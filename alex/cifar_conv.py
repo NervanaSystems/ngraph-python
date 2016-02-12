@@ -19,15 +19,15 @@ import neon.alex.nodes as g
 class CifarSimpleModel(object):
     def __init__(self):
         # This is a container where we will put new data in on every iteration
-        self.inputs = g.data_tensor((32, 32, 3), name='inputs')
+        self.inputs = g.data_tensor((3, 32, 32), name='inputs')
         self.targets = g.data_tensor((10), name='targets')
 
-        w1 = g.variable_tensor((5,5,16))
-        c1 = g.max_pool(g.relu(g.conv(self.inputs, w1, pad=2, stride=2)), (2,2), pad=0, stride=2)
-        w2 = g.variable_tensor((5,5,32))
-        c2 = g.max_pool(g.relu(g.conv(c1, w2, pad=2, stride=2)), (2.2), pad=0, stride=2)
+        c1 = g.conv(self.inputs, filter=(3,5,5), padding=(None, 0, 0), count=16, stride=(1, 2, 2))
+        p1 = g.max_pool(g.relu(c1), filter=(1,2,2), padding=(None, 0, 0), stride=(1, 1, 1))
+        c2 = g.conv(p1, filter=(3,5,5), padding=(None, 0, 0), count=16, stride=(1,2,2))
+        p2 = g.max_pool(g.relu(c1), filter=(1,2,2), padding=(None, 0, 0), stride=(1,1,1))
         #y3 = g.relu(g.affine(c2, (500,)))
         #y4 = g.softmax(g.affine(y3, (10,)))
-        print(c2)
+        print(p2)
 
 model = CifarSimpleModel()

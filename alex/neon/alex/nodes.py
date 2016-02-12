@@ -13,13 +13,15 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+import neon.alex.ntypes as ntypes
+
 class Node(object):
     def __init__(self, op_name=None, node_name=None, node_type=None, node_inputs=()):
         self.op_name = op_name
         self.node_name = node_name
         self.node_type = node_type
         self.node_inputs = node_inputs
-
+        self.has_types = False
 
     @staticmethod
     def node(value):
@@ -27,6 +29,10 @@ class Node(object):
         if isinstance(value, Node):
             return value
 
+        raise NotImplementedError()
+
+    def infer_types(self):
+        """Try to determine all relevant node types."""
         raise NotImplementedError()
 
     # Magic methods for builtin operations we want to use for creating nodes
@@ -70,47 +76,68 @@ class Node(object):
         return Pow(self, val)
 
 
-class NodeType(object):
-    def __init__(self, name):
-        self.name = name
-
-
-class TensorType(NodeType):
-    def __init__(self, shape, dtype=None):
-        super(TensorType, self).__init__('TensorType')
-        self.shape = shape
-        self.dtype = dtype
-
-
 class DataTensor(Node):
-    def __init__(self, shape, dtype, name):
-        super(DataTensor, self).__init__(op_name='DataTensor', node_type=TensorType(shape=shape, dtype=dtype), node_name=name)
+    def __init__(self, shape, dtype=None, name=None):
+        super(DataTensor, self).__init__(op_name='DataTensor', node_type=ntypes.TensorType(shape=shape, dtype=dtype), node_name=name)
+
+    def infer_types(self):
+        if not self.has_types:
+            self.has_type = True
+        return True
 
 
-def data_tensor(shape, dtype=None, name=None):
-    return DataTensor(shape=shape, dtype=dtype, name=name)
+data_tensor = DataTensor
 
 
 class VariableTensor(Node):
-    def __init__(self, shape, dtype, name):
-        super(VariableTensor, self).__init__(op_name='VariableTensor', node_type=TensorType(shape=shape, dtype=dtype), node_name=name)
+    def __init__(self, shape, dtype=None, name=None):
+        super(VariableTensor, self).__init__(op_name='VariableTensor', node_type=ntypes.TensorType(shape=shape, dtype=dtype), node_name=name)
+
+    def infer_types(self):
+        if not self.has_types:
+            self.has_type = True
+        return True
 
 
-def variable_tensor(shape, dtype=None, name=None):
-    return VariableTensor(shape=shape, dtype=dtype, name=name)
+variable_tensor=VariableTensor
 
 
 class UnaryNode(Node):
     def __init__(self, op_name, x, **kargs):
         super(UnaryNode, self).__init__(op_name=op_name, node_inputs=(x,), **kargs)
 
+    def infer_types(self):
+        pass
 
-class Neg(UnaryNode):
+
+class SameTypeNode(object):
+    def infer_types(self):
+        if self.has_types:
+            return True
+        x = self.node_inputs
+        if x.infer_types():
+            if None == self.node_type:
+                self.node_type = x.node_type.clone()
+                self.has_types = True
+            else:
+                if x.node_type == self.node_type:
+                    self.has_types = True
+                else:
+                    raise(ntypes.IncompatibleNodeTypes())
+
+        elif None != self.node_type:
+            x.node_type = self.node_type.clone()
+            self.has_types = True
+
+        return self.has_types
+
+
+class Neg(UnaryNode, SameTypeNode):
     def __init__(self, x):
-        super(Neg, self).__init__('Neg', x, node_type=x.node_type)
+        super(Neg, self).__init__('Neg', x)
 
 
-class Abs(UnaryNode):
+class Abs(UnaryNode, SameTypeNode):
     def __init__(self, x):
         super(Abs, self).__init__('Abs', x, node_type=x.node_type)
 
@@ -120,19 +147,47 @@ class BinaryNode(Node):
         super(BinaryNode, self).__init__(op_name=op_name, node_inputs=(x,y), **kargs)
 
 
-class Add(BinaryNode):
+class SumTypeNode(object):
+    def infer_types(self):
+        if self.has_types:
+            return True
+        x, y = self.node_inputs
+        if x.infer_types() and y.infer_types():
+            t1 = x.node_type
+            t2 = y.node_type
+            if not isinstance(t1, ntypes.TensorType) or not isinstance(t2, ntypes.TensorType):
+                raise ntypes.IncompatibleNodeTypes()
+            shape = ntypes.sum_broadcast_shape(t1.shape, t2.shape)
+            self.node_type = ntypes.TensorType(shape=shape)
+            self.has_types = True
+        return self.has_types
+
+
+class Add(BinaryNode, SumTypeNode):
     def __init__(self, x, y):
         super(Add, self).__init__('Add', x, y)
 
 
-class Sub(BinaryNode):
+class Sub(BinaryNode, SumTypeNode):
     def __init__(self, x, y):
         super(Sub, self).__init__('Sub', x, y)
 
 
 class Mul(BinaryNode):
+    """Multiplies, but need to find out dim mapping.
+
+    """
     def __init__(self, x, y):
         super(Mul, self).__init__('Mul', x, y)
+
+    def infer_types(self):
+        if self.has_types:
+            return True
+        x, y = self.node_inputs
+        if x.infer_types() and y.infer_types():
+            pass
+
+
 
 
 class Div(BinaryNode):
@@ -144,27 +199,46 @@ class Pow(BinaryNode):
     def __init__(self, x, y):
         super(Pow, self).__init__('Pow', x, y)
 
+def windowed_size(window_size, input_size, pre_padding=0, post_padding=0, stride=1):
+    """Return the number of outputs for given window, input, stride, and padding."""
+    extended_size = pre_padding+input_size+post_padding
+    return (extended_size-window_size)//stride+1
+
+def padding_size(window_size):
+    """Return padding needed for a given window size"""
+    return (window_size-1)//2
+
 
 class Conv(BinaryNode):
-    def __init__(self, x, window, stride, pad):
-        super(Conv, self).__init__('Conv', x, window)
-        self.stride = stride
-        self.pad = pad
+    """Primitive convolution node.
 
-def conv(x, weights, stride, pad):
-    return Conv(x, weights, stride, pad)
+    Input is (C, T, H, W) for TxHxW -> Re^C
+    Filter tensor is (C, T, R, S, K) which is K (C, T, R, S) filters
+    stride is (s1, s2, s3), where s1=1
+    padding is (p1, p2, p3) where pi is None for no padding, or 0 for 0 padding
+    output is (K, O, P, Q) for OxPxQ -> Re^K
+    """
+    def __init__(self, x, filter, stride, padding, count):
+        window = VariableTensor(filter+(count,))
+        super(Conv, self).__init__('Conv', x, window)
+        self.filter = filter
+        self.stride = stride
+        self.padding = padding
+        self.count = count
+
+
+conv=Conv
 
 
 class MaxPool(UnaryNode):
-    def __init__(self, x, size, stride, pad):
+    def __init__(self, x, filter, stride, padding):
         super(MaxPool, self).__init__('MaxPool', x)
-        self.size = size
+        self.filter = filter
         self.stride = stride
-        self.pad = pad
+        self.padding = padding
 
 
-def max_pool(x, size, stride, pad):
-    return MaxPool(x, size, stride, pad)
+max_pool = MaxPool
 
 
 class Relu(UnaryNode):
@@ -172,5 +246,4 @@ class Relu(UnaryNode):
         super(Relu, self).__init__('Relu', x, node_type=x.node_type)
 
 
-def relu(x):
-    return Relu(x)
+relu = Relu
