@@ -13,6 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+import types
+from numbers import Number
+
 import neon.alex.ntypes as ntypes
 
 class Node(object):
@@ -29,7 +32,27 @@ class Node(object):
         if isinstance(value, Node):
             return value
 
+        if isinstance(value, Number):
+            return Constant(value)
+
         raise NotImplementedError()
+
+    def collect(self, test, result=set()):
+        """Collect nodes where test is true."""
+        if self not in result:
+            for node in self.node_inputs:
+                node.collect(test, result)
+
+        if test(self):
+            result.add(self)
+
+        return result
+
+    def variables(self):
+        return self.collect(lambda x: isinstance(x, VariableTensor))
+
+    def diff(self, vars):
+        return NotImplementedError()
 
     def infer_types(self):
         """Try to determine all relevant node types."""
@@ -46,34 +69,44 @@ class Node(object):
         return Abs(self)
 
     def __add__(self, val):
-        return Add(self, val)
+        return Add(self, Node.node(val))
 
     def __radd__(self, val):
-        return Add(val, self)
+        return Add(Node.node(val), self)
 
     def __sub__(self, val):
-        return Sub(self, val)
+        return Sub(self, Node.node(val))
 
     def __rsub__(self, val):
-        return Sub(val, self)
+        return Sub(Node.node(val), self)
 
     def __mul__(self, val):
-        return Mul(self, val)
+        return Mul(self, Node.node(val))
 
     def __rmul__(self, val):
-        return Mul(val, self)
+        return Mul(Node.node(val), self)
 
     def __div__(self, val):
-        return Div(self, val)
+        return Div(self, Node.node(val))
 
     def __rdiv__(self, val):
-        return Div(val, self)
+        return Div(Node.node(val), self)
 
     def __pow__(self, val):
-        return Pow(self, val)
+        return Pow(self, Node.node(val))
 
     def __rpow__(self, val):
-        return Pow(self, val)
+        return Pow(self, Node.node(val))
+
+class Record(Node):
+    def __init__(self, kvals):
+        super(Record, self).__init__(kvals.values())
+        self.kvals = kvals
+
+    def diff(self, vars):
+        diffs = {}
+        for k,v in self.kvals:
+            diffs[k] = self.kvals.diff(vars)
 
 
 class DataTensor(Node):
@@ -85,6 +118,19 @@ class DataTensor(Node):
             self.has_type = True
         return True
 
+    def diff(self, vars):
+        return Record({var:zero for var in vars})
+
+class Constant(Node):
+    def __init__(self, value, shape=None, dtype=None):
+        super(Constant, self).__init__(op_name='Constant %s' % (value), node_type=ntypes.TensorType(shape=shape, dtype=dtype))
+        self.value = value
+
+    def diff(self, vars):
+        return Record({var:zero for var in vars})
+
+zero = Constant(0)
+one = Constant(1)
 
 data_tensor = DataTensor
 
@@ -97,6 +143,15 @@ class VariableTensor(Node):
         if not self.has_types:
             self.has_type = True
         return True
+
+    def diff(self, vars):
+        def val(var):
+            if var == self:
+                return one
+            else:
+                return zero
+
+        return Record({var:val(var) for var in vars})
 
 
 variable_tensor=VariableTensor
@@ -136,6 +191,10 @@ class Neg(UnaryNode, SameTypeNode):
     def __init__(self, x):
         super(Neg, self).__init__('Neg', x)
 
+    def diff(self, vars):
+        x = self.node_inputs
+        return -x.diff(vars)
+
 
 class Abs(UnaryNode, SameTypeNode):
     def __init__(self, x):
@@ -167,6 +226,10 @@ class Add(BinaryNode, SumTypeNode):
     def __init__(self, x, y):
         super(Add, self).__init__('Add', x, y)
 
+    def diff(self, vars):
+        x,y = self.node_inputs
+        return x.diff(vars)+y.diff(vars)
+
 
 class Sub(BinaryNode, SumTypeNode):
     def __init__(self, x, y):
@@ -179,6 +242,10 @@ class Mul(BinaryNode):
     """
     def __init__(self, x, y):
         super(Mul, self).__init__('Mul', x, y)
+
+    def diff(self, vars):
+        x,y = self.node_inputs
+        return x*y.diff(vars)+x.diff(vars)*y
 
     def infer_types(self):
         if self.has_types:
@@ -243,7 +310,17 @@ max_pool = MaxPool
 
 class Relu(UnaryNode):
     def __init__(self, x):
-        super(Relu, self).__init__('Relu', x, node_type=x.node_type)
+        super(Relu, self).__init__('Relu', x)
 
 
 relu = Relu
+
+
+class Norm2(UnaryNode):
+    def __init__(self, x):
+        super(Norm2, self).__init__('Norm2', x)
+
+
+
+
+norm2 = Norm2
