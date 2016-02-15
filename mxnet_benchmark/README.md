@@ -20,7 +20,8 @@
 * MXNet's speed 2GPU > 3GPU > 1GPU
 
 ### Settings
-* A MXNet implementation of `neon/examples/cifar10_conv.py` equivalent
+* MXNet implementation of `neon/examples/cifar10_conv.py` equivalent,
+  see `symbol_conv.py`
 * 10 epochs
 * 128 batch size
 * Tested 3, 2, 1 GPUs
@@ -36,13 +37,13 @@
 * if complaines about ippicv,
   see [here](https://github.com/dmlc/mxnet/issues/1064),
   can put the downloaded libs in `/usr/local`,
-  copy correcponding `intel64/libippicv.a` to '/usr/local/lib'
+  copy correcponding `intel64/libippicv.a` to `/usr/local/lib`
 
 
 ## Neon
 ### Titan X + Titan X + GTX 980
 ```
-time python cifar10_conv.py -b mgpu -m 3 -e 10 -z 128
+$ time python cifar10_conv.py -b mgpu -m 3 -e 10 -z 128
 (crashed)
 Boost.Python.ArgumentError: Python argument types in
     pycuda._driver.memset_d32_async(NoneType, int, int, Stream)
@@ -53,7 +54,7 @@ n::api::object stream=None)
 
 ### Titan X + Titan X
 ```
-time python cifar10_conv.py -b mgpu -m 2 -e 10 -z 128
+$ time python cifar10_conv.py -b mgpu -m 2 -e 10 -z 128
 real    0m43.526s
 user    0m40.118s
 sys     0m3.797s
