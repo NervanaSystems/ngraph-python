@@ -36,7 +36,7 @@
 * if complaines about ippicv,
   see [here](https://github.com/dmlc/mxnet/issues/1064),
   can put the downloaded libs in `/usr/local`,
-  copy correcponding intel64/libippicv.a to /usr/local/lib
+  copy correcponding `intel64/libippicv.a` to '/usr/local/lib'
 
 
 ## Neon
