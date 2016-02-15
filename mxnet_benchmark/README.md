@@ -1,6 +1,6 @@
-# CIFAR 10 Conv MGPU Benchmark Neon vs. MXNet
+# CIFAR 10 Conv MGPU Neon vs. MXNet
 
-## Results Summary
+## Summary
 ### Time
 |       | Titan + Titan + 980 | Titan + Titan | Titan   | 980     |
 |-------|---------------------|---------------|---------|---------|
@@ -30,6 +30,13 @@
 * Device 1: Titan X (idle memory 29MiB at test)
 * Device 2: GTX 980 (idle memory 15MiB at test)
 * Tested on `max4`
+
+### MXNet install notes
+* must use cudnn v3, replace manually if not the right version
+* if complaines about ippicv,
+  see [here](https://github.com/dmlc/mxnet/issues/1064),
+  can put the downloaded libs in `/usr/local`,
+  copy correcponding intel64/libippicv.a to /usr/local/lib
 
 
 ## Neon
