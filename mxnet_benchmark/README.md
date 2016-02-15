@@ -1,6 +1,12 @@
 # CIFAR 10 Conv MGPU Benchmark Neon vs. MXNet
 
-## Devices
+### Settings
+* A MXNet implementation of `neon/examples/cifar10_conv.py` equivalent
+* 10 epochs
+* 128 batch size
+* Tested 3, 2, 1 GPUs
+
+### Devices
 * Device 0: Titan X (idle memory 138MiB at test)
 * Device 1: Titan X (idle memory 29MiB at test)
 * Device 2: GTX 980 (idle memory 15MiB at test)
