@@ -44,6 +44,7 @@ real    0m34.269s
 user    2m27.192s
 sys     0m19.635s
 peak memory    (323 - 138)MiB + (214 - 29)MiB + (167 - 15)MiB
+```
 
 ### Titan X + Titan X
 ```
