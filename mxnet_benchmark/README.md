@@ -1,3 +1,5 @@
+# CIFAR 10 Conv MGPU Benchmark Neon vs. MXNet
+
 ## Devices
 * Device 0: Titan X (idle memory 138MiB at test)
 * Device 1: Titan X (idle memory 29MiB at test)
