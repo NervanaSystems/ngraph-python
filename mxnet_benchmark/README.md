@@ -1,5 +1,24 @@
 # CIFAR 10 Conv MGPU Benchmark Neon vs. MXNet
 
+## Results Summary
+### Time
+|       | Titan + Titan + 980 | Titan + Titan | Titan   | 980     |
+|-------|---------------------|---------------|---------|---------|
+| Neon  | N/A                 | 43.526s       | 20.616s | 20.054s |
+| MXNet | 34.269s             | 33.149s       | 38.159s | 40.120s |
+
+### Memory
+|       | Titan + Titan + 980 | Titan + Titan | Titan  | 980    |
+|-------|---------------------|---------------|--------|--------|
+| Neon  | N/A                 | 900 + 172 MB  | 903 MB | 869 MB |
+| MXNet | 185 + 185 + 152 MB  | 185 + 190 MB  | 212 MB | 180 MB |
+
+### Some Findings
+* Neon faster than MXNet in single GPU (1.5X)
+* MXNet are memory eficient compared to Neon (4X)
+* Neon's multi gpu slower than single under this setting
+* MXNet's speed 2GPU > 3GPU > 1GPU
+
 ### Settings
 * A MXNet implementation of `neon/examples/cifar10_conv.py` equivalent
 * 10 epochs
@@ -88,15 +107,6 @@ real    0m40.120s
 user    1m47.269s
 sys     0m12.934s
 peak memory    (195 - 15)MiB
-```
-
-### Titan X
-```
-$ time python cifar10_conv.py -b gpu -e 10 -z 128
-real    0m19.976s
-user    0m16.415s
-sys     0m3.861s
-peak memory    (1041 - 138)MiB
 ```
 
 
