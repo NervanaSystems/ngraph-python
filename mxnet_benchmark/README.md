@@ -15,7 +15,7 @@
 
 ### Some Findings
 * Neon faster than MXNet in single GPU (1.5X)
-* MXNet are memory eficient compared to Neon (4X)
+* MXNet are memory efficient compared to Neon (4X)
 * Neon's multi gpu slower than single under this setting
 * MXNet's speed 2GPU > 3GPU > 1GPU
 
