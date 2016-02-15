@@ -1,3 +1,4 @@
+# neon
 *.sublime-project
 *.sublime-workspace
 *.pyc
@@ -29,3 +30,9 @@ neon/backends/kernels/pre
 neon/backends/kernels/dump
 .idea
 *~
+
+# mxnet
+*.bin
+*.lst
+*.rec
+
