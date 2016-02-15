@@ -53,7 +53,7 @@ n::api::object stream=None)
 
 ### Titan X + Titan X
 ```
-time python cifar10_conv.py -b mgpu -m 3 -e 10 -z 128
+time python cifar10_conv.py -b mgpu -m 2 -e 10 -z 128
 real    0m43.526s
 user    0m40.118s
 sys     0m3.797s
