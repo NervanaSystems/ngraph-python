@@ -1,20 +1,11 @@
 ## Devices
-Device 0: Titan X (idle memory 138MiB at test)
-Device 1: Titan X (idle memory 29MiB at test)
-Device 2: GTX 980 (idle memory 15MiB at test)
-Tested on `max4`
+* Device 0: Titan X (idle memory 138MiB at test)
+* Device 1: Titan X (idle memory 29MiB at test)
+* Device 2: GTX 980 (idle memory 15MiB at test)
+* Tested on `max4`
 
 
 ## Neon
-### GTX 980
-```
-$ time python cifar10_conv.py -b gpu -e 10 -z 128 -i 2
-real    0m20.054s
-user    0m17.349s
-sys     0m3.114s
-peak memory    (884 - 15)MiB
-```
-
 ### Titan X + Titan X + GTX 980
 ```
 time python cifar10_conv.py -b mgpu -m 3 -e 10 -z 128
@@ -33,6 +24,24 @@ real    0m43.526s
 user    0m40.118s
 sys     0m3.797s
 peak memory    (1038 - 138)MiB  + (201 - 29)MiB
+```
+
+### Titan X
+```
+$ time python cifar10_conv.py -b gpu -e 10 -z 128 -i 0
+real    0m20.616s
+user    0m17.219s
+sys     0m3.303s
+peak memory    (1041 - 138)MiB
+```
+
+### GTX 980
+```
+$ time python cifar10_conv.py -b gpu -e 10 -z 128 -i 2
+real    0m20.054s
+user    0m17.349s
+sys     0m3.114s
+peak memory    (884 - 15)MiB
 ```
 
 
