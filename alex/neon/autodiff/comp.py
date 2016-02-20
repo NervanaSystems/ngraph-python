@@ -20,6 +20,7 @@
 # TBD: Conditionals, convolution, etc.
 # TBD: Sanitize shapes, deriv conventions
 
+
 import numpy as np
 
 class Computation(object):
@@ -200,8 +201,7 @@ class Variable(Value):
 
     def update(self, value, value_bar, e):
         np.multiply(value_bar, e, value_bar)
-        # TBD: Why is value_bar transposed?
-        return np.add(value, value_bar.T, value)
+        return np.add(value, value_bar, value)
 
 
 
@@ -258,11 +258,11 @@ class Mul(Value):
         super(Mul, self).__init__((x,y))
 
     def compute(self, value, x, y):
-        return np.matmul(x,y,value)
+        return np.dot(x,y,value)
 
     def diff(self, value, value_bar, x, y):
-        return (np.matmul(y, value_bar),
-                np.matmul(value_bar, x))
+        return (np.dot(value_bar, y.T),
+                np.dot(x.T, value_bar))
 
 class Transpose(Value):
     def __init__(self, x):
@@ -272,7 +272,7 @@ class Transpose(Value):
         return np.transpose(x)
 
     def diff(self, value, value_bar, x):
-        return value_bar
+        return value_bar.T
 
 
 class Context(object):
@@ -288,7 +288,7 @@ class Context(object):
 
         def diff(self):
             for frame, delta in zip(self.input_frames, self.function.value.diff(self.value, self.value_bar, *tuple(frame.value for frame in self.input_frames))):
-                if None == frame.value_bar:
+                if frame.value_bar is None:
                     frame.value_bar = delta
                 else:
                     frame.value_bar += delta
