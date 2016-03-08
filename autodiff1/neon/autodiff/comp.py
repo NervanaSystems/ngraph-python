@@ -23,11 +23,14 @@
 
 import numpy as np
 
-class Computation(object):
+
+class Tape(object):
     """Slightly 'compiled' version of something to be autodiff'd.
 
+    This is the "tape"
+
     """
-    class Function(object):
+    class Computation(object):
         """
         One step of a computation.
         """
@@ -37,54 +40,44 @@ class Computation(object):
             self.child_ids = child_ids
 
     def __init__(self, value):
-        ids = {}
-        self.functions = []
-        self.inputs = {}
-        self.variables = {}
-        self.size = 0
+        """
 
-        def get_id(value):
-            if value in ids:
-                return ids[value]
-            id = self.size
-            self.size += 1
-            ids[value] = id
-            return id
+        :param value: The value to compute
+        :return:
+        """
 
-        def add_function(value):
-            id = get_id(value)
-            function = Computation.Function(value, id, tuple(ids[v] for v in value.inputs))
-            self.functions.append(function)
-            return function
-
-        def add_variable(value):
-            if isinstance(value, Variable):
-                function = add_function(value)
-                self.variables[value] = function
-
-        def add_input(value):
-            if isinstance(value, Input):
-                function = add_function(value)
-                self.inputs[value] = function
-
-        def depth_first(value, f):
-            if value in ids:
-                return
-            for v in value.inputs:
-                depth_first(v, f)
-            f(value)
+        self.ids = {}
+        self.computations = []
+        self.adjoints = []
 
         # Perform a topological sort on the computation steps
+        self.output = self.add_computation(value)
 
-        # Find the variables and inputs first, to make it easier to set their values
-        depth_first(value, add_variable)
-        depth_first(value, add_input)
+    def __len__(self):
+        return len(self.computations)
 
-        # Now pick up the remaining
-        depth_first(value, add_function)
+    def add_computation(self, value):
+        if value in self.ids:
+            return self.ids[value]
+        for v in value.inputs:
+            self.add_computation(v)
 
-        self.output = self.functions[get_id(value)]
+        id = len(self.computations)
+        computation = Tape.Computation(value, id, tuple(self.ids[v].id for v in value.inputs))
+        self.ids[value] = computation
+        self.computations.append(computation)
+        return computation
 
+    def generate_autodiff(self, value, variables):
+        adjoints = {}
+        variable_map = {}
+        adjoints[value] = Constant(np.array([1.0]).reshape(1, 1))
+        for computation in reversed(self.computations):
+            value = computation.value
+            value.generate_autodiff(adjoints, adjoints[value], *value.inputs)
+        for variable in variables:
+            variable_map[variable] = (self.add_computation(adjoints[variable]).id, self.ids[variable].id)
+        return variable_map
 
 
 class Value(object):
@@ -102,7 +95,7 @@ class Value(object):
     def __init__(self, inputs=()):
         self.inputs = tuple(Value.as_value(input) for input in inputs)
 
-    def compute(self, value, *inputs):
+    def evaluate(self, value, *inputs):
         """
         Compute a value from inputs.
 
@@ -112,16 +105,14 @@ class Value(object):
         """
         raise NotImplementedError()
 
-    def diff(self, value, value_bar, *input_values):
-        """
-        Push derivative deltas back
-
-        :param value: Value computed by this step
-        :param value_bar: Previously computed deriv, for resuse
-        :param input_values: Values computed by inputs
-        :return: deriv delta for each input
-        """
+    def generate_autodiff(self, adjoints, delta, *input_values):
         raise NotImplementedError()
+
+    def generate_add_delta(self, adjoints, delta):
+        if self not in adjoints:
+            adjoints[self] = delta
+        else:
+            adjoints[self] = delta+adjoints[self]
 
     def update(self, value, value_bar, e):
         # Update the value by the deriv weighted by e
@@ -179,11 +170,12 @@ class Input(Value):
     def __init__(self):
         super(Input, self).__init__()
 
-    def compute(self, value):
+    def evaluate(self, value):
         return value
 
-    def diff(self, value, value_bar):
-        return ()
+    def generate_autodiff(self, tape, delta):
+        pass
+
 
 
 class Variable(Value):
@@ -193,11 +185,11 @@ class Variable(Value):
     def __init__(self):
         super(Variable, self).__init__()
 
-    def compute(self, value):
+    def evaluate(self, value):
         return value
 
-    def diff(self, value, value_bar):
-        return ()
+    def generate_autodiff(self, tape, delta):
+        pass
 
     def update(self, value, value_bar, e):
         np.multiply(value_bar, e, value_bar)
@@ -213,123 +205,100 @@ class Constant(Value):
         super(Constant, self).__init__()
         self.const = const
 
-    def compute(self, value):
+    def evaluate(self, value):
         return self.const
 
-    def diff(self, value, value_bar):
-        return ()
-
+    def generate_autodiff(self, tape, delta):
+        pass
 
 class Neg(Value):
     def __init__(self, x):
         super(Neg, self).__init__((x,))
 
-    def compute(self, value, x):
+    def evaluate(self, value, x):
         return -x
 
-    def diff(self, value, value_bar, x):
-        return -value_bar
+    def generate_autodiff(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, -delta)
 
 
 class Add(Value):
     def __init__(self, x, y):
         super(Add, self).__init__((x, y))
 
-    def compute(self, value, x, y):
+    def evaluate(self, value, x, y):
         return x + y
 
-    def diff(self, value, value_bar, x, y):
-        return (value_bar, value_bar)
+    def generate_autodiff(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, delta)
+
 
 
 class Sub(Value):
     def __init__(self, x, y):
         super(Sub, self).__init__((x,y))
 
-    def compute(self, value, x, y):
+    def evaluate(self, value, x, y):
         return x-y
 
-    def diff(self, value, value_bar, x, y):
-        return (value_bar, -value_bar)
+    def generate_autodiff(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, -delta)
 
 
 class Mul(Value):
     def __init__(self, x, y):
         super(Mul, self).__init__((x,y))
 
-    def compute(self, value, x, y):
+    def evaluate(self, value, x, y):
         return np.dot(x,y,value)
 
-    def diff(self, value, value_bar, x, y):
-        return (np.dot(value_bar, y.T),
-                np.dot(x.T, value_bar))
+    def generate_autodiff(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, np.dot(delta, y.T))
+        y.generate_add_delta(adjoints, np.dot(x.T, delta))
+
 
 class Transpose(Value):
     def __init__(self, x):
         super(Transpose, self).__init__((x,))
 
-    def compute(self, value, x):
+    def evaluate(self, value, x):
         return np.transpose(x)
 
-    def diff(self, value, value_bar, x):
-        return value_bar.T
+    def generate_autodiff(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta.T)
 
 
 class Context(object):
-    class Frame(object):
-        def __init__(self, context, function):
-            self.function = function
-            self.value = None
-            self.value_bar = None
-            self.input_frames = tuple(context.frames[cid] for cid in function.child_ids)
 
-        def compute(self):
-            self.value = self.function.value.compute(self.value, *(tuple(frame.value for frame in self.input_frames)))
-
-        def diff(self):
-            for frame, delta in zip(self.input_frames, self.function.value.diff(self.value, self.value_bar, *tuple(frame.value for frame in self.input_frames))):
-                if frame.value_bar is None:
-                    frame.value_bar = delta
-                else:
-                    frame.value_bar += delta
-
-    def __init__(self, computation):
-        self.computation = computation
-        self.frames = [None]*computation.size
-        for function in computation.functions:
-            self.frames[function.id] = Context.Frame(self, function)
-        self.output = self.frames[computation.output.id]
-
+    def __init__(self, tape):
+        self.tape = tape
+        self.values = [None] * len(tape)
 
     def set_input(self, input, value):
-        input_function = self.computation.inputs[input]
-        self.frames[input_function.id].value = value
+        self.values[self.tape.ids[input].id] = value
 
     def init_variable(self, variable, value):
-        variable_function = self.computation.variables[variable]
-        self.frames[variable_function.id].value = value
-
-    def get_variable_deriv(self, variable):
-        variable_function = self.computation.variables[variable]
-        return self.frames[variable_function.id].value_bar
+        self.values[self.tape.ids[variable].id] = value
 
     def get_variable_value(self, variable):
-        variable_function = self.computation.variables[variable]
-        return self.frames[variable_function.id].value
+        return self.values[self.tape.ids[variable].id]
 
-    def execute(self):
-        for frame in self.frames:
-            frame.compute()
-        self.output.value_bar = np.array([1.0]).reshape(1,1)
-        for frame in reversed(self.frames):
-            frame.diff()
+    def compute(self):
+        for computation in self.tape.computations:
+            id = computation.id
+            self.values[id] = computation.value.evaluate(self.values[id], *(tuple(self.values[child_id] for child_id in computation.child_ids)))
 
-        return self.output.value
+        return self.values[self.tape.output.id]
 
-    def update(self, e):
-        for frame in self.frames:
-            frame.value = frame.function.value.update(frame.value, frame.value_bar, e)
-            frame.value_var = None
+    def get_deriv(self, variable_map, variable):
+        adjoint_id, id = variable_map[variable]
+        return self.values[adjoint_id]
+
+    def update_variables(self, variable_map, e):
+        for variable, (adjoint_id, id) in variable_map.iteritems():
+            self.values[id] = variable.update(self.values[id], self.values[adjoint_id], e)
 
 
 def norm2(x):
@@ -337,6 +306,8 @@ def norm2(x):
 
 
 def f():
+    adiff = True
+
     # Variables will be computed
     w = Variable()
     b = Variable()
@@ -349,10 +320,13 @@ def f():
     e = norm2(y-y0)
 
     # Set up the computation
-    computation = Computation(e)
+    variables = [w,b]
+    tape = Tape(e)
+
+    variable_map = tape.generate_autodiff(e, variables)
 
     # Prepare to run the computation
-    context = Context(computation)
+    context = Context(tape)
     context.init_variable(w, np.zeros((3,4)))
     context.init_variable(b, np.zeros((3,1)))
 
@@ -360,12 +334,13 @@ def f():
     context.set_input(x, np.array([1,1,2,1]).reshape((4,1)))
     context.set_input(y0, np.array([2,1,2]).reshape(3,1))
 
+
     for i in range(1000):
-        result = context.execute()
-        db = context.get_variable_deriv(b)
-        dw = context.get_variable_deriv(w)
+        result = context.compute()
+        db = context.get_deriv(variable_map, b)
+        dw = context.get_deriv(variable_map, w)
         print('e=%s dw=%s db=%s' % (result, dw, db))
-        context.update(-.1/(1.0+i))
+        context.update_variables(variable_map, -.1/(1.0+i))
 
     print('w')
     print(context.get_variable_value(w))
