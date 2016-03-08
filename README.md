@@ -44,24 +44,9 @@ easy to have the entire expression construct a graph rather than execute a compu
 
 # Autodiff
 
-If each node in our graph has a single output and zero or more inputs, and the nodes correspond to differentiable values,
-it is relatively easy to compute the derivative, although also more complicated than it will first appear.
-
-Consider the simple case `w*x+b`.  We have zero-input nodes for `w`, `x` and `b`.  A `*` node has `w` and `x` as inputs, and
-this node and the `b` node are inputs to a `+` node; five nodes in total.  Each node represents its value in a computation.
-To compute the derivative with respect to `v` for a `+` node, we obtain nodes for the derivative with respect to `v` for its
-two inputs and then construct a `+` node that has these as inputs.  But, with pythons arithmetic on objects constructing
-graphs for us, we can simply say that for `a+b` we get `deriv(a,v)+deriv(b,v)`.  Similarly, for `a*b` we get
-`deriv(a,v)*b+a*deriv(b,v)`.  For variables, we get 0 or 1, depending on whether `v` is the variable.
-
-Of course it's not really quite that simple.  Even in the scalar case, you will end up with a graph containing
-many constants that can be propagated and eliminated to produce a much simpler expression.
-
-We will probably want to begin with a graph transformation, which converts generic nodes into the actual tensor-variant
-of `+` that is occurring, i.e. make whatever broadcasting is happening explicit before computing their derivatives,
-rather than having every operation that can broadcast attempt to deal with it.  Some nodes may have conditional
-behavior, to support things like drop-out.
-
+Autodiff techniques have been around for some time.  For example,
+http://www.qucosa.de/fileadmin/data/qucosa/documents/827/1206719130404-2230.pdf
+and [Autograd](https://github.com/HIPS/autograd).
 
 
 
