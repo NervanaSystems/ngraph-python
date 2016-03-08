@@ -15,96 +15,116 @@
 
 # First cut based on http://www.qucosa.de/fileadmin/data/qucosa/documents/827/1206719130404-2230.pdf
 
-# TBD: Generate computation rather than executing
 # TBD: Can we take some ideas from autograd?
 # TBD: Conditionals, convolution, etc.
-# TBD: Sanitize shapes, deriv conventions
-
 
 import numpy as np
 
 
 class Tape(object):
-    """Slightly 'compiled' version of something to be autodiff'd.
+    """Slightly 'compiled' version of a computation.
 
     This is the "tape"
-
     """
     class Computation(object):
         """
         One step of a computation.
         """
-        def __init__(self, value, id, child_ids):
-            self.value = value
-            self.id = id
-            self.child_ids = child_ids
+        def __init__(self, op, pos, pos_children):
+            self.op = op
+            self.pos = pos
+            self.pos_children = pos_children
 
-    def __init__(self, *values):
+        def evaluate(self, values):
+            values[self.pos] = self.op.evaluate(values[self.pos], *(tuple(values[pos_child] for pos_child in self.pos_children)))
+
+        def get(self, values):
+            return values[self.pos]
+
+        def set(self, values, value):
+            values[self.pos] = value
+
+
+    def __init__(self, *ops):
         """
-
-        :param value: The value to compute
+        :param ops: The values to compute
         :return:
         """
 
-        self.ids = {}
+        self.op_computations = {}
         self.computations = []
-        self.value_adjoints = {}
+        self.op_adjoints = {}
 
         # Perform a topological sort on the computation steps
-        for value in values:
-            self.add_computation(value)
+        for op in ops:
+            self.get_computation(op)
 
     def __len__(self):
         return len(self.computations)
 
-    def add_computation(self, value):
-        if value in self.ids:
-            return self.ids[value]
-
-        if isinstance(value, Deriv):
-            self.add_computation(value.dep)
-            self.add_computation(value.indep)
-            adjoints = self.get_adjoints(value.dep)
-            variable = value.indep
-            computation = self.add_computation(adjoints[variable])
-            self.ids[value] = computation
-            return computation
-
-        for v in value.inputs:
-            self.add_computation(v)
-
-        id = len(self.computations)
-        computation = Tape.Computation(value, id, tuple(self.ids[v].id for v in value.inputs))
-        self.ids[value] = computation
+    def new_computation(self, op):
+        pos = len(self.computations)
+        computation = Tape.Computation(op, pos, tuple(self.op_computations[child].pos for child in op.children))
         self.computations.append(computation)
         return computation
 
-    def get_adjoints(self, value):
-        if value in self.value_adjoints:
-            return self.value_adjoints[value]
+    def get_computation(self, op):
+        if op in self.op_computations:
+            return self.op_computations[op]
+
+        for child in op.children:
+            self.get_computation(child)
+
+        computation = op.get_computation(self)
+        self.op_computations[op] = computation
+        return computation
+
+    def get_adjoints(self, op):
+        if op in self.op_adjoints:
+            return self.op_adjoints[op]
         adjoints = {}
-        self.value_adjoints[value] = adjoints
-        adjoints[value] = Constant(np.array([1.0]).reshape(1, 1))
+        self.op_adjoints[op] = adjoints
+        adjoints[op] = Constant(np.array([1.0]).reshape(1, 1))
         for computation in reversed(self.computations):
-            value = computation.value
-            value.generate_adjoints(adjoints, adjoints[value], *value.inputs)
+            op = computation.op
+            op.generate_adjoints(adjoints, adjoints[op], *op.children)
         return adjoints
 
-
-class Value(object):
+class Context(object):
     """
-    A combination of python magic method handler and vm for computations.
+    An execution context for evaluating a computation on a tape.
+    """
+    def __init__(self, tape):
+        self.tape = tape
+        self.values = [None] * len(tape)
+
+    def set(self, op, value):
+        self.tape.op_computations[op].set(self.values, value)
+
+    def get(self, op):
+        return self.tape.op_computations[op].get(self.values)
+
+    def evaluate(self):
+        for computation in self.tape.computations:
+            computation.evaluate(self.values)
+
+
+class Op(object):
+    """
+    A node in a compute graph.
     """
 
     @staticmethod
-    def as_value(x):
-        if isinstance(x, Value):
+    def os_op(x):
+        if isinstance(x, Op):
             return x
         return Constant(x)
 
+    def __init__(self, children=()):
+        self.children = tuple(Op.os_op(child) for child in children)
 
-    def __init__(self, inputs=()):
-        self.inputs = tuple(Value.as_value(input) for input in inputs)
+    def get_computation(self, tape):
+        return tape.new_computation(self)
 
     def evaluate(self, value, *inputs):
         """
@@ -170,17 +190,29 @@ class Value(object):
         return Transpose(self)
 
 
-class Deriv(Value):
+class Deriv(Op):
+    """
+    Derivative of dep with respect to indep
+    """
     def __init__(self, dep, indep):
-        super(Deriv, self).__init__()
-        self.dep = dep
-        self.indep = indep
+        super(Deriv, self).__init__((dep, indep))
 
-    def evaluate(self, value):
-        return value
+    @property
+    def dep(self):
+        dep, indep = self.children
+        return dep
+
+    @property
+    def dep(self):
+        dep, indep = self.children
+        return indep
+
+    def get_computation(self, tape):
+        dep, indep = self.children
+        return tape.get_computation(tape.get_adjoints(dep)[indep])
 
 
-class Input(Value):
+class Input(Op):
     """
     An input to a computation.
     """
@@ -194,7 +226,7 @@ class Input(Value):
         pass
 
 
-class Variable(Value):
+class Variable(Op):
     """
     A variable whose autodiff will be computed.
     """
@@ -208,7 +240,7 @@ class Variable(Value):
         pass
 
 
-class Constant(Value):
+class Constant(Op):
     """
     A constant that appears in a computation.
     """
@@ -222,7 +254,7 @@ class Constant(Value):
     def generate_adjoints(self, tape, delta):
         pass
 
-class Neg(Value):
+class Neg(Op):
     def __init__(self, x):
         super(Neg, self).__init__((x,))
 
@@ -233,7 +265,7 @@ class Neg(Value):
         x.generate_add_delta(adjoints, -delta)
 
 
-class Add(Value):
+class Add(Op):
     def __init__(self, x, y):
         super(Add, self).__init__((x, y))
 
@@ -246,7 +278,7 @@ class Add(Value):
 
 
 
-class Sub(Value):
+class Sub(Op):
     def __init__(self, x, y):
         super(Sub, self).__init__((x,y))
 
@@ -258,7 +290,7 @@ class Sub(Value):
         y.generate_add_delta(adjoints, -delta)
 
 
-class Mul(Value):
+class Mul(Op):
     def __init__(self, x, y):
         super(Mul, self).__init__((x,y))
 
@@ -270,7 +302,7 @@ class Mul(Value):
         y.generate_add_delta(adjoints, np.dot(x.T, delta))
 
 
-class Transpose(Value):
+class Transpose(Op):
     def __init__(self, x):
         super(Transpose, self).__init__((x,))
 
@@ -279,28 +311,6 @@ class Transpose(Value):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta.T)
-
-
-class Context(object):
-
-    def __init__(self, tape):
-        self.tape = tape
-        self.values = [None] * len(tape)
-
-    def set(self, variable, value):
-        self.values[self.tape.ids[variable].id] = value
-
-    def get(self, variable):
-        return self.values[self.tape.ids[variable].id]
-
-    def compute(self):
-        for computation in self.tape.computations:
-            id = computation.id
-            self.values[id] = computation.value.evaluate(self.values[id], *(tuple(self.values[child_id] for child_id in computation.child_ids)))
-
-    def get_deriv(self, variable_map, variable):
-        adjoint_id, id = variable_map[variable]
-        return self.values[adjoint_id]
 
 
 def norm2(x):
@@ -339,7 +349,7 @@ def f():
         context.set(x, np.array([1, 1, 2, 1]).reshape((4, 1)))
         context.set(y0, np.array([2, 1, 2]).reshape(3, 1))
 
-        context.compute()
+        context.evaluate()
         result = context.get(e)
         db = context.get(dedb)
         dw = context.get(dedw)
