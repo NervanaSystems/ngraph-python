@@ -1,6 +1,6 @@
 
 import numpy as np
-from geon.backends.graph.graph import Graph
+from geon.backends.graph.graph import Graph, show_graph
 
 def generate_samples(xsize, bsize, N):
     w = np.random.rand(bsize, xsize)
@@ -40,5 +40,7 @@ def f():
 
         w.set(w+alpha*dedw)
         b.set(b+alpha*dedb)
+
+    show_graph(be)
 
 f()
