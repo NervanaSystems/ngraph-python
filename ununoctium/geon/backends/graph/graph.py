@@ -104,6 +104,19 @@ class Op(Arg):
     def op(self):
         return self
 
+    @property
+    def ops(self):
+        return []
+
+    def generate_add_delta(self, adjoints, delta):
+        if self not in adjoints:
+            adjoints[self] = delta
+        else:
+            adjoints[self] = delta+adjoints[self]
+
+    def __str__(self):
+        return self.__class__.__name__
+
 
 class OpIterValue(Op):
     def __init__(self, graph, sequence):
@@ -141,6 +154,10 @@ class Input(Op):
     def generate_adjoints(self, tape, delta):
         pass
 
+    def __str__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.name)
+
+
 
 class Constant(Op):
     """
@@ -155,6 +172,10 @@ class Constant(Op):
 
     def generate_adjoints(self, tape, delta):
         pass
+
+    def __str__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.const)
+
 
 
 class Neg(Op):
@@ -210,8 +231,6 @@ class Div(Op):
         super(Div, self).__init__(graph, x, y)
 
 
-
-
 class Transpose(Op):
     def __init__(self, graph, x):
         super(Transpose, self).__init__(graph, x)
@@ -228,7 +247,8 @@ class Deriv(Op):
     Derivative of dep with respect to indep
     """
     def __init__(self, graph, dep, indep):
-        super(Deriv, self).__init__(graph, dep, indep)
+        super(Deriv, self).__init__(graph, dep, indep, graph.get_adjoints(dep.op)[indep.op])
+
 
     @property
     def dep(self):
@@ -275,37 +295,30 @@ class Range(Op):
         super(Range, self).__init__(graph, start, stop, step)
 
 
+class ControlBlock(Op):
 
-class ControlBlock(object):
+    def __init__(self, graph):
+        super(ControlBlock, self).__init__(graph)
+        self.__ops = []
 
-    def __init__(self):
-        self.ops = []
-        self.contexts = []
 
     def add_op(self, op):
-        self.ops.append(op)
-
-    def add_context(self, context):
-        self.contexts.append(context)
+        if op is not self:
+            self.__ops.append(op)
 
     @property
     def graph(self):
-        return NotImplementedError()
-
-class RootControlBlock(ControlBlock):
-    def __init__(self, graph):
-        super(RootControlBlock, self).__init__()
-        self.__graph = graph
+        raise NotImplementedError()
 
     @property
-    def graph(self):
-        return self.__graph
+    def ops(self):
+        return self.__ops
+
 
 class NestedControlBlock(ControlBlock):
     def __init__(self, context):
-        super(NestedControlBlock, self).__init__()
-        self.context = context
-        self.context.add_context(self)
+        super(NestedControlBlock, self).__init__(context.graph)
+        self.parent_context = context
 
     @property
     def graph(self):
@@ -317,13 +330,55 @@ class Iterator(NestedControlBlock):
         super(Iterator, self).__init__(context)
 
 
-class Graph(object):
+def show_graph(g):
+    ids = {}
+
+    def opids(g):
+        ids[g] = len(ids)
+        for op in g.ops:
+            opids(op)
+
+    opids(g)
+
+    def show_op(op):
+        print '%d:%d:%s%s' % (ids[op], ids[op.context], op, tuple(ids[o] for o in op.args))
+        for o in op.ops:
+            show_op(o)
+    show_op(g)
+
+
+class Graph(ControlBlock):
 
     def __init__(self):
-        self.root_context = RootControlBlock(self)
-        self.context = self.root_context
+        self.context = self
+        super(Graph, self).__init__(self)
         self.inputs = {}
         self.variables = {}
+        self.op_adjoints = {}
+
+    @property
+    def graph(self):
+        return self
+
+    @staticmethod
+    def get_ordered_ops(op, ordered_ops):
+        if op not in ordered_ops:
+            for arg in op.args:
+                Graph.get_ordered_ops(arg, ordered_ops)
+            ordered_ops.append(op)
+
+    def get_adjoints(self, op):
+        if op in self.op_adjoints:
+            return self.op_adjoints[op]
+        adjoints = {}
+        ordered_ops = []
+        Graph.get_ordered_ops(op, ordered_ops)
+        self.op_adjoints[op] = adjoints
+        adjoints[op] = Constant(self, np.array([1.0]).reshape(1, 1))
+        for o in reversed(ordered_ops):
+            o.generate_adjoints(adjoints, adjoints[op], *o.args)
+        return adjoints
+
 
     def input(self, name):
         """
@@ -583,9 +638,6 @@ class Graph(object):
 
     def zeros_like(self, other_ary, name=None, persist_values=None):
         pass
-
-
-
 
 
 
