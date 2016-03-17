@@ -19,14 +19,20 @@ class UnititializedVariableError(Error):
     Attempt to use the value of an unitialized variable.
     """
 
+class IncompatibleShapesError(Error):
+    """
+    Incompatible shapes.
+    """
+
 class Arg(object):
     """
-    An Arg is something that can appear as an argument; variables and computation results.
+    An Arg is something that can appear as a Python function/operator argument, but might not be inserted directly
+    into the graph.
     """
 
     @property
     def op(self):
-        raise NotImplementedError()
+        return self.__graph()
 
     @property
     def graph(self):
@@ -37,64 +43,66 @@ class Arg(object):
 
     # Magic methods for builtin operations we want to use for creating nodes
     def __neg__(self):
-        return Neg(self.graph, self)
+        return negative(self.graph, self)
 
     def __pos__(self):
         return self
 
     def __abs__(self):
-        return Abs(self.graph, self)
+        return Abs(self)
 
     def __add__(self, val):
-        return Add(self.graph, self, val)
+        return add(self, val)
 
     def __radd__(self, val):
-        return Add(self.graph, val, self)
+        return add(val, self)
 
     def __sub__(self, val):
-        return Sub(self.graph, self, val)
+        return subtract(self, val)
 
     def __rsub__(self, val):
-        return Sub(self.graph, val, self)
+        return subtract(val, self)
 
     def __mul__(self, val):
-        return Mul(self.graph, self, val)
+        return multiply(self, val)
 
     def __rmul__(self, val):
-        return Mul(self.graph, val, self)
+        return multiply(val, self)
 
     def __div__(self, val):
-        return Div(self.graph, self, val)
+        return divide(self, val)
 
     def __rdiv__(self, val):
-        return Div(self.graph, val, self)
+        return divide(val, self)
 
     def __pow__(self, val):
-        return Pow(self.graph, self, val)
+        return Pow(self, val)
 
     def __rpow__(self, val):
-        return Pow(self.graph, self, val)
+        return Pow(self, val)
 
     @property
     def T(self):
-        return Transpose(self.graph, self)
+        return transpose(self)
 
 
 class Op(Arg):
     """
     An Op is the result of some sort of operation.
     """
-    def __init__(self, graph, *args):
-        self.context = graph.context
-        self.args = tuple(Op.as_op(graph, arg) for arg in args)
+    def __init__(self, *args):
+        self.context = Graph.get_default_graph(args).context
+        self.args = tuple(Op.as_op(arg) for arg in args)
         self.context.add_op(self)
+        self.shape = None
+        self.name = None
 
     @staticmethod
-    def as_op(graph, x):
+    def as_op(x):
         if isinstance(x, Arg):
             return x.op
 
-        return Constant(graph, x)
+        return Constant(x)
 
     @property
     def graph(self):
@@ -108,45 +116,63 @@ class Op(Arg):
     def ops(self):
         return []
 
+    def set_type(self, type):
+        self.type = type
+        return self
+
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
             adjoints[self] = delta
         else:
             adjoints[self] = delta+adjoints[self]
 
+    def arg_shapes(self):
+        return (arg.shape for arg in self.args)
+
     def __str__(self):
         return self.__class__.__name__
 
+    def reshape(self, shape):
+        return reshape(self, shape)
+
+    @property
+    def size(self):
+        result = 1
+        for d in self.shape:
+            result = result*d
+        return result
+
+
 
 class OpIterValue(Op):
-    def __init__(self, graph, sequence):
-        super(OpIterValue, self).__init__(graph, sequence)
+    def __init__(self, sequence):
+        super(OpIterValue, self).__init__(sequence)
 
 class OpIterator(Op):
-    def __init__(self, graph, sequence):
-        super(OpIterator, self).__init__(graph, sequence)
+    def __init__(self, sequence):
+        super(OpIterator, self).__init__(sequence)
         self.__next = True
 
     def __iter__(self):
-        return OpIterator(self.graph, *self.args)
+        return OpIterator(*self.args)
 
     def next(self):
         if self.__next:
             self.__next = False
             sequence, = self.args
-            return OpIterValue(self.graph, sequence)
+            return OpIterValue(sequence)
         else:
             raise StopIteration()
 
 
-class Input(Op):
+class input(Op):
     """
     Can be set externally.
     """
 
-    def __init__(self, graph, name):
-        super(Input, self).__init__(graph)
-        self.name = name
+    def __init__(self, shape):
+        super(input, self).__init__()
+        self.shape = shape
 
     def evaluate(self, value):
         return value
@@ -154,123 +180,15 @@ class Input(Op):
     def generate_adjoints(self, tape, delta):
         pass
 
-    def __str__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.name)
 
+# Not sure if we'll need this
+class variable(Arg):
 
-
-class Constant(Op):
-    """
-    A constant that appears in a graph.
-    """
-    def __init__(self, graph, const):
-        super(Constant, self).__init__(graph)
-        self.const = const
-
-    def evaluate(self, value):
-        return self.const
-
-    def generate_adjoints(self, tape, delta):
-        pass
-
-    def __str__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.const)
-
-
-
-class Neg(Op):
-    def __init__(self, graph, x):
-        super(Neg, self).__init__(graph, x)
-
-    def evaluate(self, value, x):
-        return -x
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, -delta)
-
-
-class Add(Op):
-    def __init__(self, graph, x, y):
-        super(Add, self).__init__(graph, x, y)
-
-    def evaluate(self, value, x, y):
-        return x + y
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta)
-        y.generate_add_delta(adjoints, delta)
-
-
-
-class Sub(Op):
-    def __init__(self, graph, x, y):
-        super(Sub, self).__init__(graph, x, y)
-
-    def evaluate(self, value, x, y):
-        return x-y
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta)
-        y.generate_add_delta(adjoints, -delta)
-
-
-class Mul(Op):
-    def __init__(self, graph, x, y):
-        super(Mul, self).__init__(graph, x, y)
-
-    def evaluate(self, value, x, y):
-        return np.dot(x,y,value)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, np.dot(delta, y.T))
-        y.generate_add_delta(adjoints, np.dot(x.T, delta))
-
-
-class Div(Op):
-    def __init__(self, graph, x, y):
-        super(Div, self).__init__(graph, x, y)
-
-
-class Transpose(Op):
-    def __init__(self, graph, x):
-        super(Transpose, self).__init__(graph, x)
-
-    def evaluate(self, value, x):
-        return np.transpose(x)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta.T)
-
-
-class Deriv(Op):
-    """
-    Derivative of dep with respect to indep
-    """
-    def __init__(self, graph, dep, indep):
-        super(Deriv, self).__init__(graph, dep, indep, graph.get_adjoints(dep.op)[indep.op])
-
-
-    @property
-    def dep(self):
-        dep, indep = self.children
-        return dep
-
-    @property
-    def indep(self):
-        dep, indep = self.children
-        return indep
-
-    def get_computation(self, tape):
-        dep, indep = self.children
-        return tape.get_computation(tape.get_adjoints(dep)[indep])
-
-
-class Variable(Arg):
-
-    def __init__(self, graph, name=None):
-        self.__graph = graph
+    def __init__(self, name=None):
+        self.__graph = Graph.get_default_graph()
         self.name = name
         self.__op = None
+        self.__graph.variables[name] = self
 
     @property
     def graph(self):
@@ -283,22 +201,332 @@ class Variable(Arg):
         return self.__op
 
     def set(self, op):
-        self.__op = Op.as_op(self.graph, op)
+        self.__op = Op.as_op(op)
         return self
 
 
-class Range(Op):
-    def __init__(self, graph, start, stop=None, step=1):
+class Constant(Op):
+    """
+    A constant that appears in a graph.
+    """
+    def __init__(self, const):
+        super(Constant, self).__init__()
+        self.const = const
+        if isinstance(const, np.ndarray):
+            self.shape =  const.shape
+        else:
+            self.shape = ()
+
+    def evaluate(self, value):
+        return self.const
+
+    def generate_adjoints(self, tape, delta):
+        pass
+
+    def __str__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.const)
+
+
+
+def elementwise_shape(*shapes):
+    n = max((len(shape) for shape in shapes))
+    def prepend(s):
+        return tuple(1 for x in xrange(n-len(s)))+s
+    shapes = (prepend(s) for s in shapes)
+
+    def broadcast(*vals):
+        result = 1
+        for val in vals:
+            if val == 1:
+                continue
+            elif result == 1 or val == result:
+                result = val
+            else:
+                raise IncompatibleShapesError()
+        return result
+
+    return tuple(broadcast(*d) for d in zip(*shapes))
+
+
+class add(Op):
+    def __init__(self, x, y, out=None):
+        super(add, self).__init__(x, y)
+        self.out = out
+        self.shape = elementwise_shape(*self.arg_shapes())
+
+    def evaluate(self, value, x, y):
+        return x + y
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, delta)
+
+
+class cos(Op):
+    def __init__(self, x, out=None):
+        super(cos, self).__init__(x)
+        self.out = out
+        (self.shape,) = self.arg_shapes()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*sin(x))
+
+
+# This makes the derivative simpler if we need it
+def divide(x, y, out=None):
+    result = x*reciprocal(y)
+    result.out = out
+    return result
+
+
+class dot(Op):
+    def __init__(self, x, y, out=None):
+        xr = x
+        if len(x.shape) == 0:
+            xr = reshape(x, (1,1))
+        elif len(x.shape) != 2:
+            d1 = 1
+            for d in x.shape[:-1]:
+                d1 = d1*d
+            xr = reshape(x, (d1, x.shape[-1]))
+        yr = y
+        if len(y.shape) == 0:
+            yr = reshape(y, (1,1))
+        elif len(y.shape) != 2:
+            d1 = 1
+            for d in y.shape[1:]:
+                d1 = d1*d
+            yr = reshape(y, (y.shape[0], d1))
+
+        super(dot, self).__init__(xr, yr)
+        self.out = out
+        xshape = x.shape
+        yshape = y.shape
+
+        if len(xshape) == 0:
+            self.shape = yshape
+        elif len(yshape) == 0:
+            self.shape = xshape
+        elif xshape[-1] != yshape[0]:
+            raise IncompatibleShapesError()
+        else:
+            self.shape = tuple(xshape[:-1]+yshape[1:])
+
+    def evaluate(self, value, x, y):
+        return np.dot(x,y,value)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+
+        dr = delta
+        if len(dr.shape) != 2:
+            dr = reshape(delta, (x.shape[0], y.shape[1]))
+        x.generate_add_delta(adjoints, dot(dr, y.T))
+        y.generate_add_delta(adjoints, dot(x.T, dr))
+
+
+class empty(Op):
+    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
+        super(empty, self).__init__()
+        self.shape = shape
+        self.name = name
+        self.dtype = dtype
+        self.persist_values = persist_values
+        self.other_args = args
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+
+class log(Op):
+    def __init__(self, x, out=None):
+        super(empty, self).__init__(x)
+        self.shape = elementwise_shape(*self.arg_shapes())
+        self.out = out
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta/x)
+
+
+class multiply(Op):
+    def __init__(self, x, y, out=None):
+        super(multiply, self).__init__(x, y)
+        self.out = out
+        self.shape = elementwise_shape(*self.arg_shapes())
+
+    def evaluate(self, value, x, y):
+        return np.dot(x,y,value)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta*y)
+        y.generate_add_delta(adjoints, x*delta)
+
+
+class negative(Op):
+    def __init__(self, x, out=None):
+        super(negative, self).__init__(x)
+        self.out = out
+        self.shape = self.arg_shapes()[0]
+
+    def evaluate(self, value, x):
+        return -x
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, -delta)
+
+
+class ones(Op):
+    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
+        super(ones, self).__init__()
+        self.shape = shape
+        self.name = name
+        self.dtype = dtype
+        self.persist_values = persist_values
+        self.other_args = args
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+
+class reciprocal(Op):
+    def __init__(self, x, out=None):
+        super(reciprocal, self).__init__(x)
+        self.out = out
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, -self*self*delta)
+
+
+#TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
+class reshape(Op):
+    def __init__(self, x, shape):
+        super(reshape, self).__init__(x)
+        self.shape = shape
+        if self.size != x.size:
+            raise ValueError('total size of new array must be unchanged')
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, reshape(delta, x.shape))
+
+
+class sig(Op):
+    def __init__(self, x, out=None):
+        super(sig, self).__init__(x)
+        self.out = out
+        (self.shape,) = self.arg_shapes()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*self*(1.0-self))
+
+
+class sin(Op):
+    def __init__(self, x, out=None):
+        super(sin, self).__init__(x)
+        self.out = out
+        (self.shape,) = self.arg_shapes()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*cos(x))
+
+
+class square(Op):
+    def __init__(self, x, out=None):
+        super(square, self).__init__(x)
+        self.out = out
+        self.shape = self.arg_shapes()[0]
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, 2.0*delta*x)
+
+
+class subtract(Op):
+    def __init__(self, x, y, out=None):
+        super(subtract, self).__init__(x, y)
+        self.out = out
+        self.shape = elementwise_shape(*self.arg_shapes())
+
+    def evaluate(self, value, x, y):
+        return x-y
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, -delta)
+
+
+class tanh(Op):
+    def __init__(self, x, out=None):
+        super(tanh, self).__init__(x)
+        self.out = out
+        (self.shape,) = self.arg_shapes()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*(1.0-self*self))
+
+
+class transpose(Op):
+    def __init__(self, x, out=None):
+        super(transpose, self).__init__(x)
+        self.out = out
+        xshape, = self.arg_shapes()
+        self.shape = tuple(reversed(xshape))
+
+    def evaluate(self, value, x):
+        return np.transpose(x)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta.T)
+
+
+class zeros(Op):
+    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
+        super(zeros, self).__init__()
+        self.shape = shape
+        self.name = name
+        self.dtype = dtype
+        self.persist_values = persist_values
+        self.other_args = args
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+
+
+
+
+
+class range(Op):
+    def __init__(self, start, stop=None, step=1):
         if stop is None:
             start = 0
             stop = start
-        super(Range, self).__init__(graph, start, stop, step)
+        super(range, self).__init__(start, stop, step)
 
 
-class ControlBlock(Op):
+class deriv(Op):
+    """
+    Derivative of dep with respect to indep
+    """
+    def __init__(self, dep, indep):
+        super(deriv, self).__init__(dep, indep, Graph.get_default_graph(dep, indep).get_adjoints(dep.op)[indep.op])
+        _, _, self.shape = self.arg_shapes()
 
-    def __init__(self, graph):
-        super(ControlBlock, self).__init__(graph)
+    @property
+    def dep(self):
+        dep, indep = self.args
+        return dep
+
+    @property
+    def indep(self):
+        dep, indep = self.args
+        return indep
+
+    def get_computation(self, tape):
+        dep, indep = self.args
+        return tape.get_computation(tape.get_adjoints(dep)[indep])
+
+
+class ControlBlock(object):
+
+    def __init__(self):
         self.__ops = []
 
 
@@ -315,9 +543,9 @@ class ControlBlock(Op):
         return self.__ops
 
 
-class NestedControlBlock(ControlBlock):
+class NestedControlBlock(ControlBlock, Op):
     def __init__(self, context):
-        super(NestedControlBlock, self).__init__(context.graph)
+        super(NestedControlBlock, self).__init__()
         self.parent_context = context
 
     @property
@@ -340,21 +568,63 @@ def show_graph(g):
 
     opids(g)
 
-    def show_op(op):
-        print '%d:%d:%s%s' % (ids[op], ids[op.context], op, tuple(ids[o] for o in op.args))
-        for o in op.ops:
-            show_op(o)
+    def show_op(g):
+        for op in g.ops:
+            name = ''
+            if op.name is not None:
+                name = op.name
+            print '%d:%d:%s%s:%s%s' % (ids[op], ids[op.context], name, op.shape, op, tuple(ids[arg] for arg in op.args))
+            show_op(op)
     show_op(g)
+
+@contextmanager
+def default_graph(graph=None):
+    thread_data = Graph.get_thread_data()
+    old_graph = thread_data.graph
+    if graph is None:
+        graph=Graph()
+    try:
+        thread_data.graph = graph
+        yield(graph)
+    finally:
+        thread_data.graph = old_graph
+
+class VariableBlock(object):
+    def __setattr__(self, name, value):
+        value.op.name = name
+        super(VariableBlock, self).__setattr__(name, value)
 
 
 class Graph(ControlBlock):
 
     def __init__(self):
         self.context = self
-        super(Graph, self).__init__(self)
+        super(Graph, self).__init__()
         self.inputs = {}
         self.variables = {}
         self.op_adjoints = {}
+
+    import threading
+    __thread_data = threading.local()
+    __thread_data.graph = None
+
+    @staticmethod
+    def get_thread_data():
+        return Graph.__thread_data
+
+    @staticmethod
+    def get_default_graph(*args):
+        graph = Graph.__thread_data.graph
+        for arg in args:
+            if isinstance(arg, Arg):
+                g = arg.graph
+                if g is not None:
+                    graph = g
+                    break
+
+        if graph is None:
+            raise MissingGraphError()
+        return graph
 
     @property
     def graph(self):
@@ -374,28 +644,10 @@ class Graph(ControlBlock):
         ordered_ops = []
         Graph.get_ordered_ops(op, ordered_ops)
         self.op_adjoints[op] = adjoints
-        adjoints[op] = Constant(self, np.array([1.0]).reshape(1, 1))
+        adjoints[op] = ones(op.shape)
         for o in reversed(ordered_ops):
-            o.generate_adjoints(adjoints, adjoints[op], *o.args)
+            o.generate_adjoints(adjoints, adjoints[o], *o.args)
         return adjoints
-
-
-    def input(self, name):
-        """
-        A variable whose initial value can be set in a graph.
-        :param name:
-        :return:
-        """
-        input = Input(self, name)
-        self.inputs[name] = input
-        variable = self.variable(name)
-        variable.set(input)
-        return variable
-
-    def variable(self, name=None):
-        variable = Variable(self, name)
-        self.variables[name] = variable
-        return variable
 
     @contextmanager
     def iterate(self, iterable):
@@ -416,17 +668,8 @@ class Graph(ControlBlock):
         finally:
             self.context = old_context
 
-    def range(self, *args):
-        return Range(self, *args)
-
-    def deriv(self, dep, indep):
-        return Deriv(self, dep, indep)
-
     # Neon backend
     def absolute(self, a, out=None):
-        pass
-
-    def add(self, a, b, out=None):
         pass
 
     def add_fc_bias(self, inputs, bias):
@@ -466,15 +709,6 @@ class Graph(ControlBlock):
         pass
 
     def deconv_layer(self, dtype, N, C, K, P, Q, R=None, S=None, *args):
-        pass
-
-    def divide(self, a, b, out=None):
-        pass
-
-    def dot(self, a, b, out=None):
-        pass
-
-    def empty(self, shape, dtype=None, name=None, persist_values=None, *args):
         pass
 
     def empty_like(self, other_ary, name=None, persist_values=None):
@@ -519,9 +753,6 @@ class Graph(ControlBlock):
     def less_equal(self, a, b, out=None):
         pass
 
-    def log(self, a, out=None):
-        pass
-
     def log2(self, a, out=None):
         pass
 
@@ -543,19 +774,10 @@ class Graph(ControlBlock):
     def minimum(self, a, b, out=None):
         pass
 
-    def multiply(self, a, b, out=None):
-        pass
-
-    def negative(self, a, out=None):
-        pass
-
     def not_equal(self, a, b, out=None):
         pass
 
     def onehot(self, indices, axis, out=None):
-        pass
-
-    def ones(self, shape, dtype=None, name=None, persist_values=None, *args):
         pass
 
     def output_dim(self, X, S, padding, strides, pooling=None):
@@ -565,9 +787,6 @@ class Graph(ControlBlock):
         pass
 
     def power(self, a, b, out=None):
-        pass
-
-    def reciprocal(self, a, out=None):
         pass
 
     def revert_tensor(self, tensor):
@@ -591,31 +810,19 @@ class Graph(ControlBlock):
     def sgn(self, a, out=None):
         pass
 
-    def sig(self, a, out=None):
-        pass
-
     def sig2(self, a, out=None):
         pass
 
     def sqrt(self, a, out=None):
         pass
 
-    def square(self, a, out=None):
-        pass
-
     def std(self, a, axis=None, partial=None, out=None, keepdims=None):
-        pass
-
-    def subtract(self, a, b, out=None):
         pass
 
     def sum(self, a, axis=None, out=None, keepdims=None):
         pass
 
     def take(self, a, indices, axis, out=None):
-        pass
-
-    def tanh(self, a, out=None):
         pass
 
     def tanh2(self, a, out=None):
@@ -633,13 +840,8 @@ class Graph(ControlBlock):
     def var(self, a, axis=None, partial=None, out=None, keepdims=None):
         pass
 
-    def zeros(self, shape, dtype=None, name=None, persist_values=None, *args):
-        pass
-
     def zeros_like(self, other_ary, name=None, persist_values=None):
         pass
-
-
 
 
 
