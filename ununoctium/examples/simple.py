@@ -1,22 +1,31 @@
-import geon.backends.graph.graph as graph
+import geon.backends.graph.graph as g
 
-def norm2(x):
-    return x.T*x
+gr = g.Graph()
+with g.default_graph(gr) as be:
+    from geon.backends.graph.funs import *
+    vars = g.VariableBlock()
 
-be = graph.Graph()
+    def norm2(x):
+        return dot(x.T,x)
+    try:
+        vars.w = zeros((3,10))
+        vars.b = zeros((3,))
 
-w = be.input('w')
-b = be.input('b')
+        vars.x = input((10,))
+        vars.y0 = input((3,))
 
-x = be.input('x')
-y0 = be.input('y0')
+        vars.e = norm2(sin(dot(vars.w, vars.x) + vars.b))
+        vars.reg = norm2(vars.b)+norm2(reshape(vars.w,(30,)))
+        vars.l = vars.e+.1*vars.reg
 
-e = norm2(w * x + b)
+        vars.dedw = deriv(vars.l, vars.w)
+        vars.dedb = deriv(vars.l, vars.b)
 
-dedw = be.deriv(e,w)
-dedb = be.deriv(e,b)
+    except g.IncompatibleShapesError:
+        # Convenient place to put a breakpoint for debugging
+        pass
 
-graph.show_graph(be)
+g.show_graph(gr)
 
 
 
