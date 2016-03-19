@@ -14,8 +14,8 @@ with g.default_graph(gr) as be:
         vars.x = input((10,))
         vars.y0 = input((3,))
 
-        vars.e = norm2(sin(dot(vars.w, vars.x) + vars.b))
-        vars.reg = norm2(vars.b)+norm2(reshape(vars.w,(30,)))
+        vars.e = norm2(sig(dot(vars.w, vars.x) + vars.b))
+        vars.reg = norm2(vars.b)+norm2(reshape(vars.w,(vars.w.size,)))
         vars.l = vars.e+.1*vars.reg
 
         vars.dedw = deriv(vars.l, vars.w)

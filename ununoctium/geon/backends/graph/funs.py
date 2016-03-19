@@ -6,6 +6,7 @@ cos = graph.cos
 divide = graph.divide
 dot = graph.dot
 empty = graph.empty
+exp = graph.exp
 log = graph.log
 multiply = graph.multiply
 negative = graph.negative
