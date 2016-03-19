@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import weakref
 
 import numpy as np
 
@@ -24,6 +25,7 @@ class IncompatibleShapesError(Error):
     Incompatible shapes.
     """
 
+#TODO Probably don't need this separate from Op, particularly if variable goes away
 class Arg(object):
     """
     An Arg is something that can appear as a Python function/operator argument, but might not be inserted directly
@@ -96,6 +98,18 @@ class Op(Arg):
         self.context.add_op(self)
         self.shape = None
         self.name = None
+        self.users = weakref.WeakSet()
+        self.out = None
+        for arg in self.args:
+            arg.users.add(self)
+
+    def setup_out(self, out):
+        if out is None:
+            self.out = empty(self.shape)
+        else:
+            if out.shape != self.shape:
+                raise IncompatibleShapesError()
+            self.out = out
 
     @staticmethod
     def as_op(x):
@@ -251,8 +265,8 @@ def elementwise_shape(*shapes):
 class add(Op):
     def __init__(self, x, y, out=None):
         super(add, self).__init__(x, y)
-        self.out = out
         self.shape = elementwise_shape(*self.arg_shapes())
+        self.setup_out(out)
 
     def evaluate(self, value, x, y):
         return x + y
@@ -265,8 +279,8 @@ class add(Op):
 class cos(Op):
     def __init__(self, x, out=None):
         super(cos, self).__init__(x)
-        self.out = out
         (self.shape,) = self.arg_shapes()
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
@@ -275,7 +289,7 @@ class cos(Op):
 # This makes the derivative simpler if we need it
 def divide(x, y, out=None):
     result = x*reciprocal(y)
-    result.out = out
+    result.setup_out(out)
     return result
 
 
@@ -299,7 +313,7 @@ class dot(Op):
             yr = reshape(y, (y.shape[0], d1))
 
         super(dot, self).__init__(xr, yr)
-        self.out = out
+
         xshape = x.shape
         yshape = y.shape
 
@@ -311,6 +325,7 @@ class dot(Op):
             raise IncompatibleShapesError()
         else:
             self.shape = tuple(xshape[:-1]+yshape[1:])
+        self.setup_out(out)
 
     def evaluate(self, value, x, y):
         return np.dot(x,y,value)
@@ -337,11 +352,22 @@ class empty(Op):
         pass
 
 
+class exp(Op):
+    def __init__(self, x, out=None):
+        super(exp, self).__init__(x)
+        self.shape, _ = self.arg_shapes()
+        self.setup_out(out)
+
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta)
+
+
 class log(Op):
     def __init__(self, x, out=None):
         super(empty, self).__init__(x)
         self.shape = elementwise_shape(*self.arg_shapes())
-        self.out = out
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
@@ -350,8 +376,8 @@ class log(Op):
 class multiply(Op):
     def __init__(self, x, y, out=None):
         super(multiply, self).__init__(x, y)
-        self.out = out
         self.shape = elementwise_shape(*self.arg_shapes())
+        self.setup_out(out)
 
     def evaluate(self, value, x, y):
         return np.dot(x,y,value)
@@ -364,8 +390,8 @@ class multiply(Op):
 class negative(Op):
     def __init__(self, x, out=None):
         super(negative, self).__init__(x)
-        self.out = out
         self.shape = self.arg_shapes()[0]
+        self.setup_out(out)
 
     def evaluate(self, value, x):
         return -x
@@ -390,7 +416,8 @@ class ones(Op):
 class reciprocal(Op):
     def __init__(self, x, out=None):
         super(reciprocal, self).__init__(x)
-        self.out = out
+        self.shape, = self.arg_shapes()
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
@@ -411,8 +438,8 @@ class reshape(Op):
 class sig(Op):
     def __init__(self, x, out=None):
         super(sig, self).__init__(x)
-        self.out = out
         (self.shape,) = self.arg_shapes()
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
@@ -421,8 +448,8 @@ class sig(Op):
 class sin(Op):
     def __init__(self, x, out=None):
         super(sin, self).__init__(x)
-        self.out = out
         (self.shape,) = self.arg_shapes()
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
@@ -431,8 +458,8 @@ class sin(Op):
 class square(Op):
     def __init__(self, x, out=None):
         super(square, self).__init__(x)
-        self.out = out
         self.shape = self.arg_shapes()[0]
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
@@ -441,8 +468,8 @@ class square(Op):
 class subtract(Op):
     def __init__(self, x, y, out=None):
         super(subtract, self).__init__(x, y)
-        self.out = out
         self.shape = elementwise_shape(*self.arg_shapes())
+        self.setup_out(out)
 
     def evaluate(self, value, x, y):
         return x-y
@@ -455,8 +482,8 @@ class subtract(Op):
 class tanh(Op):
     def __init__(self, x, out=None):
         super(tanh, self).__init__(x)
-        self.out = out
         (self.shape,) = self.arg_shapes()
+        self.setup_out(out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
@@ -465,9 +492,9 @@ class tanh(Op):
 class transpose(Op):
     def __init__(self, x, out=None):
         super(transpose, self).__init__(x)
-        self.out = out
         xshape, = self.arg_shapes()
         self.shape = tuple(reversed(xshape))
+        self.setup_out(out)
 
     def evaluate(self, value, x):
         return np.transpose(x)
@@ -573,7 +600,10 @@ def show_graph(g):
             name = ''
             if op.name is not None:
                 name = op.name
-            print '%d:%d:%s%s:%s%s' % (ids[op], ids[op.context], name, op.shape, op, tuple(ids[arg] for arg in op.args))
+            outid = ''
+            if op.out is not None:
+                outid = '=>%d' % (ids[op.out],)
+            print '%d:%d:%s%s:%s%s%s' % (ids[op], ids[op.context], name, op.shape, op, tuple(ids[arg] for arg in op.args), outid)
             show_op(op)
     show_op(g)
 
@@ -668,7 +698,8 @@ class Graph(ControlBlock):
         finally:
             self.context = old_context
 
-    # Neon backend
+    # Neon backend functions
+    # TODO These are just here as placeholders
     def absolute(self, a, out=None):
         pass
 
@@ -718,9 +749,6 @@ class Graph(ControlBlock):
         pass
 
     def equal(self, a, b, out=None):
-        pass
-
-    def exp(self, a, out=None):
         pass
 
     def exp2(self, a, out=None):
