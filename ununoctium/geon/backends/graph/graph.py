@@ -92,24 +92,33 @@ class Op(Arg):
     """
     An Op is the result of some sort of operation.
     """
-    def __init__(self, *args):
+    def __init__(self, out, *args):
         self.context = Graph.get_default_graph(args).context
         self.args = tuple(Op.as_op(arg) for arg in args)
-        self.context.add_op(self)
-        self.shape = None
-        self.name = None
-        self.users = weakref.WeakSet()
-        self.out = None
         for arg in self.args:
             arg.users.add(self)
-
-    def setup_out(self, out):
+        self.set_shape()
         if out is None:
             self.out = empty(self.shape)
         else:
+            self.out = out
             if out.shape != self.shape:
                 raise IncompatibleShapesError()
-            self.out = out
+        if out is not self:
+            self.out.users.add(self)
+
+        self.context.add_op(self)
+        self.name = None
+        self.users = weakref.WeakSet()
+
+    def set_shape(self):
+        raise NotImplementedError()
+
+    def deps(self):
+        if self.out is None:
+            return self.args
+        else:
+            return (self.out,)+self.args
 
     @staticmethod
     def as_op(x):
@@ -129,10 +138,6 @@ class Op(Arg):
     @property
     def ops(self):
         return []
-
-    def set_type(self, type):
-        self.type = type
-        return self
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -157,10 +162,68 @@ class Op(Arg):
         return result
 
 
+def elementwise_shape(*shapes):
+    n = max((len(shape) for shape in shapes))
+
+    def prepend(s):
+        return tuple(1 for x in xrange(n-len(s)))+s
+
+    shapes = (prepend(s) for s in shapes)
+
+    def broadcast(*vals):
+        result = 1
+        for val in vals:
+            if val == 1:
+                continue
+            elif result == 1 or val == result:
+                result = val
+            else:
+                raise IncompatibleShapesError()
+        return result
+
+    return tuple(broadcast(*d) for d in zip(*shapes))
+
+
+class ElementWise(Op):
+    def set_shape(self):
+        self.shape = elementwise_shape(*self.arg_shapes())
+
+
+def c_strides(dtype, shape):
+    stride = dtype.itemsize
+    strides = []
+    for l in shape:
+        strides.append(stride)
+        stride = stride*l
+    return tuple(reversed(strides))
+
+
+class AllocationOp(Op):
+    def __init__(self, shape, *args):
+        self.shape = shape
+        self.dtype = np.dtype(np.float32)
+        self.strides = c_strides(self.dtype, self.shape)
+        super(AllocationOp, self).__init__(self, *args)
+        self.aliases = weakref.WeakSet()
+
+    def set_shape(self):
+        pass
+
+
+class AliasOp(AllocationOp):
+    """
+    Allocates a descriptor that aliases another allocation.
+    """
+    def __init__(self, shape, *aliased):
+        super(AliasOp, self).__init__(shape, *aliased)
+        for alloc in aliased:
+            alloc.out.aliases.add(self)
+
 
 class OpIterValue(Op):
     def __init__(self, sequence):
         super(OpIterValue, self).__init__(sequence)
+
 
 class OpIterator(Op):
     def __init__(self, sequence):
@@ -179,14 +242,13 @@ class OpIterator(Op):
             raise StopIteration()
 
 
-class input(Op):
+class input(AllocationOp):
     """
     Can be set externally.
     """
 
     def __init__(self, shape):
-        super(input, self).__init__()
-        self.shape = shape
+        super(input, self).__init__(shape)
 
     def evaluate(self, value):
         return value
@@ -219,17 +281,17 @@ class variable(Arg):
         return self
 
 
-class Constant(Op):
+class Constant(AllocationOp):
     """
     A constant that appears in a graph.
     """
     def __init__(self, const):
-        super(Constant, self).__init__()
-        self.const = const
         if isinstance(const, np.ndarray):
-            self.shape =  const.shape
+            shape =  const.shape
         else:
-            self.shape = ()
+            shape = ()
+        super(Constant, self).__init__(shape)
+        self.const = const
 
     def evaluate(self, value):
         return self.const
@@ -241,32 +303,9 @@ class Constant(Op):
         return "%s(%s)" % (self.__class__.__name__, self.const)
 
 
-
-def elementwise_shape(*shapes):
-    n = max((len(shape) for shape in shapes))
-    def prepend(s):
-        return tuple(1 for x in xrange(n-len(s)))+s
-    shapes = (prepend(s) for s in shapes)
-
-    def broadcast(*vals):
-        result = 1
-        for val in vals:
-            if val == 1:
-                continue
-            elif result == 1 or val == result:
-                result = val
-            else:
-                raise IncompatibleShapesError()
-        return result
-
-    return tuple(broadcast(*d) for d in zip(*shapes))
-
-
-class add(Op):
+class add(ElementWise):
     def __init__(self, x, y, out=None):
-        super(add, self).__init__(x, y)
-        self.shape = elementwise_shape(*self.arg_shapes())
-        self.setup_out(out)
+        super(add, self).__init__(out, x, y)
 
     def evaluate(self, value, x, y):
         return x + y
@@ -276,11 +315,9 @@ class add(Op):
         y.generate_add_delta(adjoints, delta)
 
 
-class cos(Op):
+class cos(ElementWise):
     def __init__(self, x, out=None):
-        super(cos, self).__init__(x)
-        (self.shape,) = self.arg_shapes()
-        self.setup_out(out)
+        super(cos, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
@@ -288,11 +325,11 @@ class cos(Op):
 
 # This makes the derivative simpler if we need it
 def divide(x, y, out=None):
-    result = x*reciprocal(y)
-    result.setup_out(out)
+    result = multiply(x, reciprocal(y), out=out)
     return result
 
 
+#TODO Replace with a simple dot operation wrapped by the messy dimension cases
 class dot(Op):
     def __init__(self, x, y, out=None):
         xr = x
@@ -312,8 +349,6 @@ class dot(Op):
                 d1 = d1*d
             yr = reshape(y, (y.shape[0], d1))
 
-        super(dot, self).__init__(xr, yr)
-
         xshape = x.shape
         yshape = y.shape
 
@@ -325,7 +360,11 @@ class dot(Op):
             raise IncompatibleShapesError()
         else:
             self.shape = tuple(xshape[:-1]+yshape[1:])
-        self.setup_out(out)
+
+        super(dot, self).__init__(out, xr, yr)
+
+    def set_shape(self):
+        pass
 
     def evaluate(self, value, x, y):
         return np.dot(x,y,value)
@@ -339,10 +378,9 @@ class dot(Op):
         y.generate_add_delta(adjoints, dot(x.T, dr))
 
 
-class empty(Op):
+class empty(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(empty, self).__init__()
-        self.shape = shape
+        super(empty, self).__init__(shape)
         self.name = name
         self.dtype = dtype
         self.persist_values = persist_values
@@ -352,32 +390,25 @@ class empty(Op):
         pass
 
 
-class exp(Op):
+class exp(ElementWise):
     def __init__(self, x, out=None):
-        super(exp, self).__init__(x)
-        self.shape, _ = self.arg_shapes()
-        self.setup_out(out)
-
+        super(exp, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
 
 
-class log(Op):
+class log(ElementWise):
     def __init__(self, x, out=None):
-        super(empty, self).__init__(x)
-        self.shape = elementwise_shape(*self.arg_shapes())
-        self.setup_out(out)
+        super(empty, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
 
 
-class multiply(Op):
+class multiply(ElementWise):
     def __init__(self, x, y, out=None):
-        super(multiply, self).__init__(x, y)
-        self.shape = elementwise_shape(*self.arg_shapes())
-        self.setup_out(out)
+        super(multiply, self).__init__(out, x, y)
 
     def evaluate(self, value, x, y):
         return np.dot(x,y,value)
@@ -387,11 +418,9 @@ class multiply(Op):
         y.generate_add_delta(adjoints, x*delta)
 
 
-class negative(Op):
+class negative(ElementWise):
     def __init__(self, x, out=None):
-        super(negative, self).__init__(x)
-        self.shape = self.arg_shapes()[0]
-        self.setup_out(out)
+        super(negative, self).__init__(out, x)
 
     def evaluate(self, value, x):
         return -x
@@ -400,10 +429,9 @@ class negative(Op):
         x.generate_add_delta(adjoints, -delta)
 
 
-class ones(Op):
+class ones(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(ones, self).__init__()
-        self.shape = shape
+        super(ones, self).__init__(shape)
         self.name = name
         self.dtype = dtype
         self.persist_values = persist_values
@@ -413,21 +441,18 @@ class ones(Op):
         pass
 
 
-class reciprocal(Op):
+class reciprocal(ElementWise):
     def __init__(self, x, out=None):
-        super(reciprocal, self).__init__(x)
-        self.shape, = self.arg_shapes()
-        self.setup_out(out)
+        super(reciprocal, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
 
 
 #TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
-class reshape(Op):
-    def __init__(self, x, shape):
-        super(reshape, self).__init__(x)
-        self.shape = shape
+class reshape(AliasOp):
+    def __init__(self, x, shape, out=None):
+        super(reshape, self).__init__(shape, x)
         if self.size != x.size:
             raise ValueError('total size of new array must be unchanged')
 
@@ -435,41 +460,33 @@ class reshape(Op):
         x.generate_add_delta(adjoints, reshape(delta, x.shape))
 
 
-class sig(Op):
+class sig(ElementWise):
     def __init__(self, x, out=None):
-        super(sig, self).__init__(x)
-        (self.shape,) = self.arg_shapes()
-        self.setup_out(out)
+        super(sig, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
 
 
-class sin(Op):
+class sin(ElementWise):
     def __init__(self, x, out=None):
-        super(sin, self).__init__(x)
-        (self.shape,) = self.arg_shapes()
-        self.setup_out(out)
+        super(sin, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
 
 
-class square(Op):
+class square(ElementWise):
     def __init__(self, x, out=None):
-        super(square, self).__init__(x)
-        self.shape = self.arg_shapes()[0]
-        self.setup_out(out)
+        super(square, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
 
 
-class subtract(Op):
+class subtract(ElementWise):
     def __init__(self, x, y, out=None):
-        super(subtract, self).__init__(x, y)
-        self.shape = elementwise_shape(*self.arg_shapes())
-        self.setup_out(out)
+        super(subtract, self).__init__(out, x, y)
 
     def evaluate(self, value, x, y):
         return x-y
@@ -479,22 +496,17 @@ class subtract(Op):
         y.generate_add_delta(adjoints, -delta)
 
 
-class tanh(Op):
+class tanh(ElementWise):
     def __init__(self, x, out=None):
-        super(tanh, self).__init__(x)
-        (self.shape,) = self.arg_shapes()
-        self.setup_out(out)
+        super(tanh, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
 
 
-class transpose(Op):
-    def __init__(self, x, out=None):
-        super(transpose, self).__init__(x)
-        xshape, = self.arg_shapes()
-        self.shape = tuple(reversed(xshape))
-        self.setup_out(out)
+class transpose(AliasOp):
+    def __init__(self, x):
+        super(transpose, self).__init__(tuple(reversed(x.shape)), x)
 
     def evaluate(self, value, x):
         return np.transpose(x)
@@ -503,10 +515,9 @@ class transpose(Op):
         x.generate_add_delta(adjoints, delta.T)
 
 
-class zeros(Op):
+class zeros(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(zeros, self).__init__()
-        self.shape = shape
+        super(zeros, self).__init__(shape)
         self.name = name
         self.dtype = dtype
         self.persist_values = persist_values
@@ -514,8 +525,6 @@ class zeros(Op):
 
     def generate_adjoints(self, adjoints, delta):
         pass
-
-
 
 
 
@@ -528,27 +537,8 @@ class range(Op):
         super(range, self).__init__(start, stop, step)
 
 
-class deriv(Op):
-    """
-    Derivative of dep with respect to indep
-    """
-    def __init__(self, dep, indep):
-        super(deriv, self).__init__(dep, indep, Graph.get_default_graph(dep, indep).get_adjoints(dep.op)[indep.op])
-        _, _, self.shape = self.arg_shapes()
-
-    @property
-    def dep(self):
-        dep, indep = self.args
-        return dep
-
-    @property
-    def indep(self):
-        dep, indep = self.args
-        return indep
-
-    def get_computation(self, tape):
-        dep, indep = self.args
-        return tape.get_computation(tape.get_adjoints(dep)[indep])
+def deriv(dep, indep):
+    return Graph.get_default_graph(dep, indep).get_adjoints(dep.op)[indep.op]
 
 
 class ControlBlock(object):
@@ -601,7 +591,7 @@ def show_graph(g):
             if op.name is not None:
                 name = op.name
             outid = ''
-            if op.out is not None:
+            if op.out is not op:
                 outid = '=>%d' % (ids[op.out],)
             print '%d:%d:%s%s:%s%s%s' % (ids[op], ids[op.context], name, op.shape, op, tuple(ids[arg] for arg in op.args), outid)
             show_op(op)
