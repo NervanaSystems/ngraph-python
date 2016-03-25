@@ -2,7 +2,7 @@ from contextlib import contextmanager
 
 import pycuda.driver as cuda
 import numpy as np
-import storage.Storage as Storage
+from geon.backends.graph.storage import Store
 
 
 # Initialize CUDA
@@ -45,7 +45,7 @@ def cuda_context(context=None):
 
 
 #TODO: Switch to the new Storage API
-class GPUStorage(Storage):
+class GPUStorage(Store):
     def __init__(self, context, dtype, size, alloc=True):
         self.allocation = None
         self.context = context
