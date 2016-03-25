@@ -41,17 +41,17 @@ class Arg(object):
         raise NotImplementedError()
 
     def __iter__(self):
-        return OpIterator(self.graph, self.op)
+        return OpIterator(self.op)
 
     # Magic methods for builtin operations we want to use for creating nodes
     def __neg__(self):
-        return negative(self.graph, self)
+        return negative(self)
 
     def __pos__(self):
         return self
 
     def __abs__(self):
-        return Abs(self)
+        return absolute(self)
 
     def __add__(self, val):
         return add(self, val)
@@ -87,6 +87,11 @@ class Arg(object):
     def T(self):
         return transpose(self)
 
+
+def posneg(x):
+    s = .5*sig(x)
+
+    return .5+s, .5-s
 
 class Op(Arg):
     """
@@ -160,6 +165,9 @@ class Op(Arg):
         for d in self.shape:
             result = result*d
         return result
+
+    def evaluate(self, environment, *args):
+        raise NotImplementedError()
 
 
 def elementwise_shape(*shapes):
@@ -250,8 +258,8 @@ class input(AllocationOp):
     def __init__(self, shape):
         super(input, self).__init__(shape)
 
-    def evaluate(self, value):
-        return value
+    def evaluate(self, environment):
+        return environment.input(self.name, self.shape)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -293,8 +301,8 @@ class Constant(AllocationOp):
         super(Constant, self).__init__(shape)
         self.const = const
 
-    def evaluate(self, value):
-        return self.const
+    def evaluate(self, environment):
+        return environment.constant(self.const)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -303,12 +311,23 @@ class Constant(AllocationOp):
         return "%s(%s)" % (self.__class__.__name__, self.const)
 
 
+class absolute(ElementWise):
+    def __init__(self, x, out=None):
+        super(absolute, self).__init__(out, x)
+
+    def evaluate(self, environment, out, x):
+        return environment.absolute(x, out)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, sig(x)*delta)
+
+
 class add(ElementWise):
     def __init__(self, x, y, out=None):
         super(add, self).__init__(out, x, y)
 
-    def evaluate(self, value, x, y):
-        return x + y
+    def evaluate(self, environment, out, x, y):
+        return environment.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta)
@@ -321,6 +340,9 @@ class cos(ElementWise):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
+
+    def evaluate(self, environment, out, x):
+        return environment.cos(x, out)
 
 
 # This makes the derivative simpler if we need it
@@ -366,8 +388,8 @@ class dot(Op):
     def set_shape(self):
         pass
 
-    def evaluate(self, value, x, y):
-        return np.dot(x,y,value)
+    def evaluate(self, environment, out, x, y):
+        return environment.dot(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
 
@@ -389,6 +411,9 @@ class empty(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
+    def evaluate(self, environment):
+        return environment.empty(self.shape, self.dtype)
+
 
 class exp(ElementWise):
     def __init__(self, x, out=None):
@@ -397,36 +422,69 @@ class exp(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
 
+    def evaluate(self, environment, out, x):
+        return environment.exp(x, out)
+
 
 class log(ElementWise):
     def __init__(self, x, out=None):
-        super(empty, self).__init__(out, x)
+        super(log, self).__init__(out, x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
+
+    def evaluate(self, environment, out, x):
+        return environment.log(x, out)
+
+
+class maximum(ElementWise):
+    def __init__(self, x, y, out=None):
+        super(maximum, self).__init__(out, x, y)
+
+    def evaluate(self, environment, out, x, y):
+        return environment.maximum(x, y, out=out)
+
+    def generate_adjoins(self, adjoints, delta, x, y):
+        p, n = posneg(x-y)
+        x.generate_add_delta(delta*p)
+        y.generate_add_delta(delta*n)
+
+
+class minimum(ElementWise):
+    def __init__(self, x, y, out=None):
+        super(minimum, self).__init__(out, x, y)
+
+    def evaluate(self, environment, out, x, y):
+        return environment.minimum(x, y, out=out)
+
+    def generate_adjoins(self, adjoints, delta, x, y):
+        p, n = posneg(y-x)
+        x.generate_add_delta(delta*p)
+        y.generate_add_delta(delta*n)
 
 
 class multiply(ElementWise):
     def __init__(self, x, y, out=None):
         super(multiply, self).__init__(out, x, y)
 
-    def evaluate(self, value, x, y):
-        return np.dot(x,y,value)
-
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*y)
         y.generate_add_delta(adjoints, x*delta)
+
+
+    def evaluate(self, environment, out, x, y):
+        return environment.multiply(x, y, out)
 
 
 class negative(ElementWise):
     def __init__(self, x, out=None):
         super(negative, self).__init__(out, x)
 
-    def evaluate(self, value, x):
-        return -x
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
+
+    def evaluate(self, environment, out, x):
+        return environment.negative(x, out)
 
 
 class ones(AllocationOp):
@@ -440,6 +498,9 @@ class ones(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
+    def evaluate(self, environment):
+        return environment.ones(self.shape, self.dtype)
+
 
 class reciprocal(ElementWise):
     def __init__(self, x, out=None):
@@ -448,16 +509,22 @@ class reciprocal(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
 
+    def evaluate(self, environment, out, x):
+        return environment.reciprocal(x, out)
+
 
 #TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
 class reshape(AliasOp):
-    def __init__(self, x, shape, out=None):
+    def __init__(self, x, shape):
         super(reshape, self).__init__(shape, x)
         if self.size != x.size:
             raise ValueError('total size of new array must be unchanged')
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, reshape(delta, x.shape))
+
+    def evaluate(self, environment, x):
+        return environment.reshape(x, self.shape)
 
 
 class sig(ElementWise):
@@ -467,6 +534,8 @@ class sig(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
 
+    def evaluate(self, environment, out, x):
+        return environment.sig(x, out)
 
 class sin(ElementWise):
     def __init__(self, x, out=None):
@@ -475,6 +544,20 @@ class sin(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
 
+    def evaluate(self, environment, out, x):
+        return environment.sin(x, out)
+
+
+class sqrt(ElementWise):
+    def __init__(self, x, out=None):
+        super(sqrt, self).__init__(out, x)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, .5*delta*self)
+
+    def evaluate(self, environment, out, x):
+        return environment.sqrt(x, out)
+
 
 class square(ElementWise):
     def __init__(self, x, out=None):
@@ -482,6 +565,9 @@ class square(ElementWise):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
+
+    def evaluate(self, environment, out, x):
+        return environment.square(x, out)
 
 
 class subtract(ElementWise):
@@ -495,6 +581,9 @@ class subtract(ElementWise):
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, -delta)
 
+    def evaluate(self, environment, out, x, y):
+        return environment.subtract(x, y, out)
+
 
 class tanh(ElementWise):
     def __init__(self, x, out=None):
@@ -503,13 +592,16 @@ class tanh(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
 
+    def evaluate(self, environment, out, x):
+        return environment.tanh(x, out)
+
 
 class transpose(AliasOp):
     def __init__(self, x):
         super(transpose, self).__init__(tuple(reversed(x.shape)), x)
 
-    def evaluate(self, value, x):
-        return np.transpose(x)
+    def evaluate(self, environment, x):
+        return environment.transpose()
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta.T)
@@ -526,7 +618,8 @@ class zeros(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-
+    def evaluate(self, environment):
+        return environment.zeros(self.shape, self.dtype)
 
 
 class range(Op):
@@ -688,11 +781,20 @@ class Graph(ControlBlock):
         finally:
             self.context = old_context
 
+    def ordered_ops(self):
+        ops = []
+
+        def addops(g):
+            ops.append(g)
+            for op in g.ops:
+                addops(op)
+
+        addops(self)
+
+        return ops
+
     # Neon backend functions
     # TODO These are just here as placeholders
-    def absolute(self, a, out=None):
-        pass
-
     def add_fc_bias(self, inputs, bias):
         pass
 
@@ -780,16 +882,10 @@ class Graph(ControlBlock):
     def max(self, axis=None, out=None, keepdims=None):
         pass
 
-    def maximum(self, a, b, out=None):
-        pass
-
     def mean(self, a, axis=None, partial=None, out=None, keepdims=None):
         pass
 
     def min(self, a, axis=None, out=None, keepdims=None):
-        pass
-
-    def minimum(self, a, b, out=None):
         pass
 
     def not_equal(self, a, b, out=None):
@@ -829,9 +925,6 @@ class Graph(ControlBlock):
         pass
 
     def sig2(self, a, out=None):
-        pass
-
-    def sqrt(self, a, out=None):
         pass
 
     def std(self, a, axis=None, partial=None, out=None, keepdims=None):
