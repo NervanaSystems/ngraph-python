@@ -29,6 +29,8 @@ deriv = graph.deriv
 input = graph.input
 range = graph.range
 
+def relu(x,out):
+    maximum(x, 0, out)
 
 # Not sure if we'll need this
 variable = graph.variable

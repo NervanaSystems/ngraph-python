@@ -177,8 +177,16 @@ class PyCUDAEnvironment(Environment):
         return out
 
     def multiply(self, x, y, out=None):
-        x._elwise_multiply(y, out=out)
-        return out
+        if isinstance(x, gpuarray.GPUArray):
+            if isinstance(y, gpuarray.GPUArray):
+                x._elwise_multiply(y, out=out)
+                return out
+            x._axpbz(y, 0, out)
+        elif isinstance(y, gpuarray.GPUArray):
+            y._axpbz(x, 0, out)
+            return out
+        else:
+            return x*y
 
     def negative(self, x, out=None):
         x._axpbz(-1, 0.0, out)
@@ -269,7 +277,7 @@ class GenNumPy(Environment):
         return 'np.dot({x}, {y}, out={out})'.format(x=x, y=y, out=out)
 
     def empty(self, shape, dtype):
-        return 'np.empty({shape}, {dtype})'.format(shape=shape, dtype=dtype)
+        return 'np.empty({shape}, np.{dtype})'.format(shape=shape, dtype=dtype)
 
     def exp(self, x, out=None):
         return 'np.exp({x}, out={out})'.format(x=x, out=out)
@@ -290,7 +298,7 @@ class GenNumPy(Environment):
         return 'np.negative({x}, out={out})'.format(x=x, out=out)
 
     def ones(self, shape, dtype):
-        return 'np.ones({shape}, {dtype})'.format(shape=shape, dtype=dtype)
+        return 'np.ones({shape}, np.{dtype})'.format(shape=shape, dtype=dtype)
 
     def reciprocal(self, x, out=None):
         return 'np.reciprocal({x}, out={out})'.format(x=x, out=out)
@@ -320,6 +328,6 @@ class GenNumPy(Environment):
         return '{x}.transpose()'.format(x=x)
 
     def zeros(self, shape, dtype):
-        return 'np.zeros({shape}, {dtype})'.format(shape=shape,dtype=dtype)
+        return 'np.zeros({shape}, np.{dtype})'.format(shape=shape,dtype=dtype)
 
 

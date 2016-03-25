@@ -81,7 +81,7 @@ class Arg(object):
         return Pow(self, val)
 
     def __rpow__(self, val):
-        return Pow(self, val)
+        return Pow(val, self)
 
     @property
     def T(self):
@@ -207,9 +207,11 @@ def c_strides(dtype, shape):
 
 
 class AllocationOp(Op):
-    def __init__(self, shape, *args):
+    def __init__(self, shape, dtype=None, *args):
         self.shape = shape
-        self.dtype = np.dtype(np.float32)
+        if dtype == None:
+            dtype = np.dtype(np.float32)
+        self.dtype = dtype
         self.strides = c_strides(self.dtype, self.shape)
         super(AllocationOp, self).__init__(self, *args)
         self.aliases = weakref.WeakSet()
@@ -402,9 +404,8 @@ class dot(Op):
 
 class empty(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(empty, self).__init__(shape)
+        super(empty, self).__init__(shape, dtype=dtype)
         self.name = name
-        self.dtype = dtype
         self.persist_values = persist_values
         self.other_args = args
 
@@ -489,9 +490,8 @@ class negative(ElementWise):
 
 class ones(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(ones, self).__init__(shape)
+        super(ones, self).__init__(shape, dtype=dtype)
         self.name = name
-        self.dtype = dtype
         self.persist_values = persist_values
         self.other_args = args
 
@@ -609,9 +609,8 @@ class transpose(AliasOp):
 
 class zeros(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(zeros, self).__init__(shape)
+        super(zeros, self).__init__(shape, dtype=dtype)
         self.name = name
-        self.dtype = dtype
         self.persist_values = persist_values
         self.other_args = args
 
