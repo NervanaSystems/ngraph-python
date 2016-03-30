@@ -3,10 +3,6 @@ import numpy as np
 import geon.backends.graph.graph as graph
 import geon.backends.graph.typing as gt
 
-print(x)
-print(y)
-
-
 def generate_samples(xsize, bsize, N):
     w = np.random.rand(bsize, xsize)
     b = np.random.rand(bsize)

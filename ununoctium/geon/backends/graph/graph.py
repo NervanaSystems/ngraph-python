@@ -6,7 +6,6 @@ from geon.backends.graph.errors import *
 
 import numpy as np
 
-
 #TODO Probably don't need this separate from Op, particularly if variable goes away
 class Arg(object):
     """
@@ -232,7 +231,6 @@ class input(AllocationTensorOp):
     """
     Can be set externally.
     """
-
     def __init__(self, shape, dtype=np.float32):
         super(input, self).__init__(shape, dtype)
 
@@ -614,7 +612,6 @@ class ControlBlock(object):
     def __init__(self):
         self.__ops = []
 
-
     def add_context_op(self, op):
         self.__ops.append(op)
 
@@ -652,6 +649,7 @@ def show_graph(g):
             outid = ''
             if op.out is not op:
                 outid = '=>%d' % (ids[op.out],)
+
             print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.shape, op, tuple(ids[arg] for arg in op.args), outid)
             show_op(op)
     show_op(g.root_context)

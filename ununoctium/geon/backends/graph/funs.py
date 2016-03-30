@@ -38,5 +38,3 @@ variable = graph.variable
 iterate = graph.iterate
 
 
-
-
