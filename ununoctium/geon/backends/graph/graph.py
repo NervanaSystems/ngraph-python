@@ -1,29 +1,11 @@
 from contextlib import contextmanager
 import weakref
 
+import geon.backends.graph.typing as typing
+from geon.backends.graph.errors import *
+
 import numpy as np
 
-class Error(Exception):
-    """
-    Base class for graph errors.
-    """
-    pass
-
-
-class MissingGraphError(Error):
-    """
-    Graph cannot be determined.
-    """
-
-class UnititializedVariableError(Error):
-    """
-    Attempt to use the value of an unitialized variable.
-    """
-
-class IncompatibleShapesError(Error):
-    """
-    Incompatible shapes.
-    """
 
 #TODO Probably don't need this separate from Op, particularly if variable goes away
 class Arg(object):
@@ -31,10 +13,6 @@ class Arg(object):
     An Arg is something that can appear as a Python function/operator argument, but might not be inserted directly
     into the graph.
     """
-
-    @property
-    def op(self):
-        return self.__graph()
 
     @property
     def graph(self):
@@ -83,6 +61,10 @@ class Arg(object):
     def __rpow__(self, val):
         return Pow(val, self)
 
+    def __getitem__(self, val):
+        print "Arg: %s" % (val,)
+        return self
+
     @property
     def T(self):
         return transpose(self)
@@ -93,108 +75,103 @@ def posneg(x):
 
     return .5+s, .5-s
 
-class Op(Arg):
-    """
-    An Op is the result of some sort of operation.
-    """
-    def __init__(self, out, *args):
-        self.context = Graph.get_default_graph(args).context
-        self.args = tuple(Op.as_op(arg) for arg in args)
-        for arg in self.args:
-            arg.users.add(self)
-        self.set_shape()
+class GraphOp(Arg):
+    def __init__(self, graph_type, out=None):
+        self.graph_type = graph_type
         if out is None:
-            self.out = empty(self.shape)
+            self.__out = lambda : None
         else:
             self.out = out
-            if out.shape != self.shape:
-                raise IncompatibleShapesError()
-        if out is not self:
-            self.out.users.add(self)
-
-        self.context.add_op(self)
+        graph = Graph.get_default_graph()
+        self._graph_ref = weakref.ref(graph)
+        graph.add_op(self)
+        # Name assigned by user
         self.name = None
+
+        # Ops that directly use the result
         self.users = weakref.WeakSet()
-
-    def set_shape(self):
-        raise NotImplementedError()
-
-    def deps(self):
-        if self.out is None:
-            return self.args
-        else:
-            return (self.out,)+self.args
-
-    @staticmethod
-    def as_op(x):
-        if isinstance(x, Arg):
-            return x.op
-
-        return Constant(x)
+        self.args = ()
 
     @property
-    def graph(self):
-        return self.context.graph
+    def out(self):
+        return self.__out()
 
-    @property
-    def op(self):
-        return self
+    @out.setter
+    def out(self, value):
+        if not value.graph_type.is_subtype_of(self.graph_type):
+            raise IncompatibleTypesError()
+        self.__out = weakref.ref(value)
+        if value is not self:
+            value.users.add(self)
 
     @property
     def ops(self):
         return []
 
-    def generate_add_delta(self, adjoints, delta):
-        if self not in adjoints:
-            adjoints[self] = delta
-        else:
-            adjoints[self] = delta+adjoints[self]
+    @staticmethod
+    def as_op(x):
+        if isinstance(x, GraphOp):
+            return x
 
-    def arg_shapes(self):
-        return (arg.shape for arg in self.args)
+        return Constant(x)
 
-    def __str__(self):
-        return self.__class__.__name__
-
-    def reshape(self, shape):
-        return reshape(self, shape)
+    def arg_types(self):
+        return (arg.graph_type for arg in self.args)
 
     @property
     def size(self):
         result = 1
-        for d in self.shape:
-            result = result*d
+        for d in self.graph_type.shape:
+            result = result * d
         return result
+
+    def __str__(self):
+        return self.__class__.__name__
+
+    @property
+    def graph(self):
+        return self._graph_ref()
+
+    def generate_add_delta(self, adjoints, delta):
+        if self not in adjoints:
+            adjoints[self] = delta
+        else:
+            adjoints[self] = delta + adjoints[self]
 
     def evaluate(self, environment, *args):
         raise NotImplementedError()
 
 
-def elementwise_shape(*shapes):
-    n = max((len(shape) for shape in shapes))
-
-    def prepend(s):
-        return tuple(1 for x in xrange(n-len(s)))+s
-
-    shapes = (prepend(s) for s in shapes)
-
-    def broadcast(*vals):
-        result = 1
-        for val in vals:
-            if val == 1:
-                continue
-            elif result == 1 or val == result:
-                result = val
-            else:
-                raise IncompatibleShapesError()
-        return result
-
-    return tuple(broadcast(*d) for d in zip(*shapes))
+class ControlOp(GraphOp):
+    def __init__(self):
+        super(ControlOp, self).__init__(typing.Void)
 
 
-class ElementWise(Op):
-    def set_shape(self):
-        self.shape = elementwise_shape(*self.arg_shapes())
+class TensorOp(GraphOp):
+    """
+    An Op is the result of some sort of operation.
+    """
+    def __init__(self, out, *args):
+        opargs = tuple(GraphOp.as_op(arg) for arg in args)
+        for arg in opargs:
+            arg.users.add(self)
+        graph_type = self.compute_graph_type(*(arg.graph_type for arg in opargs))
+        if out is None:
+            out = empty(*graph_type.array_args())
+
+        super(TensorOp, self).__init__(graph_type=graph_type, out=out)
+        self.args = opargs
+
+    def compute_graph_type(self, *argtypes):
+        raise NotImplementedError()
+
+    def reshape(self, shape):
+        return reshape(self, shape)
+
+
+class ElementWise(TensorOp):
+    def compute_graph_type(self, *argtypes):
+        return typing.elementwise_graph_type(np.float32, *argtypes)
 
 
 def c_strides(dtype, shape):
@@ -206,38 +183,37 @@ def c_strides(dtype, shape):
     return tuple(reversed(strides))
 
 
-class AllocationOp(Op):
-    def __init__(self, shape, dtype=None, *args):
-        self.shape = shape
-        if dtype == None:
-            dtype = np.dtype(np.float32)
-        self.dtype = dtype
-        self.strides = c_strides(self.dtype, self.shape)
-        super(AllocationOp, self).__init__(self, *args)
+class ConstantScalarOp(GraphOp):
+    def __init__(self, graph_type, *args):
+        super(ConstantScalarOp, self).__init__(self, graph_type)
+
+
+class AllocationTensorOp(GraphOp):
+    def __init__(self, shape, dtype=None):
+        super(AllocationTensorOp, self).__init__(typing.Array[shape, dtype])
+        self.strides = c_strides(self.graph_type.dtype, self.graph_type.shape)
+        self.out = self
         self.aliases = weakref.WeakSet()
 
-    def set_shape(self):
-        pass
 
-
-class AliasOp(AllocationOp):
+class AliasOp(AllocationTensorOp):
     """
     Allocates a descriptor that aliases another allocation.
     """
-    def __init__(self, shape, *aliased):
-        super(AliasOp, self).__init__(shape, *aliased)
-        for alloc in aliased:
-            alloc.out.aliases.add(self)
+    def __init__(self, shape, aliased):
+        super(AliasOp, self).__init__(shape, aliased.graph_type.dtype)
+        self.args = (aliased,)
+        aliased.out.aliases.add(self)
 
 
-class OpIterValue(Op):
+class OpIterValue(TensorOp):
     def __init__(self, sequence):
         super(OpIterValue, self).__init__(sequence)
 
 
-class OpIterator(Op):
+class OpIterator(GraphOp):
     def __init__(self, sequence):
-        super(OpIterator, self).__init__(sequence)
+        super(OpIterator, self).__init__(None, sequence)
         self.__next = True
 
     def __iter__(self):
@@ -252,16 +228,16 @@ class OpIterator(Op):
             raise StopIteration()
 
 
-class input(AllocationOp):
+class input(AllocationTensorOp):
     """
     Can be set externally.
     """
 
-    def __init__(self, shape):
-        super(input, self).__init__(shape)
+    def __init__(self, shape, dtype=np.float32):
+        super(input, self).__init__(shape, dtype)
 
     def evaluate(self, environment):
-        return environment.input(self.name, self.shape)
+        return environment.input(self.name, self.graph_type)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -287,11 +263,11 @@ class variable(Arg):
         return self.__op
 
     def set(self, op):
-        self.__op = Op.as_op(op)
+        self.__op = GraphOp.as_op(op)
         return self
 
 
-class Constant(AllocationOp):
+class Constant(AllocationTensorOp):
     """
     A constant that appears in a graph.
     """
@@ -354,27 +330,27 @@ def divide(x, y, out=None):
 
 
 #TODO Replace with a simple dot operation wrapped by the messy dimension cases
-class dot(Op):
+class dot(TensorOp):
     def __init__(self, x, y, out=None):
         xr = x
-        if len(x.shape) == 0:
+        if len(x.graph_type.shape) == 0:
             xr = reshape(x, (1,1))
-        elif len(x.shape) != 2:
+        elif len(x.graph_type.shape) != 2:
             d1 = 1
-            for d in x.shape[:-1]:
+            for d in x.graph_type.shape[:-1]:
                 d1 = d1*d
-            xr = reshape(x, (d1, x.shape[-1]))
+            xr = reshape(x, (d1, x.graph_type.shape[-1]))
         yr = y
-        if len(y.shape) == 0:
+        if len(y.graph_type.shape) == 0:
             yr = reshape(y, (1,1))
-        elif len(y.shape) != 2:
+        elif len(y.graph_type.shape) != 2:
             d1 = 1
-            for d in y.shape[1:]:
+            for d in y.graph_type.shape[1:]:
                 d1 = d1*d
-            yr = reshape(y, (y.shape[0], d1))
+            yr = reshape(y, (y.graph_type.shape[0], d1))
 
-        xshape = x.shape
-        yshape = y.shape
+        xshape = x.graph_type.shape
+        yshape = y.graph_type.shape
 
         if len(xshape) == 0:
             self.shape = yshape
@@ -387,8 +363,8 @@ class dot(Op):
 
         super(dot, self).__init__(out, xr, yr)
 
-    def set_shape(self):
-        pass
+    def compute_graph_type(self, *argtypes):
+        return typing.Array[self.shape, np.result_type(*(argtype.dtype for argtype in argtypes))]
 
     def evaluate(self, environment, out, x, y):
         return environment.dot(x, y, out)
@@ -396,13 +372,13 @@ class dot(Op):
     def generate_adjoints(self, adjoints, delta, x, y):
 
         dr = delta
-        if len(dr.shape) != 2:
-            dr = reshape(delta, (x.shape[0], y.shape[1]))
+        if len(dr.graph_type.shape) != 2:
+            dr = reshape(delta, (x.graph_type.shape[0], y.graph_type.shape[1]))
         x.generate_add_delta(adjoints, dot(dr, y.T))
         y.generate_add_delta(adjoints, dot(x.T, dr))
 
 
-class empty(AllocationOp):
+class empty(AllocationTensorOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
         super(empty, self).__init__(shape, dtype=dtype)
         self.name = name
@@ -413,7 +389,7 @@ class empty(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.empty(self.shape, self.dtype)
+        return environment.empty(*self.graph_type.array_args())
 
 
 class exp(ElementWise):
@@ -488,7 +464,7 @@ class negative(ElementWise):
         return environment.negative(x, out)
 
 
-class ones(AllocationOp):
+class ones(AllocationTensorOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
         super(ones, self).__init__(shape, dtype=dtype)
         self.name = name
@@ -499,7 +475,7 @@ class ones(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.ones(self.shape, self.dtype)
+        return environment.ones(*self.graph_type.array_args())
 
 
 class reciprocal(ElementWise):
@@ -521,10 +497,10 @@ class reshape(AliasOp):
             raise ValueError('total size of new array must be unchanged')
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, reshape(delta, x.shape))
+        x.generate_add_delta(adjoints, reshape(delta, x.graph_type.shape))
 
     def evaluate(self, environment, x):
-        return environment.reshape(x, self.shape)
+        return environment.reshape(x, self.graph_type.shape)
 
 
 class sig(ElementWise):
@@ -598,7 +574,7 @@ class tanh(ElementWise):
 
 class transpose(AliasOp):
     def __init__(self, x):
-        super(transpose, self).__init__(tuple(reversed(x.shape)), x)
+        super(transpose, self).__init__(tuple(reversed(x.graph_type.shape)), x)
 
     def evaluate(self, environment, x):
         return environment.transpose()
@@ -607,7 +583,7 @@ class transpose(AliasOp):
         x.generate_add_delta(adjoints, delta.T)
 
 
-class zeros(AllocationOp):
+class zeros(AllocationTensorOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
         super(zeros, self).__init__(shape, dtype=dtype)
         self.name = name
@@ -618,19 +594,19 @@ class zeros(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.zeros(self.shape, self.dtype)
+        return environment.zeros(*self.graph_type.array_args())
 
 
-class range(Op):
+class range(GraphOp):
     def __init__(self, start, stop=None, step=1):
         if stop is None:
             start = 0
             stop = start
-        super(range, self).__init__(start, stop, step)
+        super(range, self).__init__(None, start, stop, step)
 
 
 def deriv(dep, indep):
-    return Graph.get_default_graph(dep, indep).get_adjoints(dep.op)[indep.op]
+    return Graph.get_default_graph().get_adjoints(dep)[indep]
 
 
 class ControlBlock(object):
@@ -639,27 +615,18 @@ class ControlBlock(object):
         self.__ops = []
 
 
-    def add_op(self, op):
-        if op is not self:
-            self.__ops.append(op)
-
-    @property
-    def graph(self):
-        raise NotImplementedError()
+    def add_context_op(self, op):
+        self.__ops.append(op)
 
     @property
     def ops(self):
         return self.__ops
 
 
-class NestedControlBlock(ControlBlock, Op):
+class NestedControlBlock(ControlBlock, ControlOp):
     def __init__(self, context):
         super(NestedControlBlock, self).__init__()
         self.parent_context = context
-
-    @property
-    def graph(self):
-        return self.context.graph
 
 
 class Iterator(NestedControlBlock):
@@ -675,7 +642,7 @@ def show_graph(g):
         for op in g.ops:
             opids(op)
 
-    opids(g)
+    opids(g.root_context)
 
     def show_op(g):
         for op in g.ops:
@@ -685,9 +652,9 @@ def show_graph(g):
             outid = ''
             if op.out is not op:
                 outid = '=>%d' % (ids[op.out],)
-            print '%d:%d:%s%s:%s%s%s' % (ids[op], ids[op.context], name, op.shape, op, tuple(ids[arg] for arg in op.args), outid)
+            print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.shape, op, tuple(ids[arg] for arg in op.args), outid)
             show_op(op)
-    show_op(g)
+    show_op(g.root_context)
 
 @contextmanager
 def default_graph(graph=None):
@@ -697,23 +664,43 @@ def default_graph(graph=None):
         graph=Graph()
     try:
         thread_data.graph = graph
-        yield(graph)
+        yield(graph.variables)
     finally:
         thread_data.graph = old_graph
 
+
+@contextmanager
+def iterate(iterable):
+    graph = Graph.get_default_graph()
+    old_context = graph.context
+    items = iter(iterable)
+    n = items.next()
+    iterator = Iterator(old_context)
+    with Graph.context(iterator):
+        if isinstance(n, tuple):
+            var = tuple(graph.variable() for v in n)
+            for vv, v in zip(var, n):
+                vv.set(v)
+        else:
+            var = graph.variable()
+            var.set(n)
+        yield (var)
+
+
 class VariableBlock(object):
     def __setattr__(self, name, value):
-        value.op.name = name
+        value.name = name
         super(VariableBlock, self).__setattr__(name, value)
 
 
-class Graph(ControlBlock):
+class Graph(object):
 
     def __init__(self):
-        self.context = self
         super(Graph, self).__init__()
+        self.root_context = ControlBlock()
+        self.context = self.root_context
         self.inputs = {}
-        self.variables = {}
+        self.variables = VariableBlock()
         self.op_adjoints = {}
 
     import threading
@@ -725,22 +712,25 @@ class Graph(ControlBlock):
         return Graph.__thread_data
 
     @staticmethod
-    def get_default_graph(*args):
+    def get_default_graph():
         graph = Graph.__thread_data.graph
-        for arg in args:
-            if isinstance(arg, Arg):
-                g = arg.graph
-                if g is not None:
-                    graph = g
-                    break
 
         if graph is None:
             raise MissingGraphError()
+
         return graph
 
-    @property
-    def graph(self):
-        return self
+    @contextmanager
+    def bound_context(self, context):
+        old_context = self.context
+        try:
+            self.context = context
+            yield()
+        finally:
+            self.context = old_context
+
+    def add_op(self, op):
+        self.context.add_context_op(op)
 
     @staticmethod
     def get_ordered_ops(op, ordered_ops):
@@ -756,29 +746,10 @@ class Graph(ControlBlock):
         ordered_ops = []
         Graph.get_ordered_ops(op, ordered_ops)
         self.op_adjoints[op] = adjoints
-        adjoints[op] = ones(op.shape)
+        adjoints[op] = ones(*op.graph_type.array_args())
         for o in reversed(ordered_ops):
             o.generate_adjoints(adjoints, adjoints[o], *o.args)
         return adjoints
-
-    @contextmanager
-    def iterate(self, iterable):
-        old_context = self.context
-        items = iter(iterable)
-        n = items.next()
-        try:
-            iterator = Iterator(old_context)
-            self.context = iterator
-            if isinstance(n, tuple):
-                var = tuple(self.variable() for v in n)
-                for vv, v in zip(var, n):
-                    vv.set(v)
-            else:
-                var = self.variable()
-                var.set(n)
-            yield(var)
-        finally:
-            self.context = old_context
 
     def ordered_ops(self):
         ops = []
@@ -788,7 +759,7 @@ class Graph(ControlBlock):
             for op in g.ops:
                 addops(op)
 
-        addops(self)
+        addops(self.root_context)
 
         return ops
 

@@ -35,6 +35,8 @@ def relu(x,out):
 # Not sure if we'll need this
 variable = graph.variable
 
+iterate = graph.iterate
+
 
 
 

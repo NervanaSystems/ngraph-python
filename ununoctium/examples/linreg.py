@@ -1,6 +1,11 @@
 
 import numpy as np
-from geon.backends.graph.graph import Graph, show_graph
+import geon.backends.graph.graph as graph
+import geon.backends.graph.typing as gt
+
+print(x)
+print(y)
+
 
 def generate_samples(xsize, bsize, N):
     w = np.random.rand(bsize, xsize)
@@ -20,27 +25,37 @@ def norm2(x):
 
 
 def f():
+    xsize = 10
+    bsize = 3
+    N = 100
+    K = 30
 
-    be = Graph()
-    w = be.input('w')
-    b = be.input('b')
+    from geon.backends.graph.funs import *
 
-    xs = be.input('xs')
-    y0s = be.input('y0s')
+    gr = graph.Graph()
+    with graph.default_graph(gr) as g:
 
-    with be.iterate(be.range(be.input('N'))) as i:
-        e = be.variable('e').set(0)
-        with be.iterate(zip(xs, y0s)) as ((x, y0)):
-            e.set(e + norm2(w * x + b))
+        g.w = zeros((xsize, bsize))
+        g.b = zeros((bsize,))
 
-        dedw = be.deriv(e,w)
-        dedb = be.deriv(e,b)
+        g.xs = input((xsize, N))
+        g.y0s = input((bsize, N))
 
-        alpha = -1.0/(1.0+i)
+        with iterate(range(K)) as g.i:
+            g.e = 0
+            with iterate(range(N)) as g.n:
+                g.x = g.xs[:,g.n]
+                g.y0 = g.y0s[:,g.n]
+                g.e = g.e + norm2(g.w * g.x + g.b)
 
-        w.set(w+alpha*dedw)
-        b.set(b+alpha*dedb)
+            g.dedw = deriv(g.e, g.w)
+            g.dedb = deriv(g.e, g.b)
 
-    show_graph(be)
+            g.alpha = -1.0/(1.0+g.i)
+
+            g.w += g.alpha*g.dedw
+            g.b += g.alpha*g.dedb
+
+    graph.show_graph(gr)
 
 f()

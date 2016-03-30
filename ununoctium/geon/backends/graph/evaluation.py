@@ -21,7 +21,7 @@ class Environment(dict):
         env = self.child(**kvargs)
         vals = {}
         for op in self.ops:
-            if not isinstance(op, graph.Op):
+            if not isinstance(op, graph.GraphOp):
                 continue
             args = [vals[arg.out] for arg in op.args]
             if op.out is op:
@@ -51,9 +51,9 @@ class NumPyEnvironment(Environment):
     def constant(self, value):
         return value
 
-    def input(self, name, shape):
+    def input(self, name, graph_type):
         value = self[name]
-        if shape != value.shape:
+        if graph_type.shape != value.shape:
             raise graph.IncompatibleShapesError()
         return value
 
@@ -135,9 +135,9 @@ class PyCUDAEnvironment(Environment):
     def constant(self, value):
         return value
 
-    def input(self, name, shape):
+    def input(self, name, graph_type):
         value = gpuarray.to_gpu(self[name])
-        if shape != value.shape:
+        if graph_type.shape != value.shape:
             raise graph.IncompatibleShapesError()
         return value
 
@@ -242,7 +242,7 @@ class GenNumPy(Environment):
         vals = {}
         for i, op in enumerate(self.ops):
             var = 't%d' % (i,)
-            if not isinstance(op, graph.Op):
+            if not isinstance(op, graph.GraphOp):
                 continue
             args = [vals[arg.out] for arg in op.args]
             if op.out is op:
@@ -261,7 +261,7 @@ class GenNumPy(Environment):
     def constant(self, value):
         return value
 
-    def input(self, name, shape):
+    def input(self, name, graph_type):
         return 'input("{name}")'.format(name=name)
 
     def absolute(self, x, out=None):

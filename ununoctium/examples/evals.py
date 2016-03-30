@@ -6,7 +6,6 @@ import geon.backends.graph.cudagpu as cudagpu
 gr = graph.Graph()
 with graph.default_graph(gr) as g:
     from geon.backends.graph.funs import *
-    g = graph.VariableBlock()
 
     g.x = input((10,))
     g.y = input((10,))
