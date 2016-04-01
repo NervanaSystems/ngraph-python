@@ -9,11 +9,11 @@ class Environment(dict):
     def __init__(self, graph, **kvargs):
         super(Environment, self).__init__(**kvargs)
         self.graph = graph
-        self.ops = graph.ordered_ops()
+        self.ops = graph.ordered_ops
         self.parent = None
 
     def child(self, **kvargs):
-        result = self.__class__(self.graph, **kvargs)
+        result = self.__class__(graph=self.graph, **kvargs)
         result.parent = self
         return result
 
@@ -21,17 +21,15 @@ class Environment(dict):
         env = self.child(**kvargs)
         vals = {}
         for op in self.ops:
-            if not isinstance(op, graph.GraphOp):
-                continue
-            args = [vals[arg.out] for arg in op.args]
-            if op.out is op:
+            args = [vals[arg.output] for arg in op.inputs]
+            if op.output is op:
                 val = op.evaluate(env, *args)
                 vals[op] = val
             else:
-                val = op.evaluate(env, vals[op.out], *args)
-            if op.name is not None:
-                env[op.name] = val
-        return [env[name] for name in result]
+                val = op.evaluate(env, vals[op.output], *args)
+            if op in result:
+                env[op] = val
+        return [env[op] for op in result]
 
 
     def __getitem__(self, item):
@@ -48,6 +46,9 @@ class Environment(dict):
 
 
 class NumPyEnvironment(Environment):
+    def __init__(self, **kargs):
+        super(NumPyEnvironment, self).__init__(**kargs)
+
     def constant(self, value):
         return value
 
@@ -128,6 +129,9 @@ class PyCUDAEnvironment(Environment):
     """
     Uses PuCUDA to evaluate.  Not fully tested; PyCUDA does not expose all the NumPy API.
     """
+    def __init__(self, **kvargs):
+        super(PyCUDAEnvironment, self).__init__(**kvargs)
+
     def evaluate(self, result, **kvargs):
         with cudagpu.cuda_device_context():
             return super(PyCUDAEnvironment, self).evaluate(result, **kvargs)
@@ -236,27 +240,31 @@ class PyCUDAEnvironment(Environment):
 
 class GenNumPy(Environment):
 
+    def __init__(self, **kvargs):
+        super(GenNumPy, self).__init__(**kvargs)
+
     def evaluate(self, result, **kvargs):
+        liveness = self.graph.analyze_liveness(result)
+
+        def varname(op):
+            return 't%d' % (op.opid)
+
         env = self.child(**kvargs)
         body = []
-        vals = {}
         for i, op in enumerate(self.ops):
-            var = 't%d' % (i,)
-            if not isinstance(op, graph.GraphOp):
-                continue
-            args = [vals[arg.out] for arg in op.args]
-            if op.out is op:
+            live = [varname(l) for l in liveness[i]]
+            args = [varname(arg.output) for arg in op.inputs]
+            if op.output is op:
                 val = op.evaluate(env, *args)
-                body.append('{var} = {val}'.format(var=var, val=val))
+                body.append('{var} = {val} # Live={live}'.format(var=varname(op), val=val, live=live))
             else:
-                val = op.evaluate(env, vals[op.out], *args)
+                val = '{val} # Live={live}'.format(val=op.evaluate(env, varname(op.output), *args), live=live)
                 body.append(val)
-            vals[op] = var
-            if op.name is not None:
-                env[op.name] = val
+            if op in result:
+                env[op] = val
         for line in body:
             print(line)
-        return [env[name] for name in result]
+        return [env[op] for op in result]
 
     def constant(self, value):
         return value

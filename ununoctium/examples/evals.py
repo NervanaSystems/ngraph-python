@@ -13,20 +13,20 @@ with graph.default_graph(gr) as g:
 
     g.z = 2*deriv(exp(abs(-log(g.x * g.y))), g.x)
 
-graph.show_graph(gr)
+#graph.show_graph(gr)
 
 x = np.arange(10)+1
 y = x*x
 
-gnp = evaluation.GenNumPy(gr)
-gnp.evaluate(('z','w'), x=x, y=y)
+gnp = evaluation.GenNumPy(graph=gr)
+gnp.evaluate((g.z, g.w), x=x, y=y)
 
-enp = evaluation.NumPyEnvironment(gr)
-resultnp = enp.evaluate(('z','w'), x=x, y=y)
+enp = evaluation.NumPyEnvironment(graph=gr)
+resultnp = enp.evaluate((g.z, g.w), x=x, y=y)
 print resultnp
 
-epc = evaluation.PyCUDAEnvironment(gr)
-resultpc = epc.evaluate(('z','w'), x=x, y=y)
+epc = evaluation.PyCUDAEnvironment(graph=gr)
+resultpc = epc.evaluate((g.z, g.w), x=x, y=y)
 with cudagpu.cuda_device_context():
     print resultpc
 

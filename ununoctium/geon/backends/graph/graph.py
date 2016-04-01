@@ -6,19 +6,121 @@ from geon.backends.graph.errors import *
 
 import numpy as np
 
-#TODO Probably don't need this separate from Op, particularly if variable goes away
-class Arg(object):
-    """
-    An Arg is something that can appear as a Python function/operator argument, but might not be inserted directly
-    into the graph.
-    """
+
+def posneg(x):
+    s = .5*sig(x)
+
+    return .5+s, .5-s
+
+class GraphOp(object):
+    """Any operation that can be in a computation graph"""
+
+    def __pre_init_before_super__(self, **kwds):
+        """
+        These inits are run before __init__ in base to super order.
+
+        Each method should end by returning a call to its super, i.e.
+        def __pre_init_before_super__(self, arg1, ..., **kwds):
+            do stuff
+            return super(MyClass, self).__pre_init_before_super__(**kwds)
+        """
+        return kwds
+
+    def __pre_init_after_super__(self, **kwds):
+        """
+        These inits are run before __init__ in super to base order.
+
+        Each method should begin with a call to its super, and return that value
+        def __pre_init_after_super__(self, arg1, ..., **kwds):
+            kwds = super(MyClass, self).__pre_init_before_super__(**kwds)
+            do stuff
+            return kwds
+        """
+        for arg in self.inputs:
+            arg.users.add(self)
+
+        return kwds
+
+    def __init__(self, **kwds):
+        graph = Graph.get_default_graph()
+        self._graph_ref = weakref.ref(graph)
+        self._context_ref = weakref.ref(graph.context)
+        self.predecessors = weakref.WeakSet()
+
+        kwds = self.__pre_init_before_super__(**kwds)
+        kwds = self.__pre_init_after_super__(**kwds)
+        super(GraphOp, self).__init__(**kwds)
+        self.opid = self.graph.add_op(self)
 
     @property
     def graph(self):
+        return self._graph_ref()
+
+    @property
+    def context(self):
+        return self._context_ref()
+
+    @property
+    def inputs(self):
+       return ()
+
+    @staticmethod
+    def as_op(x):
+        if isinstance(x, ValueOp):
+            return x
+
+        return Constant(x)
+
+    @property
+    def ops(self):
+        return []
+
+    def evaluate(self, environment, *args):
         raise NotImplementedError()
 
-    def __iter__(self):
-        return OpIterator(self.op)
+    def __str__(self):
+        return '<{cl} {opid}>'.format(cl=self.__class__.__name__, opid=self.opid)
+
+
+class ControlOp(GraphOp):
+    def __init__(self, **kargs):
+        super(ControlOp, self).__init__(**kargs)
+
+class ValueOp(GraphOp):
+    def __pre_init_before_super__(self, graph_type=None, **kwds):
+        if graph_type is None:
+            graph_type = self.compute_graph_type(*(arg.graph_type for arg in self.inputs))
+
+        self.graph_type = graph_type
+        return super(ValueOp, self).__pre_init_before_super__(**kwds)
+
+    def __init__(self, **kwds):
+        super(ValueOp, self).__init__(**kwds)
+
+        # Ops that directly use the result
+        self.users = weakref.WeakSet()  # Name assigned by user
+
+        self.name = None
+
+    @property
+    def output(self):
+        return self
+
+    @property
+    def size(self):
+        result = 1
+        for d in self.graph_type.shape:
+            result = result * d
+        return result
+
+    def generate_add_delta(self, adjoints, delta):
+        if self not in adjoints:
+            adjoints[self] = delta
+        else:
+            adjoints[self] = delta + adjoints[self]
+
+    def reshape(self, shape):
+        return reshape(self, shape)
 
     # Magic methods for builtin operations we want to use for creating nodes
     def __neg__(self):
@@ -60,115 +162,78 @@ class Arg(object):
     def __rpow__(self, val):
         return Pow(val, self)
 
-    def __getitem__(self, val):
-        print "Arg: %s" % (val,)
-        return self
-
     @property
     def T(self):
         return transpose(self)
 
 
-def posneg(x):
-    s = .5*sig(x)
+class ArgsOp(GraphOp):
+    def __pre_init_before_super__(self, args=(), **kargs):
+        self.__args = tuple(GraphOp.as_op(arg) for arg in args)
+        return super(ArgsOp, self).__pre_init_before_super__(**kargs)
 
-    return .5+s, .5-s
-
-class GraphOp(Arg):
-    def __init__(self, graph_type, out=None):
-        self.graph_type = graph_type
-        if out is None:
-            self.__out = lambda : None
-        else:
-            self.out = out
-        graph = Graph.get_default_graph()
-        self._graph_ref = weakref.ref(graph)
-        graph.add_op(self)
-        # Name assigned by user
-        self.name = None
-
-        # Ops that directly use the result
-        self.users = weakref.WeakSet()
-        self.args = ()
+    def __init__(self, **kargs):
+        super(ArgsOp, self).__init__(**kargs)
 
     @property
-    def out(self):
+    def inputs(self):
+        return self.__args
+
+    def add_dependencies(self):
+        super(ArgsOp, self).add_dependencies()
+        for arg in self.inputs:
+            arg.users.add(self)
+
+
+class ComputationOp(ArgsOp, ValueOp):
+    """
+    An TensorOp is the result of some sort of operation.
+    """
+    def __init__(self, **kargs):
+        super(ComputationOp, self).__init__(**kargs)
+
+    def compute_graph_type(self, *argtypes):
+        raise NotImplementedError()
+
+    def add_dependencies(self):
+        self.output.users.add(self)
+
+    @property
+    def output(self):
         return self.__out()
 
-    @out.setter
-    def out(self, value):
+    @output.setter
+    def output(self, value):
         if not value.graph_type.is_subtype_of(self.graph_type):
             raise IncompatibleTypesError()
         self.__out = weakref.ref(value)
         if value is not self:
             value.users.add(self)
 
-    @property
-    def ops(self):
-        return []
-
-    @staticmethod
-    def as_op(x):
-        if isinstance(x, GraphOp):
-            return x
-
-        return Constant(x)
-
     def arg_types(self):
-        return (arg.graph_type for arg in self.args)
+        return (arg.graph_type for arg in self.inputs)
 
-    @property
-    def size(self):
-        result = 1
-        for d in self.graph_type.shape:
-            result = result * d
-        return result
-
-    def __str__(self):
-        return self.__class__.__name__
-
-    @property
-    def graph(self):
-        return self._graph_ref()
-
-    def generate_add_delta(self, adjoints, delta):
-        if self not in adjoints:
-            adjoints[self] = delta
-        else:
-            adjoints[self] = delta + adjoints[self]
-
-    def evaluate(self, environment, *args):
-        raise NotImplementedError()
-
-
-class ControlOp(GraphOp):
-    def __init__(self):
-        super(ControlOp, self).__init__(typing.Void)
-
-
-class TensorOp(GraphOp):
+class OutputArgOp(ComputationOp):
     """
-    An Op is the result of some sort of operation.
+    An OutputArgOp has an out= argument for its result.
     """
-    def __init__(self, out, *args):
-        opargs = tuple(GraphOp.as_op(arg) for arg in args)
-        for arg in opargs:
-            arg.users.add(self)
-        graph_type = self.compute_graph_type(*(arg.graph_type for arg in opargs))
+
+    def __pre_init_after_super__(self, out=None, **kargs):
+        kargs = super(OutputArgOp, self).__pre_init_after_super__(**kargs)
         if out is None:
-            out = empty(*graph_type.array_args())
+            self.output = empty(*self.graph_type.array_args())
+        else:
+            self.output = out
+        return kargs
 
-        super(TensorOp, self).__init__(graph_type=graph_type, out=out)
-        self.args = opargs
-
-    def compute_graph_type(self, *argtypes):
-        raise NotImplementedError()
-
-    def reshape(self, shape):
-        return reshape(self, shape)
+    def __init__(self, **kargs):
+        super(OutputArgOp, self).__init__(**kargs)
 
 
-class ElementWise(TensorOp):
+class ElementWise(OutputArgOp):
+    def __init__(self, **kargs):
+        super(ElementWise, self).__init__(**kargs)
+
     def compute_graph_type(self, *argtypes):
         return typing.elementwise_graph_type(np.float32, *argtypes)
 
@@ -182,57 +247,54 @@ def c_strides(dtype, shape):
     return tuple(reversed(strides))
 
 
-class ConstantScalarOp(GraphOp):
-    def __init__(self, graph_type, *args):
-        super(ConstantScalarOp, self).__init__(self, graph_type)
-
-
-class AllocationTensorOp(GraphOp):
-    def __init__(self, shape, dtype=None):
-        super(AllocationTensorOp, self).__init__(typing.Array[shape, dtype])
+class AllocationOp(ValueOp):
+    def __init__(self, shape, dtype=None, **kargs):
+        super(AllocationOp, self).__init__(graph_type=typing.Array[shape, dtype], **kargs)
         self.strides = c_strides(self.graph_type.dtype, self.graph_type.shape)
-        self.out = self
         self.aliases = weakref.WeakSet()
 
 
-class AliasOp(AllocationTensorOp):
+class AliasOp(ArgsOp, AllocationOp):
     """
     Allocates a descriptor that aliases another allocation.
     """
-    def __init__(self, shape, aliased):
-        super(AliasOp, self).__init__(shape, aliased.graph_type.dtype)
-        self.args = (aliased,)
-        aliased.out.aliases.add(self)
+    def __init__(self, shape, aliased, **kargs):
+        super(AliasOp, self).__init__(shape=shape, dtype=aliased.graph_type.dtype, args=(aliased,), **kargs)
+        aliased.output.aliases.add(self)
+
+    @property
+    def aliased(self):
+        return self.inputs[0]
 
 
-class OpIterValue(TensorOp):
-    def __init__(self, sequence):
-        super(OpIterValue, self).__init__(sequence)
+class OpIterValue(ComputationOp):
+    def __init__(self, sequence, **kargs):
+        super(OpIterValue, self).__init__(args=(sequence,), **kargs)
 
 
 class OpIterator(GraphOp):
-    def __init__(self, sequence):
-        super(OpIterator, self).__init__(None, sequence)
+    def __init__(self, sequence, **kargs):
+        super(OpIterator, self).__init__(args=(sequence,), **kargs)
         self.__next = True
 
     def __iter__(self):
-        return OpIterator(*self.args)
+        return OpIterator(*self.inputs)
 
     def next(self):
         if self.__next:
             self.__next = False
-            sequence, = self.args
+            sequence, = self.inputs
             return OpIterValue(sequence)
         else:
             raise StopIteration()
 
 
-class input(AllocationTensorOp):
+class input(AllocationOp):
     """
     Can be set externally.
     """
-    def __init__(self, shape, dtype=np.float32):
-        super(input, self).__init__(shape, dtype)
+    def __init__(self, shape, dtype=np.float32, **kargs):
+        super(input, self).__init__(shape=shape, dtype=dtype, **kargs)
 
     def evaluate(self, environment):
         return environment.input(self.name, self.graph_type)
@@ -241,40 +303,15 @@ class input(AllocationTensorOp):
         pass
 
 
-# Not sure if we'll need this
-class variable(Arg):
-
-    def __init__(self, name=None):
-        self.__graph = Graph.get_default_graph()
-        self.name = name
-        self.__op = None
-        self.__graph.variables[name] = self
-
-    @property
-    def graph(self):
-        return self.__graph
-
-    @property
-    def op(self):
-        if self.__op is None:
-            raise UnititializedVariableError()
-        return self.__op
-
-    def set(self, op):
-        self.__op = GraphOp.as_op(op)
-        return self
-
-
-class Constant(AllocationTensorOp):
+class Constant(AllocationOp):
     """
     A constant that appears in a graph.
     """
-    def __init__(self, const):
+    def __init__(self, const, **kargs):
         if isinstance(const, np.ndarray):
-            shape =  const.shape
+            super(Constant, self).__init__(shape=const.shape, dtype=const.dtype, **kargs)
         else:
-            shape = ()
-        super(Constant, self).__init__(shape)
+            super(Constant, self).__init__((), **kargs)
         self.const = const
 
     def evaluate(self, environment):
@@ -284,12 +321,12 @@ class Constant(AllocationTensorOp):
         pass
 
     def __str__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.const)
+        return '<{cl} {opid} ({const})>'.format(cl=self.__class__.__name__, opid=self.opid, const=self.const)
 
 
 class absolute(ElementWise):
     def __init__(self, x, out=None):
-        super(absolute, self).__init__(out, x)
+        super(absolute, self).__init__(out=out, args=(x,))
 
     def evaluate(self, environment, out, x):
         return environment.absolute(x, out)
@@ -300,7 +337,7 @@ class absolute(ElementWise):
 
 class add(ElementWise):
     def __init__(self, x, y, out=None):
-        super(add, self).__init__(out, x, y)
+        super(add, self).__init__(out=out, args=(x, y))
 
     def evaluate(self, environment, out, x, y):
         return environment.add(x, y, out)
@@ -312,7 +349,7 @@ class add(ElementWise):
 
 class cos(ElementWise):
     def __init__(self, x, out=None):
-        super(cos, self).__init__(out, x)
+        super(cos, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
@@ -328,7 +365,7 @@ def divide(x, y, out=None):
 
 
 #TODO Replace with a simple dot operation wrapped by the messy dimension cases
-class dot(TensorOp):
+class dot(OutputArgOp):
     def __init__(self, x, y, out=None):
         xr = x
         if len(x.graph_type.shape) == 0:
@@ -359,7 +396,7 @@ class dot(TensorOp):
         else:
             self.shape = tuple(xshape[:-1]+yshape[1:])
 
-        super(dot, self).__init__(out, xr, yr)
+        super(dot, self).__init__(out=out, args=(xr, yr))
 
     def compute_graph_type(self, *argtypes):
         return typing.Array[self.shape, np.result_type(*(argtype.dtype for argtype in argtypes))]
@@ -376,9 +413,9 @@ class dot(TensorOp):
         y.generate_add_delta(adjoints, dot(x.T, dr))
 
 
-class empty(AllocationTensorOp):
+class empty(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(empty, self).__init__(shape, dtype=dtype)
+        super(empty, self).__init__(shape=shape, dtype=dtype)
         self.name = name
         self.persist_values = persist_values
         self.other_args = args
@@ -392,7 +429,7 @@ class empty(AllocationTensorOp):
 
 class exp(ElementWise):
     def __init__(self, x, out=None):
-        super(exp, self).__init__(out, x)
+        super(exp, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
@@ -403,7 +440,7 @@ class exp(ElementWise):
 
 class log(ElementWise):
     def __init__(self, x, out=None):
-        super(log, self).__init__(out, x)
+        super(log, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
@@ -414,7 +451,7 @@ class log(ElementWise):
 
 class maximum(ElementWise):
     def __init__(self, x, y, out=None):
-        super(maximum, self).__init__(out, x, y)
+        super(maximum, self).__init__(out=out, args=(x, y))
 
     def evaluate(self, environment, out, x, y):
         return environment.maximum(x, y, out=out)
@@ -427,7 +464,7 @@ class maximum(ElementWise):
 
 class minimum(ElementWise):
     def __init__(self, x, y, out=None):
-        super(minimum, self).__init__(out, x, y)
+        super(minimum, self).__init__(out=out, args=(x, y))
 
     def evaluate(self, environment, out, x, y):
         return environment.minimum(x, y, out=out)
@@ -440,7 +477,7 @@ class minimum(ElementWise):
 
 class multiply(ElementWise):
     def __init__(self, x, y, out=None):
-        super(multiply, self).__init__(out, x, y)
+        super(multiply, self).__init__(out=out, args=(x, y))
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*y)
@@ -453,7 +490,7 @@ class multiply(ElementWise):
 
 class negative(ElementWise):
     def __init__(self, x, out=None):
-        super(negative, self).__init__(out, x)
+        super(negative, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
@@ -462,9 +499,9 @@ class negative(ElementWise):
         return environment.negative(x, out)
 
 
-class ones(AllocationTensorOp):
+class ones(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(ones, self).__init__(shape, dtype=dtype)
+        super(ones, self).__init__(shape=shape, dtype=dtype)
         self.name = name
         self.persist_values = persist_values
         self.other_args = args
@@ -478,7 +515,7 @@ class ones(AllocationTensorOp):
 
 class reciprocal(ElementWise):
     def __init__(self, x, out=None):
-        super(reciprocal, self).__init__(out, x)
+        super(reciprocal, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
@@ -490,7 +527,7 @@ class reciprocal(ElementWise):
 #TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
 class reshape(AliasOp):
     def __init__(self, x, shape):
-        super(reshape, self).__init__(shape, x)
+        super(reshape, self).__init__(shape=shape, aliased=x)
         if self.size != x.size:
             raise ValueError('total size of new array must be unchanged')
 
@@ -503,7 +540,7 @@ class reshape(AliasOp):
 
 class sig(ElementWise):
     def __init__(self, x, out=None):
-        super(sig, self).__init__(out, x)
+        super(sig, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
@@ -513,7 +550,7 @@ class sig(ElementWise):
 
 class sin(ElementWise):
     def __init__(self, x, out=None):
-        super(sin, self).__init__(out, x)
+        super(sin, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
@@ -524,7 +561,7 @@ class sin(ElementWise):
 
 class sqrt(ElementWise):
     def __init__(self, x, out=None):
-        super(sqrt, self).__init__(out, x)
+        super(sqrt, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, .5*delta*self)
@@ -535,7 +572,7 @@ class sqrt(ElementWise):
 
 class square(ElementWise):
     def __init__(self, x, out=None):
-        super(square, self).__init__(out, x)
+        super(square, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
@@ -546,7 +583,7 @@ class square(ElementWise):
 
 class subtract(ElementWise):
     def __init__(self, x, y, out=None):
-        super(subtract, self).__init__(out, x, y)
+        super(subtract, self).__init__(out=out, args=(x, y))
 
     def evaluate(self, value, x, y):
         return x-y
@@ -561,7 +598,7 @@ class subtract(ElementWise):
 
 class tanh(ElementWise):
     def __init__(self, x, out=None):
-        super(tanh, self).__init__(out, x)
+        super(tanh, self).__init__(out=out, args=(x,))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
@@ -572,7 +609,7 @@ class tanh(ElementWise):
 
 class transpose(AliasOp):
     def __init__(self, x):
-        super(transpose, self).__init__(tuple(reversed(x.graph_type.shape)), x)
+        super(transpose, self).__init__(shape=tuple(reversed(x.graph_type.shape)), aliased=x)
 
     def evaluate(self, environment, x):
         return environment.transpose()
@@ -581,9 +618,9 @@ class transpose(AliasOp):
         x.generate_add_delta(adjoints, delta.T)
 
 
-class zeros(AllocationTensorOp):
+class zeros(AllocationOp):
     def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(zeros, self).__init__(shape, dtype=dtype)
+        super(zeros, self).__init__(shape=shape, dtype=dtype)
         self.name = name
         self.persist_values = persist_values
         self.other_args = args
@@ -595,12 +632,12 @@ class zeros(AllocationTensorOp):
         return environment.zeros(*self.graph_type.array_args())
 
 
-class range(GraphOp):
+class range(ValueOp):
     def __init__(self, start, stop=None, step=1):
         if stop is None:
             start = 0
             stop = start
-        super(range, self).__init__(None, start, stop, step)
+        super(range, self).__init__(args=(start, stop, step))
 
 
 def deriv(dep, indep):
@@ -609,10 +646,17 @@ def deriv(dep, indep):
 
 class ControlBlock(object):
 
-    def __init__(self):
+    def __init__(self, last_op=None, **kargs):
+        super(ControlBlock, self).__init__(**kargs)
+        # Ops in this block
         self.__ops = []
+        # Predecessor of this block
+        self._last_op = last_op
 
     def add_context_op(self, op):
+        if self._last_op is not None:
+            op.predecessors.add(self._last_op)
+        self._last_op = op
         self.__ops.append(op)
 
     @property
@@ -621,14 +665,14 @@ class ControlBlock(object):
 
 
 class NestedControlBlock(ControlBlock, ControlOp):
-    def __init__(self, context):
-        super(NestedControlBlock, self).__init__()
+    def __init__(self, context, **kargs):
+        super(NestedControlBlock, self).__init__(**kargs)
         self.parent_context = context
 
 
 class Iterator(NestedControlBlock):
-    def __init__(self, context):
-        super(Iterator, self).__init__(context)
+    def __init__(self, **kargs):
+        super(Iterator, self).__init__(**kargs)
 
 
 def show_graph(g):
@@ -647,10 +691,10 @@ def show_graph(g):
             if op.name is not None:
                 name = op.name
             outid = ''
-            if op.out is not op:
-                outid = '=>%d' % (ids[op.out],)
+            if op.output is not op:
+                outid = '=>%d' % (ids[op.output],)
 
-            print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.shape, op, tuple(ids[arg] for arg in op.args), outid)
+            print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.shape, op, tuple(ids[arg] for arg in op.inputs), outid)
             show_op(op)
     show_op(g.root_context)
 
@@ -693,13 +737,14 @@ class VariableBlock(object):
 
 class Graph(object):
 
-    def __init__(self):
-        super(Graph, self).__init__()
+    def __init__(self, **kargs):
+        super(Graph, self).__init__(**kargs)
         self.root_context = ControlBlock()
         self.context = self.root_context
         self.inputs = {}
         self.variables = VariableBlock()
         self.op_adjoints = {}
+        self.ordered_ops = []
 
     import threading
     __thread_data = threading.local()
@@ -728,13 +773,20 @@ class Graph(object):
             self.context = old_context
 
     def add_op(self, op):
+        opid = np.int64(len(self.ordered_ops))
+        self.ordered_ops.append(op)
         self.context.add_context_op(op)
+        return opid
 
     @staticmethod
     def get_ordered_ops(op, ordered_ops):
+        """
+        Get dependent ops ordered for autodiff.
+        """
         if op not in ordered_ops:
-            for arg in op.args:
-                Graph.get_ordered_ops(arg, ordered_ops)
+            if isinstance(op, ArgsOp):
+                for arg in op.inputs:
+                    Graph.get_ordered_ops(arg, ordered_ops)
             ordered_ops.append(op)
 
     def get_adjoints(self, op):
@@ -746,20 +798,29 @@ class Graph(object):
         self.op_adjoints[op] = adjoints
         adjoints[op] = ones(*op.graph_type.array_args())
         for o in reversed(ordered_ops):
-            o.generate_adjoints(adjoints, adjoints[o], *o.args)
+            o.generate_adjoints(adjoints, adjoints[o], *o.inputs)
         return adjoints
 
-    def ordered_ops(self):
-        ops = []
+    def analyze_liveness(self, results):
+        liveness = [set() for op in self.ordered_ops]
+        i = len(liveness)-1
+        for result in results:
+            liveness[i].add(result.output)
+        while i > 0:
+            op = self.ordered_ops[i]
+            prealive = liveness[i-1]
+            alive = set(liveness[i])
+            if isinstance(op, ValueOp):
+                output = op.output
+                alive.discard(output)
+                for arg in op.inputs:
+                    alive.add(arg.output)
+                prealive |= alive
+            i = i-1
+        self.liveness = liveness
+        return liveness
 
-        def addops(g):
-            ops.append(g)
-            for op in g.ops:
-                addops(op)
 
-        addops(self.root_context)
-
-        return ops
 
     # Neon backend functions
     # TODO These are just here as placeholders
