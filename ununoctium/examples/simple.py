@@ -1,4 +1,6 @@
 import geon.backends.graph.graph as graph
+import geon.backends.graph.evaluation as evaluation
+import numpy as np
 
 gr = graph.Graph()
 with graph.default_graph(gr) as g:
@@ -24,7 +26,13 @@ with graph.default_graph(gr) as g:
         # Convenient place to put a breakpoint for debugging
         pass
 
-graph.show_graph(gr)
+#graph.show_graph(gr)
+
+gnp = evaluation.GenNumPy(graph=gr)
+gnp.evaluate((g.dedw, g.dedb, g.l), x=np.zeros((10)), y=np.zeros(3))
+
+
+
 
 
 

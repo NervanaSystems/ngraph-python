@@ -456,7 +456,7 @@ class maximum(ElementWise):
     def evaluate(self, environment, out, x, y):
         return environment.maximum(x, y, out=out)
 
-    def generate_adjoins(self, adjoints, delta, x, y):
+    def generate_adjoints(self, adjoints, delta, x, y):
         p, n = posneg(x-y)
         x.generate_add_delta(delta*p)
         y.generate_add_delta(delta*n)
@@ -469,7 +469,7 @@ class minimum(ElementWise):
     def evaluate(self, environment, out, x, y):
         return environment.minimum(x, y, out=out)
 
-    def generate_adjoins(self, adjoints, delta, x, y):
+    def generate_adjoints(self, adjoints, delta, x, y):
         p, n = posneg(y-x)
         x.generate_add_delta(delta*p)
         y.generate_add_delta(delta*n)
@@ -612,7 +612,7 @@ class transpose(AliasOp):
         super(transpose, self).__init__(shape=tuple(reversed(x.graph_type.shape)), aliased=x)
 
     def evaluate(self, environment, x):
-        return environment.transpose()
+        return environment.transpose(x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta.T)
