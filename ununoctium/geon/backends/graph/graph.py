@@ -8,7 +8,7 @@ import numpy as np
 
 
 def posneg(x):
-    s = .5*sig(x)
+    s = .5*sgn(x)
 
     return .5+s, .5-s
 
@@ -536,6 +536,18 @@ class reshape(AliasOp):
 
     def evaluate(self, environment, x):
         return environment.reshape(x, self.graph_type.shape)
+
+
+class sgn(ElementWise):
+    def __init__(self, x, out=None):
+        super(sgn, self).__init__(out=out, args=(x,))
+
+    def generate_adjoints(self, adjoints, delta, x):
+        # Zero
+        pass
+
+    def evaluate(self, environment, out, x):
+        return environment.sign(x, out)
 
 
 class sig(ElementWise):

@@ -26,26 +26,26 @@ def f():
     N = 100
     K = 30
 
-    from geon.backends.graph.funs import *
+    import geon.backends.graph.funs as be
 
     gr = graph.Graph()
     with graph.default_graph(gr) as g:
 
-        g.w = zeros((xsize, bsize))
-        g.b = zeros((bsize,))
+        g.w = be.zeros((xsize, bsize))
+        g.b = be.zeros((bsize,))
 
-        g.xs = input((xsize, N))
-        g.y0s = input((bsize, N))
+        g.xs = be.input((xsize, N))
+        g.y0s = be.input((bsize, N))
 
-        with iterate(range(K)) as g.i:
+        with be.iterate(range(K)) as g.i:
             g.e = 0
-            with iterate(range(N)) as g.n:
+            with be.iterate(range(N)) as g.n:
                 g.x = g.xs[:,g.n]
                 g.y0 = g.y0s[:,g.n]
                 g.e = g.e + norm2(g.w * g.x + g.b)
 
-            g.dedw = deriv(g.e, g.w)
-            g.dedb = deriv(g.e, g.b)
+            g.dedw = be.deriv(g.e, g.w)
+            g.dedb = be.deriv(g.e, g.b)
 
             g.alpha = -1.0/(1.0+g.i)
 

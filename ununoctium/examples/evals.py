@@ -5,13 +5,13 @@ import geon.backends.graph.cudagpu as cudagpu
 
 gr = graph.Graph()
 with graph.default_graph(gr) as g:
-    from geon.backends.graph.funs import *
+    import geon.backends.graph.funs as be
 
-    g.x = input((10,))
-    g.y = input((10,))
-    g.w = deriv(g.x+g.y, g.y)
+    g.x = be.input((10,))
+    g.y = be.input((10,))
+    g.w = be.deriv(g.x+g.y, g.y)
 
-    g.z = 2*deriv(exp(abs(-log(g.x * g.y))), g.x)
+    g.z = 2*be.deriv(be.exp(abs(-be.log(g.x * g.y))), g.x)
 
 #graph.show_graph(gr)
 

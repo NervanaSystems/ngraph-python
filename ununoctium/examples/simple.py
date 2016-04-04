@@ -4,23 +4,23 @@ import numpy as np
 
 gr = graph.Graph()
 with graph.default_graph(gr) as g:
-    from geon.backends.graph.funs import *
+    import geon.backends.graph.funs as be
 
     def norm2(x):
-        return dot(x.T,x)
+        return be.dot(x.T,x)
     try:
-        g.w = zeros((3, 10))
-        g.b = zeros((3,))
+        g.w = be.zeros((3, 10))
+        g.b = be.zeros((3,))
 
-        g.x = input((10,))
-        g.y0 = input((3,))
+        g.x = be.input((10,))
+        g.y0 = be.input((3,))
 
-        g.e = norm2(sig(dot(g.w, g.x) + g.b))
-        g.reg = norm2(g.b) + norm2(reshape(g.w, (g.w.size,)))
+        g.e = norm2(be.sig(be.dot(g.w, g.x) + g.b))
+        g.reg = norm2(g.b) + norm2(be.reshape(g.w, (g.w.size,)))
         g.l = g.e + .1 * g.reg
 
-        g.dedw = deriv(g.l, g.w)
-        g.dedb = deriv(g.l, g.b)
+        g.dedw = be.deriv(g.l, g.w)
+        g.dedb = be.deriv(g.l, g.b)
 
     except graph.IncompatibleShapesError:
         # Convenient place to put a breakpoint for debugging

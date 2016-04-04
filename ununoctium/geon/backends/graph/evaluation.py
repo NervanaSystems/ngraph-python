@@ -100,7 +100,13 @@ class NumPyEnvironment(Environment):
     def reshape(self, x, shape):
         return x.reshape(shape)
 
-    def sig(self, x, out=None):
+    def sig(self, x, out):
+        np.negative(x, out)
+        np.exp(out, out)
+        np.add(out, 1.0, out)
+        return np.reciprocal(out, out)
+
+    def sign(self, x, out=None):
         return np.sign(x, out=out)
 
     def sin(self, x, out=None):
@@ -208,7 +214,15 @@ class PyCUDAEnvironment(Environment):
     def reshape(self, x, shape):
         return x.reshape(shape)
 
-    def sig(self, x, out=None):
+    def sig(self, x, out):
+        self.negative(x, out=out)
+        cumath.exp(out, out=out)
+        # Add one
+        out._axpbz(1.0, 1.0, out=out)
+        out._rdiv_scalar(1.0, out=out)
+        return out
+
+    def sign(self, x, out):
         out.set(np.sign(x.get()))
         return out
 
@@ -315,6 +329,9 @@ class GenNumPy(Environment):
         return '{x}.reshape({shape})'.format(x=x, shape=shape)
 
     def sig(self, x, out=None):
+        return 'np.negative({x}, {out})\nnp.exp({out}, {out})\nnp.add({out}, 1.0, {out}nnp.reciprocal({out}, {out})'.format(x=x, out=out)
+
+    def sign(self, x, out=None):
         return 'np.sign({x}, out={out})'.format(x=x, out=out)
 
     def sin(self, x, out=None):
