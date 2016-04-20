@@ -1,10 +1,43 @@
 from contextlib import contextmanager
 import weakref
 
+from geon.backends.graph.names import Nameable, VariableBlock
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 
 import numpy as np
+
+
+class Axes(VariableBlock):
+    pass
+
+class GraphMetaclass(type):
+    """Ensures that there is a default graph while running __init__"""
+    def __new__(cls, name, parents, attrs):
+        return super(GraphMetaclass, cls).__new__(cls, name, parents, attrs)
+
+    def __call__(cls, *args, **kargs):
+        gr = Graph()
+        with default_graph(gr) as g:
+            return super(GraphMetaclass, cls).__call__(*args, graph=gr, **kargs)
+
+
+class GraphModel(object):
+    """
+    Superclass for all models.
+
+    Ensures that __metaclass__ is set.
+    """
+    __metaclass__ = GraphMetaclass
+
+
+
+class Model(GraphModel):
+    def __init__(self, graph, **kargs):
+        super(Model, self).__init__(**kargs)
+        self.graph = graph
+        self.axis = Axes()
+        self.params = graph.variables
 
 
 def posneg(x):
@@ -12,7 +45,8 @@ def posneg(x):
 
     return .5+s, .5-s
 
-class GraphOp(object):
+
+class GraphOp(Nameable):
     """Any operation that can be in a computation graph"""
 
     def __pre_init_before_super__(self, **kwds):
@@ -86,6 +120,13 @@ class ControlOp(GraphOp):
     def __init__(self, **kargs):
         super(ControlOp, self).__init__(**kargs)
 
+
+class RandomStateOp(GraphOp):
+    def __init__(self, seed=None, **kargs):
+        super(RandomStateOp, self).__init__(**kargs)
+        self.seed = seed
+
+
 class ValueOp(GraphOp):
     def __pre_init_before_super__(self, graph_type=None, **kwds):
         if graph_type is None:
@@ -99,8 +140,6 @@ class ValueOp(GraphOp):
 
         # Ops that directly use the result
         self.users = weakref.WeakSet()  # Name assigned by user
-
-        self.name = None
 
     @property
     def output(self):
@@ -248,9 +287,14 @@ def c_strides(dtype, shape):
 
 
 class AllocationOp(ValueOp):
-    def __init__(self, shape, dtype=None, **kargs):
-        super(AllocationOp, self).__init__(graph_type=typing.Array[shape, dtype], **kargs)
-        self.strides = c_strides(self.graph_type.dtype, self.graph_type.shape)
+    def __init__(self, shape=None, axes=None, dtype=None, **kargs):
+        if axes is None:
+            if shape is None:
+                raise IncompatibleShapesError()
+            axes = [typing.Axis() for _ in shape]
+
+        super(AllocationOp, self).__init__(graph_type=typing.Array[axes, dtype], **kargs)
+        self.shape = shape
         self.aliases = weakref.WeakSet()
 
 
@@ -267,34 +311,12 @@ class AliasOp(ArgsOp, AllocationOp):
         return self.inputs[0]
 
 
-class OpIterValue(ComputationOp):
-    def __init__(self, sequence, **kargs):
-        super(OpIterValue, self).__init__(args=(sequence,), **kargs)
-
-
-class OpIterator(GraphOp):
-    def __init__(self, sequence, **kargs):
-        super(OpIterator, self).__init__(args=(sequence,), **kargs)
-        self.__next = True
-
-    def __iter__(self):
-        return OpIterator(*self.inputs)
-
-    def next(self):
-        if self.__next:
-            self.__next = False
-            sequence, = self.inputs
-            return OpIterValue(sequence)
-        else:
-            raise StopIteration()
-
-
 class input(AllocationOp):
     """
     Can be set externally.
     """
-    def __init__(self, shape, dtype=np.float32, **kargs):
-        super(input, self).__init__(shape=shape, dtype=dtype, **kargs)
+    def __init__(self, **kargs):
+        super(input, self).__init__(**kargs)
 
     def evaluate(self, environment):
         return environment.input(self.name, self.graph_type)
@@ -414,11 +436,8 @@ class dot(OutputArgOp):
 
 
 class empty(AllocationOp):
-    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(empty, self).__init__(shape=shape, dtype=dtype)
-        self.name = name
-        self.persist_values = persist_values
-        self.other_args = args
+    def __init__(self, **kargs):
+        super(empty, self).__init__(**kargs)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -500,11 +519,8 @@ class negative(ElementWise):
 
 
 class ones(AllocationOp):
-    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(ones, self).__init__(shape=shape, dtype=dtype)
-        self.name = name
-        self.persist_values = persist_values
-        self.other_args = args
+    def __init__(self, **kargs):
+        super(ones, self).__init__(**kargs)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -631,11 +647,8 @@ class transpose(AliasOp):
 
 
 class zeros(AllocationOp):
-    def __init__(self, shape, dtype=None, name=None, persist_values=None, *args):
-        super(zeros, self).__init__(shape=shape, dtype=dtype)
-        self.name = name
-        self.persist_values = persist_values
-        self.other_args = args
+    def __init__(self, **kargs):
+        super(zeros, self).__init__(**kargs)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -741,12 +754,6 @@ def iterate(iterable):
         yield (var)
 
 
-class VariableBlock(object):
-    def __setattr__(self, name, value):
-        value.name = name
-        super(VariableBlock, self).__setattr__(name, value)
-
-
 class Graph(object):
 
     def __init__(self, **kargs):
@@ -754,7 +761,7 @@ class Graph(object):
         self.root_context = ControlBlock()
         self.context = self.root_context
         self.inputs = {}
-        self.variables = VariableBlock()
+        self.variables = typing.VariableBlock()
         self.op_adjoints = {}
         self.ordered_ops = []
 
@@ -771,6 +778,11 @@ class Graph(object):
         graph = Graph.__thread_data.graph
 
         if graph is None:
+            # TODO: Work-around for working with Neon
+            import neon
+            be = neon.NervanaObject.be
+            if be is not None and hasattr(be, 'gr'):
+                return be.gr
             raise MissingGraphError()
 
         return graph
@@ -960,9 +972,6 @@ class Graph(object):
         pass
 
     def set_caffe_compat(self):
-        pass
-
-    def sgn(self, a, out=None):
         pass
 
     def sig2(self, a, out=None):

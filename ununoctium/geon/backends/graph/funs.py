@@ -1,5 +1,8 @@
 import geon.backends.graph.graph as graph
 
+from geon.backends.graph.names import VariableBlock, axis
+from geon.backends.graph.graph import Axes, Model
+
 absolute = graph.absolute
 add = graph.add
 cos = graph.cos
@@ -33,5 +36,7 @@ def relu(x,out):
     maximum(x, 0, out)
 
 iterate = graph.iterate
+
+
 
 

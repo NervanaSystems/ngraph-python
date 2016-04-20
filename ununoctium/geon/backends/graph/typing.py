@@ -1,4 +1,5 @@
 import numpy as np
+from geon.backends.graph.names import Nameable, LName, VariableBlock
 
 from geon.backends.graph.errors import *
 
@@ -18,57 +19,99 @@ class GraphType(object):
         return self == supertype
 
 
-class ShapeType(object):
-    pass
+class Axis(Nameable):
+    def __init__(self, name=None, **kargs):
+        super(Axis, self).__init__(**kargs)
+        self.name = name
+
+    @staticmethod
+    def froma(o):
+        if isinstance(o, Axis):
+            return o
+        if isinstance(o, LName):
+            return o.set(Axis())
+        raise IncompatibleTypesError()
+
+    def __repr__(self):
+        return '{name}Axis'.format(name=self._name_prefix())
 
 
-class IterableType(GraphType):
-    def __init__(self, itertype):
-        self.itertype = itertype
-
-    def is_subtype_of(self, supertype):
-        return isinstance(supertype, IterableType) and self.itertype.is_subtype_of(supertype.itertype)
+class AxesType(object):
+    def __init__(self, **kargs):
+        super(AxesType, self).__init__(**kargs)
 
 
-class IteratorType(GraphType):
-    def __init__(self, iterable_type):
-        self.iterable_type = iterable_type
+class DType(Nameable):
+    def __init__(self, name=None, dtype=np.float32, **kargs):
+        super(DType, self).__init__(**kargs)
+        self.name = name
+        self.dtype = np.dtype(dtype)
+
+    @staticmethod
+    def froma(o):
+        if isinstance(o, type):
+            o = np.dtype(o)
+        if isinstance(o, DType):
+            return o
+        if isinstance(o, LName):
+            return o.set(DType())
+        if isinstance(o, np.dtype):
+            return DType(dtype=o)
+        if o is None:
+            return DType()
+        raise IncompatibleTypesError()
+
+    def __repr__(self):
+        return '{name}DType[{dtype}]'.format(name=self._name_prefix(), dtype=self.dtype.name)
 
 
-    def is_subtype_of(self, supertype):
-        return isinstance(supertype, IteratorType) and self.iterabletype.is_subtype_of(supertype.iterabletype)
+class CallableType(GraphType):
+    def __init__(self, args, out, **kargs):
+        super(CallableType, self).__init__(**kargs)
+        self.args = args
+        self.out = out
+
+    def __repr__(self):
+        return 'Callable[{args},{out}]'.format(args=self.args, out=self.out)
 
 
-class ArrayType(GraphType, ShapeType):
-    def __init__(self, shape, dtype=None):
-        self.shape = shape
-        self.dtype = np.dtype(dtype or np.float32)
+def elementwise_function_type(n):
+    A = Array[(Axis(name='I'),), DType(name='dtype')]
+    return Callable[[A]*n, A]
+
+
+class ArrayType(GraphType, AxesType):
+    def __init__(self, axes, dtype=None):
+        self.axes = tuple(Axis.froma(a) for a in axes)
+        self.dtype = DType.froma(dtype)
 
     def is_subtype_of(self, supertype):
         if not isinstance(supertype, ArrayType):
             return False
-        return self.shape == supertype.shape and self.dtype == supertype.dtype
+        return self.axes == supertype.axes and self.dtype == supertype.dtype
 
     def array_args(self):
         return self.shape, self.dtype
 
+    def __repr__(self):
+        return 'Array[{axes}, {dtype}]'.format(axes=self.axes, dtype=self.dtype)
 
-class TupleType(GraphType, ShapeType):
+
+class TupleType(GraphType, AxesType):
     def __init__(self, *types):
         self.types = types
-        self.shape = ()
+        self.axes = ()
         if len(types) > 1:
             first, = types
-            if isinstance(first, ShapeType):
-                self.shape = first.shape
+            if isinstance(first, AxesType):
+                self.axes = first.axes
 
 
 class VoidType(GraphType):
     pass
 
 
-Iterable = ParamTypeFactory(IterableType)
-Iterator = ParamTypeFactory(IteratorType)
+Callable = ParamTypeFactory(CallableType)
 Array = ParamTypeFactory(ArrayType)
 Tuple = ParamTypeFactory(TupleType)
 Void = VoidType()
@@ -79,13 +122,14 @@ def graph_shape(graph_type):
     return ()
 
 
-def elementwise_shape(*shapes):
-    n = max((len(shape) for shape in shapes))
+def elementwise_shape(*axes_list):
+
+    n = max((len(shape) for shape in axes_list))
 
     def prepend(s):
         return tuple(1 for x in xrange(n-len(s)))+s
 
-    shapes = (prepend(s) for s in shapes)
+    axes_list = (prepend(s) for s in axes_list)
 
     def broadcast(*vals):
         result = 1

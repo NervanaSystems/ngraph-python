@@ -8,12 +8,13 @@ with graph.default_graph(gr) as g:
 
     def norm2(x):
         return be.dot(x.T,x)
-    try:
-        g.w = be.zeros((3, 10))
-        g.b = be.zeros((3,))
 
-        g.x = be.input((10,))
-        g.y0 = be.input((3,))
+    try:
+        g.w = be.zeros(axes=(g.X, g.Y))
+        g.b = be.zeros(axes=(g.Y,))
+
+        g.x = be.input(axes=(g.X,))
+        g.y0 = be.input(axes=(g.Y,))
 
         g.e = norm2(be.sig(be.dot(g.w, g.x) + g.b))
         g.reg = norm2(g.b) + norm2(be.reshape(g.w, (g.w.size,)))
