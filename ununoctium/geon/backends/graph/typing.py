@@ -1,5 +1,5 @@
 import numpy as np
-from geon.backends.graph.names import Nameable, LName, VariableBlock
+from geon.backends.graph.names import Nameable, LName, VariableBlock, union_shapes
 
 from geon.backends.graph.errors import *
 
@@ -91,7 +91,7 @@ class ArrayType(GraphType, AxesType):
         return self.axes == supertype.axes and self.dtype == supertype.dtype
 
     def array_args(self):
-        return self.shape, self.dtype
+        return dict(axes=self.axes, dtype=self.dtype)
 
     def __repr__(self):
         return 'Array[{axes}, {dtype}]'.format(axes=self.axes, dtype=self.dtype)
@@ -121,6 +121,10 @@ def graph_shape(graph_type):
         return graph_type.shape
     return ()
 
+def graph_axes(graph_type):
+    if isinstance(graph_type, ArrayType):
+        return graph_type.axes
+    return ()
 
 def elementwise_shape(*axes_list):
 
@@ -150,13 +154,11 @@ def argument_dtype(dtype, *args):
 
 
 def elementwise_graph_type(dtype, *graph_types):
-    shapes = (graph_shape(graph_type) for graph_type in graph_types)
-    shape = elementwise_shape(*shapes)
-
+    shapes = (graph_axes(graph_type) for graph_type in graph_types)
+    axes = union_shapes(shapes)
     dtype = np.result_type(dtype, *(graph_type.dtype for graph_type in graph_types))
 
-    return Array[shape, dtype]
-
+    return Array[axes, dtype]
 
 def graph_type(o):
     if isinstance(o, np.ndarray):

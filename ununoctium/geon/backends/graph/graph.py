@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 import weakref
 
-from geon.backends.graph.names import Nameable, VariableBlock
+from geon.backends.graph.names import Nameable, VariableBlock, merge_shapes
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 
@@ -260,7 +260,7 @@ class OutputArgOp(ComputationOp):
     def __pre_init_after_super__(self, out=None, **kargs):
         kargs = super(OutputArgOp, self).__pre_init_after_super__(**kargs)
         if out is None:
-            self.output = empty(*self.graph_type.array_args())
+            self.output = empty(**self.graph_type.array_args())
         else:
             self.output = out
         return kargs
@@ -302,8 +302,8 @@ class AliasOp(ArgsOp, AllocationOp):
     """
     Allocates a descriptor that aliases another allocation.
     """
-    def __init__(self, shape, aliased, **kargs):
-        super(AliasOp, self).__init__(shape=shape, dtype=aliased.graph_type.dtype, args=(aliased,), **kargs)
+    def __init__(self, axes, aliased, **kargs):
+        super(AliasOp, self).__init__(axes=axes, dtype=aliased.graph_type.dtype, args=(aliased,), **kargs)
         aliased.output.aliases.add(self)
 
     @property
@@ -386,53 +386,21 @@ def divide(x, y, out=None):
     return result
 
 
-#TODO Replace with a simple dot operation wrapped by the messy dimension cases
 class dot(OutputArgOp):
     def __init__(self, x, y, out=None):
-        xr = x
-        if len(x.graph_type.shape) == 0:
-            xr = reshape(x, (1,1))
-        elif len(x.graph_type.shape) != 2:
-            d1 = 1
-            for d in x.graph_type.shape[:-1]:
-                d1 = d1*d
-            xr = reshape(x, (d1, x.graph_type.shape[-1]))
-        yr = y
-        if len(y.graph_type.shape) == 0:
-            yr = reshape(y, (1,1))
-        elif len(y.graph_type.shape) != 2:
-            d1 = 1
-            for d in y.graph_type.shape[1:]:
-                d1 = d1*d
-            yr = reshape(y, (y.graph_type.shape[0], d1))
-
-        xshape = x.graph_type.shape
-        yshape = y.graph_type.shape
-
-        if len(xshape) == 0:
-            self.shape = yshape
-        elif len(yshape) == 0:
-            self.shape = xshape
-        elif xshape[-1] != yshape[0]:
-            raise IncompatibleShapesError()
-        else:
-            self.shape = tuple(xshape[:-1]+yshape[1:])
-
-        super(dot, self).__init__(out=out, args=(xr, yr))
+        lcr = merge_shapes(x.graph_type.axes, y.graph_type.axes)
+        self.axes = lcr[0] + lcr[-1]
+        super(dot, self).__init__(out=out, args=(x, y))
 
     def compute_graph_type(self, *argtypes):
-        return typing.Array[self.shape, np.result_type(*(argtype.dtype for argtype in argtypes))]
+        return typing.Array[self.axes, np.result_type(*(argtype.dtype for argtype in argtypes))]
 
     def evaluate(self, environment, out, x, y):
         return environment.dot(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-
-        dr = delta
-        if len(dr.graph_type.shape) != 2:
-            dr = reshape(delta, (x.graph_type.shape[0], y.graph_type.shape[1]))
-        x.generate_add_delta(adjoints, dot(dr, y.T))
-        y.generate_add_delta(adjoints, dot(x.T, dr))
+        x.generate_add_delta(adjoints, dot(delta, y.T))
+        y.generate_add_delta(adjoints, dot(x.T, delta))
 
 
 class empty(AllocationOp):
@@ -637,7 +605,7 @@ class tanh(ElementWise):
 
 class transpose(AliasOp):
     def __init__(self, x):
-        super(transpose, self).__init__(shape=tuple(reversed(x.graph_type.shape)), aliased=x)
+        super(transpose, self).__init__(axes=tuple(reversed(x.graph_type.axes)), aliased=x)
 
     def evaluate(self, environment, x):
         return environment.transpose(x)
@@ -719,7 +687,7 @@ def show_graph(g):
             if op.output is not op:
                 outid = '=>%d' % (ids[op.output],)
 
-            print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.shape, op, tuple(ids[arg] for arg in op.inputs), outid)
+            print '%d:%s%s:%s%s%s' % (ids[op], name, op.graph_type.axes, op, tuple(ids[arg] for arg in op.inputs), outid)
             show_op(op)
     show_op(g.root_context)
 
@@ -820,7 +788,7 @@ class Graph(object):
         ordered_ops = []
         Graph.get_ordered_ops(op, ordered_ops)
         self.op_adjoints[op] = adjoints
-        adjoints[op] = ones(*op.graph_type.array_args())
+        adjoints[op] = ones(**op.graph_type.array_args())
         for o in reversed(ordered_ops):
             o.generate_adjoints(adjoints, adjoints[o], *o.inputs)
         return adjoints

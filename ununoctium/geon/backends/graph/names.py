@@ -64,13 +64,17 @@ class axis(Nameable):
 
 def merge_shapes(x, y):
     """Combine x and y into order-preserving x-y, x&y, y-x"""
-    left = []
-    center = []
-    for _ in x:
-        if _ in y:
-            center.append(_)
-        else:
-            left.append(_)
+    left = tuple(_ for _ in x if _ not in y)
+    center = tuple(_ for _ in x if _ in y)
     right = tuple(_ for _ in y if _ not in center)
-    return tuple(left), tuple(center), right
+    return left, center, right
+
+def union_shapes(axes_list):
+    allaxes = []
+    for ax in sum(axes_list, ()):
+        if ax not in allaxes:
+            allaxes.append(ax)
+    return tuple(allaxes)
+
+
 
