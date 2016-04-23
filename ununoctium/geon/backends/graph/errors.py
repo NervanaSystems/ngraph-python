@@ -32,3 +32,9 @@ class RedefiningConstantError(Error):
     """
     Redefining a constant value.
     """
+
+class NameException(Exception):
+    """
+    Trying to set a value in a name generator.
+    """
+    pass

@@ -1,7 +1,7 @@
 import geon.backends.graph.graph as graph
 
-from geon.backends.graph.names import VariableBlock, axis
-from geon.backends.graph.graph import Axes, Model
+from geon.backends.graph.names import VariableBlock, AxisGenerator
+from geon.backends.graph.graph import Component, Model, deriv, input
 
 absolute = graph.absolute
 add = graph.add
@@ -27,9 +27,6 @@ tanh = graph.tanh
 transpose = graph.transpose
 zeros = graph.zeros
 
-
-deriv = graph.deriv
-input = graph.input
 range = graph.range
 
 def relu(x,out):

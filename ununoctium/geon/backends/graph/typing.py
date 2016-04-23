@@ -1,5 +1,5 @@
 import numpy as np
-from geon.backends.graph.names import Nameable, LName, VariableBlock, union_shapes
+from geon.backends.graph.names import NameableValue, union_axes
 
 from geon.backends.graph.errors import *
 
@@ -19,32 +19,14 @@ class GraphType(object):
         return self == supertype
 
 
-class Axis(Nameable):
-    def __init__(self, name=None, **kargs):
-        super(Axis, self).__init__(**kargs)
-        self.name = name
-
-    @staticmethod
-    def froma(o):
-        if isinstance(o, Axis):
-            return o
-        if isinstance(o, LName):
-            return o.set(Axis())
-        raise IncompatibleTypesError()
-
-    def __repr__(self):
-        return '{name}Axis'.format(name=self._name_prefix())
-
-
 class AxesType(object):
     def __init__(self, **kargs):
         super(AxesType, self).__init__(**kargs)
 
 
-class DType(Nameable):
+class DType(NameableValue):
     def __init__(self, name=None, dtype=np.float32, **kargs):
         super(DType, self).__init__(**kargs)
-        self.name = name
         self.dtype = np.dtype(dtype)
 
     @staticmethod
@@ -53,8 +35,6 @@ class DType(Nameable):
             o = np.dtype(o)
         if isinstance(o, DType):
             return o
-        if isinstance(o, LName):
-            return o.set(DType())
         if isinstance(o, np.dtype):
             return DType(dtype=o)
         if o is None:
@@ -62,7 +42,7 @@ class DType(Nameable):
         raise IncompatibleTypesError()
 
     def __repr__(self):
-        return '{name}DType[{dtype}]'.format(name=self._name_prefix(), dtype=self.dtype.name)
+        return '{name}DType[{dtype}]'.format(name=self.name or "", dtype=self.dtype.name)
 
 
 class CallableType(GraphType):
@@ -82,7 +62,7 @@ def elementwise_function_type(n):
 
 class ArrayType(GraphType, AxesType):
     def __init__(self, axes, dtype=None):
-        self.axes = tuple(Axis.froma(a) for a in axes)
+        self.axes = axes
         self.dtype = DType.froma(dtype)
 
     def is_subtype_of(self, supertype):
@@ -155,7 +135,7 @@ def argument_dtype(dtype, *args):
 
 def elementwise_graph_type(dtype, *graph_types):
     shapes = (graph_axes(graph_type) for graph_type in graph_types)
-    axes = union_shapes(shapes)
+    axes = union_axes(shapes)
     dtype = np.result_type(dtype, *(graph_type.dtype for graph_type in graph_types))
 
     return Array[axes, dtype]

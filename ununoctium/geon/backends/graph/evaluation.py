@@ -1,8 +1,29 @@
 import numpy as np
+import numbers
 import geon.backends.graph.graph as graph
+from geon.backends.graph.names import axes_shape, axes_reshape
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
+
+def maybe_reshape(array, shape):
+    if isinstance(array, numbers.Real):
+        return array
+    if array.shape == shape:
+        return array
+    return array.reshape(shape)
+
+
+class ArrayWithAxes(object):
+    def __init__(self, array, axes):
+        self.array = array
+        self.axes = axes
+
+    def array_as_axes(self, axes):
+        return maybe_reshape(self.array, axes_reshape(self.axes, axes))
+
+    def __repr__(self):
+        return '{array}:{axes}'.format(axes=self.axes, array=self.array)
 
 
 class Environment(dict):
@@ -50,19 +71,19 @@ class NumPyEnvironment(Environment):
         super(NumPyEnvironment, self).__init__(**kargs)
 
     def constant(self, value):
-        return value
+        return ArrayWithAxes(value, ())
 
     def input(self, name, graph_type):
         value = self[name]
-        if graph_type.shape != value.shape:
+        if graph_type.axes != value.axes:
             raise graph.IncompatibleShapesError()
         return value
 
     def absolute(self, x, out=None):
-        return np.abs(x, out=out)
+        return ArrayWithAxes(np.abs(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def add(self, x, y, out=None):
-        return np.add(x, y, out=out)
+        return ArrayWithAxes(np.add(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array), out.axes)
 
     def cos(self, x, out=None):
         return np.cos(x, out=out)
@@ -70,14 +91,14 @@ class NumPyEnvironment(Environment):
     def dot(self, x, y, out=None):
         return np.dot(x, y, out=out)
 
-    def empty(self, shape, dtype):
-        return np.empty(shape, dtype)
+    def empty(self, axes, dtype):
+        return ArrayWithAxes(np.empty(axes_shape(axes), dtype), axes)
 
     def exp(self, x, out=None):
-        return np.exp(x, out=out)
+        return ArrayWithAxes(np.exp(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def log(self, x, out=None):
-        return np.log(x, out=out)
+        return ArrayWithAxes(np.log(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def maximum(self, x, y, out=None):
         return np.maximum(x, y, out=out)
@@ -86,25 +107,26 @@ class NumPyEnvironment(Environment):
         return np.minimum(x, y, out=out)
 
     def multiply(self, x, y, out=None):
-        return np.multiply(x, y, out=out)
+        return ArrayWithAxes(np.multiply(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array), out.axes)
 
     def negative(self, x, out=None):
-        return np.negative(x, out=out)
+        return ArrayWithAxes(np.negative(x.array_as_axes(out.axes), out=out.array), out.axes)
 
-    def ones(self, shape, dtype):
-        return np.ones(shape, dtype)
+    def ones(self, axes, dtype):
+        return ArrayWithAxes(np.ones(axes_shape(axes), dtype), axes)
 
     def reciprocal(self, x, out=None):
-        return np.reciprocal(x, out=out)
+        return ArrayWithAxes(np.reciprocal(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def reshape(self, x, shape):
         return x.reshape(shape)
 
     def sig(self, x, out):
-        np.negative(x, out)
-        np.exp(out, out)
-        np.add(out, 1.0, out)
-        return np.reciprocal(out, out)
+        xa = x.array_as_axes(out.axes)
+        np.negative(xa, out.array)
+        np.exp(out.array, out.array)
+        np.add(out.array, 1.0, out.array)
+        return ArrayWithAxes(np.reciprocal(out.array, out.array), out.axes)
 
     def sign(self, x, out=None):
         return np.sign(x, out=out)
@@ -127,8 +149,8 @@ class NumPyEnvironment(Environment):
     def transpose(self, x):
         return x.transpose()
 
-    def zeros(self, shape, dtype):
-        return np.zeros(shape, dtype)
+    def zeros(self, axes, dtype):
+        return ArrayWithAxes(np.zeros(axes_shape(axes), dtype), axes)
 
 
 class PyCUDAEnvironment(Environment):
@@ -167,8 +189,8 @@ class PyCUDAEnvironment(Environment):
         cumath.dot(x,y, out=out)
         return out
 
-    def empty(self, shape, dtype):
-        return gpuarray.empty(shape, dtype)
+    def empty(self, axes, dtype):
+        return ArrayWithAxes(gpuarray.empty(axes_shape(axes), dtype), axes)
 
     def exp(self, x, out=None):
         cumath.exp(x, out=out)
@@ -202,10 +224,10 @@ class PyCUDAEnvironment(Environment):
         x._axpbz(-1, 0.0, out)
         return out
 
-    def ones(self, shape, dtype):
-        result = gpuarray.empty(shape, dtype)
+    def ones(self, axes, dtype):
+        result = gpuarray.empty(axes_shape(axes), dtype)
         result.fill(1.0)
-        return result
+        return ArrayWithAxes(result, axes)
 
     def reciprocal(self, x, out=None):
         x._rdiv_scalar(1.0, out)
@@ -248,8 +270,8 @@ class PyCUDAEnvironment(Environment):
     def transpose(self, x):
         return x.transpose()
 
-    def zeros(self, shape, dtype):
-        return gpuarray.zeros(shape, dtype)
+    def zeros(self, axes, dtype):
+        return ArrayWithAxes(gpuarray.zeros(axes_shape(axes), dtype), axes)
 
 
 class GenNumPy(Environment):
@@ -298,8 +320,8 @@ class GenNumPy(Environment):
     def dot(self, x, y, out=None):
         return 'np.dot({x}, {y}, out={out})'.format(x=x, y=y, out=out)
 
-    def empty(self, shape, dtype):
-        return 'np.empty({shape}, np.{dtype})'.format(shape=shape, dtype=dtype)
+    def empty(self, axes, dtype):
+        return 'np.empty({axes}, np.{dtype})'.format(axes=axes, dtype=dtype)
 
     def exp(self, x, out=None):
         return 'np.exp({x}, out={out})'.format(x=x, out=out)
@@ -319,8 +341,8 @@ class GenNumPy(Environment):
     def negative(self, x, out=None):
         return 'np.negative({x}, out={out})'.format(x=x, out=out)
 
-    def ones(self, shape, dtype):
-        return 'np.ones({shape}, np.{dtype})'.format(shape=shape, dtype=dtype)
+    def ones(self, axes, dtype):
+        return 'np.ones({axes}, np.{dtype})'.format(axes=axes, dtype=dtype)
 
     def reciprocal(self, x, out=None):
         return 'np.reciprocal({x}, out={out})'.format(x=x, out=out)
@@ -352,7 +374,7 @@ class GenNumPy(Environment):
     def transpose(self, x):
         return '{x}.transpose()'.format(x=x)
 
-    def zeros(self, shape, dtype):
-        return 'np.zeros({shape}, np.{dtype})'.format(shape=shape,dtype=dtype)
+    def zeros(self, axes, dtype):
+        return 'np.zeros({axes}, np.{dtype})'.format(axes=axes,dtype=dtype)
 
 

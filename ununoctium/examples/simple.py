@@ -5,16 +5,17 @@ import numpy as np
 gr = graph.Graph()
 with graph.default_graph(gr) as g:
     import geon.backends.graph.funs as be
+    a = be.AxisGenerator(name='a')
 
     def norm2(x):
         return be.dot(x, x)
 
     try:
-        g.w = be.zeros(axes=(g.X, g.Y))
-        g.b = be.zeros(axes=(g.Y,))
+        g.w = be.zeros(axes=(a.X, a.Y))
+        g.b = be.zeros(axes=(a.Y,))
 
-        g.x = be.input(axes=(g.X,))
-        g.y0 = be.input(axes=(g.Y,))
+        g.x = be.input(axes=(a.X,))
+        g.y0 = be.input(axes=(a.Y,))
 
         g.e = norm2(be.sig(be.dot(g.w, g.x) + g.b))
         g.reg = norm2(g.b) + norm2(g.w)

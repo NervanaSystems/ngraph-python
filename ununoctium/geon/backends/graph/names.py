@@ -1,80 +1,163 @@
-from geon.backends.graph.errors import RedefiningConstantError
+from geon.backends.graph.errors import NameException, RedefiningConstantError
+import numbers
+
+
+class NamedValue(object):
+    """A value with a name."""
+    def __init__(self, name, **kargs):
+        super(NamedValue, self).__init__(**kargs)
+        self.__name = name
+
+    @property
+    def name(self):
+        return self.__name
+
+    def _set_name(self, name):
+        self.__name = name
+
+
+class NameableValue(NamedValue):
+    """A value with a name that can be set."""
+    def __init__(self, name=None, **kargs):
+        super(NameableValue, self).__init__(name=name, **kargs)
+
+    name = NamedValue.name
+    @name.setter
+    def name(self, name):
+        self._set_name(name)
+
+
+class NamedValueGenerator(NamedValue):
+    """Accessing attributes generates objects."""
+    def __init__(self, generator, name="", write_lock=False, read_lock=False, **kargs):
+        self.__write_lock = False
+        self.__read_lock = False
+        super(NamedValueGenerator, self).__init__(name=name, **kargs)
+        self.__generator = generator
+        self.__write_lock = write_lock
+        self.__read_lock = read_lock
+
+    @property
+    def _read_lock(self):
+        return self.__read_lock
+
+    @_read_lock.setter
+    def _read_lock(self, value):
+        self.__read_lock = value
+
+    @property
+    def _write_lock(self):
+        return self.__write_lock
+
+    @_write_lock.setter
+    def _write_lock(self, value):
+        self.__write_lock = value
+
+    def __setattr__(self, name, value):
+        if name.startswith('_') or not self._write_lock:
+            return super(NamedValueGenerator, self).__setattr__(name, value)
+        else:
+            raise NameException()
+
+    def __getattr__(self, name):
+        if not name.startswith('_'):
+            if not self._read_lock:
+                named_value = self.__generator(name=self.name+"."+name)
+                super(NamedValueGenerator, self).__setattr__(name, named_value)
+                return named_value
+        return super(NamedValueGenerator, self).__getattr__(name)
+
 
 class VariableBlock(object):
     def __setattr__(self, name, value):
         """Tell value that it is being assigned to name"""
-        value.assign_to_name(self, name)
-
-    def set_value(self, name, value):
-        """Perform self.name = value"""
+        value.name = name
         super(VariableBlock, self).__setattr__(name, value)
 
-    def get_value(self, name, default=None):
-        """Returns the value associated with name, or default"""
-        try:
-            return super(VariableBlock, self).__getattr__(name)
-        except AttributeError:
-            return default
 
-    def __getattr__(self, name):
-        return LName(self, name)
+class AxisGenerator(NamedValueGenerator):
+    def __init__(self, name, **kargs):
+        super(AxisGenerator, self).__init__(name=name, generator=Axis, **kargs)
 
 
-class Nameable(object):
-    def __init__(self, name=None, **kargs):
-        super(Nameable, self).__init__(**kargs)
-        self.name = name
-
-    def assign_to_name(self, block, name):
-        self.name = name
-        block.set_value(name, self)
-
-    def _name_prefix(self):
-        if self.name is None:
-            return ""
-        else:
-            return self.name+':'
-
-
-class LName(object):
-    """Reference to an attribute that can later have the value set."""
-    def __init__(self, block, name, **kargs):
-        super(LName, self).__init__(**kargs)
-        self.name = name
-        self.block = block
-
-    def set(self, value):
-        self.block.__setattr__(self.name, value)
-        return value
-
-class axis(Nameable):
-    def __init__(self, value, **kargs):
-        super(axis, self).__init__(**kargs)
+class Axis(NamedValue):
+    def __init__(self, value=None, **kargs):
+        super(Axis, self).__init__(**kargs)
         self.value = value
 
-    def assign_to_name(self, block, name):
-        if block.get_value(name) is None:
-            super(axis, self).assign_to_name(block, name)
+    def __getitem__(self, item):
+        self.value = item
+
+    def size(self):
+        if isinstance(self.value, numbers.Integral):
+            return int(self.value)
+        if isinstance(self.value, tuple):
+            return len(self.value)
+        return 1
+
+    def __repr__(self):
+        return '{name}:Axis[{value}]'.format(value=self.value, name=self.name)
+
+
+class IndexNames(NamedValueGenerator):
+    def __init__(self, name, **kargs):
+        super(IndexNames, self).__init__(name=name, generator=Index, **kargs)
+
+
+class Index(NamedValue):
+    def __init__(self, value=None, **kargs):
+        super(Index, self).__init__(**kargs)
+        self.value = value
+
+    def __getitem__(self, item):
+        self.value = item
+
+    def __repr__(self):
+        return '{name}:Index[{value}]'.format(value=self.value, name=self.name)
+
+
+def axes_sub(x, y):
+    """Returns x with elements from y removed"""
+    return tuple(_ for _ in x if _ not in y)
+
+
+def axes_intersect(x, y):
+    """Returns intersection of x and y in x order"""
+    return tuple(_ for _ in x if _ in y)
+
+
+def axes_append(x, y):
+    """Returns x followed by elements of y not in x"""
+    return x + axes_sub(y, x)
+
+
+def axes_shape(x):
+    return tuple(_.size() for _ in x)
+
+def axes_reshape(in_axes, out_axes):
+    """
+    Compute the reshape shape to broadcase in to out.  Axes must be consistently ordered
+
+    :param in_axes: Axes of the input
+    :param out_axes: Axes of the output
+    :return: shape argument for reshape()
+    """
+    result = []
+    for out_axis in out_axes:
+        if out_axis in in_axes:
+            result.append(out_axis.size())
         else:
-            raise RedefiningConstantError
+            result.append(1)
+    return tuple(result)
 
-    def __str__(self):
-        return 'axis<{name}={value}>'.format(value=self.value, name=self.name)
-
-
-def merge_shapes(x, y):
+def merge_axes(x, y):
     """Combine x and y into order-preserving x-y, x&y, y-x"""
-    left = tuple(_ for _ in x if _ not in y)
-    center = tuple(_ for _ in x if _ in y)
-    right = tuple(_ for _ in y if _ not in center)
-    return left, center, right
+    return axes_sub(x, y), axes_intersect(x, y), axes_sub(y, x)
 
-def union_shapes(axes_list):
+def union_axes(axes_list):
     allaxes = []
     for ax in sum(axes_list, ()):
         if ax not in allaxes:
             allaxes.append(ax)
     return tuple(allaxes)
-
-
 

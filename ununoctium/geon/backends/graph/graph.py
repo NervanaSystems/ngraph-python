@@ -1,15 +1,12 @@
 from contextlib import contextmanager
 import weakref
 
-from geon.backends.graph.names import Nameable, VariableBlock, merge_shapes
+from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock, merge_axes
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 
 import numpy as np
 
-
-class Axes(VariableBlock):
-    pass
 
 class GraphMetaclass(type):
     """Ensures that there is a default graph while running __init__"""
@@ -22,7 +19,7 @@ class GraphMetaclass(type):
             return super(GraphMetaclass, cls).__call__(*args, graph=gr, **kargs)
 
 
-class GraphModel(object):
+class GraphComponent(object):
     """
     Superclass for all models.
 
@@ -30,14 +27,16 @@ class GraphModel(object):
     """
     __metaclass__ = GraphMetaclass
 
-
-
-class Model(GraphModel):
     def __init__(self, graph, **kargs):
-        super(Model, self).__init__(**kargs)
+        super(GraphComponent, self).__init__(**kargs)
         self.graph = graph
-        self.axis = Axes()
+        self.a = AxisGenerator('a')
         self.params = graph.variables
+
+
+class Model(GraphComponent):
+    def __init__(self, **kargs):
+        super(Model, self).__init__(**kargs)
 
 
 def posneg(x):
@@ -46,7 +45,7 @@ def posneg(x):
     return .5+s, .5-s
 
 
-class GraphOp(Nameable):
+class GraphOp(NameableValue):
     """Any operation that can be in a computation graph"""
 
     def __pre_init_before_super__(self, **kwds):
@@ -269,6 +268,11 @@ class OutputArgOp(ComputationOp):
         super(OutputArgOp, self).__init__(**kargs)
 
 
+class Component(GraphComponent, OutputArgOp):
+    def __init__(self, **kargs):
+        super(Component, self).__init__(**kargs)
+
+
 class ElementWise(OutputArgOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
@@ -287,14 +291,9 @@ def c_strides(dtype, shape):
 
 
 class AllocationOp(ValueOp):
-    def __init__(self, shape=None, axes=None, dtype=None, **kargs):
-        if axes is None:
-            if shape is None:
-                raise IncompatibleShapesError()
-            axes = [typing.Axis() for _ in shape]
-
+    def __init__(self, axes=None, dtype=None, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[axes, dtype], **kargs)
-        self.shape = shape
+        self.axes = axes
         self.aliases = weakref.WeakSet()
 
 
@@ -315,8 +314,8 @@ class input(AllocationOp):
     """
     Can be set externally.
     """
-    def __init__(self, **kargs):
-        super(input, self).__init__(**kargs)
+    def __init__(self, axes, **kargs):
+        super(input, self).__init__(axes=axes, **kargs)
 
     def evaluate(self, environment):
         return environment.input(self.name, self.graph_type)
@@ -388,7 +387,7 @@ def divide(x, y, out=None):
 
 class dot(OutputArgOp):
     def __init__(self, x, y, out=None):
-        lcr = merge_shapes(x.graph_type.axes, y.graph_type.axes)
+        lcr = merge_axes(x.graph_type.axes, y.graph_type.axes)
         self.axes = lcr[0] + lcr[-1]
         super(dot, self).__init__(out=out, args=(x, y))
 
@@ -399,8 +398,8 @@ class dot(OutputArgOp):
         return environment.dot(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, dot(delta, y.T))
-        y.generate_add_delta(adjoints, dot(x.T, delta))
+        x.generate_add_delta(adjoints, dot(delta, y))
+        y.generate_add_delta(adjoints, dot(x, delta))
 
 
 class empty(AllocationOp):
@@ -411,7 +410,7 @@ class empty(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.empty(*self.graph_type.array_args())
+        return environment.empty(**self.graph_type.array_args())
 
 
 class exp(ElementWise):
@@ -494,7 +493,7 @@ class ones(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.ones(*self.graph_type.array_args())
+        return environment.ones(**self.graph_type.array_args())
 
 
 class reciprocal(ElementWise):
@@ -622,7 +621,7 @@ class zeros(AllocationOp):
         pass
 
     def evaluate(self, environment):
-        return environment.zeros(*self.graph_type.array_args())
+        return environment.zeros(**self.graph_type.array_args())
 
 
 class range(ValueOp):
@@ -729,7 +728,7 @@ class Graph(object):
         self.root_context = ControlBlock()
         self.context = self.root_context
         self.inputs = {}
-        self.variables = typing.VariableBlock()
+        self.variables = VariableBlock()
         self.op_adjoints = {}
         self.ordered_ops = []
 
