@@ -1,11 +1,33 @@
 from contextlib import contextmanager
 import weakref
+import numbers
 
-from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock, merge_axes
+from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
+from geon.backends.graph.environment import get_default_environment, get_default_graph, set_default_environment, set_default_graph, bound_graph, Environment
 
 import numpy as np
+
+
+def maybe_reshape(array, shape):
+    if isinstance(array, numbers.Real):
+        return array
+    if array.shape == shape:
+        return array
+    return array.reshape(shape)
+
+
+class ArrayWithAxes(object):
+    def __init__(self, array, axes):
+        self.array = array
+        self.axes = axes
+
+    def array_as_axes(self, axes):
+        return maybe_reshape(self.array, axes_reshape(self.axes, axes))
+
+    def __repr__(self):
+        return '{array}:{axes}'.format(axes=self.axes, array=self.array)
 
 
 class GraphMetaclass(type):
@@ -14,12 +36,11 @@ class GraphMetaclass(type):
         return super(GraphMetaclass, cls).__new__(cls, name, parents, attrs)
 
     def __call__(cls, *args, **kargs):
-        gr = Graph()
-        with default_graph(gr) as g:
-            return super(GraphMetaclass, cls).__call__(*args, graph=gr, **kargs)
+        with bound_graph():
+            return super(GraphMetaclass, cls).__call__(*args, **kargs)
 
 
-class GraphComponent(object):
+class GraphComponent(Environment):
     """
     Superclass for all models.
 
@@ -27,11 +48,73 @@ class GraphComponent(object):
     """
     __metaclass__ = GraphMetaclass
 
-    def __init__(self, graph, **kargs):
+    def __init__(self, **kargs):
         super(GraphComponent, self).__init__(**kargs)
-        self.graph = graph
+        set_default_graph(self)
         self.a = AxisGenerator('a')
-        self.params = graph.variables
+        self.root_context = ControlBlock()
+        self.context = self.root_context
+        self.inputs = {}
+        self.variables = VariableBlock()
+        self.op_adjoints = {}
+        self.ordered_ops = []
+
+    @contextmanager
+    def bound_context(self, context):
+        old_context = self.context
+        try:
+            self.context = context
+            yield ()
+        finally:
+            self.context = old_context
+
+    def add_op(self, op):
+        opid = np.int64(len(self.ordered_ops))
+        self.ordered_ops.append(op)
+        self.context.add_context_op(op)
+        return opid
+
+    @staticmethod
+    def get_ordered_ops(op, ordered_ops):
+        """
+        Get dependent ops ordered for autodiff.
+        """
+        if op not in ordered_ops:
+            if isinstance(op, ArgsOp):
+                for arg in op.inputs:
+                    Graph.get_ordered_ops(arg, ordered_ops)
+            ordered_ops.append(op)
+
+    def get_adjoints(self, op):
+        if op in self.op_adjoints:
+            return self.op_adjoints[op]
+        adjoints = {}
+        ordered_ops = []
+        Graph.get_ordered_ops(op, ordered_ops)
+        self.op_adjoints[op] = adjoints
+        adjoints[op] = ones(**op.graph_type.array_args())
+        for o in reversed(ordered_ops):
+            o.generate_adjoints(adjoints, adjoints[o], *o.inputs)
+        return adjoints
+
+    def analyze_liveness(self, results):
+        liveness = [set() for op in self.ordered_ops]
+        i = len(liveness) - 1
+        for result in results:
+            liveness[i].add(result.output)
+        while i > 0:
+            op = self.ordered_ops[i]
+            prealive = liveness[i - 1]
+            alive = set(liveness[i])
+            if isinstance(op, ValueOp):
+                output = op.output
+                alive.discard(output)
+                for arg in op.inputs:
+                    alive.add(arg.output)
+                prealive |= alive
+            i = i - 1
+        self.liveness = liveness
+        return liveness
 
 
 class Model(GraphComponent):
@@ -45,43 +128,155 @@ def posneg(x):
     return .5+s, .5-s
 
 
+def axes_sub(x, y):
+    """Returns x with elements from y removed"""
+    return [_ for _ in x if _ not in y]
+
+
+def axes_intersect(x, y):
+    """Returns intersection of x and y in x order"""
+    return [_ for _ in x if _ in y]
+
+
+def axes_append(*axes_list):
+    """Returns x followed by elements of y not in x"""
+    result = []
+    for axes in axes_list:
+        for axis in axes:
+            if axis not in result:
+                result.append(axis)
+    return result
+
+
+def axes_reshape(in_axes, out_axes):
+    """
+    Compute the reshape shape to broadcase in to out.  Axes must be consistently ordered
+
+    :param in_axes: Axes of the input
+    :param out_axes: Axes of the output
+    :return: shape argument for reshape()
+    """
+    result = []
+    for out_axis in out_axes:
+        if out_axis in in_axes:
+            result.append(out_axis.size())
+        else:
+            result.append(1)
+    return tuple(result)
+
+
+def merge_axes(x, y):
+    """Combine x and y into order-preserving x-y, x&y, y-x"""
+    return axes_sub(x, y), axes_intersect(x, y), axes_sub(y, x)
+
+
+def union_axes(axes_list):
+    allaxes = []
+    for ax in sum(axes_list, ()):
+        if ax not in allaxes:
+            allaxes.append(ax)
+    return tuple(allaxes)
+
+
+def axes_list(axes, shape_list):
+    result = []
+    for shape in shape_list:
+        for axis, size in zip(axes, shape):
+            axis[size]
+        result.append(axes)
+        axes = [axis.prime() for axis in axes]
+    return result
+
+
+class AxesComp(object):
+    """A Computation for computing axes"""
+
+    @staticmethod
+    def as_axes(axes):
+        if isinstance(axes, AxesComp):
+            return axes
+        return LiteralAxesComp(axes)
+
+    def __add__(self, x):
+        return AxesAppendComp(self, AxesComp.as_axes(x))
+
+    def __radd__(self, x):
+        return AxesAppendComp(AxesComp.as_axes(x), self)
+
+    def __sub__(self, x):
+        return AxesSubComp(self, AxesComp.as_axes(x))
+
+    def __rsub__(self, x):
+        return AxesSubComp(AxesComp.as_axes(x), self)
+
+    def __mul__(self, x):
+        return AxesIntersectComp(self, AxesComp.as_axes(x))
+
+    def __rmul__(self, x):
+        return AxesIntersectComp(AxesComp.as_axes(x), self)
+
+
+class LiteralAxesComp(AxesComp):
+    """Actual axes are provided"""
+    def __init__(self, axes):
+        self.axes = axes
+
+    def evaluate(self, environment):
+        return self.axes
+
+
+class ValueAxesComp(AxesComp):
+    """Determine axes from value computed by x"""
+    def __init__(self, x):
+        self.x = x
+
+    def evaluate(self, environment):
+        return self.x.evaluate_axes(environment)
+
+
+class AxesSubComp(AxesComp):
+    """Result will be removal of axes in y from those in x"""
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def evaluate(self, env):
+        x_axes = self.x.evaluate(env)
+        y_axes = self.y.evaluate(env)
+        return axes_sub(x_axes, y_axes)
+
+
+class AxesIntersectComp(AxesComp):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def evaluate(self, env):
+        x_axes = self.x.evaluate(env)
+        y_axes = self.y.evaluate(env)
+        return axes_intersect(x_axes, y_axes)
+
+
+class AxesAppendComp(AxesComp):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def evaluate(self, env):
+        x_axes = self.x.evaluate(env)
+        y_axes = self.y.evaluate(env)
+        return axes_append(x_axes, y_axes)
+
+
 class GraphOp(NameableValue):
     """Any operation that can be in a computation graph"""
 
-    def __pre_init_before_super__(self, **kwds):
-        """
-        These inits are run before __init__ in base to super order.
-
-        Each method should end by returning a call to its super, i.e.
-        def __pre_init_before_super__(self, arg1, ..., **kwds):
-            do stuff
-            return super(MyClass, self).__pre_init_before_super__(**kwds)
-        """
-        return kwds
-
-    def __pre_init_after_super__(self, **kwds):
-        """
-        These inits are run before __init__ in super to base order.
-
-        Each method should begin with a call to its super, and return that value
-        def __pre_init_after_super__(self, arg1, ..., **kwds):
-            kwds = super(MyClass, self).__pre_init_before_super__(**kwds)
-            do stuff
-            return kwds
-        """
-        for arg in self.inputs:
-            arg.users.add(self)
-
-        return kwds
-
     def __init__(self, **kwds):
-        graph = Graph.get_default_graph()
+        graph = get_default_graph()
         self._graph_ref = weakref.ref(graph)
         self._context_ref = weakref.ref(graph.context)
         self.predecessors = weakref.WeakSet()
 
-        kwds = self.__pre_init_before_super__(**kwds)
-        kwds = self.__pre_init_after_super__(**kwds)
         super(GraphOp, self).__init__(**kwds)
         self.opid = self.graph.add_op(self)
 
@@ -127,15 +322,10 @@ class RandomStateOp(GraphOp):
 
 
 class ValueOp(GraphOp):
-    def __pre_init_before_super__(self, graph_type=None, **kwds):
-        if graph_type is None:
-            graph_type = self.compute_graph_type(*(arg.graph_type for arg in self.inputs))
 
-        self.graph_type = graph_type
-        return super(ValueOp, self).__pre_init_before_super__(**kwds)
-
-    def __init__(self, **kwds):
+    def __init__(self, graph_type=None, **kwds):
         super(ValueOp, self).__init__(**kwds)
+        self.graph_type = graph_type
 
         # Ops that directly use the result
         self.users = weakref.WeakSet()  # Name assigned by user
@@ -145,11 +335,8 @@ class ValueOp(GraphOp):
         return self
 
     @property
-    def size(self):
-        result = 1
-        for d in self.graph_type.shape:
-            result = result * d
-        return result
+    def axes(self):
+        return ValueAxesComp(self)
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -206,12 +393,13 @@ class ValueOp(GraphOp):
 
 
 class ArgsOp(GraphOp):
-    def __pre_init_before_super__(self, args=(), **kargs):
-        self.__args = tuple(GraphOp.as_op(arg) for arg in args)
-        return super(ArgsOp, self).__pre_init_before_super__(**kargs)
 
-    def __init__(self, **kargs):
+    def __init__(self, args, **kargs):
         super(ArgsOp, self).__init__(**kargs)
+        self.__args = tuple(GraphOp.as_op(arg) for arg in args)
+
+        for arg in self.inputs:
+            arg.users.add(self)
 
     @property
     def inputs(self):
@@ -248,53 +436,39 @@ class ComputationOp(ArgsOp, ValueOp):
         if value is not self:
             value.users.add(self)
 
-    def arg_types(self):
-        return (arg.graph_type for arg in self.inputs)
 
 class OutputArgOp(ComputationOp):
     """
     An OutputArgOp has an out= argument for its result.
     """
 
-    def __pre_init_after_super__(self, out=None, **kargs):
-        kargs = super(OutputArgOp, self).__pre_init_after_super__(**kargs)
-        if out is None:
-            self.output = empty(**self.graph_type.array_args())
-        else:
-            self.output = out
-        return kargs
-
-    def __init__(self, **kargs):
+    def __init__(self, out=None, **kargs):
         super(OutputArgOp, self).__init__(**kargs)
-
-
-class Component(GraphComponent, OutputArgOp):
-    def __init__(self, **kargs):
-        super(Component, self).__init__(**kargs)
+        self.out = out
 
 
 class ElementWise(OutputArgOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
 
-    def compute_graph_type(self, *argtypes):
-        return typing.elementwise_graph_type(np.float32, *argtypes)
-
-
-def c_strides(dtype, shape):
-    stride = dtype.itemsize
-    strides = []
-    for l in shape:
-        strides.append(stride)
-        stride = stride*l
-    return tuple(reversed(strides))
+    def evaluate_axes(self, environment):
+        return axes_append(*[arg.evaluate_axes(environment) for arg in self.inputs])
 
 
 class AllocationOp(ValueOp):
     def __init__(self, axes=None, dtype=None, **kargs):
-        super(AllocationOp, self).__init__(graph_type=typing.Array[axes, dtype], **kargs)
-        self.axes = axes
+        super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
+
+    def evaluate_axes(self, environment):
+        try:
+            return environment[self].axes
+        except KeyError:
+            axes = self.graph_type.axes
+
+            if isinstance(axes, tuple):
+                return self.axes
+            return axes.evaluate(environment)
 
 
 class AliasOp(ArgsOp, AllocationOp):
@@ -314,8 +488,8 @@ class input(AllocationOp):
     """
     Can be set externally.
     """
-    def __init__(self, axes, **kargs):
-        super(input, self).__init__(axes=axes, **kargs)
+    def __init__(self, **kargs):
+        super(input, self).__init__(**kargs)
 
     def evaluate(self, environment):
         return environment.input(self.name, self.graph_type)
@@ -387,15 +561,16 @@ def divide(x, y, out=None):
 
 class dot(OutputArgOp):
     def __init__(self, x, y, out=None):
-        lcr = merge_axes(x.graph_type.axes, y.graph_type.axes)
-        self.axes = lcr[0] + lcr[-1]
         super(dot, self).__init__(out=out, args=(x, y))
-
-    def compute_graph_type(self, *argtypes):
-        return typing.Array[self.axes, np.result_type(*(argtype.dtype for argtype in argtypes))]
 
     def evaluate(self, environment, out, x, y):
         return environment.dot(x, y, out)
+
+    def evaluate_axes(self, environment):
+        x, y = self.inputs
+        x_type = x.evaluate_axes(environment)
+        y_type = y.evaluate_axes(environment)
+        return tuple(axes_sub(x_type, y_type)+axes_sub(y_type, x_type))
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, dot(delta, y))
@@ -411,6 +586,19 @@ class empty(AllocationOp):
 
     def evaluate(self, environment):
         return environment.empty(**self.graph_type.array_args())
+
+
+class Parameter(AllocationOp):
+    def __init__(self, init, **kargs):
+        super(Parameter, self).__init__(**kargs)
+        self.init = init
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+    def evaluate(self, environment):
+        return environment.empty(**self.graph_type.array_args())
+
 
 
 class exp(ElementWise):
@@ -511,8 +699,6 @@ class reciprocal(ElementWise):
 class reshape(AliasOp):
     def __init__(self, x, shape):
         super(reshape, self).__init__(shape=shape, aliased=x)
-        if self.size != x.size:
-            raise ValueError('total size of new array must be unchanged')
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, reshape(delta, x.graph_type.shape))
@@ -633,7 +819,7 @@ class range(ValueOp):
 
 
 def deriv(dep, indep):
-    return Graph.get_default_graph().get_adjoints(dep)[indep]
+    return get_default_graph().get_adjoints(dep)[indep]
 
 
 class ControlBlock(object):
@@ -705,7 +891,7 @@ def default_graph(graph=None):
 
 @contextmanager
 def iterate(iterable):
-    graph = Graph.get_default_graph()
+    graph = get_default_graph()
     old_context = graph.context
     items = iter(iterable)
     n = items.next()

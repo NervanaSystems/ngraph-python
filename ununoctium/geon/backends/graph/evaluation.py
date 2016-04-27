@@ -1,30 +1,13 @@
 import numpy as np
-import numbers
-import geon.backends.graph.graph as graph
-from geon.backends.graph.names import axes_shape, axes_reshape
+
+from geon.backends.graph.errors import IncompatibleShapesError
+from geon.backends.graph.graph import ArrayWithAxes
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 
-def maybe_reshape(array, shape):
-    if isinstance(array, numbers.Real):
-        return array
-    if array.shape == shape:
-        return array
-    return array.reshape(shape)
-
-
-class ArrayWithAxes(object):
-    def __init__(self, array, axes):
-        self.array = array
-        self.axes = axes
-
-    def array_as_axes(self, axes):
-        return maybe_reshape(self.array, axes_reshape(self.axes, axes))
-
-    def __repr__(self):
-        return '{array}:{axes}'.format(axes=self.axes, array=self.array)
-
+def axes_shape(axes):
+    return tuple(axis.value for axis in axes)
 
 class Environment(dict):
     def __init__(self, graph, **kvargs):
@@ -76,7 +59,7 @@ class NumPyEnvironment(Environment):
     def input(self, name, graph_type):
         value = self[name]
         if graph_type.axes != value.axes:
-            raise graph.IncompatibleShapesError()
+            raise IncompatibleShapesError()
         return value
 
     def absolute(self, x, out=None):
@@ -170,7 +153,7 @@ class PyCUDAEnvironment(Environment):
     def input(self, name, graph_type):
         value = gpuarray.to_gpu(self[name])
         if graph_type.shape != value.shape:
-            raise graph.IncompatibleShapesError()
+            raise IncompatibleShapesError()
         return value
 
     def absolute(self, x, out=None):

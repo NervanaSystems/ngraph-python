@@ -1,5 +1,8 @@
-from geon.backends.graph.errors import NameException, RedefiningConstantError
 import numbers
+import weakref
+
+from geon.backends.graph.errors import NameException
+from geon.backends.graph.environment import get_default_environment
 
 
 class NamedValue(object):
@@ -81,12 +84,22 @@ class AxisGenerator(NamedValueGenerator):
 
 
 class Axis(NamedValue):
-    def __init__(self, value=None, **kargs):
+    def __init__(self, value=None, depth=0, parent=None, **kargs):
         super(Axis, self).__init__(**kargs)
-        self.value = value
+        self.depth = depth
+        self.parent = weakref.ref(parent or self)
 
     def __getitem__(self, item):
-        self.value = item
+        get_default_environment().set_axis_value(self, item)
+        return self
+
+    @property
+    def value(self):
+        return get_default_environment().get_axis_value(self)
+
+    def prime(self):
+        """Return a new axis related to this axix"""
+        return Axis(name=self.name, depth=self.depth+1, parent=self)
 
     def size(self):
         if isinstance(self.value, numbers.Integral):
@@ -96,7 +109,7 @@ class Axis(NamedValue):
         return 1
 
     def __repr__(self):
-        return '{name}:Axis[{value}]'.format(value=self.value, name=self.name)
+        return '{name}_{depth}:Axis[{value}]'.format(value=self.value, name=self.name, depth=self.depth)
 
 
 class IndexNames(NamedValueGenerator):
@@ -115,49 +128,4 @@ class Index(NamedValue):
     def __repr__(self):
         return '{name}:Index[{value}]'.format(value=self.value, name=self.name)
 
-
-def axes_sub(x, y):
-    """Returns x with elements from y removed"""
-    return tuple(_ for _ in x if _ not in y)
-
-
-def axes_intersect(x, y):
-    """Returns intersection of x and y in x order"""
-    return tuple(_ for _ in x if _ in y)
-
-
-def axes_append(x, y):
-    """Returns x followed by elements of y not in x"""
-    return x + axes_sub(y, x)
-
-
-def axes_shape(x):
-    return tuple(_.size() for _ in x)
-
-def axes_reshape(in_axes, out_axes):
-    """
-    Compute the reshape shape to broadcase in to out.  Axes must be consistently ordered
-
-    :param in_axes: Axes of the input
-    :param out_axes: Axes of the output
-    :return: shape argument for reshape()
-    """
-    result = []
-    for out_axis in out_axes:
-        if out_axis in in_axes:
-            result.append(out_axis.size())
-        else:
-            result.append(1)
-    return tuple(result)
-
-def merge_axes(x, y):
-    """Combine x and y into order-preserving x-y, x&y, y-x"""
-    return axes_sub(x, y), axes_intersect(x, y), axes_sub(y, x)
-
-def union_axes(axes_list):
-    allaxes = []
-    for ax in sum(axes_list, ()):
-        if ax not in allaxes:
-            allaxes.append(ax)
-    return tuple(allaxes)
 
