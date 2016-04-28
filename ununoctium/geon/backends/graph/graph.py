@@ -5,7 +5,8 @@ import numbers
 from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
-from geon.backends.graph.environment import get_default_environment, get_default_graph, set_default_environment, set_default_graph, bound_graph, Environment
+from geon.backends.graph.environment import get_default_graph, set_default_graph, bound_graph, Environment
+from geon.backends.graph.names import Naming
 
 import numpy as np
 
@@ -40,7 +41,7 @@ class GraphMetaclass(type):
             return super(GraphMetaclass, cls).__call__(*args, **kargs)
 
 
-class GraphComponent(Environment):
+class GraphComponent(object):
     """
     Superclass for all models.
 
@@ -50,6 +51,8 @@ class GraphComponent(Environment):
 
     def __init__(self, **kargs):
         super(GraphComponent, self).__init__(**kargs)
+        self.naming = Naming(name="graph")
+        self.environment = Environment()
         set_default_graph(self)
         self.a = AxisGenerator('a')
         self.root_context = ControlBlock()

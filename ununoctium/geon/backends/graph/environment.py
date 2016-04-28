@@ -4,8 +4,73 @@ import weakref
 import threading
 
 __thread_data = threading.local()
-__thread_data.graph = None
-__thread_data.environment = None
+
+
+def get_thread_data():
+    return __thread_data
+
+get_thread_data().graph = [None]
+get_thread_data().environment = [None]
+get_thread_data().naming = [None]
+
+def get_thread_naming():
+    return get_thread_data().naming
+
+
+def get_current_naming():
+    return get_thread_naming()[-1]
+
+
+def get_thread_environment():
+    return get_thread_data().environment
+
+
+def get_current_environment():
+    return get_thread_environment()[-1]
+
+
+def get_thread_graph():
+    return get_thread_data().graph
+
+
+def get_current_graph():
+    return get_thread_graph()[-1]
+
+
+@contextmanager
+def bound_environment(environment=None, graph=None):
+    if environment is None:
+        if graph is not None:
+            environment = Environment(graph.environment)
+        else:
+            environment = Environment(get_current_environment())
+    try:
+        get_thread_environment().append(environment)
+        yield(environment)
+    finally:
+        get_thread_environment().pop()
+
+
+def set_default_graph(graph):
+    get_thread_graph()[-1]=graph
+    get_thread_environment()[-1]=graph.environment
+    get_thread_naming()[-1]=graph.naming
+
+
+def get_default_graph():
+    graphs = get_thread_graph()
+    if 0 == len(graphs):
+        # TODO: Work-around for working with Neon
+        import neon
+        be = neon.NervanaObject.be
+        if be is not None and hasattr(be, 'gr'):
+            graph = be.gr
+            get_thread_graph().append(graph)
+            get_thread_environment().append(graph.environment)
+            get_thread_naming().append(graph.naming)
+
+    return get_current_graph()
+
 
 class Environment(object):
     def __init__(self, parent=None, **kargs):
@@ -36,7 +101,7 @@ class Environment(object):
 
     def get_node_axes(self, node):
         try:
-            return self.get_cached_node_axis()
+            return self.get_cached_node_axis(node)
         except KeyError:
             axes = node.evaluate_axes(self)
             self.node_axes[node] = axes
@@ -56,57 +121,22 @@ class Environment(object):
 
 
 @contextmanager
-def bound_graph(graph=None, environment=None):
-    old_graph = None
-    old_environment = None
+def bound_graph(graph=None):
     try:
-        old_graph, old_environment = set_default_graph(graph, environment)
+        environment = None
+        naming = None
+        if graph is not None:
+            environment = graph.environment
+            naming = graph.naming
+        get_thread_graph().append(graph)
+        get_thread_environment().append(environment)
+        get_thread_naming().append(naming)
         yield(graph)
     finally:
-        set_default_graph(old_graph, old_environment)
+        get_thread_graph().pop()
+        get_thread_environment().pop()
+        get_thread_naming().pop()
 
 
-@contextmanager
-def bound_environment(environment=None):
-    if environment is None:
-        environment = Environment(get_default_environment())
-    old_environment = None
-    try:
-        old_environment = set_default_environment(environment)
-        yield(environment)
-    finally:
-        set_default_environment(old_environment)
-
-
-def set_default_graph(graph, environment=None):
-    old_graph = __thread_data.graph
-    __thread_data.graph = graph
-    if environment is None and graph is not None:
-        environment = graph
-    old_environment = set_default_environment(environment)
-    return old_graph, old_environment
-
-
-def get_default_graph():
-    graph = __thread_data.graph
-
-    if graph is None:
-        # TODO: Work-around for working with Neon
-        import neon
-        be = neon.NervanaObject.be
-        if be is not None and hasattr(be, 'gr'):
-            return be.gr
-
-    return graph
-
-
-def set_default_environment(environment):
-    old_environment = __thread_data.environment
-    __thread_data.environment = environment
-    return old_environment
-
-
-def get_default_environment():
-    return __thread_data.environment
 
 

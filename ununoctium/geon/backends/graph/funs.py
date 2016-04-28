@@ -1,6 +1,6 @@
 import geon.backends.graph.graph as graph
 
-from geon.backends.graph.names import VariableBlock, AxisGenerator
+from geon.backends.graph.names import VariableBlock, AxisGenerator, name_context, layers_named, with_name_context
 from geon.backends.graph.graph import Model, Parameter, deriv, input, axes_list
 from geon.backends.graph.environment import bound_environment
 

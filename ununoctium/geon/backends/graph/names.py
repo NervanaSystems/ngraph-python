@@ -1,8 +1,10 @@
 import numbers
 import weakref
+from contextlib import contextmanager
+from functools import wraps
 
 from geon.backends.graph.errors import NameException
-from geon.backends.graph.environment import get_default_environment
+from geon.backends.graph.environment import get_current_environment, get_current_naming, get_thread_naming
 
 
 class NamedValue(object):
@@ -28,6 +30,81 @@ class NameableValue(NamedValue):
     @name.setter
     def name(self, name):
         self._set_name(name)
+
+
+class Naming(NameableValue):
+    def __init__(self, **kargs):
+        super(Naming, self).__init__(**kargs)
+        pass
+
+    def __setattr__(self, name, value):
+        super(Naming, self).__setattr__(name, value)
+        if isinstance(value, NameableValue):
+            value.name = self.name+'.'+name
+
+
+@contextmanager
+def name_context(name):
+    try:
+        naming = Naming()
+        tnaming = get_thread_naming()
+        tnaming[-1].__setattr__(name, naming)
+        tnaming.append(naming)
+        yield(naming)
+    finally:
+        tnaming.pop()
+
+
+class NamedList(NameableValue, list):
+    def __init__(self, **kargs):
+        super(NamedList, self).__init__(**kargs)
+
+class NamedListExtender(object):
+    def __init__(self, namelist):
+        self.namelist = namelist
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        namelist = self.namelist
+        val = Naming(name=namelist.name + '[{len}]'.format(len=len(namelist)))
+        if len(namelist) == 0:
+            get_thread_naming().append(val)
+        namelist.append(val)
+        return val
+
+
+@contextmanager
+def layers_named(name):
+    try:
+        naming = NamedList()
+        tnaming = get_thread_naming()
+        length = len(tnaming)
+        tnaming[-1].__setattr__(name, naming)
+        tnaming.append(naming)
+        yield(NamedListExtender(naming))
+    finally:
+        while len(tnaming) > length:
+            tnaming.pop()
+
+
+def with_name_context(fun, name=None):
+    cname = name
+    if cname is None:
+        cname = fun.__name__
+
+    @wraps(fun)
+    def wrapper(*args, **kargs):
+        myname = cname
+        if 'name' in kargs:
+            myname = kargs['name']
+            del kargs['name']
+
+        with name_context(myname) as ctx:
+            return fun(ctx, *args, **kargs)
+
+    return wrapper
 
 
 class NamedValueGenerator(NamedValue):
@@ -90,12 +167,12 @@ class Axis(NamedValue):
         self.parent = weakref.ref(parent or self)
 
     def __getitem__(self, item):
-        get_default_environment().set_axis_value(self, item)
+        get_current_environment().set_axis_value(self, item)
         return self
 
     @property
     def value(self):
-        return get_default_environment().get_axis_value(self)
+        return get_current_environment().get_axis_value(self)
 
     def prime(self):
         """Return a new axis related to this axix"""
