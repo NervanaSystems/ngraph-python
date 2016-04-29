@@ -1,5 +1,6 @@
 import numbers
 import weakref
+import collections
 from contextlib import contextmanager
 from functools import wraps
 
@@ -7,29 +8,19 @@ from geon.backends.graph.errors import NameException
 from geon.backends.graph.environment import get_current_environment, get_current_naming, get_thread_naming
 
 
-class NamedValue(object):
-    """A value with a name."""
-    def __init__(self, name, **kargs):
-        super(NamedValue, self).__init__(**kargs)
+class NameableValue(object):
+    """A value with a name that can be set."""
+    def __init__(self, name=None, **kargs):
+        super(NameableValue, self).__init__(**kargs)
         self.__name = name
 
     @property
     def name(self):
         return self.__name
 
-    def _set_name(self, name):
-        self.__name = name
-
-
-class NameableValue(NamedValue):
-    """A value with a name that can be set."""
-    def __init__(self, name=None, **kargs):
-        super(NameableValue, self).__init__(name=name, **kargs)
-
-    name = NamedValue.name
     @name.setter
     def name(self, name):
-        self._set_name(name)
+        self.__name = name
 
 
 class Naming(NameableValue):
@@ -40,7 +31,16 @@ class Naming(NameableValue):
     def __setattr__(self, name, value):
         super(Naming, self).__setattr__(name, value)
         if isinstance(value, NameableValue):
-            value.name = self.name+'.'+name
+            myname = self.name
+            value.name = myname + '.' + name
+
+        elif isinstance(value, tuple):
+            for v in value:
+                if isinstance(v, NameableValue):
+                    vname = v.name[v.name.rfind('.')+1:]
+                    self.__setattr__(vname, v)
+
+
 
 
 @contextmanager
@@ -107,44 +107,23 @@ def with_name_context(fun, name=None):
     return wrapper
 
 
-class NamedValueGenerator(NamedValue):
+class NamedValueGenerator(NameableValue):
     """Accessing attributes generates objects."""
-    def __init__(self, generator, name="", write_lock=False, read_lock=False, **kargs):
-        self.__write_lock = False
-        self.__read_lock = False
+    def __init__(self, generator, name="", **kargs):
         super(NamedValueGenerator, self).__init__(name=name, **kargs)
         self.__generator = generator
-        self.__write_lock = write_lock
-        self.__read_lock = read_lock
-
-    @property
-    def _read_lock(self):
-        return self.__read_lock
-
-    @_read_lock.setter
-    def _read_lock(self, value):
-        self.__read_lock = value
-
-    @property
-    def _write_lock(self):
-        return self.__write_lock
-
-    @_write_lock.setter
-    def _write_lock(self, value):
-        self.__write_lock = value
 
     def __setattr__(self, name, value):
-        if name.startswith('_') or not self._write_lock:
+        if name.startswith('_'):
             return super(NamedValueGenerator, self).__setattr__(name, value)
         else:
             raise NameException()
 
     def __getattr__(self, name):
         if not name.startswith('_'):
-            if not self._read_lock:
-                named_value = self.__generator(name=self.name+"."+name)
-                super(NamedValueGenerator, self).__setattr__(name, named_value)
-                return named_value
+            named_value = self.__generator(name=self.name+"."+name)
+            super(NamedValueGenerator, self).__setattr__(name, named_value)
+            return named_value
         return super(NamedValueGenerator, self).__getattr__(name)
 
 
@@ -160,11 +139,11 @@ class AxisGenerator(NamedValueGenerator):
         super(AxisGenerator, self).__init__(name=name, generator=Axis, **kargs)
 
 
-class Axis(NamedValue):
-    def __init__(self, value=None, depth=0, parent=None, **kargs):
+class Axis(NameableValue):
+    def __init__(self, depth=0, parent=None, **kargs):
         super(Axis, self).__init__(**kargs)
         self.depth = depth
-        self.parent = weakref.ref(parent or self)
+        self.parent = parent
 
     def __getitem__(self, item):
         get_current_environment().set_axis_value(self, item)
@@ -174,9 +153,8 @@ class Axis(NamedValue):
     def value(self):
         return get_current_environment().get_axis_value(self)
 
-    def prime(self):
-        """Return a new axis related to this axix"""
-        return Axis(name=self.name, depth=self.depth+1, parent=self)
+    def like(self):
+        return Axis(parent=self, name=self.name)
 
     def size(self):
         if isinstance(self.value, numbers.Integral):
@@ -186,23 +164,11 @@ class Axis(NamedValue):
         return 1
 
     def __repr__(self):
-        return '{name}_{depth}:Axis[{value}]'.format(value=self.value, name=self.name, depth=self.depth)
-
-
-class IndexNames(NamedValueGenerator):
-    def __init__(self, name, **kargs):
-        super(IndexNames, self).__init__(name=name, generator=Index, **kargs)
-
-
-class Index(NamedValue):
-    def __init__(self, value=None, **kargs):
-        super(Index, self).__init__(**kargs)
-        self.value = value
-
-    def __getitem__(self, item):
-        self.value = item
-
-    def __repr__(self):
-        return '{name}:Index[{value}]'.format(value=self.value, name=self.name)
+        val = None
+        try:
+            val = self.value
+        except:
+            pass
+        return '{name}:Axis[{value}]'.format(value=val, name=self.name)
 
 

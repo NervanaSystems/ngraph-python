@@ -5,7 +5,7 @@ import numbers
 from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
-from geon.backends.graph.environment import get_default_graph, set_default_graph, bound_graph, Environment
+from geon.backends.graph.environment import get_default_graph, set_default_graph, bound_graph, Environment, get_current_environment
 from geon.backends.graph.names import Naming
 
 import numpy as np
@@ -23,6 +23,9 @@ class ArrayWithAxes(object):
     def __init__(self, array, axes):
         self.array = array
         self.axes = axes
+        environment = get_current_environment()
+        for axis, length in zip(axes, array.shape):
+            axis[length]
 
     def array_as_axes(self, axes):
         return maybe_reshape(self.array, axes_reshape(self.axes, axes))
@@ -149,6 +152,16 @@ def axes_append(*axes_list):
             if axis not in result:
                 result.append(axis)
     return result
+
+
+def axes_replace(axes, replace, replacements):
+    """Returns axes with those axes in replace replace by those in replacements"""
+    r = dict()
+    for k in axes:
+        r[k] = k
+    for k,v in zip(replace, replacements):
+        r[k] = v
+    return [r[axis] for axis in axes]
 
 
 def axes_reshape(in_axes, out_axes):
