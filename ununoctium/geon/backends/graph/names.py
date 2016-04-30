@@ -56,10 +56,12 @@ def name_context(name):
 
 
 class NamedList(NameableValue, list):
+    """A named list of name contexts"""
     def __init__(self, **kargs):
         super(NamedList, self).__init__(**kargs)
 
 class NamedListExtender(object):
+    """An iterator of naming contexts that extends a named list"""
     def __init__(self, namelist):
         self.namelist = namelist
 
@@ -90,6 +92,7 @@ def layers_named(name):
 
 
 def with_name_context(fun, name=None):
+    """Function annotator for introducing a name context"""
     cname = name
     if cname is None:
         cname = fun.__name__
@@ -140,10 +143,8 @@ class AxisGenerator(NamedValueGenerator):
 
 
 class Axis(NameableValue):
-    def __init__(self, depth=0, parent=None, **kargs):
+    def __init__(self, **kargs):
         super(Axis, self).__init__(**kargs)
-        self.depth = depth
-        self.parent = parent
 
     def __getitem__(self, item):
         get_current_environment().set_axis_value(self, item)
@@ -154,14 +155,7 @@ class Axis(NameableValue):
         return get_current_environment().get_axis_value(self)
 
     def like(self):
-        return Axis(parent=self, name=self.name)
-
-    def size(self):
-        if isinstance(self.value, numbers.Integral):
-            return int(self.value)
-        if isinstance(self.value, tuple):
-            return len(self.value)
-        return 1
+        return Axis(name=self.name)
 
     def __repr__(self):
         val = None

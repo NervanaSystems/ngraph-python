@@ -5,23 +5,28 @@ from geon.backends.graph.graph import ArrayWithAxes
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
+import geon.backends.graph.ast as ast
 
 def axes_shape(axes):
     return tuple(axis.value for axis in axes)
 
 class Environment(dict):
-    def __init__(self, graph, **kvargs):
+    def __init__(self, graph, results, **kvargs):
         super(Environment, self).__init__(**kvargs)
         self.graph = graph
-        self.ops = graph.ordered_ops
+        self.results = results
+        self.ops = ast.Op.ordered_ops(results)
+        self.opids = dict()
+        for i, op in enumerate(self.ops):
+            self.opids[op] = i
         self.parent = None
 
     def child(self, **kvargs):
-        result = self.__class__(graph=self.graph, **kvargs)
+        result = self.__class__(graph=self.graph, results=self.results, **kvargs)
         result.parent = self
         return result
 
-    def evaluate(self, result, **kvargs):
+    def evaluate(self, **kvargs):
         env = self.child(**kvargs)
         vals = {}
         for op in self.ops:
@@ -31,9 +36,9 @@ class Environment(dict):
                 vals[op] = val
             else:
                 val = op.evaluate(env, vals[op.output], *args)
-            if op in result:
+            if op in self.results:
                 env[op] = val
-        return [env[op] for op in result]
+        return [env[op] for op in self.results]
 
 
     def __getitem__(self, item):
@@ -262,11 +267,11 @@ class GenNumPy(Environment):
     def __init__(self, **kvargs):
         super(GenNumPy, self).__init__(**kvargs)
 
-    def evaluate(self, result, **kvargs):
-        liveness = self.graph.analyze_liveness(result)
+    def evaluate(self, **kvargs):
+        liveness = ast.Op.analyze_liveness(self.results, self.ops)
 
         def varname(op):
-            return 't%d' % (op.opid)
+            return 't%d' % id(op)
 
         env = self.child(**kvargs)
         body = []
@@ -279,11 +284,11 @@ class GenNumPy(Environment):
             else:
                 val = '{val} # Live={live}'.format(val=op.evaluate(env, varname(op.output), *args), live=live)
                 body.append(val)
-            if op in result:
+            if op in self.results:
                 env[op] = val
         for line in body:
             print(line)
-        return [env[op] for op in result]
+        return [env[op] for op in self.results]
 
     def constant(self, value):
         return value
