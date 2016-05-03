@@ -96,15 +96,18 @@ class Environment(object):
     def get_axis_value(self, axis):
         return self._chained_search('axis_values', axis)
 
-    def get_cached_node_axis(self, node):
+    def get_cached_node_axes(self, node):
         return self._chained_search('node_axes', node)
+
+    def set_cached_node_axes(self, node, axes):
+        self.node_axes[node] = axes
 
     def get_node_axes(self, node):
         try:
-            return self.get_cached_node_axis(node)
+            return self.get_cached_node_axes(node)
         except KeyError:
-            axes = node.evaluate_axes(self)
-            self.node_axes[node] = axes
+            axes = node.axes.resolve(self)
+            self.set_cached_node_axes(node, axes)
             return axes
 
     def get_node_value(self, node):
@@ -112,12 +115,6 @@ class Environment(object):
 
     def set_node_value(self, node, value):
         self.node_values[node] = value
-
-    def __getitem__(self, key):
-        return self.get_node_value(key)
-
-    def __setitem__(self, key, value):
-        self.set_node_value(key, value)
 
 
 @contextmanager

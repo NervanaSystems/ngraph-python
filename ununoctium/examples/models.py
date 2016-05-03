@@ -1,5 +1,6 @@
 import geon.backends.graph.funs as be
 import geon.backends.graph.graph as graph
+import geon.backends.graph.evaluation as evaluation
 import numpy as np
 
 
@@ -53,11 +54,11 @@ class MyTest(be.Model):
         with be.bound_environment(graph=self) as environment:
             a = self.a
 
-            x = np.arange(32*32*3).reshape(32,32,3)
-            y = np.arange(10)
+            x = graph.ArrayWithAxes(np.empty((32,32,3)), (a.H, a.W, a.C))
+            y = graph.ArrayWithAxes(np.empty((10)), (a.Y,))
 
-            environment[self.x] = graph.ArrayWithAxes(x, (a.H, a.W, a.C) )
-            environment[self.y] = graph.ArrayWithAxes(y, (a.Y,))
+            environment.set_cached_node_axes(self.x, x.axes)
+            environment.set_cached_node_axes(self.y, y.axes)
             axes = environment.get_node_axes(self.value)
             print(axes)
             print(self.naming.mlp.L[0].linear.weights)
@@ -66,6 +67,11 @@ class MyTest(be.Model):
                     print(layer.axes)
                 except:
                     pass
+
+            gnp = evaluation.GenNumPy(environment=environment, results=(self.error, self.value))
+            gnp.set_input(self.x, x)
+            gnp.set_input(self.y, y)
+            gnp.evaluate()
 
 
 

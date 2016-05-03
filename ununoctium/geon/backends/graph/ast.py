@@ -11,6 +11,15 @@ from geon.backends.graph.environment import get_default_graph, set_default_graph
 from geon.backends.graph.names import Naming
 
 
+def find_axes_in_axes(subaxes, axes):
+    if not subaxes:
+        return 0
+    head = subaxes[0]
+    for i, axis in enumerate(axes):
+        if head is axis and axes[i::i+len(subaxes)] == subaxes:
+            return i
+    return -1
+
 def axes_sub(x, y):
     """Returns x with elements from y removed"""
     return [_ for _ in x if _ not in y]
@@ -90,6 +99,9 @@ class AxesComp(object):
             return axes
         return LiteralAxesComp(axes)
 
+    def resolve(self, environment):
+        raise NotImplementedError()
+
     def __add__(self, x):
         return AxesAppendComp(self, AxesComp.as_axes(x))
 
@@ -114,7 +126,7 @@ class LiteralAxesComp(AxesComp):
     def __init__(self, axes):
         self.axes = axes
 
-    def evaluate(self, environment):
+    def resolve(self, environment):
         return self.axes
 
 
@@ -123,8 +135,8 @@ class ValueAxesComp(AxesComp):
     def __init__(self, x):
         self.x = x
 
-    def evaluate(self, environment):
-        return self.x.evaluate_axes(environment)
+    def resolve(self, environment):
+        return environment.get_cached_node_axes(self.x)
 
 
 class AxesSubComp(AxesComp):
@@ -133,9 +145,9 @@ class AxesSubComp(AxesComp):
         self.x = x
         self.y = y
 
-    def evaluate(self, env):
-        x_axes = self.x.evaluate(env)
-        y_axes = self.y.evaluate(env)
+    def resolve(self, environment):
+        x_axes = self.x.resolve(environment)
+        y_axes = self.y.resolve(environment)
         return axes_sub(x_axes, y_axes)
 
 
@@ -144,9 +156,9 @@ class AxesIntersectComp(AxesComp):
         self.x = x
         self.y = y
 
-    def evaluate(self, env):
-        x_axes = self.x.evaluate(env)
-        y_axes = self.y.evaluate(env)
+    def resolve(self, environment):
+        x_axes = self.x.resolve(environment)
+        y_axes = self.y.resolve(environment)
         return axes_intersect(x_axes, y_axes)
 
 
@@ -155,10 +167,18 @@ class AxesAppendComp(AxesComp):
         self.x = x
         self.y = y
 
-    def evaluate(self, env):
-        x_axes = self.x.evaluate(env)
-        y_axes = self.y.evaluate(env)
+    def resolve(self, environment):
+        x_axes = self.x.resolve(environment)
+        y_axes = self.y.resolve(environment)
         return axes_append(x_axes, y_axes)
+
+
+class AxesEnvironment(AxesComp):
+    def __init__(self, node):
+        self.node = node
+
+    def resolve(self, environment):
+        return environment.get_node_axes(self.node)
 
 
 class Op(NameableValue):
@@ -185,14 +205,17 @@ class Op(NameableValue):
        return ()
 
     @staticmethod
-    def get_ordered_ops(op, ordered_ops):
+    def get_ordered_ops(op, ordered_ops, outputs):
         """
         Get dependent ops ordered for autodiff.
         """
         if op not in ordered_ops:
             if isinstance(op, ArgsOp):
                 for arg in op.inputs:
-                    Op.get_ordered_ops(arg, ordered_ops)
+                    Op.get_ordered_ops(arg, ordered_ops, outputs)
+                output = op.output
+                if outputs and output is not None and op is not output:
+                    Op.get_ordered_ops(op.output, ordered_ops, outputs)
             ordered_ops.append(op)
 
     @property
@@ -202,17 +225,17 @@ class Op(NameableValue):
 
         self._adjoints = weakref.WeakKeyDictionary()
         ordered_ops = []
-        Op.get_ordered_ops(self, ordered_ops)
+        Op.get_ordered_ops(self, ordered_ops, False)
         self._adjoints[self] = ones(axes=self.axes)
         for o in reversed(ordered_ops):
             o.generate_adjoints(self._adjoints, self._adjoints[o], *o.inputs)
         return self._adjoints
 
     @staticmethod
-    def ordered_ops(results):
+    def ordered_ops(results, outputs):
         ordered_ops = []
         for result in results:
-            Op.get_ordered_ops(result, ordered_ops)
+            Op.get_ordered_ops(result, ordered_ops, outputs)
         return ordered_ops
 
     @staticmethod
@@ -276,6 +299,9 @@ class ValueOp(Op):
     @property
     def axes(self):
         return ValueAxesComp(self)
+
+    def resolved_axes(self, environment):
+        return environment.get_node_axes(self)
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -365,11 +391,11 @@ class ComputationOp(ArgsOp, ValueOp):
 
     @property
     def output(self):
-        return self.__out()
+        return self.__out
 
     @output.setter
     def output(self, value):
-        self.__out = weakref.ref(value)
+        self.__out = value
         if value is not self:
             value.users.add(self)
 
@@ -390,6 +416,7 @@ class ElementWise(OutputArgOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
 
+    @property
     def axes(self):
         inputs = self.inputs
         result = self.inputs[0].axes
@@ -397,24 +424,15 @@ class ElementWise(OutputArgOp):
             result = AxesAppendComp(result, input.axes)
         return result
 
-    def evaluate_axes(self, environment):
-        return axes_append(*[arg.evaluate_axes(environment) for arg in self.inputs])
-
 
 class AllocationOp(ValueOp):
     def __init__(self, axes=None, dtype=None, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
 
-    def evaluate_axes(self, environment):
-        try:
-            return environment[self].axes
-        except KeyError:
-            axes = self.graph_type.axes
-
-            if isinstance(axes, tuple):
-                return self.axes
-            return axes.evaluate(environment)
+    @property
+    def axes(self):
+        return self.graph_type.axes
 
 
 class AliasOp(ArgsOp, AllocationOp):
@@ -437,11 +455,15 @@ class input(AllocationOp):
     def __init__(self, **kargs):
         super(input, self).__init__(**kargs)
 
-    def evaluate(self, environment):
-        return environment.input(self.name, self.graph_type)
+    def evaluate(self, evaluator):
+        return evaluator.input(self.name, axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
     def generate_adjoints(self, tape, delta):
         pass
+
+    @property
+    def axes(self):
+        return AxesEnvironment(self)
 
 
 class Constant(AllocationOp):
@@ -450,27 +472,28 @@ class Constant(AllocationOp):
     """
     def __init__(self, const, **kargs):
         if isinstance(const, np.ndarray):
+            # TODO: Figure out what to do for axes here
             super(Constant, self).__init__(shape=const.shape, dtype=const.dtype, **kargs)
         else:
-            super(Constant, self).__init__((), **kargs)
+            super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), **kargs)
         self.const = const
 
-    def evaluate(self, environment):
-        return environment.constant(self.const)
+    def evaluate(self, evaluator):
+        return evaluator.constant(self.const, axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
     def generate_adjoints(self, tape, delta):
         pass
 
     def __str__(self):
-        return '<{cl} {opid} ({const})>'.format(cl=self.__class__.__name__, opid=self.opid, const=self.const)
+        return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.const)
 
 
 class absolute(ElementWise):
     def __init__(self, x, out=None):
         super(absolute, self).__init__(out=out, args=(x,))
 
-    def evaluate(self, environment, out, x):
-        return environment.absolute(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sig(x)*delta)
@@ -480,8 +503,8 @@ class add(ElementWise):
     def __init__(self, x, y, out=None):
         super(add, self).__init__(out=out, args=(x, y))
 
-    def evaluate(self, environment, out, x, y):
-        return environment.add(x, y, out)
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta)
@@ -495,8 +518,8 @@ class cos(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
 
-    def evaluate(self, environment, out, x):
-        return environment.cos(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.cos(x, out)
 
 
 # This makes the derivative simpler if we need it
@@ -509,14 +532,17 @@ class dot(OutputArgOp):
     def __init__(self, x, y, out=None):
         super(dot, self).__init__(out=out, args=(x, y))
 
-    def evaluate(self, environment, out, x, y):
-        return environment.dot(x, y, out)
+    def evaluate(self, evaluator, out, x, y):
+        int_axes_comp = AxesIntersectComp(x.axes, y.axes)
+        int_axes = int_axes_comp.resolve(evaluator.environment)
+        return evaluator.dot(x, y, int_axes, out)
 
-    def evaluate_axes(self, environment):
+    @property
+    def axes(self):
         x, y = self.inputs
-        x_type = x.evaluate_axes(environment)
-        y_type = y.evaluate_axes(environment)
-        return tuple(axes_sub(x_type, y_type)+axes_sub(y_type, x_type))
+        x_axes = x.axes
+        y_axes = y.axes
+        return AxesAppendComp(AxesSubComp(x_axes, y_axes), AxesSubComp(y_axes, x_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, dot(delta, y))
@@ -530,8 +556,8 @@ class empty(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, environment):
-        return environment.empty(**self.graph_type.array_args())
+    def evaluate(self, evaluator):
+        return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
 
 class Parameter(AllocationOp):
@@ -542,8 +568,8 @@ class Parameter(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, environment):
-        return environment.empty(**self.graph_type.array_args())
+    def evaluate(self, evaluator):
+        return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
 
 
@@ -554,8 +580,8 @@ class exp(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
 
-    def evaluate(self, environment, out, x):
-        return environment.exp(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.exp(x, out)
 
 
 class log(ElementWise):
@@ -565,16 +591,16 @@ class log(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
 
-    def evaluate(self, environment, out, x):
-        return environment.log(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.log(x, out)
 
 
 class maximum(ElementWise):
     def __init__(self, x, y, out=None):
         super(maximum, self).__init__(out=out, args=(x, y))
 
-    def evaluate(self, environment, out, x, y):
-        return environment.maximum(x, y, out=out)
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         p, n = posneg(x-y)
@@ -586,8 +612,8 @@ class minimum(ElementWise):
     def __init__(self, x, y, out=None):
         super(minimum, self).__init__(out=out, args=(x, y))
 
-    def evaluate(self, environment, out, x, y):
-        return environment.minimum(x, y, out=out)
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         p, n = posneg(y-x)
@@ -604,8 +630,8 @@ class multiply(ElementWise):
         y.generate_add_delta(adjoints, x*delta)
 
 
-    def evaluate(self, environment, out, x, y):
-        return environment.multiply(x, y, out)
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.multiply(x, y, out)
 
 
 class negative(ElementWise):
@@ -615,8 +641,8 @@ class negative(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
 
-    def evaluate(self, environment, out, x):
-        return environment.negative(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.negative(x, out)
 
 
 class ones(AllocationOp):
@@ -626,8 +652,8 @@ class ones(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, environment):
-        return environment.ones(**self.graph_type.array_args())
+    def evaluate(self, evaluator):
+        return evaluator.ones(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
 
 class reciprocal(ElementWise):
@@ -637,8 +663,8 @@ class reciprocal(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
 
-    def evaluate(self, environment, out, x):
-        return environment.reciprocal(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.reciprocal(x, out)
 
 
 #TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
@@ -649,8 +675,8 @@ class reshape(AliasOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, reshape(delta, x.graph_type.shape))
 
-    def evaluate(self, environment, x):
-        return environment.reshape(x, self.graph_type.shape)
+    def evaluate(self, evaluator, x):
+        return evaluator.reshape(x, self.graph_type.shape)
 
 
 class sgn(ElementWise):
@@ -661,8 +687,8 @@ class sgn(ElementWise):
         # Zero
         pass
 
-    def evaluate(self, environment, out, x):
-        return environment.sign(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.sign(x, out)
 
 
 class sig(ElementWise):
@@ -672,8 +698,8 @@ class sig(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
 
-    def evaluate(self, environment, out, x):
-        return environment.sig(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.sig(x, out)
 
 class sin(ElementWise):
     def __init__(self, x, out=None):
@@ -682,8 +708,8 @@ class sin(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
 
-    def evaluate(self, environment, out, x):
-        return environment.sin(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.sin(x, out)
 
 
 class sqrt(ElementWise):
@@ -693,8 +719,8 @@ class sqrt(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, .5*delta*self)
 
-    def evaluate(self, environment, out, x):
-        return environment.sqrt(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.sqrt(x, out)
 
 
 class square(ElementWise):
@@ -704,8 +730,8 @@ class square(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
 
-    def evaluate(self, environment, out, x):
-        return environment.square(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.square(x, out)
 
 
 class subtract(ElementWise):
@@ -719,8 +745,8 @@ class subtract(ElementWise):
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, -delta)
 
-    def evaluate(self, environment, out, x, y):
-        return environment.subtract(x, y, out)
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.subtract(x, y, out)
 
 
 class tanh(ElementWise):
@@ -730,16 +756,16 @@ class tanh(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
 
-    def evaluate(self, environment, out, x):
-        return environment.tanh(x, out)
+    def evaluate(self, evaluator, out, x):
+        return evaluator.tanh(x, out)
 
 
 class transpose(AliasOp):
     def __init__(self, x):
         super(transpose, self).__init__(axes=tuple(reversed(x.graph_type.axes)), aliased=x)
 
-    def evaluate(self, environment, x):
-        return environment.transpose(x)
+    def evaluate(self, evaluator, x):
+        return evaluator.transpose(x)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta.T)
@@ -752,8 +778,8 @@ class zeros(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, environment):
-        return environment.zeros(**self.graph_type.array_args())
+    def evaluate(self, evaluator):
+        return evaluator.zeros(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
 
 class range(ValueOp):

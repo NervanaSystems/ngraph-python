@@ -1,4 +1,3 @@
-import geon.backends.graph.graph as graph
 import geon.backends.graph.evaluation as evaluation
 import numpy as np
 import geon.backends.graph.cudagpu as cudagpu
@@ -26,15 +25,21 @@ class Eval(be.Model):
             xa = ArrayWithAxes(x, (self.a.S,))
             ya = ArrayWithAxes(y, (self.a.S,))
 
-            gnp = evaluation.GenNumPy(graph=self, results=(self.naming.z, self.naming.w))
-            gnp.evaluate(x=xa, y=ya)
+            gnp = evaluation.GenNumPy(environment=environment, results=(self.naming.z, self.naming.w))
+            gnp.set_input(self.naming.x, xa)
+            gnp.set_input(self.naming.y, ya)
+            gnp.evaluate()
 
-            enp = evaluation.NumPyEnvironment(graph=self, results=(self.naming.z, self.naming.w))
-            resultnp = enp.evaluate(x=xa, y=ya)
+            enp = evaluation.NumPyEvaluator(environment=environment, results=(self.naming.z, self.naming.w))
+            enp.set_input(self.naming.x, xa)
+            enp.set_input(self.naming.y, ya)
+            resultnp = enp.evaluate()
             print resultnp
 
-            epc = evaluation.PyCUDAEnvironment(graph=self, results=(self.naming.z, self.naming.w))
-            resultpc = epc.evaluate(x=xa, y=self)
+            epc = evaluation.PyCUDAEvaluator(environment=environment, results=(self.naming.z, self.naming.w))
+            epc.set_input(self.naming.x, xa)
+            epc.set_input(self.naming.y, ya)
+            resultpc = epc.evaluate()
             with cudagpu.cuda_device_context():
                 print resultpc
 

@@ -20,12 +20,14 @@ def maybe_reshape(array, shape):
 
 
 class ArrayWithAxes(object):
-    def __init__(self, array, axes):
+    def __init__(self, array, axes, dtype=np.float32):
         self.array = array
         self.axes = axes
+        self.dtype = dtype
         environment = get_current_environment()
-        for axis, length in zip(axes, array.shape):
-            axis[length]
+        if axes:
+            for axis, length in zip(axes, array.shape):
+                axis[length]
 
     def array_as_axes(self, axes):
         return maybe_reshape(self.array, axes_reshape(self.axes, axes))
@@ -124,7 +126,7 @@ def posneg(x):
 
 def axes_reshape(in_axes, out_axes):
     """
-    Compute the reshape shape to broadcase in to out.  Axes must be consistently ordered
+    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
 
     :param in_axes: Axes of the input
     :param out_axes: Axes of the output
@@ -133,7 +135,7 @@ def axes_reshape(in_axes, out_axes):
     result = []
     for out_axis in out_axes:
         if out_axis in in_axes:
-            result.append(out_axis.size())
+            result.append(out_axis.value)
         else:
             result.append(1)
     return tuple(result)
