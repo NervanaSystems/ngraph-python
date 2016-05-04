@@ -12,11 +12,13 @@ from geon.backends.graph.names import Naming
 
 
 def find_axes_in_axes(subaxes, axes):
+    subaxes = list(subaxes)
+    axes = list(axes)
     if not subaxes:
         return 0
     head = subaxes[0]
     for i, axis in enumerate(axes):
-        if head is axis and axes[i::i+len(subaxes)] == subaxes:
+        if head is axis and axes[i:i+len(subaxes)] == subaxes:
             return i
     return -1
 
@@ -529,11 +531,12 @@ def divide(x, y, out=None):
 
 
 class dot(OutputArgOp):
-    def __init__(self, x, y, out=None):
-        super(dot, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y):
+        super(dot, self).__init__(args=(x, y))
 
     def evaluate(self, evaluator, out, x, y):
-        int_axes_comp = AxesIntersectComp(x.axes, y.axes)
+        xarg, yarg = self.inputs
+        int_axes_comp = AxesIntersectComp(xarg.axes, yarg.axes)
         int_axes = int_axes_comp.resolve(evaluator.environment)
         return evaluator.dot(x, y, int_axes, out)
 
@@ -738,9 +741,6 @@ class subtract(ElementWise):
     def __init__(self, x, y, out=None):
         super(subtract, self).__init__(out=out, args=(x, y))
 
-    def evaluate(self, value, x, y):
-        return x-y
-
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, -delta)
@@ -764,7 +764,7 @@ class transpose(AliasOp):
     def __init__(self, x):
         super(transpose, self).__init__(axes=tuple(reversed(x.graph_type.axes)), aliased=x)
 
-    def evaluate(self, evaluator, x):
+    def evaluate(self, evaluator, out, x):
         return evaluator.transpose(x)
 
     def generate_adjoints(self, adjoints, delta, x):

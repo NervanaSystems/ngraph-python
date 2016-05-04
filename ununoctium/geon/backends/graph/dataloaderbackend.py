@@ -106,6 +106,52 @@ class DataloaderBackend(Backend):
             raise ValueError("bad axis for onehot")
         return OneHot("onehot", idx=indices, axis=axis)
 
+    def empty(self, shape, dtype=None, name=None, persist_values=True,
+              parallel=False, distributed=False):
+        """
+        Instantiate a new instance of this backend's Tensor class, without
+        initializing element values.  This is slightly faster than
+        :py:func:`~neon.backends.Backend.array`,
+        :py:func:`~neon.backends.Backend.ones`,
+        :py:func:`~neon.backends.Backend.zeros`, but the values will be
+        random.
+
+        Arguments:
+            shape (int, list): length of each dimension of the Tensor.
+            dtype (data-type, optional): If present, specifies the underlying
+                                         type to employ for each element.
+            name (str, optional): name indentifying the tensor (used in printing).
+            persist_values (bool, optional): If set to True (the default), the
+                                             values assigned to this Tensor
+                                             will persist across multiple begin
+                                             and end calls.  Setting to False
+                                             may provide a performance increase
+                                             if values do not need to be
+                                             maintained across such calls
+            parallel (bool, optional): If True and using multi-GPU backend,
+                                       replicate copies of this tensor across
+                                       devices.  Defaults to False, and has no
+                                       effect on CPU, or (single) GPU backends.
+            distributed (bool, optional): If True and using multi-GPU backend,
+                                          this tensor is fragmented and
+                                          partitioned across devices.  Defaults
+                                          to False, and has no effect on CPU,
+                                          or (single) GPU backends.
+
+        Returns:
+            Tensor: array object
+
+        Raises:
+            NotImplementedError: Can't be instantiated directly.
+
+        See Also:
+            :py:func:`~neon.backends.Backend.array`,
+            :py:func:`~neon.backends.Backend.zeros`,
+            :py:func:`~neon.backends.Backend.ones`
+        """
+
+        return TensorStub(array=np.empty(shape=shape, dtype=dtype))
+
     def zeros(self, shape, dtype=None, name=None, persist_values=True,
               parallel=False, distributed=False):
         """

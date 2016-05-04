@@ -86,15 +86,35 @@ class NumPyEvaluator(Evaluator):
         if yi == -1:
             raise IncompatibleShapesError()
 
-        # Reshape x to be (leftprod, redprod)
-        # Reshape y to be (leftprod, redprod, rightprod)
+        def prod(elts):
+            result = 1
+            for elt in elts:
+                result *= elt.value
+            return result
 
+        xl = prod(x_axes[0:xi])
+        m = prod(red_axes)
+        xr = prod(x_axes[xi+len(red_axes):])
+        yl = prod(y_axes[0:yi])
+        yr = prod(y_axes[yi+len(red_axes):])
 
-        
-        return np.dot(x, y, out=out)
+        if xr != 1:
+            if yr != 1:
+                raise IncompatibleShapesError()
+            # Swap to order NumPy can do with dot
+            left = y.array.reshape(yl, m)
+            right = x.array.reshape(xl, m, xr)
+            out_reshape = out.array.reshape(yl, xl, xr)
+        else:
+            left = x.array.reshape(xl, m)
+            right = y.array.reshape(yl, m, yr)
+            out_reshape = out.array.reshape(xl, yl, yr)
+
+        np.dot(left, right, out=out_reshape)
+        return out
 
     def empty(self, axes, dtype):
-        return ArrayWithAxes(np.empty(axes_shape(axes), dtype), axes)
+        return ArrayWithAxes(np.empty(axes_shape(axes) or (1,), dtype or np.float32), axes)
 
     def exp(self, x, out):
         return ArrayWithAxes(np.exp(x.array_as_axes(out.axes), out=out.array), out.axes)
@@ -105,19 +125,19 @@ class NumPyEvaluator(Evaluator):
     def maximum(self, x, y, out):
         return np.maximum(x.array_as_axes(out.shape), y.array_as_axes(out.shape), out=out.array)
 
-    def minimum(self, x, y, out=None):
-        return np.minimum(x, y, out=out)
+    def minimum(self, x, y, out):
+        return np.minimum(x, y, out=out.array)
 
-    def multiply(self, x, y, out=None):
+    def multiply(self, x, y, out):
         return ArrayWithAxes(np.multiply(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array), out.axes)
 
-    def negative(self, x, out=None):
+    def negative(self, x, out):
         return ArrayWithAxes(np.negative(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def ones(self, axes, dtype):
         return ArrayWithAxes(np.ones(axes_shape(axes), dtype), axes)
 
-    def reciprocal(self, x, out=None):
+    def reciprocal(self, x, out):
         return ArrayWithAxes(np.reciprocal(x.array_as_axes(out.axes), out=out.array), out.axes)
 
     def reshape(self, x, shape):
@@ -130,23 +150,23 @@ class NumPyEvaluator(Evaluator):
         np.add(out.array, 1.0, out.array)
         return ArrayWithAxes(np.reciprocal(out.array, out.array), out.axes)
 
-    def sign(self, x, out=None):
-        return np.sign(x, out=out)
+    def sign(self, x, out):
+        return np.sign(x.array_as_axes(out.axes), out=out.array)
 
-    def sin(self, x, out=None):
-        return np.sin(x, out=out)
+    def sin(self, x, out):
+        return np.sin(x.array_as_axes(out.axes), out=out.array)
 
-    def sqrt(self, x, out=None):
-        return np.sqrt(x, out=out)
+    def sqrt(self, x, out):
+        return np.sqrt(x.array_as_axes(out.axes), out=out.array)
 
-    def square(self, x, out=None):
-        return np.square(x, out=out)
+    def square(self, x, out):
+        return np.square(x.array_as_axes(out.axes), out=out.array)
 
-    def subtract(self, x, y, out=None):
-        return np.subtract(x, y, out=out)
+    def subtract(self, x, y, out):
+        return np.subtract(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array)
 
-    def tanh(self, x, out=None):
-        return np.tanh(x, out=out)
+    def tanh(self, x, out):
+        return np.tanh(x.array_as_axes(out.axes), out=out.array)
 
     def transpose(self, x):
         return x.transpose()
@@ -189,7 +209,7 @@ class PyCUDAEvaluator(Evaluator):
         cumath.cos(x.array_as_axes(out.axes), out=out.array)
         return out
 
-    def dot(self, x, y, out=None):
+    def dot(self, x, y, int_axes, out):
         # TODO Implement axis dot
         cumath.dot(x.array,y.array, out=out.array)
         return out
@@ -328,7 +348,7 @@ class GenNumPy(Evaluator):
     def cos(self, x, out):
         return 'np.cos({x}, out={out})'.format(x=x, out=out)
 
-    def dot(self, x, y, out):
+    def dot(self, x, y, red_axes, out):
         return 'np.dot({x}, {y}, out={out})'.format(x=x, y=y, out=out)
 
     def empty(self, axes, dtype):
@@ -362,7 +382,7 @@ class GenNumPy(Evaluator):
         return '{x}.reshape({shape})'.format(x=x, shape=shape)
 
     def sig(self, x, out):
-        return 'np.negative({x}, {out})\nnp.exp({out}, {out})\nnp.add({out}, 1.0, {out}nnp.reciprocal({out}, {out})'.format(x=x, out=out)
+        return 'np.negative({x}, {out})\nnp.exp({out}, {out})\\nnp.add({out}, 1.0, {out}nnp.reciprocal({out}, {out})'.format(x=x, out=out)
 
     def sign(self, x, out):
         return 'np.sign({x}, out={out})'.format(x=x, out=out)
