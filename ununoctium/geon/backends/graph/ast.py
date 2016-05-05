@@ -1,14 +1,14 @@
 from contextlib import contextmanager
 import weakref
 import numbers
+import collections
 
 import numpy as np
 
-from geon.backends.graph.names import AxisGenerator, NameableValue, VariableBlock
+from geon.backends.graph.names import NameableValue
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
-from geon.backends.graph.environment import get_default_graph, set_default_graph, bound_graph, Environment, get_current_environment
-from geon.backends.graph.names import Naming
+from geon.backends.graph.environment import get_current_environment
 
 
 def find_axes_in_axes(subaxes, axes):
@@ -90,6 +90,66 @@ def axes_list(axes, shape_list):
         result.append(axes)
         axes = [axis.prime() for axis in axes]
     return result
+
+
+def maybe_reshape(array, shape):
+    if isinstance(array, numbers.Real):
+        return array
+    if array.shape == shape:
+        return array
+    return array.reshape(shape)
+
+
+def axes_reshape(in_axes, out_axes):
+    """
+    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
+
+    :param in_axes: Axes of the input
+    :param out_axes: Axes of the output
+    :return: shape argument for reshape()
+    """
+    result = []
+    for out_axis in out_axes:
+        if out_axis in in_axes:
+            result.append(out_axis.value)
+        else:
+            result.append(1)
+    return tuple(result)
+
+
+def flatten_shape(shape):
+    s = []
+    for l in shape:
+        if isinstance(l, collections.Sequence):
+            s += l
+        else:
+            s.append(l)
+    return s
+
+
+class ArrayWithAxes(object):
+    def __init__(self, array, axes, shape=None, dtype=np.float32):
+        if shape is None:
+            self.array = array
+            if axes:
+                shape = array.shape
+            else:
+                shape = ()
+        else:
+            shape = flatten_shape(shape)
+            self.array = array.reshape(*shape)
+        self.axes = axes
+        self.dtype = dtype
+        environment = get_current_environment()
+        if axes:
+            for axis, length in zip(axes, shape):
+                axis[length]
+
+    def array_as_axes(self, axes):
+        return maybe_reshape(self.array, axes_reshape(self.axes, axes))
+
+    def __repr__(self):
+        return '{array}:{axes}'.format(axes=self.axes, array=self.array)
 
 
 class AxesComp(object):
@@ -187,37 +247,26 @@ class Op(NameableValue):
     """Any operation that can be in an AST"""
 
     def __init__(self, **kwds):
-        graph = get_default_graph()
-        self._graph_ref = weakref.ref(graph)
-        self._context_ref = weakref.ref(graph.context)
         self.predecessors = weakref.WeakSet()
         self._adjoints = None
         super(Op, self).__init__(**kwds)
-
-    @property
-    def graph(self):
-        return self._graph_ref()
-
-    @property
-    def context(self):
-        return self._context_ref()
 
     @property
     def inputs(self):
        return ()
 
     @staticmethod
-    def get_ordered_ops(op, ordered_ops, outputs):
+    def get_ordered_ops(op, ordered_ops, include_outs):
         """
         Get dependent ops ordered for autodiff.
         """
         if op not in ordered_ops:
             if isinstance(op, ArgsOp):
                 for arg in op.inputs:
-                    Op.get_ordered_ops(arg, ordered_ops, outputs)
+                    Op.get_ordered_ops(arg, ordered_ops, include_outs)
                 output = op.output
-                if outputs and output is not None and op is not output:
-                    Op.get_ordered_ops(op.output, ordered_ops, outputs)
+                if include_outs and output is not None and op is not output:
+                    Op.get_ordered_ops(op.output, ordered_ops, include_outs)
             ordered_ops.append(op)
 
     @property
@@ -234,10 +283,10 @@ class Op(NameableValue):
         return self._adjoints
 
     @staticmethod
-    def ordered_ops(results, outputs):
+    def ordered_ops(results, include_outs):
         ordered_ops = []
         for result in results:
-            Op.get_ordered_ops(result, ordered_ops, outputs)
+            Op.get_ordered_ops(result, ordered_ops, include_outs)
         return ordered_ops
 
     @staticmethod
@@ -458,14 +507,24 @@ class input(AllocationOp):
         super(input, self).__init__(**kargs)
 
     def evaluate(self, evaluator):
-        return evaluator.input(self.name, axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return self.value
 
     def generate_adjoints(self, tape, delta):
         pass
 
     @property
     def axes(self):
-        return AxesEnvironment(self)
+        return self.graph_type.axes
+
+    @property
+    def value(self):
+        return get_current_environment().get_node_value(self)
+
+    @value.setter
+    def value(self, value):
+        environment = get_current_environment()
+        environment.set_cached_node_axes(self, value.axes)
+        environment.set_node_value(self, value)
 
 
 class Constant(AllocationOp):
@@ -571,9 +630,19 @@ class Parameter(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evaluator):
+    def evaluate(self, evalutor):
+        return self.value
+
+    def allocate(self, evaluator):
         return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
+    def initialize(self, evaluator, value):
+        if self.init:
+            self.init(evaluator, value)
+
+    @property
+    def value(self):
+        return get_current_environment().get_node_value(self)
 
 
 class exp(ElementWise):

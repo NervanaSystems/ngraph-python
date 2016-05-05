@@ -1,11 +1,5 @@
 from neon.util.argparser import NeonArgparser
-from neon.initializers import Constant, Gaussian
-from neon.layers import Conv, Dropout, Pooling, GeneralizedCost, Affine
-from neon.optimizers import GradientDescentMomentum, MultiOptimizer, Schedule
-from neon.transforms import Rectlin, Softmax, CrossEntropyMulti, TopKMisclassification
-from neon.models import Model
 from neon.data import ImageLoader
-from neon.callbacks.callbacks import Callbacks
 import geon.backends.graph.dataloaderbackend
 
 import geon.backends.graph.funs as be
@@ -19,6 +13,14 @@ parser.set_defaults(backend='dataloader')
 parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
 args = parser.parse_args()
+
+class Uniform(object):
+    def __init__(self, low=0.0, high=1.0):
+        self.low = low
+        self.high = high
+
+    def __call__(self, evaluator, value):
+        evaluator.uniform(value, self.low, self.high)
 
 
 @be.with_name_context
@@ -57,44 +59,34 @@ class MyTest(be.Model):
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
 
+        uni = Uniform(-.01, .01)
+
         a = self.a
-        g = self.naming
-        g.x = be.input()
-        g.y = be.input()
+        g = self.graph
+        g.x = be.input(axes=(a.C, a.H, a.W, a.N))
+        g.y = be.input(axes=(a.Y, a.N))
 
         layers=[((a.H, a.W), [(14,14)]*2+[(10,10)])]
 
-        self.value = mlp(self.naming.x, activation=be.tanh, x_axes=self.naming.x.axes, shape_spec=layers, axes=self.naming.y.axes, batch_axes=(a.N,))
+        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(a.N,), init=uni)
 
-        self.error = L2(self.naming.y-self.value)
+        g.error = L2(g.y - g.value)
 
+    @be.with_graph_context
+    @be.with_environment
     def dump(self):
-        with be.bound_environment(graph=self) as environment:
-            a = self.a
-            x_axes = (a.H, a.W, a.C, a.N)
-            y_axes = (a.Y, a.N)
+        a = self.a
 
-            environment.set_cached_node_axes(self.naming.x, x_axes)
-            environment.set_cached_node_axes(self.naming.y, y_axes)
+        self.graph.x.value = be.ArrayWithAxes(np.empty((3, 32, 32, 128)), (a.C, a.H, a.W, a.N))
+        self.graph.y.value = be.ArrayWithAxes(np.empty((1000, 128)), (a.Y, a.N))
 
-            print(environment.get_node_axes(self.value))
-            print(environment.get_node_axes(self.error))
 
-            print(self.naming.mlp.L[0].linear.weights)
-            for layer in self.naming.mlp.L:
-                try:
-                    print(layer.axes)
-                except:
-                    pass
+        gnp = evaluation.GenNumPy(results=(self.graph.error, self.graph.value))
+        gnp.evaluate()
 
-            gnp = evaluation.GenNumPy(environment=environment, results=(self.error, self.value))
 
-            x = graph.ArrayWithAxes(np.empty((3, 32, 32, 128)), x_axes)
-            y = graph.ArrayWithAxes(np.empty((1000, 128)), y_axes)
-            gnp.set_input(self.naming.x, x)
-            gnp.set_input(self.naming.y, y)
-            gnp.evaluate()
-
+    @be.with_graph_context
+    @be.with_environment
     def train(self):
         # setup data provider
         imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
@@ -102,37 +94,35 @@ class MyTest(be.Model):
 
         train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
 
-        with be.bound_environment(graph=self) as environment:
-            a = self.a
-            x_axes = (a.C, a.H, a.W, a.N)
-            y_axes = (a.Y, a.N)
+        a = self.a
+        a.N[train.bsz]
+        c, h, w = train.shape
+        a.C[c]
+        a.H[h]
+        a.W[w]
+        a.Y[train.nclasses]
 
-            environment.set_cached_node_axes(self.naming.x, x_axes)
-            environment.set_cached_node_axes(self.naming.y, y_axes)
 
-            print(environment.get_node_axes(self.value))
-            print(environment.get_node_axes(self.error))
+        a = self.a
 
-            print(self.naming.mlp.L[0].linear.weights)
-            for layer in self.naming.mlp.L:
-                try:
-                    print(layer.axes)
-                except:
-                    pass
 
-            enp = evaluation.NumPyEvaluator(environment=environment, results=(self.error, self.value))
-            for mb_idx, (xraw, yraw) in enumerate(train):
-                x = graph.ArrayWithAxes(xraw.array.reshape(3, 32, 32, 128), x_axes)
-                y = graph.ArrayWithAxes(yraw.array.reshape(1000, 128), y_axes)
-                enp.set_input(self.naming.x, x)
-                enp.set_input(self.naming.y, y)
 
-                if mb_idx % 100 == 0:
-                    print mb_idx
+        enp = evaluation.NumPyEvaluator(error=self.graph.error, results=(self.graph.value,))
+        enp.initialize()
+        for mb_idx, (xraw, yraw) in enumerate(train):
+            self.graph.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(a.C, a.H, a.W, a.N))
+            self.graph.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(a.Y, a.N))
 
-                vals = enp.evaluate()
-                print(vals)
-                break
+            if mb_idx % 100 == 0:
+                print mb_idx
+
+            vals = enp.evaluate()
+            print(vals)
+            break
+
+        print(be.get_current_environment().get_node_axes(self.graph.value))
+        print(be.get_current_environment().get_node_axes(self.graph.error))
+
 
 y = MyTest()
 #y.dump()

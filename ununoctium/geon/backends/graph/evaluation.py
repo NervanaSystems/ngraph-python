@@ -1,71 +1,83 @@
 import numpy as np
 
 from geon.backends.graph.errors import IncompatibleShapesError
-from geon.backends.graph.graph import ArrayWithAxes
+from geon.backends.graph.ast import ArrayWithAxes
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
+from geon.backends.graph.environment import get_current_environment
+
 
 def axes_shape(axes):
     return tuple(axis.value for axis in axes)
 
-class Evaluator(dict):
-    def __init__(self, environment, results, **kvargs):
+
+class Evaluator(object):
+    def __init__(self, results, error=None, environment=None, **kvargs):
         super(Evaluator, self).__init__(**kvargs)
+        if environment is None:
+            environment = get_current_environment()
         self.environment = environment
         self.results = results
-        self.ops = ast.Op.ordered_ops(results, True)
+        self.required = list(results)
+        self.error = error
+
+        if error:
+            self.required.append(error)
+            self.param_derivs = {}
+            for op in ast.Op.ordered_ops(results, True):
+                if isinstance(op, ast.Parameter):
+                    self.param_derivs[op] = ast.deriv(error, op)
+
+            self.required += self.param_derivs.values()
+
+        self.ops = ast.Op.ordered_ops(self.required, True)
         self.opids = dict()
         for i, op in enumerate(self.ops):
             self.opids[op] = i
-        self.parent = None
+        self.allocate()
 
-    def child(self, **kvargs):
-        result = self.__class__(environment=self.environment, results=self.results, **kvargs)
-        result.parent = self
-        return result
+    def allocate(self):
+        for op in self.ops:
+            print(op)
+            self.environment.get_node_axes(op)
+            if isinstance(op, ast.Parameter):
+                val = op.allocate(self)
+                self.environment.set_node_value(op, val)
 
-    def evaluate(self, **kvargs):
-        evaluator = self.child(**kvargs)
+    def initialize(self):
+        for op in self.ops:
+            if isinstance(op, ast.Parameter):
+                op.initialize(self, self.environment.get_node_value(op))
+
+
+    def evaluate(self):
         vals = {}
         for op in self.ops:
             args = [vals[arg.output] for arg in op.inputs]
             if op.output is op:
-                val = op.evaluate(evaluator, *args)
+                val = op.evaluate(self, *args)
                 vals[op] = val
             else:
-                val = op.evaluate(evaluator, vals[op.output], *args)
-            if op in self.results:
-                evaluator[op] = val
-        return [evaluator[op] for op in self.results]
+                val = op.evaluate(self, vals[op.output], *args)
+                vals[op] = val
 
-
-    def __getitem__(self, item):
-        try:
-            return super(Evaluator, self).__getitem__(item)
-        except KeyError as e:
-            if self.parent is not None:
-                return self.parent[item]
-            raise e
-
-    def set_input(self, input, value):
-        self[input.name] = value
-        self.environment.set_cached_node_axes(input, value.axes)
+        r = {}
+        if self.error:
+            r[self.error] = vals[op]
+        for op in self.results:
+            r[op] = vals[op]
+        return r
 
 
 class NumPyEvaluator(Evaluator):
     def __init__(self, **kargs):
         super(NumPyEvaluator, self).__init__(**kargs)
+        self.rng = np.random.RandomState()
 
     def constant(self, value, axes, dtype):
         return ArrayWithAxes(value, axes=axes, dtype=dtype)
-
-    def input(self, name, axes, dtype):
-        value = self[name]
-        if axes != value.axes:
-            raise IncompatibleShapesError()
-        return value
 
     def absolute(self, x, out):
         return ArrayWithAxes(np.abs(x.array_as_axes(out.axes), out=out.array), out.axes)
@@ -110,7 +122,11 @@ class NumPyEvaluator(Evaluator):
             right = y.array.reshape(yl, m, yr)
             out_reshape = out.array.reshape(xl, yl, yr)
 
-        np.dot(left, right, out=out_reshape)
+        print(x.array.shape, red_axes, y.array.shape, out.array.shape)
+        if not x.array.shape or not y.array.shape:
+            np.multiply(left, right, out=out_reshape)
+        else:
+            np.dot(left, right, out=out_reshape)
         return out
 
     def empty(self, axes, dtype):
@@ -174,6 +190,10 @@ class NumPyEvaluator(Evaluator):
     def zeros(self, axes, dtype):
         return ArrayWithAxes(np.zeros(axes_shape(axes), dtype), axes)
 
+    def uniform(self, x, low, high):
+        u = self.rng.uniform(low, high, x.array.shape)
+        x.array[:] = u
+
 
 class PyCUDAEvaluator(Evaluator):
     """
@@ -188,14 +208,6 @@ class PyCUDAEvaluator(Evaluator):
 
     def constant(self, value, axes, dtype):
         return ArrayWithAxes(value, axes=axes, dtype=dtype)
-
-    def input(self, name, axes, dtype):
-        value = self[name]
-        if axes != value.axes:
-            raise IncompatibleShapesError()
-
-        value = gpuarray.to_gpu(value.array)
-        return ArrayWithAxes(value, axes)
 
     def absolute(self, x, out):
         cumath.fabs(x.array_as_axes(out.axes), out=out.array)
@@ -316,28 +328,25 @@ class GenNumPy(Evaluator):
             except KeyError:
                 return "Error on "+str(op)
 
-        evaluator = self.child(**kvargs)
         body = []
+        vals = {}
         for i, op in enumerate(self.ops):
             live = [varname(l) for l in liveness[i]]
             args = [varname(arg.output) for arg in op.inputs]
             if op.output is op:
-                val = op.evaluate(evaluator, *args)
+                val = op.evaluate(self, *args)
+                vals[op] = val
                 body.append('{var} = {val} # Live={live}'.format(var=varname(op), val=val, live=live))
             else:
-                val = '{val} # Live={live}'.format(val=op.evaluate(evaluator, varname(op.output), *args), live=live)
+                val = '{val} # Live={live}'.format(val=op.evaluate(self, varname(op.output), *args), live=live)
+                vals[op] = val
                 body.append(val)
-            if op in self.results:
-                evaluator[op] = val
         for line in body:
             print(line)
-        return [evaluator[op] for op in self.results]
+        return [vals[op] for op in self.results]
 
     def constant(self, value, axes, dtype):
         return 'constant {dtype} {axes} = {value}'.format(value=value, axes=axes, dtype=dtype)
-
-    def input(self, name, axes, dtype):
-        return 'input("{name}")'.format(name=name)
 
     def absolute(self, x, out):
         return 'np.abs({x}, out={out})'.format(x=x, out=out)

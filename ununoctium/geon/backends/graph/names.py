@@ -5,7 +5,58 @@ from contextlib import contextmanager
 from functools import wraps
 
 from geon.backends.graph.errors import NameException
-from geon.backends.graph.environment import get_current_environment, get_current_naming, get_thread_naming
+from geon.backends.graph.environment import get_current_environment, get_thread_naming
+
+
+def get_current_naming():
+    return get_thread_naming()[-1]
+
+
+def set_current_naming(naming):
+    get_thread_naming()[-1] = naming
+
+
+@contextmanager
+def bound_naming(naming=None, create=True, name=None):
+    if naming is None and create:
+        naming = Naming(parent=get_current_naming(), name=name)
+
+    get_thread_naming().append(naming)
+
+    try:
+        yield(naming)
+    finally:
+        get_thread_naming().pop()
+
+
+@contextmanager
+def layers_named(name):
+    naming = NamedList(parent=get_current_naming(), name=name)
+    get_thread_naming().append(naming)
+
+    try:
+        yield(NamedListExtender(naming))
+    finally:
+        get_thread_naming().pop()
+
+
+def with_name_context(fun, name=None):
+    """Function annotator for introducing a name context"""
+    cname = name
+    if cname is None:
+        cname = fun.__name__
+
+    @wraps(fun)
+    def wrapper(*args, **kargs):
+        myname = cname
+        if 'name' in kargs:
+            myname = kargs['name']
+            del kargs['name']
+
+        with bound_naming(name=myname) as ctx:
+            return fun(ctx, *args, **kargs)
+
+    return wrapper
 
 
 class NameableValue(object):
@@ -23,10 +74,15 @@ class NameableValue(object):
         self.__name = name
 
 
-class Naming(NameableValue):
+class Parented(NameableValue):
+    def __init__(self, parent=None, name=None, **kargs):
+        super(Parented, self).__init__(name=name, **kargs)
+        if parent:
+            parent.__setattr__(self.name, self)
+
+class Naming(Parented):
     def __init__(self, **kargs):
         super(Naming, self).__init__(**kargs)
-        pass
 
     def __setattr__(self, name, value):
         super(Naming, self).__setattr__(name, value)
@@ -41,21 +97,7 @@ class Naming(NameableValue):
                     self.__setattr__(vname, v)
 
 
-
-
-@contextmanager
-def name_context(name):
-    try:
-        naming = Naming()
-        tnaming = get_thread_naming()
-        tnaming[-1].__setattr__(name, naming)
-        tnaming.append(naming)
-        yield(naming)
-    finally:
-        tnaming.pop()
-
-
-class NamedList(NameableValue, list):
+class NamedList(Parented, list):
     """A named list of name contexts"""
     def __init__(self, **kargs):
         super(NamedList, self).__init__(**kargs)
@@ -75,39 +117,6 @@ class NamedListExtender(object):
             get_thread_naming().append(val)
         namelist.append(val)
         return val
-
-
-@contextmanager
-def layers_named(name):
-    try:
-        naming = NamedList()
-        tnaming = get_thread_naming()
-        length = len(tnaming)
-        tnaming[-1].__setattr__(name, naming)
-        tnaming.append(naming)
-        yield(NamedListExtender(naming))
-    finally:
-        while len(tnaming) > length:
-            tnaming.pop()
-
-
-def with_name_context(fun, name=None):
-    """Function annotator for introducing a name context"""
-    cname = name
-    if cname is None:
-        cname = fun.__name__
-
-    @wraps(fun)
-    def wrapper(*args, **kargs):
-        myname = cname
-        if 'name' in kargs:
-            myname = kargs['name']
-            del kargs['name']
-
-        with name_context(myname) as ctx:
-            return fun(ctx, *args, **kargs)
-
-    return wrapper
 
 
 class NamedValueGenerator(NameableValue):

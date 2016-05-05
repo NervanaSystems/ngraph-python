@@ -1,10 +1,10 @@
 import geon.backends.graph.graph as graph
 
-from geon.backends.graph.names import AxisGenerator, name_context, layers_named, with_name_context
-from geon.backends.graph.graph import Model
+from geon.backends.graph.names import AxisGenerator, layers_named, with_name_context
+from geon.backends.graph.graph import Model, with_graph_context, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment
 
-from geon.backends.graph.ast import deriv, input, axes_list, Parameter
+from geon.backends.graph.ast import deriv, input, axes_list, Parameter, ArrayWithAxes
 from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
 from geon.backends.graph.ast import negative, ones, reciprocal, reshape, sig, sin, sqrt, square, subtract
 from geon.backends.graph.ast import tanh, transpose, zeros, range
