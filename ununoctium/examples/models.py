@@ -25,7 +25,6 @@ class Uniform(object):
 
 @be.with_name_context
 def linear(params, x, x_axes, axes, batch_axes=(), init=None):
-    print('x:{x} a:{a} b:{b}'.format(x=x_axes, a=axes, b=batch_axes))
     params.weights = be.Parameter(axes=axes+x_axes-batch_axes, init=init)
     params.bias = be.Parameter(axes=axes, init=init)
     return be.dot(params.weights, x)+params.bias
@@ -70,7 +69,16 @@ class MyTest(be.Model):
 
         g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(a.N,), init=uni)
 
-        g.error = L2(g.y - g.value)
+        # L2 regularizer of parameters
+        reg = None
+        for param in g.value.parameters():
+            l2 = L2(param)
+            if reg is None:
+                reg = l2
+            else:
+                reg = reg+l2
+
+        g.error = L2(g.y - g.value) + reg
 
     @be.with_graph_context
     @be.with_environment
@@ -105,13 +113,19 @@ class MyTest(be.Model):
 
         a = self.a
 
+        error = self.graph.error
+        learning_rate = be.input(axes=())
+        params = error.parameters()
+        derivs = [be.deriv(error, param) for param in params]
 
+        updates = be.doall(all=[be.decrement(param, learning_rate*deriv) for param, deriv in zip(params, derivs)])
 
-        enp = evaluation.NumPyEvaluator(error=self.graph.error, results=(self.graph.value,))
+        enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, updates])
         enp.initialize()
         for mb_idx, (xraw, yraw) in enumerate(train):
             self.graph.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(a.C, a.H, a.W, a.N))
             self.graph.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(a.Y, a.N))
+            learning_rate.value = be.ArrayWithAxes(.01, shape=(), axes=())
 
             if mb_idx % 100 == 0:
                 print mb_idx
@@ -120,8 +134,8 @@ class MyTest(be.Model):
             print(vals)
             break
 
-        print(be.get_current_environment().get_node_axes(self.graph.value))
-        print(be.get_current_environment().get_node_axes(self.graph.error))
+        print(be.get_current_environment().get_resolved_node_axes(self.graph.value))
+        print(be.get_current_environment().get_resolved_node_axes(self.graph.error))
 
 
 y = MyTest()

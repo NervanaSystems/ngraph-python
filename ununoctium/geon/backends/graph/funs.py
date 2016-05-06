@@ -8,7 +8,7 @@ from geon.backends.graph.ast import deriv, input, axes_list, Parameter, ArrayWit
 from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
 from geon.backends.graph.ast import negative, ones, reciprocal, reshape, sig, sin, sqrt, square, subtract
 from geon.backends.graph.ast import tanh, transpose, zeros, range
-
+from geon.backends.graph.ast import doall, decrement
 
 def relu(x,out):
     maximum(x, 0, out)

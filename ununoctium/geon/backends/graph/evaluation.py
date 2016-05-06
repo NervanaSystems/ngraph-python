@@ -20,19 +20,9 @@ class Evaluator(object):
             environment = get_current_environment()
         self.environment = environment
         self.results = results
-        self.required = list(results)
-        self.error = error
 
-        if error:
-            self.required.append(error)
-            self.param_derivs = {}
-            for op in ast.Op.ordered_ops(results, True):
-                if isinstance(op, ast.Parameter):
-                    self.param_derivs[op] = ast.deriv(error, op)
 
-            self.required += self.param_derivs.values()
-
-        self.ops = ast.Op.ordered_ops(self.required, True)
+        self.ops = ast.Op.ordered_ops(self.results, True)
         self.opids = dict()
         for i, op in enumerate(self.ops):
             self.opids[op] = i
@@ -40,8 +30,7 @@ class Evaluator(object):
 
     def allocate(self):
         for op in self.ops:
-            print(op)
-            self.environment.get_node_axes(op)
+            self.environment.get_resolved_node_axes(op)
             if isinstance(op, ast.Parameter):
                 val = op.allocate(self)
                 self.environment.set_node_value(op, val)
@@ -64,8 +53,6 @@ class Evaluator(object):
                 vals[op] = val
 
         r = {}
-        if self.error:
-            r[self.error] = vals[op]
         for op in self.results:
             r[op] = vals[op]
         return r
@@ -89,8 +76,20 @@ class NumPyEvaluator(Evaluator):
         return np.cos(x.array_as_axes(out.axes), out=out.array)
 
     def dot(self, x, y, red_axes, out):
+        # This implementation requires axes
+        #   x = xl red xr
+        #   y = yl red yr
+        #   out = xl xr yl yr
+        #   At least one of xl, xr, yl, yr is empty
+
         x_axes = x.axes
         y_axes = y.axes
+
+        if not x_axes or not y_axes:
+            # TODO turn this into multiply ahead of time
+            np.multiply(x.array, y.array, out=out.array)
+            return out
+
         xi = ast.find_axes_in_axes(red_axes, x_axes)
         if xi == -1:
             raise IncompatibleShapesError()
@@ -110,24 +109,37 @@ class NumPyEvaluator(Evaluator):
         yl = prod(y_axes[0:yi])
         yr = prod(y_axes[yi+len(red_axes):])
 
-        if xr != 1:
-            if yr != 1:
-                raise IncompatibleShapesError()
-            # Swap to order NumPy can do with dot
-            left = y.array.reshape(yl, m)
-            right = x.array.reshape(xl, m, xr)
-            out_reshape = out.array.reshape(yl, xl, xr)
-        else:
+        if xr == 1:
             left = x.array.reshape(xl, m)
             right = y.array.reshape(yl, m, yr)
+            # xl yl yr
             out_reshape = out.array.reshape(xl, yl, yr)
-
-        print(x.array.shape, red_axes, y.array.shape, out.array.shape)
-        if not x.array.shape or not y.array.shape:
-            np.multiply(left, right, out=out_reshape)
+        elif yr == 1:
+            left = y.array.reshape(yl, m)
+            right = x.array.reshape(xl, m, xr).T
+            # yl xr xl
+            out_reshape = out.array.reshape(xl, xr, yl).T
+        elif xl == 1:
+            left = x.array.reshape(m, xr).T
+            right = y.array.reshape(yl, m, yr)
+            # xr yl yr
+            out_reshape = out.array.reshape(xr, yl, yr)
+        elif yl == 1:
+            left = y.array.reshape(m, yl).T
+            right = x.array.reshape(xl, m, xr).T
+            # yl xr xl
+            out_reshape = out.array.reshape(xl, xr, yl).T
         else:
-            np.dot(left, right, out=out_reshape)
+            raise IncompatibleShapesError()
+
+        np.dot(left, right, out=out_reshape)
         return out
+
+    def update(self, params, delta):
+        if params.array.shape != delta.array.shape:
+            print('mismatch', params.axes, delta.axes)
+        np.subtract(params.array, delta.array_as_axes(params.axes), out=params.array)
+        return params
 
     def empty(self, axes, dtype):
         return ArrayWithAxes(np.empty(axes_shape(axes) or (1,), dtype or np.float32), axes)

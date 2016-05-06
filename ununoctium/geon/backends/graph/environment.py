@@ -52,7 +52,8 @@ class Environment(object):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
         self.axis_values = weakref.WeakKeyDictionary()
-        self.node_axes = weakref.WeakKeyDictionary()
+        self.resolved_node_axes = weakref.WeakKeyDictionary()
+        self.resolved_axes = weakref.WeakKeyDictionary()
         self.node_values = weakref.WeakKeyDictionary()
 
     def _chained_search(self, attr, key):
@@ -71,18 +72,26 @@ class Environment(object):
     def get_axis_value(self, axis):
         return self._chained_search('axis_values', axis)
 
-    def get_cached_node_axes(self, node):
-        return self._chained_search('node_axes', node)
+    def get_cached_resolved_node_axes(self, node):
+        return self._chained_search('resolved_node_axes', node)
 
-    def set_cached_node_axes(self, node, axes):
-        self.node_axes[node] = axes
+    def set_cached_resolved_node_axes(self, node, axes):
+        self.resolved_node_axes[node] = axes
 
-    def get_node_axes(self, node):
+    def get_resolved_axes(self, axes):
         try:
-            return self.get_cached_node_axes(node)
+            return self.resolved_axes[axes]
+        except:
+            resolved_axes = axes.resolve(self)
+            self.resolved_axes[axes] = resolved_axes
+            return resolved_axes
+
+    def get_resolved_node_axes(self, node):
+        try:
+            return self.get_cached_resolved_node_axes(node)
         except KeyError:
             axes = node.axes.resolve(self)
-            self.set_cached_node_axes(node, axes)
+            self.set_cached_resolved_node_axes(node, axes)
             return axes
 
     def get_node_value(self, node):

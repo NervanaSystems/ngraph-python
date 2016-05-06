@@ -135,9 +135,11 @@ class ArrayWithAxes(object):
                 shape = array.shape
             else:
                 shape = ()
-        else:
+        elif shape is not ():
             shape = flatten_shape(shape)
             self.array = array.reshape(*shape)
+        else:
+            self.array = array
         self.axes = axes
         self.dtype = dtype
         environment = get_current_environment()
@@ -198,7 +200,7 @@ class ValueAxesComp(AxesComp):
         self.x = x
 
     def resolve(self, environment):
-        return environment.get_cached_node_axes(self.x)
+        return environment.get_cached_resolved_node_axes(self.x)
 
 
 class AxesSubComp(AxesComp):
@@ -208,8 +210,8 @@ class AxesSubComp(AxesComp):
         self.y = y
 
     def resolve(self, environment):
-        x_axes = self.x.resolve(environment)
-        y_axes = self.y.resolve(environment)
+        x_axes = environment.get_resolved_axes(self.x)
+        y_axes = environment.get_resolved_axes(self.y)
         return axes_sub(x_axes, y_axes)
 
 
@@ -219,8 +221,8 @@ class AxesIntersectComp(AxesComp):
         self.y = y
 
     def resolve(self, environment):
-        x_axes = self.x.resolve(environment)
-        y_axes = self.y.resolve(environment)
+        x_axes = environment.get_resolved_axes(self.x)
+        y_axes = environment.get_resolved_axes(self.y)
         return axes_intersect(x_axes, y_axes)
 
 
@@ -230,8 +232,8 @@ class AxesAppendComp(AxesComp):
         self.y = y
 
     def resolve(self, environment):
-        x_axes = self.x.resolve(environment)
-        y_axes = self.y.resolve(environment)
+        x_axes = environment.get_resolved_axes(self.x)
+        y_axes = environment.get_resolved_axes(self.y)
         return axes_append(x_axes, y_axes)
 
 
@@ -240,7 +242,7 @@ class AxesEnvironment(AxesComp):
         self.node = node
 
     def resolve(self, environment):
-        return environment.get_node_axes(self.node)
+        return environment.get_resolved_node_axes(self.node)
 
 
 class Op(NameableValue):
@@ -250,6 +252,21 @@ class Op(NameableValue):
         self.predecessors = weakref.WeakSet()
         self._adjoints = None
         super(Op, self).__init__(**kwds)
+
+    def parameters(self):
+        """Return all parameters used in computing this node"""
+        params = []
+        visited = set()
+        unvisited = [self]
+
+        while unvisited:
+            node = unvisited.pop()
+            visited.add(node)
+            if isinstance(node, Parameter):
+                params.append(node)
+            unvisited.extend(node.inputs)
+
+        return params
 
     @property
     def inputs(self):
@@ -352,7 +369,7 @@ class ValueOp(Op):
         return ValueAxesComp(self)
 
     def resolved_axes(self, environment):
-        return environment.get_node_axes(self)
+        return environment.get_resolved_node_axes(self)
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -463,6 +480,33 @@ class OutputArgOp(ComputationOp):
         self.output = out
 
 
+class VoidOp(OutputArgOp):
+    def __init__(self, **kargs):
+        super(VoidOp, self).__init__(**kargs)
+
+    @property
+    def axes(self):
+        return self.output.axes
+
+
+class decrement(VoidOp):
+    def __init__(self, parameter, change, **kargs):
+        super(decrement, self).__init__(out=parameter, args=(parameter, change), **kargs)
+
+    def evaluate(self, evaluator, out, parameter, change):
+        evaluator.update(parameter, change)
+        return out
+
+
+class doall(VoidOp):
+    def __init__(self, all, **kargs):
+        super(doall, self).__init__(args=all, out=all[-1].output, **kargs)
+
+    def evaluate(self, evaluator, out, *args):
+        return out
+
+
+
 class ElementWise(OutputArgOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
@@ -522,8 +566,9 @@ class input(AllocationOp):
 
     @value.setter
     def value(self, value):
+        op = Op.as_op(value)
         environment = get_current_environment()
-        environment.set_cached_node_axes(self, value.axes)
+        environment.set_cached_resolved_node_axes(self, op.axes)
         environment.set_node_value(self, value)
 
 
@@ -590,21 +635,24 @@ def divide(x, y, out=None):
 
 
 class dot(OutputArgOp):
-    def __init__(self, x, y):
+    def __init__(self, x, y, reduction_axes=None):
+        if reduction_axes is None:
+            self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
+        else:
+            self.reduction_axes = AxesComp.as_axes(reduction_axes)
+
         super(dot, self).__init__(args=(x, y))
 
     def evaluate(self, evaluator, out, x, y):
-        xarg, yarg = self.inputs
-        int_axes_comp = AxesIntersectComp(xarg.axes, yarg.axes)
-        int_axes = int_axes_comp.resolve(evaluator.environment)
-        return evaluator.dot(x, y, int_axes, out)
+        resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
+        return evaluator.dot(x, y, resolved_reduction_axes, out)
 
     @property
     def axes(self):
         x, y = self.inputs
         x_axes = x.axes
         y_axes = y.axes
-        return AxesAppendComp(AxesSubComp(x_axes, y_axes), AxesSubComp(y_axes, x_axes))
+        return AxesAppendComp(AxesSubComp(x_axes, self.reduction_axes), AxesSubComp(y_axes, self.reduction_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, dot(delta, y))
