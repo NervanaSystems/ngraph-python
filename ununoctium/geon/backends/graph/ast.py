@@ -129,23 +129,26 @@ def flatten_shape(shape):
 
 class ArrayWithAxes(object):
     def __init__(self, array, axes, shape=None, dtype=np.float32):
-        if shape is None:
-            self.array = array
-            if axes:
-                shape = array.shape
-            else:
-                shape = ()
-        elif shape is not ():
-            shape = flatten_shape(shape)
-            self.array = array.reshape(*shape)
-        else:
-            self.array = array
-        self.axes = axes
+        self.axes = axes or ()
         self.dtype = dtype
+
+        if isinstance(array, np.ndarray):
+            if shape:
+                shape = flatten_shape(shape)
+                array = array.reshape(*shape)
+            else:
+                shape = array.shape
+            assert (len(axes) == len(shape))
+        else:
+            self.axes = axes
+            assert(axes == ())
+            shape = ()
+
+        self.array = array
+
         environment = get_current_environment()
-        if axes:
-            for axis, length in zip(axes, shape):
-                axis[length]
+        for axis, length in zip(self.axes, shape):
+            axis[length]
 
     def array_as_axes(self, axes):
         return maybe_reshape(self.array, axes_reshape(self.axes, axes))
@@ -161,7 +164,10 @@ class AxesComp(object):
     def as_axes(axes):
         if isinstance(axes, AxesComp):
             return axes
-        return LiteralAxesComp(axes)
+        elif axes is None:
+            return None
+        else:
+            return LiteralAxesComp(axes)
 
     def resolve(self, environment):
         raise NotImplementedError()
@@ -613,8 +619,8 @@ class add(ElementWise):
         return evaluator.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta)
-        y.generate_add_delta(adjoints, delta)
+        x.generate_add_delta(adjoints, sum(delta, out_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(delta, out_axes=y.axes))
 
 
 class cos(ElementWise):
@@ -635,11 +641,15 @@ def divide(x, y, out=None):
 
 
 class dot(OutputArgOp):
-    def __init__(self, x, y, reduction_axes=None):
+    def __init__(self, x, y, reduction_axes=None, out_axes=None):
+        self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
+
+        if out_axes is not None:
+            self.reduction_axes = AxesSubComp(self.reduction_axes, self.out_axes)
 
         super(dot, self).__init__(args=(x, y))
 
@@ -649,14 +659,42 @@ class dot(OutputArgOp):
 
     @property
     def axes(self):
-        x, y = self.inputs
-        x_axes = x.axes
-        y_axes = y.axes
-        return AxesAppendComp(AxesSubComp(x_axes, self.reduction_axes), AxesSubComp(y_axes, self.reduction_axes))
+        if self.out_axes:
+            return self.out_axes
+        else:
+            x, y = self.inputs
+            x_axes = x.axes
+            y_axes = y.axes
+            return AxesAppendComp(AxesSubComp(x_axes, self.reduction_axes), AxesSubComp(y_axes, self.reduction_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, dot(delta, y))
-        y.generate_add_delta(adjoints, dot(x, delta))
+        x.generate_add_delta(adjoints, dot(delta, y, out_axes=x.axes))
+        y.generate_add_delta(adjoints, dot(x, delta, out_axes=y.axes))
+
+
+class sum(OutputArgOp):
+    def __init__(self, x, reduction_axes=None, out_axes=None):
+        self.out_axes = AxesComp.as_axes(out_axes)
+        if reduction_axes is None:
+            if out_axes is None:
+                raise ValueError("At least one of reduction_axes and out_axes must be sprovided")
+            self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
+        else:
+            self.reduction_axes = AxesComp.as_axes(reduction_axes)
+        super(sum, self).__init__(args=(x,))
+
+    def evaluate(self, evaluator, out, x):
+        resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
+        return evaluator.sum(x, resolved_reduction_axes, out)
+
+    @property
+    def axes(self):
+        if self.out_axes is not None:
+            return self.out_axes
+        return AxesSubComp(x.axes, self.reduction_axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_adjoints(adjoints, sum(delta, out_axes=x.axes))
 
 
 class empty(AllocationOp):
@@ -746,8 +784,8 @@ class multiply(ElementWise):
         super(multiply, self).__init__(out=out, args=(x, y))
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta*y)
-        y.generate_add_delta(adjoints, x*delta)
+        x.generate_add_delta(adjoints, sum(delta*y, axes=x.axes))
+        y.generate_add_delta(adjoints, sum(x*delta, axes=y.axes))
 
 
     def evaluate(self, evaluator, out, x, y):
@@ -785,18 +823,6 @@ class reciprocal(ElementWise):
 
     def evaluate(self, evaluator, out, x):
         return evaluator.reciprocal(x, out)
-
-
-#TODO This should be restride, as should transpose, is terms of (i,j,k) -> ((i,j),k) i.e. remap
-class reshape(AliasOp):
-    def __init__(self, x, shape):
-        super(reshape, self).__init__(shape=shape, aliased=x)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, reshape(delta, x.graph_type.shape))
-
-    def evaluate(self, evaluator, x):
-        return evaluator.reshape(x, self.graph_type.shape)
 
 
 class sgn(ElementWise):

@@ -125,14 +125,14 @@ class MyTest(be.Model):
         for mb_idx, (xraw, yraw) in enumerate(train):
             self.graph.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(a.C, a.H, a.W, a.N))
             self.graph.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(a.Y, a.N))
-            learning_rate.value = be.ArrayWithAxes(.01, shape=(), axes=())
+            learning_rate.value = be.ArrayWithAxes(.001, shape=(), axes=())
 
             if mb_idx % 100 == 0:
                 print mb_idx
 
             vals = enp.evaluate()
-            print(vals)
-            break
+            print(vals[error])
+            #break
 
         print(be.get_current_environment().get_resolved_node_axes(self.graph.value))
         print(be.get_current_environment().get_resolved_node_axes(self.graph.error))

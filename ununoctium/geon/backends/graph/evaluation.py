@@ -1,7 +1,7 @@
 import numpy as np
 
 from geon.backends.graph.errors import IncompatibleShapesError
-from geon.backends.graph.ast import ArrayWithAxes
+from geon.backends.graph.ast import ArrayWithAxes, axes_sub
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
@@ -142,7 +142,7 @@ class NumPyEvaluator(Evaluator):
         return params
 
     def empty(self, axes, dtype):
-        return ArrayWithAxes(np.empty(axes_shape(axes) or (1,), dtype or np.float32), axes)
+        return ArrayWithAxes(np.empty(axes_shape(axes), dtype or np.float32), axes)
 
     def exp(self, x, out):
         return ArrayWithAxes(np.exp(x.array_as_axes(out.axes), out=out.array), out.axes)
@@ -192,6 +192,13 @@ class NumPyEvaluator(Evaluator):
 
     def subtract(self, x, y, out):
         return np.subtract(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array)
+
+    def sum(self, x, reduction_axes, out):
+        x_axes = x.axes
+        np_out_axes = axes_sub(x_axes, reduction_axes)
+        np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
+        np.sum(x.array, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
+        return out
 
     def tanh(self, x, out):
         return np.tanh(x.array_as_axes(out.axes), out=out.array)
@@ -370,7 +377,7 @@ class GenNumPy(Evaluator):
         return 'np.cos({x}, out={out})'.format(x=x, out=out)
 
     def dot(self, x, y, red_axes, out):
-        return 'np.dot({x}, {y}, out={out})'.format(x=x, y=y, out=out)
+        return 'np.dot({x}, {y}, axes={a}, out={out})'.format(x=x, y=y, out=out, a=red_axes)
 
     def empty(self, axes, dtype):
         return 'np.empty({axes}, np.{dtype})'.format(axes=axes, dtype=dtype)
@@ -419,6 +426,9 @@ class GenNumPy(Evaluator):
 
     def subtract(self, x, y, out):
         return 'np.subtract({x}, {y}, out={out})'.format(x=x, y=y, out=out)
+
+    def sum(self, x, reduction_axes, out):
+        return 'np.sum({x},axis={a}, out={out})'.format(x=x, a=reduction_axes, out=out)
 
     def tanh(self, x, out):
         return 'np.tanh({x}, out={out})'.format(x=x, out=out)
