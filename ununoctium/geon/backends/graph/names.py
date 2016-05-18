@@ -12,15 +12,17 @@ def get_current_naming():
     return get_thread_naming()[-1]
 
 
-def set_current_naming(naming):
-    get_thread_naming()[-1] = naming
-
-
 @contextmanager
-def bound_naming(naming=None, create=True, name=None):
-    if naming is None and create:
-        naming = Naming(parent=get_current_naming(), name=name)
+def bound_naming(naming=None, name=None):
+    """
+    Create and use a new naming context
 
+    :param naming: Reuse an existing context
+    :param name: Create a new context within the current context
+    :return: The new naming context.
+    """
+
+    naming = naming or Naming(name=name)
     get_thread_naming().append(naming)
 
     try:
@@ -31,7 +33,12 @@ def bound_naming(naming=None, create=True, name=None):
 
 @contextmanager
 def layers_named(name):
-    naming = NamedList(parent=get_current_naming(), name=name)
+    """
+    Create and use a collection of naming contexts.
+    :param name: The name of the collection.
+    :return: An iterator for new naming contexts in the collection.
+    """
+    naming = NamedList(name=name)
     get_thread_naming().append(naming)
 
     try:
@@ -41,7 +48,13 @@ def layers_named(name):
 
 
 def with_name_context(fun, name=None):
-    """Function annotator for introducing a name context"""
+    """
+    Function annotator for introducing a name context.
+
+    :param fun: The function being annotated.
+    :param name: The context name, defaults to the function name
+    :return: The annotated function.
+    """
     cname = name
     if cname is None:
         cname = fun.__name__
@@ -75,8 +88,13 @@ class NameableValue(object):
 
 
 class Parented(NameableValue):
+    """
+    A nameable value with a parent, defaults to current naming context.
+    """
     def __init__(self, parent=None, name=None, **kargs):
         super(Parented, self).__init__(name=name, **kargs)
+        if parent is None:
+            parent = get_current_naming()
         if parent:
             parent.__setattr__(self.name, self)
 
@@ -101,6 +119,7 @@ class NamedList(Parented, list):
     """A named list of name contexts"""
     def __init__(self, **kargs):
         super(NamedList, self).__init__(**kargs)
+
 
 class NamedListExtender(object):
     """An iterator of naming contexts that extends a named list"""
@@ -137,41 +156,4 @@ class NamedValueGenerator(NameableValue):
             super(NamedValueGenerator, self).__setattr__(name, named_value)
             return named_value
         return super(NamedValueGenerator, self).__getattr__(name)
-
-
-class VariableBlock(object):
-    def __setattr__(self, name, value):
-        """Tell value that it is being assigned to name"""
-        value.name = name
-        super(VariableBlock, self).__setattr__(name, value)
-
-
-class AxisGenerator(NamedValueGenerator):
-    def __init__(self, name, **kargs):
-        super(AxisGenerator, self).__init__(name=name, generator=Axis, **kargs)
-
-
-class Axis(NameableValue):
-    def __init__(self, **kargs):
-        super(Axis, self).__init__(**kargs)
-
-    def __getitem__(self, item):
-        get_current_environment().set_axis_value(self, item)
-        return self
-
-    @property
-    def value(self):
-        return get_current_environment().get_axis_value(self)
-
-    def like(self):
-        return Axis(name=self.name)
-
-    def __repr__(self):
-        val = None
-        try:
-            val = self.value
-        except:
-            pass
-        return '{name}:Axis[{value}]'.format(value=val, name=self.name)
-
 

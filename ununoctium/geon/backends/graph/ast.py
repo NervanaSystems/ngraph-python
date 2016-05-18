@@ -10,83 +10,143 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment
 
+class Axis(NameableValue):
+    def __init__(self, dependent=None, **kargs):
+        super(Axis, self).__init__(**kargs)
+        self.dependent = dependent
+
+    def __getitem__(self, key=None):
+        return AxisID(self, key or 0)
+
+    @property
+    def length(self):
+        return get_current_environment().get_axis_length(self)
+
+    @length.setter
+    def length(self, item):
+        get_current_environment().set_axis_length(self, item)
+
+    def as_axisid(self):
+        return self[0]
+
+    def like(self):
+        return Axis(name=self.name)
+
+    def __repr__(self):
+        try:
+            length = self.length
+            return '{name}={length}'.format(length=length, name=self.name)
+        except:
+            return self.name
+
+
+class AxisID(object):
+    def __init__(self, axis, idx, **kargs):
+        super(AxisID, self).__init__(**kargs)
+        self.axis = axis
+        self.idx = idx
+
+    def as_axisid(self):
+        return self
+
+    @property
+    def length(self):
+        return self.axis.length
+
+    @length.setter
+    def length(self, item):
+        self.axis.length = item
+
+    def __eq__(self, other):
+        return isinstance(other, AxisID) and self.axis == other.axis and self.idx == other.idx
+
+    def __hash__(self):
+        return hash(self.axis)+hash(self.idx)
+
+    def __repr__(self):
+        try:
+            length = self.axis.length
+            return '{name}[{idx}]={length}'.format(length=length, name=self.axis.name, idx=self.idx)
+        except:
+            return '{name}[{idx}]'.format(name=self.axis.name, idx=self.idx)
+
+
+def axis_ids(axes):
+    return [_.as_axisid() for _ in axes]
+
+
+def axes_from_ids(axes):
+    return tuple(_.axis for _ in axis_ids(axes))
+
 
 def find_axes_in_axes(subaxes, axes):
-    subaxes = list(subaxes)
-    axes = list(axes)
+    subaxes = axis_ids(subaxes)
+    axes = axis_ids(axes)
     if not subaxes:
         return 0
     head = subaxes[0]
     for i, axis in enumerate(axes):
-        if head is axis and axes[i:i+len(subaxes)] == subaxes:
+        if head == axis and axes[i:i+len(subaxes)] == subaxes:
             return i
     return -1
 
 def axes_sub(x, y):
     """Returns x with elements from y removed"""
-    return [_ for _ in x if _ not in y]
+    return [_ for _ in axis_ids(x) if _ not in axis_ids(y)]
 
 
 def axes_intersect(x, y):
     """Returns intersection of x and y in x order"""
-    return [_ for _ in x if _ in y]
+    return [_ for _ in axis_ids(x) if _ in axis_ids(y)]
 
 
 def axes_append(*axes_list):
     """Returns x followed by elements of y not in x"""
     result = []
     for axes in axes_list:
-        for axis in axes:
-            if axis not in result:
-                result.append(axis)
+        ids = axis_ids(axes)
+        for axis_id in ids:
+            if axis_id not in result:
+                result.append(axis_id)
     return result
 
 
 def axes_replace(axes, replace, replacements):
     """Returns axes with those axes in replace replace by those in replacements"""
+    ids = axis_ids(axes)
     r = dict()
-    for k in axes:
+    for k in ids:
         r[k] = k
-    for k,v in zip(replace, replacements):
+    for k,v in zip(axis_ids(replace), axis_ids(replacements)):
         r[k] = v
-    return [r[axis] for axis in axes]
+    return [r[axis] for axis in ids]
 
 
 def axes_reshape(in_axes, out_axes):
     """
-    Compute the reshape shape to broadcase in to out.  Axes must be consistently ordered
+    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
 
     :param in_axes: Axes of the input
     :param out_axes: Axes of the output
     :return: shape argument for reshape()
     """
     result = []
+    in_axes = axis_ids(in_axes)
+    out_axes = axis_ids(out_axes)
+
     for out_axis in out_axes:
         if out_axis in in_axes:
-            result.append(out_axis.size())
+            result.append(out_axis.axis.size())
         else:
             result.append(1)
     return tuple(result)
-
-
-def merge_axes(x, y):
-    """Combine x and y into order-preserving x-y, x&y, y-x"""
-    return axes_sub(x, y), axes_intersect(x, y), axes_sub(y, x)
-
-
-def union_axes(axes_list):
-    allaxes = []
-    for ax in sum(axes_list, ()):
-        if ax not in allaxes:
-            allaxes.append(ax)
-    return tuple(allaxes)
 
 
 def axes_list(axes, shape_list):
     result = []
     for shape in shape_list:
         for axis, size in zip(axes, shape):
-            axis[size]
+            axis.length = size
         result.append(axes)
         axes = [axis.prime() for axis in axes]
     return result
@@ -109,9 +169,12 @@ def axes_reshape(in_axes, out_axes):
     :return: shape argument for reshape()
     """
     result = []
+    in_axes = axis_ids(in_axes)
+    out_axes = axis_ids(out_axes)
+
     for out_axis in out_axes:
         if out_axis in in_axes:
-            result.append(out_axis.value)
+            result.append(out_axis.axis.length)
         else:
             result.append(1)
     return tuple(result)
@@ -148,7 +211,7 @@ class ArrayWithAxes(object):
 
         environment = get_current_environment()
         for axis, length in zip(self.axes, shape):
-            axis[length]
+            axis.length = length
 
     def array_as_axes(self, axes):
         return maybe_reshape(self.array, axes_reshape(self.axes, axes))
@@ -383,9 +446,6 @@ class ValueOp(Op):
         else:
             adjoints[self] = delta + adjoints[self]
 
-    def reshape(self, shape):
-        return reshape(self, shape)
-
     # Magic methods for builtin operations we want to use for creating nodes
     def __neg__(self):
         return negative(self)
@@ -596,6 +656,10 @@ class Constant(AllocationOp):
     def generate_adjoints(self, tape, delta):
         pass
 
+    @property
+    def axes(self):
+        return AxesComp.as_axes((()))
+
     def __str__(self):
         return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.const)
 
@@ -691,7 +755,7 @@ class sum(OutputArgOp):
     def axes(self):
         if self.out_axes is not None:
             return self.out_axes
-        return AxesSubComp(x.axes, self.reduction_axes)
+        return AxesSubComp(self.inputs[0].axes, self.reduction_axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_adjoints(adjoints, sum(delta, out_axes=x.axes))
@@ -784,8 +848,8 @@ class multiply(ElementWise):
         super(multiply, self).__init__(out=out, args=(x, y))
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta*y, axes=x.axes))
-        y.generate_add_delta(adjoints, sum(x*delta, axes=y.axes))
+        x.generate_add_delta(adjoints, sum(delta*y, reduction_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(x*delta, reduction_axes=y.axes))
 
 
     def evaluate(self, evaluator, out, x, y):
@@ -838,6 +902,7 @@ class sgn(ElementWise):
 
 
 class sig(ElementWise):
+    """Sigmoid"""
     def __init__(self, x, out=None):
         super(sig, self).__init__(out=out, args=(x,))
 

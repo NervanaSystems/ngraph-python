@@ -10,7 +10,7 @@ from geon.backends.graph.environment import get_current_environment
 
 
 def axes_shape(axes):
-    return tuple(axis.value for axis in axes)
+    return tuple(axis.length for axis in axes)
 
 
 class Evaluator(object):
@@ -100,7 +100,7 @@ class NumPyEvaluator(Evaluator):
         def prod(elts):
             result = 1
             for elt in elts:
-                result *= elt.value
+                result *= elt.length
             return result
 
         xl = prod(x_axes[0:xi])

@@ -27,14 +27,6 @@ def get_current_environment():
     return get_thread_environment()[-1]
 
 
-def push_current_environmnet(environmnet):
-    get_thread_environment().append(environment)
-
-
-def set_current_environment(environment):
-    get_thread_environment()[-1] = environment
-
-
 @contextmanager
 def bound_environment(environment=None, create=True):
     if environment is None and create:
@@ -51,7 +43,7 @@ class Environment(object):
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
-        self.axis_values = weakref.WeakKeyDictionary()
+        self.axis_lengths = weakref.WeakKeyDictionary()
         self.resolved_node_axes = weakref.WeakKeyDictionary()
         self.resolved_axes = weakref.WeakKeyDictionary()
         self.node_values = weakref.WeakKeyDictionary()
@@ -66,11 +58,11 @@ class Environment(object):
                 if env is None:
                     raise
 
-    def set_axis_value(self, axis, value):
-        self.axis_values[axis] = value
+    def set_axis_length(self, axis, value):
+        self.axis_lengths[axis] = value
 
-    def get_axis_value(self, axis):
-        return self._chained_search('axis_values', axis)
+    def get_axis_length(self, axis):
+        return self._chained_search('axis_lengths', axis)
 
     def get_cached_resolved_node_axes(self, node):
         return self._chained_search('resolved_node_axes', node)

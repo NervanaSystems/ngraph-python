@@ -43,7 +43,7 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
             for layer, shape in zip(layers, hidden_shapes):
                 layer.axes = tuple(axis.like() for axis in hidden_axes)
                 for axis, len in zip(layer.axes, shape):
-                    axis[len]
+                    axis.length =len
                 value = affine(value, activation=activation, x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
         layers.next()
@@ -60,14 +60,20 @@ class MyTest(be.Model):
 
         uni = Uniform(-.01, .01)
 
-        a = self.a
         g = self.graph
-        g.x = be.input(axes=(a.C, a.H, a.W, a.N))
-        g.y = be.input(axes=(a.Y, a.N))
 
-        layers=[((a.H, a.W), [(14,14)]*2+[(10,10)])]
+        g.C = be.Axis()
+        g.H = be.Axis()
+        g.W = be.Axis()
+        g.N = be.Axis()
+        g.Y = be.Axis()
 
-        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(a.N,), init=uni)
+        g.x = be.input(axes=(g.C, g.H, g.W, g.N))
+        g.y = be.input(axes=(g.Y, g.N))
+
+        layers=[((g.H, g.W), [(14,14)]*2+[(10,10)])]
+
+        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,), init=uni)
 
         # L2 regularizer of parameters
         reg = None
@@ -78,18 +84,17 @@ class MyTest(be.Model):
             else:
                 reg = reg+l2
 
-        g.error = L2(g.y - g.value) + reg
+        g.error = L2(g.y - g.value) + .01*reg
 
     @be.with_graph_context
     @be.with_environment
     def dump(self):
-        a = self.a
+        g = self.graph
 
-        self.graph.x.value = be.ArrayWithAxes(np.empty((3, 32, 32, 128)), (a.C, a.H, a.W, a.N))
-        self.graph.y.value = be.ArrayWithAxes(np.empty((1000, 128)), (a.Y, a.N))
+        g.x.value = be.ArrayWithAxes(np.empty((3, 32, 32, 128)), (g.C, g.H, g.W, g.N))
+        g.y.value = be.ArrayWithAxes(np.empty((1000, 128)), (g.Y, g.N))
 
-
-        gnp = evaluation.GenNumPy(results=(self.graph.error, self.graph.value))
+        gnp = evaluation.GenNumPy(results=(g.error, g.value))
         gnp.evaluate()
 
 
@@ -102,18 +107,15 @@ class MyTest(be.Model):
 
         train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
 
-        a = self.a
-        a.N[train.bsz]
+        g = self.graph
+        g.N.length = train.bsz
         c, h, w = train.shape
-        a.C[c]
-        a.H[h]
-        a.W[w]
-        a.Y[train.nclasses]
+        g.C.length = c
+        g.H.length = h
+        g.W.length = w
+        g.Y.length = train.nclasses
 
-
-        a = self.a
-
-        error = self.graph.error
+        error = g.error
         learning_rate = be.input(axes=())
         params = error.parameters()
         derivs = [be.deriv(error, param) for param in params]
@@ -123,8 +125,8 @@ class MyTest(be.Model):
         enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, updates])
         enp.initialize()
         for mb_idx, (xraw, yraw) in enumerate(train):
-            self.graph.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(a.C, a.H, a.W, a.N))
-            self.graph.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(a.Y, a.N))
+            g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
+            g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
             learning_rate.value = be.ArrayWithAxes(.001, shape=(), axes=())
 
             if mb_idx % 100 == 0:
@@ -134,8 +136,8 @@ class MyTest(be.Model):
             print(vals[error])
             #break
 
-        print(be.get_current_environment().get_resolved_node_axes(self.graph.value))
-        print(be.get_current_environment().get_resolved_node_axes(self.graph.error))
+        print(be.get_current_environment().get_resolved_node_axes(g.value))
+        print(be.get_current_environment().get_resolved_node_axes(g.error))
 
 
 y = MyTest()

@@ -1,5 +1,4 @@
 from functools import wraps
-from geon.backends.graph.names import AxisGenerator
 from geon.backends.graph.environment import get_current_environment, bound_environment, Environment
 from geon.backends.graph.names import Naming, get_current_naming, bound_naming
 
@@ -27,7 +26,6 @@ class GraphComponent(object):
         super(GraphComponent, self).__init__(**kargs)
         self.graph = get_current_naming()
         self.environment = get_current_environment()
-        self.a = AxisGenerator('a')
 
 
 class Model(GraphComponent):
