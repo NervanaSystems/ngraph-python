@@ -11,9 +11,12 @@ from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment
 
 class Axis(NameableValue):
-    def __init__(self, dependent=None, **kargs):
+    def __init__(self, dependent=None, like=None, **kargs):
         super(Axis, self).__init__(**kargs)
         self.dependent = dependent
+        self.like = like
+        if self.like:
+            self.name = self.like.name
 
     def __getitem__(self, key=None):
         return AxisID(self, key or 0)
@@ -28,9 +31,6 @@ class Axis(NameableValue):
 
     def as_axisid(self):
         return self[0]
-
-    def like(self):
-        return Axis(name=self.name)
 
     def __repr__(self):
         try:
@@ -306,14 +306,6 @@ class AxesAppendComp(AxesComp):
         return axes_append(x_axes, y_axes)
 
 
-class AxesEnvironment(AxesComp):
-    def __init__(self, node):
-        self.node = node
-
-    def resolve(self, environment):
-        return environment.get_resolved_node_axes(self.node)
-
-
 class Op(NameableValue):
     """Any operation that can be in an AST"""
 
@@ -503,11 +495,6 @@ class ArgsOp(Op):
     @property
     def inputs(self):
         return self.__args
-
-    def add_dependencies(self):
-        super(ArgsOp, self).add_dependencies()
-        for arg in self.inputs:
-            arg.users.add(self)
 
 
 class ComputationOp(ArgsOp, ValueOp):
@@ -988,15 +975,6 @@ class zeros(AllocationOp):
 
     def evaluate(self, evaluator):
         return evaluator.zeros(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
-
-
-class range(ValueOp):
-    def __init__(self, start, stop=None, step=1, **kargs):
-        super(self, range).__init__(**kargs)
-        if stop is None:
-            start = 0
-            stop = start
-        super(range, self).__init__(args=(start, stop, step))
 
 
 def deriv(dep, indep):

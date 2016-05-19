@@ -47,6 +47,8 @@ class Environment(object):
         self.resolved_node_axes = weakref.WeakKeyDictionary()
         self.resolved_axes = weakref.WeakKeyDictionary()
         self.node_values = weakref.WeakKeyDictionary()
+        self.values = weakref.WeakKeyDictionary()
+
 
     def _chained_search(self, attr, key):
         env = self
@@ -57,6 +59,12 @@ class Environment(object):
                 env = env.parent
                 if env is None:
                     raise
+
+    def __getitem__(self, key):
+        return self._chained_search('values', key)
+
+    def __setitem__(self, key, value):
+        self.values[key] = value
 
     def set_axis_length(self, axis, value):
         self.axis_lengths[axis] = value
