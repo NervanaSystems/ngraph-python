@@ -14,6 +14,7 @@ parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
 args = parser.parse_args()
 
+
 class Uniform(object):
     def __init__(self, low=0.0, high=1.0):
         self.low = low
@@ -25,9 +26,9 @@ class Uniform(object):
 
 @be.with_name_context
 def linear(params, x, x_axes, axes, batch_axes=(), init=None):
-    params.weights = be.Parameter(axes=axes+x_axes-batch_axes, init=init)
+    params.weights = be.Parameter(axes=axes + x_axes - batch_axes, init=init)
     params.bias = be.Parameter(axes=axes, init=init)
-    return be.dot(params.weights, x)+params.bias
+    return be.dot(params.weights, x) + params.bias
 
 
 def affine(x, activation, **kargs):
@@ -42,16 +43,17 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
         for hidden_axes, hidden_shapes in shape_spec:
             for layer, shape in zip(layers, hidden_shapes):
                 layer.axes = tuple(be.Axis(like=axis) for axis in hidden_axes)
-                for axis, len in zip(layer.axes, shape):
-                    axis.length =len
+                for axis, length in zip(layer.axes, shape):
+                    axis.length = length
                 value = affine(value, activation=activation, x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
         layers.next()
         value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
     return value
 
+
 def L2(x):
-    return be.dot(x,x)
+    return be.dot(x, x)
 
 
 class MyTest(be.Model):
@@ -71,9 +73,10 @@ class MyTest(be.Model):
         g.x = be.input(axes=(g.C, g.H, g.W, g.N))
         g.y = be.input(axes=(g.Y, g.N))
 
-        layers=[((g.H, g.W), [(32,32)]*2+[(16,16)])]
+        layers = [((g.H, g.W), [(32, 32)] * 2 + [(16, 16)])]
 
-        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,), init=uni)
+        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
+                      init=uni)
 
         # L2 regularizer of parameters
         reg = None
@@ -82,9 +85,9 @@ class MyTest(be.Model):
             if reg is None:
                 reg = l2
             else:
-                reg = reg+l2
+                reg = reg + l2
 
-        g.error = L2(g.y - g.value) + .01*reg
+        g.error = L2(g.y - g.value) + .01 * reg
 
     @be.with_graph_context
     @be.with_environment
@@ -96,7 +99,6 @@ class MyTest(be.Model):
 
         gnp = evaluation.GenNumPy(results=(g.error, g.value))
         gnp.evaluate()
-
 
     @be.with_graph_context
     @be.with_environment
@@ -120,7 +122,7 @@ class MyTest(be.Model):
         params = error.parameters()
         derivs = [be.deriv(error, param) for param in params]
 
-        updates = be.doall(all=[be.decrement(param, learning_rate*deriv) for param, deriv in zip(params, derivs)])
+        updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
 
         enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, updates])
         enp.initialize()
@@ -134,12 +136,12 @@ class MyTest(be.Model):
 
             vals = enp.evaluate()
             print(vals[error])
-            #break
+            # break
 
         print(be.get_current_environment().get_resolved_node_axes(g.value))
         print(be.get_current_environment().get_resolved_node_axes(g.error))
 
 
 y = MyTest()
-#y.dump()
+# y.dump()
 y.train()

@@ -8,5 +8,5 @@ from geon.backends.graph.defmodimp import negative, ones, reciprocal, sig, sin, 
 from geon.backends.graph.defmodimp import tanh, zeros
 from geon.backends.graph.defmodimp import doall, decrement
 
-from geon.backends.graph.defmodimp import Axis, Tensor, Parameter
-from geon.backends.graph.defmodimp import get_all_defs
+from geon.backends.graph.defmodimp import Axis, Tensor, Parameter, RecursiveTensor, Variable
+from geon.backends.graph.defmodimp import get_all_defs, find_all

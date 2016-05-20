@@ -5,6 +5,7 @@ import threading
 
 __thread_data = threading.local()
 
+
 def get_thread_data():
     return __thread_data
 
@@ -34,7 +35,7 @@ def bound_environment(environment=None, create=True):
 
     try:
         get_thread_environment().append(environment)
-        yield(environment)
+        yield (environment)
     finally:
         get_thread_environment().pop()
 
@@ -48,7 +49,6 @@ class Environment(object):
         self.resolved_axes = weakref.WeakKeyDictionary()
         self.node_values = weakref.WeakKeyDictionary()
         self.values = weakref.WeakKeyDictionary()
-
 
     def _chained_search(self, attr, key):
         env = self
@@ -81,7 +81,7 @@ class Environment(object):
     def get_resolved_axes(self, axes):
         try:
             return self.resolved_axes[axes]
-        except:
+        except KeyError:
             resolved_axes = axes.resolve(self)
             self.resolved_axes[axes] = resolved_axes
             return resolved_axes
@@ -99,7 +99,3 @@ class Environment(object):
 
     def set_node_value(self, node, value):
         self.node_values[node] = value
-
-
-
-

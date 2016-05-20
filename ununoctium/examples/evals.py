@@ -3,15 +3,16 @@ import numpy as np
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.funs as be
 
+
 class Eval(be.Model):
     def __init__(self, **kargs):
         super(Eval, self).__init__(**kargs)
-        a = self.a
-        a.S[10]
         g = self.graph
+        g.S = be.Axis()
+        g.S.length = 10
 
-        g.x = be.input(axes=(a.S,))
-        g.y = be.input(axes=(a.S,))
+        g.x = be.input(axes=(g.S,))
+        g.y = be.input(axes=(g.S,))
         g.w = be.deriv(g.x + g.y, g.y)
         g.x2 = be.dot(g.x, g.x)
 
@@ -23,8 +24,8 @@ class Eval(be.Model):
         x = np.arange(10, dtype=np.float32) + 1
         y = x * x
 
-        self.graph.x.value = be.ArrayWithAxes(x, (self.a.S,))
-        self.graph.y.value = be.ArrayWithAxes(y, (self.a.S,))
+        self.graph.x.value = be.ArrayWithAxes(x, (self.g.S,))
+        self.graph.y.value = be.ArrayWithAxes(y, (self.g.S,))
 
         gnp = evaluation.GenNumPy(results=(self.graph.x2, self.graph.z, self.graph.w))
         gnp.evaluate()

@@ -1,5 +1,6 @@
 import collections
 import weakref
+import inspect
 
 from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
@@ -9,16 +10,104 @@ def get_all_defs():
     return Defmod.defs()
 
 
+def find_all(tags=None, used_by=None, uses=None, types=None):
+    """
+    Find tensors satisfying criteria.
+
+    :param tags: Required tags
+    :param used_by: Restrict to tensors used by this tensor
+    :param types: Restrict to these types, default Tensor.
+    :return: a set of tensors.
+    """
+    result = set()
+    visited = set()
+    unvisited = set()
+    if used_by is not None:
+        if isinstance(used_by, collections.Iterable):
+            unvisited.update(used_by)
+        else:
+            unvisited.add(used_by)
+    else:
+        unvisited.update([_ for _ in get_all_defs() if isinstance(_, Tensor)])
+
+    tagset = set()
+    if tags is collections.Iterable and not isinstance(tags, str):
+        tagset.update(tags)
+    elif tags is not None:
+        tagset.add(tags)
+
+    if types is None:
+        types = (Tensor,)
+
+    while unvisited:
+        item = unvisited.pop()
+        if item in visited:
+            continue
+        visited.add(item)
+        if isinstance(item, types) and tagset.issubset(item.tags):
+            result.add(item)
+        unvisited.update(item.args)
+
+    if uses is not None:
+        usesset = set()
+        unvisited = set()
+        visited = set()
+
+        if isinstance(uses, collections.Iterable):
+            unvisited.update(uses)
+        else:
+            unvisited.add(uses)
+
+        while unvisited:
+            item = unvisited.pop()
+            if item in visited:
+                continue
+            if item in result:
+                usesset.add(item)
+            unvisited.update(item.args)
+        result.intersection_update(usesset)
+
+    return result
+
+
 class Defmod(NameableValue):
     """Base class for model definitions
 
     Handles generic printing and tracking object creation order.
     """
-    def __init__(self, **kargs):
+
+    def __init__(self, tags=None, **kargs):
         super(Defmod, self).__init__(**kargs)
         defs = Defmod.defs()
         self.seqid = len(defs)
         defs.append(self)
+
+        self.tags = set()
+        if tags is not None:
+            if isinstance(tags, collections.Iterable) and not isinstance(tags, str):
+                self.tags.update(tags)
+            else:
+                self.tags.add(tags)
+
+        # TODO This is a good first cut for debugging info, but it would be nice to
+        # TODO be able to reliably walk the stack back to user code rather than just
+        # TODO back past this constructor
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            while frame.f_locals.get('self', None) is self:
+                frame = frame.f_back
+            while frame:
+                filename, lineno, function, code_context, index = inspect.getframeinfo(frame)
+                if -1 == filename.find('geon/backends/graph'):
+                    break
+                frame = frame.f_back
+
+            self.filename = filename
+            self.lineno = lineno
+            self.code_context = code_context
+        finally:
+            del frame
 
     @staticmethod
     def defs():
@@ -38,7 +127,7 @@ class Defmod(NameableValue):
     def __shortpr(self):
         name = ''
         if self.name is not None:
-            name = '{'+self.name+'}'
+            name = '{' + self.name + '}'
         return '{seqid}:{cls}{name}'.format(name=name, seqid=self.seqid, cls=self.__class__.__name__)
 
     def _abbrev_value(self, value):
@@ -53,7 +142,7 @@ class Defmod(NameableValue):
                 else:
                     result = s
 
-            return '('+result+')'
+            return '(' + result + ')'
         else:
             return '{v}'.format(v=value)
 
@@ -67,7 +156,7 @@ class Defmod(NameableValue):
                 continue
             s = '{key}={val}'.format(key=key, val=self._abbrev_value(val))
             if result:
-                result = result+', '+s
+                result = result + ', ' + s
             else:
                 result = s
         return result
@@ -78,39 +167,32 @@ class Defmod(NameableValue):
 
 class Tensor(Defmod):
     """Any tensor-value"""
-    def __init__(self, axes=None, dtype=None, **kargs):
+
+    def __init__(self, axes=None, dtype=None, args=None, **kargs):
         super(Tensor, self).__init__(**kargs)
         self._axes = Axes.as_axes(axes)
         self.dtype = dtype
+
+        if args is None:
+            self.args = ()
+        else:
+            self.args = tuple(Tensor.as_tensor(_) for _ in args)
+        for arg in self.args:
+            arg.users.add(self)
 
         # Tensors that directly use the result
         self.users = weakref.WeakSet()  # Name assigned by user
 
     @property
+    def size(self):
+        return TensorSize(self)
+
+    @property
     def axes(self):
         return self._axes
 
-    @property
-    def args(self):
-        return ()
-
-    def parameters(self):
-        """Return all parameters used in computing this node"""
-        params = []
-        visited = set()
-        unvisited = [self]
-
-        while unvisited:
-            node = unvisited.pop()
-            visited.add(node)
-            if isinstance(node, Parameter):
-                params.append(node)
-            unvisited.extend(node.args)
-
-        return params
-
     def _repr_attrs(self, *attrs):
-        return super(Tensor, self)._repr_attrs('axes', 'dtype', *attrs)
+        return super(Tensor, self)._repr_attrs('_axes', 'dtype', 'args', *attrs)
 
     @staticmethod
     def as_tensor(tensor):
@@ -158,9 +240,18 @@ class Tensor(Defmod):
     def __rpow__(self, val):
         return Pow(val, self)
 
+    def __getitem__(self, key):
+        return TensorGetItem(self, key)
+
+
+class TensorSize(Tensor):
+    def __init__(self, tensor, **kargs):
+        super(TensorSize, self).__init__(axes=(), args=(tensor,))
+
 
 class LiteralTensor(Tensor):
     """A literal value in the definition."""
+
     def __init__(self, value, **kargs):
         super(LiteralTensor, self).__init__(**kargs)
         self.value = value
@@ -171,6 +262,7 @@ class LiteralTensor(Tensor):
 
 class ArrayWithAxes(Tensor):
     """A NumPy array with axes"""
+
     def __init__(self, array, axes, **kargs):
         super(ArrayWithAxes, self).__init__(axes=axes, dtype=array.dtype, **kargs)
         self.array = array
@@ -179,9 +271,81 @@ class ArrayWithAxes(Tensor):
         return super(ArrayWithAxes, self)._repr_attrs('array', *attrs)
 
 
+class RecursiveTensor(Tensor):
+    """A NumPy array with axes"""
+
+    def __init__(self, axes, **kargs):
+        super(RecursiveTensor, self).__init__(**kargs)
+
+    def __setitem__(self, key, value):
+        TensorSetItem(self, key, value)
+
+
+class TensorSetItem(Defmod):
+    def __init__(self, tensor, key, value, **kargs):
+        super(TensorSetItem, self).__init__(**kargs)
+        self.tensor = tensor
+        self.key = key
+        self.value = value
+
+    def _repr_attrs(self, *attrs):
+        return super(TensorSetItem, self)._repr_attrs('tensor', 'key', 'value', *attrs)
+
+
+class TensorGetItem(Tensor):
+    def __init__(self, tensor, key, **kargs):
+        super(TensorGetItem, self).__init__(**kargs)
+        self.tensor = tensor
+        self.key = key
+
+    def _repr_attrs(self, *attrs):
+        return super(TensorGetItem, self)._repr_attrs('tensor', 'key', *attrs)
+
+
+class VariableExpr(Defmod):
+    def __init__(self, args, **kargs):
+        super(VariableExpr, self).__init__(**kargs)
+        self.args = args
+
+    def _repr_attrs(self, *attrs):
+        return super(VariableExpr, self)._repr_attrs('args', *attrs)
+
+    def __add__(self, other):
+        return VariableAdd(self, other)
+
+    def __radd__(self, other):
+        return VariableAdd(other, self)
+
+    def __sub__(self, other):
+        return VariableSub(self, other)
+
+    def __rsub__(self, other):
+        return VariableSub(other, self)
+
+
+class VariableAdd(VariableExpr):
+    def __init__(self, x, y, **kargs):
+        super(VariableAdd, self).__init__(args=(x, y), **kargs)
+
+
+class VariableSub(VariableExpr):
+    def __init__(self, x, y, **kargs):
+        super(VariableSub, self).__init__(args=(x, y), **kargs)
+
+
+class Variable(VariableExpr):
+    def __init__(self, kind, **kargs):
+        super(Variable, self).__init__(args=(), **kargs)
+        self.kind = kind
+
+    def _repr_attrs(self, *attrs):
+        return super(Variable, self)._repr_attrs('kind', *attrs)
+
+
 class Parameter(Tensor):
     """A parameter to be trained"""
-    def __init__(self, init, **kargs):
+
+    def __init__(self, init=None, **kargs):
         super(Parameter, self).__init__(**kargs)
         self.init = init
 
@@ -191,12 +355,14 @@ class Parameter(Tensor):
 
 class input(Tensor):
     """A value that will be supplied."""
+
     def __init__(self, axes, **kargs):
         super(input, self).__init__(axes=axes, **kargs)
 
 
 class ComputedTensor(Tensor):
     """An computation that produces a tensor value"""
+
     def __init__(self, **kargs):
         super(ComputedTensor, self).__init__(**kargs)
 
@@ -205,24 +371,9 @@ class ComputedTensor(Tensor):
         return ValueAxes(self)
 
 
-class Args(Defmod):
-    """Something that has tensor arguments"""
-    def __init__(self, args, **kargs):
-        super(Args, self).__init__(**kargs)
-        self._args = tuple(Tensor.as_tensor(_) for _ in args)
-        for arg in self._args:
-            arg.users.add(self)
-
-    @property
-    def args(self):
-        return self._args
-
-    def _repr_attrs(self, *attrs):
-        return super(Args, self)._repr_attrs('args', *attrs)
-
-
-class ElementWise(Args, ComputedTensor):
+class ElementWise(ComputedTensor):
     """Element wise computation"""
+
     def __init__(self, e_axes=None, **kargs):
         super(ElementWise, self).__init__(**kargs)
         self.e_axes = Axes.as_axes(e_axes)
@@ -231,7 +382,7 @@ class ElementWise(Args, ComputedTensor):
         return super(ElementWise, self)._repr_attrs('e_axes', *attrs)
 
 
-class Reduction(Args, ComputedTensor):
+class Reduction(ComputedTensor):
     def __init__(self, r_axes=None, **kargs):
         super(Reduction, self).__init__(**kargs)
         self.r_aces = Axes.as_axes(r_axes)
@@ -255,7 +406,7 @@ class cos(ElementWise):
         super(cos, self).__init__(args=(x,), **kargs)
 
 
-class decrement(Args):
+class decrement(ComputedTensor):
     def __init__(self, parameter, change, **kargs):
         super(decrement, self).__init__(args=(parameter, change), **kargs)
 
@@ -265,12 +416,12 @@ class divide(ElementWise):
         super(divide, self).__init__(args=(x, y), **kargs)
 
 
-class doall(Args):
+class doall(ComputedTensor):
     def __init__(self, all, **kargs):
         super(doall, self).__init__(args=all, **kargs)
 
 
-class dot(Args, ComputedTensor):
+class dot(ComputedTensor):
     def __init__(self, x, y, reduction_axes=None, **kargs):
         super(dot, self).__init__(args=(x, y), **kargs)
         self.r_axes = Axes.as_axes(reduction_axes)
@@ -282,6 +433,7 @@ class dot(Args, ComputedTensor):
 class sum(Reduction):
     def __init__(self, x, **kargs):
         super(sum, self).__init__(args=(x,), **kargs)
+
 
 class exp(ElementWise):
     def __init__(self, x, **kargs):
@@ -330,6 +482,7 @@ class sgn(ElementWise):
 
 class sig(ElementWise):
     """Sigmoid"""
+
     def __init__(self, x, **kargs):
         super(sig, self).__init__(args=(x,), **kargs)
 
@@ -377,7 +530,7 @@ class deriv(Tensor):
 class Axis(Defmod):
     def __init__(self, length=None, dependents=None, like=None, **kargs):
         super(Axis, self).__init__(**kargs)
-        self.__length = length
+        self._length = length
         self.dependents = dependents
         self.like = like
         if self.like is not None:
@@ -388,14 +541,14 @@ class Axis(Defmod):
 
     @property
     def length(self):
-        return self.__length or AxisLength(self)
+        return self._length or AxisLength(self)
 
     @length.setter
     def length(self, length):
-        return AxisSetLength(self, length)
+        AxisSetLength(self, length)
 
     def _repr_attrs(self, *attrs):
-        return super(Axis, self)._repr_attrs('length', 'dependents', 'like', *attrs)
+        return super(Axis, self)._repr_attrs('_length', 'dependents', 'like', *attrs)
 
 
 class AxisLength(Defmod):
@@ -503,4 +656,3 @@ class SubAxes(CombineAxes):
 class IntersectAxes(CombineAxes):
     def __init__(self, *args, **kargs):
         super(IntersectAxes, self).__init__(args=args, **kargs)
-
