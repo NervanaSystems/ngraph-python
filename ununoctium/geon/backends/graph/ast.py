@@ -723,13 +723,32 @@ class dot(OutputArgOp):
         y.generate_add_delta(adjoints, dot(x, delta, out_axes=y.axes))
 
 
+class softmax(OutputArgOp):
+    def __init__(self, x, **kargs):
+        super(softmax, self).__init__(args=(x,), **kargs)
+
+    def evaluate(self, evaluator, out, x):
+        return evaluator.softmax(x, out)
+
+    @property
+    def axes(self):
+        x, = self.inputs
+        return x.axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        z = delta*self
+        zs = sum(z)
+        x.generate_add_delta(adjoints, (z-zs*self))
+
+
 class sum(OutputArgOp):
     def __init__(self, x, reduction_axes=None, out_axes=None):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             if out_axes is None:
-                raise ValueError("At least one of reduction_axes and out_axes must be sprovided")
-            self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
+                self.reduction_axes = x.axes
+            else:
+                self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(sum, self).__init__(args=(x,))
@@ -745,7 +764,7 @@ class sum(OutputArgOp):
         return AxesSubComp(self.inputs[0].axes, self.reduction_axes)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_adjoints(adjoints, sum(delta, out_axes=x.axes))
+        x.generate_add_delta(adjoints, delta)
 
 
 class empty(AllocationOp):

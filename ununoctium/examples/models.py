@@ -40,12 +40,12 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
     value = x
     last_axes = x_axes
     with be.layers_named('L') as layers:
-        for hidden_axes, hidden_shapes in shape_spec:
+        for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for layer, shape in zip(layers, hidden_shapes):
                 layer.axes = tuple(be.Axis(like=axis) for axis in hidden_axes)
                 for axis, length in zip(layer.axes, shape):
                     axis.length = length
-                value = affine(value, activation=activation, x_axes=last_axes, axes=layer.axes, **kargs)
+                value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
         layers.next()
         value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
@@ -54,6 +54,12 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
 
 def L2(x):
     return be.dot(x, x)
+
+
+def cross_entropy(y, t):
+    a = - be.log(y) * t
+    b = - be.log(1 - y) * (1 - t)
+    return be.sum(a + b)
 
 
 class MyTest(be.Model):
@@ -73,10 +79,13 @@ class MyTest(be.Model):
         g.x = be.input(axes=(g.C, g.H, g.W, g.N))
         g.y = be.input(axes=(g.Y, g.N))
 
-        layers = [((g.H, g.W), [(32, 32)] * 2 + [(16, 16)])]
+        layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
 
-        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
+        g.value = mlp(g.x, activation=be.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
                       init=uni)
+
+        #g.error = L2(g.y - g.value)
+        g.error = cross_entropy(g.value, g.y)
 
         # L2 regularizer of parameters
         reg = None
@@ -87,7 +96,7 @@ class MyTest(be.Model):
             else:
                 reg = reg + l2
 
-        g.error = L2(g.y - g.value) + .01 * reg
+        g.loss = g.error + .01 * reg
 
     @be.with_graph_context
     @be.with_environment
@@ -118,28 +127,30 @@ class MyTest(be.Model):
         g.Y.length = train.nclasses
 
         error = g.error
+        loss = g.loss
         learning_rate = be.input(axes=())
         params = error.parameters()
         derivs = [be.deriv(error, param) for param in params]
 
         updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
 
-        enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, updates])
+        enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, loss, updates])
         enp.initialize()
-        for mb_idx, (xraw, yraw) in enumerate(train):
-            g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
-            g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
-            learning_rate.value = be.ArrayWithAxes(.001, shape=(), axes=())
+        for epoch in range(10):
+            for mb_idx, (xraw, yraw) in enumerate(train):
+                g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
+                g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
+                learning_rate.value = be.ArrayWithAxes(.001, shape=(), axes=())
 
-            if mb_idx % 100 == 0:
-                print mb_idx
+                if mb_idx % 100 == 0:
+                    print mb_idx
 
-            vals = enp.evaluate()
-            print(vals[error])
-            # break
-
-        print(be.get_current_environment().get_resolved_node_axes(g.value))
-        print(be.get_current_environment().get_resolved_node_axes(g.error))
+                vals = enp.evaluate()
+                print(vals[loss].array/128.0)
+                # break
+            train.reset()
+            #print(be.get_current_environment().get_resolved_node_axes(g.value).array/128.0)
+            #print(be.get_current_environment().get_resolved_node_axes(g.error))
 
 
 y = MyTest()

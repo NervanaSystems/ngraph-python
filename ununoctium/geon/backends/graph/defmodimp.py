@@ -487,6 +487,15 @@ class sig(ElementWise):
         super(sig, self).__init__(args=(x,), **kargs)
 
 
+class softmax(Tensor):
+    def __init__(self, x, softmax_axes=None, **kargs):
+        super(softmax, args=(x,), **kargs)
+        self.softmax_axes = None
+
+    def _repr_attrs(self, *attrs):
+        super(softmax, self)._repr_attrs('softmax_axes', *attrs)
+
+
 class sin(ElementWise):
     def __init__(self, x, **kargs):
         super(sin, self).__init__(args=(x,), **kargs)

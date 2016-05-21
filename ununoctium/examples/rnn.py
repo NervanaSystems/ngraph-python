@@ -28,6 +28,9 @@ class MyRnn(be.Model):
         g.H = be.Axis()
 
         # Define the inputs.
+        # Length of the sequence
+        g.t = be.Tensor(axes=(g.N), dtype=np.int32)
+        g.T.length = g.t
         g.x = be.Tensor(axes=(g.X, g.T, g.N))
         # This would only be used for training or evaluation
         g.y_ = be.Tensor(axes=(g.Y, g.T, g.N))
@@ -66,7 +69,7 @@ class MyRnn(be.Model):
     @be.with_environment
     def dump(self):
         for _ in be.get_all_defs():
-            print(_)
+            print('{s} # File "{filename}", line {lineno}'.format(s=_, filename=_.filename, lineno=_.lineno))
 
 
 MyRnn().dump()

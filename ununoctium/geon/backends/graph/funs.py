@@ -6,7 +6,7 @@ from geon.backends.graph.environment import bound_environment
 
 from geon.backends.graph.ast import Axis, deriv, input, axes_list, Parameter, ArrayWithAxes
 from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
-from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, sqrt, square, subtract, sum
+from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, sum
 from geon.backends.graph.ast import tanh, transpose, zeros
 from geon.backends.graph.ast import doall, decrement
 
@@ -188,10 +188,6 @@ def sig2(self, a, out=None):
 
 
 def std(self, a, axis=None, partial=None, out=None, keepdims=None):
-    pass
-
-
-def sum(self, a, axis=None, out=None, keepdims=None):
     pass
 
 

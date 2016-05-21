@@ -184,6 +184,15 @@ class NumPyEvaluator(Evaluator):
     def sin(self, x, out):
         return np.sin(x.array_as_axes(out.axes), out=out.array)
 
+    def softmax(self, x, out):
+        xa = x.array_as_axes(out.axes)
+        m = xa.max()
+        np.subtract(xa, m, out=out.array)
+        np.exp(out.array, out=out.array)
+        s = out.array.sum()
+        np.divide(out.array, s, out=out.array)
+        return out
+
     def sqrt(self, x, out):
         return np.sqrt(x.array_as_axes(out.axes), out=out.array)
 
@@ -197,7 +206,11 @@ class NumPyEvaluator(Evaluator):
         x_axes = x.axes
         np_out_axes = axes_sub(x_axes, reduction_axes)
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
-        np.sum(x.array, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
+        if out.axes != np_out_axes:
+            temp = np.sum(x.array, axis=np_red_dims)
+            out.array[...] = temp
+        else:
+            np.sum(x.array, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
         return out
 
     def tanh(self, x, out):
