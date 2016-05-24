@@ -1,7 +1,17 @@
 from contextlib import contextmanager
 import weakref
-
 import threading
+
+# TODO Store default values directly with the keys, i.e. a default axis length is stored in the axis.
+# TODO When acessing values from the environment, pass the default value.  This lets us get rid of the
+# TODO environment that is used to hold default values, and some of the @with_environment uses.  Can
+# TODO have an Empty object if we need a way to throw on undefined values
+
+# TODO store a "batch" attribute on an axis in the environment, so that a @with_batch_axes
+# TODO can automatcially tag those axes as batch.
+
+# TODO replace the special-cases in the environment with a kind argument to access/set so we don't
+# TODO need all these special-purpose methods
 
 __thread_data = threading.local()
 

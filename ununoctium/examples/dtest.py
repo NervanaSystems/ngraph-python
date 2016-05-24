@@ -17,8 +17,8 @@ def linear(params, x, x_axes, axes, batch_axes=(), init=None):
     return be.dot(params.weights, x) + params.bias
 
 
-def affine(x, activation, **kargs):
-    return activation(linear(x, **kargs))
+def affine(x, activation, batch_axes=None, **kargs):
+    return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
 
 
 @be.with_name_context
@@ -26,12 +26,12 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
     value = x
     last_axes = x_axes
     with be.layers_named('L') as layers:
-        for hidden_axes, hidden_shapes in shape_spec:
+        for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for layer, shape in zip(layers, hidden_shapes):
                 layer.axes = tuple(be.Axis(like=axis) for axis in hidden_axes)
                 for axis, length in zip(layer.axes, shape):
                     axis.length = length
-                value = affine(value, activation=activation, x_axes=last_axes, axes=layer.axes, **kargs)
+                value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
         layers.next()
         value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
@@ -41,6 +41,16 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
 # noinspection PyPep8Naming
 def L2(x):
     return be.dot(x, x)
+
+
+def cross_entropy(y, t):
+    """
+
+    :param y:  Estimate
+    :param t: Actual 1-hot data
+    :return:
+    """
+    return -be.sum(be.log(y) * t)
 
 
 class MyTest(be.Model):
@@ -60,10 +70,12 @@ class MyTest(be.Model):
         g.x = be.Tensor(axes=(g.C, g.H, g.W, g.N))
         g.y = be.Tensor(axes=(g.Y, g.N))
 
-        layers = [((g.H, g.W), [(32, 32)] * 2 + [(16, 16)])]
+        layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
 
-        g.value = mlp(g.x, activation=be.tanh, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
+        g.value = mlp(g.x, activation=be.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
                       init=uni)
+
+        g.error = cross_entropy(g.value, g.y)
 
         # L2 regularizer of parameters
         reg = None
@@ -73,7 +85,7 @@ class MyTest(be.Model):
                 reg = l2
             else:
                 reg = reg + l2
-        g.error = L2(g.y - g.value) + .01 * reg
+        g.loss = g.error + .01 * reg
 
     @be.with_graph_context
     @be.with_environment

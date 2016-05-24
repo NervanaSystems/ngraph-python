@@ -5,6 +5,12 @@ import inspect
 from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 
+# TODO This implementation only read the model description.  These model descriptions use
+# TODO implicit allocation, with the exception of inputs and parameters.
+# TODO Once the model description has been
+# TODO read, we can analyze it and produce an intermediate graph in terms of primitive access
+# TODO operations and tensor operations that compute on explicit allocations.
+
 
 def get_all_defs():
     return Defmod.defs()
@@ -168,9 +174,10 @@ class Defmod(NameableValue):
 class Tensor(Defmod):
     """Any tensor-value"""
 
-    def __init__(self, axes=None, dtype=None, args=None, **kargs):
+    def __init__(self, axes=None, batch_axes=None, dtype=None, args=None, **kargs):
         super(Tensor, self).__init__(**kargs)
         self._axes = Axes.as_axes(axes)
+        self.batch_axes = Axes.as_axes(batch_axes)
         self.dtype = dtype
 
         if args is None:
@@ -192,7 +199,7 @@ class Tensor(Defmod):
         return self._axes
 
     def _repr_attrs(self, *attrs):
-        return super(Tensor, self)._repr_attrs('_axes', 'dtype', 'args', *attrs)
+        return super(Tensor, self)._repr_attrs('_axes', 'batch_axes', 'dtype', 'args', *attrs)
 
     @staticmethod
     def as_tensor(tensor):
@@ -385,7 +392,7 @@ class ElementWise(ComputedTensor):
 class Reduction(ComputedTensor):
     def __init__(self, r_axes=None, **kargs):
         super(Reduction, self).__init__(**kargs)
-        self.r_aces = Axes.as_axes(r_axes)
+        self.r_axes = Axes.as_axes(r_axes)
 
     def _repr_attrs(self, *attrs):
         return super(Reduction, self)._repr_attrs('r_axes', *attrs)
@@ -488,12 +495,8 @@ class sig(ElementWise):
 
 
 class softmax(Tensor):
-    def __init__(self, x, softmax_axes=None, **kargs):
-        super(softmax, args=(x,), **kargs)
-        self.softmax_axes = None
-
-    def _repr_attrs(self, *attrs):
-        super(softmax, self)._repr_attrs('softmax_axes', *attrs)
+    def __init__(self, x, **kargs):
+        super(softmax, self).__init__(args=(x,), **kargs)
 
 
 class sin(ElementWise):

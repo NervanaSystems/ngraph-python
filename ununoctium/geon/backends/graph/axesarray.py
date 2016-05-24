@@ -3,6 +3,15 @@ import numbers
 import collections
 import numpy as np
 
+# This is a partial implementation of axes on top of NumPy
+
+# TODO Track the computation so that we can interactively autodiff
+
+# TODO Only the simpler axis cases are handled
+
+# TODO AxisIDs are mostly missing
+
+
 def axes_generator(axes, gen_axis, base_index=None):
     index = list(base_index or [0]*len(axes))
     pos = axes.index(gen_axis)
