@@ -339,7 +339,7 @@ class Op(NameableValue):
         Get dependent ops ordered for autodiff.
         """
         if op not in ordered_ops:
-            if isinstance(op, ArgsOp):
+            if isinstance(op, ComputationOp):
                 for arg in op.inputs:
                     Op.get_ordered_ops(arg, ordered_ops, include_outs)
                 output = op.output
@@ -399,17 +399,6 @@ class Op(NameableValue):
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
-
-
-class ControlOp(Op):
-    def __init__(self, **kargs):
-        super(ControlOp, self).__init__(**kargs)
-
-
-class RandomStateOp(Op):
-    def __init__(self, seed=None, **kargs):
-        super(RandomStateOp, self).__init__(**kargs)
-        self.seed = seed
 
 
 class ValueOp(Op):
@@ -478,37 +467,30 @@ class ValueOp(Op):
     def __rpow__(self, val):
         return Pow(val, self)
 
-    @property
-    def T(self):
-        return transpose(self)
 
-
-class ArgsOp(Op):
-
-    def __init__(self, args, **kargs):
-        super(ArgsOp, self).__init__(**kargs)
+class ComputationOp(ValueOp):
+    """
+    An TensorOp is the result of some sort of operation.
+    """
+    def __init__(self, args, out=None, batch_axes=None, **kargs):
+        super(ComputationOp, self).__init__(**kargs)
         self.__args = tuple(Op.as_op(arg) for arg in args)
 
         for arg in self.inputs:
             arg.users.add(self)
 
-    @property
-    def inputs(self):
-        return self.__args
+        self.batch_axes = AxesComp.as_axes(batch_axes or ())
 
-
-class ComputationOp(ArgsOp, ValueOp):
-    """
-    An TensorOp is the result of some sort of operation.
-    """
-    def __init__(self, **kargs):
-        super(ComputationOp, self).__init__(**kargs)
-
-    def compute_graph_type(self, *argtypes):
-        raise NotImplementedError()
+        if out is None:
+            out = empty(axes=self.axes)
+        self.output = out
 
     def add_dependencies(self):
         self.output.users.add(self)
+
+    @property
+    def inputs(self):
+        return self.__args
 
     @property
     def output(self):
@@ -521,19 +503,7 @@ class ComputationOp(ArgsOp, ValueOp):
             value.users.add(self)
 
 
-class OutputArgOp(ComputationOp):
-    """
-    An OutputArgOp has an out= argument for its result.
-    """
-
-    def __init__(self, out=None, **kargs):
-        super(OutputArgOp, self).__init__(**kargs)
-        if out is None:
-            out = empty(axes=self.axes)
-        self.output = out
-
-
-class VoidOp(OutputArgOp):
+class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
 
@@ -559,8 +529,7 @@ class doall(VoidOp):
         return out
 
 
-
-class ElementWise(OutputArgOp):
+class ElementWise(ComputationOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
 
@@ -573,6 +542,18 @@ class ElementWise(OutputArgOp):
         return result
 
 
+class trace(ElementWise):
+    def __init__(self, x, label=None, **kargs):
+        super(trace, self).__init__(args=(x,), **kargs)
+        self.label = label
+
+    def evaluate(self, evaluator, out, x):
+        evaluator.trace(x, self.label, out)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, trace(delta, label='d'+self.label))
+
+
 class AllocationOp(ValueOp):
     def __init__(self, axes=None, dtype=None, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
@@ -581,19 +562,6 @@ class AllocationOp(ValueOp):
     @property
     def axes(self):
         return self.graph_type.axes
-
-
-class AliasOp(ArgsOp, AllocationOp):
-    """
-    Allocates a descriptor that aliases another allocation.
-    """
-    def __init__(self, axes, aliased, **kargs):
-        super(AliasOp, self).__init__(axes=axes, dtype=aliased.graph_type.dtype, args=(aliased,), **kargs)
-        aliased.output.aliases.add(self)
-
-    @property
-    def aliased(self):
-        return self.inputs[0]
 
 
 class input(AllocationOp):
@@ -652,8 +620,8 @@ class Constant(AllocationOp):
 
 
 class absolute(ElementWise):
-    def __init__(self, x, out=None):
-        super(absolute, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(absolute, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
         return evaluator.absolute(x, out)
@@ -663,8 +631,8 @@ class absolute(ElementWise):
 
 
 class add(ElementWise):
-    def __init__(self, x, y, out=None):
-        super(add, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y, **kargs):
+        super(add, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
         return evaluator.add(x, y, out)
@@ -675,8 +643,8 @@ class add(ElementWise):
 
 
 class cos(ElementWise):
-    def __init__(self, x, out=None):
-        super(cos, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(cos, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*sin(x))
@@ -686,13 +654,13 @@ class cos(ElementWise):
 
 
 # This makes the derivative simpler if we need it
-def divide(x, y, out=None):
-    result = multiply(x, reciprocal(y), out=out)
+def divide(x, y, **kargs):
+    result = multiply(x, reciprocal(y), **kargs)
     return result
 
 
-class dot(OutputArgOp):
-    def __init__(self, x, y, reduction_axes=None, out_axes=None):
+class dot(ComputationOp):
+    def __init__(self, x, y, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
@@ -702,7 +670,7 @@ class dot(OutputArgOp):
         if out_axes is not None:
             self.reduction_axes = AxesSubComp(self.reduction_axes, self.out_axes)
 
-        super(dot, self).__init__(args=(x, y))
+        super(dot, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
         resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
@@ -723,12 +691,12 @@ class dot(OutputArgOp):
         y.generate_add_delta(adjoints, dot(x, delta, out_axes=y.axes))
 
 
-class softmax(OutputArgOp):
+class softmax(ComputationOp):
     def __init__(self, x, **kargs):
         super(softmax, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.softmax(x, out)
+        return evaluator.softmax(x, evaluator.environment.get_resolved_axes(self.batch_axes), out)
 
     @property
     def axes(self):
@@ -737,12 +705,12 @@ class softmax(OutputArgOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         z = delta*self
-        zs = sum(z)
+        zs = sum(z, reduction_axes=AxesSubComp(x.axes, self.batch_axes))
         x.generate_add_delta(adjoints, (z-zs*self))
 
 
-class sum(OutputArgOp):
-    def __init__(self, x, reduction_axes=None, out_axes=None):
+class sum(ComputationOp):
+    def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             if out_axes is None:
@@ -751,7 +719,7 @@ class sum(OutputArgOp):
                 self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
-        super(sum, self).__init__(args=(x,))
+        super(sum, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
         resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
@@ -802,8 +770,8 @@ class Parameter(AllocationOp):
 
 
 class exp(ElementWise):
-    def __init__(self, x, out=None):
-        super(exp, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(exp, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
@@ -813,8 +781,8 @@ class exp(ElementWise):
 
 
 class log(ElementWise):
-    def __init__(self, x, out=None):
-        super(log, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(log, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta/x)
@@ -824,8 +792,8 @@ class log(ElementWise):
 
 
 class maximum(ElementWise):
-    def __init__(self, x, y, out=None):
-        super(maximum, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y, **kargs):
+        super(maximum, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
         return evaluator.maximum(x, y, out=out)
@@ -837,8 +805,8 @@ class maximum(ElementWise):
 
 
 class minimum(ElementWise):
-    def __init__(self, x, y, out=None):
-        super(minimum, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y, **kargs):
+        super(minimum, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
         return evaluator.minimum(x, y, out=out)
@@ -850,12 +818,12 @@ class minimum(ElementWise):
 
 
 class multiply(ElementWise):
-    def __init__(self, x, y, out=None):
-        super(multiply, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y, **kargs):
+        super(multiply, self).__init__(args=(x, y), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta*y, reduction_axes=x.axes))
-        y.generate_add_delta(adjoints, sum(x*delta, reduction_axes=y.axes))
+        x.generate_add_delta(adjoints, sum(delta*y, out_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(x*delta, out_axes=y.axes))
 
 
     def evaluate(self, evaluator, out, x, y):
@@ -863,8 +831,8 @@ class multiply(ElementWise):
 
 
 class negative(ElementWise):
-    def __init__(self, x, out=None):
-        super(negative, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(negative, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
@@ -885,8 +853,8 @@ class ones(AllocationOp):
 
 
 class reciprocal(ElementWise):
-    def __init__(self, x, out=None):
-        super(reciprocal, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(reciprocal, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self*self*delta)
@@ -896,8 +864,8 @@ class reciprocal(ElementWise):
 
 
 class sgn(ElementWise):
-    def __init__(self, x, out=None):
-        super(sgn, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(sgn, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         # Zero
@@ -909,8 +877,8 @@ class sgn(ElementWise):
 
 class sig(ElementWise):
     """Sigmoid"""
-    def __init__(self, x, out=None):
-        super(sig, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(sig, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
@@ -919,8 +887,8 @@ class sig(ElementWise):
         return evaluator.sig(x, out)
 
 class sin(ElementWise):
-    def __init__(self, x, out=None):
-        super(sin, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(sin, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*cos(x))
@@ -930,8 +898,8 @@ class sin(ElementWise):
 
 
 class sqrt(ElementWise):
-    def __init__(self, x, out=None):
-        super(sqrt, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(sqrt, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, .5*delta*self)
@@ -941,8 +909,8 @@ class sqrt(ElementWise):
 
 
 class square(ElementWise):
-    def __init__(self, x, out=None):
-        super(square, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **karegs):
+        super(square, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0*delta*x)
@@ -952,8 +920,8 @@ class square(ElementWise):
 
 
 class subtract(ElementWise):
-    def __init__(self, x, y, out=None):
-        super(subtract, self).__init__(out=out, args=(x, y))
+    def __init__(self, x, y, **kargs):
+        super(subtract, self).__init__(args=(x, y), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta)
@@ -964,25 +932,14 @@ class subtract(ElementWise):
 
 
 class tanh(ElementWise):
-    def __init__(self, x, out=None):
-        super(tanh, self).__init__(out=out, args=(x,))
+    def __init__(self, x, **kargs):
+        super(tanh, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
 
     def evaluate(self, evaluator, out, x):
         return evaluator.tanh(x, out)
-
-
-class transpose(AliasOp):
-    def __init__(self, x):
-        super(transpose, self).__init__(axes=tuple(reversed(x.graph_type.axes)), aliased=x)
-
-    def evaluate(self, evaluator, out, x):
-        return evaluator.transpose(x)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta.T)
 
 
 class zeros(AllocationOp):

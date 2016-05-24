@@ -31,8 +31,8 @@ def linear(params, x, x_axes, axes, batch_axes=(), init=None):
     return be.dot(params.weights, x) + params.bias
 
 
-def affine(x, activation, **kargs):
-    return activation(linear(x, **kargs))
+def affine(x, activation, batch_axes=None, **kargs):
+    return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
 
 
 @be.with_name_context
@@ -57,9 +57,13 @@ def L2(x):
 
 
 def cross_entropy(y, t):
-    a = - be.log(y) * t
-    b = - be.log(1 - y) * (1 - t)
-    return be.sum(a + b)
+    """
+
+    :param y:  Estimate
+    :param t: Actual 1-hot data
+    :return:
+    """
+    return -be.sum(be.log(y) * t)
 
 
 class MyTest(be.Model):
@@ -84,7 +88,6 @@ class MyTest(be.Model):
         g.value = mlp(g.x, activation=be.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
                       init=uni)
 
-        #g.error = L2(g.y - g.value)
         g.error = cross_entropy(g.value, g.y)
 
         # L2 regularizer of parameters
@@ -98,6 +101,7 @@ class MyTest(be.Model):
 
         g.loss = g.error + .01 * reg
 
+
     @be.with_graph_context
     @be.with_environment
     def dump(self):
@@ -106,7 +110,11 @@ class MyTest(be.Model):
         g.x.value = be.ArrayWithAxes(np.empty((3, 32, 32, 128)), (g.C, g.H, g.W, g.N))
         g.y.value = be.ArrayWithAxes(np.empty((1000, 128)), (g.Y, g.N))
 
-        gnp = evaluation.GenNumPy(results=(g.error, g.value))
+        learning_rate = be.input(axes=())
+        params = g.error.parameters()
+        derivs = [be.deriv(g.error, param) for param in params]
+
+        gnp = evaluation.GenNumPy(results=derivs)
         gnp.evaluate()
 
     @be.with_graph_context
@@ -126,15 +134,13 @@ class MyTest(be.Model):
         g.W.length = w
         g.Y.length = train.nclasses
 
-        error = g.error
-        loss = g.loss
         learning_rate = be.input(axes=())
-        params = error.parameters()
-        derivs = [be.deriv(error, param) for param in params]
+        params = g.error.parameters()
+        derivs = [be.deriv(g.loss, param) for param in params]
 
         updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
 
-        enp = evaluation.NumPyEvaluator(results=[self.graph.value, error, loss, updates])
+        enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
         enp.initialize()
         for epoch in range(10):
             for mb_idx, (xraw, yraw) in enumerate(train):
@@ -146,7 +152,7 @@ class MyTest(be.Model):
                     print mb_idx
 
                 vals = enp.evaluate()
-                print(vals[loss].array/128.0)
+                print(vals[g.error].array/128.0)
                 # break
             train.reset()
             #print(be.get_current_environment().get_resolved_node_axes(g.value).array/128.0)
@@ -154,5 +160,5 @@ class MyTest(be.Model):
 
 
 y = MyTest()
-# y.dump()
+#y.dump()
 y.train()

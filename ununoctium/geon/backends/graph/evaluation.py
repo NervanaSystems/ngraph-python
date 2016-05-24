@@ -63,6 +63,15 @@ class NumPyEvaluator(Evaluator):
         super(NumPyEvaluator, self).__init__(**kargs)
         self.rng = np.random.RandomState()
 
+    def trace(self, x, label, out):
+        oa = out.array
+        xa = x.array
+        if oa.shape == ():
+            oa = oa.reshape((1,))
+            xa = xa.reshape((1,))
+        oa[:] = xa
+        return out
+
     def constant(self, value, axes, dtype):
         return ArrayWithAxes(value, axes=axes, dtype=dtype)
 
@@ -184,12 +193,35 @@ class NumPyEvaluator(Evaluator):
     def sin(self, x, out):
         return np.sin(x.array_as_axes(out.axes), out=out.array)
 
-    def softmax(self, x, out):
-        xa = x.array_as_axes(out.axes)
-        m = xa.max()
+    def softmax(self, x, batch_axes, out):
+        softmax_axes = axes_sub(x.axes, batch_axes)
+        if softmax_axes == ():
+            raise ValueError('Empty softmax')
+        sa_i = ast.find_axes_in_axes(softmax_axes, x.axes)
+        if sa_i == -1:
+            raise ValueError('Softmax axes not contiguous')
+        if sa_i != 0:
+            raise ValueError('Softmax axes not on left')
+        xa = x.array
+        sm_dims = [axis.length for axis in softmax_axes]
+        def prod(dims):
+            result = 1
+            for dim in dims:
+                result = result * dim
+            return result
+        sm_size = prod(sm_dims)
+        rem_dims = [axis.length for axis in x.axes[len(softmax_axes):]]
+
+        if len(softmax_axes) > 1:
+            new_shape = [sm_size]+rem_dims
+            xa = xa.reshape(new_shape)
+        m = xa.max(axis=0)
+        m = m.reshape([1]*len(sm_dims)+rem_dims)
         np.subtract(xa, m, out=out.array)
         np.exp(out.array, out=out.array)
-        s = out.array.sum()
+        out_temp = out.array.reshape([sm_size]+list(out.array.shape[len(softmax_axes):]))
+        s = out_temp.sum(axis=0)
+        s = s.reshape([1]*len(sm_dims)+list(out.array.shape[len(softmax_axes):]))
         np.divide(out.array, s, out=out.array)
         return out
 
@@ -206,7 +238,7 @@ class NumPyEvaluator(Evaluator):
         x_axes = x.axes
         np_out_axes = axes_sub(x_axes, reduction_axes)
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
-        if out.axes != np_out_axes:
+        if list(out.axes) != list(np_out_axes):
             temp = np.sum(x.array, axis=np_red_dims)
             out.array[...] = temp
         else:
@@ -370,7 +402,7 @@ class GenNumPy(Evaluator):
                 vals[op] = val
                 body.append('{var} = {val} # Live={live}'.format(var=varname(op), val=val, live=live))
             else:
-                val = '{val} # Live={live}'.format(val=op.evaluate(self, varname(op.output), *args), live=live)
+                val = '{var} = {val} # Live={live}'.format(val=op.evaluate(self, varname(op.output), *args), var=varname(op), live=live)
                 vals[op] = val
                 body.append(val)
         for line in body:
@@ -430,6 +462,9 @@ class GenNumPy(Evaluator):
 
     def sin(self, x, out):
         return 'np.sin({x}, out={out})'.format(x=x, out=out)
+
+    def softmax(self, x, batch_axes, out):
+        return 'softmax({x}, batch_axes={batch_axes}, out=out'.format(x=x, batch_axes=batch_axes, out=out)
 
     def sqrt(self, x, out):
         return 'np.sqrt({x}, out={out})'.format(x=x, out=out)
