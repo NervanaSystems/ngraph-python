@@ -104,6 +104,7 @@ class Environment(object):
             self.set_cached_resolved_node_axes(node, axes)
             return axes
 
+    # Node values are where parameters and inputs are currently kept
     def get_node_value(self, node):
         return self._chained_search('node_values', node)
 

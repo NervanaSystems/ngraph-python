@@ -8,6 +8,14 @@ import geon.backends.graph.evaluation as evaluation
 import numpy as np
 
 
+# parse the command line arguments (generates the backend)
+parser = NeonArgparser(__doc__)
+parser.set_defaults(backend='dataloader')
+parser.add_argument('--subset_pct', type=float, default=100,
+                    help='subset of training dataset to use (percentage)')
+args = parser.parse_args()
+
+
 # noinspection PyPep8Naming
 def L2(x):
     return be.dot(x, x)
@@ -28,17 +36,24 @@ class MyRnn(be.Model):
         g.H = be.Axis()
 
         # Define the inputs.
-        # Length of the sequence
+        # Length of the sequences in the batch
         g.t = be.Tensor(axes=(g.N), dtype=np.int32)
         g.T.length = g.t
+
+        # There are a number of ways we could store variable-length sequences
+        # 1) Pick a maximal length for T for all the data (Neon does this)
+        # 2) Pick a maximal length for T per batch; batch size might vary
+        # 3) Pack the data (not supported by NumPy arrays)
+
+        # Input batch of sequences
         g.x = be.Tensor(axes=(g.X, g.T, g.N))
-        # This would only be used for training or evaluation
+        # Output batch of sequences for training/evaluation
         g.y_ = be.Tensor(axes=(g.Y, g.T, g.N))
 
         # Recursive computation of the hidden state.
         # Axes for defining position roles
         h = be.RecursiveTensor(axes=(g.H, g.T, g.N))
-        h[:, 0] = be.Parameter(axes=(g.H,))
+        h[:, 0, :] = be.Parameter(axes=(g.H,))
         HWh = be.Parameter(axes=(g.H, g.H))
         HWx = be.Parameter(axes=(g.X, g.H))
         Hb = be.Parameter(axes=(g.H,))
@@ -48,11 +63,11 @@ class MyRnn(be.Model):
 
         YW = be.Parameter(axes=(g.H, g.Y))
         Yb = be.Parameter(axes=(g.Y))
-        # This is what we would want for inference
+        # This is the value we want for inference
         g.y = be.tanh(be.dot(h, YW)+Yb)
 
-        e = g.y-g.y_
         # This is what we want for training, perhaps added to a parameter regularization
+        e = g.y-g.y_
         g.error = be.dot(e, e)/e.size
 
         # L2 regularizer of parameters
@@ -64,6 +79,43 @@ class MyRnn(be.Model):
             else:
                 reg = reg + l2
         g.loss = g.error + .01 * reg
+
+    @be.with_graph_context
+    @be.with_environment
+    def train(self, epochs):
+        g  = self.graph
+
+        # setup data provider
+        imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
+                              repo_dir=args.data_dir, subset_pct=args.subset_pct)
+
+        train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
+
+        g.N.length = train.bsz
+        g.Y.length = train.nclasses
+
+        learning_rate = be.input(axes=())
+
+        params = g.loss.parameters()
+        derivs = [be.deriv(g.loss, param) for param in params]
+
+        updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
+
+        enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
+        enp.initialize()
+
+        # Some future data loader
+        for epoch_no, batches in train:
+            for batch_no, batch in batches:
+                g.N.length = batch.batch_size
+                g.t[:] = batch.sample_lengths
+                g.x[:] = batch.x
+                g.y_[:] = batch.y
+
+                learning_rate[:] = be.ArrayWithAxes(.001, shape=(), axes=())
+
+                vals = enp.evaluate()
+                print(vals[g.error])
 
     @be.with_graph_context
     @be.with_environment

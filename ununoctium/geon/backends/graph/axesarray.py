@@ -5,6 +5,9 @@ import numpy as np
 
 # This is a partial implementation of axes on top of NumPy
 
+# TODO See http://docs.scipy.org/doc/numpy/user/basics.subclassing.html for information
+# TODO about properly subclassing ndarray.
+
 # TODO Track the computation so that we can interactively autodiff
 
 # TODO Only the simpler axis cases are handled
