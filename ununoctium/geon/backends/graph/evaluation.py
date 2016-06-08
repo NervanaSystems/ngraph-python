@@ -22,7 +22,6 @@ class Evaluator(object):
         self.results = results
 
         self.ops = ast.Op.ordered_ops(self.results, True)
-        self.allocate(self.ops)
 
         self.opids = dict()
         for i, op in enumerate(self.ops):
@@ -36,6 +35,8 @@ class Evaluator(object):
                 self.environment.set_node_value(op, val)
 
     def initialize(self):
+        self.allocate(self.ops)
+
         initializers = []
         with captured_ops(initializers):
             for op in self.ops:

@@ -111,51 +111,74 @@ class MyTest(be.Model):
         gnp.evaluate()
 
     @be.with_graph_context
-    @be.with_environment
     def train(self):
-        be.get_current_environment()['rng'] = be.RNG()
-        # setup data provider
-        imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
-                              repo_dir=args.data_dir, subset_pct=args.subset_pct)
+        with be.bound_environment() as env:
+            env['rng'] = be.RNG()
+            # setup data provider
+            imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
+                                  repo_dir=args.data_dir, subset_pct=args.subset_pct)
 
-        train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
+            train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
+            test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
 
+            g = self.graph
+            g.N.length = train.bsz
+            c, h, w = train.shape
+            g.C.length = c
+            g.H.length = h
+            g.W.length = w
+            g.Y.length = train.nclasses
+
+            learning_rate = be.input(axes=())
+            params = g.error.parameters()
+            for param in params:
+                print(param.name)
+            derivs = [be.deriv(g.loss, param) for param in params]
+
+            updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
+
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
+            enp.initialize()
+
+            for epoch in range(args.epochs):
+                print("Epoch {epoch}".format(epoch=epoch))
+                training_error = 0
+                training_n = 0
+                learning_rate.value = be.ArrayWithAxes(.001/(1+epoch), shape=(), axes=())
+                for mb_idx, (xraw, yraw) in enumerate(train):
+                    g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
+                    g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
+                    vals = enp.evaluate()
+                    training_error += vals[g.error].array/128.0
+                    training_n += 1
+                    # break
+
+                print('Training error: {e}'.format(e=training_error/training_n))
+                self.test(env, test)
+
+                train.reset()
+
+            return env
+
+    @be.with_graph_context
+    def test(self, env, test):
         g = self.graph
-        g.N.length = train.bsz
-        c, h, w = train.shape
-        g.C.length = c
-        g.H.length = h
-        g.W.length = w
-        g.Y.length = train.nclasses
-
-        learning_rate = be.input(axes=())
-        params = g.error.parameters()
-        for param in params:
-            print(param.name)
-        derivs = [be.deriv(g.loss, param) for param in params]
-
-        updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
-
-        enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
-        enp.initialize()
-
-        for epoch in range(10):
-            learning_rate.value = be.ArrayWithAxes(.001/(1+epoch), shape=(), axes=())
-            for mb_idx, (xraw, yraw) in enumerate(train):
-                g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
-                g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
-
-                if mb_idx % 100 == 0:
-                    print mb_idx
+        with be.bound_environment(env):
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error])
+            total_error = 0
+            n = 0
+            for mb_idx, (xraw, yraw) in enumerate(test):
+                g.x.value = be.ArrayWithAxes(xraw.array, shape=(test.shape, test.bsz), axes=(g.C, g.H, g.W, g.N))
+                g.y.value = be.ArrayWithAxes(yraw.array, shape=(test.nclasses, test.bsz), axes=(g.Y, g.N))
 
                 vals = enp.evaluate()
-                print(vals[g.error].array/128.0)
+                total_error += vals[g.error].array / test.bsz
+                n += 1
                 # break
-            train.reset()
-            #print(be.get_current_environment().get_resolved_node_axes(g.value).array/128.0)
-            #print(be.get_current_environment().get_resolved_node_axes(g.error))
+            print("Test error: {e}".format(e=total_error/n))
 
 
 y = MyTest()
 #y.dump()
-y.train()
+env = y.train()
+#y.test(env)
