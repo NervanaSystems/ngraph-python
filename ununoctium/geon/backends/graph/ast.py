@@ -5,10 +5,12 @@ import collections
 
 import numpy as np
 
+import neon.backends.backend
+
 from geon.backends.graph.names import NameableValue
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
-from geon.backends.graph.environment import get_current_environment
+from geon.backends.graph.environment import get_current_environment, get_current_ops
 
 class Axis(NameableValue):
     def __init__(self, dependent=None, like=None, **kargs):
@@ -313,6 +315,9 @@ class Op(NameableValue):
         self.predecessors = weakref.WeakSet()
         self._adjoints = None
         super(Op, self).__init__(**kwds)
+        ops = get_current_ops()
+        if ops is not None:
+            ops.append(self)
 
     def parameters(self):
         """Return all parameters used in computing this node"""
@@ -377,7 +382,7 @@ class Op(NameableValue):
             op = ordered_ops[i]
             prealive = liveness[i - 1]
             alive = set(liveness[i])
-            if isinstance(op, ValueOp):
+            if isinstance(op, Tensor):
                 output = op.output
                 alive.discard(output)
                 for arg in op.inputs:
@@ -388,7 +393,7 @@ class Op(NameableValue):
 
     @staticmethod
     def as_op(x):
-        if isinstance(x, ValueOp):
+        if isinstance(x, Tensor):
             return x
 
         return Constant(x)
@@ -401,10 +406,10 @@ class Op(NameableValue):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
-class ValueOp(Op):
+class Tensor(Op):
 
     def __init__(self, graph_type=None, **kwds):
-        super(ValueOp, self).__init__(**kwds)
+        super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
 
         # Ops that directly use the result
@@ -467,8 +472,15 @@ class ValueOp(Op):
     def __rpow__(self, val):
         return Pow(val, self)
 
+    def __setitem__(self, key, val):
+        return SetItem(self, key, val)
 
-class ComputationOp(ValueOp):
+    @property
+    def shape(self):
+        return self.axes
+
+
+class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
     """
@@ -503,6 +515,42 @@ class ComputationOp(ValueOp):
             value.users.add(self)
 
 
+class RNG(ComputationOp):
+    def __init__(self, seed=None, **kargs):
+        super(RNG, self).__init__(args=(), **kargs)
+        self.seed = seed
+
+    @property
+    def axes(self):
+        return AxesComp.as_axes(())
+
+    def uniform(self, low=0.0, high=1.0, size=None, **kargs):
+        return Uniform(rng=self,low=low, high=high, size=size, **kargs)
+
+    def evaluate(self, evaluator, out):
+        return evaluator.rng(seed=self.seed)
+
+
+class RNGOp(ComputationOp):
+    def __init__(self, rng, axes, **kargs):
+        self.__axes = axes
+        super(RNGOp, self).__init__(args=(rng,), **kargs)
+
+    @property
+    def axes(self):
+        return self.__axes
+
+
+class Uniform(RNGOp):
+    def __init__(self, low=0.0, high=1.0, size=None, **kargs):
+        super(Uniform, self).__init__(axes=size, **kargs)
+        self.low = low
+        self.high = high
+
+    def evaluate(self, evaluator, out, rng):
+        return evaluator.rng_uniform(rng, self.low, self.high, out)
+
+
 class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
@@ -519,6 +567,16 @@ class decrement(VoidOp):
     def evaluate(self, evaluator, out, parameter, change):
         evaluator.update(parameter, change)
         return out
+
+
+class SetItem(VoidOp):
+    def __init__(self, tensor, item, val, **kargs):
+        super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
+        self.item = item
+
+    def evaluate(self, evaluator, out, tensor, val):
+        evaluator.set_item(tensor, self.item, val)
+        pass
 
 
 class doall(VoidOp):
@@ -554,7 +612,7 @@ class trace(ElementWise):
         x.generate_add_delta(adjoints, trace(delta, label='d'+self.label))
 
 
-class AllocationOp(ValueOp):
+class AllocationOp(Tensor):
     def __init__(self, axes=None, dtype=None, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
@@ -760,9 +818,9 @@ class Parameter(AllocationOp):
     def allocate(self, evaluator):
         return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
 
-    def initialize(self, evaluator, value):
+    def initializer(self, evaluator, value):
         if self.init:
-            self.init(evaluator, value)
+            self.init.fill(self)
 
     @property
     def value(self):

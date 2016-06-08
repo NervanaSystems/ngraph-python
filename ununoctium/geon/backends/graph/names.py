@@ -39,12 +39,14 @@ def layers_named(name):
     :return: An iterator for new naming contexts in the collection.
     """
     naming = NamedList(name=name)
-    get_thread_naming().append(naming)
+    yield(NamedListExtender(naming))
 
-    try:
-        yield(NamedListExtender(naming))
-    finally:
-        get_thread_naming().pop()
+
+@contextmanager
+def next_layer(layers):
+    layer = layers.next()
+    with bound_naming(naming=layer):
+        yield(layer)
 
 
 def with_name_context(fun, name=None):
@@ -95,8 +97,20 @@ class Parented(NameableValue):
         super(Parented, self).__init__(name=name, **kargs)
         if parent is None:
             parent = get_current_naming()
-        if parent:
+        if parent is not None:
             parent.__setattr__(self.name, self)
+
+    def _set_value_name(self, name, value):
+        if isinstance(value, NameableValue):
+            myname = self.name
+            value.name = myname + name
+
+        elif isinstance(value, tuple):
+            for v in value:
+                if isinstance(v, NameableValue):
+                    vname = v.name[v.name.rfind('.') + 1:]
+                    self.__setattr__(vname, v)
+
 
 class Naming(Parented):
     def __init__(self, **kargs):
@@ -104,15 +118,7 @@ class Naming(Parented):
 
     def __setattr__(self, name, value):
         super(Naming, self).__setattr__(name, value)
-        if isinstance(value, NameableValue):
-            myname = self.name
-            value.name = myname + '.' + name
-
-        elif isinstance(value, tuple):
-            for v in value:
-                if isinstance(v, NameableValue):
-                    vname = v.name[v.name.rfind('.')+1:]
-                    self.__setattr__(vname, v)
+        self._set_value_name("." + name, value)
 
 
 class NamedList(Parented, list):
@@ -131,9 +137,9 @@ class NamedListExtender(object):
 
     def next(self):
         namelist = self.namelist
-        val = Naming(name=namelist.name + '[{len}]'.format(len=len(namelist)))
-        if len(namelist) == 0:
-            get_thread_naming().append(val)
+        name = '[{len}]'.format(len=len(namelist))
+        val = Naming(parent=namelist, name=name)
+        namelist._set_value_name(name, val)
         namelist.append(val)
         return val
 

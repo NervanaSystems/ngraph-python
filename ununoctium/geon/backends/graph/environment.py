@@ -27,6 +27,26 @@ def get_thread_naming():
     return get_thread_data().naming
 
 
+get_thread_data().ops = [None]
+
+
+def get_thread_ops():
+    return get_thread_data().ops
+
+
+def get_current_ops():
+    return get_thread_ops()[-1]
+
+
+@contextmanager
+def captured_ops(ops=None):
+    try:
+        get_thread_ops().append(ops)
+        yield(ops)
+    finally:
+        get_thread_ops().pop()
+
+
 get_thread_data().environment = [None]
 
 
@@ -36,6 +56,17 @@ def get_thread_environment():
 
 def get_current_environment():
     return get_thread_environment()[-1]
+
+
+class EnvironmentProxy(object):
+    def __init__(self):
+        pass
+
+    def __getattr__(self, item):
+        return get_current_environment()[item]
+
+
+proxy = EnvironmentProxy()
 
 
 @contextmanager
@@ -58,7 +89,7 @@ class Environment(object):
         self.resolved_node_axes = weakref.WeakKeyDictionary()
         self.resolved_axes = weakref.WeakKeyDictionary()
         self.node_values = weakref.WeakKeyDictionary()
-        self.values = weakref.WeakKeyDictionary()
+        self.values = dict()
 
     def _chained_search(self, attr, key):
         env = self

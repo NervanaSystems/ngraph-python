@@ -2,6 +2,8 @@ import numpy as np
 
 from neon.backends.backend import Backend
 
+from geon.backends.graph.ast import RNG
+
 
 class TensorStub(object):
     def __init__(self, array):
@@ -86,7 +88,7 @@ class DataloaderBackend(Backend):
         Returns:
             np.random.RandomState: numpy RNG
         """
-        return seed # graph.RandomStateOp(seed=seed)
+        return RNG(seed) # graph.RandomStateOp(seed=seed)
 
     def onehot(self, indices, axis, out=None):
         """
