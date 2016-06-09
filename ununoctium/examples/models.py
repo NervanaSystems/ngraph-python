@@ -113,12 +113,12 @@ class MyTest(be.Model):
     @be.with_graph_context
     def train(self):
         with be.bound_environment() as env:
-            env['rng'] = be.RNG()
             # setup data provider
             imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                                   repo_dir=args.data_dir, subset_pct=args.subset_pct)
 
             train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
+            #train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
             test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
 
             g = self.graph
@@ -131,8 +131,6 @@ class MyTest(be.Model):
 
             learning_rate = be.input(axes=())
             params = g.error.parameters()
-            for param in params:
-                print(param.name)
             derivs = [be.deriv(g.loss, param) for param in params]
 
             updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])

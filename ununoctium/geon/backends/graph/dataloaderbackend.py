@@ -53,7 +53,7 @@ class OneHot(object):
         return
 
 
-@Backend.register('dataloader')
+@Backend.register_backend('dataloader')
 class DataloaderBackend(Backend):
     def __init__(self,
                  rng_seed=None,
