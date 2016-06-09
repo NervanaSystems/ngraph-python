@@ -16,10 +16,13 @@ parser.add_argument('--subset_pct', type=float, default=100,
 args = parser.parse_args()
 
 @be.with_name_context
-def linear(params, x, x_axes, axes, batch_axes=(), init=None):
+def linear(params, x, x_axes, axes, batch_axes=(), init=None, bias=None):
     params.weights = be.Parameter(axes=axes + x_axes - batch_axes, init=init)
-    params.bias = be.Parameter(axes=axes, init=init)
-    return be.dot(params.weights, x) + params.bias
+    result = be.dot(params.weights, x)
+    if bias is not None:
+        params.bias = be.Parameter(axes=axes, init=bias)
+        result = result + params.bias
+    return result
 
 
 def affine(x, activation, batch_axes=None, **kargs):
