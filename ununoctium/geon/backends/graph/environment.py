@@ -85,10 +85,7 @@ class Environment(object):
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
-        self.axis_lengths = weakref.WeakKeyDictionary()
-        self.resolved_node_axes = weakref.WeakKeyDictionary()
-        self.resolved_axes = weakref.WeakKeyDictionary()
-        self.node_values = weakref.WeakKeyDictionary()
+        self.resolved_tensor_axes = weakref.WeakKeyDictionary()
         self.values = dict()
 
     def _chained_search(self, attr, key):
@@ -107,37 +104,8 @@ class Environment(object):
     def __setitem__(self, key, value):
         self.values[key] = value
 
-    def set_axis_length(self, axis, value):
-        self.axis_lengths[axis] = value
+    def get_cached_resolved_tensor_axes(self, tensor):
+        return self._chained_search('resolved_tensor_axes', tensor)
 
-    def get_axis_length(self, axis):
-        return self._chained_search('axis_lengths', axis)
-
-    def get_cached_resolved_node_axes(self, node):
-        return self._chained_search('resolved_node_axes', node)
-
-    def set_cached_resolved_node_axes(self, node, axes):
-        self.resolved_node_axes[node] = axes
-
-    def get_resolved_axes(self, axes):
-        try:
-            return self.resolved_axes[axes]
-        except KeyError:
-            resolved_axes = axes.resolve(self)
-            self.resolved_axes[axes] = resolved_axes
-            return resolved_axes
-
-    def get_resolved_node_axes(self, node):
-        try:
-            return self.get_cached_resolved_node_axes(node)
-        except KeyError:
-            axes = node.axes.resolve(self)
-            self.set_cached_resolved_node_axes(node, axes)
-            return axes
-
-    # Node values are where parameters and inputs are currently kept
-    def get_node_value(self, node):
-        return self._chained_search('node_values', node)
-
-    def set_node_value(self, node, value):
-        self.node_values[node] = value
+    def set_cached_resolved_tensor_axes(self, tensor, axes):
+        self.resolved_tensor_axes[tensor] = axes

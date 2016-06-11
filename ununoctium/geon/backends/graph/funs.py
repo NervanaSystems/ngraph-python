@@ -4,7 +4,8 @@ from geon.backends.graph.names import layers_named, with_name_context, bound_nam
 from geon.backends.graph.graph import Model, with_graph_context, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment
 
-from geon.backends.graph.ast import Axis, deriv, input, axes_list, Parameter, ArrayWithAxes
+from geon.backends.graph.ast import AxisVar, deriv, input, Parameter
+from geon.backends.graph.arrayaxes import axes_list, AxisArray
 from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
 from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, sum
 from geon.backends.graph.ast import tanh, zeros

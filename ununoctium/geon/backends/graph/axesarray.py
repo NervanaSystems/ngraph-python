@@ -3,6 +3,11 @@ import numbers
 import collections
 import numpy as np
 
+import geon.backends.graph.arrayaxes as arrayaxes
+from geon.backends.graph.arrayaxes import Axis, axes_sub, axes_intersect, axes_append, axes_contains
+from geon.backends.graph.arrayaxes import elementwise_axes, axes, reaxe, dot_axes
+
+
 # This is a partial implementation of axes on top of NumPy
 
 # TODO See http://docs.scipy.org/doc/numpy/user/basics.subclassing.html for information
@@ -13,136 +18,6 @@ import numpy as np
 # TODO Only the simpler axis cases are handled
 
 # TODO AxisIDs are mostly missing
-
-
-def axes_generator(axes, gen_axis, base_index=None):
-    index = list(base_index or [0]*len(axes))
-    pos = axes.index(gen_axis)
-    for i in xrange(gen_axis.length):
-        index[pos] = i
-        yield tuple(index)
-
-class HasAxes:
-    __metaclass__ = abc.ABCMeta
-
-    @property
-    def axes(self):
-        return ()
-
-
-class HasScalarAxes(HasAxes):
-    pass
-
-
-HasScalarAxes.register(numbers.Real)
-
-
-def axes(x):
-    if isinstance(x, HasScalarAxes):
-        return ()
-    elif isinstance(x, HasAxes):
-        return x.axes
-    else:
-        raise ValueError("{x} has no axes".format(x=x))
-
-
-def reaxe(x, axes, broadcast=False):
-    if isinstance(x, HasScalarAxes):
-        if broadcast or axes == ():
-            return x
-    elif isinstance(x, HasAxes):
-        return x.reaxe(axes, broadcast)
-
-    raise ValueError("{x} has no axes".format(x=x))
-
-
-def axes_shape(axes):
-    shape = []
-    for axis in axes:
-        length = 1
-        for caxis in flatten_axes(axis):
-            length = length*caxis.length
-        shape.append(length)
-    return shape
-
-
-class Axis(object):
-    def __init__(self, name, length, **kargs):
-        super(Axis, self).__init__(**kargs)
-        self.name = name
-        self.__length = length
-
-    @property
-    def length(self):
-        return self.__length
-
-    def flatten(self):
-        return [self]
-
-    def __repr__(self):
-        return '{name}[{length}]'.format(name=self.name, length=self.length)
-
-def flatten_axes(axes):
-    result = []
-    def flatten1(axes):
-        if isinstance(axes, collections.Sequence):
-            for _ in axes:
-                flatten1(_)
-        else:
-            result.append(axes)
-
-    flatten1(axes)
-    return result
-
-
-def find_axes_in_axes(subaxes, axes):
-    subaxes = list(subaxes)
-    axes = list(axes)
-    if not subaxes:
-        return 0
-    head = subaxes[0]
-    for i, axis in enumerate(axes):
-        if head is axis and axes[i:i+len(subaxes)] == subaxes:
-            return i
-    return -1
-
-
-def axes_sub(x, y):
-    """Returns x with elements from y removed"""
-    return [_ for _ in x if _ not in y]
-
-
-def axes_intersect(x, y):
-    """Returns intersection of x and y in x order"""
-    return [_ for _ in x if _ in y]
-
-
-def axes_append(*axes_list):
-    """Returns x followed by elements of y not in x"""
-    result = []
-    for axes in axes_list:
-        for axis in axes:
-            if axis not in result:
-                result.append(axis)
-    return result
-
-
-def axes_contains(sub_axes, super_axes):
-    for axis in sub_axes:
-        if axis not in super_axes:
-            return False
-    return True
-
-
-def elementwise_axes(args_axes, out_axes=None):
-    if out_axes is None:
-        out_axes = args_axes
-
-    if not axes_contains(args_axes, out_axes):
-        raise ValueError('out_axes is missing axes {a}'.format(a=axes_sub(args_axes, out_axes)))
-
-    return out_axes
-
 
 def elementwise_reaxe(args, out=None, out_axes=None):
     args_axes = axes_append(*(axes(arg) for arg in args))
@@ -165,24 +40,6 @@ def elementwise_reaxe(args, out=None, out_axes=None):
     rargs = (reaxe(arg, args_axes, broadcast=True) for arg in args)
 
     return rargs, rout, out
-
-
-def dot_axes(x_axes, y_axes, reduction_axes=None, out_axes=None):
-    xy_axes = axes_intersect(x_axes, y_axes)
-    x_or_y_axes = axes_append(x_axes, y_axes)
-    if reduction_axes is None:
-        if out_axes is None:
-            reduction_axes = xy_axes
-        else:
-            reduction_axes = axes_sub(x_or_y_axes, out_axes)
-
-    if out_axes is None:
-        out_axes = axes_sub(x_or_y_axes, reduction_axes)
-
-    # Common but not reduced
-    s_axes = axes_sub(xy_axes, reduction_axes)
-
-    return reduction_axes, s_axes, out_axes
 
 
 def abs(x, out=None):
@@ -259,15 +116,15 @@ def dot(x, y, reduction_axes=None, out_axes=None, out=None):
         reduce = x_groups[0]
         xr_axes = axes_sub(x_axes, reduction_axes)
         xr_axes.extend(reduce)
-        xr = reaxe(x, xr_axes, broadcast=True)
+        xr = arrayaxes.reaxe(x, xr_axes, broadcast=True)
         yr_axes = axes_sub(y_axes, reduce)
         if len(yr_axes) < 2:
             yr_axes.insert(0, reduce)
-            yr = reaxe(y, yr_axes)
+            yr = arrayaxes.reaxe(y, yr_axes)
         else:
             yr_axes[-1:-1] = reduce
-            yr = reaxe(y, yr_axes, broadcast=True)
-        outr = reaxe(out, out_axes)
+            yr = arrayaxes.reaxe(y, yr_axes, broadcast=True)
+        outr = arrayaxes.reaxe(out, out_axes)
         if len(out_axes) == 0:
             outr[()] = np.dot(xr, yr)
         else:
@@ -357,7 +214,7 @@ def tanh(x, out=None):
 
 class AxesArray(np.ndarray, HasAxes):
     def __new__(cls, axes, base=None, broadcast=False, **kargs):
-        shape = tuple(axes_shape(axes))
+        shape = tuple(arrayaxes.axes_shape(axes))
         if base is not None:
             base_array = base._base()
             base_axes = base_array.axes
@@ -371,7 +228,7 @@ class AxesArray(np.ndarray, HasAxes):
 
             strides = []
             for axis in axes:
-                component_axes = flatten_axes(axis)
+                component_axes = arrayaxes.flatten_axes(axis)
                 if len(component_axes) == 0:
                     raise ValueError('Cannot compose empty axis set')
                 axis_pos = base_axes.index(component_axes[0])
@@ -425,7 +282,7 @@ class AxesArray(np.ndarray, HasAxes):
         return divide(self, other)
 
     def __mul__(self, other):
-        if not isinstance(other, HasAxes):
+        if not isinstance(other, AxesArray):
             raise ValueError()
 
         return multiply(self, other)
@@ -473,46 +330,12 @@ class AxesArray(np.ndarray, HasAxes):
         return subtract(self, other)
 
 
-def reaxe_array(array, axes, new_axes):
-    axis_pos = [-1]*len(new_axes)
-    for i, axis in enumerate(new_axes):
-        pos = axes.index(axis)
-        axis_pos[i] = pos
-    old_strides = array.strides
-    old_shape = array.shape
-    new_strides = [old_strides[pos] for pos in axis_pos]
-    new_shape = [old_shape[pos] for pos in axis_pos]
-    return np.ndarray(shape=new_shape, dtype=array.dtype, buffer=array, strides=new_strides)
-
-
-def permute(array, permutation):
-    old_strides = array.strides
-    old_shape = array.shape
-    new_strides = [old_strides[pos] for pos in permutation]
-    new_shape = [old_shape[pos] for pos in permutation]
-    return np.ndarray(shape=new_shape, dtype=array.dtype, buffer=array, strides=new_strides)
-
-
-def invert_permutation(permutation):
-    result = list(permutation)
-    for i, p in enumerate(permutation):
-        result[p] = i
-    return result
-
-
-
-def permutation(array):
-    """The permutation to put the axes of the array in storage order (decreasing strides)"""
-    t = sorted([(i, s) for i, s in enumerate(array.strides)], key=lambda p: -p[1])
-    return tuple(i for i, s in t)
-
-
 H = Axis('H', 3)
 W = Axis('W', 4)
 C = Axis('C', 2)
 
-for idx in axes_generator((H,W,C), C):
-    for idx1 in axes_generator((H,W,C), H, idx):
+for idx in arrayaxes.axes_generator((H,W,C), C):
+    for idx1 in arrayaxes.axes_generator((H,W,C), H, idx):
         print idx1
 
 

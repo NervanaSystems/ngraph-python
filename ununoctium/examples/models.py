@@ -37,7 +37,7 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_layer(layers) as layer:
-                    layer.axes = tuple(be.Axis(like=axis) for axis in hidden_axes)
+                    layer.axes = tuple(be.AxisVar(like=axis) for axis in hidden_axes)
                     for axis, length in zip(layer.axes, shape):
                         axis.length = length
                     value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
@@ -69,11 +69,11 @@ class MyTest(be.Model):
 
         g = self.graph
 
-        g.C = be.Axis()
-        g.H = be.Axis()
-        g.W = be.Axis()
-        g.N = be.Axis()
-        g.Y = be.Axis()
+        g.C = be.AxisVar()
+        g.H = be.AxisVar()
+        g.W = be.AxisVar()
+        g.N = be.AxisVar()
+        g.Y = be.AxisVar()
 
         g.x = be.input(axes=(g.C, g.H, g.W, g.N))
         g.y = be.input(axes=(g.Y, g.N))
@@ -103,8 +103,8 @@ class MyTest(be.Model):
     def dump(self):
         g = self.graph
 
-        g.x.value = be.ArrayWithAxes(np.empty((3, 32, 32, 128)), (g.C, g.H, g.W, g.N))
-        g.y.value = be.ArrayWithAxes(np.empty((1000, 128)), (g.Y, g.N))
+        g.x.value = be.AxisArray(array=np.empty((3, 32, 32, 128)), axes=(g.C, g.H, g.W, g.N))
+        g.y.value = be.AxisArray(array=np.empty((1000, 128)), axes=(g.Y, g.N))
 
         learning_rate = be.input(axes=())
         params = g.error.parameters()
@@ -145,12 +145,12 @@ class MyTest(be.Model):
                 print("Epoch {epoch}".format(epoch=epoch))
                 training_error = 0
                 training_n = 0
-                learning_rate.value = be.ArrayWithAxes(.001/(1+epoch), shape=(), axes=())
+                learning_rate.value = be.AxisArray(array=.1 / (1 + epoch) / train.bsz, axes=())
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
-                    g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
+                    g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
+                    g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
                     vals = enp.evaluate()
-                    training_error += vals[g.error].array/128.0
+                    training_error += vals[g.error]/train.bsz
                     training_n += 1
                     # break
 
@@ -169,11 +169,10 @@ class MyTest(be.Model):
             total_error = 0
             n = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
-                g.x.value = be.ArrayWithAxes(xraw.array, shape=(test.shape, test.bsz), axes=(g.C, g.H, g.W, g.N))
-                g.y.value = be.ArrayWithAxes(yraw.array, shape=(test.nclasses, test.bsz), axes=(g.Y, g.N))
-
+                g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
+                g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
                 vals = enp.evaluate()
-                total_error += vals[g.error].array / test.bsz
+                total_error += vals[g.error] / test.bsz
                 n += 1
                 # break
             print("Test error: {e}".format(e=total_error/n))

@@ -107,7 +107,7 @@ class Parented(NameableValue):
 
         elif isinstance(value, tuple):
             for v in value:
-                if isinstance(v, NameableValue):
+                if isinstance(v, NameableValue) and v.name is not None:
                     vname = v.name[v.name.rfind('.') + 1:]
                     self.__setattr__(vname, v)
 
