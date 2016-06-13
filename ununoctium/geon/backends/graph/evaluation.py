@@ -1,11 +1,13 @@
 import numpy as np
 
 from geon.backends.graph.errors import IncompatibleShapesError
-from geon.backends.graph.ast import ArrayWithAxes, axes_sub
+from geon.backends.graph.arrayaxes import axes_sub
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
+from geon.backends.graph.arrayaxes import find_axes_in_axes, AxisArray
+import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 
 
@@ -29,10 +31,8 @@ class Evaluator(object):
 
     def allocate(self, ops):
         for op in ops:
-            self.environment.get_resolved_node_axes(op)
-            if isinstance(op, ast.Parameter):
-                val = op.allocate(self)
-                self.environment.set_node_value(op, val)
+            self.get_resolved_tensor_axes(op)
+            self.environment[op] = op.allocate(self)
 
     def initialize(self):
         self.allocate(self.ops)
@@ -41,10 +41,29 @@ class Evaluator(object):
         with captured_ops(initializers):
             for op in self.ops:
                 if isinstance(op, ast.Parameter):
-                    op.initializer(self, self.environment.get_node_value(op))
+                    op.initializer(self, self.environment[op])
         ops = ast.Op.ordered_ops(initializers, True)
         self.allocate(ops)
         self.evaluate_ops(ops)
+
+    def get_resolved_tensor_axes(self, tensor):
+        try:
+            return self.environment.get_cached_resolved_tensor_axes(tensor)
+        except KeyError:
+            axes = tensor.axes.evaluate(self)
+            self.environment.set_cached_resolved_tensor_axes(tensor, axes)
+            return axes
+
+    def get_resolved_axes(self, axes_comp):
+        try:
+            return self.environment[axes_comp]
+        except KeyError:
+            resolved_axes = axes_comp.evaluate(self)
+            self.environment[axes_comp] = resolved_axes
+            return resolved_axes
+
+    def get_cached_resolved_tensor_axes(self, tensor):
+        return self.environment.get_cached_resolved_tensor_axes(tensor)
 
     def evaluate_ops(self, ops):
         vals = {}
@@ -71,8 +90,8 @@ class NumPyEvaluator(Evaluator):
         super(NumPyEvaluator, self).__init__(**kargs)
 
     def trace(self, x, label, out):
-        oa = out.array
-        xa = x.array
+        oa = out
+        xa = x
         if oa.shape == ():
             oa = oa.reshape((1,))
             xa = xa.reshape((1,))
@@ -84,24 +103,23 @@ class NumPyEvaluator(Evaluator):
 
     def rng_uniform(self, rng, low, high, out):
         shape = [axis.length for axis in out.axes]
-        out.array[:] = rng.uniform(low, high, shape)
+        out[:] = rng.uniform(low, high, shape)
         return out
 
     def set_item(self, array, item, value):
-        array.array.__setitem__(item, value.array)
+        array.__setitem__(item, value)
 
     def constant(self, value, axes, dtype):
-        return ArrayWithAxes(value, axes=axes, dtype=dtype)
+        return AxisArray(axes=axes, array=value, dtype=dtype)
 
     def absolute(self, x, out):
-        return ArrayWithAxes(np.abs(x.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.abs(x.axes_like(out), out=out)
 
     def add(self, x, y, out):
-        return ArrayWithAxes(np.add(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.add(x.axes_like(out), y.axes_like(out), out=out)
 
     def cos(self, x, out):
-        np.cos(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.cos(x.axes_like(out), out=out)
 
     def dot(self, x, y, red_axes, out):
         # This implementation requires axes
@@ -115,13 +133,13 @@ class NumPyEvaluator(Evaluator):
 
         if not x_axes or not y_axes:
             # TODO turn this into multiply ahead of time
-            np.multiply(x.array, y.array, out=out.array)
+            np.multiply(x, y, out=out)
             return out
 
-        xi = ast.find_axes_in_axes(red_axes, x_axes)
+        xi = find_axes_in_axes(red_axes, x_axes)
         if xi == -1:
             raise IncompatibleShapesError()
-        yi = ast.find_axes_in_axes(red_axes, y_axes)
+        yi = find_axes_in_axes(red_axes, y_axes)
         if yi == -1:
             raise IncompatibleShapesError()
 
@@ -138,25 +156,25 @@ class NumPyEvaluator(Evaluator):
         yr = prod(y_axes[yi+len(red_axes):])
 
         if xr == 1:
-            left = x.array.reshape(xl, m)
-            right = y.array.reshape(yl, m, yr)
+            left = x.reshape(xl, m)
+            right = y.reshape(yl, m, yr)
             # xl yl yr
-            out_reshape = out.array.reshape(xl, yl, yr)
+            out_reshape = out.reshape(xl, yl, yr)
         elif yr == 1:
-            left = y.array.reshape(yl, m)
-            right = x.array.reshape(xl, m, xr).T
+            left = y.reshape(yl, m)
+            right = x.reshape(xl, m, xr).T
             # yl xr xl
-            out_reshape = out.array.reshape(xl, xr, yl).T
+            out_reshape = out.reshape(xl, xr, yl).T
         elif xl == 1:
-            left = x.array.reshape(m, xr).T
-            right = y.array.reshape(yl, m, yr)
+            left = x.reshape(m, xr).T
+            right = y.reshape(yl, m, yr)
             # xr yl yr
-            out_reshape = out.array.reshape(xr, yl, yr)
+            out_reshape = out.reshape(xr, yl, yr)
         elif yl == 1:
-            left = y.array.reshape(m, yl).T
-            right = x.array.reshape(xl, m, xr).T
+            left = y.reshape(m, yl).T
+            right = x.reshape(xl, m, xr).T
             # yl xr xl
-            out_reshape = out.array.reshape(xl, xr, yl).T
+            out_reshape = out.reshape(xl, xr, yl).T
         else:
             raise IncompatibleShapesError()
 
@@ -164,68 +182,60 @@ class NumPyEvaluator(Evaluator):
         return out
 
     def update(self, params, delta):
-        if params.array.shape != delta.array.shape:
+        if params.shape != delta.shape:
             print('mismatch', params.axes, delta.axes)
-        np.subtract(params.array, delta.array_as_axes(params.axes), out=params.array)
+        np.subtract(params, delta.axes_like(params), out=params)
         return params
 
     def empty(self, axes, dtype):
-        return ArrayWithAxes(np.empty(axes_shape(axes), dtype or np.float32), axes)
+        return AxisArray(axes=axes, dtype=dtype or np.float32)
 
     def exp(self, x, out):
-        return ArrayWithAxes(np.exp(x.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.exp(x.axes_like(out), out=out)
 
     def log(self, x, out):
-        return ArrayWithAxes(np.log(x.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.log(x.axes_like(out), out=out)
 
     def maximum(self, x, y, out):
-        np.maximum(x.array_as_axes(out.shape), y.array_as_axes(out.shape), out=out.array)
-        return out
+        return np.maximum(x.axes_like(out), y.axes_like(out), out=out)
 
     def minimum(self, x, y, out):
-        np.minimum(x, y, out=out.array)
-        return out
+        return np.minimum(x.axes_like(out), y.axes_like(out), out=out)
 
     def multiply(self, x, y, out):
-        return ArrayWithAxes(np.multiply(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.multiply(x.axes_like(out), y.axes_like(out), out=out)
 
     def negative(self, x, out):
-        return ArrayWithAxes(np.negative(x.array_as_axes(out.axes), out=out.array), out.axes)
+        return np.negative(x.axes_like(out), out=out)
 
     def ones(self, axes, dtype):
-        return ArrayWithAxes(np.ones(axes_shape(axes), dtype), axes)
+        return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
 
     def reciprocal(self, x, out):
-        return ArrayWithAxes(np.reciprocal(x.array_as_axes(out.axes), out=out.array), out.axes)
-
-    def reshape(self, x, shape):
-        return x.reshape(shape)
+        return np.reciprocal(x.axes_like(out), out=out)
 
     def sig(self, x, out):
-        xa = x.array_as_axes(out.axes)
-        np.negative(xa, out.array)
-        np.exp(out.array, out.array)
-        np.add(out.array, 1.0, out.array)
-        return ArrayWithAxes(np.reciprocal(out.array, out.array), out.axes)
+        xa = x.axes_like(out)
+        np.negative(xa, out)
+        np.exp(out, out)
+        np.add(out, 1.0, out)
+        return np.reciprocal(out, out)
 
     def sign(self, x, out):
-        np.sign(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.sign(x.axes_like(out), out=out)
 
     def sin(self, x, out):
-        np.sin(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.sin(x.axes_like(out), out=out)
 
     def softmax(self, x, batch_axes, out):
         softmax_axes = axes_sub(x.axes, batch_axes)
         if softmax_axes == ():
             raise ValueError('Empty softmax')
-        sa_i = ast.find_axes_in_axes(softmax_axes, x.axes)
+        sa_i = find_axes_in_axes(softmax_axes, x.axes)
         if sa_i == -1:
             raise ValueError('Softmax axes not contiguous')
         if sa_i != 0:
             raise ValueError('Softmax axes not on left')
-        xa = x.array
         sm_dims = [axis.length for axis in softmax_axes]
         def prod(dims):
             result = 1
@@ -237,50 +247,45 @@ class NumPyEvaluator(Evaluator):
 
         if len(softmax_axes) > 1:
             new_shape = [sm_size]+rem_dims
-            xa = xa.reshape(new_shape)
-        m = xa.max(axis=0)
+            x = x.reshape(new_shape)
+        m = x.max(axis=0)
         m = m.reshape([1]*len(sm_dims)+rem_dims)
-        np.subtract(xa, m, out=out.array)
-        np.exp(out.array, out=out.array)
-        out_temp = out.array.reshape([sm_size]+list(out.array.shape[len(softmax_axes):]))
+        np.subtract(x, m, out=out)
+        np.exp(out, out=out)
+        out_temp = out.reshape([sm_size]+list(out.shape[len(softmax_axes):]))
         s = out_temp.sum(axis=0)
-        s = s.reshape([1]*len(sm_dims)+list(out.array.shape[len(softmax_axes):]))
-        np.divide(out.array, s, out=out.array)
-        return out
+        s = s.reshape([1]*len(sm_dims)+list(out.shape[len(softmax_axes):]))
+        return np.divide(out, s, out=out)
 
     def sqrt(self, x, out):
-        np.sqrt(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.sqrt(x.axes_like(out), out=out)
 
     def square(self, x, out):
-        np.square(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.square(x.axes_like(out), out=out)
 
     def subtract(self, x, y, out):
-        np.subtract(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.subtract(x.axes_like(out), y.axes_like(out), out=out)
 
     def sum(self, x, reduction_axes, out):
         x_axes = x.axes
         np_out_axes = axes_sub(x_axes, reduction_axes)
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
         if list(out.axes) != list(np_out_axes):
-            temp = np.sum(x.array, axis=np_red_dims)
-            out.array[...] = temp
+            temp = np.sum(x, axis=np_red_dims)
+            out[...] = temp
         else:
-            np.sum(x.array, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
+            np.sum(x, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
         return out
 
     def tanh(self, x, out):
-        np.tanh(x.array_as_axes(out.axes), out=out.array)
-        return out
+        return np.tanh(x.axes_like(out), out=out)
 
     def zeros(self, axes, dtype):
-        return ArrayWithAxes(np.zeros(axes_shape(axes), dtype), axes)
+        return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
 
     def uniform(self, x, low, high):
-        u = self.rng.uniform(low, high, x.array.shape)
-        x.array[:] = u
+        u = self.rng.uniform(low, high, x.shape)
+        x[:] = u
 
 
 class PyCUDAEvaluator(Evaluator):
@@ -295,70 +300,69 @@ class PyCUDAEvaluator(Evaluator):
             return super(PyCUDAEvaluator, self).evaluate(**kvargs)
 
     def constant(self, value, axes, dtype):
-        return ArrayWithAxes(value, axes=axes, dtype=dtype)
+        return AxisArray(array=value, axes=axes, dtype=dtype)
 
     def absolute(self, x, out):
-        cumath.fabs(x.array_as_axes(out.axes), out=out.array)
+        cumath.fabs(x.axes_like(out), out=out)
         return out
 
     def add(self, x, y, out):
-        x.array_as_axes(out.axes)._axpbyz(1, y.array_as_axes(out.axes), 1, out.array)
+        x.axes_like(out)._axpbyz(1, y.axes_like(out), 1, out)
         return out
 
     def cos(self, x, out):
-        cumath.cos(x.array_as_axes(out.axes), out=out.array)
+        cumath.cos(x.axes_like(out), out=out)
         return out
 
     def dot(self, x, y, int_axes, out):
         # TODO Implement axis dot
-        cumath.dot(x.array,y.array, out=out.array)
+        cumath.dot(x, y, out=out)
         return out
 
     def empty(self, axes, dtype):
-        return ArrayWithAxes(gpuarray.empty(axes_shape(axes), dtype), axes)
+        return AxisArray(array=gpuarray.empty(axes_shape(axes), dtype), axes=axes)
 
     def exp(self, x, out):
-        cumath.exp(x.array_as_axes(out.axes), out=out.array)
+        cumath.exp(x.axes_like(out), out=out)
         return out
 
     def log(self, x, out):
-        cumath.log(x.array_as_axes(out.axes), out=out.array)
+        cumath.log(x.axes_like(out), out=out)
         return out
 
     def maximum(self, x, y, out):
-        cumath.maximum(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out)
+        cumath.maximum(x.axes_like(out), y.axes_like(out), out=out)
         return out
 
     def minimum(self, x, y, out):
-        cumath.minimum(x.array_as_axes(out.axes), y.array_as_axes(out.axes), out=out)
+        cumath.minimum(x.axes_like(out), y.axes_like(out), out=out)
         return out
 
     def multiply(self, xa, ya, out):
-        x = xa.array_as_axes(out.axes)
-        y = ya.array_as_axes(out.axes)
-        o = out.array
+        x = xa.axes_like(out)
+        y = ya.axes_like(out)
         if isinstance(x, gpuarray.GPUArray):
             if isinstance(y, gpuarray.GPUArray):
-                x._elwise_multiply(y, out=o)
+                x._elwise_multiply(y, out=out)
                 return out
-            x._axpbz(y, 0, o)
+            x._axpbz(y, 0, out)
         elif isinstance(y, gpuarray.GPUArray):
-            y._axpbz(x, 0, o)
+            y._axpbz(x, 0, out)
             return out
         else:
             return x*y
 
     def negative(self, x, out):
-        x.array_as_axes(out.axes)._axpbz(-1, 0.0, out.array)
+        x.axes_like(out)._axpbz(-1, 0.0, out)
         return out
 
     def ones(self, axes, dtype):
         result = gpuarray.empty(axes_shape(axes), dtype)
         result.fill(1.0)
-        return ArrayWithAxes(result, axes)
+        return AxisArray(array=result, axes=axes)
 
     def reciprocal(self, x, out):
-        x.array_as_axes(out.axes)._rdiv_scalar(1.0, out.array)
+        x.axes_like(out)._rdiv_scalar(1.0, out)
         return out
 
     def reshape(self, x, shape):
@@ -366,40 +370,37 @@ class PyCUDAEvaluator(Evaluator):
 
     def sig(self, x, out):
         self.negative(x, out=out)
-        cumath.exp(out.array, out=out.array)
+        cumath.exp(out, out=out)
         # Add one
-        out.array._axpbz(1.0, 1.0, out=out.array)
-        out.array._rdiv_scalar(1.0, out=out.array)
+        out._axpbz(1.0, 1.0, out=out)
+        out._rdiv_scalar(1.0, out=out)
         return out
 
     def sign(self, x, out):
-        out.array.set(np.sign(x.array_as_axes(out.axes).get()))
+        out.set(np.sign(x.axes_like(out).get()))
         return out
 
     def sin(self, x, out):
-        cumath.sin(x.array_as_axes(out.axes), out=out.array)
+        cumath.sin(x.axes_like(out), out=out)
         return out
 
     def sqrt(self, x, out):
-        cumath.sqrt(x.array_as_axes(out.axes), out=out.array)
+        cumath.sqrt(x.axes_like(out), out=out)
         return out
 
     def square(self, x, out):
-        return self.multiply(x.array_as_axes(out.axes), x.array_as_axes(out.axes), out.array)
+        return self.multiply(x.axes_like(out), x.axes_like(out), out)
 
     def subtract(self, x, y, out):
-        x.array_as_axes(out.axes)._axpbyz(1, y.array_as_axes(out.axes), 1, out.array)
+        x.axes_like(out)._axpbyz(1, y.axes_like(out), 1, out)
         return out
 
     def tanh(self, x, out):
-        cumath.tanh(x.array_as_axes(out.axes), out=out.array)
+        cumath.tanh(x.axes_like(out), out=out)
         return out
 
-    def transpose(self, x):
-        return x.array.transpose()
-
     def zeros(self, axes, dtype):
-        return ArrayWithAxes(gpuarray.zeros(axes_shape(axes), dtype), axes)
+        return AxisArray(array=gpuarray.zeros(axes_shape(axes), dtype), axes=axes)
 
 
 class GenNumPy(Evaluator):

@@ -8,7 +8,7 @@ class Eval(be.Model):
     def __init__(self, **kargs):
         super(Eval, self).__init__(**kargs)
         g = self.graph
-        g.S = be.Axis()
+        g.S = be.AxisVar()
         g.S.length = 10
 
         g.x = be.input(axes=(g.S,))
@@ -24,8 +24,8 @@ class Eval(be.Model):
         x = np.arange(10, dtype=np.float32) + 1
         y = x * x
 
-        self.graph.x.value = be.ArrayWithAxes(x, (self.g.S,))
-        self.graph.y.value = be.ArrayWithAxes(y, (self.g.S,))
+        self.graph.x.value = be.AxisArray(array=x, axes=(self.g.S,))
+        self.graph.y.value = be.AxisArray(array=y, axes=(self.g.S,))
 
         gnp = evaluation.GenNumPy(results=(self.graph.x2, self.graph.z, self.graph.w))
         gnp.evaluate()

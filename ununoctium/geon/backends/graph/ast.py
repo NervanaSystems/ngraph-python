@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 import weakref
 import numbers
-import collections
 
 import numpy as np
 
@@ -11,215 +10,25 @@ from geon.backends.graph.names import NameableValue
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
+import geon.backends.graph.arrayaxes as arrayaxes
 
-class Axis(NameableValue):
-    def __init__(self, dependent=None, like=None, **kargs):
-        super(Axis, self).__init__(**kargs)
-        self.dependent = dependent
-        self.like = like
-        if self.like:
-            self.name = self.like.name
-
-    def __getitem__(self, key=None):
-        return AxisID(self, key or 0)
+class AxisVar(arrayaxes.Axis):
+    """
+    Like an axis, except the length comes from the environment.
+    """
+    def __init__(self, **kargs):
+        super(AxisVar, self).__init__(length=-1, **kargs)
 
     @property
     def length(self):
-        return get_current_environment().get_axis_length(self)
+        return get_current_environment()[self]
 
     @length.setter
     def length(self, item):
-        get_current_environment().set_axis_length(self, item)
-
-    def as_axisid(self):
-        return self[0]
+        get_current_environment()[self] = item
 
     def __repr__(self):
-        try:
-            length = self.length
-            return '{name}={length}'.format(length=length, name=self.name)
-        except:
-            return self.name
-
-
-class AxisID(object):
-    def __init__(self, axis, idx, **kargs):
-        super(AxisID, self).__init__(**kargs)
-        self.axis = axis
-        self.idx = idx
-
-    def as_axisid(self):
-        return self
-
-    @property
-    def length(self):
-        return self.axis.length
-
-    @length.setter
-    def length(self, item):
-        self.axis.length = item
-
-    def __eq__(self, other):
-        return isinstance(other, AxisID) and self.axis == other.axis and self.idx == other.idx
-
-    def __hash__(self):
-        return hash(self.axis)+hash(self.idx)
-
-    def __repr__(self):
-        try:
-            length = self.axis.length
-            return '{name}[{idx}]={length}'.format(length=length, name=self.axis.name, idx=self.idx)
-        except:
-            return '{name}[{idx}]'.format(name=self.axis.name, idx=self.idx)
-
-
-def axis_ids(axes):
-    return [_.as_axisid() for _ in axes]
-
-
-def axes_from_ids(axes):
-    return tuple(_.axis for _ in axis_ids(axes))
-
-
-def find_axes_in_axes(subaxes, axes):
-    subaxes = axis_ids(subaxes)
-    axes = axis_ids(axes)
-    if not subaxes:
-        return 0
-    head = subaxes[0]
-    for i, axis in enumerate(axes):
-        if head == axis and axes[i:i+len(subaxes)] == subaxes:
-            return i
-    return -1
-
-def axes_sub(x, y):
-    """Returns x with elements from y removed"""
-    return [_ for _ in axis_ids(x) if _ not in axis_ids(y)]
-
-
-def axes_intersect(x, y):
-    """Returns intersection of x and y in x order"""
-    return [_ for _ in axis_ids(x) if _ in axis_ids(y)]
-
-
-def axes_append(*axes_list):
-    """Returns x followed by elements of y not in x"""
-    result = []
-    for axes in axes_list:
-        ids = axis_ids(axes)
-        for axis_id in ids:
-            if axis_id not in result:
-                result.append(axis_id)
-    return result
-
-
-def axes_replace(axes, replace, replacements):
-    """Returns axes with those axes in replace replace by those in replacements"""
-    ids = axis_ids(axes)
-    r = dict()
-    for k in ids:
-        r[k] = k
-    for k,v in zip(axis_ids(replace), axis_ids(replacements)):
-        r[k] = v
-    return [r[axis] for axis in ids]
-
-
-def axes_reshape(in_axes, out_axes):
-    """
-    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
-
-    :param in_axes: Axes of the input
-    :param out_axes: Axes of the output
-    :return: shape argument for reshape()
-    """
-    result = []
-    in_axes = axis_ids(in_axes)
-    out_axes = axis_ids(out_axes)
-
-    for out_axis in out_axes:
-        if out_axis in in_axes:
-            result.append(out_axis.axis.size())
-        else:
-            result.append(1)
-    return tuple(result)
-
-
-def axes_list(axes, shape_list):
-    result = []
-    for shape in shape_list:
-        for axis, size in zip(axes, shape):
-            axis.length = size
-        result.append(axes)
-        axes = [axis.prime() for axis in axes]
-    return result
-
-
-def maybe_reshape(array, shape):
-    if isinstance(array, numbers.Real):
-        return array
-    if array.shape == shape:
-        return array
-    return array.reshape(shape)
-
-
-def axes_reshape(in_axes, out_axes):
-    """
-    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
-
-    :param in_axes: Axes of the input
-    :param out_axes: Axes of the output
-    :return: shape argument for reshape()
-    """
-    result = []
-    in_axes = axis_ids(in_axes)
-    out_axes = axis_ids(out_axes)
-
-    for out_axis in out_axes:
-        if out_axis in in_axes:
-            result.append(out_axis.axis.length)
-        else:
-            result.append(1)
-    return tuple(result)
-
-
-def flatten_shape(shape):
-    s = []
-    for l in shape:
-        if isinstance(l, collections.Sequence):
-            s += l
-        else:
-            s.append(l)
-    return s
-
-
-class ArrayWithAxes(object):
-    def __init__(self, array, axes, shape=None, dtype=np.float32):
-        self.axes = axes or ()
-        self.dtype = dtype
-
-        if isinstance(array, np.ndarray):
-            if shape:
-                shape = flatten_shape(shape)
-                array = array.reshape(*shape)
-            else:
-                shape = array.shape
-            assert (len(axes) == len(shape))
-        else:
-            self.axes = axes
-            assert(axes == ())
-            shape = ()
-
-        self.array = array
-
-        environment = get_current_environment()
-        for axis, length in zip(self.axes, shape):
-            axis.length = length
-
-    def array_as_axes(self, axes):
-        return maybe_reshape(self.array, axes_reshape(self.axes, axes))
-
-    def __repr__(self):
-        return '{array}:{axes}'.format(axes=self.axes, array=self.array)
+        return 'AxisVar({name})'.format(name=self.name or self.like)
 
 
 class AxesComp(object):
@@ -234,7 +43,7 @@ class AxesComp(object):
         else:
             return LiteralAxesComp(axes)
 
-    def resolve(self, environment):
+    def evaluate(self, evaluator):
         raise NotImplementedError()
 
     def __add__(self, x):
@@ -261,7 +70,7 @@ class LiteralAxesComp(AxesComp):
     def __init__(self, axes):
         self.axes = axes
 
-    def resolve(self, environment):
+    def evaluate(self, evaluator):
         return self.axes
 
 
@@ -270,8 +79,8 @@ class ValueAxesComp(AxesComp):
     def __init__(self, x):
         self.x = x
 
-    def resolve(self, environment):
-        return environment.get_cached_resolved_node_axes(self.x)
+    def evaluate(self, evaluator):
+        return evaluator.get_cached_resolved_tensor_axes(self.x)
 
 
 class AxesSubComp(AxesComp):
@@ -280,10 +89,10 @@ class AxesSubComp(AxesComp):
         self.x = x
         self.y = y
 
-    def resolve(self, environment):
-        x_axes = environment.get_resolved_axes(self.x)
-        y_axes = environment.get_resolved_axes(self.y)
-        return axes_sub(x_axes, y_axes)
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return arrayaxes.axes_sub(x_axes, y_axes)
 
 
 class AxesIntersectComp(AxesComp):
@@ -291,10 +100,10 @@ class AxesIntersectComp(AxesComp):
         self.x = x
         self.y = y
 
-    def resolve(self, environment):
-        x_axes = environment.get_resolved_axes(self.x)
-        y_axes = environment.get_resolved_axes(self.y)
-        return axes_intersect(x_axes, y_axes)
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return arrayaxes.axes_intersect(x_axes, y_axes)
 
 
 class AxesAppendComp(AxesComp):
@@ -302,10 +111,10 @@ class AxesAppendComp(AxesComp):
         self.x = x
         self.y = y
 
-    def resolve(self, environment):
-        x_axes = environment.get_resolved_axes(self.x)
-        y_axes = environment.get_resolved_axes(self.y)
-        return axes_append(x_axes, y_axes)
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return arrayaxes.axes_append(x_axes, y_axes)
 
 
 class Op(NameableValue):
@@ -402,6 +211,9 @@ class Op(NameableValue):
     def ops(self):
         return []
 
+    def allocate(self, evaluator):
+        pass
+
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
@@ -422,9 +234,6 @@ class Tensor(Op):
     @property
     def axes(self):
         return ValueAxesComp(self)
-
-    def resolved_axes(self, environment):
-        return environment.get_resolved_node_axes(self)
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -641,14 +450,15 @@ class input(AllocationOp):
 
     @property
     def value(self):
-        return get_current_environment().get_node_value(self)
+        return get_current_environment()[self]
 
     @value.setter
     def value(self, value):
-        op = Op.as_op(value)
         environment = get_current_environment()
-        environment.set_cached_resolved_node_axes(self, op.axes)
-        environment.set_node_value(self, value)
+        environment[self] = value
+
+        op = Op.as_op(value)
+        environment.set_cached_resolved_tensor_axes(self, op.axes)
 
 
 class Constant(AllocationOp):
@@ -656,15 +466,15 @@ class Constant(AllocationOp):
     A constant that appears in a graph.
     """
     def __init__(self, const, **kargs):
-        if isinstance(const, np.ndarray):
+        if isinstance(const, arrayaxes.ObjectWithAxes):
             # TODO: Figure out what to do for axes here
-            super(Constant, self).__init__(shape=const.shape, dtype=const.dtype, **kargs)
+            super(Constant, self).__init__(axes=arrayaxes.axes(const), dtype=np.dtype(type(const)), **kargs)
         else:
             super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), **kargs)
         self.const = const
 
     def evaluate(self, evaluator):
-        return evaluator.constant(self.const, axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return evaluator.constant(self.const, axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -731,7 +541,7 @@ class dot(ComputationOp):
         super(dot, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
+        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
         return evaluator.dot(x, y, resolved_reduction_axes, out)
 
     @property
@@ -754,7 +564,7 @@ class softmax(ComputationOp):
         super(softmax, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.softmax(x, evaluator.environment.get_resolved_axes(self.batch_axes), out)
+        return evaluator.softmax(x, evaluator.get_resolved_axes(self.batch_axes), out)
 
     @property
     def axes(self):
@@ -780,7 +590,7 @@ class sum(ComputationOp):
         super(sum, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        resolved_reduction_axes = evaluator.environment.get_resolved_axes(self.reduction_axes)
+        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
         return evaluator.sum(x, resolved_reduction_axes, out)
 
     @property
@@ -801,7 +611,34 @@ class empty(AllocationOp):
         pass
 
     def evaluate(self, evaluator):
-        return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+
+
+class Slice(ComputationOp):
+    def __init__(self, slices, x, **kargs):
+        super(Slice, self).__init__(args=(x,), **kargs)
+        self.slices = slices
+
+    def evaluate(self, evaluator, out, x):
+        # TODO This is like an allocate,
+        pass
+
+
+class Pad(ComputationOp):
+    def __init__(self, axes, slice, x, **kargs):
+        super(Pad, self).__init__(args=(x,), **kargs)
+        self._axes = axes
+        self.slice = slice
+
+    @property
+    def axes(self):
+        return self.axes
+
+    def evaluate(self, evaluator, out, x):
+        return evaluator.pad(x, self.slice, out)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        pass
 
 
 class Parameter(AllocationOp):
@@ -816,7 +653,7 @@ class Parameter(AllocationOp):
         return self.value
 
     def allocate(self, evaluator):
-        return evaluator.empty(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
     def initializer(self, evaluator, value):
         if self.init:
@@ -824,7 +661,7 @@ class Parameter(AllocationOp):
 
     @property
     def value(self):
-        return get_current_environment().get_node_value(self)
+        return get_current_environment()[self]
 
 
 class exp(ElementWise):
@@ -907,7 +744,7 @@ class ones(AllocationOp):
         pass
 
     def evaluate(self, evaluator):
-        return evaluator.ones(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return evaluator.ones(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 
 class reciprocal(ElementWise):
@@ -967,7 +804,7 @@ class sqrt(ElementWise):
 
 
 class square(ElementWise):
-    def __init__(self, x, **karegs):
+    def __init__(self, x, **kargs):
         super(square, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1008,7 +845,7 @@ class zeros(AllocationOp):
         pass
 
     def evaluate(self, evaluator):
-        return evaluator.zeros(axes=self.resolved_axes(evaluator.environment), dtype=self.graph_type.dtype)
+        return evaluator.zeros(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 
 def deriv(dep, indep):
