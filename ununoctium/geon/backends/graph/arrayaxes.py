@@ -5,6 +5,7 @@ import numbers
 import numpy as np
 
 from geon.backends.graph.names import NameableValue
+from geon.backends.graph.environment import get_current_environment
 
 
 class Axis(NameableValue):
@@ -40,6 +41,27 @@ class Axis(NameableValue):
 
     def __repr__(self):
         return 'Axis({name})'.format(name=self.name or self.like)
+
+
+class AxisVar(Axis):
+    """
+    Like an axis, except the length comes from the environment.
+    """
+    def __init__(self, length=None, **kargs):
+        super(AxisVar, self).__init__(length=-1, **kargs)
+        if length is not None:
+            self.length = length
+
+    @property
+    def length(self):
+        return get_current_environment()[self]
+
+    @length.setter
+    def length(self, item):
+        get_current_environment()[self] = item
+
+    def __repr__(self):
+        return 'AxisVar({name})'.format(name=self.name or self.like)
 
 
 class AxisID(object):
@@ -78,6 +100,125 @@ class AxisID(object):
 
 Axis.register(AxisID)
 
+
+class AxesComp(object):
+    """A Computation for computing axes"""
+    def __init__(self, **kargs):
+        super(AxesComp, self).__init__(**kargs)
+
+    @staticmethod
+    def as_axes(axes, **kargs):
+        if isinstance(axes, AxesComp):
+            return axes
+        elif axes is None:
+            return None
+        else:
+            return LiteralAxesComp(axes, **kargs)
+
+    def evaluate(self, evaluator):
+        raise NotImplementedError()
+
+    def __add__(self, x):
+        return AxesAppendComp(self, AxesComp.as_axes(x))
+
+    def __radd__(self, x):
+        return AxesAppendComp(AxesComp.as_axes(x), self)
+
+    def __sub__(self, x):
+        return AxesSubComp(self, AxesComp.as_axes(x))
+
+    def __rsub__(self, x):
+        return AxesSubComp(AxesComp.as_axes(x), self)
+
+    def __mul__(self, x):
+        return AxesIntersectComp(self, AxesComp.as_axes(x))
+
+    def __rmul__(self, x):
+        return AxesIntersectComp(AxesComp.as_axes(x), self)
+
+
+class LiteralAxesComp(AxesComp):
+    """Actual axes are provided"""
+    def __init__(self, axes, **kargs):
+        super(LiteralAxesComp, self).__init__(**kargs)
+        self.axes = axes
+
+    def evaluate(self, evaluator):
+        return self.axes
+
+
+class BatchAxes(AxesComp):
+    """Axes used for batch"""
+    def __init__(self, **kargs):
+        super(BatchAxes, self).__init__(**kargs)
+
+    def evaluate(self, evaluator):
+        return evaluator.get_batch_axes()
+
+
+class ValueAxesComp(AxesComp):
+    """Determine axes from value computed by x"""
+    def __init__(self, x, **kargs):
+        super(ValueAxesComp, self).__init__(**kargs)
+        self.x = x
+
+    def evaluate(self, evaluator):
+        return evaluator.get_cached_resolved_tensor_axes(self.x)
+
+
+class AxesSubComp(AxesComp):
+    """Result will be removal of axes in y from those in x"""
+    def __init__(self, x, y, **kargs):
+        super(AxesSubComp, self).__init__(**kargs)
+        self.x = x
+        self.y = y
+
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return axes_sub(x_axes, y_axes)
+
+
+def sample_axes(x, **kargs):
+    return AxesSubComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
+
+
+def batch_axes(x, **kargs):
+    return AxesAppendComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
+
+
+class AxesIntersectComp(AxesComp):
+    def __init__(self, x, y, **kargs):
+        super(AxesIntersectComp, self).__init__(**kargs)
+        self.x = x
+        self.y = y
+
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return axes_intersect(x_axes, y_axes)
+
+
+class AxesAppendComp(AxesComp):
+    def __init__(self, x, y, **kargs):
+        super(AxesAppendComp, self).__init__(**kargs)
+        self.x = x
+        self.y = y
+
+    def evaluate(self, evaluator):
+        x_axes = evaluator.get_resolved_axes(self.x)
+        y_axes = evaluator.get_resolved_axes(self.y)
+        return axes_append(x_axes, y_axes)
+
+
+def linear_map_axesa(in_axes, out_axes):
+    return AxesSubComp(AxesAppendComp(in_axes, out_axes),
+                       AxesIntersectComp(in_axes, out_axes))
+
+
+def linear_map_axes(in_axes, out_axes):
+    return AxesSubComp(AxesAppendComp(out_axes, in_axes),
+                       AxesIntersectComp(in_axes, out_axes))
 
 
 def axis_ids(axes):
@@ -347,7 +488,7 @@ class AxisArray(np.ndarray):
         self.axes = tuple(axes)
 
     def reaxe(self, axes, broadcast=False):
-        if axes == self.axes:
+        if axes == axes(self):
             return self
 
         return AxisArray(base=self, axes=axes, broadcast=broadcast)

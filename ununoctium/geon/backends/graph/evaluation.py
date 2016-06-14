@@ -9,6 +9,7 @@ import geon.backends.graph.ast as ast
 from geon.backends.graph.arrayaxes import find_axes_in_axes, AxisArray
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
+from geon.backends.graph.environment import get_batch_axes, set_batch_axes
 
 
 def axes_shape(axes):
@@ -64,6 +65,12 @@ class Evaluator(object):
 
     def get_cached_resolved_tensor_axes(self, tensor):
         return self.environment.get_cached_resolved_tensor_axes(tensor)
+
+    def get_batch_axes(self):
+        return get_batch_axes()
+
+    def set_batch_axes(self, axes):
+        set_batch_axes(axes)
 
     def evaluate_ops(self, ops):
         vals = {}

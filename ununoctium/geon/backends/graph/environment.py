@@ -88,7 +88,7 @@ class Environment(object):
         self.resolved_tensor_axes = weakref.WeakKeyDictionary()
         self.values = dict()
 
-    def _chained_search(self, attr, key):
+    def _chained_search(self, attr, key, default=None, use_default=False):
         env = self
         while True:
             try:
@@ -96,6 +96,8 @@ class Environment(object):
             except KeyError:
                 env = env.parent
                 if env is None:
+                    if use_default:
+                        return default
                     raise
 
     def __getitem__(self, key):
@@ -104,8 +106,21 @@ class Environment(object):
     def __setitem__(self, key, value):
         self.values[key] = value
 
+    def get_value(self, key, default):
+        return self._chained_search('values', key, default=default, use_default=True)
+
+    def set_value(self, key, value):
+        self.values[key] = value
+
     def get_cached_resolved_tensor_axes(self, tensor):
         return self._chained_search('resolved_tensor_axes', tensor)
 
     def set_cached_resolved_tensor_axes(self, tensor, axes):
         self.resolved_tensor_axes[tensor] = axes
+
+def get_batch_axes():
+    return get_current_environment()['batch_axes']
+
+
+def set_batch_axes(axes):
+    get_current_environment()['batch_axes'] = axes
