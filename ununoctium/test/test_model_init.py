@@ -19,6 +19,8 @@
 #
 # should produce sth like this:
 #
+# output of old api:
+#
 # epoch: -1 time: 8.49s train_error: 0.00 test_error: 89.48 loss: 0.000
 # epoch: 0 time: 59.21s train_error: 72.90 test_error: 68.41 train_loss: 2.940
 # epoch: 1 time: 57.59s train_error: 67.16 test_error: 66.04 train_loss: 2.754
@@ -30,6 +32,22 @@
 # epoch: 7 time: 57.68s train_error: 63.06 test_error: 63.28 train_loss: 2.609
 # epoch: 8 time: 57.64s train_error: 62.72 test_error: 62.29 train_loss: 2.595
 # epoch: 9 time: 58.53s train_error: 62.56 test_error: 62.92 train_loss: 2.588
+
+
+# output after api update
+#
+# epoch: -1 time: 0.81s train_error: 0.00 test_error: 89.79 loss: 0.000
+# epoch: 0 time: 7.68s train_error: 71.79 test_error: 69.35 train_loss: 2.915
+# epoch: 1 time: 7.61s train_error: 67.83 test_error: 66.67 train_loss: 2.775
+# epoch: 2 time: 7.26s train_error: 66.53 test_error: 65.66 train_loss: 2.734
+# epoch: 3 time: 6.66s train_error: 65.81 test_error: 64.80 train_loss: 2.707
+# epoch: 4 time: 6.79s train_error: 65.19 test_error: 64.54 train_loss: 2.686
+# epoch: 5 time: 6.75s train_error: 64.91 test_error: 64.06 train_loss: 2.669
+# epoch: 6 time: 6.93s train_error: 64.42 test_error: 64.00 train_loss: 2.653
+# epoch: 7 time: 7.36s train_error: 64.23 test_error: 64.04 train_loss: 2.647
+# epoch: 8 time: 7.67s train_error: 63.89 test_error: 63.51 train_loss: 2.635
+# epoch: 9 time: 8.66s train_error: 63.25 test_error: 63.98 train_loss: 2.620
+
 
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader
@@ -51,33 +69,29 @@ parser.add_argument('--subset_pct', type=float, default=100,
 args = parser.parse_args()
 
 @be.with_name_context
-def linear(params, x, x_axes, axes, batch_axes=(), init=None, bias=None):
-    params.weights = be.Parameter(axes=axes + x_axes - batch_axes, init=init)
+def linear(params, x, axes, init=None, bias=None):
+    params.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(params.weights, x)
     if bias is not None:
-        params.bias = be.Parameter(axes=axes, init=bias)
+        params.bias = be.Parameter(axes=result.axes.sample, init=bias)
         result = result + params.bias
     return result
 
-def affine(x, activation, batch_axes=None, **kargs):
-    return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
+def affine(x, activation, **kargs):
+    return activation(linear(x, **kargs))
 
 
 @be.with_name_context
-def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
+def mlp(params, x, activation, shape_spec, axes, **kargs):
     value = x
-    last_axes = x_axes
     with be.layers_named('L') as layers:
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_layer(layers) as layer:
-                    layer.axes = tuple(be.Axis(like=axis) for axis in hidden_axes)
-                    for axis, length in zip(layer.axes, shape):
-                        axis.length = length
-                    value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
-                    last_axes = value.axes
+                    layer.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
+                    value = affine(value, activation=hidden_activation, axes=layer.axes, **kargs)
         with be.next_layer(layers):
-            value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
+            value = affine(value, activation=activation, axes=axes, **kargs)
     return value
 
 def cross_entropy(pred, t):
@@ -94,11 +108,13 @@ class MyTest(be.Model):
         super(MyTest, self).__init__(**kargs)
         g = self.graph
 
-        g.C = be.Axis()
-        g.H = be.Axis()
-        g.W = be.Axis()
-        g.N = be.Axis()
-        g.Y = be.Axis()
+        g.C = be.AxisVar()
+        g.H = be.AxisVar()
+        g.W = be.AxisVar()
+        g.N = be.AxisVar()
+        g.Y = be.AxisVar()
+
+        be.set_batch_axes([g.N])
 
         g.x = be.input(axes=(g.C, g.H, g.W, g.N))
         g.y = be.input(axes=(g.Y, g.N))
@@ -106,8 +122,7 @@ class MyTest(be.Model):
         layers = [(be.tanh, (g.Y,), [(200,)])]
 
         uni = Uniform(-0.1, 0.1)
-        g.value = mlp(g.x, activation=be.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
-                      init=uni)
+        g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
 
         g.loss = cross_entropy(g.value, g.y)
 
@@ -163,6 +178,7 @@ class MyTest(be.Model):
 
             start_test = default_timer()
             test_error = self.test(env, test, True)
+
             print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} loss: {:.3f}'.
                   format(-1, default_timer() - start_test, 0, test_error, 0))
 
@@ -175,15 +191,15 @@ class MyTest(be.Model):
                 train_error = 0
                 n_bs = 0
                 nprocessed = 0
-                learning_rate.value = be.ArrayWithAxes(.01/128, shape=(), axes=())
+                learning_rate.value = be.AxisArray(array=.1 / (1 + epoch) / train.bsz, axes=())
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
-                    g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
+                    g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
+                    g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
 
                     vals = enp.evaluate()
 
-                    train_loss += vals[g.loss].array / train.bsz
-                    train_error += np.sum(np.not_equal(np.argmax(vals[g.value].array, axis=0),
+                    train_loss += vals[g.loss] / train.bsz
+                    train_error += np.sum(np.not_equal(np.argmax(vals[g.value], axis=0),
                                                        np.argmax(yraw.array, axis=0))) / float(train.bsz)
                     n_bs += 1
                     nprocessed += xraw.array.shape[1]
@@ -194,7 +210,7 @@ class MyTest(be.Model):
                 test_error = self.test(env, test)
 
                 print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} train_loss: {:.3f}'.format(
-                    epoch, default_timer() - start_train, train_error, test_error, train_loss))
+                    epoch, default_timer() - start_train, float(train_error), test_error, float(train_loss)))
                 train.reset()
 
     @be.with_graph_context
@@ -207,9 +223,8 @@ class MyTest(be.Model):
             n_bs = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
                 # TODO: need to fix that the processed data does not equal to the actual number of the data
-                g.x.value = be.ArrayWithAxes(xraw.array, shape=(test.shape, test.bsz),
-                                             axes=(g.C, g.H, g.W, g.N))
-                g.y.value = be.ArrayWithAxes(yraw.array, shape=(test.nclasses, test.bsz), axes=(g.Y, g.N))
+                g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
+                g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
                 vals = enp.evaluate()
 
                 if printParam and mb_idx == 0:
@@ -217,18 +232,18 @@ class MyTest(be.Model):
                         # if "bias" not in para.name and vals[para].array.shape[0] == 10:
 
                         print(para.name)
-                        print(vals[para].array.shape)
-                        print(vals[para].array)
+                        print(vals[para].shape)
+                        print(vals[para])
 
-                    print(g.x.value.array[0][0][0])
-                    print(g.y.value.array.shape)
-                    print(g.y.value.array[:,1])
+                    print(g.x.value[0][0][0])
+                    print(g.y.value.shape)
+                    print(g.y.value[:,1])
 
-                test_error += np.sum(np.not_equal(np.argmax(vals[g.value].array, axis=0),
+                test_error += np.sum(np.not_equal(np.argmax(vals[g.value], axis=0),
                                                   np.argmax(yraw.array, axis=0)))
                 n_bs += 1
 
-            return test_error / float(test.bsz) / n_bs * 100
+            return float(test_error / float(test.bsz) / n_bs * 100)
 
 # data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
