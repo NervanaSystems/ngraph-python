@@ -210,7 +210,7 @@ class AxesAppendComp(AxesComp):
         y_axes = evaluator.get_resolved_axes(self.y)
         return axes_append(x_axes, y_axes)
 
-
+# This one should also work, but there are some bugs in axes/dot
 def linear_map_axesa(in_axes, out_axes):
     return AxesSubComp(AxesAppendComp(in_axes, out_axes),
                        AxesIntersectComp(in_axes, out_axes))
@@ -423,6 +423,17 @@ class AxisArray(np.ndarray):
 
     def __new__(cls, axes=None, array=None, base=None, broadcast=False, dtype=None, buffer=None, offset=0,
                 strides=None, order=None):
+        if axes is not None:
+            def canonic(x):
+                if isinstance(x, collections.Iterable):
+                    x = tuple(x)
+                    if len(x) == 1:
+                        return x[0]
+                    else:
+                        return x
+                else:
+                    return x
+            axes = tuple(canonic(x) for x in axes)
         shape = tuple(axes_shape(axes))
         if array is not None:
             array = np.asarray(array)
@@ -439,8 +450,10 @@ class AxisArray(np.ndarray):
             if buffer is None:
                 buffer = base
             base_strides = base.strides
-            if isinstance(base, ObjectWithAxes):
+            if isinstance(buffer, ObjectWithAxes):
                 base_axes = buffer.axes
+            elif isinstance(base, ObjectWithAxes):
+                base_axes = base.axes
             else:
                 base_axes = axes
 
@@ -477,21 +490,24 @@ class AxisArray(np.ndarray):
         if obj is None:
             return
         obj_axes = getattr(obj, 'axes', None)
-        obj_shape = [_.length for _ in obj_axes]
+        obj_shape = axes_shape(obj_axes)
         axes = []
         shape = self.shape
         if obj_shape != shape:
             for axis, s in zip(obj_axes, self.shape):
+                if isinstance(axis, list):
+                    pass
                 if axis.length != s:
                     axis = Axis(s, like=axis)
                 axes.append(axis)
         self.axes = tuple(axes)
 
     def reaxe(self, axes, broadcast=False):
-        if axes == axes(self):
+        axes = tuple(axes)
+        if axes == self.axes:
             return self
 
-        return AxisArray(base=self, axes=axes, broadcast=broadcast)
+        return AxisArray(base=self, axes=axes, broadcast=broadcast, dtype=self.dtype)
 
     def axes_like(self, array):
         # TODO Is this reaxe?
@@ -541,19 +557,6 @@ def axes_generator(axes, gen_axis, base_index=None):
     for i in xrange(gen_axis.length):
         index[pos] = i
         yield tuple(index)
-
-
-if __name__ == '__main__':
-    H=Axis(10, name='H')
-    W=Axis(20, name='W')
-    x = np.zeros((10, 20))
-    ax = AxisArray((H,W), x)
-
-    a = AxisArray((H,W))
-    b = a.reaxe((W,H))
-    c = a + b
-    a[0,1] = 7
-    print b[1,0]
 
 
 

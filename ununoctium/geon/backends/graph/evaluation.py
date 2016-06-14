@@ -137,8 +137,9 @@ class NumPyEvaluator(Evaluator):
 
         x_axes = x.axes
         y_axes = y.axes
+        out_axes = out.axes
 
-        if not x_axes or not y_axes:
+        if len(x_axes) is 0 or len(y_axes) is 0:
             # TODO turn this into multiply ahead of time
             np.multiply(x, y, out=out)
             return out
@@ -150,42 +151,22 @@ class NumPyEvaluator(Evaluator):
         if yi == -1:
             raise IncompatibleShapesError()
 
-        def prod(elts):
-            result = 1
-            for elt in elts:
-                result *= elt.length
-            return result
+        xl = x_axes[0:xi]
+        xr = x_axes[xi+len(red_axes):]
+        yl = y_axes[0:yi]
+        yr = y_axes[yi+len(red_axes):]
 
-        xl = prod(x_axes[0:xi])
-        m = prod(red_axes)
-        xr = prod(x_axes[xi+len(red_axes):])
-        yl = prod(y_axes[0:yi])
-        yr = prod(y_axes[yi+len(red_axes):])
+        al = arrayaxes.axes_append(xl, xr)
+        br = arrayaxes.axes_append(yl, yr)
 
-        if xr == 1:
-            left = x.reshape(xl, m)
-            right = y.reshape(yl, m, yr)
-            # xl yl yr
-            out_reshape = out.reshape(xl, yl, yr)
-        elif yr == 1:
-            left = y.reshape(yl, m)
-            right = x.reshape(xl, m, xr).T
-            # yl xr xl
-            out_reshape = out.reshape(xl, xr, yl).T
-        elif xl == 1:
-            left = x.reshape(m, xr).T
-            right = y.reshape(yl, m, yr)
-            # xr yl yr
-            out_reshape = out.reshape(xr, yl, yr)
-        elif yl == 1:
-            left = y.reshape(m, yl).T
-            right = x.reshape(xl, m, xr).T
-            # yl xr xl
-            out_reshape = out.reshape(xl, xr, yl).T
-        else:
+        a = arrayaxes.reaxe(x, axes=(al, red_axes))
+        b = arrayaxes.reaxe(y, axes=(red_axes, br))
+        if arrayaxes.axes_intersect(al,br):
+            # Can't handle yet
             raise IncompatibleShapesError()
-
-        np.dot(left, right, out=out_reshape)
+        o = arrayaxes.reaxe(out, axes=(al, br))
+        #o = out.reaxe(axes=(al, br))
+        np.dot(a,b,out=o)
         return out
 
     def update(self, params, delta):
