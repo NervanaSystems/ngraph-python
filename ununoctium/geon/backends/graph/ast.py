@@ -11,110 +11,7 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
 import geon.backends.graph.arrayaxes as arrayaxes
-
-class AxisVar(arrayaxes.Axis):
-    """
-    Like an axis, except the length comes from the environment.
-    """
-    def __init__(self, **kargs):
-        super(AxisVar, self).__init__(length=-1, **kargs)
-
-    @property
-    def length(self):
-        return get_current_environment()[self]
-
-    @length.setter
-    def length(self, item):
-        get_current_environment()[self] = item
-
-    def __repr__(self):
-        return 'AxisVar({name})'.format(name=self.name or self.like)
-
-
-class AxesComp(object):
-    """A Computation for computing axes"""
-
-    @staticmethod
-    def as_axes(axes):
-        if isinstance(axes, AxesComp):
-            return axes
-        elif axes is None:
-            return None
-        else:
-            return LiteralAxesComp(axes)
-
-    def evaluate(self, evaluator):
-        raise NotImplementedError()
-
-    def __add__(self, x):
-        return AxesAppendComp(self, AxesComp.as_axes(x))
-
-    def __radd__(self, x):
-        return AxesAppendComp(AxesComp.as_axes(x), self)
-
-    def __sub__(self, x):
-        return AxesSubComp(self, AxesComp.as_axes(x))
-
-    def __rsub__(self, x):
-        return AxesSubComp(AxesComp.as_axes(x), self)
-
-    def __mul__(self, x):
-        return AxesIntersectComp(self, AxesComp.as_axes(x))
-
-    def __rmul__(self, x):
-        return AxesIntersectComp(AxesComp.as_axes(x), self)
-
-
-class LiteralAxesComp(AxesComp):
-    """Actual axes are provided"""
-    def __init__(self, axes):
-        self.axes = axes
-
-    def evaluate(self, evaluator):
-        return self.axes
-
-
-class ValueAxesComp(AxesComp):
-    """Determine axes from value computed by x"""
-    def __init__(self, x):
-        self.x = x
-
-    def evaluate(self, evaluator):
-        return evaluator.get_cached_resolved_tensor_axes(self.x)
-
-
-class AxesSubComp(AxesComp):
-    """Result will be removal of axes in y from those in x"""
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return arrayaxes.axes_sub(x_axes, y_axes)
-
-
-class AxesIntersectComp(AxesComp):
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return arrayaxes.axes_intersect(x_axes, y_axes)
-
-
-class AxesAppendComp(AxesComp):
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return arrayaxes.axes_append(x_axes, y_axes)
+from geon.backends.graph.arrayaxes import AxesComp, ValueAxesComp, BatchAxes, AxesIntersectComp, AxesSubComp, AxesAppendComp
 
 
 class Op(NameableValue):
@@ -300,7 +197,7 @@ class ComputationOp(Tensor):
         for arg in self.inputs:
             arg.users.add(self)
 
-        self.batch_axes = AxesComp.as_axes(batch_axes or ())
+        self.batch_axes = AxesComp.as_axes(batch_axes or BatchAxes())
 
         if out is None:
             out = empty(axes=self.axes)

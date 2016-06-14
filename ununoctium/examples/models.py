@@ -16,34 +16,30 @@ parser.add_argument('--subset_pct', type=float, default=100,
 args = parser.parse_args()
 
 @be.with_name_context
-def linear(params, x, x_axes, axes, batch_axes=(), init=None, bias=None):
-    params.weights = be.Parameter(axes=axes + x_axes - batch_axes, init=init)
+def linear(params, x, axes, init=None, bias=None):
+    params.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(params.weights, x)
     if bias is not None:
-        params.bias = be.Parameter(axes=axes, init=bias)
+        params.bias = be.Parameter(axes=result.axes.sample, init=bias)
         result = result + params.bias
     return result
 
 
-def affine(x, activation, batch_axes=None, **kargs):
-    return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
+def affine(x, activation, **kargs):
+    return activation(linear(x, **kargs))
 
 
 @be.with_name_context
-def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
+def mlp(params, x, activation, shape_spec, axes, **kargs):
     value = x
-    last_axes = x_axes
     with be.layers_named('L') as layers:
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_layer(layers) as layer:
-                    layer.axes = tuple(be.AxisVar(like=axis) for axis in hidden_axes)
-                    for axis, length in zip(layer.axes, shape):
-                        axis.length = length
-                    value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
-                    last_axes = value.axes
+                    layer.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
+                    value = affine(value, activation=hidden_activation, axes=layer.axes, **kargs)
         with be.next_layer(layers):
-            value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
+            value = affine(value, activation=activation, axes=axes, **kargs)
     return value
 
 
@@ -75,14 +71,15 @@ class MyTest(be.Model):
         g.N = be.AxisVar()
         g.Y = be.AxisVar()
 
+        be.set_batch_axes([g.N])
+
         g.x = be.input(axes=(g.C, g.H, g.W, g.N))
         g.y = be.input(axes=(g.Y, g.N))
 
         #layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
         layers = [(be.tanh, (g.Y,), [(200,)])]
 
-        g.value = mlp(g.x, activation=be.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
-                      init=uni)
+        g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
 
         g.error = cross_entropy(g.value, g.y)
 
