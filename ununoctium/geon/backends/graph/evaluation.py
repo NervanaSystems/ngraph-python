@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
-from geon.backends.graph.arrayaxes import find_axes_in_axes, AxisArray
+from geon.backends.graph.arrayaxes import find_axes_in_axes, AxisArray, reaxe, reaxe_like, tensor_axes
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 from geon.backends.graph.environment import get_batch_axes, set_batch_axes
@@ -51,7 +51,7 @@ class Evaluator(object):
         try:
             return self.environment.get_cached_resolved_tensor_axes(tensor)
         except KeyError:
-            axes = tensor.axes.evaluate(self)
+            axes = tensor_axes(tensor).evaluate(self)
             self.environment.set_cached_resolved_tensor_axes(tensor, axes)
             return axes
 
@@ -109,7 +109,7 @@ class NumPyEvaluator(Evaluator):
         return np.random.RandomState(seed=seed)
 
     def rng_uniform(self, rng, low, high, out):
-        shape = [axis.length for axis in out.axes]
+        shape = [axis.length for axis in tensor_axes(out)]
         out[:] = rng.uniform(low, high, shape)
         return out
 
@@ -120,13 +120,13 @@ class NumPyEvaluator(Evaluator):
         return AxisArray(axes=axes, array=value, dtype=dtype)
 
     def absolute(self, x, out):
-        return np.abs(x.axes_like(out), out=out)
+        return np.abs(reaxe_like(x, out, True), out=out)
 
     def add(self, x, y, out):
-        return np.add(x.axes_like(out), y.axes_like(out), out=out)
+        return np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def cos(self, x, out):
-        return np.cos(x.axes_like(out), out=out)
+        return np.cos(reaxe_like(x, out, True), out=out)
 
     def dot(self, x, y, red_axes, out):
         # This implementation requires axes
@@ -135,9 +135,9 @@ class NumPyEvaluator(Evaluator):
         #   out = xl xr yl yr
         #   At least one of xl, xr, yl, yr is empty
 
-        x_axes = x.axes
-        y_axes = y.axes
-        out_axes = out.axes
+        x_axes = tensor_axes(x)
+        y_axes = tensor_axes(y)
+        out_axes = tensor_axes(out)
 
         if len(x_axes) is 0 or len(y_axes) is 0:
             # TODO turn this into multiply ahead of time
@@ -171,55 +171,55 @@ class NumPyEvaluator(Evaluator):
 
     def update(self, params, delta):
         if params.shape != delta.shape:
-            print('mismatch', params.axes, delta.axes)
-        np.subtract(params, delta.axes_like(params), out=params)
+            print('mismatch', tensor_axes(params), tensor_axes(delta))
+        np.subtract(params, reaxe_like(delta, params, True), out=params)
         return params
 
     def empty(self, axes, dtype):
         return AxisArray(axes=axes, dtype=dtype or np.float32)
 
     def exp(self, x, out):
-        return np.exp(x.axes_like(out), out=out)
+        return np.exp(reaxe_like(x, out, True), out=out)
 
     def log(self, x, out):
-        return np.log(x.axes_like(out), out=out)
+        return np.log(reaxe_like(x, out, True), out=out)
 
     def maximum(self, x, y, out):
-        return np.maximum(x.axes_like(out), y.axes_like(out), out=out)
+        return np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def minimum(self, x, y, out):
-        return np.minimum(x.axes_like(out), y.axes_like(out), out=out)
+        return np.minimum(reaxe_like(x. out, True), reaxe_like(y, out, True), out=out)
 
     def multiply(self, x, y, out):
-        return np.multiply(x.axes_like(out), y.axes_like(out), out=out)
+        return np.multiply(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def negative(self, x, out):
-        return np.negative(x.axes_like(out), out=out)
+        return np.negative(reaxe_like(x, out, True), out=out)
 
     def ones(self, axes, dtype):
         return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
 
     def reciprocal(self, x, out):
-        return np.reciprocal(x.axes_like(out), out=out)
+        return np.reciprocal(reaxe_like(x, out, True), out=out)
 
     def sig(self, x, out):
-        xa = x.axes_like(out)
+        xa = reaxe_like(x, out, True)
         np.negative(xa, out)
         np.exp(out, out)
         np.add(out, 1.0, out)
         return np.reciprocal(out, out)
 
     def sign(self, x, out):
-        return np.sign(x.axes_like(out), out=out)
+        return np.sign(reaxe_like(x, out, True), out=out)
 
     def sin(self, x, out):
-        return np.sin(x.axes_like(out), out=out)
+        return np.sin(reaxe_like(x, out, True), out=out)
 
     def softmax(self, x, batch_axes, out):
-        softmax_axes = axes_sub(x.axes, batch_axes)
+        softmax_axes = axes_sub(tensor_axes(x), batch_axes)
         if softmax_axes == ():
             raise ValueError('Empty softmax')
-        sa_i = find_axes_in_axes(softmax_axes, x.axes)
+        sa_i = find_axes_in_axes(softmax_axes, tensor_axes(x))
         if sa_i == -1:
             raise ValueError('Softmax axes not contiguous')
         if sa_i != 0:
@@ -231,7 +231,7 @@ class NumPyEvaluator(Evaluator):
                 result = result * dim
             return result
         sm_size = prod(sm_dims)
-        rem_dims = [axis.length for axis in x.axes[len(softmax_axes):]]
+        rem_dims = [axis.length for axis in tensor_axes(x)[len(softmax_axes):]]
 
         if len(softmax_axes) > 1:
             new_shape = [sm_size]+rem_dims
@@ -246,27 +246,27 @@ class NumPyEvaluator(Evaluator):
         return np.divide(out, s, out=out)
 
     def sqrt(self, x, out):
-        return np.sqrt(x.axes_like(out), out=out)
+        return np.sqrt(reaxe_like(x, out, True), out=out)
 
     def square(self, x, out):
-        return np.square(x.axes_like(out), out=out)
+        return np.square(reaxe_like(x, out, True), out=out)
 
     def subtract(self, x, y, out):
-        return np.subtract(x.axes_like(out), y.axes_like(out), out=out)
+        return np.subtract(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def sum(self, x, reduction_axes, out):
-        x_axes = x.axes
+        x_axes = tensor_axes(x)
         np_out_axes = axes_sub(x_axes, reduction_axes)
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
-        if list(out.axes) != list(np_out_axes):
+        if list(tensor_axes(out)) != list(np_out_axes):
             temp = np.sum(x, axis=np_red_dims)
             out[...] = temp
         else:
-            np.sum(x, axis=np_red_dims, out=out.array_as_axes(np_out_axes))
+            np.sum(x, axis=np_red_dims, out=reaxe(out, np_out_axes, True))
         return out
 
     def tanh(self, x, out):
-        return np.tanh(x.axes_like(out), out=out)
+        return np.tanh(reaxe_like(x, out, True), out=out)
 
     def zeros(self, axes, dtype):
         return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
@@ -291,15 +291,15 @@ class PyCUDAEvaluator(Evaluator):
         return AxisArray(array=value, axes=axes, dtype=dtype)
 
     def absolute(self, x, out):
-        cumath.fabs(x.axes_like(out), out=out)
+        cumath.fabs(reaxe_like(x, out, True), out=out)
         return out
 
     def add(self, x, y, out):
-        x.axes_like(out)._axpbyz(1, y.axes_like(out), 1, out)
+        reaxe_like(x, out, True)._axpbyz(1, reaxe_like(y, out, True), 1, out)
         return out
 
     def cos(self, x, out):
-        cumath.cos(x.axes_like(out), out=out)
+        cumath.cos(reaxe_like(x, out, True), out=out)
         return out
 
     def dot(self, x, y, int_axes, out):
@@ -311,24 +311,24 @@ class PyCUDAEvaluator(Evaluator):
         return AxisArray(array=gpuarray.empty(axes_shape(axes), dtype), axes=axes)
 
     def exp(self, x, out):
-        cumath.exp(x.axes_like(out), out=out)
+        cumath.exp(reaxe_like(x, out, True), out=out)
         return out
 
     def log(self, x, out):
-        cumath.log(x.axes_like(out), out=out)
+        cumath.log(reaxe_like(x, out, True), out=out)
         return out
 
     def maximum(self, x, y, out):
-        cumath.maximum(x.axes_like(out), y.axes_like(out), out=out)
+        cumath.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
         return out
 
     def minimum(self, x, y, out):
-        cumath.minimum(x.axes_like(out), y.axes_like(out), out=out)
+        cumath.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
         return out
 
     def multiply(self, xa, ya, out):
-        x = xa.axes_like(out)
-        y = ya.axes_like(out)
+        x = reaxe_like(xa, out, True)
+        y = reaxe_like(ya, out, True)
         if isinstance(x, gpuarray.GPUArray):
             if isinstance(y, gpuarray.GPUArray):
                 x._elwise_multiply(y, out=out)
@@ -341,7 +341,7 @@ class PyCUDAEvaluator(Evaluator):
             return x*y
 
     def negative(self, x, out):
-        x.axes_like(out)._axpbz(-1, 0.0, out)
+        reaxe_like(x, out, True)._axpbz(-1, 0.0, out)
         return out
 
     def ones(self, axes, dtype):
@@ -350,7 +350,7 @@ class PyCUDAEvaluator(Evaluator):
         return AxisArray(array=result, axes=axes)
 
     def reciprocal(self, x, out):
-        x.axes_like(out)._rdiv_scalar(1.0, out)
+        reaxe_like(x, out, True)._rdiv_scalar(1.0, out)
         return out
 
     def reshape(self, x, shape):
@@ -365,26 +365,26 @@ class PyCUDAEvaluator(Evaluator):
         return out
 
     def sign(self, x, out):
-        out.set(np.sign(x.axes_like(out).get()))
+        out.set(np.sign(reaxe_like(x, out, True).get()))
         return out
 
     def sin(self, x, out):
-        cumath.sin(x.axes_like(out), out=out)
+        cumath.sin(reaxe_like(x, out, True), out=out)
         return out
 
     def sqrt(self, x, out):
-        cumath.sqrt(x.axes_like(out), out=out)
+        cumath.sqrt(reaxe_like(x, out, True), out=out)
         return out
 
     def square(self, x, out):
-        return self.multiply(x.axes_like(out), x.axes_like(out), out)
+        return self.multiply(reaxe_like(x, out, True), reaxe_like(x, out, True), out)
 
     def subtract(self, x, y, out):
-        x.axes_like(out)._axpbyz(1, y.axes_like(out), 1, out)
+        reaxe_like(x, out, True)._axpbyz(1, reaxe_like(y, out, True), 1, out)
         return out
 
     def tanh(self, x, out):
-        cumath.tanh(x.axes_like(out), out=out)
+        cumath.tanh(reaxe_like(x, out, True), out=out)
         return out
 
     def zeros(self, axes, dtype):

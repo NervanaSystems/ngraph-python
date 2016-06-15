@@ -5,7 +5,7 @@ import numpy as np
 
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.arrayaxes import Axis, axes_sub, axes_intersect, axes_append, axes_contains
-from geon.backends.graph.arrayaxes import elementwise_axes, axes, reaxe, dot_axes
+from geon.backends.graph.arrayaxes import elementwise_axes, tensor_axes, reaxe, dot_axes
 
 
 # This is a partial implementation of axes on top of NumPy
@@ -20,12 +20,12 @@ from geon.backends.graph.arrayaxes import elementwise_axes, axes, reaxe, dot_axe
 # TODO AxisIDs are mostly missing
 
 def elementwise_reaxe(args, out=None, out_axes=None):
-    args_axes = axes_append(*(axes(arg) for arg in args))
+    args_axes = axes_append(*(tensor_axes(arg) for arg in args))
     if out_axes is None and out is not None:
-        out_axes = axes(out)
+        out_axes = tensor_axes(out)
 
-    if out is not None and axes(out) != out_axes:
-        raise ValueError('out_axes={oa} inconsistent with axes(out)={a}'.format(oa=out_axes, a=axes(out)))
+    if out is not None and tensor_axes(out) != out_axes:
+        raise ValueError('out_axes={oa} inconsistent with axes(out)={a}'.format(oa=out_axes, a=tensor_axes(out)))
 
     out_axes = elementwise_axes(args_axes, out_axes)
 
@@ -74,8 +74,8 @@ def dot(x, y, reduction_axes=None, out_axes=None, out=None):
             if out_axes != out.axes:
                 raise ValueError('out_axes does not match out.axes')
 
-    x_axes = axes(x)
-    y_axes = axes(y)
+    x_axes = tensor_axes(x)
+    y_axes = tensor_axes(y)
 
     reduction_axes, s_axes, out_axes = dot_axes(x_axes, y_axes, reduction_axes=reduction_axes, out_axes=out_axes)
 
@@ -83,8 +83,8 @@ def dot(x, y, reduction_axes=None, out_axes=None, out=None):
         out = AxesArray(axes=out_axes)
 
     # Split reductions into groups of contiguous axes that can be done with one np.dot
-    x_base_axes = axes(x._base())
-    y_base_axes = axes(y._base())
+    x_base_axes = tensor_axes(x._base())
+    y_base_axes = tensor_axes(y._base())
     # reduction ordered by x with broadcasts at end
     x_reduction_axes = axes_intersect(x_base_axes, reduction_axes)
     y_reduction_axes = axes_intersect(y_base_axes, reduction_axes)

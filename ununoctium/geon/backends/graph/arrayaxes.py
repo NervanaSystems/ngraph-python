@@ -179,6 +179,18 @@ class AxesSubComp(AxesComp):
         return axes_sub(x_axes, y_axes)
 
 
+def tensor_axes(tensor):
+    if isinstance(tensor, Scalar):
+        return ()
+    elif isinstance(tensor, ObjectWithAxes):
+        return tensor.__axes__()
+    else:
+        return get_current_environment().get_cached_resolved_tensor_axes(tensor)
+
+def set_tensor_axes(tensor, axes):
+    get_current_environment().set_cached_resolved_tensor_axes(tensor, axes)
+
+
 def sample_axes(x, **kargs):
     return AxesSubComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
 
@@ -293,26 +305,6 @@ def axes_replace(axes, replace, replacements):
     return [r[axis] for axis in ids]
 
 
-def axes_reshape(in_axes, out_axes):
-    """
-    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
-
-    :param in_axes: Axes of the input
-    :param out_axes: Axes of the output
-    :return: shape argument for reshape()
-    """
-    result = []
-    in_axes = axis_ids(in_axes)
-    out_axes = axis_ids(out_axes)
-
-    for out_axis in out_axes:
-        if out_axis in in_axes:
-            result.append(out_axis.length)
-        else:
-            result.append(1)
-    return tuple(result)
-
-
 def axes_list(axes, shape_list):
     result = []
     for shape in shape_list:
@@ -365,6 +357,10 @@ def reaxe(x, axes, broadcast=False):
         return x.reaxe(axes, broadcast)
 
     raise ValueError("{x} has no axes".format(x=x))
+
+
+def reaxe_like(x, like, broadcast=False):
+    return reaxe(x, tensor_axes(like), broadcast)
 
 
 def dot_axes(x_axes, y_axes, reduction_axes=None, out_axes=None):
@@ -468,19 +464,25 @@ class AxisArray(np.ndarray):
                 component_axes = flatten_axes(axis)
                 if len(component_axes) == 0:
                     raise ValueError('Cannot compose empty axis set')
-                axis_pos = base_axes.index(component_axes[0])
-                if axis_pos == -1:
-                    if not broadcast:
-                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
-                    for caxis in component_axes:
-                        if base_axes.index(caxis) != -1:
-                            raise ValueError('Cannot compose broadcast and non-broadcast axes')
-                else:
+                if len(component_axes) == 0:
+                    pass
+                try:
+                    axis_pos = base_axes.index(component_axes[0])
                     for i, caxis in enumerate(component_axes):
                         if axis_pos + i != base_axes.index(caxis):
                             raise ValueError('Cannot compose non-contiguous axes')
+                    strides.append(stride(component_axes[-1]))
+                except ValueError:
+                    if not broadcast:
+                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
+                    for caxis in component_axes:
+                        try:
+                            base_axes.index(caxis)
+                            raise ValueError('Cannot compose broadcast and non-broadcast axes')
+                        except ValueError:
+                            strides.append(0)
 
-                strides.append(stride(component_axes[-1]))
+
 
         obj = np.ndarray.__new__(cls, shape, dtype, buffer, offset, strides, order)
         obj.axes = axes
@@ -506,26 +508,14 @@ class AxisArray(np.ndarray):
         axes = tuple(axes)
         if axes == self.axes:
             return self
+        if len(self.axes) == 0 and broadcast:
+            return self
 
         return AxisArray(base=self, axes=axes, broadcast=broadcast, dtype=self.dtype)
 
-    def axes_like(self, array):
-        # TODO Is this reaxe?
-        """
-        Reshape self to conform ot array.
 
-        :param array:
-        :return: An alias of self shaped like array
-        """
-        return self.array_as_axes(array.axes)
-
-    def array_as_axes(self, axes):
-        # TODO Is this reaxe?
-        shape = axes_reshape(self.axes, axes)
-
-        if self.shape == shape:
-            return self
-        return self.reshape(shape)
+    def __axes__(self):
+        return self.axes
 
 
 class ObjectWithAxes(object):
@@ -541,14 +531,6 @@ class Scalar(object):
 
 Scalar.register(numbers.Real)
 ObjectWithAxes.register(Scalar)
-
-def axes(x):
-    if isinstance(x, Scalar):
-        return ()
-
-    if isinstance(x, ObjectWithAxes):
-        return x.axes
-    raise ValueError("{x} has no axes".format(x=x))
 
 
 def axes_generator(axes, gen_axis, base_index=None):
