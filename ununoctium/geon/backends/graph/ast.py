@@ -335,22 +335,29 @@ class AllocationOp(Tensor):
         return self.graph_type.axes
 
 
+class Reaxe(AllocationOp):
+    def __init__(self, axes, **kargs):
+        super(AllocationOp, self).__init__(axes=axes, graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
+
+
+
+
 class input(AllocationOp):
     """
     Can be set externally.
     """
     def __init__(self, **kargs):
         super(input, self).__init__(**kargs)
+        self.__axes = ValueAxesComp(self)
 
     def evaluate(self, evaluator):
-        return self.value
+        return evaluator.input_value(self)
 
     def generate_adjoints(self, tape, delta):
         pass
 
-    @property
-    def axes(self):
-        return self.graph_type.axes
+    def __axes__(self):
+        return self.__axes
 
     @property
     def value(self):
@@ -360,9 +367,8 @@ class input(AllocationOp):
     def value(self, value):
         environment = get_current_environment()
         environment[self] = value
-
-        op = Op.as_op(value)
-        environment.set_cached_resolved_tensor_axes(self, tensor_axes(op))
+        # op = Op.as_op(value)
+        # environment.set_cached_resolved_tensor_axes(self, tensor_axes(op))
 
 
 class Constant(AllocationOp):
@@ -514,8 +520,11 @@ class empty(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evaluator):
+    def allocate(self, evaluator):
         return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+
+    def evaluate(self, evaluator):
+        return evaluator.value(self)
 
 
 class Slice(ComputationOp):
@@ -553,8 +562,8 @@ class Parameter(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evalutor):
-        return self.value
+    def evaluate(self, evaluator):
+        return evaluator.value(self)
 
     def allocate(self, evaluator):
         return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)

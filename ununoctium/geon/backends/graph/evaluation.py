@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
-from geon.backends.graph.arrayaxes import find_axes_in_axes, AxisArray, reaxe, reaxe_like, tensor_axes
+from geon.backends.graph.arrayaxes import find_axes_in_axes, reaxe, reaxe_like, tensor_axes
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 from geon.backends.graph.environment import get_batch_axes, set_batch_axes
@@ -51,7 +51,7 @@ class Evaluator(object):
         try:
             return self.environment.get_cached_resolved_tensor_axes(tensor)
         except KeyError:
-            axes = tensor_axes(tensor).evaluate(self)
+            axes = tensor.axes.evaluate(self)
             self.environment.set_cached_resolved_tensor_axes(tensor, axes)
             return axes
 
@@ -63,14 +63,19 @@ class Evaluator(object):
             self.environment[axes_comp] = resolved_axes
             return resolved_axes
 
-    def get_cached_resolved_tensor_axes(self, tensor):
-        return self.environment.get_cached_resolved_tensor_axes(tensor)
-
     def get_batch_axes(self):
         return get_batch_axes()
 
     def set_batch_axes(self, axes):
         set_batch_axes(axes)
+
+    def input_value(self, x):
+        result = self.environment[x]
+        if isinstance(result, arrayaxes.Scalar):
+            return result
+        axes = self.get_resolved_axes(x.axes)
+        arrayaxes.set_tensor_axis_strides(result, arrayaxes.c_axis_strides(result.dtype, axes), self.environment)
+        return arrayaxes.set_tensor_axes(result, axes, self.environment)
 
     def evaluate_ops(self, ops):
         vals = {}
@@ -90,6 +95,9 @@ class Evaluator(object):
         for op in self.results:
             r[op] = vals[op.output]
         return r
+
+    def value(self, op):
+        return self.environment[op]
 
 
 class NumPyEvaluator(Evaluator):
@@ -117,7 +125,7 @@ class NumPyEvaluator(Evaluator):
         array.__setitem__(item, value)
 
     def constant(self, value, axes, dtype):
-        return AxisArray(axes=axes, array=value, dtype=dtype)
+        return value
 
     def absolute(self, x, out):
         return np.abs(reaxe_like(x, out, True), out=out)
@@ -176,7 +184,7 @@ class NumPyEvaluator(Evaluator):
         return params
 
     def empty(self, axes, dtype):
-        return AxisArray(axes=axes, dtype=dtype or np.float32)
+        return arrayaxes.empty(axes, dtype)
 
     def exp(self, x, out):
         return np.exp(reaxe_like(x, out, True), out=out)
@@ -197,7 +205,8 @@ class NumPyEvaluator(Evaluator):
         return np.negative(reaxe_like(x, out, True), out=out)
 
     def ones(self, axes, dtype):
-        return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
+        #return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
+        return arrayaxes.ones(axes, dtype)
 
     def reciprocal(self, x, out):
         return np.reciprocal(reaxe_like(x, out, True), out=out)
@@ -269,7 +278,9 @@ class NumPyEvaluator(Evaluator):
         return np.tanh(reaxe_like(x, out, True), out=out)
 
     def zeros(self, axes, dtype):
-        return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
+        #return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
+        return arrayaxes.zeros(axes, dtype)
+
 
     def uniform(self, x, low, high):
         u = self.rng.uniform(low, high, x.shape)
@@ -288,7 +299,7 @@ class PyCUDAEvaluator(Evaluator):
             return super(PyCUDAEvaluator, self).evaluate(**kvargs)
 
     def constant(self, value, axes, dtype):
-        return AxisArray(array=value, axes=axes, dtype=dtype)
+        return value
 
     def absolute(self, x, out):
         cumath.fabs(reaxe_like(x, out, True), out=out)
@@ -308,7 +319,7 @@ class PyCUDAEvaluator(Evaluator):
         return out
 
     def empty(self, axes, dtype):
-        return AxisArray(array=gpuarray.empty(axes_shape(axes), dtype), axes=axes)
+        return cumath.empty(axes, dtype)
 
     def exp(self, x, out):
         cumath.exp(reaxe_like(x, out, True), out=out)
@@ -347,7 +358,7 @@ class PyCUDAEvaluator(Evaluator):
     def ones(self, axes, dtype):
         result = gpuarray.empty(axes_shape(axes), dtype)
         result.fill(1.0)
-        return AxisArray(array=result, axes=axes)
+        return result
 
     def reciprocal(self, x, out):
         reaxe_like(x, out, True)._rdiv_scalar(1.0, out)
@@ -388,7 +399,7 @@ class PyCUDAEvaluator(Evaluator):
         return out
 
     def zeros(self, axes, dtype):
-        return AxisArray(array=gpuarray.zeros(axes_shape(axes), dtype), axes=axes)
+        return gpuarray.zeros(axes_shape(axes), dtype)
 
 
 class GenNumPy(Evaluator):

@@ -21,11 +21,13 @@ class Eval(be.Model):
     @be.with_graph_context
     @be.with_environment
     def run(self):
+
+
         x = np.arange(10, dtype=np.float32) + 1
         y = x * x
 
-        self.graph.x.value = be.AxisArray(array=x, axes=(self.g.S,))
-        self.graph.y.value = be.AxisArray(array=y, axes=(self.g.S,))
+        self.graph.x.value = x
+        self.graph.y.value = y
 
         gnp = evaluation.GenNumPy(results=(self.graph.x2, self.graph.z, self.graph.w))
         gnp.evaluate()
