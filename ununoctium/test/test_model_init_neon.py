@@ -18,50 +18,39 @@
 #
 # test_model_init_neon.py -v -r 0 --backend cpu --epochs 10 --eval_freq 1
 #
-# should produce sth like this:
-#
-# 2016-06-10 09:42:51,635 - neon - DISPLAY - Misclassification error = 89.26%
-# 2016-06-10 09:42:51,635 - neon - DISPLAY - epoch: 0 learning_rate: 0.01 initial_train_loss: -1.39674e-06
-# Epoch 0   [Train |████████████████████|  391/391  batches, 1.94 cost, 4.67s] [CrossEntropyMulti Loss 1.95, 0.62s]
-# 2016-06-10 09:42:57,624 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6953
-# 2016-06-10 09:42:57,625 - neon.callbacks.callbacks - INFO - Epoch 0 complete.  Train Cost 2.065901.  Eval Cost 1.951186
-# 2016-06-10 09:42:57,626 - neon - DISPLAY - epoch: 1 learning_rate: 0.01 initial_train_loss: 2.0659
-# Epoch 1   [Train |████████████████████|  391/391  batches, 1.90 cost, 4.06s] [CrossEntropyMulti Loss 1.90, 0.63s]
-# 2016-06-10 09:43:03,030 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6659
-# 2016-06-10 09:43:03,030 - neon.callbacks.callbacks - INFO - Epoch 1 complete.  Train Cost 1.928025.  Eval Cost 1.899957
-# 2016-06-10 09:43:03,031 - neon - DISPLAY - epoch: 2 learning_rate: 0.01 initial_train_loss: 1.92803
-# Epoch 2   [Train |████████████████████|  390/390  batches, 1.88 cost, 3.90s] [CrossEntropyMulti Loss 1.87, 0.59s]
-# 2016-06-10 09:43:08,047 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6572
-# 2016-06-10 09:43:08,048 - neon.callbacks.callbacks - INFO - Epoch 2 complete.  Train Cost 1.876261.  Eval Cost 1.870557
-# 2016-06-10 09:43:08,048 - neon - DISPLAY - epoch: 3 learning_rate: 0.01 initial_train_loss: 1.87626
-# Epoch 3   [Train |████████████████████|  391/391  batches, 1.86 cost, 4.24s] [CrossEntropyMulti Loss 1.86, 0.66s]
-# 2016-06-10 09:43:13,615 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6457
-# 2016-06-10 09:43:13,616 - neon.callbacks.callbacks - INFO - Epoch 3 complete.  Train Cost 1.853629.  Eval Cost 1.855121
-# 2016-06-10 09:43:13,617 - neon - DISPLAY - epoch: 4 learning_rate: 0.01 initial_train_loss: 1.85363
-# Epoch 4   [Train |████████████████████|  391/391  batches, 1.84 cost, 4.38s] [CrossEntropyMulti Loss 1.84, 0.67s]
-# 2016-06-10 09:43:19,312 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6419
-# 2016-06-10 09:43:19,313 - neon.callbacks.callbacks - INFO - Epoch 4 complete.  Train Cost 1.842031.  Eval Cost 1.835479
-# 2016-06-10 09:43:19,313 - neon - DISPLAY - epoch: 5 learning_rate: 0.01 initial_train_loss: 1.84203
-# Epoch 5   [Train |████████████████████|  390/390  batches, 1.81 cost, 4.40s] [CrossEntropyMulti Loss 1.83, 0.71s]
-# 2016-06-10 09:43:25,068 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6339
-# 2016-06-10 09:43:25,069 - neon.callbacks.callbacks - INFO - Epoch 5 complete.  Train Cost 1.818277.  Eval Cost 1.830219
-# 2016-06-10 09:43:25,069 - neon - DISPLAY - epoch: 6 learning_rate: 0.01 initial_train_loss: 1.81828
-# Epoch 6   [Train |████████████████████|  391/391  batches, 1.80 cost, 4.50s] [CrossEntropyMulti Loss 1.81, 0.65s]
-# 2016-06-10 09:43:30,896 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6285
-# 2016-06-10 09:43:30,897 - neon.callbacks.callbacks - INFO - Epoch 6 complete.  Train Cost 1.812860.  Eval Cost 1.812943
-# 2016-06-10 09:43:30,898 - neon - DISPLAY - epoch: 7 learning_rate: 0.01 initial_train_loss: 1.81286
-# Epoch 7   [Train |████████████████████|  390/390  batches, 1.80 cost, 4.18s] [CrossEntropyMulti Loss 1.80, 0.70s]
-# 2016-06-10 09:43:36,446 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6289
-# 2016-06-10 09:43:36,447 - neon.callbacks.callbacks - INFO - Epoch 7 complete.  Train Cost 1.794399.  Eval Cost 1.802400
-# 2016-06-10 09:43:36,447 - neon - DISPLAY - epoch: 8 learning_rate: 0.01 initial_train_loss: 1.7944
-# Epoch 8   [Train |████████████████████|  391/391  batches, 1.78 cost, 4.12s] [CrossEntropyMulti Loss 1.79, 0.70s]
-# 2016-06-10 09:43:41,960 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6216
-# 2016-06-10 09:43:41,960 - neon.callbacks.callbacks - INFO - Epoch 8 complete.  Train Cost 1.791364.  Eval Cost 1.794109
-# 2016-06-10 09:43:41,961 - neon - DISPLAY - epoch: 9 learning_rate: 0.01 initial_train_loss: 1.79136
-# Epoch 9   [Train |████████████████████|  391/391  batches, 1.77 cost, 6.58s] [CrossEntropyMulti Loss 1.80, 0.85s]
-# 2016-06-10 09:43:50,098 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6195
-# 2016-06-10 09:43:50,098 - neon.callbacks.callbacks - INFO - Epoch 9 complete.  Train Cost 1.786760.  Eval Cost 1.797422
-# 2016-06-10 09:43:50,708 - neon - DISPLAY - Misclassification error = 62.27%
+# 2016-06-16 16:20:41,472 - neon - DISPLAY - Misclassification error = 89.26%
+# 2016-06-16 16:20:41,472 - neon - DISPLAY - epoch: 0 learning_rate: 0.01 initial_train_loss: 7.1575e-33
+# 2016-06-16 16:20:48,942 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6895
+# 2016-06-16 16:20:48,944 - neon.callbacks.callbacks - INFO - Epoch 0 complete.  Train Cost 2.062410.  Eval Cost 1.952405
+# 2016-06-16 16:20:48,945 - neon - DISPLAY - epoch: 1 learning_rate: 0.01 initial_train_loss: 2.06241
+# 2016-06-16 16:20:54,028 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6686
+# 2016-06-16 16:20:54,029 - neon.callbacks.callbacks - INFO - Epoch 1 complete.  Train Cost 1.917983.  Eval Cost 1.897193
+# 2016-06-16 16:20:54,030 - neon - DISPLAY - epoch: 2 learning_rate: 0.01 initial_train_loss: 1.91798
+# 2016-06-16 16:20:59,107 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6578
+# 2016-06-16 16:20:59,109 - neon.callbacks.callbacks - INFO - Epoch 2 complete.  Train Cost 1.862682.  Eval Cost 1.868695
+# 2016-06-16 16:20:59,110 - neon - DISPLAY - epoch: 3 learning_rate: 0.01 initial_train_loss: 1.86268
+# 2016-06-16 16:21:04,690 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6481
+# 2016-06-16 16:21:04,691 - neon.callbacks.callbacks - INFO - Epoch 3 complete.  Train Cost 1.845137.  Eval Cost 1.847145
+# 2016-06-16 16:21:04,692 - neon - DISPLAY - epoch: 4 learning_rate: 0.01 initial_train_loss: 1.84514
+# 2016-06-16 16:21:09,788 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6393
+# 2016-06-16 16:21:09,788 - neon.callbacks.callbacks - INFO - Epoch 4 complete.  Train Cost 1.834346.  Eval Cost 1.835796
+# 2016-06-16 16:21:09,789 - neon - DISPLAY - epoch: 5 learning_rate: 0.01 initial_train_loss: 1.83435
+# 2016-06-16 16:21:15,231 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6441
+# 2016-06-16 16:21:15,232 - neon.callbacks.callbacks - INFO - Epoch 5 complete.  Train Cost 1.808218.  Eval Cost 1.835048
+# 2016-06-16 16:21:15,232 - neon - DISPLAY - epoch: 6 learning_rate: 0.01 initial_train_loss: 1.80822
+# 2016-06-16 16:21:20,232 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.633
+# 2016-06-16 16:21:20,233 - neon.callbacks.callbacks - INFO - Epoch 6 complete.  Train Cost 1.809532.  Eval Cost 1.820541
+# 2016-06-16 16:21:20,233 - neon - DISPLAY - epoch: 7 learning_rate: 0.01 initial_train_loss: 1.80953
+# 2016-06-16 16:21:25,392 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6278
+# 2016-06-16 16:21:25,393 - neon.callbacks.callbacks - INFO - Epoch 7 complete.  Train Cost 1.789490.  Eval Cost 1.811423
+# 2016-06-16 16:21:25,394 - neon - DISPLAY - epoch: 8 learning_rate: 0.01 initial_train_loss: 1.78949
+# 2016-06-16 16:21:30,609 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6304
+# 2016-06-16 16:21:30,610 - neon.callbacks.callbacks - INFO - Epoch 8 complete.  Train Cost 1.782343.  Eval Cost 1.799538
+# 2016-06-16 16:21:30,610 - neon - DISPLAY - epoch: 9 learning_rate: 0.01 initial_train_loss: 1.78234
+# 2016-06-16 16:21:36,211 - neon.callbacks.callbacks - INFO - Top1Misclass: 0.6261
+# 2016-06-16 16:21:36,212 - neon.callbacks.callbacks - INFO - Epoch 9 complete.  Train Cost 1.778128.  Eval Cost 1.790867
+# 2016-06-16 16:21:36,823 - neon - DISPLAY - Misclassification error = 62.61%
+
 
 """
 Small CIFAR10 based MLP with fully connected layers.
