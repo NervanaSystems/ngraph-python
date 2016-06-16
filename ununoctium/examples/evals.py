@@ -18,7 +18,7 @@ class Eval(be.Model):
 
         g.z = 2 * be.deriv(be.exp(abs(-be.log(g.x * g.y))), g.x)
 
-    @be.with_graph_context
+    @be.with_graph_scope
     @be.with_environment
     def run(self):
 

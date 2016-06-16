@@ -2,7 +2,7 @@ import collections
 
 from neon.layers.container import flatten
 
-from geon.backends.graph.names import Naming
+from geon.backends.graph.names import NameScope
 from geon.backends.graph.layer import Layer, BranchNode
 
 

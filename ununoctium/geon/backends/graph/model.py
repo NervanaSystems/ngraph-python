@@ -1,6 +1,6 @@
 import numpy as np
 
-from geon.backends.graph.names import NameableValue, bound_naming
+from geon.backends.graph.names import NameableValue, name_scope
 from geon.backends.graph.environment import bound_environment, captured_ops
 from geon.backends.graph.graph import GraphComponent
 from geon.backends.graph.arrayaxes import AxisVar
@@ -16,7 +16,7 @@ class Model(object, NameableValue, GraphComponent):
         self.optimizer = optimizer
 
         graph = self.graph
-        # Define the standar Neon axes
+        # Define the standard Neon axes
         graph.N = AxisVar()
         graph.C = AxisVar()
         graph.D = AxisVar()
@@ -82,7 +82,7 @@ class Model(object, NameableValue, GraphComponent):
         self.optimizer = optimizer
 
         with bound_environment(environmant=self.environment):
-            with bound_naming(naming=self.graph):
+            with name_scope(name_scope=self.graph):
                 with captured_ops as self.ops:
                     self.initialize(dataset, cost)
 

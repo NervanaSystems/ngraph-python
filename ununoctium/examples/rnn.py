@@ -80,7 +80,7 @@ class MyRnn(be.Model):
                 reg = reg + l2
         g.loss = g.error + .01 * reg
 
-    @be.with_graph_context
+    @be.with_graph_scope
     @be.with_environment
     def train(self, epochs):
         g  = self.graph
@@ -117,7 +117,7 @@ class MyRnn(be.Model):
                 vals = enp.evaluate()
                 print(vals[g.error])
 
-    @be.with_graph_context
+    @be.with_graph_scope
     @be.with_environment
     def dump(self):
         for _ in be.get_all_defs():

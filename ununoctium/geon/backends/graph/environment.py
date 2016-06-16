@@ -13,25 +13,25 @@ import threading
 # TODO replace the special-cases in the environment with a kind argument to access/set so we don't
 # TODO need all these special-purpose methods
 
-__thread_data = threading.local()
+__thread_state = threading.local()
 
 
-def get_thread_data():
-    return __thread_data
+def get_thread_state():
+    return __thread_state
 
 
-get_thread_data().naming = [None]
+get_thread_state().name_scope = [None]
 
 
-def get_thread_naming():
-    return get_thread_data().naming
+def get_thread_name_scope():
+    return get_thread_state().name_scope
 
 
-get_thread_data().ops = [None]
+get_thread_state().ops = [None]
 
 
 def get_thread_ops():
-    return get_thread_data().ops
+    return get_thread_state().ops
 
 
 def get_current_ops():
@@ -47,11 +47,11 @@ def captured_ops(ops=None):
         get_thread_ops().pop()
 
 
-get_thread_data().environment = [None]
+get_thread_state().environment = [None]
 
 
 def get_thread_environment():
-    return get_thread_data().environment
+    return get_thread_state().environment
 
 
 def get_current_environment():

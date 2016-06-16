@@ -1,4 +1,4 @@
-from geon.backends.graph.names import NameableValue, Naming
+from geon.backends.graph.names import NameableValue, NameScope
 
 # TODO These are stubs for implementing Neon's layers
 

@@ -1,5 +1,5 @@
-from geon.backends.graph.names import layers_named, with_name_context
-from geon.backends.graph.graph import Model, with_graph_context, with_environment, get_current_environment
+from geon.backends.graph.names import name_scope_list, with_name_scope
+from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment
 
 from geon.backends.graph.defmodimp import Axis, deriv, input, Parameter, ArrayWithAxes

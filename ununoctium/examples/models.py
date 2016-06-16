@@ -15,13 +15,13 @@ parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
 args = parser.parse_args()
 
-@be.with_name_context
-def linear(params, x, axes, init=None, bias=None):
-    params.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
-    result = be.dot(params.weights, x)
+@be.with_name_scope
+def linear(ns, x, axes, init=None, bias=None):
+    ns.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+    result = be.dot(ns.weights, x)
     if bias is not None:
-        params.bias = be.Parameter(axes=result.axes.sample, init=bias)
-        result = result + params.bias
+        ns.bias = be.Parameter(axes=result.axes.sample, init=bias)
+        result = result + ns.bias
     return result
 
 
@@ -29,16 +29,16 @@ def affine(x, activation, **kargs):
     return activation(linear(x, **kargs))
 
 
-@be.with_name_context
-def mlp(params, x, activation, shape_spec, axes, **kargs):
+@be.with_name_scope
+def mlp(ns, x, activation, shape_spec, axes, **kargs):
     value = x
-    with be.layers_named('L') as layers:
+    with be.name_scope_list('L') as name_scopes:
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
-                with be.next_layer(layers) as layer:
-                    layer.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
-                    value = affine(value, activation=hidden_activation, axes=layer.axes, **kargs)
-        with be.next_layer(layers):
+                with be.next_name_scope(name_scopes) as nns:
+                    nns.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
+                    value = affine(value, activation=hidden_activation, axes=nns.axes, **kargs)
+        with be.next_name_scope(name_scopes):
             value = affine(value, activation=activation, axes=axes, **kargs)
     return value
 
@@ -95,8 +95,7 @@ class MyTest(be.Model):
         g.loss = g.error + .01 * reg
 
 
-    @be.with_graph_context
-    @be.with_environment
+    @be.with_graph_scope
     def dump(self):
         g = self.graph
 
@@ -110,7 +109,7 @@ class MyTest(be.Model):
         gnp = evaluation.GenNumPy(results=derivs)
         gnp.evaluate()
 
-    @be.with_graph_context
+    @be.with_graph_scope
     def train(self):
         with be.bound_environment() as env:
             # setup data provider
@@ -121,21 +120,21 @@ class MyTest(be.Model):
             #train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
             test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
 
-            g = self.graph
-            g.N.length = train.bsz
+            graph = self.graph
+            graph.N.length = train.bsz
             c, h, w = train.shape
-            g.C.length = c
-            g.H.length = h
-            g.W.length = w
-            g.Y.length = train.nclasses
+            graph.C.length = c
+            graph.H.length = h
+            graph.W.length = w
+            graph.Y.length = train.nclasses
 
             learning_rate = be.input(axes=())
-            params = g.error.parameters()
-            derivs = [be.deriv(g.loss, param) for param in params]
+            params = graph.error.parameters()
+            derivs = [be.deriv(graph.loss, param) for param in params]
 
             updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
 
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error, updates]+derivs)
             enp.initialize()
 
             for epoch in range(args.epochs):
@@ -144,10 +143,10 @@ class MyTest(be.Model):
                 training_n = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    g.x.value = xraw.array
-                    g.y.value = yraw.array
+                    graph.x.value = xraw.array
+                    graph.y.value = yraw.array
                     vals = enp.evaluate()
-                    training_error += vals[g.error]/train.bsz
+                    training_error += vals[graph.error]/train.bsz
                     training_n += 1
                     # break
 
@@ -158,18 +157,18 @@ class MyTest(be.Model):
 
             return env
 
-    @be.with_graph_context
+    @be.with_graph_scope
     def test(self, env, test):
-        g = self.graph
+        graph = self.graph
         with be.bound_environment(env):
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error])
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error])
             total_error = 0
             n = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
-                g.x.value = xraw.array
-                g.y.value = yraw.array
+                graph.x.value = xraw.array
+                graph.y.value = yraw.array
                 vals = enp.evaluate()
-                total_error += vals[g.error] / test.bsz
+                total_error += vals[graph.error] / test.bsz
                 n += 1
                 # break
             print("Test error: {e}".format(e=total_error/n))
