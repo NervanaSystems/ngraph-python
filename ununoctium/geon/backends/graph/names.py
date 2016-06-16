@@ -1,60 +1,56 @@
-import numbers
-import weakref
-import collections
 from contextlib import contextmanager
 from functools import wraps
 
-from geon.backends.graph.errors import NameException
-from geon.backends.graph.environment import get_current_environment, get_thread_naming
+from geon.backends.graph.environment import get_thread_name_scope
 
 
-def get_current_naming():
-    return get_thread_naming()[-1]
+def get_current_name_scope():
+    return get_thread_name_scope()[-1]
 
 
 @contextmanager
-def bound_naming(naming=None, name=None):
+def name_scope(name=None, name_scope=None):
     """
-    Create and use a new naming context
+    Create and use a new name scope
 
-    :param naming: Reuse an existing context
-    :param name: Create a new context within the current context
-    :return: The new naming context.
+    :param name_scope: Reuse an existing name scope
+    :param name: Create a new name scope within the current name scope
+    :return: The new name scope.
     """
 
-    naming = naming or Naming(name=name)
-    get_thread_naming().append(naming)
+    name_scope = name_scope or NameScope(name=name)
+    get_thread_name_scope().append(name_scope)
 
     try:
-        yield(naming)
+        yield(name_scope)
     finally:
-        get_thread_naming().pop()
+        get_thread_name_scope().pop()
 
 
 @contextmanager
-def layers_named(name):
+def name_scope_list(name):
     """
-    Create and use a collection of naming contexts.
-    :param name: The name of the collection.
-    :return: An iterator for new naming contexts in the collection.
+    Create and use a list of name scopes.
+    :param name: The name of the list.
+    :return: An iterator for new name scopes in the collection.
     """
-    naming = NamedList(name=name)
-    yield(NamedListExtender(naming))
+    naming = NameScopeList(name=name)
+    yield(NameScopeListExtender(naming))
 
 
 @contextmanager
-def next_layer(layers):
-    layer = layers.next()
-    with bound_naming(naming=layer):
-        yield(layer)
+def next_name_scope(name_scope_list):
+    ns = name_scope_list.next()
+    with name_scope(name_scope=ns):
+        yield(ns)
 
 
-def with_name_context(fun, name=None):
+def with_name_scope(fun, name=None):
     """
-    Function annotator for introducing a name context.
+    Function annotator for introducing a name scope.
 
     :param fun: The function being annotated.
-    :param name: The context name, defaults to the function name
+    :param name: The name scope name, defaults to the function name
     :return: The annotated function.
     """
     cname = name
@@ -68,7 +64,7 @@ def with_name_context(fun, name=None):
             myname = kargs['name']
             del kargs['name']
 
-        with bound_naming(name=myname) as ctx:
+        with name_scope(name=myname) as ctx:
             return fun(ctx, *args, **kargs)
 
     return wrapper
@@ -89,14 +85,16 @@ class NameableValue(object):
         self.__name = name
 
 
+_default_parent = object()
+
 class Parented(NameableValue):
     """
-    A nameable value with a parent, defaults to current naming context.
+    A nameable value with a parent, defaults to current name scope.
     """
-    def __init__(self, parent=None, name=None, **kargs):
+    def __init__(self, parent=_default_parent, name=None, **kargs):
         super(Parented, self).__init__(name=name, **kargs)
-        if parent is None:
-            parent = get_current_naming()
+        if parent is _default_parent:
+            parent = get_current_name_scope()
         if parent is not None:
             parent.__setattr__(self.name, self)
 
@@ -112,54 +110,33 @@ class Parented(NameableValue):
                     self.__setattr__(vname, v)
 
 
-class Naming(Parented):
+class NameScope(Parented):
     def __init__(self, **kargs):
-        super(Naming, self).__init__(**kargs)
+        super(NameScope, self).__init__(**kargs)
 
     def __setattr__(self, name, value):
-        super(Naming, self).__setattr__(name, value)
+        super(NameScope, self).__setattr__(name, value)
         self._set_value_name("." + name, value)
 
 
-class NamedList(Parented, list):
-    """A named list of name contexts"""
+class NameScopeList(Parented, list):
+    """A named list of name scopes"""
     def __init__(self, **kargs):
-        super(NamedList, self).__init__(**kargs)
+        super(NameScopeList, self).__init__(**kargs)
 
 
-class NamedListExtender(object):
-    """An iterator of naming contexts that extends a named list"""
-    def __init__(self, namelist):
-        self.namelist = namelist
+class NameScopeListExtender(object):
+    """An iterator of name scopes that extends a named list"""
+    def __init__(self, name_scope_list):
+        self.name_scope_list = name_scope_list
 
     def __iter__(self):
         return self
 
     def next(self):
-        namelist = self.namelist
-        name = '[{len}]'.format(len=len(namelist))
-        val = Naming(parent=namelist, name=name)
-        namelist._set_value_name(name, val)
-        namelist.append(val)
+        name_scope_list = self.name_scope_list
+        name = '[{len}]'.format(len=len(name_scope_list))
+        val = NameScope(parent=name_scope_list, name=name)
+        name_scope_list._set_value_name(name, val)
+        name_scope_list.append(val)
         return val
-
-
-class NamedValueGenerator(NameableValue):
-    """Accessing attributes generates objects."""
-    def __init__(self, generator, name="", **kargs):
-        super(NamedValueGenerator, self).__init__(name=name, **kargs)
-        self.__generator = generator
-
-    def __setattr__(self, name, value):
-        if name.startswith('_'):
-            return super(NamedValueGenerator, self).__setattr__(name, value)
-        else:
-            raise NameException()
-
-    def __getattr__(self, name):
-        if not name.startswith('_'):
-            named_value = self.__generator(name=self.name+"."+name)
-            super(NamedValueGenerator, self).__setattr__(name, named_value)
-            return named_value
-        return super(NamedValueGenerator, self).__getattr__(name)
-

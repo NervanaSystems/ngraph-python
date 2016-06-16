@@ -10,7 +10,7 @@ class Uniform(object):
         evaluator.uniform(value, self.low, self.high)
 
 
-@nm.with_name_context
+@nm.with_name_scope
 def linear(m, x, x_axes, axes, batch_axes=(), init=None):
     m.weights = nm.Parameter(axes=axes + x_axes - batch_axes, init=init, tags='parameter')
     m.bias = nm.Parameter(axes=axes, init=init, tags='parameter')
@@ -21,11 +21,11 @@ def affine(x, activation, batch_axes=None, **kargs):
     return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
 
 
-@nm.with_name_context
+@nm.with_name_scope
 def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
     value = x
     last_axes = x_axes
-    with nm.layers_named('L') as layers:
+    with nm.name_scope_list('L') as layers:
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for layer, shape in zip(layers, hidden_shapes):
                 layer.axes = tuple(nm.Axis(like=axis) for axis in hidden_axes)
@@ -87,7 +87,7 @@ class MyTest(nm.Model):
                 reg = reg + l2
         g.loss = g.error + .01 * reg
 
-    @nm.with_graph_context
+    @nm.with_graph_scope
     @nm.with_environment
     def dump(self):
         for _ in nm.get_all_defs():

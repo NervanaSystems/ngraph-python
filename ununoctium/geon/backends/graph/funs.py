@@ -1,7 +1,7 @@
 import geon.backends.graph.graph as graph
 
-from geon.backends.graph.names import layers_named, with_name_context, bound_naming, next_layer
-from geon.backends.graph.graph import Model, with_graph_context, with_environment, get_current_environment
+from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope, next_name_scope
+from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment, set_batch_axes, get_batch_axes
 
 from geon.backends.graph.ast import deriv, input, Parameter
