@@ -100,8 +100,8 @@ class MyTest(be.Model):
     def dump(self):
         g = self.graph
 
-        g.x.value = be.AxisArray(array=np.empty((3, 32, 32, 128)), axes=(g.C, g.H, g.W, g.N))
-        g.y.value = be.AxisArray(array=np.empty((1000, 128)), axes=(g.Y, g.N))
+        g.x.value = np.empty((3, 32, 32, 128))
+        g.y.value = np.empty((1000, 128))
 
         learning_rate = be.input(axes=())
         params = g.error.parameters()
@@ -142,10 +142,10 @@ class MyTest(be.Model):
                 print("Epoch {epoch}".format(epoch=epoch))
                 training_error = 0
                 training_n = 0
-                learning_rate.value = be.AxisArray(array=.1 / (1 + epoch) / train.bsz, axes=())
+                learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
-                    g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
+                    g.x.value = xraw.array
+                    g.y.value = yraw.array
                     vals = enp.evaluate()
                     training_error += vals[g.error]/train.bsz
                     training_n += 1
@@ -166,8 +166,8 @@ class MyTest(be.Model):
             total_error = 0
             n = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
-                g.x.value = be.AxisArray(axes=(g.C, g.H, g.W, g.N), array=xraw.array)
-                g.y.value = be.AxisArray(axes=(g.Y, g.N), array=yraw.array)
+                g.x.value = xraw.array
+                g.y.value = yraw.array
                 vals = enp.evaluate()
                 total_error += vals[g.error] / test.bsz
                 n += 1

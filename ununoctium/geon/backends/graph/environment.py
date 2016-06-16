@@ -85,8 +85,12 @@ class Environment(object):
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
-        self.resolved_tensor_axes = weakref.WeakKeyDictionary()
+        # TODO Should be weak, but can't be until axes are compile-time
+        self.resolved_tensor_axes = dict()
+        # TODO Should be weak, but can't be until axes are compile-time
+        self.tensor_strides = dict()
         self.values = dict()
+
 
     def _chained_search(self, attr, key, default=None, use_default=False):
         env = self
@@ -117,6 +121,15 @@ class Environment(object):
 
     def set_cached_resolved_tensor_axes(self, tensor, axes):
         self.resolved_tensor_axes[tensor] = axes
+
+
+    def get_tensor_strides(self, tensor):
+        return self._chained_search('tensor_strides', tensor)
+
+
+    def set_tensor_strides(self, tensor, strides):
+        self.tensor_strides[tensor] = strides
+
 
 def get_batch_axes():
     return get_current_environment()['batch_axes']

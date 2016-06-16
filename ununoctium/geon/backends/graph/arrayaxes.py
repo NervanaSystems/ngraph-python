@@ -163,7 +163,7 @@ class ValueAxesComp(AxesComp):
         self.x = x
 
     def evaluate(self, evaluator):
-        return evaluator.get_cached_resolved_tensor_axes(self.x)
+        return evaluator.get_resolved_tensor_axes(self.x)
 
 
 class AxesSubComp(AxesComp):
@@ -177,6 +177,99 @@ class AxesSubComp(AxesComp):
         x_axes = evaluator.get_resolved_axes(self.x)
         y_axes = evaluator.get_resolved_axes(self.y)
         return axes_sub(x_axes, y_axes)
+
+
+def c_axis_strides(dtype, axes):
+    strides = dict()
+    stride = dtype.itemsize
+    for axis in reversed(axes):
+        strides[axis] = stride
+        stride *= axis.length
+    return strides
+
+
+def set_tensor_axis_strides(tensor, axis_strides, environment):
+    key = NumpyWrapper(tensor)
+    environment.set_tensor_strides(key, axis_strides)
+    return tensor
+
+def tensor_axis_strides(array, axes=None):
+    axis_strides = dict()
+
+    if axes is None:
+        axes = tensor_axes(array)
+
+    for axis, stride in zip(axes, array.strides):
+        axis_strides[axis] = stride
+
+    return axis_strides
+
+
+def tensor_strides(tensor, axes=None, environment=None):
+    if environment is None:
+        environment = get_current_environment()
+    if axes is None:
+        try:
+            axes = tensor_axes(tensor, environment)
+        except KeyError:
+            return dict()
+    try:
+        return environment.get_tensor_strides(NumpyWrapper(tensor))
+    except KeyError:
+        return tensor_axis_strides(tensor, axes)
+
+class NumpyWrapper(object):
+    def __init__(self, array):
+        self.array = array
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, NumpyWrapper):
+            return False
+        return id(self.array) == id(other.array)
+
+    def __hash__(self):
+        return id(self.array)
+
+def tensor_axes(tensor, environment=None):
+    if isinstance(tensor, Scalar):
+        return ()
+    elif isinstance(tensor, ObjectWithAxes):
+        return tensor.__axes__()
+    else:
+        if environment is None:
+            environment = get_current_environment()
+        key = tensor
+        if isinstance(tensor, np.ndarray):
+            key = NumpyWrapper(tensor)
+        return environment.get_cached_resolved_tensor_axes(key)
+
+
+def canonicalize_axes(axes):
+    def canonic(x):
+        if isinstance(x, collections.Iterable):
+            x = tuple(x)
+            if len(x) == 1:
+                return x[0]
+            else:
+                return x
+        else:
+            return x
+
+    return tuple(canonic(x) for x in axes)
+
+
+def set_tensor_axes(tensor, axes, environment=None):
+    axes = canonicalize_axes(axes)
+    if environment is None:
+        environment = get_current_environment()
+
+    key = tensor
+    if isinstance(tensor, np.ndarray):
+        key = NumpyWrapper(tensor)
+    environment.set_cached_resolved_tensor_axes(key, axes)
+    return tensor
 
 
 def sample_axes(x, **kargs):
@@ -293,26 +386,6 @@ def axes_replace(axes, replace, replacements):
     return [r[axis] for axis in ids]
 
 
-def axes_reshape(in_axes, out_axes):
-    """
-    Compute the reshape shape to broadcast in to out.  Axes must be consistently ordered
-
-    :param in_axes: Axes of the input
-    :param out_axes: Axes of the output
-    :return: shape argument for reshape()
-    """
-    result = []
-    in_axes = axis_ids(in_axes)
-    out_axes = axis_ids(out_axes)
-
-    for out_axis in out_axes:
-        if out_axis in in_axes:
-            result.append(out_axis.length)
-        else:
-            result.append(1)
-    return tuple(result)
-
-
 def axes_list(axes, shape_list):
     result = []
     for shape in shape_list:
@@ -361,10 +434,14 @@ def reaxe(x, axes, broadcast=False):
     if isinstance(x, Scalar):
         if broadcast or axes == ():
             return x
-    elif isinstance(x, AxisArray):
-        return x.reaxe(axes, broadcast)
+    elif isinstance(x, np.ndarray):
+        return reaxe_array(axes, x, broadcast)
 
     raise ValueError("{x} has no axes".format(x=x))
+
+
+def reaxe_like(x, like, broadcast=False):
+    return reaxe(x, tensor_axes(like), broadcast)
 
 
 def dot_axes(x_axes, y_axes, reduction_axes=None, out_axes=None):
@@ -385,26 +462,6 @@ def dot_axes(x_axes, y_axes, reduction_axes=None, out_axes=None):
     return reduction_axes, s_axes, out_axes
 
 
-def permute(array, permutation):
-    old_strides = array.strides
-    old_shape = array.shape
-    new_strides = [old_strides[pos] for pos in permutation]
-    new_shape = [old_shape[pos] for pos in permutation]
-    return np.ndarray(shape=new_shape, dtype=array.dtype, buffer=array, strides=new_strides)
-
-
-def invert_permutation(permutation):
-    result = list(permutation)
-    for i, p in enumerate(permutation):
-        result[p] = i
-    return result
-
-
-def permutation(array):
-    """The permutation to put the axes of the array in storage order (decreasing strides)"""
-    t = sorted([(i, s) for i, s in enumerate(array.strides)], key=lambda p: -p[1])
-    return tuple(i for i, s in t)
-
 def shapes_compatible(shape1, shape2):
     def shape_size(shape):
         result = 1
@@ -415,125 +472,78 @@ def shapes_compatible(shape1, shape2):
     return shape_size(shape1) == shape_size(shape2)
 
 
-class AxisArray(np.ndarray):
-    """
-    Helper to keep arrays and axes paired until shaping is explicit in the graph.
-    """
-    __metaclass__ = ABCMeta
+def empty(axes, dtype=float):
+    axes = canonicalize_axes(axes)
+    return set_tensor_axes(np.empty(axes_shape(axes), dtype), axes)
 
-    def __new__(cls, axes=None, array=None, base=None, broadcast=False, dtype=None, buffer=None, offset=0,
-                strides=None, order=None):
-        if axes is not None:
-            def canonic(x):
-                if isinstance(x, collections.Iterable):
-                    x = tuple(x)
-                    if len(x) == 1:
-                        return x[0]
-                    else:
-                        return x
+
+def empty_like(a, dtype=None, subok=True):
+    return set_tensor_axes(np.empty_like(a, dtype, subok), tensor_axes(a))
+
+
+def ones(axes, dtype=None):
+    axes = canonicalize_axes(axes)
+    return set_tensor_axes(np.ones(axes_shape(axes), dtype), axes)
+
+
+def ones_like(a, dtype=None, subok=True):
+    return set_tensor_axes(np.ones_like(a, dtype, subok), tensor_axes(a))
+
+
+def zeros(axes, dtype=None):
+    axes = canonicalize_axes(axes)
+    return set_tensor_axes(np.zeros(axes_shape(axes), dtype), axes)
+
+
+def zeros_like(a, dtype=None, subok=True):
+    return set_tensor_axes(np.zeros_like(a, dtype, subok), tensor_axes(a))
+
+
+def full(axes, fill_value, dtype=None):
+    axes = canonicalize_axes(axes)
+    return set_tensor_axes(np.full(axes_shape(axes), fill_value, dtype), axes)
+
+
+def full_like(a, fill_value, dtype=None, subok=True):
+    return set_tensor_axes(np.full_like(a, fill_value, dtype, subok), tensor_axes(a))
+
+
+def reaxe_strides(axes, axis_strides, broadcast=False):
+    strides = []
+    for axis in axes:
+        component_axes = flatten_axes(axis)
+        if len(component_axes) == 0:
+            strides.append(0)
+        else:
+            try:
+                strides.append(axis_strides[component_axes[-1]])
+            except KeyError:
+                if not broadcast:
+                    raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
                 else:
-                    return x
-            axes = tuple(canonic(x) for x in axes)
-        shape = tuple(axes_shape(axes))
-        if array is not None:
-            array = np.asarray(array)
-            if not shapes_compatible(array.shape, shape):
-                raise ValueError('Incompatible shapes')
-            base = array.reshape(shape)
-            dtype = array.dtype
+                    strides.append(0)
+    return strides
 
-        if dtype is None:
-            dtype = float
 
-        if base is not None:
-            buffer = base.base
-            if buffer is None:
-                buffer = base
-            base_strides = base.strides
-            if isinstance(buffer, ObjectWithAxes):
-                base_axes = buffer.axes
-            elif isinstance(base, ObjectWithAxes):
-                base_axes = base.axes
-            else:
-                base_axes = axes
+def reaxe_array(axes, array, broadcast=False, offset=0):
+    axes = canonicalize_axes(axes)
 
-            def stride(axis):
-                index = base_axes.index(axis)
-                if index < 0:
-                    return 0
-                return base_strides[index]
+    axis_strides = dict()
+    axis_strides.update(tensor_strides(array))
 
-            strides = []
-            for axis in axes:
-                component_axes = flatten_axes(axis)
-                if len(component_axes) == 0:
-                    raise ValueError('Cannot compose empty axis set')
-                axis_pos = base_axes.index(component_axes[0])
-                if axis_pos == -1:
-                    if not broadcast:
-                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
-                    for caxis in component_axes:
-                        if base_axes.index(caxis) != -1:
-                            raise ValueError('Cannot compose broadcast and non-broadcast axes')
-                else:
-                    for i, caxis in enumerate(component_axes):
-                        if axis_pos + i != base_axes.index(caxis):
-                            raise ValueError('Cannot compose non-contiguous axes')
+    buffer = array.base
+    if buffer is not None:
+        axis_strides.update(tensor_strides(buffer))
+    else:
+        buffer = array
 
-                strides.append(stride(component_axes[-1]))
-
-        obj = np.ndarray.__new__(cls, shape, dtype, buffer, offset, strides, order)
-        obj.axes = axes
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        obj_axes = getattr(obj, 'axes', None)
-        obj_shape = axes_shape(obj_axes)
-        axes = []
-        shape = self.shape
-        if obj_shape != shape:
-            for axis, s in zip(obj_axes, self.shape):
-                if isinstance(axis, list):
-                    pass
-                if axis.length != s:
-                    axis = Axis(s, like=axis)
-                axes.append(axis)
-        self.axes = tuple(axes)
-
-    def reaxe(self, axes, broadcast=False):
-        axes = tuple(axes)
-        if axes == self.axes:
-            return self
-
-        return AxisArray(base=self, axes=axes, broadcast=broadcast, dtype=self.dtype)
-
-    def axes_like(self, array):
-        # TODO Is this reaxe?
-        """
-        Reshape self to conform ot array.
-
-        :param array:
-        :return: An alias of self shaped like array
-        """
-        return self.array_as_axes(array.axes)
-
-    def array_as_axes(self, axes):
-        # TODO Is this reaxe?
-        shape = axes_reshape(self.axes, axes)
-
-        if self.shape == shape:
-            return self
-        return self.reshape(shape)
+    strides = reaxe_strides(axes, axis_strides, broadcast)
+    obj = np.ndarray(tuple(axes_shape(axes)), array.dtype, buffer, offset, strides)
+    return set_tensor_axes(obj, axes)
 
 
 class ObjectWithAxes(object):
     __metaclass__ = ABCMeta
-
-
-ObjectWithAxes.register(AxisArray)
-
 
 class Scalar(object):
     __metaclass__ = ABCMeta
@@ -541,22 +551,5 @@ class Scalar(object):
 
 Scalar.register(numbers.Real)
 ObjectWithAxes.register(Scalar)
-
-def axes(x):
-    if isinstance(x, Scalar):
-        return ()
-
-    if isinstance(x, ObjectWithAxes):
-        return x.axes
-    raise ValueError("{x} has no axes".format(x=x))
-
-
-def axes_generator(axes, gen_axis, base_index=None):
-    index = list(base_index or [0]*len(axes))
-    pos = axes.index(gen_axis)
-    for i in xrange(gen_axis.length):
-        index[pos] = i
-        yield tuple(index)
-
 
 
