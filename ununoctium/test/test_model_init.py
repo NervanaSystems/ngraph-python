@@ -39,6 +39,7 @@ from neon.initializers import Uniform, Constant
 import geon.backends.graph.funs as be
 import geon.backends.graph.graph as graph
 import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.axis as ax
 import geon.backends.graph.dataloaderbackend
 
 import numpy as np
@@ -53,10 +54,10 @@ args = parser.parse_args()
 
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
-    ns.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+    ns.weights = be.Variable(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
-        ns.bias = be.Parameter(axes=result.axes.sample, init=bias)
+        ns.bias = be.Variable(axes=result.axes.sample, init=bias)
         result = result + ns.bias
     return result
 
@@ -77,48 +78,34 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
             value = affine(value, activation=activation, axes=axes, **kargs)
     return value
 
-def cross_entropy(pred, t):
-    """
-    :param pred:  Estimate
-    :param t: Actual 1-hot data
-    :return:
-    """
-    return -be.sum(be.log(pred) / np.log(2.0) * t)
-
 
 class MyTest(be.Model):
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
         g = self.graph
 
-        g.C = be.AxisVar()
-        g.H = be.AxisVar()
-        g.W = be.AxisVar()
-        g.N = be.AxisVar()
-        g.Y = be.AxisVar()
+        be.set_batch_axes([ax.N])
 
-        be.set_batch_axes([g.N])
+        g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
+        g.y = be.placeholder(axes=(ax.Y, ax.N))
 
-        g.x = be.input(axes=(g.C, g.H, g.W, g.N))
-        g.y = be.input(axes=(g.Y, g.N))
-
-        layers = [(be.tanh, (g.Y,), [(200,)])]
+        layers = [(be.tanh, (ax.Y,), [(200,)])]
 
         uni = Uniform(-0.1, 0.1)
         g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
 
-        g.loss = cross_entropy(g.value, g.y)
+        g.loss = be.cross_entropy_multi(g.value, g.y)
 
     @be.with_graph_scope
     def get_initial_params(self, train, test):
         with be.bound_environment() as env:
             g = self.graph
-            g.N.length = train.bsz
+            ax.N.length = train.bsz
             c, h, w = train.shape
-            g.C.length = c
-            g.H.length = h
-            g.W.length = w
-            g.Y.length = train.nclasses
+            ax.C.length = c
+            ax.H.length = h
+            ax.W.length = w
+            ax.Y.length = train.nclasses
 
             g.params = g.value.parameters()
 
@@ -126,8 +113,8 @@ class MyTest(be.Model):
             enp.initialize()
 
             for mb_idx, (xraw, yraw) in enumerate(train):
-                g.x.value = be.ArrayWithAxes(xraw.array, shape=(train.shape, train.bsz), axes=(g.C, g.H, g.W, g.N))
-                g.y.value = be.ArrayWithAxes(yraw.array, shape=(train.nclasses, train.bsz), axes=(g.Y, g.N))
+                g.x.value = xraw.array
+                g.y.value = yraw.array
                 vals = enp.evaluate()
                 break
 
@@ -142,14 +129,14 @@ class MyTest(be.Model):
     def train(self, train, test):
         with be.bound_environment() as env:
             graph = self.graph
-            graph.N.length = train.bsz
+            ax.N.length = train.bsz
             c, h, w = train.shape
-            graph.C.length = c
-            graph.H.length = h
-            graph.W.length = w
-            graph.Y.length = train.nclasses
+            ax.C.length = c
+            ax.H.length = h
+            ax.W.length = w
+            ax.Y.length = train.nclasses
 
-            learning_rate = be.input(axes=())
+            learning_rate = be.placeholder(axes=())
             graph.params = graph.loss.parameters()
             derivs = [be.deriv(graph.loss, param) for param in graph.params]
 

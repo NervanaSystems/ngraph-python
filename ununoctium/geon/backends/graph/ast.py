@@ -771,7 +771,7 @@ def deriv(dep, indep):
 
 
 def cross_entropy_multi(y, t):
-    return -sum(safelog(y) * t)
+    return -sum(safelog(y) * t)*(1.0/np.log(2))
 
 
 def cross_entropy_binary(y, t):
