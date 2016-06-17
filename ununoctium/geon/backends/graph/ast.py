@@ -13,6 +13,9 @@ from geon.backends.graph.environment import get_current_environment, get_current
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.arrayaxes import AxesComp, ValueAxesComp, BatchAxes, AxesIntersectComp, AxesSubComp, AxesAppendComp, tensor_axes
 
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
 
 class Op(NameableValue):
     """Any operation that can be in an AST"""
@@ -311,6 +314,35 @@ class ElementWise(ComputationOp):
         for input in inputs[1:]:
             result = AxesAppendComp(result, tensor_axes(input))
         return result
+
+
+class AllReduce(ElementWise):
+    def __init__(self, x, **kargs):
+        super(AllReduce, self).__init__(args=(x,), **kargs)
+
+    def evaluate(self, evaluator, out, x):
+        #print type(x)
+        #print x
+        # from pprint import pprint
+        #pprint (vars(x))
+        #pprint (vars(out))
+        # pprint (x.axes_like(out))
+        x_val = x # np.asarray(x, dtype=x.dtype) # read dat from GPU to CPU -- expensive!
+        recv_buffer = np.zeros(shape=x_val.shape, dtype=x.dtype)
+        #print (type(x_val), type(recv_buffer), x_val.shape, recv_buffer.shape)
+        comm.Allreduce( x_val, recv_buffer)
+        recv_buffer = recv_buffer / comm.Get_size()
+        out = arrayaxes.AxisArray(axes=x.axes, array=recv_buffer) # write from CPU to GPU
+    
+        #out = x
+        #print type(out)
+        #print out
+        #print out.axes
+        #out = arrayaxes.AxisArray(axes=x.axes, array=np.ones(shape=out.shape))
+        return out
+
+#    def generate_adjoints(self, adjoints, delta, x):
+#        x.generate_add_delta(adjoints, sig(x)*delta)
 
 
 class trace(ElementWise):
