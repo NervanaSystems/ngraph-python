@@ -1,4 +1,5 @@
 import geon.backends.graph.defmod as nm
+import geon.backends.graph.axis as ax
 
 
 class Uniform(object):
@@ -12,8 +13,8 @@ class Uniform(object):
 
 @nm.with_name_scope
 def linear(m, x, x_axes, axes, batch_axes=(), init=None):
-    m.weights = nm.Parameter(axes=axes + x_axes - batch_axes, init=init, tags='parameter')
-    m.bias = nm.Parameter(axes=axes, init=init, tags='parameter')
+    m.weights = nm.Variable(axes=axes + x_axes - batch_axes, init=init, tags='parameter')
+    m.bias = nm.Variable(axes=axes, init=init, tags='parameter')
     return nm.dot(m.weights, x) + m.bias
 
 
@@ -61,25 +62,19 @@ class MyTest(nm.Model):
 
         g = self.graph
 
-        g.C = nm.Axis()
-        g.H = nm.Axis()
-        g.W = nm.Axis()
-        g.N = nm.Axis()
-        g.Y = nm.Axis()
+        g.x = nm.Tensor(axes=(ax.C, ax.H, ax.W, ax.N))
+        g.y = nm.Tensor(axes=(ax.Y, ax.N))
 
-        g.x = nm.Tensor(axes=(g.C, g.H, g.W, g.N))
-        g.y = nm.Tensor(axes=(g.Y, g.N))
+        layers = [(nm.tanh, (ax.H, ax.W), [(16, 16)] * 1 + [(4, 4)])]
 
-        layers = [(nm.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
-
-        g.value = mlp(g.x, activation=nm.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(g.N,),
+        g.value = mlp(g.x, activation=nm.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(ax.N,),
                       init=uni)
 
         g.error = cross_entropy(g.value, g.y)
 
         # L2 regularizer of parameters
         reg = None
-        for param in nm.find_all(types=nm.Parameter, tags='parameter', used_by=g.value):
+        for param in nm.find_all(types=nm.Variable, tags='parameter', used_by=g.value):
             l2 = L2(param)
             if reg is None:
                 reg = l2

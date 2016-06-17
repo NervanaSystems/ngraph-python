@@ -34,7 +34,7 @@ class Op(NameableValue):
         while unvisited:
             node = unvisited.pop()
             visited.add(node)
-            if isinstance(node, Parameter):
+            if isinstance(node, Variable):
                 params.append(node)
             unvisited.extend(node.inputs)
 
@@ -342,12 +342,12 @@ class Reaxe(AllocationOp):
 
 
 
-class input(AllocationOp):
+class placeholder(AllocationOp):
     """
     Can be set externally.
     """
     def __init__(self, **kargs):
-        super(input, self).__init__(**kargs)
+        super(placeholder, self).__init__(**kargs)
         self.__axes = ValueAxesComp(self)
 
     def evaluate(self, evaluator):
@@ -554,9 +554,9 @@ class Pad(ComputationOp):
         pass
 
 
-class Parameter(AllocationOp):
+class Variable(AllocationOp):
     def __init__(self, init, **kargs):
-        super(Parameter, self).__init__(**kargs)
+        super(Variable, self).__init__(**kargs)
         self.init = init
 
     def generate_adjoints(self, adjoints, delta):
@@ -597,6 +597,11 @@ class log(ElementWise):
 
     def evaluate(self, evaluator, out, x):
         return evaluator.log(x, out)
+
+
+class safelog(log):
+    def evaluate(self, evaluator, out, x):
+        return evaluator.safelog(x, out)
 
 
 class maximum(ElementWise):
@@ -764,3 +769,12 @@ class zeros(AllocationOp):
 def deriv(dep, indep):
     return dep.adjoints[indep]
 
+
+def cross_entropy_multi(y, t):
+    return -sum(safelog(y) * t)
+
+
+def cross_entropy_binary(y, t):
+    a = - safelog(y) * t
+    b = - safelog(1 - y) * (1 - t)
+    return sum(a + b)

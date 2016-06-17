@@ -53,16 +53,16 @@ class MyRnn(be.Model):
         # Recursive computation of the hidden state.
         # Axes for defining position roles
         h = be.RecursiveTensor(axes=(g.H, g.T, g.N))
-        h[:, 0, :] = be.Parameter(axes=(g.H,))
-        HWh = be.Parameter(axes=(g.H, g.H))
-        HWx = be.Parameter(axes=(g.X, g.H))
-        Hb = be.Parameter(axes=(g.H,))
+        h[:, 0, :] = be.Variable(axes=(g.H,))
+        HWh = be.Variable(axes=(g.H, g.H))
+        HWx = be.Variable(axes=(g.X, g.H))
+        Hb = be.Variable(axes=(g.H,))
 
-        g.t = be.Variable(g.T)
+        g.t = be.Var(g.T)
         h[:, g.t+1] = be.sig(be.dot(h[:, g.t], HWh)+be.dot(g.x[g.T], HWx)+Hb)
 
-        YW = be.Parameter(axes=(g.H, g.Y))
-        Yb = be.Parameter(axes=(g.Y))
+        YW = be.Variable(axes=(g.H, g.Y))
+        Yb = be.Variable(axes=(g.Y))
         # This is the value we want for inference
         g.y = be.tanh(be.dot(h, YW)+Yb)
 
@@ -72,7 +72,7 @@ class MyRnn(be.Model):
 
         # L2 regularizer of parameters
         reg = None
-        for param in be.find_all(types=be.Parameter, used_by=g.error):
+        for param in be.find_all(types=be.Variable, used_by=g.error):
             l2 = L2(param)
             if reg is None:
                 reg = l2

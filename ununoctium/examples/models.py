@@ -1,11 +1,11 @@
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader
-import geon.backends.graph.dataloaderbackend
 from neon.initializers import Uniform, Constant
 
 import geon.backends.graph.funs as be
 import geon.backends.graph.graph as graph
 import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.axis as ax
 import numpy as np
 
 # parse the command line arguments (generates the backend)
@@ -17,10 +17,10 @@ args = parser.parse_args()
 
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
-    ns.weights = be.Parameter(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+    ns.weights = be.Variable(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
-        ns.bias = be.Parameter(axes=result.axes.sample, init=bias)
+        ns.bias = be.Variable(axes=be.sample_axes(result), init=bias)
         result = result + ns.bias
     return result
 
@@ -47,16 +47,6 @@ def L2(x):
     return be.dot(x, x)
 
 
-def cross_entropy(y, t):
-    """
-
-    :param y:  Estimate
-    :param t: Actual 1-hot data
-    :return:
-    """
-    return -be.sum(be.log(y) * t)
-
-
 class MyTest(be.Model):
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
@@ -65,23 +55,17 @@ class MyTest(be.Model):
 
         g = self.graph
 
-        g.C = be.AxisVar()
-        g.H = be.AxisVar()
-        g.W = be.AxisVar()
-        g.N = be.AxisVar()
-        g.Y = be.AxisVar()
+        be.set_batch_axes([ax.N])
 
-        be.set_batch_axes([g.N])
-
-        g.x = be.input(axes=(g.C, g.H, g.W, g.N))
-        g.y = be.input(axes=(g.Y, g.N))
+        g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
+        g.y = be.placeholder(axes=(ax.Y, ax.N))
 
         #layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
-        layers = [(be.tanh, (g.Y,), [(200,)])]
+        layers = [(be.tanh, (ax.Y,), [(200,)])]
 
         g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
 
-        g.error = cross_entropy(g.value, g.y)
+        g.error = be.cross_entropy_multi(g.value, g.y)
 
         # L2 regularizer of parameters
         reg = None
@@ -102,7 +86,7 @@ class MyTest(be.Model):
         g.x.value = np.empty((3, 32, 32, 128))
         g.y.value = np.empty((1000, 128))
 
-        learning_rate = be.input(axes=())
+        learning_rate = be.placeholder(axes=())
         params = g.error.parameters()
         derivs = [be.deriv(g.error, param) for param in params]
 
@@ -121,14 +105,14 @@ class MyTest(be.Model):
             test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
 
             graph = self.graph
-            graph.N.length = train.bsz
+            ax.N.length = train.bsz
             c, h, w = train.shape
-            graph.C.length = c
-            graph.H.length = h
-            graph.W.length = w
-            graph.Y.length = train.nclasses
+            ax.C.length = c
+            ax.H.length = h
+            ax.W.length = w
+            ax.Y.length = train.nclasses
 
-            learning_rate = be.input(axes=())
+            learning_rate = be.placeholder(axes=())
             params = graph.error.parameters()
             derivs = [be.deriv(graph.loss, param) for param in params]
 

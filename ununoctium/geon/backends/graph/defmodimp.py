@@ -309,55 +309,55 @@ class TensorGetItem(Tensor):
         return super(TensorGetItem, self)._repr_attrs('tensor', 'key', *attrs)
 
 
-class VariableExpr(Defmod):
+class VarExpr(Defmod):
     def __init__(self, args, **kargs):
-        super(VariableExpr, self).__init__(**kargs)
+        super(VarExpr, self).__init__(**kargs)
         self.args = args
 
     def _repr_attrs(self, *attrs):
-        return super(VariableExpr, self)._repr_attrs('args', *attrs)
+        return super(VarExpr, self)._repr_attrs('args', *attrs)
 
     def __add__(self, other):
-        return VariableAdd(self, other)
+        return VarAdd(self, other)
 
     def __radd__(self, other):
-        return VariableAdd(other, self)
+        return VarAdd(other, self)
 
     def __sub__(self, other):
-        return VariableSub(self, other)
+        return VarSub(self, other)
 
     def __rsub__(self, other):
-        return VariableSub(other, self)
+        return VarSub(other, self)
 
 
-class VariableAdd(VariableExpr):
+class VarAdd(VarExpr):
     def __init__(self, x, y, **kargs):
-        super(VariableAdd, self).__init__(args=(x, y), **kargs)
+        super(VarAdd, self).__init__(args=(x, y), **kargs)
 
 
-class VariableSub(VariableExpr):
+class VarSub(VarExpr):
     def __init__(self, x, y, **kargs):
-        super(VariableSub, self).__init__(args=(x, y), **kargs)
+        super(VarSub, self).__init__(args=(x, y), **kargs)
 
 
-class Variable(VariableExpr):
+class Var(VarExpr):
     def __init__(self, kind, **kargs):
-        super(Variable, self).__init__(args=(), **kargs)
+        super(Var, self).__init__(args=(), **kargs)
         self.kind = kind
 
     def _repr_attrs(self, *attrs):
-        return super(Variable, self)._repr_attrs('kind', *attrs)
+        return super(Var, self)._repr_attrs('kind', *attrs)
 
 
-class Parameter(Tensor):
+class Variable(Tensor):
     """A parameter to be trained"""
 
     def __init__(self, init=None, **kargs):
-        super(Parameter, self).__init__(**kargs)
+        super(Variable, self).__init__(**kargs)
         self.init = init
 
     def _repr_attrs(self, *attrs):
-        return super(Parameter, self)._repr_attrs('init', *attrs)
+        return super(Variable, self)._repr_attrs('init', *attrs)
 
 
 class input(Tensor):

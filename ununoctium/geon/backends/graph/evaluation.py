@@ -41,7 +41,7 @@ class Evaluator(object):
         initializers = []
         with captured_ops(initializers):
             for op in self.ops:
-                if isinstance(op, ast.Parameter):
+                if isinstance(op, ast.Variable):
                     op.initializer(self, self.environment[op])
         ops = ast.Op.ordered_ops(initializers, True)
         self.allocate(ops)
@@ -191,6 +191,11 @@ class NumPyEvaluator(Evaluator):
 
     def log(self, x, out):
         return np.log(reaxe_like(x, out, True), out=out)
+
+    expm50 = np.exp(-50.)
+    def safelog(self, x, out):
+        np.maximum(reaxe_like(x, out, True), NumPyEvaluator.expm50, out)
+        return np.log(out, out)
 
     def maximum(self, x, y, out):
         return np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)

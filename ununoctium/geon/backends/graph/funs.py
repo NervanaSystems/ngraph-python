@@ -1,18 +1,16 @@
+import geon.backends.graph.dataloaderbackend
 import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope, next_name_scope
 from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment, set_batch_axes, get_batch_axes
 
-from geon.backends.graph.ast import deriv, input, Parameter
-from geon.backends.graph.arrayaxes import axes_list, AxisVar, linear_map_axes, sample_axes, batch_axes, set_tensor_axes, tensor_axes
+from geon.backends.graph.ast import deriv, placeholder, Variable
+from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, linear_map_axes, sample_axes, batch_axes, set_tensor_axes, tensor_axes
 from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
 from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, sum
-from geon.backends.graph.ast import tanh, zeros
+from geon.backends.graph.ast import tanh, zeros, safelog, cross_entropy_binary, cross_entropy_multi
 from geon.backends.graph.ast import doall, decrement, trace, RNG
-
-from geon.backends.graph.layer import Affine
-#from geon.backends.graph.initializer import Uniform
 
 def relu(x,out):
     maximum(x, 0, out)

@@ -39,7 +39,7 @@ class Sequential(LayerContainer):
         root = self._layers[0]
 
 
-    def configure(self, graph, in_obj):
+    def configure(self, in_obj):
         """
         Must receive a list of shapes for configuration (one for each pathway)
         the shapes correspond to the layer_container attribute
@@ -49,9 +49,9 @@ class Sequential(LayerContainer):
         """
         config_layers = self.layers if in_obj else self._layers
         in_obj = in_obj if in_obj else self.layers[0]
-        in_obj = super(Sequential, self).configure(graph, in_obj)
+        in_obj = super(Sequential, self).configure(in_obj)
         for l in config_layers:
-            in_obj = l.configure(graph, in_obj)
+            in_obj = l.configure(in_obj)
         return in_obj
 
 

@@ -11,8 +11,8 @@ class Eval(be.Model):
         g.S = be.AxisVar()
         g.S.length = 10
 
-        g.x = be.input(axes=(g.S,))
-        g.y = be.input(axes=(g.S,))
+        g.x = be.placeholder(axes=(g.S,))
+        g.y = be.placeholder(axes=(g.S,))
         g.w = be.deriv(g.x + g.y, g.y)
         g.x2 = be.dot(g.x, g.x)
 
