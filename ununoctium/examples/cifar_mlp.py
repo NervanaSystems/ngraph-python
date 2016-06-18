@@ -1,9 +1,4 @@
-from neon.util.argparser import NeonArgparser
-from neon.data import ImageLoader
-from neon.initializers import Uniform
-
 from geon.backends.graph.graphneon import *
-
 
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
@@ -23,7 +18,7 @@ init_uni0 = Uniform(low=-0.1 * scale, high=0.1 * scale)
 init_uni1 = Uniform(low=-0.1, high=0.1)
 
 #opt_gdm = GradientDescentMomentum(learning_rate=0.01 * scale, momentum_coef=0.9)
-opt_gdm = None
+opt_gdm = GradientDescent(learning_rate=0.01 * scale)
 
 # set up the model layers
 # TODO switch back to neon cifar_mlp example activations

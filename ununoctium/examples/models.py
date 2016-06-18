@@ -1,11 +1,7 @@
-from neon.util.argparser import NeonArgparser
-from neon.data import ImageLoader
-from neon.initializers import Uniform, Constant
+from geon.backends.graph.graphneon import *
 
-import geon.backends.graph.funs as be
 import geon.backends.graph.graph as graph
 import geon.backends.graph.evaluation as evaluation
-import geon.backends.graph.axis as ax
 import numpy as np
 
 # parse the command line arguments (generates the backend)
@@ -43,8 +39,12 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
     return value
 
 
-def L2(x):
-    return be.dot(x, x)
+def grad_descent(cost):
+    learning_rate = be.placeholder(axes=())
+    params = cost.parameters()
+    derivs = [be.deriv(cost, param) for param in params]
+    updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
+    return learning_rate, updates
 
 
 class MyTest(be.Model):
@@ -77,7 +77,6 @@ class MyTest(be.Model):
                 reg = reg + l2
 
         g.loss = g.error + .01 * reg
-
 
     @be.with_graph_scope
     def dump(self):
@@ -112,13 +111,9 @@ class MyTest(be.Model):
             ax.W.length = w
             ax.Y.length = train.nclasses
 
-            learning_rate = be.placeholder(axes=())
-            params = graph.error.parameters()
-            derivs = [be.deriv(graph.loss, param) for param in params]
+            learning_rate, updates = grad_descent(graph.error)
 
-            updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
-
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error, updates]+derivs)
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error, updates])
             enp.initialize()
 
             for epoch in range(args.epochs):
