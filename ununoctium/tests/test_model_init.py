@@ -50,6 +50,9 @@ parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
+# MPI flag
+parser.add_argument('-mpi_flag', action='store_true')
+
 args = parser.parse_args()
 
 @be.with_name_scope
@@ -118,13 +121,6 @@ class MyTest(be.Model):
                 vals = enp.evaluate()
                 break
 
-            for para in g.params:
-                # if "bias" not in para.name and vals[para].array.shape[0] == 10:
-                # if vals[para].array.shape[1] == 10:
-                print(para.name)
-                print(vals[para].array.shape)
-                print(vals[para].array)
-
     @be.with_graph_scope
     def train(self, train, test):
         with be.bound_environment() as env:
@@ -140,21 +136,25 @@ class MyTest(be.Model):
             graph.params = graph.loss.parameters()
             derivs = [be.deriv(graph.loss, param) for param in graph.params]
 
-            updates = be.doall(
-                all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(graph.params, derivs)])
+            # check for the mpi_flag
+            # if the flag is set, we add an AllReduce node after each derivs node to synch up
+            synced_derivs = []
+            if args.mpi_flag:
+                synced_derivs = [ be.AllReduce(deriv) for deriv in derivs]
+            else:
+                synced_derivs = derivs
 
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.loss, updates] + derivs + graph.params)
+            updates = be.doall(
+                all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
+
+            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
             enp.initialize()
 
             start_test = default_timer()
             test_error = self.test(env, test, True)
 
-            print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} loss: {:.3f}'.
-                  format(-1, default_timer() - start_test, 0, test_error, 0))
-
             for epoch in range(args.epochs):
                 # TODO: need to fix that the processed data does not equal to the actual number of the data
-
                 start_train = default_timer()
 
                 train_loss = 0
@@ -197,18 +197,6 @@ class MyTest(be.Model):
                 graph.y.value = yraw.array
                 vals = enp.evaluate()
 
-                if printParam and mb_idx == 0:
-                    for para in graph.params:
-                        # if "bias" not in para.name and vals[para].array.shape[0] == 10:
-
-                        print(para.name)
-                        print(vals[para].shape)
-                        print(vals[para])
-
-                    # print(g.x.value[0][0][0])
-                    # print(g.y.value.shape)
-                    # print(g.y.value[:,1])
-
                 test_error += np.sum(np.not_equal(np.argmax(vals[graph.value], axis=0),
                                                   np.argmax(yraw.array, axis=0)))
                 n_bs += 1
@@ -221,10 +209,6 @@ imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
 train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
 test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
 
-print(train.ndata)
-print(train.shape)
-
-args.epochs = 10     # set epochs to zero, just test the initial value
 
 geon_model = MyTest()
 # geon_model.get_initial_params(train, test)
