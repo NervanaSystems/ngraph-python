@@ -170,8 +170,8 @@ class AxesSubComp(AxesComp):
     """Result will be removal of axes in y from those in x"""
     def __init__(self, x, y, **kargs):
         super(AxesSubComp, self).__init__(**kargs)
-        self.x = x
-        self.y = y
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
 
     def evaluate(self, evaluator):
         x_axes = evaluator.get_resolved_axes(self.x)
@@ -283,8 +283,8 @@ def batch_axes(x, **kargs):
 class AxesIntersectComp(AxesComp):
     def __init__(self, x, y, **kargs):
         super(AxesIntersectComp, self).__init__(**kargs)
-        self.x = x
-        self.y = y
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
 
     def evaluate(self, evaluator):
         x_axes = evaluator.get_resolved_axes(self.x)
@@ -295,8 +295,8 @@ class AxesIntersectComp(AxesComp):
 class AxesAppendComp(AxesComp):
     def __init__(self, x, y, **kargs):
         super(AxesAppendComp, self).__init__(**kargs)
-        self.x = x
-        self.y = y
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
 
     def evaluate(self, evaluator):
         x_axes = evaluator.get_resolved_axes(self.x)
