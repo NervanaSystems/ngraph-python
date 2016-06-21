@@ -73,7 +73,7 @@ class Linear(ParameterLayer):
         """
         in_obj = super(Linear, self).configure(in_obj)
 
-        v = be.Variable(axes=be.linear_map_axes(be.sample_axes(in_obj),
+        v = be.Variable(axes=be.linear_map_axes(be.sample_axes(in_obj.axes),
                                                 self.axes or [be.Axis(self.nout, name='Hidden')]),
                         init=self.init)
         return be.dot(v, in_obj)

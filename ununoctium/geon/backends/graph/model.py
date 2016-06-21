@@ -3,10 +3,11 @@ import numpy as np
 from geon.backends.graph.names import NameableValue, name_scope
 from geon.backends.graph.environment import bound_environment, captured_ops
 from geon.backends.graph.graph import GraphComponent
+from neon.backends.backend import Block
 import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
-
+import geon.backends.graph.evaluation as evaluation
 
 
 class Model(GraphComponent):
@@ -14,6 +15,8 @@ class Model(GraphComponent):
         super(Model, self).__init__(**kargs)
         self.initialized = False
         self.name = name
+        self.epoch_index = 0
+        self.finished = False
 
         self.optimizer = optimizer
 
@@ -39,13 +42,14 @@ class Model(GraphComponent):
             return
 
         # Propagate shapes through the layers to configure
-        output = self.layers.configure(dataset)
+        self.output = self.layers.configure(dataset)
 
         if cost is not None:
-            self.graph.cost = cost.get_cost(output, self.graph.target)
+            self.graph.cost = cost.get_cost(self.output, self.graph.target)
+            self.cost = cost
 
         self.initialized = True
-        return output
+        return self.output
 
 
     def fit(self, dataset, input_axes, target_axes, cost, optimizer, num_epochs, callbacks):
@@ -70,42 +74,39 @@ class Model(GraphComponent):
         self.ndata = dataset.ndata
         self.optimizer = optimizer
 
-
-
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
-                self.ops = []
-                with captured_ops(self.ops):
-                    # TODO Move this axis initialization into a util
-                    batch_input_axes = input_axes + (ax.N,)
-                    batch_target_axes = target_axes + (ax.N,)
-                    be.set_batch_axes([ax.N])
-                    self.graph.input = be.placeholder(axes=batch_input_axes)
-                    self.graph.target = be.placeholder(axes=batch_target_axes)
-                    for axis, length in zip(input_axes, dataset.shape):
-                        axis.length = length
-                    for axis, length in zip(target_axes, (dataset.nclasses,)):
-                        axis.length = length
-                    ax.N.length = dataset.bsz
+                # TODO Move this axis initialization into a util
+                batch_input_axes = input_axes + (ax.N,)
+                batch_target_axes = target_axes + (ax.N,)
+                be.set_batch_axes([ax.N])
+                self.graph.input = be.placeholder(axes=batch_input_axes)
+                self.graph.target = be.placeholder(axes=batch_target_axes)
+                for axis, length in zip(input_axes, dataset.shape):
+                    axis.length = length
+                for axis, length in zip(target_axes, (dataset.nclasses,)):
+                    axis.length = length
+                ax.N.length = dataset.bsz
 
-                    self.initialize(self.graph.input, cost)
+                self.initialize(self.graph.input, cost)
+                updates = self.optimizer.configure(self.graph.cost)
 
+                self.enp = evaluation.NumPyEvaluator(results=[self.graph.cost, updates])
+                self.enp.initialize()
 
-        # TODO finish this
-        if False:
-            callbacks.on_train_begin(num_epochs)
-            while self.epoch_index < num_epochs and not self.finished:
-                self.nbatches = dataset.nbatches
+                callbacks.on_train_begin(num_epochs)
+                while self.epoch_index < num_epochs and not self.finished:
+                    self.nbatches = dataset.nbatches
 
-                callbacks.on_epoch_begin(self.epoch_index)
+                    callbacks.on_epoch_begin(self.epoch_index)
 
-                self._epoch_fit(dataset, callbacks)
+                    self._epoch_fit(dataset, callbacks)
 
-                callbacks.on_epoch_end(self.epoch_index)
+                    callbacks.on_epoch_end(self.epoch_index)
 
-                self.epoch_index += 1
+                    self.epoch_index += 1
 
-            callbacks.on_train_end()
+                callbacks.on_train_end()
 
     def _epoch_fit(self, dataset, callbacks):
         """
@@ -115,42 +116,45 @@ class Model(GraphComponent):
             dataset (NervanaDataIterator): Dataset iterator to perform fit on
         """
         epoch = self.epoch_index
-        self.total_cost[:] = 0
+        self.total_cost = 0
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.be.begin(Block.minibatch, mb_idx)
+            self.graph.input.value = x.array
+            self.graph.target.value = t.array
+            self.optimizer.optimize(self.epoch_index)
 
-            x = self.fprop(x)
+            vals = self.enp.evaluate()
+            batch_cost = vals[self.graph.cost]
+            self.cost.cost = batch_cost
+            self.total_cost += batch_cost
 
-            self.total_cost[:] = self.total_cost + self.cost.get_cost(x, t)
-
-            # deltas back propagate through layers
-            # for every layer in reverse except the 0th one
-            delta = self.cost.get_errors(x, t)
-
-            self.bprop(delta)
-            self.optimizer.optimize(self.layers_to_optimize, epoch=epoch)
-
-            self.be.end(Block.minibatch, mb_idx)
             callbacks.on_minibatch_end(epoch, mb_idx)
 
         # now we divide total cost by the number of batches,
         # so it was never total cost, but sum of averages
         # across all the minibatches we trained on
-        self.total_cost[:] = self.total_cost / dataset.nbatches
+        self.total_cost = self.total_cost / dataset.nbatches
 
+    @be.with_graph_scope
+    def epoch_eval(self, eval_set):
+        with be.bound_environment(self.environment):
+            nprocessed = 0
+            self.loss = 0
+            eval_set.reset()
+            enp = evaluation.NumPyEvaluator(results=[self.graph.cost])
+            for x, t in eval_set:
+                self.graph.input.value = x.array
+                self.graph.target.value = t.array
+                bsz = min(eval_set.ndata - nprocessed, eval_set.bsz)
+                nsteps = x.array.shape[1] // eval_set.bsz if not isinstance(x, list) else \
+                    x[0].array.shape[1] // eval_set.bsz
+                vals = enp.evaluate()
+                batch_cost =  vals[self.graph.cost]
+                nprocessed += bsz
+                self.loss += batch_cost / nsteps
+            return float(self.loss) / nprocessed
 
-    def fprop(self, x, inference=False):
-        """
-        Forward propagates a minibatch x through the model.
-
-        Arguments:
-            x (Tensor): Input minibatch data.
-            inference (bool): Flag for performing training or inference
-                Only affects batch norm and dropout layers.
-
-        Returns:
-            Tensor: the output of the final layer in the model
-        """
-        return self.layers.fprop(x, inference)
+    def serialize(self, fn=None, keep_states=True):
+        # TODO
+        pass
