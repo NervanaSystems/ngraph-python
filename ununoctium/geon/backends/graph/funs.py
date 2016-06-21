@@ -7,7 +7,7 @@ from geon.backends.graph.environment import bound_environment, set_batch_axes, g
 
 from geon.backends.graph.ast import deriv, placeholder, Variable
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, linear_map_axes, sample_axes, batch_axes, set_tensor_axes, tensor_axes
-from geon.backends.graph.ast import absolute, add, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
+from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, empty, exp, log, maximum, minimum, multiply
 from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, sum
 from geon.backends.graph.ast import tanh, zeros, safelog, cross_entropy_binary, cross_entropy_multi
 from geon.backends.graph.ast import doall, decrement, trace, RNG
@@ -18,10 +18,6 @@ def relu(x,out):
 
 # TODO These are just here as placeholders
 def add_fc_bias(self, inputs, bias):
-    pass
-
-
-def argmax(self, axis=None, out=None, keepdims=None):
     pass
 
 

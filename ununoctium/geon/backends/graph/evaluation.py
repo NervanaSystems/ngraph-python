@@ -130,6 +130,18 @@ class NumPyEvaluator(Evaluator):
     def absolute(self, x, out):
         return np.abs(reaxe_like(x, out, True), out=out)
 
+    def argmax(self, x, max_axes, out):
+        xa = reaxe(x, (max_axes, tensor_axes(out)))
+        oa = reaxe(out, [tensor_axes(out)])
+        np.ndarray.argmax(xa, 0, oa)
+        return out
+
+    def argmin(self, x, max_axes, out):
+        xa = reaxe(x, (max_axes, tensor_axes(out)))
+        oa = reaxe(out, [tensor_axes(out)])
+        np.ndarray.argmin(xa, 0, oa)
+        return out
+
     def add(self, x, y, out):
         return np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 

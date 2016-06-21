@@ -71,7 +71,11 @@ class Op(NameableValue):
         Op.get_ordered_ops(self, ordered_ops, False)
         self._adjoints[self] = ones(axes=tensor_axes(self))
         for o in reversed(ordered_ops):
-            o.generate_adjoints(self._adjoints, self._adjoints[o], *o.inputs)
+            scale = o.scale
+            adjoint = self._adjoints[o]
+            if scale != 1.0:
+                adjoint = adjoint * scale
+            o.generate_adjoints(self._adjoints, adjoint, *o.inputs)
         return self._adjoints
 
     @staticmethod
@@ -120,9 +124,12 @@ class Op(NameableValue):
 
 class Tensor(Op):
 
-    def __init__(self, graph_type=None, **kwds):
+    def __init__(self, graph_type=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
+
+        # Derivative will be scaled by this if not 1.0
+        self.scale = scale
 
         # Ops that directly use the result
         self.users = weakref.WeakSet()  # Name assigned by user
@@ -200,7 +207,7 @@ class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
     """
-    def __init__(self, args, out=None, batch_axes=None, **kargs):
+    def __init__(self, args, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.__args = tuple(Op.as_op(arg) for arg in args)
 
@@ -210,7 +217,7 @@ class ComputationOp(Tensor):
         self.batch_axes = AxesComp.as_axes(batch_axes or BatchAxes())
 
         if out is None:
-            out = empty(axes=tensor_axes(self))
+            out = empty(axes=tensor_axes(self), dtype=dtype)
         self.output = out
 
     def add_dependencies(self):
@@ -342,7 +349,7 @@ class trace(ElementWise):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, dtype=None, **kargs):
+    def __init__(self, axes=None, dtype=np.float32, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
 
@@ -434,6 +441,40 @@ class add(ElementWise):
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(x)))
         y.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(y)))
+
+
+class argmax(ComputationOp):
+    def __init__(self, x, max_axes=None, **kargs):
+        if max_axes is None:
+            max_axes = x.axes-BatchAxes()
+        self.max_axes = AxesComp.as_axes(max_axes)
+        super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
+
+
+    def evaluate(self, evaluator, out, x):
+        max_axes = evaluator.get_resolved_axes(self.max_axes)
+        return evaluator.argmax(x, max_axes, out)
+
+    @property
+    def axes(self):
+        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
+
+
+class argmin(ComputationOp):
+    def __init__(self, x, min_axes=None, **kargs):
+        if min_axes is None:
+            min_axes = x.axes - BatchAxes()
+        self.max_axes = AxesComp.as_axes(min_axes)
+        super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
+
+
+    def evaluate(self, evaluator, out, x):
+        max_axes = evaluator.get_resolved_axes(self.max_axes)
+        return evaluator.argmin(x, max_axes, out)
+
+    @property
+    def axes(self):
+        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
 
 
 class cos(ElementWise):
@@ -786,8 +827,9 @@ def deriv(dep, indep):
     return dep.adjoints[indep]
 
 
-def cross_entropy_multi(y, t):
-    return -sum(safelog(y) * t)*(1.0/np.log(2))
+def cross_entropy_multi(y, t, usebits=False):
+    logscale = np.float(1. / np.log(2.0) if usebits else 1.)
+    return -sum(safelog(y) * t)*logscale
 
 
 def cross_entropy_binary(y, t):
