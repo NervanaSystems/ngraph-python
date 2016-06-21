@@ -12,6 +12,8 @@ from geon.backends.graph.ast import negative, ones, reciprocal, sig, sin, softma
 from geon.backends.graph.ast import tanh, zeros, safelog, cross_entropy_binary, cross_entropy_multi
 from geon.backends.graph.ast import doall, decrement, trace, RNG
 
+from geon.backends.graph.ast import AllReduce 
+
 def relu(x,out):
     maximum(x, 0, out)
 

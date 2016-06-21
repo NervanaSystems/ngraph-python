@@ -135,12 +135,11 @@ class MyTest(be.Model):
             learning_rate = be.placeholder(axes=())
             graph.params = graph.loss.parameters()
             derivs = [be.deriv(graph.loss, param) for param in graph.params]
-
             # check for the mpi_flag
             # if the flag is set, we add an AllReduce node after each derivs node to synch up
             synced_derivs = []
             if args.mpi_flag:
-                synced_derivs = [ be.AllReduce(deriv) for deriv in derivs]
+                synced_derivs = [be.AllReduce(deriv) for deriv in derivs]
             else:
                 synced_derivs = derivs
 
@@ -173,7 +172,6 @@ class MyTest(be.Model):
                                                        np.argmax(yraw.array, axis=0))) / float(train.bsz)
                     n_bs += 1
                     nprocessed += xraw.array.shape[1]
-                    # print(str(mb_idx) + " " + str(nprocessed) + " " + str(train.bsz))
 
                 train_loss /= n_bs
                 train_error = train_error / n_bs * 100
