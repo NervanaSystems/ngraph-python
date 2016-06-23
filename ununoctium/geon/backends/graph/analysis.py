@@ -1,4 +1,4 @@
-from geon.backends.graph.defmodimp import ComputedTensor, ElementWise, Function, Variable
+from geon.backends.graph.defmodimp import ComputedTensor, ElementWise, Function, Variable, input
 
 def _random_colors(N, alpha=.5):
     from colorsys import hsv_to_rgb
@@ -144,17 +144,17 @@ class KernelFlowGraph(DataFlowGraph):
         self.dataflow = dataflow
         
     def visualize(self, fname):
-        from graphviz import Digraph
-        getinfo =  lambda x: x.code if isinstance(x, Operation) else x.info
-        dot = Digraph(graph_attr={'compound':'true', 'nodesep':'1', 'ranksep':'.8'})
-        variables = {x for x in self.successors if isinstance(x, Variable)}
-        subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id), getinfo) for x in self.successors if isinstance(x, Function)}
+        predecessors = Digraph._invert(self.successors)
+        from graphviz import Digraph as gvDigraph
+        dot = gvDigraph(graph_attr={'compound':'true', 'nodesep':'.5', 'ranksep':'.5'})
+        leaves = {x for x, y in predecessors.iteritems() if len(y)==0}
+        subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id)) for x in self.successors if isinstance(x, Function)}
         #Subgraphs
         for x, sg in subgs.iteritems():
             sg.body.append('color=gray')
             sg.body.append('label={}'.format(x.id))
             dot.subgraph(sg)
-        for x in variables:
+        for x in leaves:
             dot.node(x.id, x.graph_label, x.style)
         #Edges
         edges = {(a, b) for a, _ in self.successors.iteritems() for b in _}
