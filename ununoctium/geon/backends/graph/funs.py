@@ -9,7 +9,7 @@ from geon.backends.graph.ast import deriv, placeholder, Variable
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, linear_map_axes, sample_axes, batch_axes, \
     set_tensor_axes, tensor_axes
 from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, empty, equal, exp, log, maximum, \
-    mean, minimum, multiply
+    mean, minimum, multiply, greater, greater_equal, less, less_equal, power
 from geon.backends.graph.ast import negative, not_equal, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
 from geon.backends.graph.ast import tanh, zeros, safelog, cross_entropy_binary, cross_entropy_multi
@@ -103,22 +103,6 @@ def gen_rng(self, seed=None):
     pass
 
 
-def greater(self, a, b, out=None):
-    pass
-
-
-def greater_equal(self, a, b, out=None):
-    pass
-
-
-def less(self, a, b, out=None):
-    pass
-
-
-def less_equal(self, a, b, out=None):
-    pass
-
-
 def log2(self, a, out=None):
     pass
 
@@ -144,10 +128,6 @@ def output_dim(self, X, S, padding, strides, pooling=None):
 
 
 def pool_layer(self, dtype, op, N, C, D=None, H=None, W=None, J=None, T=None, *args):
-    pass
-
-
-def power(self, a, b, out=None):
     pass
 
 

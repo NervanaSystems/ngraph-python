@@ -21,10 +21,8 @@ init_uni1 = Uniform(low=-0.1, high=0.1)
 opt_gdm = GradientDescent(learning_rate=0.01 * scale)
 
 # set up the model layers
-# TODO switch back to neon cifar_mlp example activations
-# TODO use some sort of axis aliasing mechanism so we don't need axes in last layer
-layers = [Affine(nout=200, init=init_uni0, activation=be.tanh),
-          Affine(nout=train.nclasses, axes=(ax.Y,), init=init_uni1, activation=be.softmax)]
+layers = [Affine(nout=200, init=init_uni0, activation=Rectlin()),
+          Affine(nout=train.nclasses, axes=(ax.Y,), init=init_uni1, activation=Softmax())]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
