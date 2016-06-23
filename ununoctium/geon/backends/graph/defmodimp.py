@@ -76,6 +76,23 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
     return result
 
 
+class Function(NameableValue):
+    
+    def __init__(self, ops):
+        super(Function, self).__init__()
+        from geon.backends.graph.analysis import Digraph
+        self.ops = Digraph(ops)
+        use, defs = set(), set()
+        for op in self.ops.topsort():
+            #Kernel defines the def of each operation
+            defs |= set(op.defs())
+            #Kernel uses the use of each operation
+            #except whatever can be held in registers
+            use |= set(op.args) - defs
+        self.use = use
+        self.defs = defs
+
+
 class Defmod(NameableValue):
     """Base class for model definitions
 
@@ -263,6 +280,10 @@ class LiteralTensor(Tensor):
         super(LiteralTensor, self).__init__(**kargs)
         self.value = value
 
+    @property
+    def graph_label(self):
+        return str(self.value)
+        
     def _repr_attrs(self, *attrs):
         return super(LiteralTensor, self)._repr_attrs('value', *attrs)
 
@@ -355,7 +376,7 @@ class Variable(Tensor):
     def __init__(self, init=None, **kargs):
         super(Variable, self).__init__(**kargs)
         self.init = init
-
+        
     def _repr_attrs(self, *attrs):
         return super(Variable, self)._repr_attrs('init', *attrs)
 
@@ -373,6 +394,10 @@ class ComputedTensor(Tensor):
     def __init__(self, **kargs):
         super(ComputedTensor, self).__init__(**kargs)
 
+    @property
+    def graph_label(self):
+        return type(self).__name__
+        
     @property
     def axes(self):
         return ValueAxes(self)
@@ -494,7 +519,7 @@ class sig(ElementWise):
         super(sig, self).__init__(args=(x,), **kargs)
 
 
-class softmax(Tensor):
+class softmax(ComputedTensor):
     def __init__(self, x, **kargs):
         super(softmax, self).__init__(args=(x,), **kargs)
 
@@ -668,3 +693,4 @@ class SubAxes(CombineAxes):
 class IntersectAxes(CombineAxes):
     def __init__(self, *args, **kargs):
         super(IntersectAxes, self).__init__(args=args, **kargs)
+

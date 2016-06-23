@@ -71,11 +71,26 @@ def with_name_scope(fun, name=None):
 
 
 class NameableValue(object):
-    """A value with a name that can be set."""
+    
+    counter = 0
+
+    @staticmethod
+    def generate_id():
+        NameableValue.counter += 1
+        return 't{}'.format(NameableValue.counter)
+
+
+    """A value with a name and debugging info that can be set."""
     def __init__(self, name=None, **kargs):
         super(NameableValue, self).__init__(**kargs)
         self.__name = name
+        self.id = NameableValue.generate_id()
+        self.style = {}
 
+    @property
+    def graph_label(self):
+        return self.__name 
+        
     @property
     def name(self):
         return self.__name
