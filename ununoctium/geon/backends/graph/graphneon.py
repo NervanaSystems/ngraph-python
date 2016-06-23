@@ -7,6 +7,7 @@ import geon.backends.graph.axis as ax
 from geon.backends.graph.layer import *
 from geon.backends.graph.optimizer import *
 from geon.backends.graph.cost import CrossEntropyBinary, CrossEntropyMulti, SumSquared, Misclassification
+from geon.backends.graph.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, Logistic
 from geon.backends.graph.model import Model
 from geon.backends.graph.optimizer import GradientDescent
 

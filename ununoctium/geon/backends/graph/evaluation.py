@@ -211,6 +211,18 @@ class NumPyEvaluator(Evaluator):
     def exp(self, x, out):
         return np.exp(reaxe_like(x, out, True), out=out)
 
+    def greater(self, x, y, out):
+        return np.greater(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+
+    def greater_equal(self, x, y, out):
+        return np.greater_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+
+    def less(self, x, y, out):
+        return np.less(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+
+    def less_equal(self, x, y, out):
+        return np.less_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+
     def log(self, x, out):
         return np.log(reaxe_like(x, out, True), out=out)
 
@@ -223,7 +235,7 @@ class NumPyEvaluator(Evaluator):
         return np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def minimum(self, x, y, out):
-        return np.minimum(reaxe_like(x. out, True), reaxe_like(y, out, True), out=out)
+        return np.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def multiply(self, x, y, out):
         return np.multiply(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)

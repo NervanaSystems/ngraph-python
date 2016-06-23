@@ -183,10 +183,29 @@ class Tensor(Op):
         return divide(val, self)
 
     def __pow__(self, val):
-        return pow(self, val)
+        return power(self, val)
 
     def __rpow__(self, val):
-        return pow(val, self)
+        return power(val, self)
+
+    # Python uses eq for comparing keys
+    #def __eq__(self, val):
+    #    return equal(self, val)
+
+    def __ne__(self, val):
+        return not_equal(self, val)
+
+    def __lt__(self, val):
+        return less(self, val)
+
+    def __gt__(self, val):
+        return greater(self, val)
+
+    def __le__(self, val):
+        return less_equal(self, val)
+
+    def __ge__(self, val):
+        return greater_equal(self, val)
 
     def __setitem__(self, key, val):
         return SetItem(self, key, val)
@@ -361,13 +380,6 @@ class AllocationOp(Tensor):
         return self.graph_type.axes
 
 
-class Reaxe(AllocationOp):
-    def __init__(self, axes, **kargs):
-        super(AllocationOp, self).__init__(axes=axes, graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
-
-
-
-
 class placeholder(AllocationOp):
     """
     Can be set externally.
@@ -539,22 +551,39 @@ class dot(ComputationOp):
         y.generate_add_delta(adjoints, dot(x, delta, out_axes=tensor_axes(y)))
 
 
-class equal(ElementWise):
-    #TODO return type
+class ElementWiseBoolean(ElementWise):
     def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
-        super(equal, self).__init__(args=(x, y), dtype=dtype, **kargs)
+        super(ElementWiseBoolean, self).__init__(args=(x, y), dtype=dtype, **kargs)
 
+
+class equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
         return evaluator.equal(x, y, out)
 
 
-class not_equal(ElementWise):
-    #TODO return type
-    def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
-        super(not_equal, self).__init__(args=(x, y), dtype=dtype, **kargs)
-
+class not_equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
         return evaluator.not_equal(x, y, out)
+
+
+class greater(ElementWiseBoolean):
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.greater(x, y, out)
+
+
+class less(ElementWiseBoolean):
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.less(x, y, out)
+
+
+class greater_equal(ElementWiseBoolean):
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.greater_equal(x, y, out)
+
+
+class less_equal(ElementWiseBoolean):
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.less_equal(x, y, out)
 
 
 class softmax(ComputationOp):
@@ -721,9 +750,8 @@ class maximum(ElementWise):
         return evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        p, n = posneg(x-y)
-        x.generate_add_delta(delta*p)
-        y.generate_add_delta(delta*n)
+        x.generate_add_delta(adjoints, delta*(self == x))
+        y.generate_add_delta(adjoints, delta*(self == y))
 
 
 class minimum(ElementWise):
@@ -734,9 +762,8 @@ class minimum(ElementWise):
         return evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        p, n = posneg(y-x)
-        x.generate_add_delta(delta*p)
-        y.generate_add_delta(delta*n)
+        x.generate_add_delta(adjoints, delta*(self == x))
+        y.generate_add_delta(adjoints, delta*(self == y))
 
 
 class multiply(ElementWise):
@@ -774,9 +801,9 @@ class ones(AllocationOp):
         return evaluator.ones(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 
-class pow(ElementWise):
+class power(ElementWise):
     def __init__(self, x, y, **kargs):
-        super(pow, self).__init__(args=(x,), **kargs)
+        super(power, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
         return evaluator.pow(x, y, out)
