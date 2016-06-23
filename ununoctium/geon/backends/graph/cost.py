@@ -294,9 +294,6 @@ class Misclassification(Metric):
         """
         Initialize the metric.
         """
-        self.preds = self.be.iobuf(1, persist_values=False)
-        self.hyps = self.be.iobuf(1, persist_values=False)
-        self.outputs = self.preds  # Contains per record metric
         self.metric_names = ['Top1Misclass']
 
     def __call__(self, y, t, calcrange=slice(0, None)):
@@ -311,11 +308,10 @@ class Misclassification(Metric):
             float: Returns the metric
         """
         # convert back from onehot and compare
-        self.preds[:] = self.be.argmax(y, axis=0)
-        self.hyps[:] = self.be.argmax(t, axis=0)
-        self.outputs[:] = self.be.not_equal(self.preds, self.hyps)
-
-        return self.outputs.get()[:, calcrange].mean()
+        preds = be.argmax(y)
+        hyps = be.argmax(t)
+        ne = be.not_equal(preds, hyps)
+        return ne.mean(reduction_axes=be.tensor_axes(ne))
 
 
 class Accuracy(Metric):

@@ -138,7 +138,7 @@ class Model(GraphComponent):
 
     @be.with_graph_scope
     def epoch_eval(self, dataset):
-        with be.bound_environment(self.environment):
+        with be.bound_environment():
             nprocessed = 0
             self.loss = 0
             dataset.reset()
@@ -172,16 +172,18 @@ class Model(GraphComponent):
             running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
             nprocessed = 0
             dataset.reset()
-            enp = evaluation.NumPyEvaluator(results=[self.output])
+            error = metric(self.output, self.graph.target)
+            enp = evaluation.NumPyEvaluator(results=[error])
             for x, t in dataset:
                 self.graph.input.value = x.array
                 self.graph.target.value = t.array
                 bsz = min(dataset.ndata - nprocessed, dataset.bsz)
                 nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
                     x[0].array.shape[1] // dataset.bsz
+                calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
-                output = vals[self.output]
-                running_error += metric(output, t, calcrange=slice(0, nsteps * bsz)) * nsteps * bsz
+                error_val = vals[error]
+                running_error += error_val * bsz * nsteps
                 nprocessed += bsz * nsteps
             running_error /= nprocessed
             return running_error

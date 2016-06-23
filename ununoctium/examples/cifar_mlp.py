@@ -26,7 +26,7 @@ opt_gdm = GradientDescent(learning_rate=0.01 * scale)
 layers = [Affine(nout=200, init=init_uni0, activation=be.tanh),
           Affine(nout=train.nclasses, axes=(ax.Y,), init=init_uni1, activation=be.softmax)]
 
-cost = GeneralizedCost(costfunc=CrossEntropyBinary())
+cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
 mlp = Model(layers=layers)
 
@@ -37,4 +37,4 @@ callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 mlp.fit(train, input_axes=(ax.C, ax.H, ax.W), target_axes=(ax.Y,), optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 
 #TODO
-#print('Misclassification error = %.1f%%' % (mlp.eval(test, metric=Misclassification())*100))
+print('Misclassification error = %.1f%%' % (mlp.eval(test, metric=Misclassification())*100))
