@@ -32,6 +32,9 @@ from neon.data import NervanaDataIterator, Ticker
 from neon.util.compat import PY3
 from neon.util.persist import load_obj, save_obj, load_class
 from neon.layers import Convolution, BatchNorm
+
+import geon.backends.graph.arrayaxes as arrayaxes
+
 logger = logging.getLogger(__name__)
 
 

@@ -137,23 +137,57 @@ class Model(GraphComponent):
         self.total_cost = self.total_cost / dataset.nbatches
 
     @be.with_graph_scope
-    def epoch_eval(self, eval_set):
-        with be.bound_environment(self.environment):
+    def epoch_eval(self, dataset):
+        with be.bound_environment():
             nprocessed = 0
             self.loss = 0
-            eval_set.reset()
+            dataset.reset()
             enp = evaluation.NumPyEvaluator(results=[self.graph.cost])
-            for x, t in eval_set:
+            for x, t in dataset:
                 self.graph.input.value = x.array
                 self.graph.target.value = t.array
-                bsz = min(eval_set.ndata - nprocessed, eval_set.bsz)
-                nsteps = x.array.shape[1] // eval_set.bsz if not isinstance(x, list) else \
-                    x[0].array.shape[1] // eval_set.bsz
+                bsz = min(dataset.ndata - nprocessed, dataset.bsz)
+                nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
+                    x[0].array.shape[1] // dataset.bsz
                 vals = enp.evaluate()
                 batch_cost =  vals[self.graph.cost]
                 nprocessed += bsz
                 self.loss += batch_cost / nsteps
             return float(self.loss) / nprocessed
+
+    @be.with_graph_scope
+    def eval(self, dataset, metric):
+        """
+        Evaluates a model on a dataset according to an input metric.
+
+        Arguments:
+            datasets (NervanaDataIterator): dataset to evaluate on.
+            metric (Cost): what function to evaluate dataset on.
+
+        Returns:
+            Host numpy array: the error of the final layer for the evaluation dataset
+        """
+        self.initialize(dataset)
+        with be.bound_environment(self.environment):
+            running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
+            nprocessed = 0
+            dataset.reset()
+            error = metric(self.output, self.graph.target)
+            enp = evaluation.NumPyEvaluator(results=[error])
+            for x, t in dataset:
+                self.graph.input.value = x.array
+                self.graph.target.value = t.array
+                bsz = min(dataset.ndata - nprocessed, dataset.bsz)
+                nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
+                    x[0].array.shape[1] // dataset.bsz
+                calcrange = slice(0, nsteps * bsz)
+                vals = enp.evaluate()
+                error_val = vals[error]
+                running_error += error_val * bsz * nsteps
+                nprocessed += bsz * nsteps
+            running_error /= nprocessed
+            return running_error
+
 
     def serialize(self, fn=None, keep_states=True):
         # TODO

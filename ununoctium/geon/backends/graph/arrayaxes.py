@@ -271,13 +271,18 @@ def set_tensor_axes(tensor, axes, environment=None):
     environment.set_cached_resolved_tensor_axes(key, axes)
     return tensor
 
+def tensor_sample_axes(x, **kargs):
+    return sample_axes(tensor_axes(x), **kargs)
 
 def sample_axes(x, **kargs):
     return AxesSubComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
 
 
+def tensor_batch_axes(x, **kargs):
+    return batch_axes(tensor_axes(x), **kargs)
+
 def batch_axes(x, **kargs):
-    return AxesAppendComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
+    return AxesIntersectComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
 
 
 class AxesIntersectComp(AxesComp):
@@ -418,6 +423,14 @@ def axes_shape(axes):
             length = length*caxis.length
         shape.append(length)
     return shape
+
+
+def axes_size(axes):
+    size = 1
+    for axis in axes:
+        for caxis in flatten_axes(axis):
+            size *= caxis.length
+    return size
 
 
 def flatten_shape(shape):

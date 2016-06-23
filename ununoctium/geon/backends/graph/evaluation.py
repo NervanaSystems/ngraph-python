@@ -30,14 +30,14 @@ class Evaluator(object):
         for i, op in enumerate(self.ops):
             self.opids[op] = i
 
+        self.allocate(self.ops)
+
     def allocate(self, ops):
         for op in ops:
             self.get_resolved_tensor_axes(op)
             self.environment[op] = op.allocate(self)
 
     def initialize(self):
-        self.allocate(self.ops)
-
         initializers = []
         with captured_ops(initializers):
             for op in self.ops:
@@ -124,17 +124,36 @@ class NumPyEvaluator(Evaluator):
     def set_item(self, array, item, value):
         array.__setitem__(item, value)
 
-    def constant(self, value, axes, dtype):
-        return value
+    def constant(self, value, out):
+        if isinstance(out, np.ndarray):
+            out.fill(value)
+            return out
+        else:
+            return value
 
     def absolute(self, x, out):
         return np.abs(reaxe_like(x, out, True), out=out)
+
+    def argmax(self, x, max_axes, out):
+        xa = reaxe(x, (max_axes, tensor_axes(out)))
+        oa = reaxe(out, [tensor_axes(out)])
+        np.ndarray.argmax(xa, 0, oa)
+        return out
+
+    def argmin(self, x, max_axes, out):
+        xa = reaxe(x, (max_axes, tensor_axes(out)))
+        oa = reaxe(out, [tensor_axes(out)])
+        np.ndarray.argmin(xa, 0, oa)
+        return out
 
     def add(self, x, y, out):
         return np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def cos(self, x, out):
         return np.cos(reaxe_like(x, out, True), out=out)
+
+    def divide(self, x, y, out):
+        return np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def dot(self, x, y, red_axes, out):
         # This implementation requires axes
@@ -186,6 +205,9 @@ class NumPyEvaluator(Evaluator):
     def empty(self, axes, dtype):
         return arrayaxes.empty(axes, dtype)
 
+    def equal(self, x, y, out):
+        return np.equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+
     def exp(self, x, out):
         return np.exp(reaxe_like(x, out, True), out=out)
 
@@ -208,6 +230,9 @@ class NumPyEvaluator(Evaluator):
 
     def negative(self, x, out):
         return np.negative(reaxe_like(x, out, True), out=out)
+
+    def not_equal(self, x, y, out):
+        return np.not_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def ones(self, axes, dtype):
         #return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
@@ -269,8 +294,18 @@ class NumPyEvaluator(Evaluator):
         return np.subtract(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def sum(self, x, reduction_axes, out):
-        x_axes = tensor_axes(x)
-        np_out_axes = axes_sub(x_axes, reduction_axes)
+        if len(reduction_axes) == 0:
+            xr = reaxe_like(x, out, True)
+            out[()] = xr[()]
+        else:
+            x_axes = tensor_axes(x)
+            np_out_axes = tensor_axes(out)
+            sum_axes = [reduction_axes]
+            sum_axes.extend(np_out_axes)
+            xsum = reaxe(x, sum_axes, True)
+            np.sum(xsum, axis=0, out=out)
+        return out
+
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
         if list(tensor_axes(out)) != list(np_out_axes):
             temp = np.sum(x, axis=np_red_dims)

@@ -56,8 +56,10 @@ class Axes(TypeDescriptor):
 
 
 class Array(TypeDescriptor):
-    def __init__(self, axes, dtype, **kargs):
+    def __init__(self, axes, dtype=np.float32, **kargs):
         super(Array, self).__init__(**kargs)
+        if dtype is None:
+            pass
         self.dtype = dtype
         self.axes = axes
 

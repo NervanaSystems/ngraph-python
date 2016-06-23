@@ -11,7 +11,7 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
 import geon.backends.graph.arrayaxes as arrayaxes
-from geon.backends.graph.arrayaxes import AxesComp, ValueAxesComp, BatchAxes, AxesIntersectComp, AxesSubComp, AxesAppendComp, tensor_axes
+from geon.backends.graph.arrayaxes import AxesComp, ValueAxesComp, BatchAxes, AxesIntersectComp, AxesSubComp, AxesAppendComp, tensor_axes, tensor_sample_axes
 
 from mpi4py import MPI
 
@@ -69,9 +69,13 @@ class Op(NameableValue):
         self._adjoints = weakref.WeakKeyDictionary()
         ordered_ops = []
         Op.get_ordered_ops(self, ordered_ops, False)
-        self._adjoints[self] = ones(axes=tensor_axes(self))
+        self._adjoints[self] = ones(axes=tensor_sample_axes(self))
         for o in reversed(ordered_ops):
-            o.generate_adjoints(self._adjoints, self._adjoints[o], *o.inputs)
+            scale = o.scale
+            adjoint = self._adjoints[o]
+            if scale != 1.0:
+                adjoint = adjoint * scale
+            o.generate_adjoints(self._adjoints, adjoint, *o.inputs)
         return self._adjoints
 
     @staticmethod
@@ -120,9 +124,12 @@ class Op(NameableValue):
 
 class Tensor(Op):
 
-    def __init__(self, graph_type=None, **kwds):
+    def __init__(self, graph_type=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
+
+        # Derivative will be scaled by this if not 1.0
+        self.scale = scale
 
         # Ops that directly use the result
         self.users = weakref.WeakSet()  # Name assigned by user
@@ -176,10 +183,10 @@ class Tensor(Op):
         return divide(val, self)
 
     def __pow__(self, val):
-        return Pow(self, val)
+        return pow(self, val)
 
     def __rpow__(self, val):
-        return Pow(val, self)
+        return pow(val, self)
 
     def __setitem__(self, key, val):
         return SetItem(self, key, val)
@@ -192,6 +199,9 @@ class Tensor(Op):
     def shape(self):
         return self.__axes__()
 
+    def mean(self, **kargs):
+        return mean(self, **kargs)
+
 
 arrayaxes.ObjectWithAxes.register(Tensor)
 
@@ -200,7 +210,7 @@ class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
     """
-    def __init__(self, args, out=None, batch_axes=None, **kargs):
+    def __init__(self, args, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.__args = tuple(Op.as_op(arg) for arg in args)
 
@@ -210,7 +220,7 @@ class ComputationOp(Tensor):
         self.batch_axes = AxesComp.as_axes(batch_axes or BatchAxes())
 
         if out is None:
-            out = empty(axes=tensor_axes(self))
+            out = empty(axes=tensor_axes(self), dtype=dtype)
         self.output = out
 
     def add_dependencies(self):
@@ -342,7 +352,7 @@ class trace(ElementWise):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, dtype=None, **kargs):
+    def __init__(self, axes=None, dtype=np.float32, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
 
@@ -383,8 +393,6 @@ class placeholder(AllocationOp):
     def value(self, value):
         environment = get_current_environment()
         environment[self] = value
-        # op = Op.as_op(value)
-        # environment.set_cached_resolved_tensor_axes(self, tensor_axes(op))
 
 
 class Constant(AllocationOp):
@@ -400,7 +408,7 @@ class Constant(AllocationOp):
         self.const = const
 
     def evaluate(self, evaluator):
-        return evaluator.constant(self.const, axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+        return evaluator.constant(self.const, evaluator.value(self))
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -436,6 +444,40 @@ class add(ElementWise):
         y.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(y)))
 
 
+class argmax(ComputationOp):
+    def __init__(self, x, max_axes=None, **kargs):
+        if max_axes is None:
+            max_axes = tensor_sample_axes(x)
+        self.max_axes = AxesComp.as_axes(max_axes)
+        super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
+
+
+    def evaluate(self, evaluator, out, x):
+        max_axes = evaluator.get_resolved_axes(self.max_axes)
+        return evaluator.argmax(x, max_axes, out)
+
+    @property
+    def axes(self):
+        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
+
+
+class argmin(ComputationOp):
+    def __init__(self, x, min_axes=None, **kargs):
+        if min_axes is None:
+            min_axes = tensor_sample_axes
+        self.max_axes = AxesComp.as_axes(min_axes)
+        super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
+
+
+    def evaluate(self, evaluator, out, x):
+        max_axes = evaluator.get_resolved_axes(self.max_axes)
+        return evaluator.argmin(x, max_axes, out)
+
+    @property
+    def axes(self):
+        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
+
+
 class cos(ElementWise):
     def __init__(self, x, **kargs):
         super(cos, self).__init__(args=(x,), **kargs)
@@ -447,8 +489,20 @@ class cos(ElementWise):
         return evaluator.cos(x, out)
 
 
+class divide(ElementWise):
+    def __init__(self, x, y, **kargs):
+        super(divide, self).__init__(args=(x, y), **kargs)
+
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.divide(x, y, out)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta*self/x)
+        y.generate_add_delta(adjoints, -delta*self/y)
+
+
 # This makes the derivative simpler if we need it
-def divide(x, y, **kargs):
+def dividex(x, y, **kargs):
     result = multiply(x, reciprocal(y), **kargs)
     return result
 
@@ -483,6 +537,24 @@ class dot(ComputationOp):
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, dot(delta, y, out_axes=tensor_axes(x)))
         y.generate_add_delta(adjoints, dot(x, delta, out_axes=tensor_axes(y)))
+
+
+class equal(ElementWise):
+    #TODO return type
+    def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
+        super(equal, self).__init__(args=(x, y), dtype=dtype, **kargs)
+
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.equal(x, y, out)
+
+
+class not_equal(ElementWise):
+    #TODO return type
+    def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
+        super(not_equal, self).__init__(args=(x, y), dtype=dtype, **kargs)
+
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.not_equal(x, y, out)
 
 
 class softmax(ComputationOp):
@@ -527,6 +599,24 @@ class sum(ComputationOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
+
+
+class tensor_size(ComputationOp):
+    def __init__(self, x, reduction_axes=None, **kargs):
+        if reduction_axes is None:
+            self.reduction_axes = tensor_axes(x)
+        else:
+            self.reduction_axes = AxesComp.as_axes(reduction_axes)
+        super(tensor_size, self).__init__(args=(x,), **kargs)
+
+    def evaluate(self, evaluator, out, x):
+        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
+        size = arrayaxes.axes_size(resolved_reduction_axes)
+        return evaluator.constant(size, out)
+
+    @property
+    def axes(self):
+        return AxesComp.as_axes(())
 
 
 class empty(AllocationOp):
@@ -582,7 +672,10 @@ class Variable(AllocationOp):
         return evaluator.value(self)
 
     def allocate(self, evaluator):
-        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+        try:
+            return evaluator.value(self)
+        except KeyError:
+            return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
     def initializer(self, evaluator, value):
         if self.init:
@@ -679,6 +772,18 @@ class ones(AllocationOp):
 
     def evaluate(self, evaluator):
         return evaluator.ones(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+
+
+class pow(ElementWise):
+    def __init__(self, x, y, **kargs):
+        super(pow, self).__init__(args=(x,), **kargs)
+
+    def evaluate(self, evaluator, out, x, y):
+        return evaluator.pow(x, y, out)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta*y*self/x)
+        y.generate_add_delta(adjoints, delta*self*log(x))
 
 
 class reciprocal(ElementWise):
@@ -782,12 +887,17 @@ class zeros(AllocationOp):
         return evaluator.zeros(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 
+def mean(x, **kargs):
+    return sum(x, **kargs)/tensor_size(x, **kargs)
+
+
 def deriv(dep, indep):
     return dep.adjoints[indep]
 
 
-def cross_entropy_multi(y, t):
-    return -sum(safelog(y) * t)*(1.0/np.log(2))
+def cross_entropy_multi(y, t, usebits=False):
+    logscale = np.float(1. / np.log(2.0) if usebits else 1.)
+    return -sum(safelog(y) * t)*logscale
 
 
 def cross_entropy_binary(y, t):
