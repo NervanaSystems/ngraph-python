@@ -69,16 +69,16 @@ def affine(x, activation, **kargs):
 
 
 @be.with_name_scope
-def mlp(ns, x, activation, shape_spec, axes, **kargs):
+def mlp(ns, x, shape_spec, axes, **kargs):
     value = x
     with be.name_scope_list('L') as name_scopes:
-        for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
+        for hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_name_scope(name_scopes) as nns:
                     nns.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
-                    value = affine(value, activation=hidden_activation, axes=nns.axes, **kargs)
+                    value = affine(value, activation=be.tanh, axes=nns.axes, **kargs)
         with be.next_name_scope(name_scopes):
-            value = affine(value, activation=activation, axes=axes, **kargs)
+            value = affine(value, activation=be.softmax, axes=axes, **kargs)
     return value
 
 
@@ -92,10 +92,10 @@ class MyTest(be.Model):
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))
 
-        layers = [(be.tanh, (ax.Y,), [(200,)])]
+        layers = [((ax.Y,), [(200,)])]
 
         uni = Uniform(-0.1, 0.1)
-        g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
+        g.value = mlp(g.x, shape_spec=layers, axes=g.y.axes, init=uni)
 
         g.loss = be.cross_entropy_multi(g.value, g.y)
 
@@ -132,6 +132,7 @@ class MyTest(be.Model):
             ax.W.length = w
             ax.Y.length = train.nclasses
 
+            # TODO: learning_rate might be a variable rather than placeholder.
             learning_rate = be.placeholder(axes=())
             graph.params = graph.loss.parameters()
             derivs = [be.deriv(graph.loss, param) for param in graph.params]
