@@ -31,16 +31,9 @@
 # epoch: 8 time: 6.36s train_error: 62.89 test_error: 64.12 train_loss: 2.606
 # epoch: 9 time: 5.81s train_error: 62.86 test_error: 63.13 train_loss: 2.594
 
-
-from neon.util.argparser import NeonArgparser
-from neon.data import ImageLoader
-from neon.initializers import Uniform, Constant
-
-import geon.backends.graph.funs as be
+from geon.backends.graph.graphneon import *
 import geon.backends.graph.graph as graph
 import geon.backends.graph.evaluation as evaluation
-import geon.backends.graph.axis as ax
-import geon.backends.graph.dataloaderbackend
 
 import numpy as np
 from timeit import default_timer
