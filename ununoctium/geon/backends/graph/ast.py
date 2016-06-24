@@ -56,9 +56,6 @@ class Op(NameableValue):
             if isinstance(op, ComputationOp):
                 for arg in op.inputs:
                     Op.get_ordered_ops(arg, ordered_ops, include_outs)
-                output = op.output
-                if include_outs and output is not None and op is not output:
-                    Op.get_ordered_ops(op.output, ordered_ops, include_outs)
             ordered_ops.append(op)
 
     @property
@@ -90,16 +87,15 @@ class Op(NameableValue):
         liveness = [set() for _ in ordered_ops]
         i = len(liveness) - 1
         for result in results:
-            liveness[i].add(result.output)
+            liveness[i].add(result)
         while i > 0:
             op = ordered_ops[i]
             prealive = liveness[i - 1]
             alive = set(liveness[i])
             if isinstance(op, Tensor):
-                output = op.output
-                alive.discard(output)
+                alive.discard(op)
                 for arg in op.inputs:
-                    alive.add(arg.output)
+                    alive.add(arg)
                 prealive |= alive
             i = i - 1
         return liveness
@@ -116,6 +112,15 @@ class Op(NameableValue):
         return []
 
     def allocate(self, evaluator):
+        """Allocate storage required for this op"""
+        pass
+
+    def generate_initializations(self):
+        """Generate operations that perform graph initializations"""
+        pass
+
+    def evaluate(self, evaluator, out, *args):
+        """Process op"""
         pass
 
     def __str__(self):
@@ -232,18 +237,18 @@ class ComputationOp(Tensor):
     def __init__(self, args, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.__args = tuple(Op.as_op(arg) for arg in args)
+        self.dtype = dtype
 
         for arg in self.inputs:
             arg.users.add(self)
 
         self.batch_axes = AxesComp.as_axes(batch_axes or BatchAxes())
 
-        if out is None:
-            out = empty(axes=tensor_axes(self), dtype=dtype)
-        self.output = out
+    def allocate(self, evaluator):
+        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.dtype)
 
     def add_dependencies(self):
-        self.output.users.add(self)
+        self.users.add(self)
 
     @property
     def inputs(self):
@@ -272,7 +277,7 @@ class RNG(ComputationOp):
     def uniform(self, low=0.0, high=1.0, size=None, **kargs):
         return Uniform(rng=self,low=low, high=high, size=size, **kargs)
 
-    def evaluate(self, evaluator, out):
+    def allocate(self, evaluator):
         return evaluator.rng(seed=self.seed)
 
 
@@ -293,16 +298,20 @@ class Uniform(RNGOp):
         self.high = high
 
     def evaluate(self, evaluator, out, rng):
-        return evaluator.rng_uniform(rng, self.low, self.high, out)
+        evaluator.rng_uniform(rng, self.low, self.high, out)
 
 
 class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
+        self.__axes = AxesComp.as_axes(())
+
+    def allocate(self, environment):
+        return None
 
     @property
     def axes(self):
-        return tensor_axes(self.output)
+        return self.__axes
 
 
 class decrement(VoidOp):
@@ -311,7 +320,6 @@ class decrement(VoidOp):
 
     def evaluate(self, evaluator, out, parameter, change):
         evaluator.update(parameter, change)
-        return out
 
 
 class SetItem(VoidOp):
@@ -321,15 +329,11 @@ class SetItem(VoidOp):
 
     def evaluate(self, evaluator, out, tensor, val):
         evaluator.set_item(tensor, self.item, val)
-        pass
 
 
 class doall(VoidOp):
     def __init__(self, all, **kargs):
-        super(doall, self).__init__(args=all, out=all[-1].output, **kargs)
-
-    def evaluate(self, evaluator, out, *args):
-        return out
+        super(doall, self).__init__(args=all, out=all[-1], **kargs)
 
 
 class ElementWise(ComputationOp):
@@ -355,7 +359,6 @@ class AllReduce(ElementWise):
         comm.Allreduce(x_val, recv_buffer, op= MPI.SUM)
         recv_buffer = recv_buffer / comm.Get_size() # Normalize the results to the number of MPI threads    
         out[:] = recv_buffer
-        return out
 
 
 class trace(ElementWise):
@@ -388,14 +391,15 @@ class placeholder(AllocationOp):
         super(placeholder, self).__init__(**kargs)
         self.__axes = ValueAxesComp(self)
 
-    def evaluate(self, evaluator):
+    def __axes__(self):
+        return self.__axes
+
+    def evaluate(self, evaluator, out):
+        # TODO Side-effect is setting axes on tensor, won't be needed when this isn't a run-time thing
         return evaluator.input_value(self)
 
     def generate_adjoints(self, tape, delta):
         pass
-
-    def __axes__(self):
-        return self.__axes
 
     @property
     def value(self):
@@ -419,8 +423,8 @@ class Constant(AllocationOp):
             super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), **kargs)
         self.const = const
 
-    def evaluate(self, evaluator):
-        return evaluator.constant(self.const, evaluator.value(self))
+    def allocate(self, evaluator):
+        return evaluator.constant(self.const, self.const)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -438,7 +442,7 @@ class absolute(ElementWise):
         super(absolute, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.absolute(x, out)
+        evaluator.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sig(x)*delta)
@@ -449,7 +453,7 @@ class add(ElementWise):
         super(add, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.add(x, y, out)
+        evaluator.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(x)))
@@ -466,7 +470,7 @@ class argmax(ComputationOp):
 
     def evaluate(self, evaluator, out, x):
         max_axes = evaluator.get_resolved_axes(self.max_axes)
-        return evaluator.argmax(x, max_axes, out)
+        evaluator.argmax(x, max_axes, out)
 
     @property
     def axes(self):
@@ -483,7 +487,7 @@ class argmin(ComputationOp):
 
     def evaluate(self, evaluator, out, x):
         max_axes = evaluator.get_resolved_axes(self.max_axes)
-        return evaluator.argmin(x, max_axes, out)
+        evaluator.argmin(x, max_axes, out)
 
     @property
     def axes(self):
@@ -498,7 +502,7 @@ class cos(ElementWise):
         x.generate_add_delta(adjoints, delta*sin(x))
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.cos(x, out)
+        evaluator.cos(x, out)
 
 
 class divide(ElementWise):
@@ -506,7 +510,7 @@ class divide(ElementWise):
         super(divide, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.divide(x, y, out)
+        evaluator.divide(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*self/x)
@@ -534,7 +538,7 @@ class dot(ComputationOp):
 
     def evaluate(self, evaluator, out, x, y):
         resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
-        return evaluator.dot(x, y, resolved_reduction_axes, out)
+        evaluator.dot(x, y, resolved_reduction_axes, out)
 
     @property
     def axes(self):
@@ -558,32 +562,32 @@ class ElementWiseBoolean(ElementWise):
 
 class equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.equal(x, y, out)
+        evaluator.equal(x, y, out)
 
 
 class not_equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.not_equal(x, y, out)
+        evaluator.not_equal(x, y, out)
 
 
 class greater(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.greater(x, y, out)
+        evaluator.greater(x, y, out)
 
 
 class less(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.less(x, y, out)
+        evaluator.less(x, y, out)
 
 
 class greater_equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.greater_equal(x, y, out)
+        evaluator.greater_equal(x, y, out)
 
 
 class less_equal(ElementWiseBoolean):
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.less_equal(x, y, out)
+        evaluator.less_equal(x, y, out)
 
 
 class softmax(ComputationOp):
@@ -591,7 +595,7 @@ class softmax(ComputationOp):
         super(softmax, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.softmax(x, evaluator.get_resolved_axes(self.batch_axes), out)
+        evaluator.softmax(x, evaluator.get_resolved_axes(self.batch_axes), out)
 
     @property
     def axes(self):
@@ -618,7 +622,7 @@ class sum(ComputationOp):
 
     def evaluate(self, evaluator, out, x):
         resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
-        return evaluator.sum(x, resolved_reduction_axes, out)
+        evaluator.sum(x, resolved_reduction_axes, out)
 
     @property
     def axes(self):
@@ -641,35 +645,17 @@ class tensor_size(ComputationOp):
     def evaluate(self, evaluator, out, x):
         resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
         size = arrayaxes.axes_size(resolved_reduction_axes)
-        return evaluator.constant(size, out)
+        evaluator.constant(size, out)
 
     @property
     def axes(self):
         return AxesComp.as_axes(())
 
 
-class empty(AllocationOp):
-    def __init__(self, **kargs):
-        super(empty, self).__init__(**kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
-
-    def allocate(self, evaluator):
-        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
-
-    def evaluate(self, evaluator):
-        return evaluator.value(self)
-
-
 class Slice(ComputationOp):
     def __init__(self, slices, x, **kargs):
         super(Slice, self).__init__(args=(x,), **kargs)
         self.slices = slices
-
-    def evaluate(self, evaluator, out, x):
-        # TODO This is like an allocate,
-        pass
 
 
 class Pad(ComputationOp):
@@ -683,7 +669,7 @@ class Pad(ComputationOp):
         return self._axes
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.pad(x, self.slice, out)
+        evaluator.pad(x, self.slice, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         pass
@@ -697,16 +683,13 @@ class Variable(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evaluator):
-        return evaluator.value(self)
-
     def allocate(self, evaluator):
         try:
             return evaluator.value(self)
         except KeyError:
             return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
-    def initializer(self, evaluator, value):
+    def generate_initializations(self):
         if self.init:
             self.init.fill(self)
 
@@ -723,7 +706,7 @@ class exp(ElementWise):
         x.generate_add_delta(adjoints, delta)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.exp(x, out)
+        evaluator.exp(x, out)
 
 
 class log(ElementWise):
@@ -734,12 +717,12 @@ class log(ElementWise):
         x.generate_add_delta(adjoints, delta/x)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.log(x, out)
+        evaluator.log(x, out)
 
 
 class safelog(log):
     def evaluate(self, evaluator, out, x):
-        return evaluator.safelog(x, out)
+        evaluator.safelog(x, out)
 
 
 class maximum(ElementWise):
@@ -747,7 +730,7 @@ class maximum(ElementWise):
         super(maximum, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.maximum(x, y, out=out)
+        evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*(self == x))
@@ -759,7 +742,7 @@ class minimum(ElementWise):
         super(minimum, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.minimum(x, y, out=out)
+        evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*(self == x))
@@ -776,7 +759,7 @@ class multiply(ElementWise):
 
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.multiply(x, y, out)
+        evaluator.multiply(x, y, out)
 
 
 class negative(ElementWise):
@@ -787,7 +770,7 @@ class negative(ElementWise):
         x.generate_add_delta(adjoints, -delta)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.negative(x, out)
+        evaluator.negative(x, out)
 
 
 class ones(AllocationOp):
@@ -797,7 +780,7 @@ class ones(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evaluator):
+    def allocate(self, evaluator):
         return evaluator.ones(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 
@@ -806,7 +789,7 @@ class power(ElementWise):
         super(power, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.pow(x, y, out)
+        evaluator.pow(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta*y*self/x)
@@ -821,7 +804,7 @@ class reciprocal(ElementWise):
         x.generate_add_delta(adjoints, -self*self*delta)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.reciprocal(x, out)
+        evaluator.reciprocal(x, out)
 
 
 class sgn(ElementWise):
@@ -833,7 +816,7 @@ class sgn(ElementWise):
         pass
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.sign(x, out)
+        evaluator.sign(x, out)
 
 
 class sig(ElementWise):
@@ -845,7 +828,7 @@ class sig(ElementWise):
         x.generate_add_delta(adjoints, delta*self*(1.0-self))
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.sig(x, out)
+        evaluator.sig(x, out)
 
 class sin(ElementWise):
     def __init__(self, x, **kargs):
@@ -855,7 +838,7 @@ class sin(ElementWise):
         x.generate_add_delta(adjoints, delta*cos(x))
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.sin(x, out)
+        evaluator.sin(x, out)
 
 
 class sqrt(ElementWise):
@@ -866,7 +849,7 @@ class sqrt(ElementWise):
         x.generate_add_delta(adjoints, .5*delta*self)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.sqrt(x, out)
+        evaluator.sqrt(x, out)
 
 
 class square(ElementWise):
@@ -877,7 +860,7 @@ class square(ElementWise):
         x.generate_add_delta(adjoints, 2.0*delta*x)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.square(x, out)
+        evaluator.square(x, out)
 
 
 class subtract(ElementWise):
@@ -889,7 +872,7 @@ class subtract(ElementWise):
         y.generate_add_delta(adjoints, -delta)
 
     def evaluate(self, evaluator, out, x, y):
-        return evaluator.subtract(x, y, out)
+        evaluator.subtract(x, y, out)
 
 
 class tanh(ElementWise):
@@ -900,7 +883,7 @@ class tanh(ElementWise):
         x.generate_add_delta(adjoints, delta*(1.0-self*self))
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.tanh(x, out)
+        evaluator.tanh(x, out)
 
 
 class zeros(AllocationOp):
@@ -910,7 +893,7 @@ class zeros(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def evaluate(self, evaluator):
+    def allocate(self, evaluator):
         return evaluator.zeros(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
 
 

@@ -8,7 +8,7 @@ from geon.backends.graph.environment import bound_environment, set_batch_axes, g
 from geon.backends.graph.ast import deriv, placeholder, Variable
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, linear_map_axes, sample_axes, batch_axes, \
     set_tensor_axes, tensor_axes
-from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, empty, equal, exp, log, maximum, \
+from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, maximum, \
     mean, minimum, multiply, greater, greater_equal, less, less_equal, power
 from geon.backends.graph.ast import negative, not_equal, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum

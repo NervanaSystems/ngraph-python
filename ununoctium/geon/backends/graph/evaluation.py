@@ -41,8 +41,7 @@ class Evaluator(object):
         initializers = []
         with captured_ops(initializers):
             for op in self.ops:
-                if isinstance(op, ast.Variable):
-                    op.initializer(self, self.environment[op])
+                op.generate_initializations()
         ops = ast.Op.ordered_ops(initializers, True)
         self.allocate(ops)
         self.evaluate_ops(ops)
@@ -75,25 +74,17 @@ class Evaluator(object):
             return result
         axes = self.get_resolved_axes(x.axes)
         arrayaxes.set_tensor_axis_strides(result, arrayaxes.c_axis_strides(result.dtype, axes), self.environment)
-        return arrayaxes.set_tensor_axes(result, axes, self.environment)
+        arrayaxes.set_tensor_axes(result, axes, self.environment)
 
     def evaluate_ops(self, ops):
-        vals = {}
         for op in ops:
-            args = [vals[arg.output] for arg in op.inputs]
-            if op.output is op:
-                val = op.evaluate(self, *args)
-                vals[op.output] = val
-            else:
-                val = op.evaluate(self, vals[op.output], *args)
-                vals[op.output] = val
-        return vals
+            op.evaluate(self, self.environment[op], *[self.environment[arg] for arg in op.inputs])
 
     def evaluate(self):
-        vals = self.evaluate_ops(self.ops)
+        self.evaluate_ops(self.ops)
         r = {}
         for op in self.results:
-            r[op] = vals[op.output]
+            r[op] = self.environment[op]
         return r
 
     def value(self, op):
@@ -111,7 +102,6 @@ class NumPyEvaluator(Evaluator):
             oa = oa.reshape((1,))
             xa = xa.reshape((1,))
         oa[:] = xa
-        return out
 
     def rng(self, seed=None):
         return np.random.RandomState(seed=seed)
@@ -119,41 +109,38 @@ class NumPyEvaluator(Evaluator):
     def rng_uniform(self, rng, low, high, out):
         shape = [axis.length for axis in tensor_axes(out)]
         out[:] = rng.uniform(low, high, shape)
-        return out
 
     def set_item(self, array, item, value):
         array.__setitem__(item, value)
 
+    # Allocator
     def constant(self, value, out):
         if isinstance(out, np.ndarray):
             out.fill(value)
-            return out
         else:
             return value
 
     def absolute(self, x, out):
-        return np.abs(reaxe_like(x, out, True), out=out)
+        np.abs(reaxe_like(x, out, True), out=out)
 
     def argmax(self, x, max_axes, out):
         xa = reaxe(x, (max_axes, tensor_axes(out)))
         oa = reaxe(out, [tensor_axes(out)])
         np.ndarray.argmax(xa, 0, oa)
-        return out
 
     def argmin(self, x, max_axes, out):
         xa = reaxe(x, (max_axes, tensor_axes(out)))
         oa = reaxe(out, [tensor_axes(out)])
         np.ndarray.argmin(xa, 0, oa)
-        return out
 
     def add(self, x, y, out):
-        return np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def cos(self, x, out):
-        return np.cos(reaxe_like(x, out, True), out=out)
+        np.cos(reaxe_like(x, out, True), out=out)
 
     def divide(self, x, y, out):
-        return np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def dot(self, x, y, red_axes, out):
         # This implementation requires axes
@@ -169,7 +156,7 @@ class NumPyEvaluator(Evaluator):
         if len(x_axes) is 0 or len(y_axes) is 0:
             # TODO turn this into multiply ahead of time
             np.multiply(x, y, out=out)
-            return out
+            return
 
         xi = find_axes_in_axes(red_axes, x_axes)
         if xi == -1:
@@ -194,13 +181,11 @@ class NumPyEvaluator(Evaluator):
         o = arrayaxes.reaxe(out, axes=(al, br))
         #o = out.reaxe(axes=(al, br))
         np.dot(a,b,out=o)
-        return out
 
     def update(self, params, delta):
         if params.shape != delta.shape:
             print('mismatch', tensor_axes(params), tensor_axes(delta))
         np.subtract(params, reaxe_like(delta, params, True), out=params)
-        return params
 
     def empty(self, axes, dtype):
         return arrayaxes.empty(axes, dtype)
@@ -209,62 +194,62 @@ class NumPyEvaluator(Evaluator):
         return np.equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def exp(self, x, out):
-        return np.exp(reaxe_like(x, out, True), out=out)
+        np.exp(reaxe_like(x, out, True), out=out)
 
     def greater(self, x, y, out):
-        return np.greater(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.greater(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def greater_equal(self, x, y, out):
-        return np.greater_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.greater_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def less(self, x, y, out):
-        return np.less(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.less(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def less_equal(self, x, y, out):
-        return np.less_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.less_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def log(self, x, out):
-        return np.log(reaxe_like(x, out, True), out=out)
+        np.log(reaxe_like(x, out, True), out=out)
 
     expm50 = np.exp(-50.)
     def safelog(self, x, out):
         np.maximum(reaxe_like(x, out, True), NumPyEvaluator.expm50, out)
-        return np.log(out, out)
+        np.log(out, out)
 
     def maximum(self, x, y, out):
-        return np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def minimum(self, x, y, out):
-        return np.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def multiply(self, x, y, out):
-        return np.multiply(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.multiply(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def negative(self, x, out):
-        return np.negative(reaxe_like(x, out, True), out=out)
+        np.negative(reaxe_like(x, out, True), out=out)
 
     def not_equal(self, x, y, out):
-        return np.not_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.not_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def ones(self, axes, dtype):
         #return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
         return arrayaxes.ones(axes, dtype)
 
     def reciprocal(self, x, out):
-        return np.reciprocal(reaxe_like(x, out, True), out=out)
+        np.reciprocal(reaxe_like(x, out, True), out=out)
 
     def sig(self, x, out):
         xa = reaxe_like(x, out, True)
         np.negative(xa, out)
         np.exp(out, out)
         np.add(out, 1.0, out)
-        return np.reciprocal(out, out)
+        np.reciprocal(out, out)
 
     def sign(self, x, out):
-        return np.sign(reaxe_like(x, out, True), out=out)
+        np.sign(reaxe_like(x, out, True), out=out)
 
     def sin(self, x, out):
-        return np.sin(reaxe_like(x, out, True), out=out)
+        np.sin(reaxe_like(x, out, True), out=out)
 
     def softmax(self, x, batch_axes, out):
         softmax_axes = axes_sub(tensor_axes(x), batch_axes)
@@ -294,16 +279,16 @@ class NumPyEvaluator(Evaluator):
         out_temp = out.reshape([sm_size]+list(out.shape[len(softmax_axes):]))
         s = out_temp.sum(axis=0)
         s = s.reshape([1]*len(sm_dims)+list(out.shape[len(softmax_axes):]))
-        return np.divide(out, s, out=out)
+        np.divide(out, s, out=out)
 
     def sqrt(self, x, out):
-        return np.sqrt(reaxe_like(x, out, True), out=out)
+        np.sqrt(reaxe_like(x, out, True), out=out)
 
     def square(self, x, out):
-        return np.square(reaxe_like(x, out, True), out=out)
+        np.square(reaxe_like(x, out, True), out=out)
 
     def subtract(self, x, y, out):
-        return np.subtract(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.subtract(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def sum(self, x, reduction_axes, out):
         if len(reduction_axes) == 0:
@@ -316,7 +301,7 @@ class NumPyEvaluator(Evaluator):
             sum_axes.extend(np_out_axes)
             xsum = reaxe(x, sum_axes, True)
             np.sum(xsum, axis=0, out=out)
-        return out
+        return
 
         np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
         if list(tensor_axes(out)) != list(np_out_axes):
@@ -324,10 +309,9 @@ class NumPyEvaluator(Evaluator):
             out[...] = temp
         else:
             np.sum(x, axis=np_red_dims, out=reaxe(out, np_out_axes, True))
-        return out
 
     def tanh(self, x, out):
-        return np.tanh(reaxe_like(x, out, True), out=out)
+        np.tanh(reaxe_like(x, out, True), out=out)
 
     def zeros(self, axes, dtype):
         #return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
@@ -472,15 +456,10 @@ class GenNumPy(Evaluator):
         vals = {}
         for i, op in enumerate(self.ops):
             live = [varname(l) for l in liveness[i]]
-            args = [varname(arg.output) for arg in op.inputs]
-            if op.output is op:
-                val = op.evaluate(self, *args)
-                vals[op] = val
-                body.append('{var} = {val} # Live={live}'.format(var=varname(op), val=val, live=live))
-            else:
-                val = '{var} = {val} # Live={live}'.format(val=op.evaluate(self, varname(op.output), *args), var=varname(op), live=live)
-                vals[op] = val
-                body.append(val)
+            args = [varname(arg) for arg in op.inputs]
+            val = '{var} = {val} # Live={live}'.format(val=op.evaluate(self, varname(op), *args), var=varname(op), live=live)
+            vals[op] = val
+            body.append(val)
         for line in body:
             print(line)
         return [vals[op] for op in self.results]

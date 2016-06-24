@@ -1,6 +1,9 @@
+from __future__ import division
+
 from abc import ABCMeta
 import collections
 import numbers
+import math
 
 import numpy as np
 
@@ -566,3 +569,28 @@ Scalar.register(numbers.Real)
 ObjectWithAxes.register(Scalar)
 
 
+def output_dim(self, X, F, padding, strides, pooling=False, cafe_compatibility=False):
+    """
+    Compute along 1 dimension, with these sizes, what will be the output dimension.
+
+    Arguments:
+        X (int): input data dimension
+        F (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+        pooling (bool): flag for setting pooling layer size
+    """
+
+    if cafe_compatibility and pooling:
+        size = int(math.ceil((float(X - F + 2 * padding) / strides))) + 1
+        if padding > 0 and (size - 1) * strides >= X + padding:
+            # decrement size if last pooling op is completely in padding
+            size -= 1
+    else:
+        # normal neon output size determination
+        size = ((X - F + 2 * padding) // strides) + 1
+
+    if pooling and padding >= F:
+        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, F))
+
+    return size
