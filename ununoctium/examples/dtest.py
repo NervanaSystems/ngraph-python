@@ -1,6 +1,6 @@
 import geon.backends.graph.defmod as nm
 import geon.backends.graph.axis as ax
-
+import geon.backends.graph.analysis as analysis
 
 class Uniform(object):
     def __init__(self, low=0.0, high=1.0):
@@ -71,7 +71,7 @@ class MyTest(nm.Model):
                       init=uni)
 
         g.error = cross_entropy(g.value, g.y)
-
+        print g.error
         # L2 regularizer of parameters
         reg = None
         for param in nm.find_all(types=nm.Variable, tags='parameter', used_by=g.value):
@@ -81,7 +81,10 @@ class MyTest(nm.Model):
             else:
                 reg = reg + l2
         g.loss = g.error + .01 * reg
-
+        dataflow = analysis.DataFlowGraph([g.loss])
+        kernelflow = analysis.KernelFlowGraph(dataflow)
+        kernelflow.visualize('Kernel Flow')
+        
     @nm.with_graph_scope
     @nm.with_environment
     def dump(self):
