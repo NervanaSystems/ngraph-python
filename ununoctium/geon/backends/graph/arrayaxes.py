@@ -4,6 +4,7 @@ from abc import ABCMeta
 import collections
 import numbers
 import math
+import weakref
 
 import numpy as np
 
@@ -104,82 +105,6 @@ class AxisID(object):
 Axis.register(AxisID)
 
 
-class AxesComp(object):
-    """A Computation for computing axes"""
-    def __init__(self, **kargs):
-        super(AxesComp, self).__init__(**kargs)
-
-    @staticmethod
-    def as_axes(axes, **kargs):
-        if isinstance(axes, AxesComp):
-            return axes
-        elif axes is None:
-            return None
-        else:
-            return LiteralAxesComp(axes, **kargs)
-
-    def evaluate(self, evaluator):
-        raise NotImplementedError()
-
-    def __add__(self, x):
-        return AxesAppendComp(self, AxesComp.as_axes(x))
-
-    def __radd__(self, x):
-        return AxesAppendComp(AxesComp.as_axes(x), self)
-
-    def __sub__(self, x):
-        return AxesSubComp(self, AxesComp.as_axes(x))
-
-    def __rsub__(self, x):
-        return AxesSubComp(AxesComp.as_axes(x), self)
-
-    def __mul__(self, x):
-        return AxesIntersectComp(self, AxesComp.as_axes(x))
-
-    def __rmul__(self, x):
-        return AxesIntersectComp(AxesComp.as_axes(x), self)
-
-
-class LiteralAxesComp(AxesComp):
-    """Actual axes are provided"""
-    def __init__(self, axes, **kargs):
-        super(LiteralAxesComp, self).__init__(**kargs)
-        self.axes = axes
-
-    def evaluate(self, evaluator):
-        return self.axes
-
-
-class BatchAxes(AxesComp):
-    """Axes used for batch"""
-    def __init__(self, **kargs):
-        super(BatchAxes, self).__init__(**kargs)
-
-    def evaluate(self, evaluator):
-        return evaluator.get_batch_axes()
-
-
-class ValueAxesComp(AxesComp):
-    """Determine axes from value computed by x"""
-    def __init__(self, x, **kargs):
-        super(ValueAxesComp, self).__init__(**kargs)
-        self.x = x
-
-    def evaluate(self, evaluator):
-        return evaluator.get_resolved_tensor_axes(self.x)
-
-
-class AxesSubComp(AxesComp):
-    """Result will be removal of axes in y from those in x"""
-    def __init__(self, x, y, **kargs):
-        super(AxesSubComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return axes_sub(x_axes, y_axes)
 
 
 def c_axis_strides(dtype, axes):
@@ -273,53 +198,6 @@ def set_tensor_axes(tensor, axes, environment=None):
         key = NumpyWrapper(tensor)
     environment.set_cached_resolved_tensor_axes(key, axes)
     return tensor
-
-def tensor_sample_axes(x, **kargs):
-    return sample_axes(tensor_axes(x), **kargs)
-
-def sample_axes(x, **kargs):
-    return AxesSubComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
-
-
-def tensor_batch_axes(x, **kargs):
-    return batch_axes(tensor_axes(x), **kargs)
-
-def batch_axes(x, **kargs):
-    return AxesIntersectComp(AxesComp.as_axes(x, **kargs), BatchAxes(**kargs))
-
-
-class AxesIntersectComp(AxesComp):
-    def __init__(self, x, y, **kargs):
-        super(AxesIntersectComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return axes_intersect(x_axes, y_axes)
-
-
-class AxesAppendComp(AxesComp):
-    def __init__(self, x, y, **kargs):
-        super(AxesAppendComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-
-    def evaluate(self, evaluator):
-        x_axes = evaluator.get_resolved_axes(self.x)
-        y_axes = evaluator.get_resolved_axes(self.y)
-        return axes_append(x_axes, y_axes)
-
-# This one should also work, but there are some bugs in axes/dot
-def linear_map_axesa(in_axes, out_axes):
-    return AxesSubComp(AxesAppendComp(in_axes, out_axes),
-                       AxesIntersectComp(in_axes, out_axes))
-
-
-def linear_map_axes(in_axes, out_axes):
-    return AxesSubComp(AxesAppendComp(out_axes, in_axes),
-                       AxesIntersectComp(in_axes, out_axes))
 
 
 def axis_ids(axes):
@@ -558,6 +436,12 @@ def reaxe_array(axes, array, broadcast=False, offset=0):
     return set_tensor_axes(obj, axes)
 
 
+class ReaxeParams(object):
+    def __init__(self, reaxes, axis_strides, broadcast=False):
+        self.strides = reaxe_strides(reaxes, axis_strides, broadcast)
+        self.shape = tuple(axes_shape(reaxes))
+
+
 class ObjectWithAxes(object):
     __metaclass__ = ABCMeta
 
@@ -594,3 +478,14 @@ def output_dim(self, X, F, padding, strides, pooling=False, cafe_compatibility=F
         raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, F))
 
     return size
+
+
+def get_batch_axes(default=()):
+    environment = get_current_environment()
+    if environment is None:
+        return default
+    return environment.get_value('batch_axes', default)
+
+
+def set_batch_axes(axes):
+    get_current_environment()['batch_axes'] = axes

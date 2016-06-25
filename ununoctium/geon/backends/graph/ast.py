@@ -11,7 +11,7 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
 import geon.backends.graph.arrayaxes as arrayaxes
-from geon.backends.graph.arrayaxes import AxesComp, ValueAxesComp, BatchAxes, AxesIntersectComp, AxesSubComp, AxesAppendComp, tensor_axes, tensor_sample_axes
+from geon.backends.graph.arrayaxes import tensor_axes, get_batch_axes, set_batch_axes
 
 from mpi4py import MPI
 
@@ -127,11 +127,174 @@ class Op(NameableValue):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
+class TensorAxesInfo(object):
+    def __init__(self, axes, alloc=None, init=None, read_only=False, dtype=None, **kargs):
+        super(TensorAxesInfo, self).__init__(**kargs)
+        axes = tuple(axes)
+        self.axes = axes
+        self.views = weakref.WeakValueDictionary()
+        self.views[self.axes] = self
+        self.idx = 0
+        self.alloc = alloc
+        self.init = init
+        self.read_only = read_only
+        self.dtype = dtype
+
+    def get_or_default(self, axes, default_function):
+        axes = tuple(axes)
+        if self.views.has_key(axes):
+            return self.views[axes]
+        result = default_function()
+        self.views[axes] = result
+        return result
+
+    def reaxe(self, reaxe):
+        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(self, reaxe, idx=len(self.views)))
+
+
+class TensorViewInfo(object):
+    def __init__(self, tensor_axes_info, idx, **kargs):
+        super(TensorViewInfo, self).__init__(**kargs)
+        self.tensor_axes_info = tensor_axes_info
+        self.idx = idx
+
+
+class TensorReaxeViewInfo(TensorViewInfo):
+    def __init__(self, reaxe, **kargs):
+        super(TensorReaxeViewInfo, self).__init__(**kargs)
+        self.reaxe = reaxe
+
+
+class AxesComp(object):
+    """A Computation for computing axes"""
+    def __init__(self, axes=None, **kargs):
+        super(AxesComp, self).__init__(**kargs)
+        self.__axes__ = axes
+
+    @staticmethod
+    def as_axes(axes, **kargs):
+        if isinstance(axes, AxesComp):
+            return axes
+        elif axes is None:
+            return None
+        else:
+            return LiteralAxesComp(axes=axes, **kargs)
+
+    @property
+    def value(self):
+        if self.__axes__ is None:
+            self.__axes__ = self.resolve()
+        return self.__axes__
+
+    def resolve(self):
+        raise NotImplementedError()
+
+    def __add__(self, x):
+        return AxesAppendComp(self, AxesComp.as_axes(x))
+
+    def __radd__(self, x):
+        return AxesAppendComp(AxesComp.as_axes(x), self)
+
+    def __sub__(self, x):
+        return AxesSubComp(self, AxesComp.as_axes(x))
+
+    def __rsub__(self, x):
+        return AxesSubComp(AxesComp.as_axes(x), self)
+
+    def __mul__(self, x):
+        return AxesIntersectComp(self, AxesComp.as_axes(x))
+
+    def __rmul__(self, x):
+        return AxesIntersectComp(AxesComp.as_axes(x), self)
+
+
+def sample_axes(x, **kargs):
+    return AxesSubComp(AxesComp.as_axes(x, **kargs), get_batch_axes())
+
+
+def tensor_sample_axes(x, **kargs):
+    return sample_axes(tensor_axes(x), **kargs)
+
+
+def tensor_batch_axes(x, **kargs):
+    return batch_axes(tensor_axes(x), **kargs)
+
+
+def batch_axes(x, **kargs):
+    return AxesIntersectComp(AxesComp.as_axes(x, **kargs), get_batch_axes())
+
+
+# This one should also work, but there are some bugs in axes/dot
+def linear_map_axesa(in_axes, out_axes):
+    return AxesSubComp(AxesAppendComp(in_axes, out_axes),
+                       AxesIntersectComp(in_axes, out_axes))
+
+
+def linear_map_axes(in_axes, out_axes):
+    return AxesSubComp(AxesAppendComp(out_axes, in_axes),
+                       AxesIntersectComp(in_axes, out_axes))
+
+
+class LiteralAxesComp(AxesComp):
+    """Actual axes are provided"""
+    def __init__(self, **kargs):
+        super(LiteralAxesComp, self).__init__(**kargs)
+
+
+class ValueAxesComp(AxesComp):
+    """Determine axes from value computed by x"""
+    def __init__(self, x, **kargs):
+        super(ValueAxesComp, self).__init__(**kargs)
+        self.x = x
+
+    def resolve(self):
+        return self.x.resolved_axes
+
+
+class AxesSubComp(AxesComp):
+    """Result will be removal of axes in y from those in x"""
+    def __init__(self, x, y, **kargs):
+        super(AxesSubComp, self).__init__(**kargs)
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
+
+    def resolve(self):
+        x_axes = self.x.value
+        y_axes = self.y.value
+        return arrayaxes.axes_sub(x_axes, y_axes)
+
+
+class AxesIntersectComp(AxesComp):
+    def __init__(self, x, y, **kargs):
+        super(AxesIntersectComp, self).__init__(**kargs)
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
+
+    def resolve(self):
+        x_axes = self.x.value
+        y_axes = self.y.value
+        return arrayaxes.axes_intersect(x_axes, y_axes)
+
+
+class AxesAppendComp(AxesComp):
+    def __init__(self, x, y, **kargs):
+        super(AxesAppendComp, self).__init__(**kargs)
+        self.x = AxesComp.as_axes(x)
+        self.y = AxesComp.as_axes(y)
+
+    def resolve(self):
+        x_axes = self.x.value
+        y_axes = self.y.value
+        return arrayaxes.axes_append(x_axes, y_axes)
+
+
 class Tensor(Op):
 
     def __init__(self, graph_type=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
+        self.__tensor_axes_info = None
+        self.__call_info = None
 
         # Derivative will be scaled by this if not 1.0
         self.scale = scale
@@ -218,6 +381,34 @@ class Tensor(Op):
     def __axes__(self):
         return self.axes
 
+    @property
+    def tensor_axes_info(self):
+        if self.__tensor_axes_info is None:
+            self.__tensor_axes_info = self.compute_tensor_axes_info()
+        return self.__tensor_axes_info
+
+    def compute_tensor_axes_info(self):
+        dtype = None
+        if self.graph_type is not None:
+            dtype = self.graph_type.dtype
+        return TensorAxesInfo(self.axes.value, dtype=dtype)
+
+    @property
+    def call_info(self):
+        if self.__call_info is None:
+            self.__call_info = self.compute_call_info()
+        return self.__call_info
+
+    def compute_call_info(self):
+        return [self.reaxe(self.resolved_axes)]
+
+    @property
+    def resolved_axes(self):
+        return self.tensor_axes_info.axes
+
+    def reaxe(self, reaxe):
+        return self.tensor_axes_info.reaxe(reaxe)
+
     # Required for parameter initializers
     @property
     def shape(self):
@@ -242,10 +433,13 @@ class ComputationOp(Tensor):
         for arg in self.inputs:
             arg.users.add(self)
 
-        self.batch_axes = AxesComp.as_axes(batch_axes or BatchAxes())
+        if batch_axes is None:
+            batch_axes = get_batch_axes()
+
+        self.batch_axes = AxesComp.as_axes(batch_axes)
 
     def allocate(self, evaluator):
-        return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.dtype)
+        return evaluator.empty(axes=self.resolved_axes, dtype=self.dtype)
 
     def add_dependencies(self):
         self.users.add(self)
@@ -306,7 +500,7 @@ class VoidOp(ComputationOp):
         super(VoidOp, self).__init__(**kargs)
         self.__axes = AxesComp.as_axes(())
 
-    def allocate(self, environment):
+    def allocate(self, evaluator):
         return None
 
     @property
@@ -347,6 +541,12 @@ class ElementWise(ComputationOp):
         for input in inputs[1:]:
             result = AxesAppendComp(result, tensor_axes(input))
         return result
+
+    def compute_call_info(self):
+        ci = super(ElementWise, self).compute_call_info()
+        for arg in self.inputs:
+            ci.append(arg.reaxe(self.resolved_axes))
+        return ci
 
 
 class AllReduce(ElementWise):
@@ -469,7 +669,7 @@ class argmax(ComputationOp):
 
 
     def evaluate(self, evaluator, out, x):
-        max_axes = evaluator.get_resolved_axes(self.max_axes)
+        max_axes = self.max_axes.value
         evaluator.argmax(x, max_axes, out)
 
     @property
@@ -481,17 +681,17 @@ class argmin(ComputationOp):
     def __init__(self, x, min_axes=None, **kargs):
         if min_axes is None:
             min_axes = tensor_sample_axes
-        self.max_axes = AxesComp.as_axes(min_axes)
+        self.min_axes = AxesComp.as_axes(min_axes)
         super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
 
     def evaluate(self, evaluator, out, x):
-        max_axes = evaluator.get_resolved_axes(self.max_axes)
-        evaluator.argmin(x, max_axes, out)
+        min_axes = self.min_axes.value
+        evaluator.argmin(x, min_axes, out)
 
     @property
     def axes(self):
-        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
+        return AxesSubComp(tensor_axes(self.inputs[0]), self.min_axes)
 
 
 class cos(ElementWise):
@@ -537,7 +737,7 @@ class dot(ComputationOp):
         super(dot, self).__init__(args=(x, y), **kargs)
 
     def evaluate(self, evaluator, out, x, y):
-        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
+        resolved_reduction_axes = self.reduction_axes.value
         evaluator.dot(x, y, resolved_reduction_axes, out)
 
     @property
@@ -595,7 +795,7 @@ class softmax(ComputationOp):
         super(softmax, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        evaluator.softmax(x, evaluator.get_resolved_axes(self.batch_axes), out)
+        evaluator.softmax(x, self.batch_axes.value, out)
 
     @property
     def axes(self):
@@ -621,7 +821,7 @@ class sum(ComputationOp):
         super(sum, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
+        resolved_reduction_axes = self.reduction_axes.value
         evaluator.sum(x, resolved_reduction_axes, out)
 
     @property
@@ -643,7 +843,7 @@ class tensor_size(ComputationOp):
         super(tensor_size, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        resolved_reduction_axes = evaluator.get_resolved_axes(self.reduction_axes)
+        resolved_reduction_axes = self.reduction_axes.value
         size = arrayaxes.axes_size(resolved_reduction_axes)
         evaluator.constant(size, out)
 
@@ -687,7 +887,7 @@ class Variable(AllocationOp):
         try:
             return evaluator.value(self)
         except KeyError:
-            return evaluator.empty(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+            return evaluator.empty(axes=self.resolved_axes, dtype=self.graph_type.dtype)
 
     def generate_initializations(self):
         if self.init:
@@ -781,7 +981,7 @@ class ones(AllocationOp):
         pass
 
     def allocate(self, evaluator):
-        return evaluator.ones(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+        return evaluator.ones(axes=self.resolved_axes, dtype=self.graph_type.dtype)
 
 
 class power(ElementWise):
@@ -894,7 +1094,7 @@ class zeros(AllocationOp):
         pass
 
     def allocate(self, evaluator):
-        return evaluator.zeros(axes=evaluator.get_resolved_tensor_axes(self), dtype=self.graph_type.dtype)
+        return evaluator.zeros(axes=self.resolved_axes, dtype=self.graph_type.dtype)
 
 
 def mean(x, **kargs):

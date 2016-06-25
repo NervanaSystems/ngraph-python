@@ -116,24 +116,19 @@ class Environment(object):
     def set_value(self, key, value):
         self.values[key] = value
 
+    # TODO Remove
     def get_cached_resolved_tensor_axes(self, tensor):
         return self._chained_search('resolved_tensor_axes', tensor)
 
+    # TODO Remove
     def set_cached_resolved_tensor_axes(self, tensor, axes):
         self.resolved_tensor_axes[tensor] = axes
 
-
+    # TODO Remove
     def get_tensor_strides(self, tensor):
         return self._chained_search('tensor_strides', tensor)
 
-
+    # TODO Remove
     def set_tensor_strides(self, tensor, strides):
         self.tensor_strides[tensor] = strides
 
-
-def get_batch_axes():
-    return get_current_environment()['batch_axes']
-
-
-def set_batch_axes(axes):
-    get_current_environment()['batch_axes'] = axes

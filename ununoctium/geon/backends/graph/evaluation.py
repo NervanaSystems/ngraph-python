@@ -6,10 +6,9 @@ import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
-from geon.backends.graph.arrayaxes import find_axes_in_axes, reaxe, reaxe_like, tensor_axes
+from geon.backends.graph.arrayaxes import find_axes_in_axes, reaxe, reaxe_like, tensor_axes, get_batch_axes, set_batch_axes
 import geon.backends.graph.arrayaxes as arrayaxes
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
-from geon.backends.graph.environment import get_batch_axes, set_batch_axes
 
 
 def axes_shape(axes):
@@ -34,7 +33,7 @@ class Evaluator(object):
 
     def allocate(self, ops):
         for op in ops:
-            self.get_resolved_tensor_axes(op)
+            call_info = op.call_info
             self.environment[op] = op.allocate(self)
 
     def initialize(self):
@@ -46,33 +45,11 @@ class Evaluator(object):
         self.allocate(ops)
         self.evaluate_ops(ops)
 
-    def get_resolved_tensor_axes(self, tensor):
-        try:
-            return self.environment.get_cached_resolved_tensor_axes(tensor)
-        except KeyError:
-            axes = tensor.axes.evaluate(self)
-            self.environment.set_cached_resolved_tensor_axes(tensor, axes)
-            return axes
-
-    def get_resolved_axes(self, axes_comp):
-        try:
-            return self.environment[axes_comp]
-        except KeyError:
-            resolved_axes = axes_comp.evaluate(self)
-            self.environment[axes_comp] = resolved_axes
-            return resolved_axes
-
-    def get_batch_axes(self):
-        return get_batch_axes()
-
-    def set_batch_axes(self, axes):
-        set_batch_axes(axes)
-
     def input_value(self, x):
         result = self.environment[x]
         if isinstance(result, arrayaxes.Scalar):
             return result
-        axes = self.get_resolved_axes(x.axes)
+        axes = x.axes.value
         arrayaxes.set_tensor_axis_strides(result, arrayaxes.c_axis_strides(result.dtype, axes), self.environment)
         arrayaxes.set_tensor_axes(result, axes, self.environment)
 
@@ -95,6 +72,16 @@ class NumPyEvaluator(Evaluator):
     def __init__(self, **kargs):
         super(NumPyEvaluator, self).__init__(**kargs)
 
+    def allocate_views(self, tensor_axis_info, array):
+        views = [None]*len(tensor_axis_info.views)
+        views[0] = array
+        axis_strides = dict(zip(tensor_axis_info.axes, array.shape))
+        for reaxes, view in tensor_axis_info.views.iteritems():
+            rp = arrayaxes.ReaxeParams(reaxes, axis_strides, True)
+            rarray = np.ndarray(rp.shape, array.dtype, array, 0, rp.strides)
+            views[view.idx] = rarray
+
+
     def trace(self, x, label, out):
         oa = out
         xa = x
@@ -107,8 +94,7 @@ class NumPyEvaluator(Evaluator):
         return np.random.RandomState(seed=seed)
 
     def rng_uniform(self, rng, low, high, out):
-        shape = [axis.length for axis in tensor_axes(out)]
-        out[:] = rng.uniform(low, high, shape)
+        out[:] = rng.uniform(low, high, out.shape)
 
     def set_item(self, array, item, value):
         array.__setitem__(item, value)
