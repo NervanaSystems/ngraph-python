@@ -4,7 +4,7 @@ import numbers
 
 import numpy as np
 
-import neon.backends.backend
+import neon.initializers.initializer as initializer
 
 from geon.backends.graph.names import NameableValue
 import geon.backends.graph.typing as typing
@@ -111,14 +111,6 @@ class Op(NameableValue):
     def ops(self):
         return []
 
-    def allocate(self, evaluator):
-        """Allocate storage required for this op"""
-        pass
-
-    def generate_initializations(self):
-        """Generate operations that perform graph initializations"""
-        pass
-
     def evaluate(self, evaluator, out, *args):
         """Process op"""
         pass
@@ -128,17 +120,34 @@ class Op(NameableValue):
 
 
 class TensorAxesInfo(object):
+    """Information about a use of a tensor with axes"""
     def __init__(self, axes, alloc=None, init=None, read_only=False, dtype=None, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
         axes = tuple(axes)
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
-        self.views[self.axes] = self
-        self.idx = 0
         self.alloc = alloc
         self.init = init
         self.read_only = read_only
         self.dtype = dtype
+
+    def allocation_info(self, environment, axes=None, dtype=None, **kargs):
+        if axes is None:
+            axes = self.axes
+        if dtype is None:
+            dtype = self.dtype
+        allocation_info = TensorAllocationInfo(axes=axes, dtype=dtype, **kargs)
+        environment.set_tensor_allocation_info(self, allocation_info)
+        return allocation_info
+
+    def generate_initializations(self, tensor):
+        if self.init:
+            self.init.fill(tensor)
+
+    def allocate(self, evaluator):
+        if self.alloc is not None:
+            allocation_info = self.allocation_info()
+            self.alloc(evaluator)
 
     def get_or_default(self, axes, default_function):
         axes = tuple(axes)
@@ -149,20 +158,56 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(self, reaxe, idx=len(self.views)))
+        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(tensor_axes_info=self, reaxe=reaxe, idx=len(self.views)))
 
 
 class TensorViewInfo(object):
+    """The use of a view of a tensor with axes"""
     def __init__(self, tensor_axes_info, idx, **kargs):
         super(TensorViewInfo, self).__init__(**kargs)
         self.tensor_axes_info = tensor_axes_info
         self.idx = idx
 
+    def get_allocation(self, evaluator, tensor_allocation_info):
+        try:
+            return evaluator.environment.get_tensor_allocation_value(self)
+        except KeyError:
+            tensor = self.allocate(evaluator, tensor_allocation_info)
+            evaluator.environment.set_tensor_allocation_value(self, tensor)
+            return tensor
+
+    def allocate(self, evaluator, tensor_allocation_info):
+        raise NotImplementedError()
+
 
 class TensorReaxeViewInfo(TensorViewInfo):
+    """The use of a reaxe view of a tensor with axes"""
     def __init__(self, reaxe, **kargs):
         super(TensorReaxeViewInfo, self).__init__(**kargs)
         self.reaxe = reaxe
+
+    def allocate(self, evaluator, tensor_allocation_info):
+        return evaluator.reaxe(tensor_allocation_info, self.reaxe)
+
+
+class TensorAllocationInfo(object):
+    """Axes information about an allocated tensor"""
+    def __init__(self, axes, dtype, sizes=None, strides=None, **kargs):
+        super(TensorAllocationInfo, self).__init__(**kargs)
+        self.axes = arrayaxes.canonicalize_axes(axes)
+        self.dtype = dtype
+        if sizes is None:
+            sizes = tuple(arrayaxes.axes_sizes(self.axes))
+        self.sizes = sizes
+        if strides is None:
+            strides = arrayaxes.c_axis_strides(dtype, axes)
+        self.strides = strides
+        self.axis_strides = dict()
+        for axis, stride in zip(self.axes, self.strides):
+            self.axis_strides[axis] = stride
+
+    def reaxe_params(self, reaxes, broadcast=False):
+        return arrayaxes.ReaxeParams(reaxes, self.axis_strides, broadcast)
 
 
 class AxesComp(object):
@@ -382,6 +427,10 @@ class Tensor(Op):
         return self.axes
 
     @property
+    def value(self):
+        return get_current_environment().get_tensor_value(self)
+
+    @property
     def tensor_axes_info(self):
         if self.__tensor_axes_info is None:
             self.__tensor_axes_info = self.compute_tensor_axes_info()
@@ -437,9 +486,6 @@ class ComputationOp(Tensor):
             batch_axes = get_batch_axes()
 
         self.batch_axes = AxesComp.as_axes(batch_axes)
-
-    def allocate(self, evaluator):
-        return evaluator.empty(axes=self.resolved_axes, dtype=self.dtype)
 
     def add_dependencies(self):
         self.users.add(self)
@@ -499,9 +545,6 @@ class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
         self.__axes = AxesComp.as_axes(())
-
-    def allocate(self, evaluator):
-        return None
 
     @property
     def axes(self):
@@ -589,26 +632,22 @@ class placeholder(AllocationOp):
     """
     def __init__(self, **kargs):
         super(placeholder, self).__init__(**kargs)
-        self.__axes = ValueAxesComp(self)
+        self.__axes = AxesAppendComp(AxesComp.as_axes(arrayaxes.get_phase_axes()), ValueAxesComp(self)
 
     def __axes__(self):
         return self.__axes
-
-    def evaluate(self, evaluator, out):
-        # TODO Side-effect is setting axes on tensor, won't be needed when this isn't a run-time thing
-        return evaluator.input_value(self)
 
     def generate_adjoints(self, tape, delta):
         pass
 
     @property
     def value(self):
-        return get_current_environment()[self]
+        return super(placeholder, self).value
 
     @value.setter
     def value(self, value):
         environment = get_current_environment()
-        environment[self] = value
+        environment.set_placeholder_value(self, value)
 
 
 class Constant(AllocationOp):
@@ -616,15 +655,9 @@ class Constant(AllocationOp):
     A constant that appears in a graph.
     """
     def __init__(self, const, **kargs):
-        if isinstance(const, arrayaxes.ObjectWithAxes):
-            # TODO: Figure out what to do for axes here
-            super(Constant, self).__init__(axes=tensor_axes(const), dtype=np.dtype(type(const)), **kargs)
-        else:
-            super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), **kargs)
+        init = initializer.Constant(const)
+        super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), init=init, **kargs)
         self.const = const
-
-    def allocate(self, evaluator):
-        return evaluator.constant(self.const, self.const)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -878,20 +911,14 @@ class Pad(ComputationOp):
 class Variable(AllocationOp):
     def __init__(self, init, **kargs):
         super(Variable, self).__init__(**kargs)
+        self.tensor_axes_info.init = init
         self.init = init
 
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def allocate(self, evaluator):
-        try:
-            return evaluator.value(self)
-        except KeyError:
-            return evaluator.empty(axes=self.resolved_axes, dtype=self.graph_type.dtype)
-
-    def generate_initializations(self):
-        if self.init:
-            self.init.fill(self)
+    def allocate(self, evaluator, tensor_allocation_info):
+        self.empty(tensor_allocation_info)
 
     @property
     def value(self):
@@ -980,8 +1007,13 @@ class ones(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def allocate(self, evaluator):
-        return evaluator.ones(axes=self.resolved_axes, dtype=self.graph_type.dtype)
+    def compute_tensor_axes_info(self):
+        tensor_axes_info = super(ones, self).computer_tensor_axes_info()
+        tensor_axes_info.alloc = self.allocate
+        return tensor_axes_info
+
+    def allocate(self, evaluator, tensor_allocation_info):
+        return evaluator.ones(tensor_allocation_info)
 
 
 class power(ElementWise):
@@ -1093,8 +1125,13 @@ class zeros(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def allocate(self, evaluator):
-        return evaluator.zeros(axes=self.resolved_axes, dtype=self.graph_type.dtype)
+    def compute_tensor_axes_info(self):
+        tensor_axes_info = super(ones, self).computer_tensor_axes_info()
+        tensor_axes_info.alloc = self.allocate
+        return tensor_axes_info
+
+    def allocate(self, evaluator, tensor_allocation_info):
+        return evaluator.zeros(tensor_allocation_info)
 
 
 def mean(x, **kargs):

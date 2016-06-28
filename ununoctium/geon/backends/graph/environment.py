@@ -85,12 +85,7 @@ class Environment(object):
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
-        # TODO Should be weak, but can't be until axes are compile-time
-        self.resolved_tensor_axes = dict()
-        # TODO Should be weak, but can't be until axes are compile-time
-        self.tensor_strides = dict()
         self.values = dict()
-
 
     def _chained_search(self, attr, key, default=None, use_default=False):
         env = self
@@ -116,19 +111,25 @@ class Environment(object):
     def set_value(self, key, value):
         self.values[key] = value
 
-    # TODO Remove
-    def get_cached_resolved_tensor_axes(self, tensor):
-        return self._chained_search('resolved_tensor_axes', tensor)
+    def get_tensor_value(self, tensor):
+        tensor_axes_info = tensor.tensor_axes_info
+        tensor_allocation_info = self.get_tensor_allocation_info(tensor_axes_info)
+        return self.get_tensor_allocation_value(tensor_allocation_info)
 
-    # TODO Remove
-    def set_cached_resolved_tensor_axes(self, tensor, axes):
-        self.resolved_tensor_axes[tensor] = axes
+    def set_tensor_value(self, tensor, value, axes=None):
+        tensor_axes_info = tensor.tensor_axes_info
+        tensor_allocation_info = tensor_axes_info.allocation_info(axes)
+        self.set_tensor_allocation_value(tensor_allocation_info, value)
 
-    # TODO Remove
-    def get_tensor_strides(self, tensor):
-        return self._chained_search('tensor_strides', tensor)
+    def set_tensor_allocation_info(self, tensor_axes_info, tensor_allocation_info):
+        self[tensor_axes_info] = tensor_allocation_info
 
-    # TODO Remove
-    def set_tensor_strides(self, tensor, strides):
-        self.tensor_strides[tensor] = strides
+    def get_tensor_allocation_info(self, tensor_axes_info):
+        return self[tensor_axes_info]
+
+    def set_tensor_allocation_value(self, tensor_allocation_info, value):
+        self[tensor_allocation_info] = value
+
+    def get_tensor_allocation_value(self, tensor_allocation_info):
+        return self[tensor_allocation_info]
 

@@ -24,17 +24,48 @@ class Evaluator(object):
         self.results = results
 
         self.ops = ast.Op.ordered_ops(self.results, True)
+        self.compute_initializations(self, self.ops)
 
         self.opids = dict()
-        for i, op in enumerate(self.ops):
-            self.opids[op] = i
+        for op in self.initialization_ops:
+            self.opids[op] = len(self.opids)
+        for op in self.ops:
+            self.opids[op] = len(self.opids)
 
-        self.allocate(self.ops)
+    def compute_initializations(self, ops):
+        initializers = []
+        initialized_ops = set()
+        with captured_ops(initializers):
+            uninitialized_ops = ops
+            while uninitialized_ops:
+                for op in uninitialized_ops:
+                    if op in initialized_ops:
+                        continue
+                    initialized_ops.add(op)
+                    op.tensor_axis_info.generate_initializations(op)
 
-    def allocate(self, ops):
+                uninitialized_ops = ast.Op.ordered_ops(initializers, True)
+
+        self.initialization_ops = ast.Op.ordered_ops(initializers, True)
+
+    def compute_allocations(self):
+        ops = set(self.ops)
+        ops.update(self.initialization_ops)
+        all_tensor_axes_info = set()
+        for op in ops:
+            all_tensor_axes_info.add(op.tensor_axes_info)
+
+        for tensor_axes_info in all_tensor_axes_info:
+            tensor_axes_info.allocate(self)
+
+    def compute_call_allocations(self, ops):
         for op in ops:
             call_info = op.call_info
-            self.environment[op] = op.allocate(self)
+            call_allocations = []
+            for view in call_allocations:
+                tensor_axes_info = view.tensor_axes_info
+                tensor_allocation_info = self.environment.get_tensor_allocation_info(tensor_axes_info)
+                view.allocate(self, tensor_allocation_info)
 
     def initialize(self):
         initializers = []
@@ -44,14 +75,6 @@ class Evaluator(object):
         ops = ast.Op.ordered_ops(initializers, True)
         self.allocate(ops)
         self.evaluate_ops(ops)
-
-    def input_value(self, x):
-        result = self.environment[x]
-        if isinstance(result, arrayaxes.Scalar):
-            return result
-        axes = x.axes.value
-        arrayaxes.set_tensor_axis_strides(result, arrayaxes.c_axis_strides(result.dtype, axes), self.environment)
-        arrayaxes.set_tensor_axes(result, axes, self.environment)
 
     def evaluate_ops(self, ops):
         for op in ops:
@@ -98,6 +121,12 @@ class NumPyEvaluator(Evaluator):
 
     def set_item(self, array, item, value):
         array.__setitem__(item, value)
+
+    def reaxe(self, tensor_allocation_info, reaxes):
+        tensor = self.environment.get_tensor_allocation_value(tensor_allocation_info)
+        reaxe_params = tensor_allocation_info.reaxe_params(reaxes, True)
+        reaxed_tensor = np.ndarray(reaxe_params.shape, tensor.dtype, tensor, 0, reaxe_params.strides)
+        return reaxed_tensor
 
     # Allocator
     def constant(self, value, out):

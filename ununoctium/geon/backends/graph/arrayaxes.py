@@ -313,6 +313,9 @@ def axes_size(axes):
             size *= caxis.length
     return size
 
+def axes_sizes(axes):
+    return [axis.length for axis in axes]
+
 
 def flatten_shape(shape):
     s = []
@@ -489,3 +492,14 @@ def get_batch_axes(default=()):
 
 def set_batch_axes(axes):
     get_current_environment()['batch_axes'] = axes
+
+
+def get_phase_axes(default=()):
+    environment = get_current_environment()
+    if environment is None:
+        return default
+    return environment.get_value('phase_axes', default)
+
+
+def set_phase_axes(axes):
+    get_current_environment()['phase_axes'] = axes

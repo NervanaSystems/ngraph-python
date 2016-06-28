@@ -80,6 +80,7 @@ class Model(GraphComponent):
                 batch_input_axes = input_axes + (ax.N,)
                 batch_target_axes = target_axes + (ax.N,)
                 be.set_batch_axes([ax.N])
+                be.set_phase_axes([ax.Phi])
                 self.graph.input = be.placeholder(axes=batch_input_axes)
                 self.graph.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
@@ -87,6 +88,7 @@ class Model(GraphComponent):
                 for axis, length in zip(target_axes, (dataset.nclasses,)):
                     axis.length = length
                 ax.N.length = dataset.bsz
+                ax.Phi.length = 2
 
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.graph.cost)

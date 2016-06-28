@@ -81,6 +81,7 @@ class MyTest(be.Model):
         g = self.graph
 
         be.set_batch_axes([ax.N])
+        be.set_phase_axes([ax.Phi])
 
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))
