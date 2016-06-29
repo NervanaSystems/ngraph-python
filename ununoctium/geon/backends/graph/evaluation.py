@@ -26,7 +26,8 @@ class Evaluator(object):
         self.ops = ast.Op.ordered_ops(self.results)
         self.compute_initializations(self.ops)
         self.compute_allocations()
-        self.compute_call_allocations()
+        self.compute_call_allocations(self.initialization_ops)
+        self.compute_call_allocations(self.ops)
 
         self.opids = dict()
         for op in self.initialization_ops:
@@ -65,7 +66,7 @@ class Evaluator(object):
         for op in ops:
             call_info = op.call_info
             call_allocations = []
-            for view in call_allocations:
+            for view in call_info:
                 tensor_axes_info = view.tensor_axes_info
                 tensor_allocation_info = self.environment.get_tensor_allocation_info(tensor_axes_info)
                 view.allocate(self, tensor_allocation_info)
@@ -92,6 +93,23 @@ class NumPyEvaluator(Evaluator):
     def __init__(self, **kargs):
         super(NumPyEvaluator, self).__init__(**kargs)
 
+    # allocators
+    def empty(self, tensor_allocation_info):
+        return np.empty(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
+
+    def ones(self, tensor_allocation_info):
+        return np.ones(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
+
+    def zeros(self, tensor_allocation_info):
+        return np.zeros(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
+
+    def constant(self, value, out):
+        if isinstance(out, np.ndarray):
+            out.fill(value)
+        else:
+            return value
+
+
     def allocate_views(self, tensor_axis_info, array):
         views = [None]*len(tensor_axis_info.views)
         views[0] = array
@@ -102,6 +120,7 @@ class NumPyEvaluator(Evaluator):
             views[view.idx] = rarray
 
 
+    # Operations
     def trace(self, x, label, out):
         oa = out
         xa = x
@@ -125,15 +144,13 @@ class NumPyEvaluator(Evaluator):
     def reaxe(self, tensor_allocation_info, reaxes):
         tensor = self.environment.get_tensor_allocation_value(tensor_allocation_info)
         reaxe_params = tensor_allocation_info.reaxe_params(reaxes, True)
-        reaxed_tensor = np.ndarray(reaxe_params.shape, tensor.dtype, tensor, 0, reaxe_params.strides)
+        if reaxe_params.identity:
+            return tensor
+        try:
+            reaxed_tensor = np.ndarray(reaxe_params.shape, tensor.dtype, tensor, 0, reaxe_params.strides)
+        except:
+            pass
         return reaxed_tensor
-
-    # Allocator
-    def constant(self, value, out):
-        if isinstance(out, np.ndarray):
-            out.fill(value)
-        else:
-            return value
 
     def absolute(self, x, out):
         np.abs(reaxe_like(x, out, True), out=out)
@@ -158,7 +175,7 @@ class NumPyEvaluator(Evaluator):
         np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
     def dot(self, x, y, red_axes, out):
-        # This implementation requires axes
+        # This implementation  requires axes
         #   x = xl red xr
         #   y = yl red yr
         #   out = xl xr yl yr
@@ -202,9 +219,6 @@ class NumPyEvaluator(Evaluator):
             print('mismatch', tensor_axes(params), tensor_axes(delta))
         np.subtract(params, reaxe_like(delta, params, True), out=params)
 
-    def empty(self, axes, dtype):
-        return arrayaxes.empty(axes, dtype)
-
     def equal(self, x, y, out):
         return np.equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
@@ -245,10 +259,6 @@ class NumPyEvaluator(Evaluator):
 
     def not_equal(self, x, y, out):
         np.not_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
-
-    def ones(self, axes, dtype):
-        #return AxisArray(axes=axes, dtype=dtype, array=np.ones(axes_shape(axes)))
-        return arrayaxes.ones(axes, dtype)
 
     def reciprocal(self, x, out):
         np.reciprocal(reaxe_like(x, out, True), out=out)
@@ -327,11 +337,6 @@ class NumPyEvaluator(Evaluator):
 
     def tanh(self, x, out):
         np.tanh(reaxe_like(x, out, True), out=out)
-
-    def zeros(self, axes, dtype):
-        #return AxisArray(axes=axes, dtype=dtype, array=np.zeros(axes_shape(axes)))
-        return arrayaxes.zeros(axes, dtype)
-
 
     def uniform(self, x, low, high):
         u = self.rng.uniform(low, high, x.shape)

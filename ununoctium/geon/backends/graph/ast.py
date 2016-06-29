@@ -124,14 +124,17 @@ class TensorAxesInfo(object):
         self.init = init
         self.read_only = read_only
         self.dtype = dtype
+        self.allocation_info = None
+        self.value = None
 
-    def allocation_info(self, environment, axes=None, dtype=None, **kargs):
+    def create_allocation_info(self, environment, axes=None, dtype=None, **kargs):
         if axes is None:
             axes = self.axes
         if dtype is None:
-            dtype = self.dtype
+            dtype = self.dtype or np.dtype(np.float32)
         allocation_info = TensorAllocationInfo(axes=axes, dtype=dtype, **kargs)
         environment.set_tensor_allocation_info(self, allocation_info)
+        self.allocation_info = allocation_info
         return allocation_info
 
     def generate_initializations(self, tensor):
@@ -139,9 +142,14 @@ class TensorAxesInfo(object):
             self.init.fill(tensor)
 
     def allocate(self, evaluator):
+        allocation_info = self.create_allocation_info(evaluator.environment)
         if self.alloc is not None:
-            allocation_info = self.allocation_info()
-            self.alloc(evaluator)
+            value = self.alloc(evaluator, allocation_info)
+        else:
+            value = evaluator.empty(allocation_info)
+        self.value = value
+        evaluator.environment.set_tensor_allocation_value(allocation_info, value)
+
 
     def get_or_default(self, axes, default_function):
         axes = tuple(axes)
@@ -194,14 +202,16 @@ class TensorAllocationInfo(object):
             sizes = tuple(arrayaxes.axes_sizes(self.axes))
         self.sizes = sizes
         if strides is None:
-            strides = arrayaxes.c_axis_strides(dtype, axes)
-        self.strides = strides
-        self.axis_strides = dict()
-        for axis, stride in zip(self.axes, self.strides):
-            self.axis_strides[axis] = stride
+            self.axis_strides = arrayaxes.c_axis_strides(dtype, axes)
+            self.strides = tuple(self.axis_strides[axis] for axis in self.axes)
+        else:
+            self.strides = strides
+            self.axis_strides = dict()
+            for axis, stride in zip(self.axes, self.strides):
+                self.axis_strides[axis] = stride
 
     def reaxe_params(self, reaxes, broadcast=False):
-        return arrayaxes.ReaxeParams(reaxes, self.axis_strides, broadcast)
+        return arrayaxes.ReaxeParams(reaxes, self.axes, self.axis_strides, broadcast)
 
 
 class AxesComp(object):

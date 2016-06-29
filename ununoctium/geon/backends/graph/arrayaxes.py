@@ -109,10 +109,10 @@ Axis.register(AxisID)
 
 def c_axis_strides(dtype, axes):
     strides = dict()
-    stride = dtype.itemsize
+    stride = np.dtype(dtype).itemsize
     for axis in reversed(axes):
         strides[axis] = stride
-        stride *= axis.length
+        stride = stride * axis.length
     return strides
 
 
@@ -440,7 +440,8 @@ def reaxe_array(axes, array, broadcast=False, offset=0):
 
 
 class ReaxeParams(object):
-    def __init__(self, reaxes, axis_strides, broadcast=False):
+    def __init__(self, reaxes, axes, axis_strides, broadcast=False):
+        self.identity = tuple(reaxes) == tuple(axes)
         self.strides = reaxe_strides(reaxes, axis_strides, broadcast)
         self.shape = tuple(axes_shape(reaxes))
 
