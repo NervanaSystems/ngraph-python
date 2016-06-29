@@ -23,8 +23,10 @@ class Evaluator(object):
         self.environment = environment
         self.results = results
 
-        self.ops = ast.Op.ordered_ops(self.results, True)
-        self.compute_initializations(self, self.ops)
+        self.ops = ast.Op.ordered_ops(self.results)
+        self.compute_initializations(self.ops)
+        self.compute_allocations()
+        self.compute_call_allocations()
 
         self.opids = dict()
         for op in self.initialization_ops:
@@ -42,11 +44,12 @@ class Evaluator(object):
                     if op in initialized_ops:
                         continue
                     initialized_ops.add(op)
-                    op.tensor_axis_info.generate_initializations(op)
+                    op.tensor_axes_info.generate_initializations(op)
 
-                uninitialized_ops = ast.Op.ordered_ops(initializers, True)
+                uninitialized_ops = ast.Op.ordered_ops(initializers)
+                uninitialized_ops = [op for op in uninitialized_ops if op not in initialized_ops]
 
-        self.initialization_ops = ast.Op.ordered_ops(initializers, True)
+        self.initialization_ops = ast.Op.ordered_ops(initializers)
 
     def compute_allocations(self):
         ops = set(self.ops)
@@ -68,13 +71,7 @@ class Evaluator(object):
                 view.allocate(self, tensor_allocation_info)
 
     def initialize(self):
-        initializers = []
-        with captured_ops(initializers):
-            for op in self.ops:
-                op.generate_initializations()
-        ops = ast.Op.ordered_ops(initializers, True)
-        self.allocate(ops)
-        self.evaluate_ops(ops)
+        self.evaluate_ops(self.initialization_ops)
 
     def evaluate_ops(self, ops):
         for op in ops:
@@ -121,6 +118,9 @@ class NumPyEvaluator(Evaluator):
 
     def set_item(self, array, item, value):
         array.__setitem__(item, value)
+
+    def fill(self, out, value):
+        out.fill(value)
 
     def reaxe(self, tensor_allocation_info, reaxes):
         tensor = self.environment.get_tensor_allocation_value(tensor_allocation_info)

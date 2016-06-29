@@ -18,4 +18,4 @@ Q = AxisVar(name='Q')
 Y = AxisVar(name='Y')
 
 # Dataloader phase
-Phi = AxisVar(name='Phi', length=2)
+Phi = AxisVar(name='Phi')

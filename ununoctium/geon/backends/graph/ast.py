@@ -7,6 +7,7 @@ import numpy as np
 import neon.initializers.initializer as initializer
 
 from geon.backends.graph.names import NameableValue
+from geon.backends.graph.nodes import Node
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
@@ -17,11 +18,10 @@ from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
 
-class Op(NameableValue):
+class Op(NameableValue, Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, **kwds):
-        self.predecessors = weakref.WeakSet()
         self._adjoints = None
         super(Op, self).__init__(**kwds)
         ops = get_current_ops()
@@ -43,20 +43,12 @@ class Op(NameableValue):
 
         return params
 
-    @property
-    def inputs(self):
-       return ()
-
     @staticmethod
-    def get_ordered_ops(op, ordered_ops, include_outs):
+    def get_ordered_ops(op, ordered_ops):
         """
         Get dependent ops ordered for autodiff.
         """
-        if op not in ordered_ops:
-            if isinstance(op, ComputationOp):
-                for arg in op.inputs:
-                    Op.get_ordered_ops(arg, ordered_ops, include_outs)
-            ordered_ops.append(op)
+        Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
     @property
     def adjoints(self):
@@ -65,7 +57,7 @@ class Op(NameableValue):
 
         self._adjoints = weakref.WeakKeyDictionary()
         ordered_ops = []
-        Op.get_ordered_ops(self, ordered_ops, False)
+        Op.get_ordered_ops(self, ordered_ops)
         self._adjoints[self] = ones(axes=tensor_sample_axes(self))
         for o in reversed(ordered_ops):
             scale = o.scale
@@ -76,10 +68,9 @@ class Op(NameableValue):
         return self._adjoints
 
     @staticmethod
-    def ordered_ops(results, include_outs):
+    def ordered_ops(results):
         ordered_ops = []
-        for result in results:
-            Op.get_ordered_ops(result, ordered_ops, include_outs)
+        Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     @staticmethod
@@ -99,6 +90,9 @@ class Op(NameableValue):
                 prealive |= alive
             i = i - 1
         return liveness
+
+    def as_node(self, x):
+        return Op.as_op(x)
 
     @staticmethod
     def as_op(x):
@@ -344,9 +338,6 @@ class Tensor(Op):
         # Derivative will be scaled by this if not 1.0
         self.scale = scale
 
-        # Ops that directly use the result
-        self.users = weakref.WeakSet()  # Name assigned by user
-
     @property
     def output(self):
         return self
@@ -474,9 +465,8 @@ class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
     """
-    def __init__(self, args, out=None, dtype=np.float32, batch_axes=None, **kargs):
+    def __init__(self, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
-        self.__args = tuple(Op.as_op(arg) for arg in args)
         self.dtype = dtype
 
         for arg in self.inputs:
@@ -486,23 +476,6 @@ class ComputationOp(Tensor):
             batch_axes = get_batch_axes()
 
         self.batch_axes = AxesComp.as_axes(batch_axes)
-
-    def add_dependencies(self):
-        self.users.add(self)
-
-    @property
-    def inputs(self):
-        return self.__args
-
-    @property
-    def output(self):
-        return self.__out
-
-    @output.setter
-    def output(self, value):
-        self.__out = value
-        if value is not self:
-            value.users.add(self)
 
 
 class RNG(ComputationOp):
@@ -617,9 +590,11 @@ class trace(ElementWise):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, dtype=np.float32, **kargs):
+    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.aliases = weakref.WeakSet()
+        self.tensor_axes_info.init = init
+        self.init = init
 
     @property
     def axes(self):
@@ -632,7 +607,7 @@ class placeholder(AllocationOp):
     """
     def __init__(self, **kargs):
         super(placeholder, self).__init__(**kargs)
-        self.__axes = AxesAppendComp(AxesComp.as_axes(arrayaxes.get_phase_axes()), ValueAxesComp(self)
+        self.__axes = AxesAppendComp(AxesComp.as_axes(arrayaxes.get_phase_axes()), ValueAxesComp(self))
 
     def __axes__(self):
         return self.__axes
@@ -650,14 +625,25 @@ class placeholder(AllocationOp):
         environment.set_placeholder_value(self, value)
 
 
+class ConstantInit(VoidOp):
+    def __init__(self, tensor, const, **kargs):
+        super(ConstantInit, self).__init__(args=(tensor,), **kargs)
+        self.const = const
+
+    def evaluate(self, evaluator, out, tensor):
+        self.evaluator.fill(out, self.const)
+
+
 class Constant(AllocationOp):
     """
     A constant that appears in a graph.
     """
     def __init__(self, const, **kargs):
-        init = initializer.Constant(const)
-        super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), init=init, **kargs)
+        super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), init=self, **kargs)
         self.const = const
+
+    def fill(self, c):
+        ConstantInit(c, self.const)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -909,10 +895,8 @@ class Pad(ComputationOp):
 
 
 class Variable(AllocationOp):
-    def __init__(self, init, **kargs):
+    def __init__(self, **kargs):
         super(Variable, self).__init__(**kargs)
-        self.tensor_axes_info.init = init
-        self.init = init
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1008,7 +992,7 @@ class ones(AllocationOp):
         pass
 
     def compute_tensor_axes_info(self):
-        tensor_axes_info = super(ones, self).computer_tensor_axes_info()
+        tensor_axes_info = super(ones, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = self.allocate
         return tensor_axes_info
 
@@ -1126,7 +1110,7 @@ class zeros(AllocationOp):
         pass
 
     def compute_tensor_axes_info(self):
-        tensor_axes_info = super(ones, self).computer_tensor_axes_info()
+        tensor_axes_info = super(ones, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = self.allocate
         return tensor_axes_info
 
