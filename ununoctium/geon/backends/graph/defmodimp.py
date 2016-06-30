@@ -74,24 +74,7 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
         result.intersection_update(usesset)
 
     return result
-
-
-class Function(NameableValue):
     
-    def __init__(self, ops):
-        super(Function, self).__init__()
-        from geon.backends.graph.analysis import Digraph
-        self.ops = Digraph(ops)
-        use, defs = set(), set()
-        for op in self.ops.topsort():
-            #Kernel defines the def of each operation
-            defs |= set(op.defs())
-            #Kernel uses the use of each operation
-            #except whatever can be held in registers
-            use |= set(op.args) - defs
-        self.use = use
-        self.defs = defs
-
 
 class Defmod(NameableValue):
     """Base class for model definitions
