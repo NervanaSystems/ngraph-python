@@ -81,9 +81,6 @@ class MyTest(nm.Model):
             else:
                 reg = reg + l2
         g.loss = g.error + .01 * reg
-        dataflow = analysis.DataFlowGraph([g.loss])
-        kernelflow = analysis.KernelFlowGraph(dataflow)
-        kernelflow.visualize('Kernel Flow')
         
     @nm.with_graph_scope
     @nm.with_environment
