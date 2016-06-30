@@ -120,6 +120,10 @@ class TensorDescription(object):
         self.offset = offset
         self.__buffer = buffer
         self.tensor = tensor
+        self.views = weakref.WeakSet()
+
+        if buffer is not None:
+            buffer.views.add(self)
 
         if shape is None:
             shape = tuple(axes_sizes(self.axes))
@@ -151,6 +155,7 @@ class TensorDescription(object):
     @property
     def buffer(self):
         return self.__buffer or self
+
 
     def __getitem__(self, item):
         if isinstance(item, Axis):

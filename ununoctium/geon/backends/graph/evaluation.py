@@ -49,6 +49,8 @@ class Evaluator(object):
                 uninitialized_ops = [op for op in uninitialized_ops if op not in initialized_ops]
 
         self.initialization_ops = ast.Op.ordered_ops(initializers)
+        for op in ops:
+            op.call_info
 
     def compute_allocations(self):
         ops = set(self.initialization_ops)
@@ -61,8 +63,7 @@ class Evaluator(object):
 
     def evaluate_ops(self, ops):
         for op in ops:
-            call_info = op.call_info
-            op.evaluate_call_info(self, *call_info)
+            op.evaluate_call_info(self, *op.call_info)
 
     def evaluate(self):
         self.evaluate_ops(self.ops)
@@ -80,13 +81,17 @@ class NumPyEvaluator(Evaluator):
         super(NumPyEvaluator, self).__init__(**kargs)
 
     # allocators
+    def set_tensor(self, tensor_description, tensor):
+        tensor_description.tensor = tensor
+        for td in tensor_description.views:
+            self.tensor_view(td)
+
     def empty(self, tensor_description):
         return np.empty(tensor_description.sizes, tensor_description.dtype)
 
     def tensor_view(self, tensor_description):
-        tensor = tensor_description.buffer.tensor
-        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor,
-                          offset=tensor_description.offset, strides=tensor_description.strides)
+        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.tensor,
+                            offset=tensor_description.offset, strides=tensor_description.strides)
 
     def ones(self, tensor_allocation_info):
         return np.ones(tensor_allocation_info.sizes, tensor_allocation_info.dtype)

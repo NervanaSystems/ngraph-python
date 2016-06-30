@@ -137,6 +137,13 @@ class TensorAxesInfo(object):
     def tensor(self):
         return self.tensor_description.tensor
 
+    def set_tensor(self, evaluator, tensor):
+        self.tensor_description.tensor = tensor
+        for view in self.views.values():
+            if view.tensor_description is self.tensor_description:
+                continue
+            view.update_tensor(evaluator)
+
     def generate_initializations(self, tensor):
         if self.init:
             self.init.fill(tensor)
@@ -147,9 +154,8 @@ class TensorAxesInfo(object):
                 tensor = self.alloc(evaluator, self.tensor_description)
             else:
                 tensor = evaluator.empty(self.tensor_description)
+            self.set_tensor(evaluator, tensor)
             self.tensor_description.tensor = tensor
-        for view in self.views.values():
-            view.alloc(evaluator)
 
     def get_or_default(self, axes, default_function):
         axes = tuple(axes)
@@ -178,6 +184,10 @@ class TensorViewInfo(object):
     @property
     def tensor(self):
         return self.tensor_description.tensor
+
+    def update_tensor(self, evaluator):
+        tensor_description = self.tensor_description
+        tensor_description.tensor = evaluator.tensor_view(tensor_description)
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
