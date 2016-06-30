@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import weakref
 import numbers
+import collections
 
 import numpy as np
 
@@ -124,32 +125,31 @@ class TensorAxesInfo(object):
         self.init = init
         self.read_only = read_only
         self.dtype = dtype
-        self.allocation_info = None
-        self.value = None
+        self.__tensor_description = None
 
-    def create_allocation_info(self, environment, axes=None, dtype=None, **kargs):
-        if axes is None:
-            axes = self.axes
-        if dtype is None:
-            dtype = self.dtype or np.dtype(np.float32)
-        allocation_info = TensorAllocationInfo(axes=axes, dtype=dtype, **kargs)
-        environment.set_tensor_allocation_info(self, allocation_info)
-        self.allocation_info = allocation_info
-        return allocation_info
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = arrayaxes.TensorDescription(axes=self.axes, dtype=self.dtype)
+        return self.__tensor_description
+
+    @property
+    def tensor(self):
+        return self.tensor_description.tensor
 
     def generate_initializations(self, tensor):
         if self.init:
             self.init.fill(tensor)
 
     def allocate(self, evaluator):
-        allocation_info = self.create_allocation_info(evaluator.environment)
-        if self.alloc is not None:
-            value = self.alloc(evaluator, allocation_info)
-        else:
-            value = evaluator.empty(allocation_info)
-        self.value = value
-        evaluator.environment.set_tensor_allocation_value(allocation_info, value)
-
+        if self.tensor_description.tensor is None:
+            if self.alloc is not None:
+                tensor = self.alloc(evaluator, self.tensor_description)
+            else:
+                tensor = evaluator.empty(self.tensor_description)
+            self.tensor_description.tensor = tensor
+        for view in self.views.values():
+            view.alloc(evaluator)
 
     def get_or_default(self, axes, default_function):
         axes = tuple(axes)
@@ -160,7 +160,7 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(tensor_axes_info=self, reaxe=reaxe, idx=len(self.views)))
+        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(tensor_axes_info=self, reaxes=reaxe, idx=len(self.views)))
 
 
 class TensorViewInfo(object):
@@ -170,48 +170,28 @@ class TensorViewInfo(object):
         self.tensor_axes_info = tensor_axes_info
         self.idx = idx
 
-    def get_allocation(self, evaluator, tensor_allocation_info):
-        try:
-            return evaluator.environment.get_tensor_allocation_value(self)
-        except KeyError:
-            tensor = self.allocate(evaluator, tensor_allocation_info)
-            evaluator.environment.set_tensor_allocation_value(self, tensor)
-            return tensor
+    def allocate(self, evaluator):
+        if self.tensor_description.tensor is None:
+            tensor = evaluator.empty(self.tensor_description)
+            self.tensor_description.tensor = tensor
 
-    def allocate(self, evaluator, tensor_allocation_info):
-        raise NotImplementedError()
+    @property
+    def tensor(self):
+        return self.tensor_description.tensor
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
     """The use of a reaxe view of a tensor with axes"""
-    def __init__(self, reaxe, **kargs):
+    def __init__(self, reaxes, **kargs):
         super(TensorReaxeViewInfo, self).__init__(**kargs)
-        self.reaxe = reaxe
+        self.reaxes = reaxes
+        self.__tensor_description = None
 
-    def allocate(self, evaluator, tensor_allocation_info):
-        return evaluator.reaxe(tensor_allocation_info, self.reaxe)
-
-
-class TensorAllocationInfo(object):
-    """Axes information about an allocated tensor"""
-    def __init__(self, axes, dtype, sizes=None, strides=None, **kargs):
-        super(TensorAllocationInfo, self).__init__(**kargs)
-        self.axes = arrayaxes.canonicalize_axes(axes)
-        self.dtype = dtype
-        if sizes is None:
-            sizes = tuple(arrayaxes.axes_sizes(self.axes))
-        self.sizes = sizes
-        if strides is None:
-            self.axis_strides = arrayaxes.c_axis_strides(dtype, axes)
-            self.strides = tuple(self.axis_strides[axis] for axis in self.axes)
-        else:
-            self.strides = strides
-            self.axis_strides = dict()
-            for axis, stride in zip(self.axes, self.strides):
-                self.axis_strides[axis] = stride
-
-    def reaxe_params(self, reaxes, broadcast=False):
-        return arrayaxes.ReaxeParams(reaxes, self.axes, self.axis_strides, broadcast)
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = self.tensor_axes_info.tensor_description.reaxe(self.reaxes)
+        return self.__tensor_description
 
 
 class AxesComp(object):
@@ -429,7 +409,7 @@ class Tensor(Op):
 
     @property
     def value(self):
-        return get_current_environment().get_tensor_value(self)
+        return self.tensor_axes_info.tensor_description.tensor
 
     @property
     def tensor_axes_info(self):
@@ -451,6 +431,9 @@ class Tensor(Op):
 
     def compute_call_info(self):
         return [self.reaxe(self.resolved_axes)]
+
+    def evaluate_call_info(self, evaluator, *args):
+        self.evaluate(evaluator, *(arg.tensor for arg in args))
 
     @property
     def resolved_axes(self):
@@ -493,6 +476,11 @@ class RNG(ComputationOp):
         super(RNG, self).__init__(args=(), **kargs)
         self.seed = seed
 
+    def compute_tensor_axes_info(self):
+        tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
+        tensor_axes_info.alloc = lambda evaluator, tensor_description : evaluator.rng(seed=self.seed)
+        return tensor_axes_info
+
     @property
     def axes(self):
         return AxesComp.as_axes(())
@@ -512,6 +500,12 @@ class RNGOp(ComputationOp):
     @property
     def axes(self):
         return self.__axes
+
+    def compute_call_info(self):
+        rng, = self.inputs
+        call_info = super(RNGOp, self).compute_call_info()
+        call_info.append(rng.reaxe(rng.resolved_axes))
+        return call_info
 
 
 class Uniform(RNGOp):
@@ -533,6 +527,10 @@ class VoidOp(ComputationOp):
     def axes(self):
         return self.__axes
 
+    def compute_call_info(self):
+        # No out
+        return []
+
 
 class decrement(VoidOp):
     def __init__(self, parameter, change, **kargs):
@@ -547,7 +545,14 @@ class SetItem(VoidOp):
         super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
         self.item = item
 
-    def evaluate(self, evaluator, out, tensor, val):
+    def compute_call_info(self):
+        tensor, val = self.inputs
+        call_info = super(SetItem, self).compute_call_info()
+        call_info.append(tensor.reaxe(tensor.resolved_axes))
+        call_info.append(val.reaxe(tensor.resolved_axes))
+        return call_info
+
+    def evaluate(self, evaluator, tensor, val):
         evaluator.set_item(tensor, self.item, val)
 
 
@@ -640,8 +645,14 @@ class ConstantInit(VoidOp):
         super(ConstantInit, self).__init__(args=(tensor,), **kargs)
         self.const = const
 
-    def evaluate(self, evaluator, out, tensor):
-        self.evaluator.fill(out, self.const)
+    def compute_call_info(self):
+        tensor, = self.inputs
+        call_info = super(ConstantInit, self).compute_call_info()
+        call_info.append(tensor.reaxe(tensor.resolved_axes))
+        return call_info
+
+    def evaluate(self, evaluator, tensor):
+        evaluator.fill(tensor, self.const)
 
 
 class Constant(AllocationOp):

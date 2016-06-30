@@ -26,8 +26,6 @@ class Evaluator(object):
         self.ops = ast.Op.ordered_ops(self.results)
         self.compute_initializations(self.ops)
         self.compute_allocations()
-        self.compute_call_allocations(self.initialization_ops)
-        self.compute_call_allocations(self.ops)
 
         self.opids = dict()
         for op in self.initialization_ops:
@@ -53,30 +51,18 @@ class Evaluator(object):
         self.initialization_ops = ast.Op.ordered_ops(initializers)
 
     def compute_allocations(self):
-        ops = set(self.ops)
-        ops.update(self.initialization_ops)
-        all_tensor_axes_info = set()
+        ops = set(self.initialization_ops)
+        ops.update(self.ops)
         for op in ops:
-            all_tensor_axes_info.add(op.tensor_axes_info)
-
-        for tensor_axes_info in all_tensor_axes_info:
-            tensor_axes_info.allocate(self)
-
-    def compute_call_allocations(self, ops):
-        for op in ops:
-            call_info = op.call_info
-            call_allocations = []
-            for view in call_info:
-                tensor_axes_info = view.tensor_axes_info
-                tensor_allocation_info = self.environment.get_tensor_allocation_info(tensor_axes_info)
-                view.allocate(self, tensor_allocation_info)
+            op.tensor_axes_info.allocate(self)
 
     def initialize(self):
         self.evaluate_ops(self.initialization_ops)
 
     def evaluate_ops(self, ops):
         for op in ops:
-            op.evaluate(self, self.environment[op], *[self.environment[arg] for arg in op.inputs])
+            call_info = op.call_info
+            op.evaluate_call_info(self, *call_info)
 
     def evaluate(self):
         self.evaluate_ops(self.ops)
@@ -94,8 +80,13 @@ class NumPyEvaluator(Evaluator):
         super(NumPyEvaluator, self).__init__(**kargs)
 
     # allocators
-    def empty(self, tensor_allocation_info):
-        return np.empty(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
+    def empty(self, tensor_description):
+        return np.empty(tensor_description.sizes, tensor_description.dtype)
+
+    def tensor_view(self, tensor_description):
+        tensor = tensor_description.buffer.tensor
+        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor,
+                          offset=tensor_description.offset, strides=tensor_description.strides)
 
     def ones(self, tensor_allocation_info):
         return np.ones(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
@@ -108,17 +99,6 @@ class NumPyEvaluator(Evaluator):
             out.fill(value)
         else:
             return value
-
-
-    def allocate_views(self, tensor_axis_info, array):
-        views = [None]*len(tensor_axis_info.views)
-        views[0] = array
-        axis_strides = dict(zip(tensor_axis_info.axes, array.shape))
-        for reaxes, view in tensor_axis_info.views.iteritems():
-            rp = arrayaxes.ReaxeParams(reaxes, axis_strides, True)
-            rarray = np.ndarray(rp.shape, array.dtype, array, 0, rp.strides)
-            views[view.idx] = rarray
-
 
     # Operations
     def trace(self, x, label, out):
@@ -140,17 +120,6 @@ class NumPyEvaluator(Evaluator):
 
     def fill(self, out, value):
         out.fill(value)
-
-    def reaxe(self, tensor_allocation_info, reaxes):
-        tensor = self.environment.get_tensor_allocation_value(tensor_allocation_info)
-        reaxe_params = tensor_allocation_info.reaxe_params(reaxes, True)
-        if reaxe_params.identity:
-            return tensor
-        try:
-            reaxed_tensor = np.ndarray(reaxe_params.shape, tensor.dtype, tensor, 0, reaxe_params.strides)
-        except:
-            pass
-        return reaxed_tensor
 
     def absolute(self, x, out):
         np.abs(reaxe_like(x, out, True), out=out)

@@ -105,21 +105,112 @@ class AxisID(object):
 Axis.register(AxisID)
 
 
+TensorAxisInfo = collections.namedtuple('TensorAxisInfo', ['length', 'stride'])
 
 
-def c_axis_strides(dtype, axes):
-    strides = dict()
-    stride = np.dtype(dtype).itemsize
-    for axis in reversed(axes):
-        strides[axis] = stride
-        stride = stride * axis.length
-    return strides
+class TensorDescription(object):
+    """Axes information about an allocated tensor"""
 
+    def __init__(self, axes, dtype=np.dtype(np.float32), shape=None, sizes=None, strides=None, offset=0, verify=True,
+                 buffer=None, tensor=None, **kargs):
+        super(TensorDescription, self).__init__(**kargs)
+        self.dtype = np.dtype(dtype)
+        self.axes = tuple(canonicalize_axes(axes))
+        self.ndim = len(self.axes)
+        self.offset = offset
+        self.__buffer = buffer
+        self.tensor = tensor
 
-def set_tensor_axis_strides(tensor, axis_strides, environment):
-    key = NumpyWrapper(tensor)
-    environment.set_tensor_strides(key, axis_strides)
-    return tensor
+        if shape is None:
+            shape = tuple(axes_sizes(self.axes))
+        self.shape = shape
+
+        if sizes is None:
+            self.sizes = self.shape
+        else:
+            self.sizes = tuple(sizes)
+            assert len(self.sizes) == self.ndim, "Sizes must have same number of dimensions as axes"
+
+        self.axes_info = collections.OrderedDict()
+        if strides is None:
+            strides = []
+            stride = self.dtype.itemsize
+            for axis, size in zip(self.axes, self.sizes):
+                if verify:
+                    assert axis.length <= size, "An dimension size cannot be less than the dimension length"
+                self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
+                stride = stride * size
+                strides.append(stride)
+            self.strides = tuple(strides)
+        else:
+            assert len(strides) == self.ndim
+            self.strides = tuple(strides)
+            for axis, stride in zip(self.axes, self.strides):
+                self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
+
+    @property
+    def buffer(self):
+        return self.__buffer or self
+
+    def __getitem__(self, item):
+        if isinstance(item, Axis):
+            return self.axes_info[item]
+
+        elif isinstance(item, collections.Iterable):
+            assert len(item) == self.ndim
+            offset = self.offset
+            for idx, axis_info in zip(item, self.axes_info):
+                assert 0 <= idx and idx < axis_info.length
+                offset = offset + idx * axis_info.stride
+            return offset
+
+    def reaxe(self, reaxes, broadcast=True):
+        if self.axes == tuple(reaxes):
+            return self
+
+        # Format of reaxes:
+        # Axis: position is an axis
+        # tuple of axes: position is combination of the axes
+        strides = []
+        for axis in reaxes:
+            component_axes = flatten_axes(axis)
+            if len(component_axes) == 0:
+                strides.append(0)
+            else:
+                try:
+                    strides.append(self[component_axes[-1]].stride)
+                except KeyError:
+                    if not broadcast:
+                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
+                    else:
+                        strides.append(0)
+        shape = tuple(axes_shape(reaxes))
+        return TensorDescription(reaxes, dtype=self.dtype, shape=shape, strides=strides, offset=self.offset,
+                                 buffer=self.buffer)
+
+    def slice(self, slices):
+        assert len(slices) == self.ndim
+        base_index = []
+        shape = []
+        strides = []
+        axes = []
+        for s, stride, length, axis in zip(slices, self.strides, self.shape, self.axes):
+            if isinstance(s, slice):
+                # Keep slice dimensions
+                start, stop, step = slice.indices(length)
+                base_index.append(start)
+                strides.append(stride * step)
+                shape.append((stop - start) // step)
+                axes.append(axis)
+            else:
+                # Omit fixed dimensions
+                base_index.append(s)
+
+        offset = self[base_index]
+
+        return TensorDescription(axes, dtype=self.dtype, shape=shape, strides=strides, offset=offset,
+                                 buffer=self.buffer)
+
 
 def tensor_axis_strides(array, axes=None):
     axis_strides = dict()
@@ -244,23 +335,6 @@ def axes_append(*axes_list):
     return result
 
 
-def axes_contains(sub_axes, super_axes):
-    for axis in sub_axes:
-        if axis not in super_axes:
-            return False
-    return True
-
-
-def elementwise_axes(args_axes, out_axes=None):
-    if out_axes is None:
-        out_axes = args_axes
-
-    if not axes_contains(args_axes, out_axes):
-        raise ValueError('out_axes is missing axes {a}'.format(a=axes_sub(args_axes, out_axes)))
-
-    return out_axes
-
-
 def axes_replace(axes, replace, replacements):
     """Returns axes with those axes in replace replace by those in replacements"""
     ids = axis_ids(axes)
@@ -359,16 +433,6 @@ def dot_axes(x_axes, y_axes, reduction_axes=None, out_axes=None):
     return reduction_axes, s_axes, out_axes
 
 
-def shapes_compatible(shape1, shape2):
-    def shape_size(shape):
-        result = 1
-        for l in flatten_shape(shape):
-            result *= l
-        return result
-
-    return shape_size(shape1) == shape_size(shape2)
-
-
 def empty(axes, dtype=float):
     axes = canonicalize_axes(axes)
     return set_tensor_axes(np.empty(axes_shape(axes), dtype), axes)
@@ -405,23 +469,6 @@ def full_like(a, fill_value, dtype=None, subok=True):
     return set_tensor_axes(np.full_like(a, fill_value, dtype, subok), tensor_axes(a))
 
 
-def reaxe_strides(axes, axis_strides, broadcast=False):
-    strides = []
-    for axis in axes:
-        component_axes = flatten_axes(axis)
-        if len(component_axes) == 0:
-            strides.append(0)
-        else:
-            try:
-                strides.append(axis_strides[component_axes[-1]])
-            except KeyError:
-                if not broadcast:
-                    raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
-                else:
-                    strides.append(0)
-    return strides
-
-
 def reaxe_array(axes, array, broadcast=False, offset=0):
     axes = canonicalize_axes(axes)
 
@@ -439,11 +486,24 @@ def reaxe_array(axes, array, broadcast=False, offset=0):
     return set_tensor_axes(obj, axes)
 
 
-class ReaxeParams(object):
-    def __init__(self, reaxes, axes, axis_strides, broadcast=False):
-        self.identity = tuple(reaxes) == tuple(axes)
-        self.strides = reaxe_strides(reaxes, axis_strides, broadcast)
-        self.shape = tuple(axes_shape(reaxes))
+def reaxe_strides(reaxes, axis_strides, broadcast=False):
+    # Format of reaxes:
+    # Axis: position is an axis
+    # tuple of axes: position is combination of the axes
+    strides = []
+    for axis in reaxes:
+        component_axes = flatten_axes(axis)
+        if len(component_axes) == 0:
+            strides.append(0)
+        else:
+            try:
+                strides.append(axis_strides[component_axes[-1]])
+            except KeyError:
+                if not broadcast:
+                    raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
+                else:
+                    strides.append(0)
+    return strides
 
 
 class ObjectWithAxes(object):

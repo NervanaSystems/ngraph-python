@@ -3,8 +3,6 @@ import weakref
 class Node(object):
 
     def __init__(self, args=(), **kargs):
-        if kargs:
-            pass
         super(Node, self).__init__(**kargs)
         self.users = weakref.WeakSet()
         self.__inputs = ()

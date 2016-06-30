@@ -111,25 +111,3 @@ class Environment(object):
     def set_value(self, key, value):
         self.values[key] = value
 
-    def get_tensor_value(self, tensor):
-        tensor_axes_info = tensor.tensor_axes_info
-        tensor_allocation_info = self.get_tensor_allocation_info(tensor_axes_info)
-        return self.get_tensor_allocation_value(tensor_allocation_info)
-
-    def set_tensor_value(self, tensor, value, axes=None):
-        tensor_axes_info = tensor.tensor_axes_info
-        tensor_allocation_info = tensor_axes_info.allocation_info(axes)
-        self.set_tensor_allocation_value(tensor_allocation_info, value)
-
-    def set_tensor_allocation_info(self, tensor_axes_info, tensor_allocation_info):
-        self[tensor_axes_info] = tensor_allocation_info
-
-    def get_tensor_allocation_info(self, tensor_axes_info):
-        return self[tensor_axes_info]
-
-    def set_tensor_allocation_value(self, tensor_allocation_info, value):
-        self[tensor_allocation_info] = value
-
-    def get_tensor_allocation_value(self, tensor_allocation_info):
-        return self[tensor_allocation_info]
-
