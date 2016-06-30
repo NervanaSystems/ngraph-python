@@ -937,5 +937,9 @@ class Function(NameableValue):
         self.defs = defs
 
     @property
+    def graph_label(self):
+        return self.__class__.__name__
+        
+    @property
     def inputs(self):
         return self.use
