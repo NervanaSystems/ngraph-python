@@ -17,6 +17,6 @@ class Compounded(be.Model):
 
         dataflow = analysis.DataFlowGraph([g.z])
         kernelflow = analysis.KernelFlowGraph(dataflow)
-	kernelflow.visualize('Compounded')
+        kernelflow.view()
 
 Compounded()

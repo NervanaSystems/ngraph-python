@@ -11,7 +11,7 @@ def _random_colors(N, alpha=.5):
     
 class Digraph(object):
     
-    def _graphviz(self, name='', getinfo = None):
+    def _graphviz(self, name=''):
         from graphviz import Digraph
         dot = Digraph(name)
         for node, nexts in self.successors.iteritems():
@@ -32,9 +32,12 @@ class Digraph(object):
     def __init__(self, successors):
         self.successors = successors
         
-    def visualize(self, fname):
-        self._graphviz().render('/tmp/{}.gv'.format(fname), view=True)
+    def render(self, fpath, view = True):
+        self._graphviz().render(fpath, view=view)
 
+    def view(self):
+        self._graphviz().view()
+        
     def topsort(self):
         visited = set()
         result = []
@@ -76,7 +79,32 @@ class KernelFlowGraph(DataFlowGraph):
         if isinstance(op1, ElementWise) and isinstance(op2, ElementWise):
             return True
         return False
-    
+        
+    def _graphviz(self, name=''):
+        predecessors = Digraph._invert(self.successors)
+        from graphviz import Digraph as gvDigraph
+        dot = gvDigraph(name, graph_attr={'compound':'true', 'nodesep':'.5', 'ranksep':'.5'})
+        leaves = {x for x, y in predecessors.iteritems() if len(y)==0}
+        subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id)) for x in self.successors if isinstance(x, Function)}
+        #Subgraphs
+        for x, sg in subgs.iteritems():
+            sg.body.append('color=gray')
+            sg.body.append('label={}'.format(x.id))
+            dot.subgraph(sg)
+        for x in leaves:
+            dot.node(x.id, x.graph_label, x.style)
+        #Edges
+        edges = {(a, b) for a, _ in self.successors.iteritems() for b in _}
+        sorts = {x: x.ops.topsort() for x in self.successors if isinstance(x, Function)}
+        firsts = {x: sorts[x][0] if isinstance(x, Function) else x for x in self.successors}
+        lasts = {x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}  
+        for a, b in edges:
+            kw = {}
+            if isinstance(a, Function): kw['ltail'] = 'cluster_{}'.format(a.id)
+            if isinstance(b, Function): kw['lhead'] = 'cluster_{}'.format(b.id)
+            edge = dot.edge(lasts[a].id, firsts[b].id, **kw)
+        return dot
+        
     def _compute_paths(self):
         path_from, bad_path_from = dict(), dict()
         order = self.topsort()
@@ -141,31 +169,6 @@ class KernelFlowGraph(DataFlowGraph):
         #Saves dataflow for visualization
         self.dataflow = dataflow
         
-    def visualize(self, fname):
-        predecessors = Digraph._invert(self.successors)
-        from graphviz import Digraph as gvDigraph
-        dot = gvDigraph(graph_attr={'compound':'true', 'nodesep':'.5', 'ranksep':'.5'})
-        leaves = {x for x, y in predecessors.iteritems() if len(y)==0}
-        subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id)) for x in self.successors if isinstance(x, Function)}
-        #Subgraphs
-        for x, sg in subgs.iteritems():
-            sg.body.append('color=gray')
-            sg.body.append('label={}'.format(x.id))
-            dot.subgraph(sg)
-        for x in leaves:
-            dot.node(x.id, x.graph_label, x.style)
-        #Edges
-        edges = {(a, b) for a, _ in self.successors.iteritems() for b in _}
-        sorts = {x: x.ops.topsort() for x in self.successors if isinstance(x, Function)}
-        firsts = {x: sorts[x][0] if isinstance(x, Function) else x for x in self.successors}
-        lasts = {x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}  
-        for a, b in edges:
-            kw = {}
-            if isinstance(a, Function): kw['ltail'] = 'cluster_{}'.format(a.id)
-            if isinstance(b, Function): kw['lhead'] = 'cluster_{}'.format(b.id)
-            edge = dot.edge(lasts[a].id, firsts[b].id, **kw)
-        dot.render('/tmp/{}.gv'.format(fname), view=True)
-
 
     def liveness(self):
         order = self.topsort()
