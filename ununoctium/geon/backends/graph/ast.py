@@ -396,8 +396,8 @@ class Tensor(Op):
     #def __eq__(self, val):
     #    return equal(self, val)
 
-    def __ne__(self, val):
-        return not_equal(self, val)
+    #def __ne__(self, val):
+    #    return not_equal(self, val)
 
     def __lt__(self, val):
         return less(self, val)
@@ -1166,3 +1166,24 @@ def cross_entropy_binary(y, t):
     a = - safelog(y) * t
     b = - safelog(1 - y) * (1 - t)
     return sum(a + b)
+    
+
+class Function(NameableValue):
+    
+    def __init__(self, ops):
+        super(Function, self).__init__()
+        from geon.backends.graph.analysis import Digraph
+        self.ops = Digraph(ops)
+        use, defs = set(), set()
+        for op in self.ops.topsort():
+            #Kernel defines the def of each operation
+            defs |= set([op])
+            #Kernel uses the use of each operation
+            #except whatever can be held in registers
+            use |= set(op.inputs) - defs
+        self.use = use
+        self.defs = defs
+
+    @property
+    def inputs(self):
+        return self.use

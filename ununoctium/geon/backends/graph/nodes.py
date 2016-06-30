@@ -9,6 +9,10 @@ class Node(object):
         self.inputs = args
 
     @property
+    def graph_label(self):
+        return self.__class__.__name__
+
+    @property
     def inputs(self):
         """All the inputs to this node"""
         return self.__inputs

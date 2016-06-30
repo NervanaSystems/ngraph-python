@@ -1,4 +1,5 @@
-from geon.backends.graph.defmodimp import ComputedTensor, ElementWise, Function, Variable, input
+from collections import defaultdict
+from geon.backends.graph.ast import ComputationOp, AllocationOp, ElementWise, Function
 
 def _random_colors(N, alpha=.5):
     from colorsys import hsv_to_rgb
@@ -15,8 +16,6 @@ class Digraph(object):
         dot = Digraph(name)
         for node, nexts in self.successors.iteritems():
             dot.node(node.id, node.graph_label, node.style)
-            if node.graph_label is None:
-                print type(node)
             for next in nexts:
                 dot.node(next.id, next.graph_label, next.style)
                 dot.edge(node.id, next.id)
@@ -24,10 +23,10 @@ class Digraph(object):
                 
     @staticmethod
     def _invert(adjacency):
-        result = dict((x, set()) for x in adjacency.keys())
+        result = {x: set() for x in adjacency.iterkeys()}
         for x, others in adjacency.iteritems():
             for y in others:
-                result.setdefault(y, set()).add(x)
+                result[y].add(x)
         return result
 
     def __init__(self, successors):
@@ -40,7 +39,7 @@ class Digraph(object):
         visited = set()
         result = []
         predecessors = Digraph._invert(self.successors)
-        counts = dict((a, len(b)) for a, b in predecessors.iteritems())
+        counts = {a: len(b) for a, b in predecessors.iteritems()}
         queue = [node for node,count in counts.iteritems() if count == 0]
         while queue:
             #Dequeue node with all dependency satisfied
@@ -57,14 +56,13 @@ class DataFlowGraph(Digraph):
     
     def _fill_successors(self, outputs):
         for w in outputs:
-            self.successors.setdefault(w, set())
-            use = set(w.args)
-            for v in use:
-                self.successors.setdefault(v, set()).add(w)
-            self._fill_successors(use)
+            self.successors[w] |= set()
+            for v in w.inputs:
+                self.successors[v].add(w)
+                self._fill_successors({v})
 
     def __init__(self, outputs):
-        super(DataFlowGraph, self).__init__(dict())
+        super(DataFlowGraph, self).__init__(defaultdict(set))
         self._fill_successors(outputs)
         self.outputs = outputs
 
@@ -73,7 +71,7 @@ class KernelFlowGraph(DataFlowGraph):
 
     @staticmethod
     def _fusible(op1, op2):
-        if not isinstance(op1, ComputedTensor) or not isinstance(op2, ComputedTensor):
+        if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
             return False
         if isinstance(op1, ElementWise) and isinstance(op2, ElementWise):
             return True
@@ -98,7 +96,8 @@ class KernelFlowGraph(DataFlowGraph):
         while worklist:
             #Update worklist
             x = worklist.pop()
-            if x!=w: worklist |= {y for y in self.successors[x] if w in path_from[y]}
+            if x!=w:
+                worklist |= {y for y in self.successors[x] if w in path_from[y]}
             #Add vertices
             vertices |= {x}
         return vertices
@@ -115,7 +114,6 @@ class KernelFlowGraph(DataFlowGraph):
         #Extracts clusters
         super(KernelFlowGraph, self).__init__(dataflow.outputs)
         successors = self.successors
-        
         path_from, bad_path_from = self._compute_paths()
         edges = {(a, b) for a, _ in successors.iteritems() for b in _}
         clusters = dict((x,{x}) for e in edges for x in e)
@@ -137,7 +135,7 @@ class KernelFlowGraph(DataFlowGraph):
         extract_subgraph = lambda R: dict((a, b & R) for a, b in dataflow.successors.iteritems() if a in R)
         clusters = {x: extract_subgraph(y) for x, y in clusters.iteritems()}
         #Creates final adjacency list
-        clusters = {x: Function(y) if isinstance(x, ComputedTensor) else x for x, y in clusters.iteritems()}
+        clusters = {x: Function(y) if isinstance(x, ComputationOp) else x for x, y in clusters.iteritems()}
         self.successors = {clusters[a]: {clusters[b] for b in lst} for a, lst in successors.iteritems()}
         
         #Saves dataflow for visualization
@@ -173,56 +171,11 @@ class KernelFlowGraph(DataFlowGraph):
         order = self.topsort()
         #Initialize
         liveness = dict((op,set()) for op in order)
-        keeps = {x for x in self.successors if isinstance(x, Variable) and x.keep}
+        keeps = {x for x in self.successors if isinstance(x, AllocationOp) and x.keep}
         liveness[order[-1]] = set(self.outputs) | keeps
         #Update
         for current, previous in reversed(zip(order[1:], order[:-1])):
             liveness[previous] = set(current.use) | (liveness[current] - set(current.defs))
         return liveness
-        
-class UndirectedGraph(object):
-
-    def __init__(self, successors):
-        self.successors = successors
-        
-    def visualize(self, fname):
-        from graphviz import Graph
-        dot = Graph()
-        processed = set()
-        for na, _ in self.successors.iteritems():
-            dot.node(na.label, na.label, na.style)
-            for nb in _:
-                dot.node(nb.label, nb.label, nb.style)
-                if (nb, na) not in processed:
-                    dot.edge(na.label, nb.label)
-                    processed.add((na,nb))
-        dot.render('/tmp/{}.gv'.format(fname), view=True)
-
-    def color(self):
-        neighbors_map = dict(self.successors)
-        for node, preds in Digraph._invert(self.successors).iteritems():
-            neighbors_map[node] |= preds
-        degrees = [len(neighbors) for neighbors in neighbors_map.itervalues()]
-        maxdegree = max(degrees)
-        colors = set(range(maxdegree+1))
-        for na, neighbors in neighbors_map.iteritems():
-            na.color = min(colors - {nb.color for nb in neighbors})
-        cmap = _random_colors(len({x.color for x in neighbors_map}), .5)
-        for na in neighbors_map:
-            na.style = {'style':'filled', 'fillcolor': cmap[na.color]}
-
-    
-class InterferenceGraph(UndirectedGraph):
-    
-    def __init__(self, kernelflow):
-        from itertools import combinations
-        succs = dict()
-        lives = kernelflow.liveness()
-        succs = {x: set() for y in lives.itervalues() for x in y}
-
-        for lst in lives.itervalues():
-            for u, v in combinations(lst, 2):
-                succs.setdefault(u, set()).add(v)
-        super(InterferenceGraph, self).__init__(succs)
     
 
