@@ -32,8 +32,8 @@ class Digraph(object):
     def __init__(self, successors):
         self.successors = successors
         
-    def visualize(self, fname):
-        self._graphviz().render('/tmp/{}.gv'.format(fname), view=True)
+    def visualize(self, fpath):
+        self._graphviz().render('{}.gv'.format(fpath), view=True)
 
     def topsort(self):
         visited = set()
