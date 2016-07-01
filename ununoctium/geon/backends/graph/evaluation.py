@@ -1,18 +1,10 @@
 import numpy as np
 
-from geon.backends.graph.errors import IncompatibleShapesError
-from geon.backends.graph.arrayaxes import axes_sub
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.ast as ast
-from geon.backends.graph.arrayaxes import find_axes_in_axes, reaxe, reaxe_like, tensor_axes, get_batch_axes, set_batch_axes
-import geon.backends.graph.arrayaxes as arrayaxes
-from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
-
-
-def axes_shape(axes):
-    return tuple(axis.length for axis in axes)
+from geon.backends.graph.environment import get_current_environment, captured_ops
 
 
 class Evaluator(object):
@@ -97,17 +89,11 @@ class NumPyEvaluator(Evaluator):
         return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
                           offset=tensor_description.offset, strides=tensor_description.strides)
 
-    def ones(self, tensor_allocation_info):
-        return np.ones(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
+    def ones(self, tensor_description):
+        return np.ones(tensor_description.sizes, tensor_description.dtype)
 
-    def zeros(self, tensor_allocation_info):
-        return np.zeros(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
-
-    def constant(self, value, out):
-        if isinstance(out, np.ndarray):
-            out.fill(value)
-        else:
-            return value
+    def zeros(self, tensor_description):
+        return np.zeros(tensor_description.sizes, tensor_description.dtype)
 
     # Operations
     def trace(self, x, label, out):
@@ -152,8 +138,6 @@ class NumPyEvaluator(Evaluator):
         np.dot(x, y, out)
 
     def update(self, params, delta):
-        if params.shape != delta.shape:
-            print('mismatch', tensor_axes(params), tensor_axes(delta))
         np.subtract(params, delta, out=params)
 
     def equal(self, x, y, out):
@@ -216,7 +200,7 @@ class NumPyEvaluator(Evaluator):
         np.sin(x, out=out)
 
     def sqrt(self, x, out):
-        np.sqrt(reaxe_like(x, out, True), out=out)
+        np.sqrt(x, out=out)
 
     def square(self, x, out):
         np.square(x, out=out)
@@ -249,74 +233,62 @@ class PyCUDAEvaluator(Evaluator):
         with cudagpu.cuda_device_context():
             return super(PyCUDAEvaluator, self).evaluate(**kvargs)
 
-    def constant(self, value, axes, dtype):
-        return value
+    # allocations
+    def empty(self, tensor_description):
+        return cumath.empty(tensor_description.sizes, tensor_description.dtype)
 
-    def absolute(self, x, out):
-        cumath.fabs(reaxe_like(x, out, True), out=out)
-        return out
-
-    def add(self, x, y, out):
-        reaxe_like(x, out, True)._axpbyz(1, reaxe_like(y, out, True), 1, out)
-        return out
-
-    def cos(self, x, out):
-        cumath.cos(reaxe_like(x, out, True), out=out)
-        return out
-
-    def dot(self, x, y, int_axes, out):
-        # TODO Implement axis dot
-        cumath.dot(x, y, out=out)
-        return out
-
-    def empty(self, axes, dtype):
-        return cumath.empty(axes, dtype)
-
-    def exp(self, x, out):
-        cumath.exp(reaxe_like(x, out, True), out=out)
-        return out
-
-    def log(self, x, out):
-        cumath.log(reaxe_like(x, out, True), out=out)
-        return out
-
-    def maximum(self, x, y, out):
-        cumath.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
-        return out
-
-    def minimum(self, x, y, out):
-        cumath.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
-        return out
-
-    def multiply(self, xa, ya, out):
-        x = reaxe_like(xa, out, True)
-        y = reaxe_like(ya, out, True)
-        if isinstance(x, gpuarray.GPUArray):
-            if isinstance(y, gpuarray.GPUArray):
-                x._elwise_multiply(y, out=out)
-                return out
-            x._axpbz(y, 0, out)
-        elif isinstance(y, gpuarray.GPUArray):
-            y._axpbz(x, 0, out)
-            return out
-        else:
-            return x*y
-
-    def negative(self, x, out):
-        reaxe_like(x, out, True)._axpbz(-1, 0.0, out)
-        return out
-
-    def ones(self, axes, dtype):
-        result = gpuarray.empty(axes_shape(axes), dtype)
+    def ones(self, tensor_description):
+        result = self.empty(tensor_description)
         result.fill(1.0)
         return result
 
-    def reciprocal(self, x, out):
-        reaxe_like(x, out, True)._rdiv_scalar(1.0, out)
-        return out
+    def zeros(self, tensor_description):
+        return gpuarray.zeros(tensor_description.sizes, tensor_description.dtype)
 
-    def reshape(self, x, shape):
-        return x.reshape(shape)
+    # Operations
+
+    def absolute(self, x, out):
+        cumath.fabs(x, out=out)
+
+    def add(self, x, y, out):
+        x._axpbyz(1, y, 1, out)
+
+    def cos(self, x, out):
+        cumath.cos(x, out=out)
+
+    def dot(self, x, y, out):
+        cumath.dot(x, y, out=out)
+
+    def exp(self, x, out):
+        cumath.exp(x, out=out)
+
+    def log(self, x, out):
+        cumath.log(x, out=out)
+
+    def maximum(self, x, y, out):
+        cumath.maximum(x, y, out=out)
+
+    def minimum(self, x, y, out):
+        cumath.minimum(x, y, out=out)
+
+    def multiply(self, x, y, out):
+        if isinstance(x, gpuarray.GPUArray):
+            if isinstance(y, gpuarray.GPUArray):
+                x._elwise_multiply(y, out=out)
+                return
+            x._axpbz(y, 0, out)
+            return
+        elif isinstance(y, gpuarray.GPUArray):
+            y._axpbz(x, 0, out)
+            return
+        else:
+            out[:] = x*y
+
+    def negative(self, x, out):
+        x._axpbz(-1, 0.0, out)
+
+    def reciprocal(self, x, out):
+        x._rdiv_scalar(1.0, out)
 
     def sig(self, x, out):
         self.negative(x, out=out)
@@ -324,33 +296,24 @@ class PyCUDAEvaluator(Evaluator):
         # Add one
         out._axpbz(1.0, 1.0, out=out)
         out._rdiv_scalar(1.0, out=out)
-        return out
 
     def sign(self, x, out):
-        out.set(np.sign(reaxe_like(x, out, True).get()))
-        return out
+        out.set(np.sign(x.get()))
 
     def sin(self, x, out):
-        cumath.sin(reaxe_like(x, out, True), out=out)
-        return out
+        cumath.sin(x, out=out)
 
     def sqrt(self, x, out):
-        cumath.sqrt(reaxe_like(x, out, True), out=out)
-        return out
+        cumath.sqrt(x, out=out)
 
     def square(self, x, out):
-        return self.multiply(reaxe_like(x, out, True), reaxe_like(x, out, True), out)
+        self.multiply(x, x, out)
 
     def subtract(self, x, y, out):
-        reaxe_like(x, out, True)._axpbyz(1, reaxe_like(y, out, True), 1, out)
-        return out
+        x._axpbyz(1, y, 1, out)
 
     def tanh(self, x, out):
-        cumath.tanh(reaxe_like(x, out, True), out=out)
-        return out
-
-    def zeros(self, axes, dtype):
-        return gpuarray.zeros(axes_shape(axes), dtype)
+        cumath.tanh(x, out=out)
 
 
 class GenNumPy(Evaluator):

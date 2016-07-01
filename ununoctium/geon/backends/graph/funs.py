@@ -7,7 +7,7 @@ from geon.backends.graph.environment import bound_environment
 
 from geon.backends.graph.ast import deriv, placeholder, Variable, linear_map_axes, sample_axes, batch_axes
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, \
-    set_tensor_axes, tensor_axes, set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
+    set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, maximum, \
     mean, minimum, multiply, greater, greater_equal, less, less_equal, power
 from geon.backends.graph.ast import negative, not_equal, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, \

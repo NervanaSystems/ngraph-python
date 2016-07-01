@@ -311,7 +311,7 @@ class Misclassification(Metric):
         preds = be.argmax(y)
         hyps = be.argmax(t)
         ne = be.not_equal(preds, hyps)
-        return ne.mean(reduction_axes=be.tensor_axes(ne))
+        return ne.mean(reduction_axes=ne.axes)
 
 
 class Accuracy(Metric):

@@ -5,17 +5,16 @@ import collections
 
 import numpy as np
 
-import neon.initializers.initializer as initializer
-
 from geon.backends.graph.names import NameableValue
 from geon.backends.graph.nodes import Node
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
-import geon.backends.graph.arrayaxes as arrayaxes
-from geon.backends.graph.arrayaxes import tensor_axes, get_batch_axes, set_batch_axes, find_axes_in_axes
+from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
+    canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size
 
 from mpi4py import MPI
+
 
 comm = MPI.COMM_WORLD
 
@@ -136,7 +135,7 @@ class TensorAxesInfo(object):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            self.__tensor_description = arrayaxes.TensorDescription(axes=self.axes, dtype=self.dtype)
+            self.__tensor_description = TensorDescription(axes=self.axes, dtype=self.dtype)
         return self.__tensor_description
 
     @property
@@ -164,7 +163,7 @@ class TensorAxesInfo(object):
             self.tensor_description.value = tensor
 
     def get_or_default(self, axes, default_function):
-        axes = arrayaxes.canonicalize_axes(axes)
+        axes = canonicalize_axes(axes)
         if self.views.has_key(axes):
             return self.views[axes]
         result = default_function()
@@ -258,11 +257,11 @@ def sample_axes(x, **kargs):
 
 
 def tensor_sample_axes(x, **kargs):
-    return sample_axes(tensor_axes(x), **kargs)
+    return sample_axes(x.axes, **kargs)
 
 
 def tensor_batch_axes(x, **kargs):
-    return batch_axes(tensor_axes(x), **kargs)
+    return batch_axes(x.axes, **kargs)
 
 
 def batch_axes(x, **kargs):
@@ -306,7 +305,7 @@ class AxesSubComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return arrayaxes.axes_sub(x_axes, y_axes)
+        return axes_sub(x_axes, y_axes)
 
 
 class AxesIntersectComp(AxesComp):
@@ -318,7 +317,7 @@ class AxesIntersectComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return arrayaxes.axes_intersect(x_axes, y_axes)
+        return axes_intersect(x_axes, y_axes)
 
 
 class AxesAppendComp(AxesComp):
@@ -330,7 +329,7 @@ class AxesAppendComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return arrayaxes.axes_append(x_axes, y_axes)
+        return axes_append(x_axes, y_axes)
 
 
 class Tensor(Op):
@@ -471,9 +470,6 @@ class Tensor(Op):
         return mean(self, **kargs)
 
 
-arrayaxes.ObjectWithAxes.register(Tensor)
-
-
 class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
@@ -592,9 +588,9 @@ class ElementWise(ComputationOp):
     @property
     def axes(self):
         inputs = self.inputs
-        result = tensor_axes(self.inputs[0])
+        result = self.inputs[0].axes
         for input in inputs[1:]:
-            result = AxesAppendComp(result, tensor_axes(input))
+            result = AxesAppendComp(result, input.axes)
         return result
 
     def compute_call_info(self):
@@ -664,7 +660,7 @@ class placeholder(AllocationOp):
 
     def sync(self, evaluator):
         value = self.value
-        if isinstance(value, arrayaxes.Scalar):
+        if isinstance(value, numbers.Real):
             evaluator.fill(self.tensor_axes_info.tensor_description.value, value)
         else:
             evaluator.set_value(self, value)
@@ -726,8 +722,8 @@ class add(ElementWise):
         evaluator.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(x)))
-        y.generate_add_delta(adjoints, sum(delta, out_axes=tensor_axes(y)))
+        x.generate_add_delta(adjoints, sum(delta, out_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(delta, out_axes=y.axes))
 
 
 class argmax(ComputationOp):
@@ -746,7 +742,8 @@ class argmax(ComputationOp):
 
     @property
     def axes(self):
-        return AxesSubComp(tensor_axes(self.inputs[0]), self.max_axes)
+        x, = self.inputs
+        return AxesSubComp(x.axes, self.max_axes)
 
 
 class argmin(ComputationOp):
@@ -765,7 +762,8 @@ class argmin(ComputationOp):
 
     @property
     def axes(self):
-        return AxesSubComp(tensor_axes(self.inputs[0]), self.min_axes)
+        x, = self.inputs
+        return AxesSubComp(x.axes, self.min_axes)
 
 
 class cos(ElementWise):
@@ -801,7 +799,7 @@ class dot(ComputationOp):
     def __init__(self, x, y, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
-            self.reduction_axes = AxesIntersectComp(tensor_axes(x), tensor_axes(y))
+            self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
 
@@ -839,12 +837,12 @@ class dot(ComputationOp):
         yl = y_axes[0:yi]
         yr = y_axes[yi+len(red_axes):]
 
-        al = arrayaxes.axes_append(xl, xr)
-        br = arrayaxes.axes_append(yl, yr)
+        al = axes_append(xl, xr)
+        br = axes_append(yl, yr)
 
         a = x.reaxe((al, red_axes))
         b = y.reaxe((red_axes, br))
-        if arrayaxes.axes_intersect(al,br):
+        if axes_intersect(al,br):
             # Can't handle yet
             raise IncompatibleShapesError()
         o = self.reaxe((al, br))
@@ -862,13 +860,11 @@ class dot(ComputationOp):
             return self.out_axes
         else:
             x, y = self.inputs
-            x_axes = tensor_axes(x)
-            y_axes = tensor_axes(y)
-            return AxesAppendComp(AxesSubComp(x_axes, self.reduction_axes), AxesSubComp(y_axes, self.reduction_axes))
+            return AxesAppendComp(AxesSubComp(x.axes, self.reduction_axes), AxesSubComp(y.axes, self.reduction_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, dot(delta, y, out_axes=tensor_axes(x)))
-        y.generate_add_delta(adjoints, dot(x, delta, out_axes=tensor_axes(y)))
+        x.generate_add_delta(adjoints, dot(delta, y, out_axes=x.axes))
+        y.generate_add_delta(adjoints, dot(x, delta, out_axes=y.axes))
 
 
 class ElementWiseBoolean(ElementWise):
@@ -914,7 +910,7 @@ class softmax(ComputationOp):
     def compute_call_info(self):
         x, m = self.inputs
         batch_axes = self.batch_axes.value
-        softmax_axes = arrayaxes.axes_sub(x.resolved_axes, batch_axes)
+        softmax_axes = axes_sub(x.resolved_axes, batch_axes)
         if softmax_axes == ():
             raise ValueError('Empty softmax')
 
@@ -933,11 +929,11 @@ class softmax(ComputationOp):
     @property
     def axes(self):
         x, m = self.inputs
-        return tensor_axes(x)
+        return x.axes
 
     def generate_adjoints(self, adjoints, delta, x, m):
         z = delta*self
-        zs = sum(z, reduction_axes=AxesSubComp(tensor_axes(x), self.batch_axes))
+        zs = sum(z, reduction_axes=AxesSubComp(x.axes, self.batch_axes))
         x.generate_add_delta(adjoints, (z-zs*self))
 
 
@@ -981,7 +977,7 @@ class sum(ComputationOp):
     def axes(self):
         if self.out_axes is not None:
             return self.out_axes
-        return AxesSubComp(tensor_axes(self.inputs[0]), self.reduction_axes)
+        return AxesSubComp(self.inputs[0].axes, self.reduction_axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
@@ -990,15 +986,15 @@ class sum(ComputationOp):
 class tensor_size(ComputationOp):
     def __init__(self, x, reduction_axes=None, **kargs):
         if reduction_axes is None:
-            self.reduction_axes = tensor_axes(x)
+            self.reduction_axes = x.axes
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(tensor_size, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out):
         resolved_reduction_axes = self.reduction_axes.value
-        size = arrayaxes.axes_size(resolved_reduction_axes)
-        evaluator.constant(size, out)
+        size = axes_size(resolved_reduction_axes)
+        evaluator.fill(out, size)
 
     @property
     def axes(self):
@@ -1106,8 +1102,8 @@ class multiply(ElementWise):
         super(multiply, self).__init__(args=(x, y), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta*y, out_axes=tensor_axes(x)))
-        y.generate_add_delta(adjoints, sum(x*delta, out_axes=tensor_axes(y)))
+        x.generate_add_delta(adjoints, sum(delta*y, out_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(x*delta, out_axes=y.axes))
 
 
     def evaluate(self, evaluator, out, x, y):
