@@ -550,7 +550,11 @@ class decrement(VoidOp):
     def __init__(self, parameter, change, **kargs):
         super(decrement, self).__init__(out=parameter, args=(parameter, change), **kargs)
 
-    def evaluate(self, evaluator, out, parameter, change):
+    def compute_call_info(self):
+        parameter, change = self.inputs
+        return [parameter.reaxe(parameter.resolved_axes), delta.reaxe(parameter.resolved_axes)]
+
+    def evaluate(self, evaluator, parameter, change):
         evaluator.update(parameter, change)
 
 
@@ -728,10 +732,12 @@ class argmax(ComputationOp):
         self.max_axes = AxesComp.as_axes(max_axes)
         super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
+    def compute_call_info(self):
+        x, y = self.inputs
+        return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
-        max_axes = self.max_axes.value
-        evaluator.argmax(x, max_axes, out)
+        evaluator.argmax(x, out)
 
     @property
     def axes(self):
@@ -745,10 +751,12 @@ class argmin(ComputationOp):
         self.min_axes = AxesComp.as_axes(min_axes)
         super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
+    def compute_call_info(self):
+        x, y = self.inputs
+        return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
-        min_axes = self.min_axes.value
-        evaluator.argmin(x, min_axes, out)
+        evaluator.argmin(x, out)
 
     @property
     def axes(self):
@@ -922,10 +930,32 @@ class sum(ComputationOp):
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(sum, self).__init__(args=(x,), **kargs)
+        self.mode = None
+
+    def compute_call_info(self):
+        x, = self.inputs
+        reduction_axes = self.reduction_axes.value
+
+        if len(reduction_axes) == 0:
+            # TODO do this as a reaxe to 1d or something
+            xr = x.reaxe(out.resolved_axes)
+            mode = 'copy'
+            return [out.reaxe(out.resolved_axes), xr]
+            out[()] = xr[()]
+        else:
+            x_axes = tensor_axes(x)
+            np_out_axes = tensor_axes(out)
+            sum_axes = [reduction_axes]
+            sum_axes.extend(np_out_axes)
+            self.mode = 0
+            return [out.reaxe(out.resolved_axes), x.reaxe(sum_axes)]
+        return
 
     def evaluate(self, evaluator, out, x):
-        resolved_reduction_axes = self.reduction_axes.value
-        evaluator.sum(x, resolved_reduction_axes, out)
+        if mode is 'copy':
+            evaluator.copy(x, out)
+        else:
+            evaluator.sum(x, self.mode, out)
 
     @property
     def axes(self):

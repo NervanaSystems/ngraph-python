@@ -131,26 +131,22 @@ class NumPyEvaluator(Evaluator):
         out.fill(value)
 
     def absolute(self, x, out):
-        np.abs(reaxe_like(x, out, True), out=out)
+        np.abs(x, out=out)
 
-    def argmax(self, x, max_axes, out):
-        xa = reaxe(x, (max_axes, tensor_axes(out)))
-        oa = reaxe(out, [tensor_axes(out)])
-        np.ndarray.argmax(xa, 0, oa)
+    def argmax(self, x, out):
+        np.ndarray.argmax(x, 0, out)
 
-    def argmin(self, x, max_axes, out):
-        xa = reaxe(x, (max_axes, tensor_axes(out)))
-        oa = reaxe(out, [tensor_axes(out)])
-        np.ndarray.argmin(xa, 0, oa)
+    def argmin(self, x, out):
+        np.ndarray.argmin(x, 0, out)
 
     def add(self, x, y, out):
-        np.add(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.add(x, y, out=out)
 
     def cos(self, x, out):
-        np.cos(reaxe_like(x, out, True), out=out)
+        np.cos(x, out=out)
 
     def divide(self, x, y, out):
-        np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.divide(x, y, out=out)
 
     def dot(self, x, y, out):
         np.dot(x, y, out)
@@ -158,64 +154,63 @@ class NumPyEvaluator(Evaluator):
     def update(self, params, delta):
         if params.shape != delta.shape:
             print('mismatch', tensor_axes(params), tensor_axes(delta))
-        np.subtract(params, reaxe_like(delta, params, True), out=params)
+        np.subtract(params, delta, out=params)
 
     def equal(self, x, y, out):
-        return np.equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        return np.equal(x, y, out=out)
 
     def exp(self, x, out):
-        np.exp(reaxe_like(x, out, True), out=out)
+        np.exp(x, out=out)
 
     def greater(self, x, y, out):
-        np.greater(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.greater(x, y, out=out)
 
     def greater_equal(self, x, y, out):
-        np.greater_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.greater_equal(x, y, out=out)
 
     def less(self, x, y, out):
-        np.less(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.less(x, y, out=out)
 
     def less_equal(self, x, y, out):
-        np.less_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.less_equal(x, y, out=out)
 
     def log(self, x, out):
-        np.log(reaxe_like(x, out, True), out=out)
+        np.log(x, out=out)
 
     expm50 = np.exp(-50.)
     def safelog(self, x, out):
-        np.maximum(reaxe_like(x, out, True), NumPyEvaluator.expm50, out)
+        np.maximum(x, NumPyEvaluator.expm50, out)
         np.log(out, out)
 
     def maximum(self, x, y, out):
-        np.maximum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.maximum(x, y, out=out)
 
     def minimum(self, x, y, out):
-        np.minimum(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.minimum(x, y, out=out)
 
     def multiply(self, x, y, out):
-        np.multiply(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.multiply(x, y, out=out)
 
     def negative(self, x, out):
-        np.negative(reaxe_like(x, out, True), out=out)
+        np.negative(x, out=out)
 
     def not_equal(self, x, y, out):
-        np.not_equal(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.not_equal(x, y, out=out)
 
     def reciprocal(self, x, out):
-        np.reciprocal(reaxe_like(x, out, True), out=out)
+        np.reciprocal(x, out=out)
 
     def sig(self, x, out):
-        xa = reaxe_like(x, out, True)
-        np.negative(xa, out)
+        np.negative(x, out)
         np.exp(out, out)
         np.add(out, 1.0, out)
         np.reciprocal(out, out)
 
     def sign(self, x, out):
-        np.sign(reaxe_like(x, out, True), out=out)
+        np.sign(x, out=out)
 
     def sin(self, x, out):
-        np.sin(reaxe_like(x, out, True), out=out)
+        np.sin(x, out=out)
 
     def softmax(self, x, batch_axes, out):
         softmax_axes = axes_sub(tensor_axes(x), batch_axes)
@@ -251,33 +246,19 @@ class NumPyEvaluator(Evaluator):
         np.sqrt(reaxe_like(x, out, True), out=out)
 
     def square(self, x, out):
-        np.square(reaxe_like(x, out, True), out=out)
+        np.square(x, out=out)
 
     def subtract(self, x, y, out):
-        np.subtract(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
+        np.subtract(x, y, out=out)
 
-    def sum(self, x, reduction_axes, out):
-        if len(reduction_axes) == 0:
-            xr = reaxe_like(x, out, True)
-            out[()] = xr[()]
-        else:
-            x_axes = tensor_axes(x)
-            np_out_axes = tensor_axes(out)
-            sum_axes = [reduction_axes]
-            sum_axes.extend(np_out_axes)
-            xsum = reaxe(x, sum_axes, True)
-            np.sum(xsum, axis=0, out=out)
-        return
+    def copy(self, x, out):
+        out[()] = x[()]
 
-        np_red_dims = tuple(x_axes.index(axis) for axis in reduction_axes)
-        if list(tensor_axes(out)) != list(np_out_axes):
-            temp = np.sum(x, axis=np_red_dims)
-            out[...] = temp
-        else:
-            np.sum(x, axis=np_red_dims, out=reaxe(out, np_out_axes, True))
+    def sum(self, x, axis, out):
+        np.sum(x, axis=axis, out=out)
 
     def tanh(self, x, out):
-        np.tanh(reaxe_like(x, out, True), out=out)
+        np.tanh(x, out=out)
 
     def uniform(self, x, low, high):
         u = self.rng.uniform(low, high, x.shape)
