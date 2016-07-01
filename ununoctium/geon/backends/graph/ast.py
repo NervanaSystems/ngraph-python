@@ -61,11 +61,12 @@ class Op(NameableValue, Node):
         Op.get_ordered_ops(self, ordered_ops)
         self._adjoints[self] = ones(axes=tensor_sample_axes(self))
         for o in reversed(ordered_ops):
-            scale = o.scale
-            adjoint = self._adjoints[o]
-            if scale != 1.0:
-                adjoint = adjoint * scale
-            o.generate_adjoints(self._adjoints, adjoint, *o.inputs)
+            if o in self._adjoints:
+                scale = o.scale
+                adjoint = self._adjoints[o]
+                if scale != 1.0:
+                    adjoint = adjoint * scale
+                o.generate_adjoints(self._adjoints, adjoint, *o.inputs)
         return self._adjoints
 
     @staticmethod
@@ -106,7 +107,7 @@ class Op(NameableValue, Node):
     def ops(self):
         return []
 
-    def evaluate(self, evaluator, out, *args):
+    def evaluate(self, evaluator, *args):
         """Process op"""
         pass
 
@@ -120,7 +121,7 @@ class Op(NameableValue, Node):
 
 class TensorAxesInfo(object):
     """Information about a use of a tensor with axes"""
-    def __init__(self, axes, alloc=None, init=None, read_only=False, dtype=np.float32, **kargs):
+    def __init__(self, axes, alloc=None, init=None, read_only=False, tags=(), dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
         axes = tuple(axes)
         self.axes = axes
@@ -129,6 +130,7 @@ class TensorAxesInfo(object):
         self.init = init
         self.read_only = read_only
         self.dtype = np.dtype(dtype)
+        self.tags = set(tags)
         self.__tensor_description = None
 
     @property
@@ -336,6 +338,9 @@ class Tensor(Op):
     def __init__(self, graph_type=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
+        self.dtype = None
+        if self.graph_type is not None:
+            self.dtype = self.graph_type.dtype
         self.__tensor_axes_info = None
         self.__call_info = None
 
@@ -433,8 +438,8 @@ class Tensor(Op):
 
     def compute_tensor_axes_info(self):
         dtype = np.float32
-        if self.graph_type is not None:
-            dtype = self.graph_type.dtype
+        if self.dtype is not None:
+            dtype = self.dtype
         return TensorAxesInfo(self.axes.value, dtype=dtype)
 
     @property
@@ -447,7 +452,8 @@ class Tensor(Op):
         return [self.reaxe(self.resolved_axes)]
 
     def evaluate_call_info(self, evaluator, *args):
-        self.evaluate(evaluator, *(arg.value for arg in args))
+        call_args = [arg.value for arg in args]
+        self.evaluate(evaluator, *call_args)
 
     @property
     def resolved_axes(self):
@@ -547,11 +553,11 @@ class VoidOp(ComputationOp):
 
 
 class decrement(VoidOp):
-    def __init__(self, parameter, change, **kargs):
-        super(decrement, self).__init__(out=parameter, args=(parameter, change), **kargs)
+    def __init__(self, parameter, delta, **kargs):
+        super(decrement, self).__init__(out=parameter, args=(parameter, delta), **kargs)
 
     def compute_call_info(self):
-        parameter, change = self.inputs
+        parameter, delta = self.inputs
         return [parameter.reaxe(parameter.resolved_axes), delta.reaxe(parameter.resolved_axes)]
 
     def evaluate(self, evaluator, parameter, change):
@@ -623,11 +629,10 @@ class trace(ElementWise):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
+    def __init__(self, axes=None, init=None, dtype=np.float32, tags=(), **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
-        self.aliases = weakref.WeakSet()
         self.tensor_axes_info.init = init
-        self.init = init
+        self.tensor_axes_info.tags.update(tags)
 
     @property
     def axes(self):
@@ -733,7 +738,7 @@ class argmax(ComputationOp):
         super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
     def compute_call_info(self):
-        x, y = self.inputs
+        x, = self.inputs
         return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
@@ -752,7 +757,7 @@ class argmin(ComputationOp):
         super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
     def compute_call_info(self):
-        x, y = self.inputs
+        x, = self.inputs
         return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
@@ -903,17 +908,34 @@ class less_equal(ElementWiseBoolean):
 
 class softmax(ComputationOp):
     def __init__(self, x, **kargs):
-        super(softmax, self).__init__(args=(x,), **kargs)
+        m = Temporary(axes=AxesComp.as_axes(get_batch_axes()))
+        super(softmax, self).__init__(args=(x, m), **kargs)
 
-    def evaluate(self, evaluator, out, x):
-        evaluator.softmax(x, self.batch_axes.value, out)
+    def compute_call_info(self):
+        x, m = self.inputs
+        batch_axes = self.batch_axes.value
+        softmax_axes = arrayaxes.axes_sub(x.resolved_axes, batch_axes)
+        if softmax_axes == ():
+            raise ValueError('Empty softmax')
+
+        xs = x.reaxe([softmax_axes, batch_axes])
+        ms = m.reaxe([softmax_axes, batch_axes])
+        out = self.reaxe([softmax_axes, batch_axes])
+        return [out, xs, m.reaxe(batch_axes), ms]
+
+    def evaluate(self, evaluator, out, x, m, ms):
+        evaluator.max(x, 0, m)
+        evaluator.subtract(x, ms, out)
+        evaluator.exp(out, out)
+        evaluator.sum(out, 0, m)
+        evaluator.divide(out, ms, out)
 
     @property
     def axes(self):
-        x, = self.inputs
+        x, m = self.inputs
         return tensor_axes(x)
 
-    def generate_adjoints(self, adjoints, delta, x):
+    def generate_adjoints(self, adjoints, delta, x, m):
         z = delta*self
         zs = sum(z, reduction_axes=AxesSubComp(tensor_axes(x), self.batch_axes))
         x.generate_add_delta(adjoints, (z-zs*self))
@@ -924,9 +946,9 @@ class sum(ComputationOp):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             if out_axes is None:
-                self.reduction_axes = tensor_axes(x)
+                self.reduction_axes = sample_axes(x.axes)
             else:
-                self.reduction_axes = AxesSubComp(tensor_axes(x), self.out_axes)
+                self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(sum, self).__init__(args=(x,), **kargs)
@@ -938,21 +960,19 @@ class sum(ComputationOp):
 
         if len(reduction_axes) == 0:
             # TODO do this as a reaxe to 1d or something
-            xr = x.reaxe(out.resolved_axes)
-            mode = 'copy'
-            return [out.reaxe(out.resolved_axes), xr]
-            out[()] = xr[()]
+            xr = x.reaxe(self.resolved_axes)
+            self.mode = 'copy'
+            return [self.reaxe(self.resolved_axes), xr]
         else:
-            x_axes = tensor_axes(x)
-            np_out_axes = tensor_axes(out)
+            x_axes = x.resolved_axes
+            np_out_axes = self.resolved_axes
             sum_axes = [reduction_axes]
             sum_axes.extend(np_out_axes)
             self.mode = 0
-            return [out.reaxe(out.resolved_axes), x.reaxe(sum_axes)]
-        return
+            return [self.reaxe(np_out_axes), x.reaxe(sum_axes)]
 
     def evaluate(self, evaluator, out, x):
-        if mode is 'copy':
+        if self.mode is 'copy':
             evaluator.copy(x, out)
         else:
             evaluator.sum(x, self.mode, out)
@@ -975,7 +995,7 @@ class tensor_size(ComputationOp):
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(tensor_size, self).__init__(args=(x,), **kargs)
 
-    def evaluate(self, evaluator, out, x):
+    def evaluate(self, evaluator, out):
         resolved_reduction_axes = self.reduction_axes.value
         size = arrayaxes.axes_size(resolved_reduction_axes)
         evaluator.constant(size, out)
@@ -1011,6 +1031,17 @@ class Pad(ComputationOp):
 class Variable(AllocationOp):
     def __init__(self, **kargs):
         super(Variable, self).__init__(**kargs)
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+    def allocate(self, evaluator, tensor_allocation_info):
+        self.empty(tensor_allocation_info)
+
+
+class Temporary(AllocationOp):
+    def __init__(self, **kargs):
+        super(Temporary, self).__init__(tags=['temp'], **kargs)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1236,15 +1267,15 @@ def deriv(dep, indep):
     return dep.adjoints[indep]
 
 
-def cross_entropy_multi(y, t, usebits=False):
+def cross_entropy_multi(y, t, usebits=False, out_axes=()):
     logscale = np.float(1. / np.log(2.0) if usebits else 1.)
-    return -sum(safelog(y) * t)*logscale
+    return -sum(safelog(y) * t, out_axes=out_axes)*logscale
 
 
-def cross_entropy_binary(y, t):
+def cross_entropy_binary(y, t, out_axes=()):
     a = - safelog(y) * t
     b = - safelog(1 - y) * (1 - t)
-    return sum(a + b)
+    return sum(a + b, out_axes=out_axes)
     
 
 class Function(NameableValue):

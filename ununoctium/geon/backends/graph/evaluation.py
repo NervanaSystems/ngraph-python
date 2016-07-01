@@ -72,17 +72,17 @@ class Evaluator(object):
         self.evaluate_ops(self.ops)
         r = {}
         for op in self.results:
-            r[op] = self.get_tensor(op)
+            r[op] = self.value(op)
         return r
 
     def value(self, op):
-        return op.tensor_axes_info.tensor_description.tensor_description.value
+        return op.tensor_axes_info.tensor_description.value
 
     def set_value(self, op, tensor):
         tensor_description = op.tensor_axes_info.tensor_description
         tensor_description.value = tensor
         for td in tensor_description.views:
-            self.tensor_view(td)
+            td.value = self.tensor_view(td)
 
 
 class NumPyEvaluator(Evaluator):
@@ -182,6 +182,9 @@ class NumPyEvaluator(Evaluator):
         np.maximum(x, NumPyEvaluator.expm50, out)
         np.log(out, out)
 
+    def max(self, x, axis, out):
+        np.max(x, axis, out=out)
+
     def maximum(self, x, y, out):
         np.maximum(x, y, out=out)
 
@@ -211,36 +214,6 @@ class NumPyEvaluator(Evaluator):
 
     def sin(self, x, out):
         np.sin(x, out=out)
-
-    def softmax(self, x, batch_axes, out):
-        softmax_axes = axes_sub(tensor_axes(x), batch_axes)
-        if softmax_axes == ():
-            raise ValueError('Empty softmax')
-        sa_i = find_axes_in_axes(softmax_axes, tensor_axes(x))
-        if sa_i == -1:
-            raise ValueError('Softmax axes not contiguous')
-        if sa_i != 0:
-            raise ValueError('Softmax axes not on left')
-        sm_dims = [axis.length for axis in softmax_axes]
-        def prod(dims):
-            result = 1
-            for dim in dims:
-                result = result * dim
-            return result
-        sm_size = prod(sm_dims)
-        rem_dims = [axis.length for axis in tensor_axes(x)[len(softmax_axes):]]
-
-        if len(softmax_axes) > 1:
-            new_shape = [sm_size]+rem_dims
-            x = x.reshape(new_shape)
-        m = x.max(axis=0)
-        m = m.reshape([1]*len(sm_dims)+rem_dims)
-        np.subtract(x, m, out=out)
-        np.exp(out, out=out)
-        out_temp = out.reshape([sm_size]+list(out.shape[len(softmax_axes):]))
-        s = out_temp.sum(axis=0)
-        s = s.reshape([1]*len(sm_dims)+list(out.shape[len(softmax_axes):]))
-        np.divide(out, s, out=out)
 
     def sqrt(self, x, out):
         np.sqrt(reaxe_like(x, out, True), out=out)
