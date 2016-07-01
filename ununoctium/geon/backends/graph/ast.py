@@ -13,7 +13,7 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
 import geon.backends.graph.arrayaxes as arrayaxes
-from geon.backends.graph.arrayaxes import tensor_axes, get_batch_axes, set_batch_axes
+from geon.backends.graph.arrayaxes import tensor_axes, get_batch_axes, set_batch_axes, find_axes_in_axes
 
 from mpi4py import MPI
 
@@ -110,13 +110,17 @@ class Op(NameableValue, Node):
         """Process op"""
         pass
 
+    def sync(self, evaluator):
+        """Make sure evaluator has local changes"""
+        pass
+
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
 class TensorAxesInfo(object):
     """Information about a use of a tensor with axes"""
-    def __init__(self, axes, alloc=None, init=None, read_only=False, dtype=None, **kargs):
+    def __init__(self, axes, alloc=None, init=None, read_only=False, dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
         axes = tuple(axes)
         self.axes = axes
@@ -124,7 +128,7 @@ class TensorAxesInfo(object):
         self.alloc = alloc
         self.init = init
         self.read_only = read_only
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
         self.__tensor_description = None
 
     @property
@@ -134,11 +138,11 @@ class TensorAxesInfo(object):
         return self.__tensor_description
 
     @property
-    def tensor(self):
-        return self.tensor_description.tensor
+    def value(self):
+        return self.tensor_description.value
 
     def set_tensor(self, evaluator, tensor):
-        self.tensor_description.tensor = tensor
+        self.tensor_description.value = tensor
         for view in self.views.values():
             if view.tensor_description is self.tensor_description:
                 continue
@@ -149,16 +153,16 @@ class TensorAxesInfo(object):
             self.init.fill(tensor)
 
     def allocate(self, evaluator):
-        if self.tensor_description.tensor is None:
+        if self.tensor_description.value is None:
             if self.alloc is not None:
                 tensor = self.alloc(evaluator, self.tensor_description)
             else:
                 tensor = evaluator.empty(self.tensor_description)
             self.set_tensor(evaluator, tensor)
-            self.tensor_description.tensor = tensor
+            self.tensor_description.value = tensor
 
     def get_or_default(self, axes, default_function):
-        axes = tuple(axes)
+        axes = arrayaxes.canonicalize_axes(axes)
         if self.views.has_key(axes):
             return self.views[axes]
         result = default_function()
@@ -177,17 +181,17 @@ class TensorViewInfo(object):
         self.idx = idx
 
     def allocate(self, evaluator):
-        if self.tensor_description.tensor is None:
+        if self.tensor_description.value is None:
             tensor = evaluator.empty(self.tensor_description)
-            self.tensor_description.tensor = tensor
+            self.tensor_description.value = tensor
 
     @property
-    def tensor(self):
-        return self.tensor_description.tensor
+    def value(self):
+        return self.tensor_description.value
 
     def update_tensor(self, evaluator):
         tensor_description = self.tensor_description
-        tensor_description.tensor = evaluator.tensor_view(tensor_description)
+        tensor_description.value = evaluator.tensor_view(tensor_description)
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
@@ -419,7 +423,7 @@ class Tensor(Op):
 
     @property
     def value(self):
-        return self.tensor_axes_info.tensor_description.tensor
+        return self.tensor_axes_info.tensor_description.value
 
     @property
     def tensor_axes_info(self):
@@ -428,7 +432,7 @@ class Tensor(Op):
         return self.__tensor_axes_info
 
     def compute_tensor_axes_info(self):
-        dtype = None
+        dtype = np.float32
         if self.graph_type is not None:
             dtype = self.graph_type.dtype
         return TensorAxesInfo(self.axes.value, dtype=dtype)
@@ -443,7 +447,7 @@ class Tensor(Op):
         return [self.reaxe(self.resolved_axes)]
 
     def evaluate_call_info(self, evaluator, *args):
-        self.evaluate(evaluator, *(arg.tensor for arg in args))
+        self.evaluate(evaluator, *(arg.value for arg in args))
 
     @property
     def resolved_axes(self):
@@ -632,7 +636,7 @@ class placeholder(AllocationOp):
     """
     def __init__(self, **kargs):
         super(placeholder, self).__init__(**kargs)
-        self.__axes = AxesAppendComp(AxesComp.as_axes(arrayaxes.get_phase_axes()), ValueAxesComp(self))
+        self.__axes = ValueAxesComp(self)
 
     def __axes__(self):
         return self.__axes
@@ -640,14 +644,21 @@ class placeholder(AllocationOp):
     def generate_adjoints(self, tape, delta):
         pass
 
+    #TODO Find a better way to set parameters
     @property
     def value(self):
-        return super(placeholder, self).value
+        return get_current_environment()[self]
 
     @value.setter
     def value(self, value):
-        environment = get_current_environment()
-        environment.set_placeholder_value(self, value)
+        get_current_environment()[self] = value
+
+    def sync(self, evaluator):
+        value = self.value
+        if isinstance(value, arrayaxes.Scalar):
+            evaluator.fill(self.tensor_axes_info.tensor_description.value, value)
+        else:
+            evaluator.set_value(self, value)
 
 
 class ConstantInit(VoidOp):
@@ -670,7 +681,7 @@ class Constant(AllocationOp):
     A constant that appears in a graph.
     """
     def __init__(self, const, **kargs):
-        super(Constant, self).__init__(axes=(), dtype=np.dtype(type(const)), init=self, **kargs)
+        super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), init=self, **kargs)
         self.const = const
 
     def fill(self, c):
@@ -784,11 +795,53 @@ class dot(ComputationOp):
         if out_axes is not None:
             self.reduction_axes = AxesSubComp(self.reduction_axes, self.out_axes)
 
+        self.multiply = False
+
         super(dot, self).__init__(args=(x, y), **kargs)
 
+    def compute_call_info(self):
+        x, y = self.inputs
+
+        x_axes = x.axes.value
+        y_axes = y.axes.value
+        out_axes = self.axes.value
+        red_axes = self.reduction_axes.value
+
+        if len(x_axes) is 0 or len(y_axes) is 0:
+            # TODO turn this into multiply ahead of time
+            self.multiply = True
+            return [self.reaxe(self.resolved_axes), x.reaxe(x.resolved_axes), y.reaxe(y.resolved_axes)]
+            np.multiply(x, y, out=out)
+            return
+
+        xi = find_axes_in_axes(red_axes, x_axes)
+        if xi == -1:
+            raise IncompatibleShapesError()
+        yi = find_axes_in_axes(red_axes, y_axes)
+        if yi == -1:
+            raise IncompatibleShapesError()
+
+        xl = x_axes[0:xi]
+        xr = x_axes[xi+len(red_axes):]
+        yl = y_axes[0:yi]
+        yr = y_axes[yi+len(red_axes):]
+
+        al = arrayaxes.axes_append(xl, xr)
+        br = arrayaxes.axes_append(yl, yr)
+
+        a = x.reaxe((al, red_axes))
+        b = y.reaxe((red_axes, br))
+        if arrayaxes.axes_intersect(al,br):
+            # Can't handle yet
+            raise IncompatibleShapesError()
+        o = self.reaxe((al, br))
+        return [o, a, b]
+
     def evaluate(self, evaluator, out, x, y):
-        resolved_reduction_axes = self.reduction_axes.value
-        evaluator.dot(x, y, resolved_reduction_axes, out)
+        if self.multiply:
+            evaluator.multiply(x, y, out)
+        else:
+            evaluator.dot(x, y, out)
 
     @property
     def axes(self):
@@ -934,10 +987,6 @@ class Variable(AllocationOp):
 
     def allocate(self, evaluator, tensor_allocation_info):
         self.empty(tensor_allocation_info)
-
-    @property
-    def value(self):
-        return get_current_environment()[self]
 
 
 class exp(ElementWise):

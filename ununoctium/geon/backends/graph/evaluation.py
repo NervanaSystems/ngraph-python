@@ -63,17 +63,26 @@ class Evaluator(object):
 
     def evaluate_ops(self, ops):
         for op in ops:
+            op.sync(self)
+
+        for op in ops:
             op.evaluate_call_info(self, *op.call_info)
 
     def evaluate(self):
         self.evaluate_ops(self.ops)
         r = {}
         for op in self.results:
-            r[op] = self.environment[op]
+            r[op] = self.get_tensor(op)
         return r
 
     def value(self, op):
-        return self.environment[op]
+        return op.tensor_axes_info.tensor_description.tensor_description.value
+
+    def set_value(self, op, tensor):
+        tensor_description = op.tensor_axes_info.tensor_description
+        tensor_description.value = tensor
+        for td in tensor_description.views:
+            self.tensor_view(td)
 
 
 class NumPyEvaluator(Evaluator):
@@ -81,17 +90,12 @@ class NumPyEvaluator(Evaluator):
         super(NumPyEvaluator, self).__init__(**kargs)
 
     # allocators
-    def set_tensor(self, tensor_description, tensor):
-        tensor_description.tensor = tensor
-        for td in tensor_description.views:
-            self.tensor_view(td)
-
     def empty(self, tensor_description):
         return np.empty(tensor_description.sizes, tensor_description.dtype)
 
     def tensor_view(self, tensor_description):
-        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.tensor,
-                            offset=tensor_description.offset, strides=tensor_description.strides)
+        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
+                          offset=tensor_description.offset, strides=tensor_description.strides)
 
     def ones(self, tensor_allocation_info):
         return np.ones(tensor_allocation_info.sizes, tensor_allocation_info.dtype)
@@ -148,45 +152,8 @@ class NumPyEvaluator(Evaluator):
     def divide(self, x, y, out):
         np.divide(reaxe_like(x, out, True), reaxe_like(y, out, True), out=out)
 
-    def dot(self, x, y, red_axes, out):
-        # This implementation  requires axes
-        #   x = xl red xr
-        #   y = yl red yr
-        #   out = xl xr yl yr
-        #   At least one of xl, xr, yl, yr is empty
-
-        x_axes = tensor_axes(x)
-        y_axes = tensor_axes(y)
-        out_axes = tensor_axes(out)
-
-        if len(x_axes) is 0 or len(y_axes) is 0:
-            # TODO turn this into multiply ahead of time
-            np.multiply(x, y, out=out)
-            return
-
-        xi = find_axes_in_axes(red_axes, x_axes)
-        if xi == -1:
-            raise IncompatibleShapesError()
-        yi = find_axes_in_axes(red_axes, y_axes)
-        if yi == -1:
-            raise IncompatibleShapesError()
-
-        xl = x_axes[0:xi]
-        xr = x_axes[xi+len(red_axes):]
-        yl = y_axes[0:yi]
-        yr = y_axes[yi+len(red_axes):]
-
-        al = arrayaxes.axes_append(xl, xr)
-        br = arrayaxes.axes_append(yl, yr)
-
-        a = arrayaxes.reaxe(x, axes=(al, red_axes))
-        b = arrayaxes.reaxe(y, axes=(red_axes, br))
-        if arrayaxes.axes_intersect(al,br):
-            # Can't handle yet
-            raise IncompatibleShapesError()
-        o = arrayaxes.reaxe(out, axes=(al, br))
-        #o = out.reaxe(axes=(al, br))
-        np.dot(a,b,out=o)
+    def dot(self, x, y, out):
+        np.dot(x, y, out)
 
     def update(self, params, delta):
         if params.shape != delta.shape:

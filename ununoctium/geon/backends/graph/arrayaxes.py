@@ -112,14 +112,14 @@ class TensorDescription(object):
     """Axes information about an allocated tensor"""
 
     def __init__(self, axes, dtype=np.dtype(np.float32), shape=None, sizes=None, strides=None, offset=0, verify=True,
-                 buffer=None, tensor=None, **kargs):
+                 buffer=None, value=None, **kargs):
         super(TensorDescription, self).__init__(**kargs)
         self.dtype = np.dtype(dtype)
         self.axes = tuple(canonicalize_axes(axes))
         self.ndim = len(self.axes)
         self.offset = offset
         self.__buffer = buffer
-        self.tensor = tensor
+        self.value = value
         self.views = weakref.WeakSet()
 
         if buffer is not None:
@@ -139,18 +139,18 @@ class TensorDescription(object):
         if strides is None:
             strides = []
             stride = self.dtype.itemsize
-            for axis, size in zip(self.axes, self.sizes):
+            for axis, size in reversed(zip(self.axes, self.sizes)):
                 if verify:
                     assert axis.length <= size, "An dimension size cannot be less than the dimension length"
                 self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
                 stride = stride * size
                 strides.append(stride)
-            self.strides = tuple(strides)
+            self.strides = tuple(reversed(strides))
         else:
             assert len(strides) == self.ndim
             self.strides = tuple(strides)
-            for axis, stride in zip(self.axes, self.strides):
-                self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
+            for axis, length, stride in zip(self.axes, axes_shape(self.axes), self.strides):
+                self.axes_info[axis] = TensorAxisInfo(length=length, stride=stride)
 
     @property
     def buffer(self):
