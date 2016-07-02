@@ -5,7 +5,7 @@ from geon.backends.graph.names import name_scope_list, with_name_scope, name_sco
 from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
 from geon.backends.graph.environment import bound_environment, set_batch_axes, get_batch_axes
 
-from geon.backends.graph.ast import deriv, placeholder, Variable
+from geon.backends.graph.ast import deriv, placeholder, Variable, Constant
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, linear_map_axes, sample_axes, batch_axes, \
     set_tensor_axes, tensor_axes
 from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, maximum, \
