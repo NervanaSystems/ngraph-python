@@ -89,26 +89,6 @@ class Defmod(Node):
         self.seqid = len(defs)
         defs.append(self)
 
-        # TODO This is a good first cut for debugging info, but it would be nice to
-        # TODO be able to reliably walk the stack back to user code rather than just
-        # TODO back past this constructor
-        frame = None
-        try:
-            frame = inspect.currentframe()
-            while frame.f_locals.get('self', None) is self:
-                frame = frame.f_back
-            while frame:
-                filename, lineno, function, code_context, index = inspect.getframeinfo(frame)
-                if -1 == filename.find('geon/backends/graph'):
-                    break
-                frame = frame.f_back
-
-            self.filename = filename
-            self.lineno = lineno
-            self.code_context = code_context
-        finally:
-            del frame
-
     @staticmethod
     def defs():
         try:

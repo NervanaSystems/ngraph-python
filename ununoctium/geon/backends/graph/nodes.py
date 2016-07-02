@@ -1,9 +1,11 @@
 import weakref
 import collections
+import inspect
+
 from geon.backends.graph.names import NameableValue
 
-class Node(NameableValue):
 
+class Node(NameableValue):
     def __init__(self, args=(), tags=None, **kargs):
         super(Node, self).__init__(**kargs)
         self.users = weakref.WeakSet()
@@ -17,6 +19,25 @@ class Node(NameableValue):
             else:
                 self.tags.add(tags)
 
+        # TODO This is a good first cut for debugging info, but it would be nice to
+        # TODO be able to reliably walk the stack back to user code rather than just
+        # TODO back past this constructor
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            while frame.f_locals.get('self', None) is self:
+                frame = frame.f_back
+            while frame:
+                filename, lineno, function, code_context, index = inspect.getframeinfo(frame)
+                if -1 == filename.find('geon/backends/graph'):
+                    break
+                frame = frame.f_back
+
+            self.filename = filename
+            self.lineno = lineno
+            self.code_context = code_context
+        finally:
+            del frame
 
     @property
     def graph_label(self):
@@ -86,19 +107,21 @@ class Node(NameableValue):
         for node in root:
             visit(node)
 
+    @property
+    def file_info(self):
+        return 'File "{filename}", line {lineno}'.format(filename=self.filename, lineno=self.lineno)
+
     def _repr_body(self):
         return self._abbrev_args(self._repr_attrs())
 
     def _repr_attrs(self, *attrs):
         return attrs
 
-
     def __shortpr(self):
         name = ''
         if self.name is not None:
             name = '{' + self.name + '}'
         return '{seqid}:{cls}{name}'.format(name=name, seqid=self.seqid, cls=self.__class__.__name__)
-
 
     def _abbrev_value(self, value):
         if isinstance(value, Node):
@@ -116,7 +139,6 @@ class Node(NameableValue):
         else:
             return '{v}'.format(v=value)
 
-
     def _abbrev_args(self, keys):
         if not isinstance(keys, tuple):
             keys = (keys,)
@@ -132,9 +154,5 @@ class Node(NameableValue):
                 result = s
         return result
 
-
     def __repr__(self):
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
-
-
-

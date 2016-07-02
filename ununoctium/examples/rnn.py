@@ -121,7 +121,7 @@ class MyRnn(be.Model):
     @be.with_environment
     def dump(self):
         for _ in be.get_all_defs():
-            print('{s} # File "{filename}", line {lineno}'.format(s=_, filename=_.filename, lineno=_.lineno))
+            print('{s} # {file_info}'.format(s=_, file_info=_.file_info))
 
 
 MyRnn().dump()
