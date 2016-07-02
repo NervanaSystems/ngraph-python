@@ -4,6 +4,7 @@ import inspect
 
 from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
+from geon.backends.graph.nodes import Node
 
 # TODO This implementation only read the model description.  These model descriptions use
 # TODO implicit allocation, with the exception of inputs and parameters.
@@ -76,24 +77,17 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
     return result
     
 
-class Defmod(NameableValue):
+class Defmod(Node):
     """Base class for model definitions
 
     Handles generic printing and tracking object creation order.
     """
 
-    def __init__(self, tags=None, **kargs):
+    def __init__(self, **kargs):
         super(Defmod, self).__init__(**kargs)
         defs = Defmod.defs()
         self.seqid = len(defs)
         defs.append(self)
-
-        self.tags = set()
-        if tags is not None:
-            if isinstance(tags, collections.Iterable) and not isinstance(tags, str):
-                self.tags.update(tags)
-            else:
-                self.tags.add(tags)
 
         # TODO This is a good first cut for debugging info, but it would be nice to
         # TODO be able to reliably walk the stack back to user code rather than just
@@ -124,71 +118,19 @@ class Defmod(NameableValue):
             get_current_environment()[Defmod] = defs
         return defs
 
-    def _repr_body(self):
-        return self._abbrev_args(self._repr_attrs())
+    def as_node(self, x):
+        return Tensor.as_tensor(x)
 
-    def _repr_attrs(self, *attrs):
-        return attrs
-
-    def __shortpr(self):
-        name = ''
-        if self.name is not None:
-            name = '{' + self.name + '}'
-        return '{seqid}:{cls}{name}'.format(name=name, seqid=self.seqid, cls=self.__class__.__name__)
-
-    def _abbrev_value(self, value):
-        if isinstance(value, Defmod):
-            return value.__shortpr()
-        elif isinstance(value, tuple):
-            result = ''
-            for _ in value:
-                s = self._abbrev_value(_)
-                if result:
-                    result = result + ', ' + s
-                else:
-                    result = s
-
-            return '(' + result + ')'
-        else:
-            return '{v}'.format(v=value)
-
-    def _abbrev_args(self, keys):
-        if not isinstance(keys, tuple):
-            keys = (keys,)
-        result = ''
-        for key in keys:
-            val = self.__getattribute__(key)
-            if val is None:
-                continue
-            s = '{key}={val}'.format(key=key, val=self._abbrev_value(val))
-            if result:
-                result = result + ', ' + s
-            else:
-                result = s
-        return result
-
-    def __repr__(self):
-        return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
 
 
 class Tensor(Defmod):
     """Any tensor-value"""
 
-    def __init__(self, axes=None, batch_axes=None, dtype=None, args=None, **kargs):
+    def __init__(self, axes=None, batch_axes=None, dtype=None, **kargs):
         super(Tensor, self).__init__(**kargs)
         self._axes = Axes.as_axes(axes)
         self.batch_axes = Axes.as_axes(batch_axes)
         self.dtype = dtype
-
-        if args is None:
-            self.args = ()
-        else:
-            self.args = tuple(Tensor.as_tensor(_) for _ in args)
-        for arg in self.args:
-            arg.users.add(self)
-
-        # Tensors that directly use the result
-        self.users = weakref.WeakSet()  # Name assigned by user
 
     @property
     def size(self):

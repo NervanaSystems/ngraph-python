@@ -60,7 +60,7 @@ class DataFlowGraph(Digraph):
     def _fill_successors(self, outputs):
         for w in outputs:
             self.successors[w] |= set()
-            for v in w.inputs:
+            for v in w.args:
                 self.successors[v].add(w)
                 self._fill_successors({v})
 

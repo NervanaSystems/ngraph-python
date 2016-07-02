@@ -334,7 +334,7 @@ class GenNumPy(Evaluator):
         vals = {}
         for i, op in enumerate(self.ops):
             live = [varname(l) for l in liveness[i]]
-            args = [varname(arg) for arg in op.inputs]
+            args = [varname(arg) for arg in op.args]
             val = '{var} = {val} # Live={live}'.format(val=op.evaluate(self, varname(op), *args), var=varname(op), live=live)
             vals[op] = val
             body.append(val)

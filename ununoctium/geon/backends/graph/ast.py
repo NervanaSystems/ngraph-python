@@ -18,7 +18,7 @@ from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
 
-class Op(NameableValue, Node):
+class Op(Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, **kwds):
@@ -39,7 +39,7 @@ class Op(NameableValue, Node):
             visited.add(node)
             if isinstance(node, Variable):
                 params.append(node)
-            unvisited.extend(node.inputs)
+            unvisited.extend(node.args)
 
         return params
 
@@ -65,7 +65,7 @@ class Op(NameableValue, Node):
                 adjoint = self._adjoints[o]
                 if scale != 1.0:
                     adjoint = adjoint * scale
-                o.generate_adjoints(self._adjoints, adjoint, *o.inputs)
+                o.generate_adjoints(self._adjoints, adjoint, *o.args)
         return self._adjoints
 
     @staticmethod
@@ -86,7 +86,7 @@ class Op(NameableValue, Node):
             alive = set(liveness[i])
             if isinstance(op, Tensor):
                 alive.discard(op)
-                for arg in op.inputs:
+                for arg in op.args:
                     alive.add(arg)
                 prealive |= alive
             i = i - 1
@@ -478,7 +478,7 @@ class ComputationOp(Tensor):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
 
-        for arg in self.inputs:
+        for arg in self.args:
             arg.users.add(self)
 
         if batch_axes is None:
@@ -518,7 +518,7 @@ class RNGOp(ComputationOp):
         return self.__axes
 
     def compute_call_info(self):
-        rng, = self.inputs
+        rng, = self.args
         call_info = super(RNGOp, self).compute_call_info()
         call_info.append(rng.reaxe(rng.resolved_axes))
         return call_info
@@ -553,7 +553,7 @@ class decrement(VoidOp):
         super(decrement, self).__init__(out=parameter, args=(parameter, delta), **kargs)
 
     def compute_call_info(self):
-        parameter, delta = self.inputs
+        parameter, delta = self.args
         return [parameter.reaxe(parameter.resolved_axes), delta.reaxe(parameter.resolved_axes)]
 
     def evaluate(self, evaluator, parameter, change):
@@ -566,7 +566,7 @@ class SetItem(VoidOp):
         self.item = item
 
     def compute_call_info(self):
-        tensor, val = self.inputs
+        tensor, val = self.args
         call_info = super(SetItem, self).compute_call_info()
         call_info.append(tensor.reaxe(tensor.resolved_axes))
         call_info.append(val.reaxe(tensor.resolved_axes))
@@ -587,15 +587,15 @@ class ElementWise(ComputationOp):
 
     @property
     def axes(self):
-        inputs = self.inputs
-        result = self.inputs[0].axes
+        inputs = self.args
+        result = self.args[0].axes
         for input in inputs[1:]:
             result = AxesAppendComp(result, input.axes)
         return result
 
     def compute_call_info(self):
         ci = super(ElementWise, self).compute_call_info()
-        for arg in self.inputs:
+        for arg in self.args:
             ci.append(arg.reaxe(self.resolved_axes))
         return ci
 
@@ -672,7 +672,7 @@ class ConstantInit(VoidOp):
         self.const = const
 
     def compute_call_info(self):
-        tensor, = self.inputs
+        tensor, = self.args
         call_info = super(ConstantInit, self).compute_call_info()
         call_info.append(tensor.reaxe(tensor.resolved_axes))
         return call_info
@@ -734,7 +734,7 @@ class argmax(ComputationOp):
         super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
     def compute_call_info(self):
-        x, = self.inputs
+        x, = self.args
         return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
@@ -742,7 +742,7 @@ class argmax(ComputationOp):
 
     @property
     def axes(self):
-        x, = self.inputs
+        x, = self.args
         return AxesSubComp(x.axes, self.max_axes)
 
 
@@ -754,7 +754,7 @@ class argmin(ComputationOp):
         super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
     def compute_call_info(self):
-        x, = self.inputs
+        x, = self.args
         return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
@@ -762,7 +762,7 @@ class argmin(ComputationOp):
 
     @property
     def axes(self):
-        x, = self.inputs
+        x, = self.args
         return AxesSubComp(x.axes, self.min_axes)
 
 
@@ -811,7 +811,7 @@ class dot(ComputationOp):
         super(dot, self).__init__(args=(x, y), **kargs)
 
     def compute_call_info(self):
-        x, y = self.inputs
+        x, y = self.args
 
         x_axes = x.axes.value
         y_axes = y.axes.value
@@ -859,7 +859,7 @@ class dot(ComputationOp):
         if self.out_axes:
             return self.out_axes
         else:
-            x, y = self.inputs
+            x, y = self.args
             return AxesAppendComp(AxesSubComp(x.axes, self.reduction_axes), AxesSubComp(y.axes, self.reduction_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
@@ -908,7 +908,7 @@ class softmax(ComputationOp):
         super(softmax, self).__init__(args=(x, m), **kargs)
 
     def compute_call_info(self):
-        x, m = self.inputs
+        x, m = self.args
         batch_axes = self.batch_axes.value
         softmax_axes = axes_sub(x.resolved_axes, batch_axes)
         if softmax_axes == ():
@@ -928,7 +928,7 @@ class softmax(ComputationOp):
 
     @property
     def axes(self):
-        x, m = self.inputs
+        x, m = self.args
         return x.axes
 
     def generate_adjoints(self, adjoints, delta, x, m):
@@ -951,7 +951,7 @@ class sum(ComputationOp):
         self.mode = None
 
     def compute_call_info(self):
-        x, = self.inputs
+        x, = self.args
         reduction_axes = self.reduction_axes.value
 
         if len(reduction_axes) == 0:
@@ -977,7 +977,7 @@ class sum(ComputationOp):
     def axes(self):
         if self.out_axes is not None:
             return self.out_axes
-        return AxesSubComp(self.inputs[0].axes, self.reduction_axes)
+        return AxesSubComp(self.args[0].axes, self.reduction_axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
@@ -1286,7 +1286,7 @@ class Function(NameableValue):
             defs |= set([op])
             #Kernel uses the use of each operation
             #except whatever can be held in registers
-            use |= set(op.inputs) - defs
+            use |= set(op.args) - defs
         self.use = use
         self.defs = defs
 

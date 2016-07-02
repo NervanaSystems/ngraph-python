@@ -1313,7 +1313,7 @@ class DeconvCallback(Callback):
                     activation = out
 
                     # zero out w.r.t to input from lower layer
-                    layer_below_acts = layers[layer_ind - i].inputs
+                    layer_below_acts = layers[layer_ind - i].args
                     layer_below_acts[:] = be.greater(layer_below_acts, 0)
                     activation[:] = be.multiply(layer_below_acts, activation)
 
