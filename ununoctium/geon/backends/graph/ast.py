@@ -11,7 +11,7 @@ import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops
 from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
-    canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size
+    canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size, axes_sizes
 
 from mpi4py import MPI
 
@@ -137,6 +137,10 @@ class TensorAxesInfo(object):
         if self.__tensor_description is None:
             self.__tensor_description = TensorDescription(axes=self.axes, dtype=self.dtype)
         return self.__tensor_description
+
+    @property
+    def shapes(self):
+       return axes_sizes(self.axes)
 
     @property
     def value(self):
@@ -477,6 +481,8 @@ class ComputationOp(Tensor):
     def __init__(self, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
+        self.defs = {self}
+
 
         for arg in self.args:
             arg.users.add(self)
@@ -641,6 +647,7 @@ class placeholder(AllocationOp):
     def __init__(self, **kargs):
         super(placeholder, self).__init__(**kargs)
         self.__axes = ValueAxesComp(self)
+        self.tensor_axes_info.read_only = True
 
     def __axes__(self):
         return self.__axes
@@ -648,6 +655,10 @@ class placeholder(AllocationOp):
     def generate_adjoints(self, tape, delta):
         pass
 
+    @property
+    def graph_label(self):
+        return self.name.split('.')[-1]
+        
     #TODO Find a better way to set parameters
     @property
     def value(self):
@@ -694,6 +705,10 @@ class Constant(AllocationOp):
     def generate_adjoints(self, tape, delta):
         pass
 
+    @property
+    def graph_label(self):
+        return str(self.const)
+        
     @property
     def axes(self):
         return AxesComp.as_axes((()))
@@ -1241,20 +1256,20 @@ def cross_entropy_binary(y, t, out_axes=()):
     return sum(a + b, out_axes=out_axes)
     
 
-class Function(NameableValue):
+class Function(Node):
     
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.backends.graph.analysis import Digraph
         self.ops = Digraph(ops)
-        use, defs = set(), set()
+        args, defs = set(), set()
         for op in self.ops.topsort():
             #Kernel defines the def of each operation
             defs |= set([op])
-            #Kernel uses the use of each operation
-            #except whatever can be held in registers
-            use |= set(op.args) - defs
-        self.use = use
+            #Kernel uses the args of each operation
+            #except whatever is being defined
+            args |= set(op.args) - defs
+        self.args = args
         self.defs = defs
 
     @property
@@ -1264,3 +1279,13 @@ class Function(NameableValue):
     @property
     def inputs(self):
         return self.use
+
+
+class Buffer:
+    
+    def __init__(self, color, size):
+        self.color = color
+        self.size = size
+        self.data = None
+        
+    

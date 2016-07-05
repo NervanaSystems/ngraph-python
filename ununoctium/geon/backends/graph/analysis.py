@@ -1,13 +1,9 @@
 from collections import defaultdict
-from geon.backends.graph.ast import ComputationOp, AllocationOp, ElementWise, Function
+from geon.backends.graph.ast import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer
+from operator import mul
+from itertools import product
+from geon.backends.graph.arrayaxes import axes_sizes
 
-def _random_colors(N, alpha=.5):
-    from colorsys import hsv_to_rgb
-    HSV = [[x*1.0/N, 0.5, 0.5] for x in range(N)]
-    RGBA = [x + (alpha,) for x in map(lambda x: hsv_to_rgb(*x), HSV)]
-    RGBA = [[int(y*255) for y in x] for x in RGBA]
-    HEX = ["#{:02x}{:02x}{:02x}{:02x}".format(r,g,b,a) for r,g,b,a in RGBA]
-    return HEX
     
 class Digraph(object):
     
@@ -74,9 +70,10 @@ class KernelFlowGraph(DataFlowGraph):
 
     @staticmethod
     def _fusible(op1, op2):
+        shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
         if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
             return False
-        if isinstance(op1, ElementWise) and isinstance(op2, ElementWise):
+        if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1==shapes2:
             return True
         return False
         
@@ -165,7 +162,6 @@ class KernelFlowGraph(DataFlowGraph):
         #Creates final adjacency list
         clusters = {x: Function(y) if isinstance(x, ComputationOp) else x for x, y in clusters.iteritems()}
         self.successors = {clusters[a]: {clusters[b] for b in lst} for a, lst in successors.iteritems()}
-        
         #Saves dataflow for visualization
         self.dataflow = dataflow
         
@@ -174,11 +170,84 @@ class KernelFlowGraph(DataFlowGraph):
         order = self.topsort()
         #Initialize
         liveness = dict((op,set()) for op in order)
-        keeps = {x for x in self.successors if isinstance(x, AllocationOp) and x.keep}
+        keeps = {x for x in self.successors if isinstance(x, AllocationOp) and x.tensor_axes_info.read_only}
         liveness[order[-1]] = set(self.outputs) | keeps
         #Update
         for current, previous in reversed(zip(order[1:], order[:-1])):
-            liveness[previous] = set(current.use) | (liveness[current] - set(current.defs))
+            args = {x for x in current.args if not isinstance(x, Constant)}
+            liveness[previous] = args | (liveness[current] - set(current.defs))
         return liveness
     
 
+class UndirectedGraph(object):
+
+    def __init__(self, neighbors):
+        self.neighbors = neighbors
+        
+    def _graphviz(self, name=''):
+        from graphviz import Graph
+        dot = Graph()
+        processed = set()
+        for na, _ in self.neighbors.iteritems():
+            dot.node(na.id, na.graph_label, na.style)
+            for nb in _:
+                dot.node(nb.id, nb.graph_label, nb.style)
+                if (nb, na) not in processed:
+                    dot.edge(na.id, nb.id)
+                    processed.add((na,nb))
+        return dot
+
+    def render(self, fpath, view = True):
+        self._graphviz().render(fpath, view=view)
+
+    def view(self):
+        self._graphviz().view()
+
+class InterferenceGraph(UndirectedGraph):
+
+    def __init__(self, lives):
+        neighbors = defaultdict(set) 
+        edges = [(u,v) for l in lives.itervalues() for u,v in product(l,l) if u!=v]
+        for u,v in edges: neighbors[u].add(v)
+        super(InterferenceGraph, self).__init__(neighbors)
+        self.weights = {x: reduce(mul, x.tensor_axes_info.shapes, 1)*x.tensor_axes_info.dtype.itemsize for x in neighbors}
+
+
+
+def _random_colors(N, alpha=.5):
+    from colorsys import hsv_to_rgb
+    HSV = [[x*1.0/N, 0.5, 0.5] for x in range(N)]
+    RGBA = [x + (alpha,) for x in map(lambda x: hsv_to_rgb(*x), HSV)]
+    RGBA = [[int(y*255) for y in x] for x in RGBA]
+    HEX = ["#{:02x}{:02x}{:02x}{:02x}".format(r,g,b,a) for r,g,b,a in RGBA]
+    return HEX
+    
+def color(interference):
+    neighbors = interference.neighbors
+    weights = interference.weights
+    partitions = []
+    buffers = []
+    queue = sorted(weights, key=weights.__getitem__, reverse=True)
+    while queue:
+        u = queue.pop(0)
+        #Creates a new set and grows it as much as possible
+        S = {u}
+        N = neighbors[u]
+        for x in queue:
+            if x not in N:
+                S |= {x}
+                N |= neighbors[x]
+        partitions.append(S)
+        color = len(partitions) - 1
+        buffers.append(Buffer(color, weights[u]))
+        #Update remaining nodes
+        queue = [x for x in queue if x not in S]
+        for s in S: 
+            s.tensor_axes_info.alloc = buffers[color]
+    cmap = _random_colors(len(partitions), .5)
+    for na in weights:
+        na.style = {'style':'filled', 'fillcolor': cmap[na.tensor_axes_info.alloc.color]}
+    total_mem = sum([x.size for x in buffers])
+    return total_mem
+
+    

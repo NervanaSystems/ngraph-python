@@ -83,8 +83,8 @@ class NameableValue(object):
     """A value with a name and debugging info that can be set."""
     def __init__(self, name=None, **kargs):
         super(NameableValue, self).__init__(**kargs)
-        self.__name = name
         self.id = NameableValue.generate_id()
+        self.__name = name if name is not None else self.id
         self.style = {}
         
     @property

@@ -8,7 +8,7 @@ import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
 import geon.backends.graph.evaluation as evaluation
-
+import geon.backends.graph.analysis as analysis
 
 class Model(GraphComponent):
     def __init__(self, layers, name=None, optimizer=None, **kargs):
@@ -93,6 +93,14 @@ class Model(GraphComponent):
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.graph.cost)
 
+                
+                dataflow = analysis.DataFlowGraph([self.graph.cost, updates])
+                kernelflow = analysis.KernelFlowGraph(dataflow)
+                interference = analysis.InterferenceGraph(kernelflow.liveness())
+                memory = analysis.color(interference)
+                #print 'The memory footprint is {} GB'.format(memory*10**-9)
+                #dataflow.view()
+                
                 self.enp = evaluation.NumPyEvaluator(results=[self.graph.cost, updates])
                 self.enp.initialize()
 

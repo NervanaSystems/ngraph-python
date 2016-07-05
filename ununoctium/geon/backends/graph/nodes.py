@@ -12,6 +12,7 @@ class Node(NameableValue):
         self.__args = ()
         self.tags = set()
         self.args = args
+        self.defs = set()
 
         if tags is not None:
             if isinstance(tags, collections.Iterable) and not isinstance(tags, str):
@@ -153,6 +154,8 @@ class Node(NameableValue):
             else:
                 result = s
         return result
-
+    
     def __repr__(self):
-        return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
+        return self.id
+    #def __repr__(self):
+    #    return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
