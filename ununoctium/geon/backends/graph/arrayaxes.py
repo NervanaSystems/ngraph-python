@@ -1,4 +1,5 @@
 from __future__ import division
+from future.utils import with_metaclass
 
 from abc import ABCMeta
 import collections
@@ -11,9 +12,7 @@ from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 
 
-class Axis(NameableValue):
-    __metaclass__ = ABCMeta
-
+class Axis(with_metaclass(ABCMeta, NameableValue)):
     def __init__(self, length, like=None, **kargs):
         super(Axis, self).__init__(**kargs)
         self._length = length

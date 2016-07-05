@@ -1,4 +1,5 @@
 from functools import wraps
+from future.utils import with_metaclass
 from geon.backends.graph.environment import get_current_environment, bound_environment, Environment
 from geon.backends.graph.names import NameScope, get_current_name_scope, name_scope
 
@@ -14,14 +15,12 @@ class GraphMetaclass(type):
                 return super(GraphMetaclass, cls).__call__(*args, **kargs)
 
 
-class GraphComponent(object):
+class GraphComponent(with_metaclass(GraphMetaclass, object)):
     """
     Superclass for all models.
 
-    Ensures that __metaclass__ is set.
+    Ensures that __metaclass__ is GraphMetaclass.
     """
-    __metaclass__ = GraphMetaclass
-
     def __init__(self, **kargs):
         super(GraphComponent, self).__init__(**kargs)
         self.graph = get_current_name_scope()

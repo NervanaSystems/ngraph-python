@@ -11,9 +11,9 @@ from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, \
 
 from geon.backends.graph.ast import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, maximum, \
     mean, minimum, multiply, greater, greater_equal, less, less_equal, power
-from geon.backends.graph.ast import negative, not_equal, ones, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
+from geon.backends.graph.ast import negative, not_equal, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
-from geon.backends.graph.ast import tanh, zeros, safelog, cross_entropy_binary, cross_entropy_multi
+from geon.backends.graph.ast import tanh, safelog, cross_entropy_binary, cross_entropy_multi
 from geon.backends.graph.ast import doall, decrement, trace, RNG
 
 from geon.backends.graph.ast import AllReduce

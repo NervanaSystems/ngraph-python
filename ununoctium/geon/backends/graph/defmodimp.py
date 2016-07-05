@@ -402,11 +402,6 @@ class negative(ElementWise):
         super(negative, self).__init__(args=(x,), **kargs)
 
 
-class ones(Tensor):
-    def __init__(self, **kargs):
-        super(ones, self).__init__(**kargs)
-
-
 class reciprocal(ElementWise):
     def __init__(self, x, **kargs):
         super(reciprocal, self).__init__(args=(x,), **kargs)
@@ -457,11 +452,6 @@ class sum(Reduction):
 class tanh(ElementWise):
     def __init__(self, x, **kargs):
         super(tanh, self).__init__(args=(x,), **kargs)
-
-
-class zeros(Tensor):
-    def __init__(self, **kargs):
-        super(zeros, self).__init__(**kargs)
 
 
 class deriv(Tensor):

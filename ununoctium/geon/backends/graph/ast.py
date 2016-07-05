@@ -58,7 +58,7 @@ class Op(Node):
         self._adjoints = weakref.WeakKeyDictionary()
         ordered_ops = []
         Op.get_ordered_ops(self, ordered_ops)
-        self._adjoints[self] = ones(axes=tensor_sample_axes(self))
+        self._adjoints[self] = Op.as_op(1)
         for o in reversed(ordered_ops):
             if o in self._adjoints:
                 scale = o.scale
@@ -439,7 +439,7 @@ class Tensor(Op):
         dtype = np.float32
         if self.dtype is not None:
             dtype = self.dtype
-        return TensorAxesInfo(self.axes.value, dtype=dtype)
+        return TensorAxesInfo(self.axes.value, dtype=dtype, tags=self.tags)
 
     @property
     def call_info(self):
@@ -625,10 +625,9 @@ class trace(ElementWise):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, init=None, dtype=np.float32, tags=(), **kargs):
+    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
         super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
         self.tensor_axes_info.init = init
-        self.tensor_axes_info.tags.update(tags)
 
     @property
     def axes(self):
@@ -1121,22 +1120,6 @@ class negative(ElementWise):
         evaluator.negative(x, out)
 
 
-class ones(AllocationOp):
-    def __init__(self, **kargs):
-        super(ones, self).__init__(**kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
-
-    def compute_tensor_axes_info(self):
-        tensor_axes_info = super(ones, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = self.allocate
-        return tensor_axes_info
-
-    def allocate(self, evaluator, tensor_allocation_info):
-        return evaluator.ones(tensor_allocation_info)
-
-
 class power(ElementWise):
     def __init__(self, x, y, **kargs):
         super(power, self).__init__(args=(x,), **kargs)
@@ -1237,22 +1220,6 @@ class tanh(ElementWise):
 
     def evaluate(self, evaluator, out, x):
         evaluator.tanh(x, out)
-
-
-class zeros(AllocationOp):
-    def __init__(self, **kargs):
-        super(zeros, self).__init__(**kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
-
-    def compute_tensor_axes_info(self):
-        tensor_axes_info = super(ones, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = self.allocate
-        return tensor_axes_info
-
-    def allocate(self, evaluator, tensor_allocation_info):
-        return evaluator.zeros(tensor_allocation_info)
 
 
 def mean(x, **kargs):
