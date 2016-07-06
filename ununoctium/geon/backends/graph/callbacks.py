@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 
 class Callbacks(NervanaObject):
-
     """
     Container class for storing and iterating over callbacks.
 
@@ -192,14 +191,14 @@ class Callbacks(NervanaObject):
         self.add_callback(SaveBestStateCallback(path))
 
     def add_watch_ticker_callback(self, valid):
-            """
-            Convenience function to create and add a watch ticker callback.
+        """
+        Convenience function to create and add a watch ticker callback.
 
-            Arguments:
-                valid (dataset): the validation set to use
-                    For a ticker dataset, this can be the training set if desired.
-            """
-            self.callbacks.append(WatchTickerCallback(self.model, valid))
+        Arguments:
+            valid (dataset): the validation set to use
+                For a ticker dataset, this can be the training set if desired.
+        """
+        self.callbacks.append(WatchTickerCallback(self.model, valid))
 
     def add_early_stop_callback(self, stop_func):
         """
@@ -344,7 +343,6 @@ class Callbacks(NervanaObject):
 
 
 class Callback(NervanaObject):
-
     """
     Interface defining common callback functions.
 
@@ -492,7 +490,6 @@ class Callback(NervanaObject):
 
 
 class SerializeModelCallback(Callback):
-
     """
     Callback for serializing the state of the model.
 
@@ -564,6 +561,7 @@ class RunTimerCallback(Callback):
     """
     Callback which tracks the total training time.
     """
+
     def __init__(self):
         super(RunTimerCallback, self).__init__()
 
@@ -598,6 +596,7 @@ class TrainCostCallback(Callback):
     """
     Callback for computing average training cost periodically during training.
     """
+
     def __init__(self, wsz=10):
         super(TrainCostCallback, self).__init__(epoch_freq=1)
         self.wsz = wsz
@@ -639,7 +638,6 @@ class TrainCostCallback(Callback):
 
 
 class LossCallback(Callback):
-
     """
     Callback for calculating the loss on a given dataset periodically during training.
 
@@ -694,6 +692,7 @@ class MetricCallback(Callback):
         epoch_freq (int, optional): how often (in epochs) to log info.
                                     Defaults to every 1 epoch.
     """
+
     def __init__(self, eval_set, metric, epoch_freq=1):
         super(MetricCallback, self).__init__(epoch_freq=epoch_freq)
         self.eval_set = eval_set
@@ -736,7 +735,6 @@ class MetricCallback(Callback):
 
 
 class MultiLabelStatsCallback(Callback):
-
     """
     Callback for calculating statistics on multi-label classification tasks.
 
@@ -803,6 +801,7 @@ class HistCallback(Callback):
     flag. Histograms are stored to the hdf5 output file and can be visualized
     using the nvis tool.
     """
+
     def __init__(self, plot_per_mini, filter_key):
         super(HistCallback, self).__init__(epoch_freq=1, minibatch_freq=1)
         self.plot_per_mini = plot_per_mini
@@ -964,7 +963,6 @@ class ProgressBarCallback(Callback):
 
 
 class TrainLoggerCallback(Callback):
-
     """
     Callback for logging training progress.
 
@@ -1023,7 +1021,6 @@ class TrainLoggerCallback(Callback):
 
 
 class SaveBestStateCallback(Callback):
-
     """
     Callback for saving the best model state so far.
 
@@ -1055,7 +1052,6 @@ class SaveBestStateCallback(Callback):
 
 
 class EarlyStopCallback(Callback):
-
     """
     Callback for stopping training when a threshold has been triggered.
 
@@ -1106,6 +1102,7 @@ class DeconvCallback(Callback):
 
     .. [Springenberg2014] http://arxiv.org/abs/1412.6806
     """
+
     def __init__(self, train_set, valid_set, max_fm=16, dataset_pct=25):
         super(DeconvCallback, self).__init__(epoch_freq=1)
         self.train_set = train_set
@@ -1302,7 +1299,6 @@ class DeconvCallback(Callback):
             # Loop over the previous layers to perform deconv
             for i, l in enumerate(layers[layer_ind::-1], 0):
                 if isinstance(l, Convolution):
-
                     # zero out w.r.t. current layer activations
                     activation[:] = be.maximum(activation, 0)
 
@@ -1331,6 +1327,7 @@ class BatchNormTuneCallback(Callback):
         tune_set (Dataset):  data set over which to tune parameters (usually a subset of the
                              training set)
     """
+
     def __init__(self, tune_set, epoch_freq=1):
         super(BatchNormTuneCallback, self).__init__(epoch_freq=epoch_freq)
         self.tune_set = tune_set
@@ -1363,7 +1360,6 @@ class BatchNormTuneCallback(Callback):
 
 
 class WatchTickerCallback(Callback):
-
     """
     Callback that examines a single input, output pair using a validation set.
     This only works with ticker datasets - it wouldn't make much sense to
@@ -1412,7 +1408,6 @@ class WatchTickerCallback(Callback):
             # Print out the name and pretty version of each of X, y, and mask
             for name, item in zip(["Inputs", "Outputs", "Targets"],
                                   [x, y, t[0]]):
-
                 neon_logger.display(name)
 
                 # Only get the first sequence in the minibatch

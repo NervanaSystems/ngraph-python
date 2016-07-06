@@ -7,8 +7,9 @@ from neon.backends.backend import Block
 import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.nptransform as nptransform
 import geon.backends.graph.analysis as analysis
+
 
 class Model(GraphComponent):
     def __init__(self, layers, name=None, optimizer=None, **kargs):
@@ -27,7 +28,6 @@ class Model(GraphComponent):
             self.layers = layers
         else:
             self.layers = Sequential(layers)
-
 
     def initialize(self, dataset, cost=None):
         """
@@ -50,7 +50,6 @@ class Model(GraphComponent):
 
         self.initialized = True
         return self.output
-
 
     def fit(self, dataset, input_axes, target_axes, cost, optimizer, num_epochs, callbacks):
         """
@@ -92,16 +91,14 @@ class Model(GraphComponent):
 
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.graph.cost)
-
-                
+            
                 dataflow = analysis.DataFlowGraph([self.graph.cost, updates])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
                 #print 'The memory footprint is {} GB'.format(memory*10**-9)
-                #dataflow.view()
-                
-                self.enp = evaluation.NumPyEvaluator(results=[self.graph.cost, updates])
+                #dataflow.render('cifar_mlp.gv', True)             
+                self.enp = nptransform.NumPyTransformer(results=[self.graph.cost, updates])
                 self.enp.initialize()
 
                 callbacks.on_train_begin(num_epochs)
@@ -152,7 +149,7 @@ class Model(GraphComponent):
             nprocessed = 0
             self.loss = 0
             dataset.reset()
-            enp = evaluation.NumPyEvaluator(results=[self.graph.cost])
+            enp = nptransform.NumPyTransformer(results=[self.graph.cost])
             for x, t in dataset:
                 self.graph.input.value = x.array
                 self.graph.target.value = t.array
@@ -160,7 +157,7 @@ class Model(GraphComponent):
                 nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
                     x[0].array.shape[1] // dataset.bsz
                 vals = enp.evaluate()
-                batch_cost =  vals[self.graph.cost]
+                batch_cost = vals[self.graph.cost]
                 nprocessed += bsz
                 self.loss += batch_cost / nsteps
             return float(self.loss) / nprocessed
@@ -183,7 +180,7 @@ class Model(GraphComponent):
             nprocessed = 0
             dataset.reset()
             error = metric(self.output, self.graph.target)
-            enp = evaluation.NumPyEvaluator(results=[error])
+            enp = nptransform.NumPyTransformer(results=[error])
             for x, t in dataset:
                 self.graph.input.value = x.array
                 self.graph.target.value = t.array
@@ -197,7 +194,6 @@ class Model(GraphComponent):
                 nprocessed += bsz * nsteps
             running_error /= nprocessed
             return running_error
-
 
     def serialize(self, fn=None, keep_states=True):
         # TODO

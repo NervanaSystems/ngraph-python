@@ -1,5 +1,5 @@
 import geon.backends.graph.funs as be
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.pycudatransform as evaluation
 
 """
 Test be.Constant

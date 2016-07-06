@@ -6,6 +6,7 @@ from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 from geon.backends.graph.nodes import Node
 
+
 # TODO This implementation only read the model description.  These model descriptions use
 # TODO implicit allocation, with the exception of inputs and parameters.
 # TODO Once the model description has been
@@ -75,7 +76,7 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
         result.intersection_update(usesset)
 
     return result
-    
+
 
 class Defmod(Node):
     """Base class for model definitions
@@ -100,7 +101,6 @@ class Defmod(Node):
 
     def as_node(self, x):
         return Tensor.as_tensor(x)
-
 
 
 class Tensor(Defmod):
@@ -188,7 +188,7 @@ class LiteralTensor(Tensor):
     @property
     def graph_label(self):
         return str(self.value)
-        
+
     def _repr_attrs(self, *attrs):
         return super(LiteralTensor, self)._repr_attrs('value', *attrs)
 
@@ -281,7 +281,7 @@ class Variable(Tensor):
     def __init__(self, init=None, **kargs):
         super(Variable, self).__init__(**kargs)
         self.init = init
-        
+
     def _repr_attrs(self, *attrs):
         return super(Variable, self)._repr_attrs('init', *attrs)
 
@@ -302,7 +302,7 @@ class ComputedTensor(Tensor):
     @property
     def graph_label(self):
         return type(self).__name__
-        
+
     @property
     def axes(self):
         return ValueAxes(self)
@@ -588,4 +588,3 @@ class SubAxes(CombineAxes):
 class IntersectAxes(CombineAxes):
     def __init__(self, *args, **kargs):
         super(IntersectAxes, self).__init__(args=args, **kargs)
-

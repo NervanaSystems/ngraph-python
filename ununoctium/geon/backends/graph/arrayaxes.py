@@ -49,6 +49,7 @@ class AxisVar(Axis):
     """
     Like an axis, except the length comes from the environment.
     """
+
     def __init__(self, length=None, **kargs):
         super(AxisVar, self).__init__(length=-1, **kargs)
         if length is not None:
@@ -94,14 +95,13 @@ class AxisID(object):
         return isinstance(other, AxisID) and self.axis == other.axis and self.idx == other.idx
 
     def __hash__(self):
-        return hash(self.axis)+hash(self.idx)
+        return hash(self.axis) + hash(self.idx)
 
     def __repr__(self):
         return '{axis}[{idx}])'.format(axis=self.axis, idx=self.idx)
 
 
 Axis.register(AxisID)
-
 
 TensorAxisInfo = collections.namedtuple('TensorAxisInfo', ['length', 'stride'])
 
@@ -153,7 +153,6 @@ class TensorDescription(object):
     @property
     def buffer(self):
         return self.__buffer or self
-
 
     def __getitem__(self, item):
         if isinstance(item, Axis):
@@ -248,7 +247,7 @@ def find_axes_in_axes(subaxes, axes):
         return 0
     head = subaxes[0]
     for i, axis in enumerate(axes):
-        if head == axis and axes[i:i+len(subaxes)] == subaxes:
+        if head == axis and axes[i:i + len(subaxes)] == subaxes:
             return i
     return -1
 
@@ -280,7 +279,7 @@ def axes_replace(axes, replace, replacements):
     r = dict()
     for k in ids:
         r[k] = k
-    for k,v in zip(axis_ids(replace), axis_ids(replacements)):
+    for k, v in zip(axis_ids(replace), axis_ids(replacements)):
         r[k] = v
     return [r[axis] for axis in ids]
 
@@ -298,6 +297,7 @@ def axes_list(axes, shape_list):
 def flatten_axes(axes):
     """Return axes with all tuples expanded."""
     result = []
+
     def flatten1(axes):
         if isinstance(axes, collections.Sequence):
             for _ in axes:
@@ -314,7 +314,7 @@ def axes_shape(axes):
     for axis in axes:
         length = 1
         for caxis in flatten_axes(axis):
-            length = length*caxis.length
+            length = length * caxis.length
         shape.append(length)
     return shape
 

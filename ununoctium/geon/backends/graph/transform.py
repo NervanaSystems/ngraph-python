@@ -1,3 +1,6 @@
+from future.utils import with_metaclass
+import abc
+
 from contextlib import contextmanager
 import weakref
 import numbers
@@ -6,19 +9,551 @@ import collections
 import numpy as np
 
 from geon.backends.graph.names import NameableValue
-from geon.backends.graph.nodes import Node
+import geon.backends.graph.nodes as nodes
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
-from geon.backends.graph.environment import get_current_environment, get_current_ops
+from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
     canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size, axes_sizes
 
 from mpi4py import MPI
 
-
 comm = MPI.COMM_WORLD
 
-class Op(Node):
+
+class Transformer(with_metaclass(abc.ABCMeta, object)):
+    def __init__(self, results, error=None, initialize=False, environment=None, **kvargs):
+        super(Transformer, self).__init__(**kvargs)
+        if environment is None:
+            environment = get_current_environment()
+        self.environment = environment
+        self.results = results
+
+        self.ops = Op.ordered_ops(self.results)
+        self.compute_initializations(self.ops)
+        self.compute_allocations()
+
+        self.opids = dict()
+        for op in self.initialization_ops:
+            self.opids[op] = len(self.opids)
+        for op in self.ops:
+            self.opids[op] = len(self.opids)
+
+    def compute_initializations(self, ops):
+        initializers = []
+        initialized_ops = set()
+        with captured_ops(initializers):
+            uninitialized_ops = ops
+            while uninitialized_ops:
+                for op in uninitialized_ops:
+                    if op in initialized_ops:
+                        continue
+                    initialized_ops.add(op)
+                    op.tensor_axes_info.generate_initializations(op)
+
+                uninitialized_ops = Op.ordered_ops(initializers)
+                uninitialized_ops = [op for op in uninitialized_ops if op not in initialized_ops]
+
+        self.initialization_ops = Op.ordered_ops(initializers)
+        for op in ops:
+            op.call_info
+
+    def compute_allocations(self):
+        ops = set(self.initialization_ops)
+        ops.update(self.ops)
+        for op in ops:
+            op.tensor_axes_info.allocate(self)
+
+    def initialize(self):
+        self.evaluate_ops(self.initialization_ops)
+
+    def backend_transformations(self, ops):
+        for op in ops:
+            op.backend_transform(self)
+
+    def evaluate_ops(self, ops):
+        for op in ops:
+            op.sync(self)
+
+        for op in ops:
+            op.evaluate_call_info(self, *op.call_info)
+
+    def evaluate(self):
+        self.evaluate_ops(self.ops)
+        r = {}
+        for op in self.results:
+            r[op] = self.value(op)
+        return r
+
+    def value(self, op):
+        return op.tensor_axes_info.tensor_description.value
+
+    def set_value(self, op, tensor):
+        tensor_description = op.tensor_axes_info.tensor_description
+        tensor_description.value = tensor
+        for td in tensor_description.views:
+            td.value = self.tensor_view(td)
+
+    # Allocators
+    # TODO Should this be combined with tensor_view?
+    @abc.abstractmethod
+    def empty(self, tensor_description):
+        """
+        Allocate unitialized tensor.
+
+        :param tensor_description: Description of the tensor's type, shape, size, and strides.
+        :return: Reference to the tensor.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def rng(self, seed=None):
+        """
+        Allocate a random number generator.
+
+        :param seed: An integer.
+        :return: Reference to the random number generator.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def tensor_view(self, tensor_description):
+        """
+        Allocate a view of a tensor.
+
+        :param tensor_description: Description of the tensor view.
+        :return: Reference to the tensor view.
+        """
+        raise NotImplementedError()
+
+    # Side-effects
+    # TODO Should this be combined with set_item?
+    @abc.abstractmethod
+    def fill(self, out, value):
+        """
+        Initialize a tensor with a scalar.
+
+        :param out: Tensor to initialize
+        :param value: Scalar value.
+        :return:
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def rng_uniform(self, rng, low, high, out):
+        """
+        Initializes out with a uniform distribution
+
+        :param rng: Random number generator
+        :param low: low end of range
+        :param high: upper end of range
+        :param out: tensor to be initialized
+        :return:
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def set_item(self, tensor, item, value):
+        """
+        Implements __setitem__.
+
+        :param tensor: Tensor to be modified
+        :param item: Slice/index to set
+        :param value: New values for tensor[item]
+        :return:
+        """
+        raise NotImplementedError()
+
+    # Operations
+    @abc.abstractmethod
+    def absolute(self, x, out):
+        """
+        Absolute value.
+
+        :param x: Input tensor
+        :param out: Output tensor, may be input.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def add(self, x, y, out):
+        """
+        out = x + y
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def argmax(self, x, out):
+        """
+        Argmax on dim 0 of x.
+
+        :param x:
+        :param out: Integer tensor
+        :return:
+        """
+        raise NotImplementedError()
+
+    def argmin(self, x, out):
+        """
+        Argmin on dim 0 of x.
+
+        :param x:
+        :param out: Integer tensor
+        :return:
+        """
+        raise NotImplementedError()
+
+    def cos(self, x, out):
+        """
+        Cosine.
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def divide(self, x, y, out):
+        """
+        out = x/y
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def dot(self, x, y, out):
+        """
+        Generalized dot using NumPy dimension conventions.
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def equal(self, x, y, out):
+        """
+        Numerical equality.
+
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def exp(self, x, out):
+        """
+        out = e^x
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def greater(self, x, y, out):
+        """
+        x > y
+
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def greater_equal(self, x, y, out):
+        """
+        x >= y
+
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def less(self, x, y, out):
+        """
+        x < y
+
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def less_equal(self, x, y, out):
+        """
+        x <= y
+
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def log(self, x, out):
+        """
+        log(x)
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def max(self, x, axis, out):
+        """
+        Maximum x value on axis.
+
+        :param x:
+        :param axis: Axis to maximize over.
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def maximum(self, x, y, out):
+        """
+        max(x, y)
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def min(self, x, axis, out):
+        """
+        Minimum x value on axis.
+
+        :param x:
+        :param axis: Axis to maximize over.
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def minimum(self, x, y, out):
+        """
+        min(x, y)
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def multiply(self, x, y, out):
+        """
+        x*y
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def negative(self, x, out):
+        """
+        -x
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def not_equal(self, x, y, out):
+        """
+        x != y
+        :param x:
+        :param y:
+        :param out: Boolean tensor.
+        :return:
+        """
+        raise NotImplementedError()
+
+    def reciprocal(self, x, out):
+        """
+        1/x
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def sign(self, x, out):
+        """
+        signum(x)
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def sin(self, x, out):
+        """
+        sine(x)
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def sqrt(self, x, out):
+        """
+        sqrt(x)
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def square(self, x, out):
+        """
+        x^2
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def subtract(self, x, y, out):
+        """
+        x - y
+
+        :param x:
+        :param y:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def sum(self, x, axis, out):
+        """
+        sum of x over axis
+
+        :param x:
+        :param axis:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def tanh(self, x, out):
+        """
+        tanh(x)
+
+        :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+
+class AbstractVisitor(nodes.AbstractVisitor):
+    @abc.abstractmethod
+    def visit_op(self, op):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_tensor(self, tensor):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_allocation(self, allocation):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_computation(self, computation):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_RNG(self, rng):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_rngop(self, rngop, rng):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_uniform(self, uniform, rng):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_void(self, void):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_set_item(self, set_item, tensor, item, val):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_doall(self, doall, *args):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_elementwise(self, elementwise):
+        raise NotImplementedError()
+
+
+class Visitor(nodes.Visitor):
+    def visit_op(self, op):
+        return self.visit_node(op)
+
+    def visit_tensor(self, tensor):
+        return self.visit_op(tensor)
+
+    def visit_allocation(self, allocation):
+        return self.visit_tensor(allocation)
+
+    def visit_computation(self, computation):
+        return self.visit_tensor(computation)
+
+    def visit_RNG(self, rng):
+        return self.visit_allocation(rng)
+
+    def visit_rngop(self, rngop, rng):
+        return self.visit_computation(rngop)
+
+    def visit_uniform(self, uniform, rng):
+        return self.visit_rngop(uniform, rng)
+
+    def visit_void(self, void):
+        return self.visit_computation(void)
+
+    def visit_set_item(self, set_item, tensor, item, val):
+        return self.visit_void(set_item)
+
+    def visit_doall(self, doall, *args):
+        return self.visit_void(doall)
+
+    def visit_elementwise(self, elementwise):
+        return self.visit_computation(elementwise)
+
+
+class Op(nodes.Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, **kwds):
@@ -43,12 +578,15 @@ class Op(Node):
 
         return params
 
+    def visit(self, visitor, **kargs):
+        return visitor.visit_op(self, **kargs)
+
     @staticmethod
     def get_ordered_ops(op, ordered_ops):
         """
         Get dependent ops ordered for autodiff.
         """
-        Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
+        nodes.Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
     @property
     def adjoints(self):
@@ -71,7 +609,7 @@ class Op(Node):
     @staticmethod
     def ordered_ops(results):
         ordered_ops = []
-        Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
+        nodes.Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     @staticmethod
@@ -120,6 +658,7 @@ class Op(Node):
 
 class TensorAxesInfo(object):
     """Information about a use of a tensor with axes"""
+
     def __init__(self, axes, alloc=None, init=None, read_only=False, tags=(), dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
         axes = tuple(axes)
@@ -175,11 +714,13 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        return self.get_or_default(reaxe, lambda : TensorReaxeViewInfo(tensor_axes_info=self, reaxes=reaxe, idx=len(self.views)))
+        return self.get_or_default(reaxe, lambda: TensorReaxeViewInfo(tensor_axes_info=self, reaxes=reaxe,
+                                                                      idx=len(self.views)))
 
 
 class TensorViewInfo(object):
     """The use of a view of a tensor with axes"""
+
     def __init__(self, tensor_axes_info, idx, **kargs):
         super(TensorViewInfo, self).__init__(**kargs)
         self.tensor_axes_info = tensor_axes_info
@@ -201,6 +742,7 @@ class TensorViewInfo(object):
 
 class TensorReaxeViewInfo(TensorViewInfo):
     """The use of a reaxe view of a tensor with axes"""
+
     def __init__(self, reaxes, **kargs):
         super(TensorReaxeViewInfo, self).__init__(**kargs)
         self.reaxes = reaxes
@@ -215,6 +757,7 @@ class TensorReaxeViewInfo(TensorViewInfo):
 
 class AxesComp(object):
     """A Computation for computing axes"""
+
     def __init__(self, axes=None, **kargs):
         super(AxesComp, self).__init__(**kargs)
         self.__axes__ = axes
@@ -285,12 +828,14 @@ def linear_map_axes(in_axes, out_axes):
 
 class LiteralAxesComp(AxesComp):
     """Actual axes are provided"""
+
     def __init__(self, **kargs):
         super(LiteralAxesComp, self).__init__(**kargs)
 
 
 class ValueAxesComp(AxesComp):
     """Determine axes from value computed by x"""
+
     def __init__(self, x, **kargs):
         super(ValueAxesComp, self).__init__(**kargs)
         self.x = x
@@ -301,6 +846,7 @@ class ValueAxesComp(AxesComp):
 
 class AxesSubComp(AxesComp):
     """Result will be removal of axes in y from those in x"""
+
     def __init__(self, x, y, **kargs):
         super(AxesSubComp, self).__init__(**kargs)
         self.x = AxesComp.as_axes(x)
@@ -337,7 +883,6 @@ class AxesAppendComp(AxesComp):
 
 
 class Tensor(Op):
-
     def __init__(self, graph_type=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
         self.graph_type = graph_type
@@ -349,6 +894,9 @@ class Tensor(Op):
 
         # Derivative will be scaled by this if not 1.0
         self.scale = scale
+
+    def visit(self, visitor, **kargs):
+        return visitor.visit_tensor(self, **kargs)
 
     @property
     def output(self):
@@ -405,10 +953,10 @@ class Tensor(Op):
         return power(val, self)
 
     # Python uses eq for comparing keys
-    #def __eq__(self, val):
+    # def __eq__(self, val):
     #    return equal(self, val)
 
-    #def __ne__(self, val):
+    # def __ne__(self, val):
     #    return not_equal(self, val)
 
     def __lt__(self, val):
@@ -423,8 +971,25 @@ class Tensor(Op):
     def __ge__(self, val):
         return greater_equal(self, val)
 
+    # Only works when capturing ops
     def __setitem__(self, key, val):
         return SetItem(self, key, val)
+
+    # Only works when capturing ops
+    def __iadd__(self, val):
+        return SetItem(self, slice(None, None, None), self + val)
+
+    # Only works when capturing ops
+    def __isub__(self, val):
+        return SetItem(self, slice(None, None, None), self - val)
+
+    # Only works when capturing ops
+    def __imul__(self, val):
+        return SetItem(self, slice(None, None, None), self * val)
+
+    # Only works when capturing ops
+    def __idiv__(self, val):
+        return SetItem(self, slice(None, None, None), self / val)
 
     def __axes__(self):
         return self.axes
@@ -470,14 +1035,28 @@ class Tensor(Op):
     def shape(self):
         return self.__axes__()
 
-    def mean(self, **kargs):
-        return mean(self, **kargs)
+    def mean(self, out_axes=(), **kargs):
+        return mean(self, out_axes=out_axes, **kargs)
+
+
+class AllocationOp(Tensor):
+    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
+        super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
+        self.tensor_axes_info.init = init
+
+    def visit(self, visitor):
+        return self.visit_allocation(self)
+
+    @property
+    def axes(self):
+        return self.graph_type.axes
 
 
 class ComputationOp(Tensor):
     """
     An TensorOp is the result of some sort of operation.
     """
+
     def __init__(self, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
@@ -492,15 +1071,21 @@ class ComputationOp(Tensor):
 
         self.batch_axes = AxesComp.as_axes(batch_axes)
 
+    def visit(self, visitor):
+        return self.visit_computation(self)
 
-class RNG(ComputationOp):
+
+class RNG(AllocationOp):
     def __init__(self, seed=None, **kargs):
         super(RNG, self).__init__(args=(), **kargs)
         self.seed = seed
 
+    def visit(self, visitor):
+        return self.visit_RNG(self)
+
     def compute_tensor_axes_info(self):
         tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description : evaluator.rng(seed=self.seed)
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng(seed=self.seed)
         return tensor_axes_info
 
     @property
@@ -508,10 +1093,7 @@ class RNG(ComputationOp):
         return AxesComp.as_axes(())
 
     def uniform(self, low=0.0, high=1.0, size=None, **kargs):
-        return Uniform(rng=self,low=low, high=high, size=size, **kargs)
-
-    def allocate(self, evaluator):
-        return evaluator.rng(seed=self.seed)
+        return Uniform(rng=self, low=low, high=high, size=size, **kargs)
 
 
 class RNGOp(ComputationOp):
@@ -522,6 +1104,9 @@ class RNGOp(ComputationOp):
     @property
     def axes(self):
         return self.__axes
+
+    def visit(self, visitor):
+        return visitor.visit_rngop(self, *self.args)
 
     def compute_call_info(self):
         rng, = self.args
@@ -536,6 +1121,9 @@ class Uniform(RNGOp):
         self.low = low
         self.high = high
 
+    def visit(self, visitor):
+        return self.visit_uniform(self)
+
     def evaluate(self, evaluator, out, rng):
         evaluator.rng_uniform(rng, self.low, self.high, out)
 
@@ -544,6 +1132,9 @@ class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
         self.__axes = AxesComp.as_axes(())
+
+    def visit(self, visitor):
+        return visitor.visit_void(self)
 
     @property
     def axes(self):
@@ -554,22 +1145,19 @@ class VoidOp(ComputationOp):
         return []
 
 
-class decrement(VoidOp):
-    def __init__(self, parameter, delta, **kargs):
-        super(decrement, self).__init__(out=parameter, args=(parameter, delta), **kargs)
-
-    def compute_call_info(self):
-        parameter, delta = self.args
-        return [parameter.reaxe(parameter.resolved_axes), delta.reaxe(parameter.resolved_axes)]
-
-    def evaluate(self, evaluator, parameter, change):
-        evaluator.update(parameter, change)
+# TODO Optimize X o= X
+def assign(lvalue, rvalue):
+    return SetItem(lvalue, slice(None, None, None), rvalue)
 
 
 class SetItem(VoidOp):
     def __init__(self, tensor, item, val, **kargs):
         super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
         self.item = item
+
+    def visit(self, visitor):
+        tensor, val = self.args
+        return visitor.visit_set_item(self, tensor, self.item, val)
 
     def compute_call_info(self):
         tensor, val = self.args
@@ -586,10 +1174,16 @@ class doall(VoidOp):
     def __init__(self, all, **kargs):
         super(doall, self).__init__(args=all, out=all[-1], **kargs)
 
+    def visit(self, visitor):
+        return visitor.visit_doall(self, *self.args)
+
 
 class ElementWise(ComputationOp):
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
+
+    def visit(self, visitor):
+        return self.visit_elementwise(self)
 
     @property
     def axes(self):
@@ -611,39 +1205,18 @@ class AllReduce(ElementWise):
         super(AllReduce, self).__init__(args=(x,), **kargs)
 
     def evaluate(self, evaluator, out, x):
-        x_val = x # read data from GPU to CPU -- expensive!
+        x_val = x  # read data from GPU to CPU -- expensive!
         recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
-        comm.Allreduce(x_val, recv_buffer, op= MPI.SUM)
-        recv_buffer = recv_buffer / comm.Get_size() # Normalize the results to the number of MPI threads    
+        comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
+        recv_buffer = recv_buffer / comm.Get_size()  # Normalize the results to the number of MPI threads
         out[:] = recv_buffer
-
-
-class trace(ElementWise):
-    def __init__(self, x, label=None, **kargs):
-        super(trace, self).__init__(args=(x,), **kargs)
-        self.label = label
-
-    def evaluate(self, evaluator, out, x):
-        evaluator.trace(x, self.label, out)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, trace(delta, label='d'+self.label))
-
-
-class AllocationOp(Tensor):
-    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
-        super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
-        self.tensor_axes_info.init = init
-
-    @property
-    def axes(self):
-        return self.graph_type.axes
 
 
 class placeholder(AllocationOp):
     """
     Can be set externally.
     """
+
     def __init__(self, **kargs):
         super(placeholder, self).__init__(**kargs)
         self.__axes = ValueAxesComp(self)
@@ -659,7 +1232,6 @@ class placeholder(AllocationOp):
     def graph_label(self):
         return self.name.split('.')[-1]
         
-    #TODO Find a better way to set parameters
     @property
     def value(self):
         return get_current_environment()[self]
@@ -695,6 +1267,7 @@ class Constant(AllocationOp):
     """
     A constant that appears in a graph.
     """
+
     def __init__(self, const, **kargs):
         super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), init=self, **kargs)
         self.const = const
@@ -725,7 +1298,7 @@ class absolute(ElementWise):
         evaluator.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sig(x)*delta)
+        x.generate_add_delta(adjoints, sig(x) * delta)
 
 
 class add(ElementWise):
@@ -785,7 +1358,7 @@ class cos(ElementWise):
         super(cos, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*sin(x))
+        x.generate_add_delta(adjoints, delta * sin(x))
 
     def evaluate(self, evaluator, out, x):
         evaluator.cos(x, out)
@@ -799,8 +1372,8 @@ class divide(ElementWise):
         evaluator.divide(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta*self/x)
-        y.generate_add_delta(adjoints, -delta*self/y)
+        x.generate_add_delta(adjoints, delta * self / x)
+        y.generate_add_delta(adjoints, -delta * self / y)
 
 
 # This makes the derivative simpler if we need it
@@ -847,16 +1420,16 @@ class dot(ComputationOp):
             raise IncompatibleShapesError()
 
         xl = x_axes[0:xi]
-        xr = x_axes[xi+len(red_axes):]
+        xr = x_axes[xi + len(red_axes):]
         yl = y_axes[0:yi]
-        yr = y_axes[yi+len(red_axes):]
+        yr = y_axes[yi + len(red_axes):]
 
         al = axes_append(xl, xr)
         br = axes_append(yl, yr)
 
         a = x.reaxe((al, red_axes))
         b = y.reaxe((red_axes, br))
-        if axes_intersect(al,br):
+        if axes_intersect(al, br):
             # Can't handle yet
             raise IncompatibleShapesError()
         o = self.reaxe((al, br))
@@ -946,9 +1519,9 @@ class softmax(ComputationOp):
         return x.axes
 
     def generate_adjoints(self, adjoints, delta, x, m):
-        z = delta*self
+        z = delta * self
         zs = sum(z, reduction_axes=AxesSubComp(x.axes, self.batch_axes))
-        x.generate_add_delta(adjoints, (z-zs*self))
+        x.generate_add_delta(adjoints, (z - zs * self))
 
 
 class sum(ComputationOp):
@@ -983,7 +1556,8 @@ class sum(ComputationOp):
 
     def evaluate(self, evaluator, out, x):
         if self.mode is 'copy':
-            evaluator.copy(x, out)
+            # TODO Change this to a node replace
+            evaluator.set_item(out, (), x)
         else:
             evaluator.sum(x, self.mode, out)
 
@@ -998,9 +1572,13 @@ class sum(ComputationOp):
 
 
 class tensor_size(ComputationOp):
-    def __init__(self, x, reduction_axes=None, **kargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None,  **kargs):
+        self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
-            self.reduction_axes = x.axes
+            if out_axes is None:
+                self.reduction_axes = sample_axes(x.axes)
+            else:
+                self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
         super(tensor_size, self).__init__(args=(x,), **kargs)
@@ -1013,6 +1591,9 @@ class tensor_size(ComputationOp):
     @property
     def axes(self):
         return AxesComp.as_axes(())
+
+    def generate_adjoints(self, adjoints, delta, x):
+        pass
 
 
 class Slice(ComputationOp):
@@ -1045,9 +1626,6 @@ class Variable(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    def allocate(self, evaluator, tensor_allocation_info):
-        self.empty(tensor_allocation_info)
-
 
 class Temporary(AllocationOp):
     def __init__(self, **kargs):
@@ -1055,9 +1633,6 @@ class Temporary(AllocationOp):
 
     def generate_adjoints(self, adjoints, delta):
         pass
-
-    def allocate(self, evaluator, tensor_allocation_info):
-        self.empty(tensor_allocation_info)
 
 
 class exp(ElementWise):
@@ -1076,15 +1651,19 @@ class log(ElementWise):
         super(log, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta/x)
+        x.generate_add_delta(adjoints, delta / x)
 
     def evaluate(self, evaluator, out, x):
         evaluator.log(x, out)
 
 
+# TODO Transform this inso max/log after autodiff
 class safelog(log):
+    expm50 = np.exp(-50.)
+
     def evaluate(self, evaluator, out, x):
-        evaluator.safelog(x, out)
+        evaluator.maximum(x, safelog.expm50, out)
+        evaluator.log(out, out)
 
 
 class maximum(ElementWise):
@@ -1095,8 +1674,8 @@ class maximum(ElementWise):
         evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta*(self == x))
-        y.generate_add_delta(adjoints, delta*(self == y))
+        x.generate_add_delta(adjoints, delta * (self == x))
+        y.generate_add_delta(adjoints, delta * (self == y))
 
 
 class minimum(ElementWise):
@@ -1107,8 +1686,8 @@ class minimum(ElementWise):
         evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta*(self == x))
-        y.generate_add_delta(adjoints, delta*(self == y))
+        x.generate_add_delta(adjoints, delta * (self == x))
+        y.generate_add_delta(adjoints, delta * (self == y))
 
 
 class multiply(ElementWise):
@@ -1116,9 +1695,8 @@ class multiply(ElementWise):
         super(multiply, self).__init__(args=(x, y), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta*y, out_axes=x.axes))
-        y.generate_add_delta(adjoints, sum(x*delta, out_axes=y.axes))
-
+        x.generate_add_delta(adjoints, sum(delta * y, out_axes=x.axes))
+        y.generate_add_delta(adjoints, sum(x * delta, out_axes=y.axes))
 
     def evaluate(self, evaluator, out, x, y):
         evaluator.multiply(x, y, out)
@@ -1143,8 +1721,8 @@ class power(ElementWise):
         evaluator.pow(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta*y*self/x)
-        y.generate_add_delta(adjoints, delta*self*log(x))
+        x.generate_add_delta(adjoints, delta * y * self / x)
+        y.generate_add_delta(adjoints, delta * self * log(x))
 
 
 class reciprocal(ElementWise):
@@ -1152,7 +1730,7 @@ class reciprocal(ElementWise):
         super(reciprocal, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, -self*self*delta)
+        x.generate_add_delta(adjoints, -self * self * delta)
 
     def evaluate(self, evaluator, out, x):
         evaluator.reciprocal(x, out)
@@ -1172,21 +1750,27 @@ class sgn(ElementWise):
 
 class sig(ElementWise):
     """Sigmoid"""
+
     def __init__(self, x, **kargs):
         super(sig, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*self*(1.0-self))
+        x.generate_add_delta(adjoints, delta * self * (1.0 - self))
 
+    # TODO replace this with nodes after autodiff
     def evaluate(self, evaluator, out, x):
-        evaluator.sig(x, out)
+        evaluator.negative(x, out)
+        evaluator.exp(out, out)
+        evaluator.add(out, 1.0, out)
+        evaluator.reciprocal(out, out)
+
 
 class sin(ElementWise):
     def __init__(self, x, **kargs):
         super(sin, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*cos(x))
+        x.generate_add_delta(adjoints, delta * cos(x))
 
     def evaluate(self, evaluator, out, x):
         evaluator.sin(x, out)
@@ -1197,7 +1781,7 @@ class sqrt(ElementWise):
         super(sqrt, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, .5*delta*self)
+        x.generate_add_delta(adjoints, .5 * delta * self)
 
     def evaluate(self, evaluator, out, x):
         evaluator.sqrt(x, out)
@@ -1208,7 +1792,7 @@ class square(ElementWise):
         super(square, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, 2.0*delta*x)
+        x.generate_add_delta(adjoints, 2.0 * delta * x)
 
     def evaluate(self, evaluator, out, x):
         evaluator.square(x, out)
@@ -1231,40 +1815,39 @@ class tanh(ElementWise):
         super(tanh, self).__init__(args=(x,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*(1.0-self*self))
+        x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
     def evaluate(self, evaluator, out, x):
         evaluator.tanh(x, out)
 
 
 def mean(x, **kargs):
-    return sum(x, **kargs)/tensor_size(x, **kargs)
+    return sum(x, **kargs) / tensor_size(x, **kargs)
 
 
 def deriv(dep, indep):
     return dep.adjoints[indep]
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=()):
+def cross_entropy_multi(y, t, usebits=False, out_axes=None):
     logscale = np.float(1. / np.log(2.0) if usebits else 1.)
-    return -sum(safelog(y) * t, out_axes=out_axes)*logscale
+    return -sum(safelog(y) * t, out_axes=out_axes) * logscale
 
 
-def cross_entropy_binary(y, t, out_axes=()):
+def cross_entropy_binary(y, t, out_axes=None):
     a = - safelog(y) * t
     b = - safelog(1 - y) * (1 - t)
     return sum(a + b, out_axes=out_axes)
-    
 
-class Function(Node):
-    
+
+class Function(NameableValue):
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.backends.graph.analysis import Digraph
         self.ops = Digraph(ops)
         args, defs = set(), set()
         for op in self.ops.topsort():
-            #Kernel defines the def of each operation
+            # Kernel defines the def of each operation
             defs |= set([op])
             #Kernel uses the args of each operation
             #except whatever is being defined
@@ -1275,7 +1858,7 @@ class Function(Node):
     @property
     def graph_label(self):
         return self.__class__.__name__
-        
+
     @property
     def inputs(self):
         return self.use

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from geon.backends.graph.ast import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer
+from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer
 from operator import mul
 from itertools import product
 from geon.backends.graph.arrayaxes import axes_sizes

@@ -24,7 +24,7 @@ class Compounded(be.Model):
         kernelflow = analysis.KernelFlowGraph(dataflow)
         interference = analysis.InterferenceGraph(kernelflow.liveness())
         memory = analysis.color(interference)
-        print 'The memory footprint is {} GB'.format(memory*10**-9)
         dataflow.view()
+        print 'The memory footprint is {} GB'.format(memory*10**-9)
 
 Compounded()

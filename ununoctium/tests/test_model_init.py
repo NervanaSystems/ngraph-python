@@ -33,7 +33,7 @@
 
 from geon.backends.graph.graphneon import *
 import geon.backends.graph.graph as graph
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.pycudatransform as evaluation
 
 import numpy as np
 from timeit import default_timer
@@ -139,7 +139,7 @@ class MyTest(be.Model):
                 synced_derivs = derivs
 
             updates = be.doall(
-                all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
+                all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
 
             enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
             enp.initialize()

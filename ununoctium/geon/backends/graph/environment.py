@@ -42,7 +42,7 @@ def get_current_ops():
 def captured_ops(ops=None):
     try:
         get_thread_ops().append(ops)
-        yield(ops)
+        yield (ops)
     finally:
         get_thread_ops().pop()
 
@@ -110,4 +110,3 @@ class Environment(object):
 
     def set_value(self, key, value):
         self.values[key] = value
-

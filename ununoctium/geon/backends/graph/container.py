@@ -20,6 +20,7 @@ class LayerContainer(Layer):
     Layer containers are a generic class that are used to encapsulate groups of layers and
     provide methods for propagating through the constituent layers, allocating memory.
     """
+
     def __init__(self, **kargs):
         super(LayerContainer, self).__init__(**kargs)
 
@@ -32,12 +33,12 @@ class Sequential(LayerContainer):
         layers (list): List of objects which can be either a list of layers
                        (including layer containers).
     """
+
     def __init__(self, layers, **kargs):
         super(Sequential, self).__init__(**kargs)
         self.layers = [l for l in flatten(layers)]
         self._layers = [x for x in self.layers if type(x) not in (BranchNode,)]
         root = self._layers[0]
-
 
     def configure(self, in_obj):
         """
@@ -53,7 +54,6 @@ class Sequential(LayerContainer):
         for l in config_layers:
             in_obj = l.configure(in_obj)
         return in_obj
-
 
 
 class Tree(LayerContainer):
@@ -79,5 +79,6 @@ class SingleOutputTree(Tree):
     the output of the main branch (branch index 0) during
     inference.
     """
+
     def __init__(self, **kargs):
         super(SingleOutputTree, self).__init__(**kargs)

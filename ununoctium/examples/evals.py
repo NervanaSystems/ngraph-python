@@ -1,6 +1,5 @@
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
-import geon.backends.graph.cudagpu as cudagpu
 import geon.backends.graph.funs as be
 
 

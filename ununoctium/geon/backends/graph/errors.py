@@ -28,10 +28,12 @@ class IncompatibleTypesError(Error):
     Incompatible graph types.
     """
 
+
 class RedefiningConstantError(Error):
     """
     Redefining a constant value.
     """
+
 
 class NameException(Exception):
     """

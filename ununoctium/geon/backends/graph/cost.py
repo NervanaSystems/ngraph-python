@@ -19,7 +19,6 @@ import geon.backends.graph.funs as be
 
 
 class Cost(object):
-
     """
     Base class for cost functions that are used during training.
 
@@ -43,7 +42,6 @@ class Cost(object):
 
 
 class CrossEntropyBinary(Cost):
-
     """
     Binary cross-entropy cost.
 
@@ -81,7 +79,6 @@ class CrossEntropyBinary(Cost):
 
 
 class CrossEntropyMulti(Cost):
-
     """
     Multi-class cross-entropy cost.
 
@@ -126,7 +123,6 @@ class CrossEntropyMulti(Cost):
 
 
 class SumSquared(Cost):
-
     """
     Total Squared Error cost function. Computes :math:`\sum_i (y_i-t_i)^2`.
 
@@ -137,12 +133,11 @@ class SumSquared(Cost):
         """
         Define the cost function and its gradient as lambda functions.
         """
-        d = y-t
-        return be.dot(d,d)/2
+        d = y - t
+        return be.dot(d, d) / 2
 
 
 class MeanSquared(Cost):
-
     """
     Average Squared Error cost function. Computes :math:`\\frac{1}{N}\\sum_i (y_i-t_i)^2`.
     """
@@ -156,7 +151,6 @@ class MeanSquared(Cost):
 
 
 class SmoothL1Loss(Cost):
-
     """
     Smooth L1 cost function.
 
@@ -188,7 +182,6 @@ class SmoothL1Loss(Cost):
 
 
 class Metric(Cost):
-
     """
     Base class for Metrics. Metrics are quantities not used during training
     for the back-propogration but are useful to compute and display to check
@@ -212,7 +205,6 @@ class Metric(Cost):
 
 
 class LogLoss(Metric):
-
     """
     LogLoss metric.
 
@@ -239,7 +231,6 @@ class LogLoss(Metric):
 
 
 class TopKMisclassification(Metric):
-
     """
     Multiple misclassification metrics.
 
@@ -285,7 +276,6 @@ class TopKMisclassification(Metric):
 
 
 class Misclassification(Metric):
-
     """
     Misclassification error metric.
     """
@@ -311,11 +301,10 @@ class Misclassification(Metric):
         preds = be.argmax(y)
         hyps = be.argmax(t)
         ne = be.not_equal(preds, hyps)
-        return ne.mean(reduction_axes=ne.axes)
+        return ne.mean(out_axes=())
 
 
 class Accuracy(Metric):
-
     """
     Accuracy metric (correct rate).
 
@@ -352,6 +341,7 @@ class PrecisionRecall(Metric):
 
     Typically used in a conjunction with a multi-classification model.
     """
+
     def __init__(self, num_classes, binarize=False, epsilon=1e-6):
         """
         Arguments:
@@ -408,7 +398,6 @@ class PrecisionRecall(Metric):
 
 
 class ObjectDetection(Metric):
-
     """
     The object detection metric includes object label accuracy, and
     bounding box regression.

@@ -22,7 +22,7 @@ def name_scope(name=None, name_scope=None):
     get_thread_name_scope().append(name_scope)
 
     try:
-        yield(name_scope)
+        yield (name_scope)
     finally:
         get_thread_name_scope().pop()
 
@@ -35,14 +35,14 @@ def name_scope_list(name):
     :return: An iterator for new name scopes in the collection.
     """
     naming = NameScopeList(name=name)
-    yield(NameScopeListExtender(naming))
+    yield (NameScopeListExtender(naming))
 
 
 @contextmanager
 def next_name_scope(name_scope_list):
     ns = name_scope_list.next()
     with name_scope(name_scope=ns):
-        yield(ns)
+        yield (ns)
 
 
 def with_name_scope(fun, name=None):
@@ -71,7 +71,6 @@ def with_name_scope(fun, name=None):
 
 
 class NameableValue(object):
-    
     counter = 0
 
     @staticmethod
@@ -79,14 +78,14 @@ class NameableValue(object):
         NameableValue.counter += 1
         return 't{}'.format(NameableValue.counter)
 
-
     """A value with a name and debugging info that can be set."""
+
     def __init__(self, name=None, **kargs):
         super(NameableValue, self).__init__(**kargs)
         self.id = NameableValue.generate_id()
         self.__name = name if name is not None else self.id
         self.style = {}
-        
+
     @property
     def name(self):
         return self.__name
@@ -98,10 +97,12 @@ class NameableValue(object):
 
 _default_parent = object()
 
+
 class Parented(NameableValue):
     """
     A nameable value with a parent, defaults to current name scope.
     """
+
     def __init__(self, parent=_default_parent, name=None, **kargs):
         super(Parented, self).__init__(name=name, **kargs)
         if parent is _default_parent:
@@ -132,12 +133,14 @@ class NameScope(Parented):
 
 class NameScopeList(Parented, list):
     """A named list of name scopes"""
+
     def __init__(self, **kargs):
         super(NameScopeList, self).__init__(**kargs)
 
 
 class NameScopeListExtender(object):
     """An iterator of name scopes that extends a named list"""
+
     def __init__(self, name_scope_list):
         self.name_scope_list = name_scope_list
 

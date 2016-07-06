@@ -4,7 +4,7 @@ import geon.backends.graph.dataloaderbackend
 
 import geon.backends.graph.defmod as be
 import geon.backends.graph.graph as graph
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 
 
