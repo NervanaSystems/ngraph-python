@@ -1,7 +1,7 @@
 from geon.backends.graph.graphneon import *
 
 import geon.backends.graph.graph as graph
-import geon.backends.graph.evaluation as evaluation
+import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 
 # parse the command line arguments (generates the backend)
@@ -43,7 +43,7 @@ def grad_descent(cost):
     learning_rate = be.placeholder(axes=())
     params = cost.parameters()
     derivs = [be.deriv(cost, param) for param in params]
-    updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
+    updates = be.doall(all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(params, derivs)])
     return learning_rate, updates
 
 

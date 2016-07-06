@@ -55,7 +55,7 @@ class GradientDescent(Optimizer):
             learning_rate_value = learning_rate_value * clip_gradient_norm(grads)
         if self.gradient_clip_value is not None:
             grads = [clip_gradient_value(param, self.gradient_clip_value) for grade in grads]
-        self.updates = be.doall(all=[be.decrement(param, learning_rate_value * grad) for param, grad in zip(params, grads)])
+        self.updates = be.doall(all=[be.assign(param, param - learning_rate_value * grad) for param, grad in zip(params, grads)])
         return self.updates
 
     def optimize(self, epoch):

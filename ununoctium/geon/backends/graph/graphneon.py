@@ -13,4 +13,3 @@ from geon.backends.graph.optimizer import GradientDescent
 
 from geon.backends.graph.callbacks import *
 from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, PolySchedule
-

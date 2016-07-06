@@ -2,7 +2,7 @@ import numpy as np
 
 from neon.backends.backend import Backend
 
-from geon.backends.graph.ast import RNG
+from geon.backends.graph.transform import RNG
 
 
 class TensorStub(object):
@@ -30,6 +30,7 @@ class TensorStub(object):
 
 class OneHot(object):
     """Remembers onehot parameters"""
+
     def __init__(self, name, idx, axis):
         self.name = name
         self.idx = idx
@@ -89,7 +90,7 @@ class DataloaderBackend(Backend):
         Returns:
             np.random.RandomState: numpy RNG
         """
-        return RNG(seed) # graph.RandomStateOp(seed=seed)
+        return RNG(seed)  # graph.RandomStateOp(seed=seed)
 
     def onehot(self, indices, axis, out=None):
         """

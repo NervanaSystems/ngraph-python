@@ -1,6 +1,8 @@
 import weakref
 import collections
 import inspect
+import abc
+from future.utils import with_metaclass
 
 from geon.backends.graph.names import NameableValue
 
@@ -67,6 +69,9 @@ class Node(NameableValue):
     def as_node(self, arg):
         """Override to convert an object to a node"""
         return arg
+
+    def visit(self, visitor):
+        visitor.visit_node(self)
 
     @staticmethod
     def visit_input_closure(root, fun):
@@ -156,3 +161,14 @@ class Node(NameableValue):
 
     def __repr__(self):
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
+
+
+class AbstractVisitor(with_metaclass(abc.ABCMeta, object)):
+    @abc.abstractmethod
+    def visit_node(self, node):
+        raise NotImplementedError()
+
+
+class Visitor(AbstractVisitor):
+    def visit_node(self, node):
+        pass

@@ -1,15 +1,7 @@
 import geon.backends.graph.defmod as nm
 import geon.backends.graph.axis as ax
 import geon.backends.graph.analysis as analysis
-
-class Uniform(object):
-    def __init__(self, low=0.0, high=1.0):
-        self.low = low
-        self.high = high
-
-    def __call__(self, evaluator, value):
-        evaluator.uniform(value, self.low, self.high)
-
+from neon.initializers import Uniform
 
 @nm.with_name_scope
 def linear(m, x, x_axes, axes, batch_axes=(), init=None):

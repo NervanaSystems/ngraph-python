@@ -6,6 +6,7 @@ from geon.backends.graph.names import NameScope, get_current_name_scope, name_sc
 
 class GraphMetaclass(type):
     """Ensures that there is a default graph while running __init__"""
+
     def __new__(cls, name, parents, attrs):
         return super(GraphMetaclass, cls).__new__(cls, name, parents, attrs)
 
@@ -21,6 +22,7 @@ class GraphComponent(with_metaclass(GraphMetaclass, object)):
 
     Ensures that __metaclass__ is GraphMetaclass.
     """
+
     def __init__(self, **kargs):
         super(GraphComponent, self).__init__(**kargs)
         self.graph = get_current_name_scope()
@@ -30,6 +32,7 @@ class GraphComponent(with_metaclass(GraphMetaclass, object)):
 class Model(GraphComponent):
     def __init__(self, **kargs):
         super(Model, self).__init__(**kargs)
+
 
 def with_graph_scope(fun):
     """Function annotator for introducing a name context"""
@@ -41,6 +44,7 @@ def with_graph_scope(fun):
                 return fun(self, *args, **kargs)
 
     return wrapper
+
 
 def with_environment(fun):
     @wraps(fun)

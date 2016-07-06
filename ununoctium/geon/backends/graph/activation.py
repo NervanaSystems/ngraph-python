@@ -1,5 +1,6 @@
 import geon.backends.graph.funs as be
 
+
 class Transform(object):
     def __init__(self, name=None):
         self.name = name
@@ -10,6 +11,7 @@ class Rectlin(Transform):
     Rectified Linear Unit (ReLu) activation function, :math:`f(x) = \max(x, 0)`.
     Can optionally set a slope which will make this a Leaky ReLu.
     """
+
     def __init__(self, slope=0, **kargs):
         """
         Class constructor.
@@ -38,6 +40,7 @@ class Identity(Transform):
     """
     Identity activation function, :math:`f(x) = x`
     """
+
     def __init__(self, **kargs):
         """
         Class constructor.
@@ -63,6 +66,7 @@ class Explin(Transform):
 
     From: Clevert, Unterthiner and Hochreiter, ICLR 2016.
     """
+
     def __init__(self, alpha=1.0, **kargs):
         """
         Class constructor.
@@ -91,6 +95,7 @@ class Normalizer(Transform):
     """
     Normalize inputs by a fixed divisor.
     """
+
     def __init__(self, divisor=128., **kargs):
         """
         Class constructor.
@@ -119,7 +124,8 @@ class Softmax(Transform):
     """
     SoftMax activation function. Ensures that the activation output sums to 1.
     """
-    def __init__(self, epsilon=2**-23, **kargs):
+
+    def __init__(self, epsilon=2 ** -23, **kargs):
         """
         Class constructor.
 
@@ -146,6 +152,7 @@ class Tanh(Transform):
     """
     Hyperbolic tangent activation function, :math:`f(x) = \\tanh(x)`.
     """
+
     def __init__(self, **kargs):
         """
         Class constructor.
@@ -171,6 +178,7 @@ class Logistic(Transform):
 
     Squashes the input from range :math:`[-\infty,+\infty]` to :math:`[0, 1]`
     """
+
     def __init__(self, shortcut=False, **kargs):
         """
         Initialize Logistic based on whether shortcut is True or False. Shortcut

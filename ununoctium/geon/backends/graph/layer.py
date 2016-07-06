@@ -2,6 +2,7 @@ from geon.backends.graph.names import NameableValue, NameScope
 import geon.backends.graph.funs as be
 import geon.backends.graph.arrayaxes as arrayaxes
 
+
 # TODO These are stubs for implementing Neon's layers
 
 class Layer(object):
@@ -17,6 +18,7 @@ class Layer(object):
         :return: The output of the layer
         """
         return in_obj
+
 
 class BranchNode(Layer):
     def __init__(self, **kargs):
@@ -44,7 +46,6 @@ class ParameterLayer(Layer):
 
 
 class Convolution(ParameterLayer):
-
     """
     Convolutional layer implementation.
 
@@ -172,7 +173,6 @@ class Convolution(ParameterLayer):
 
 
 class ConvLayer(object):
-
     """
     ConvLayer parameter object.
     This then is passed as an argument to all the convolution operations.
@@ -232,8 +232,8 @@ class ConvLayer(object):
         self.nOut = reduce(mul, self.MPQ, 1) * K
 
         if all(x == 1 for x in self.TRS) and \
-           all(p == 0 for p in self.padding) and \
-           all(s == 1 for s in self.strides):
+                all(p == 0 for p in self.padding) and \
+                all(s == 1 for s in self.strides):
 
             self.dot = True
         else:
@@ -360,7 +360,7 @@ class ConvLayer(object):
 
                     if beta:
                         O[:, m, p, q, :] = alpha * np.dot(slicedF.T, slicedI) + \
-                            beta * X[:, m, p, q, :]
+                                           beta * X[:, m, p, q, :]
                     else:
                         O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
@@ -409,7 +409,6 @@ class ConvLayer(object):
 
 
 class DeconvLayer(ConvLayer):
-
     """
     DeconvLayer parameter object.
     This then is passed as an argument to all the convolution operations.
@@ -480,8 +479,8 @@ class DeconvLayer(ConvLayer):
         self.nOut = reduce(mul, self.DHW, 1) * C
 
         if all(x == 1 for x in self.TRS) and \
-           all(p == 0 for p in self.padding) and \
-           all(s == 1 for s in self.strides):
+                all(p == 0 for p in self.padding) and \
+                all(s == 1 for s in self.strides):
 
             self.dot = True
         else:
@@ -496,7 +495,6 @@ class DeconvLayer(ConvLayer):
 
 
 class PoolLayer(object):
-
     """
     PoolLayer parameter object.
     This then is passed as an argument to all pooling kernels.
@@ -668,6 +666,7 @@ class Activation(Layer):
             functions to apply
         name (str, optional): Layer name. Defaults to "ActivationLayer"
     """
+
     def __init__(self, transform, **kargs):
         super(Activation, self).__init__(**kargs)
         self.transform = transform
@@ -701,6 +700,7 @@ class CompoundLayer(list):
     """
     Base class for macro layers.
     """
+
     def __init__(self, bias=None, batch_norm=False, activation=None, name=None, axes=None):
         if batch_norm and (bias is not None):
             raise AttributeError('Batchnorm and bias cannot be combined')
@@ -719,7 +719,6 @@ class CompoundLayer(list):
 
 
 class Affine(CompoundLayer):
-
     """
     A linear layer with a learned bias and activation, implemented as a list
     composing separate linear, bias/batchnorm and activation layers.
@@ -745,7 +744,6 @@ class Affine(CompoundLayer):
 
 
 class Conv(CompoundLayer):
-
     """
     A convolutional layer with a learned bias and activation, implemented as a
     list composing separate Convolution, Bias and Activation layers.
@@ -784,7 +782,6 @@ class Conv(CompoundLayer):
 
 
 class Deconv(CompoundLayer):
-
     """
     Same as Conv layer, but implements a composite deconvolution layer.
     """
@@ -815,7 +812,6 @@ class LookupTable(ParameterLayer):
 
 
 class GeneralizedCost(object):
-
     """
     A cost layer that applies the provided cost function and computes errors
     with respect to inputs and targets.
@@ -842,7 +838,7 @@ class GeneralizedCost(object):
             Tensor containing cost
 
         """
-        return self.costfunc(inputs, targets)
+        return self.costfunc(inputs, targets).mean(out_axes=())
 
 
 class BatchNorm(Layer):
