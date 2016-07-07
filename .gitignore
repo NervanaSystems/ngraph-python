@@ -35,4 +35,4 @@ neon/backends/kernels/dump
 *.bin
 *.lst
 *.rec
-
+*.egg

@@ -28,38 +28,40 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             environment = get_current_environment()
         self.environment = environment
         self.results = results
+        self.opids = dict()
 
         self.ops = Op.ordered_ops(self.results)
+        self.initialize_ordered_ops(self.ops)
 
-        self.opids = dict()
-        for op in self.ops:
-            self.opids[op] = len(self.opids)
+    def initialize_ordered_ops(self, ordered_ops):
+        # Give ids
+        for op in ordered_ops:
+            if op not in self.opids:
+                self.opids[op] = len(self.opids)
 
         # Determine required views
-        for op in self.ops:
+        for op in ordered_ops:
             op.call_info
 
         # Allocate and initialize
-        for op in self.ops:
-            op.tensor_axes_info.allocate(self)
+        for op in ordered_ops:
             op.tensor_axes_info.initialize(self)
-
-    def evaluate_op(self, op):
-        # Used by initializers
-        ops = Op.ordered_ops([op])
-        for op in ops:
             op.tensor_axes_info.allocate(self)
-            op.evaluate_call_info(self, *op.call_info)
 
-    def evaluate_ops(self, ops):
-        for op in ops:
+    def evaluate_ordered_ops(self, ordered_ops):
+        for op in ordered_ops:
             op.sync(self)
 
-        for op in ops:
+        for op in ordered_ops:
             op.evaluate_call_info(self, *op.call_info)
 
+    def evaluate_ops(self, eval_ops):
+        ops = Op.ordered_ops(eval_ops)
+        self.initialize_ordered_ops(ops)
+        self.evaluate_ordered_ops(ops)
+
     def evaluate(self):
-        self.evaluate_ops(self.ops)
+        self.evaluate_ordered_ops(self.ops)
         r = {}
         for op in self.results:
             r[op] = self.value(op)
@@ -952,8 +954,8 @@ class TensorAxesInfo(object):
 
     def initialize(self, transformer):
         if not self.initialized:
-            transformer.evaluate_op(self.initializer)
             self.initialized = True
+            transformer.evaluate_ops([self.initializer])
 
     @property
     def tensor_description(self):
