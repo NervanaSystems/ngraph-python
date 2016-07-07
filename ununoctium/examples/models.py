@@ -114,7 +114,7 @@ class MyTest(be.Model):
 
             learning_rate, updates = grad_descent(graph.error)
 
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error, updates])
+            enp = be.NumPyTransformer(results=[self.graph.value, graph.error, updates])
 
             for epoch in range(args.epochs):
                 print("Epoch {epoch}".format(epoch=epoch))
@@ -140,7 +140,7 @@ class MyTest(be.Model):
     def test(self, env, test):
         graph = self.graph
         with be.bound_environment(env):
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error])
+            enp = be.NumPyTransformer(results=[self.graph.value, graph.error])
             total_error = 0
             n = 0
             for mb_idx, (xraw, yraw) in enumerate(test):

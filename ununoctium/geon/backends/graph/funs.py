@@ -18,6 +18,7 @@ from geon.backends.graph.transform import tanh, safelog, cross_entropy_binary, c
 from geon.backends.graph.transform import doall, RNG
 
 from geon.backends.graph.transform import AllReduce
+from geon.backends.graph.nptransform import NumPyTransformer
 
 
 # TODO These are just here as placeholders

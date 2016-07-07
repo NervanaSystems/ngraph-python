@@ -140,7 +140,7 @@ class MyTest(be.Model):
             updates = be.doall(
                 all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
 
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
+            enp = be.NumPyTransformer(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
 
             start_test = default_timer()
             test_error = self.test(env, test, True)
@@ -178,7 +178,7 @@ class MyTest(be.Model):
     def test(self, env, test, printParam=False):
         graph = self.graph
         with be.bound_environment(env):
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value] + graph.params)
+            enp = be.NumPyTransformer(results=[self.graph.value] + graph.params)
 
             test_error = 0
             n_bs = 0

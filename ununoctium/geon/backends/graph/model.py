@@ -91,8 +91,7 @@ class Model(GraphComponent):
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.graph.cost)
 
-                self.enp = nptransform.NumPyTransformer(results=[self.graph.cost, updates])
-                # self.enp.initialize()
+                self.enp = be.NumPyTransformer(results=[self.graph.cost, updates])
 
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:
