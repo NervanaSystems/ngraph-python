@@ -38,29 +38,43 @@ class Optimizer(object):
         raise NotImplementedError()
 
 
-class GradientDescent(Optimizer):
-    def __init__(self, learning_rate, gradient_clip_norm=None, gradient_clip_value=None, schedule=ExpSchedule(1.0), **kargs):
-        super(GradientDescent, self).__init__(**kargs)
+class GradientDescentMomentum(Optimizer):
+    def __init__(self, learning_rate, momentum_coef=0.0, stochastic_round=False,
+                 wdecay=0.0, gradient_clip_norm=None, gradient_clip_value=None,
+                 name=None, schedule=ExpSchedule(1.0), **kargs):
+        super(GradientDescentMomentum, self).__init__(**kargs)
         self.learning_rate = learning_rate
-        self.schedule = schedule
+        self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.wdecay = wdecay
+        self.schedule = schedule
+        self.stochastic_round = stochastic_round
 
     def configure(self, cost):
-        self.learning_rate_placeholder = be.placeholder(axes=())
+        self.learning_rate_placeholder = be.placeholder(axes=()) 
         learning_rate_value = self.learning_rate_placeholder
         params = cost.parameters()
         grads = [be.deriv(cost, param) for param in params]
+        velocities = [be.Variable(axes=param.axes, init=be.Constant(0)) for param in params]
+
+        scale_factor = 1
         if self.gradient_clip_norm:
-            learning_rate_value = learning_rate_value * clip_gradient_norm(grads)
+            scale_factor = clip_gradient_norm(grads)
         if self.gradient_clip_value is not None:
             grads = [clip_gradient_value(param, self.gradient_clip_value) for grade in grads]
-        self.updates = be.doall(all=[be.assign(param, param - learning_rate_value * grad) for param, grad in zip(params, grads)])
-        return self.updates
+
+        velocity_updates = [
+            be.assign(
+                lvalue = velocity,
+                rvalue =  velocity * self.momentum_coef - learning_rate_value * (scale_factor * grad + self.wdecay * param)
+            )
+        for param, grad, velocity in zip(params, grads, velocities)]
+
+        param_updates = [be.assign(lvalue=param, rvalue=param+velocity) for param, velocity in zip(params, velocities)]
+
+        return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):
         learning_rate = self.schedule.get_learning_rate(self.learning_rate, epoch)
         self.learning_rate_placeholder.value = learning_rate
-
-
-

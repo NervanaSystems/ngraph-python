@@ -43,11 +43,11 @@ num_epochs = args.epochs
 #TODO Switch to momentum
 init_uni = Uniform(low=-0.1, high=0.1)
 if args.datatype in [np.float32, np.float64]:
-    opt_gdm = GradientDescent(learning_rate=0.01,
+    opt_gdm = GradientDescentMomentum(learning_rate=0.01,
                                       momentum_coef=0.9,
                                       stochastic_round=args.rounding)
 elif args.datatype in [np.float16]:
-    opt_gdm = GradientDescent(learning_rate=0.01 / cost_scale,
+    opt_gdm = GradientDescentMomentum(learning_rate=0.01 / cost_scale,
                                       momentum_coef=0.9,
                                       stochastic_round=args.rounding)
 

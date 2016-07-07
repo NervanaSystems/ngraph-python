@@ -1399,7 +1399,6 @@ class Uniform(RNGOp):
     def evaluate(self, evaluator, out, rng):
         evaluator.rng_uniform(rng, self.low, self.high, out)
 
-
 class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
