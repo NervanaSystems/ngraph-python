@@ -96,6 +96,18 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    def rng_uniform_tensor(self, rng, tensor_description, low, high):
+        """
+        Allocate a tensor initialized with a uniform distribution.
+
+        :param rng: Random number generator
+        :param tensor_description: Description of the tensor's type, shape, size, and strides.
+        :param low:
+        :param high:
+        :return: Reference to uniform distribution.
+        """
+        raise NotImplementedError()
+
     @abc.abstractmethod
     def tensor_view(self, tensor_description):
         """
@@ -1382,9 +1394,7 @@ class RNGOp(AllocationOp):
 
     def compute_call_info(self):
         rng, = self.args
-        call_info = super(RNGOp, self).compute_call_info()
-        call_info.append(rng.reaxe(rng.resolved_axes))
-        return call_info
+        return [rng.reaxe(rng.resolved_axes)]
 
 
 class Uniform(RNGOp):
@@ -1393,11 +1403,13 @@ class Uniform(RNGOp):
         self.low = low
         self.high = high
 
+        def allocator(transformer, tensor_description):
+            rng, = self.call_info
+            return transformer.rng_uniform_tensor(rng.value, tensor_description, low, high)
+        self.tensor_axes_info.alloc = allocator
+
     def visit(self, visitor):
         return self.visit_uniform(self, self.low, self.high, *self.args)
-
-    def evaluate(self, evaluator, out, rng):
-        evaluator.rng_uniform(rng, self.low, self.high, out)
 
 
 class VoidOp(ComputationOp):
