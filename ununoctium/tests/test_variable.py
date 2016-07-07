@@ -15,7 +15,6 @@ def test_init_variable():
         hello = be.Variable(axes=(ax.Y,), init=Constant(4))
 
         enp = evaluation.NumPyEvaluator(results=[hello])
-        enp.initialize()
 
         result = enp.evaluate()[hello]
         print(result)
@@ -30,7 +29,6 @@ def test_init_1D_variable():
         hello = be.Variable(axes=(ax.Y,), init=Constant(3))
 
         enp = evaluation.NumPyEvaluator(results=[hello])
-        enp.initialize()
 
         result = enp.evaluate()[hello]
         print(result)
@@ -45,7 +43,6 @@ def test_init_2D_variable():
         hello = be.Variable(axes=[ax.M, ax.N], init=Constant(5))
 
         enp = evaluation.NumPyEvaluator(results=[hello])
-        enp.initialize()
 
         result = enp.evaluate()[hello]
         print(result)

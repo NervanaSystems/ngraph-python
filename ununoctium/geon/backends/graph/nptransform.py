@@ -1,6 +1,6 @@
 import numpy as np
 
-from geon.backends.graph.transform import Op, Transformer, AllocationOp
+from geon.backends.graph.transform import Op, Transformer, AllocationOp, Visitor
 
 
 class NumPyTransformer(Transformer):
@@ -131,3 +131,8 @@ class NPUniform(AllocationOp):
         rng, = self.args
         tensor_axes_info = super(NPUniform, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
+
+
+class NumPyTransformVisitor(Visitor):
+    def visit_uniform(self, uniform, low, high, rng):
+        pass

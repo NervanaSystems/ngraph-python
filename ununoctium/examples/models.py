@@ -115,7 +115,6 @@ class MyTest(be.Model):
             learning_rate, updates = grad_descent(graph.error)
 
             enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.error, updates])
-            enp.initialize()
 
             for epoch in range(args.epochs):
                 print("Epoch {epoch}".format(epoch=epoch))

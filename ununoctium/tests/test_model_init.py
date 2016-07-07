@@ -107,7 +107,6 @@ class MyTest(be.Model):
             g.params = g.value.parameters()
 
             enp = evaluation.NumPyEvaluator(results=[self.graph.value] + g.params)
-            enp.initialize()
 
             for mb_idx, (xraw, yraw) in enumerate(train):
                 g.x.value = xraw.array
@@ -142,7 +141,6 @@ class MyTest(be.Model):
                 all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
 
             enp = evaluation.NumPyEvaluator(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
-            enp.initialize()
 
             start_test = default_timer()
             test_error = self.test(env, test, True)

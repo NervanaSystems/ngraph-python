@@ -10,7 +10,6 @@ def test_constant_init():
         a = be.Constant(5)
 
         enp = evaluation.NumPyEvaluator(results=[a])
-        enp.initialize()
 
         result = enp.evaluate()[a]
         print(result)
@@ -26,7 +25,6 @@ def test_constant_add():
         c = a + b
 
         enp = evaluation.NumPyEvaluator(results=[c])
-        enp.initialize()
 
         result = enp.evaluate()[c]
         print(result)

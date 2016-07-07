@@ -102,7 +102,6 @@ class MyRnn(be.Model):
         updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
 
         enp = evaluation.NumPyEvaluator(results=[self.graph.value, g.error, updates]+derivs)
-        enp.initialize()
 
         # Some future data loader
         for epoch_no, batches in train:
