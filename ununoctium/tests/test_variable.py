@@ -1,13 +1,13 @@
-from neon.initializers import Uniform, Constant
+'''
+Test the usage of be.Variable
+
+'''
+
+from neon.initializers import Constant
 
 import geon.backends.graph.funs as be
-import geon.backends.graph.pycudatransform as evaluation
 import geon.backends.graph.axis as ax
 
-"""
-Test the initialization of be.Variable
-
-"""
 def test_init_variable():
     with be.bound_environment():
 
@@ -49,6 +49,19 @@ def test_init_2D_variable():
 
         print("pass 2D variable initialization")
 
+def test_init_1D_variable_from_array():
+    with be.bound_environment():
+
+        ax.Y.length = 2
+        hello = be.Variable(axes=(ax.Y,), init=Constant([3,3]))
+
+        enp = be.NumPyTransformer(results=[hello])
+
+        result = enp.evaluate()[hello]
+        print(result)
+
+
 test_init_variable()
 test_init_1D_variable()
 test_init_2D_variable()
+test_init_1D_variable_from_array()
