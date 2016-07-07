@@ -1,5 +1,6 @@
 import geon.backends.graph.funs as be
 from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, PolySchedule
+from neon.initializers import Constant
 
 
 # Optimizer support
@@ -56,7 +57,7 @@ class GradientDescentMomentum(Optimizer):
         learning_rate_value = self.learning_rate_placeholder
         params = cost.parameters()
         grads = [be.deriv(cost, param) for param in params]
-        velocities = [be.Variable(axes=param.axes, init=be.Constant(0)) for param in params]
+        velocities = [be.Temporary(axes=param.axes, init=Constant(0)) for param in params]
 
         scale_factor = 1
         if self.gradient_clip_norm:

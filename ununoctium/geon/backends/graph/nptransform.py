@@ -11,6 +11,11 @@ class NumPyTransformer(Transformer):
     def empty(self, tensor_description):
         return np.empty(tensor_description.sizes, tensor_description.dtype)
 
+    def nparray(self, tensor_description, array):
+        tensor = self.empty(tensor_description)
+        tensor[:] = array
+        return tensor
+
     def rng(self, seed=None):
         return np.random.RandomState(seed=seed)
 

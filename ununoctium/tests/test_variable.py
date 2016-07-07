@@ -1,4 +1,6 @@
-from neon.initializers import Uniform, Constant
+import numpy as np
+
+from neon.initializers import Uniform, Constant, Array
 
 import geon.backends.graph.funs as be
 import geon.backends.graph.pycudatransform as evaluation
@@ -49,6 +51,20 @@ def test_init_2D_variable():
 
         print("pass 2D variable initialization")
 
+def test_init_numpy_variable():
+    with be.bound_environment():
+        ax.Y.length = 10
+        npvar = be.NumPyTensor(np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
+        hello = be.Variable(axes=[ax.Y], init=Array(npvar))
+
+        enp = be.NumPyTransformer(results=[hello])
+
+        result = enp.evaluate()[hello]
+        print(result)
+
+        print("pass numpy variable initialization")
+
 test_init_variable()
 test_init_1D_variable()
 test_init_2D_variable()
+test_init_numpy_variable()

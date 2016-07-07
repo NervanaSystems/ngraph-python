@@ -89,6 +89,19 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def nparray(self, tensor_description, array):
+        """
+        Allocate a tensor and initialize it with a numpy array.
+
+        This needs to be executed from the CPU since that's where the NumPy array is.
+
+        :param tensor_description:
+        :param array:
+        :return: Reference to the tensor
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def rng(self, seed=None):
         """
         Allocate a random number generator.
@@ -520,11 +533,15 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def visit_constant_init(self, constant, const):
+    def visit_fill(self, fill, const):
         raise NotImplementedError()
 
     @abc.abstractmethod
     def visit_constant(self, constant, const):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_numpy_tensor(self, numpy_tensor, nptensor):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -704,11 +721,14 @@ class Visitor(nodes.Visitor):
     def visit_placheolder(self, placeholder):
         return self.visit_allocation(placeholder)
 
-    def visit_constant_init(self, constant, const):
-        return self.visit_void(constant)
+    def visit_fill(self, fill, const):
+        return self.visit_void(fill)
 
     def visit_constant(self, constant, const):
         return self.visit_allocation(constant)
+
+    def visit_numpy_tensor(self, numpy_tensor, nptensor):
+        return self.visit_allocation(numpy_tensor)
 
     def visit_absolute(self, absolute, x):
         return self.visit_elementwise(absolute)
@@ -1540,17 +1560,17 @@ class placeholder(AllocationOp):
             evaluator.set_value(self, value)
 
 
-class ConstantInit(VoidOp):
+class Fill(VoidOp):
     def __init__(self, tensor, const, **kargs):
-        super(ConstantInit, self).__init__(args=(tensor,), **kargs)
+        super(Fill, self).__init__(args=(tensor,), **kargs)
         self.const = const
 
     def visit(self, visitor):
-        return visitor.visit_constant_init(self, self.const)
+        return visitor.visit_fill(self, self.const)
 
     def compute_call_info(self):
         tensor, = self.args
-        call_info = super(ConstantInit, self).compute_call_info()
+        call_info = super(Fill, self).compute_call_info()
         call_info.append(tensor.reaxe(tensor.resolved_axes))
         return call_info
 
@@ -1565,15 +1585,17 @@ class Constant(AllocationOp):
 
     def __init__(self, const, **kargs):
         self.const = const
-        super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), init=self, **kargs)
+        super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), **kargs)
+
+        class init(object):
+            def fill(self, tensor):
+                Fill(tensor, const)
+        self.tensor_axes_info.init = init()
 
     def visit(self, visitor):
         return self.visit_constant(self, self.const)
 
-    def fill(self, c):
-        ConstantInit(c, self.const)
-
-    def generate_adjoints(self, tape, delta):
+    def generate_adjoints(self, adjoints, delta):
         pass
 
     @property
@@ -1586,6 +1608,35 @@ class Constant(AllocationOp):
 
     def __str__(self):
         return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.const)
+
+
+class NumPyTensor(AllocationOp):
+    """
+    A NumPy tensor with attached axes information
+    """
+
+    def __init__(self, nptensor, **kargs):
+        self.nptensor = nptensor
+        super(NumPyTensor, self).__init__(dtype=nptensor.dtype, **kargs)
+
+        def allocator(transformer, tensor_description):
+            out, = self.call_info
+            return transformer.nparray(tensor_description, nptensor)
+
+        self.tensor_axes_info.alloc = allocator
+
+    def visit(self, visitor):
+        return self.visit_numpy_tensor(self, self.nptensor)
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
+
+    @property
+    def graph_label(self):
+        return str(self.nptensor)
+
+    def __str__(self):
+        return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.nptensor)
 
 
 class absolute(ElementWise):
