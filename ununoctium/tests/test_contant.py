@@ -1,15 +1,16 @@
+'''
+Test the usage of be.Constant
+
+'''
+
 import geon.backends.graph.funs as be
-import geon.backends.graph.pycudatransform as evaluation
+from neon.initializers import Constant
 
-"""
-Test be.Constant
-
-"""
 def test_constant_init():
     with be.bound_environment():
         a = be.Constant(5)
 
-        enp = evaluation.NumPyEvaluator(results=[a])
+        enp = be.NumPyTransformer(results=[a])
 
         result = enp.evaluate()[a]
         print(result)
@@ -24,7 +25,7 @@ def test_constant_add():
         b = be.Constant(2)
         c = a + b
 
-        enp = evaluation.NumPyEvaluator(results=[c])
+        enp = be.NumPyTransformer(results=[c])
 
         result = enp.evaluate()[c]
         print(result)
@@ -32,6 +33,16 @@ def test_constant_add():
         assert(result == 3)
         print("pass constant add")
 
+def test_2D_constant_init():
+    a = Constant([3, 5])
+    print(a.val)
+
+    with be.bound_environment():
+        b = be.Constant([3,5])
+        enp = be.NumPyTransformer(results=[b])
+        result = enp.evaluate()[b]
+        print(result)
 
 test_constant_init()
 test_constant_add()
+test_2D_constant_init()
