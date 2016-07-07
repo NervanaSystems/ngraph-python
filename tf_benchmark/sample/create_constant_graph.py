@@ -12,12 +12,12 @@ def create_tf_graph():
   a = tf.constant(10)
   b = tf.constant(32)
   c = a + b
-  d = c + a
+  d = c * a
 
   sess = tf.Session()
   print(sess.run(c))
 
-  graph_name = "sample_graph"
+  graph_name = "constant_graph"
 
   tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb.txt", True)  # The graph is written as a text proto
   tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb", False)  # The graph is written as a binary proto
