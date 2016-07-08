@@ -16,8 +16,7 @@ test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **
 init_uni0 = Uniform(low=-0.002 , high=0.002)
 init_uni1 = Uniform(low=-0.1, high=0.1)
 
-#opt_gdm = GradientDescentMomentum(learning_rate=0.01 * scale, momentum_coef=0.9)
-opt_gdm = GradientDescentMomentum(learning_rate=0.01, momentum_coef=0.9)
+opt_gdm = GradientDescentMomentum(learning_rate=0.0001, momentum_coef=0.9)
 
 # set up the model layers
 layers = [Affine(nout=200, init=init_uni0, activation=Rectlin()),

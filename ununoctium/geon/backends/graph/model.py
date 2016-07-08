@@ -21,8 +21,6 @@ class Model(GraphComponent):
 
         self.optimizer = optimizer
 
-        graph = self.graph
-
         # Wrap the list of layers in a Sequential container if a raw list of layers
         if type(layers) in (Sequential, Tree, SingleOutputTree):
             self.layers = layers
@@ -44,9 +42,9 @@ class Model(GraphComponent):
         # Propagate shapes through the layers to configure
         self.output = self.layers.configure(dataset)
 
+        self.cost = cost
         if cost is not None:
-            self.graph.cost = cost.get_cost(self.output, self.graph.target)
-            self.cost = cost
+            self.cost.initialize(self.output, self.graph.target)
 
         self.initialized = True
         return self.output
@@ -90,14 +88,14 @@ class Model(GraphComponent):
                 ax.Phi.length = 2
 
                 self.initialize(self.graph.input, cost)
-                updates = self.optimizer.configure(self.graph.cost)
-                dataflow = analysis.DataFlowGraph([self.graph.cost, updates])
+                updates = self.optimizer.configure(self.cost.total_cost)
+                dataflow = analysis.DataFlowGraph([self.cost.mean_cost, updates])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
                 #print 'The memory footprint is {} GB'.format(memory*10**-9)
                 #dataflow.render('cifar_mlp.gv', True)             
-                self.enp = be.NumPyTransformer(results=[self.graph.cost, updates])
+                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
 
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:
@@ -130,7 +128,7 @@ class Model(GraphComponent):
             self.optimizer.optimize(self.epoch_index)
 
             vals = self.enp.evaluate()
-            batch_cost = vals[self.graph.cost]
+            batch_cost = vals[self.cost.mean_cost]
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
 
@@ -147,7 +145,7 @@ class Model(GraphComponent):
             nprocessed = 0
             self.loss = 0
             dataset.reset()
-            enp = nptransform.NumPyTransformer(results=[self.graph.cost])
+            enp = nptransform.NumPyTransformer(results=[self.cost.mean_cost])
             for x, t in dataset:
                 self.graph.input.value = x
                 self.graph.target.value = t
@@ -155,7 +153,7 @@ class Model(GraphComponent):
                 nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz
                 vals = enp.evaluate()
-                batch_cost = vals[self.graph.cost]
+                batch_cost = vals[self.cost.mean_cost]
                 nprocessed += bsz
                 self.loss += batch_cost / nsteps
             return float(self.loss) / nprocessed

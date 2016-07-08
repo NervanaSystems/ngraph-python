@@ -825,7 +825,7 @@ class GeneralizedCost(object):
         self.costfunc = costfunc
         self.name = name
 
-    def get_cost(self, inputs, targets):
+    def initialize(self, inputs, targets):
         """
         Compute the cost function over the inputs and targets.
 
@@ -835,10 +835,12 @@ class GeneralizedCost(object):
             targets (Tensor): Tensor containing target values.
 
         Returns:
-            Tensor containing cost
+            Tensors containing mean cost, total costs, sample costs
 
         """
-        return self.costfunc(inputs, targets).mean(out_axes=())
+        self.costs = self.costfunc(inputs, targets)
+        self.total_cost = be.sum(self.costs, out_axes=())
+        self.mean_cost = self.total_cost/be.tensor_size(self.costs, out_axes=())
 
 
 class BatchNorm(Layer):
