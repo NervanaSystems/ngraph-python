@@ -31,9 +31,14 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.opids = dict()
 
         self.ops = Op.ordered_ops(self.results)
-        self.initialize_ordered_ops(self.ops)
+        self.initializers = self.ordered_initializers(self.ops)
+        self.initialize_call_info(self.initializers)
+        self.initialize_call_info(self.ops)
+        self.allocate_ordered_ops(self.initializers)
+        self.allocate_ordered_ops(self.ops)
+        self.evaluate_ordered_ops(self.initializers)
 
-    def initialize_ordered_ops(self, ordered_ops):
+    def initialize_call_info(self, ordered_ops):
         # Give ids
         for op in ordered_ops:
             if op not in self.opids:
@@ -43,9 +48,49 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         for op in ordered_ops:
             op.call_info
 
-        # Allocate and initialize
+
+    def ordered_initializers(self, ordered_ops):
+        todo = set(ordered_ops)
+        initializers = set()
+        while todo:
+            these_ops = todo
+            todo = set()
+            for op in these_ops:
+                if not op.tensor_axes_info.initialized:
+                    initializers.update(op.initializers)
+                    todo.update(op.initializers)
+                    op.tensor_axes_info.initialized = True
+
+        ordered_initializer_ops = []
+        visited = set()
+        inits = set()
+
+        def visit(node):
+            if node not in visited:
+                if node.initializers:
+                    if node in inits:
+                        if node not in visited:
+                            ordered_initializer_ops.append(node)
+                            visited.add(node)
+                    else:
+                        inits.add(node)
+                        for n in node.initializers:
+                            visit(n)
+                else:
+                    for n in node.args:
+                        visit(n)
+                if node not in visited:
+                    ordered_initializer_ops.append(node)
+                    visited.add(node)
+
+        for node in initializers:
+            visit(node)
+
+        return ordered_initializer_ops
+
+    def allocate_ordered_ops(self, ordered_ops):
+        # Allocate
         for op in ordered_ops:
-            op.tensor_axes_info.initialize(self)
             op.tensor_axes_info.allocate(self)
 
     def evaluate_ordered_ops(self, ordered_ops):
@@ -57,7 +102,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def evaluate_ops(self, eval_ops):
         ops = Op.ordered_ops(eval_ops)
-        self.initialize_ordered_ops(ops)
+        self.allocate_ordered_ops(ops)
         self.evaluate_ordered_ops(ops)
 
     def evaluate(self):
@@ -836,9 +881,10 @@ class Visitor(nodes.Visitor):
 class Op(nodes.Node):
     """Any operation that can be in an AST"""
 
-    def __init__(self, **kwds):
-        self._adjoints = None
+    def __init__(self, initializers=None, **kwds):
         super(Op, self).__init__(**kwds)
+        self._adjoints = None
+        self.initializers = initializers or []
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
@@ -939,9 +985,8 @@ class Op(nodes.Node):
 class TensorAxesInfo(object):
     """Information about a use of a tensor with axes"""
 
-    def __init__(self, tensor, axes, alloc=None, init=None, read_only=False, tags=(), dtype=np.float32, **kargs):
+    def __init__(self, axes, alloc=None, read_only=False, tags=(), dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
-        self.tensor = tensor
         axes = tuple(axes)
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
@@ -951,31 +996,7 @@ class TensorAxesInfo(object):
         self.tags = set(tags)
         self.__tensor_description = None
         self.initializer = None
-        self.initialized = True
-        self.init = init
-
-    @property
-    def init(self):
-        return self.__init
-
-    @init.setter
-    def init(self, init):
-        self.__init = init
-        self.initialized = True
-        if init is not None:
-            initializers = []
-            with captured_ops(initializers):
-                init.fill(self.tensor)
-            if len(initializers) > 0:
-                for op in initializers:
-                    op.tensor_axes_info
-                self.initializer = doall(initializers)
-                self.initialized = False
-
-    def initialize(self, transformer):
-        if not self.initialized:
-            self.initialized = True
-            transformer.evaluate_ops([self.initializer])
+        self.initialized = False
 
     @property
     def tensor_description(self):
@@ -997,10 +1018,6 @@ class TensorAxesInfo(object):
             if view.tensor_description is self.tensor_description:
                 continue
             view.update_tensor(evaluator)
-
-    def generate_initializations(self, tensor):
-        if self.init:
-            self.init.fill(tensor)
 
     def allocate(self, evaluator):
         if self.tensor_description.value is None:
@@ -1189,12 +1206,16 @@ class AxesAppendComp(AxesComp):
 
 
 class Tensor(Op):
-    def __init__(self, graph_type=None, scale=1, **kwds):
+    def __init__(self, dtype=None, axes=None, scale=1, **kwds):
         super(Tensor, self).__init__(**kwds)
-        self.graph_type = graph_type
-        self.dtype = None
-        if self.graph_type is not None:
-            self.dtype = self.graph_type.dtype
+        if dtype is None:
+            dtype = np.dtype(np.float32)
+        self.dtype = dtype
+        if axes is None:
+            axes = ValueAxesComp(self)
+        else:
+            axes = AxesComp.as_axes(axes)
+        self.__axes = axes
         self.__tensor_axes_info = None
         self.__call_info = None
 
@@ -1210,7 +1231,7 @@ class Tensor(Op):
 
     @property
     def axes(self):
-        return ValueAxesComp(self)
+        return self.__axes
 
     def generate_add_delta(self, adjoints, delta):
         if self not in adjoints:
@@ -1314,7 +1335,7 @@ class Tensor(Op):
         dtype = np.float32
         if self.dtype is not None:
             dtype = self.dtype
-        return TensorAxesInfo(self, self.axes.value, dtype=dtype, tags=self.tags)
+        return TensorAxesInfo(self.axes.value, dtype=dtype, tags=self.tags)
 
     @property
     def call_info(self):
@@ -1346,16 +1367,18 @@ class Tensor(Op):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, axes=None, init=None, dtype=np.float32, **kargs):
-        super(AllocationOp, self).__init__(graph_type=typing.Array[AxesComp.as_axes(axes), dtype], **kargs)
-        self.tensor_axes_info.init = init
+    def __init__(self, init=None, initial_value=None, initializers=[], **kargs):
+        super(AllocationOp, self).__init__(**kargs)
+        if init is not None:
+            with captured_ops(self.initializers):
+                init.fill(self)
+        elif callable(initial_value):
+            self.initializers.append(assign(self, initial_value()))
+        elif initial_value is not None:
+            self.initializers.append(assign(self, initial_value))
 
     def visit(self, visitor):
         return self.visit_allocation(self)
-
-    @property
-    def axes(self):
-        return self.graph_type.axes
 
 
 class ComputationOp(Tensor):
@@ -1586,11 +1609,7 @@ class Constant(AllocationOp):
     def __init__(self, const, **kargs):
         self.const = const
         super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), **kargs)
-
-        class init(object):
-            def fill(self, tensor):
-                Fill(tensor, const)
-        self.tensor_axes_info.init = init()
+        self.initializers.append(Fill(self, const))
 
     def visit(self, visitor):
         return self.visit_constant(self, self.const)
