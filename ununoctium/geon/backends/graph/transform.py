@@ -1607,7 +1607,7 @@ class Fill(VoidOp):
 
 class Constant(AllocationOp):
     """
-    A constant that appears in a graph.
+    A scalar constant that appears in a graph.
     """
 
     def __init__(self, const, **kargs):

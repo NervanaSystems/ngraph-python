@@ -4,7 +4,10 @@ Test the usage of be.Constant
 '''
 
 import geon.backends.graph.funs as be
+import geon.backends.graph.axis as ax
+import numpy as np
 from neon.initializers import Constant
+
 
 def test_constant_init():
     with be.bound_environment():
@@ -15,7 +18,7 @@ def test_constant_init():
         result = enp.evaluate()[a]
         print(result)
 
-        assert(result == 5)
+        assert (result == 5)
         print("pass constant initialization")
 
 
@@ -30,18 +33,20 @@ def test_constant_add():
         result = enp.evaluate()[c]
         print(result)
 
-        assert(result == 3)
+        assert (result == 3)
         print("pass constant add")
 
-def test_2D_constant_init():
-    a = Constant([3, 5])
-    print(a.val)
 
+def test_2D_constant_init():
     with be.bound_environment():
-        b = be.Constant([3,5])
-        enp = be.NumPyTransformer(results=[b])
-        result = enp.evaluate()[b]
-        print(result)
+        ax.Y.length = 2
+        a = be.NumPyTensor(np.array([3, 5], dtype=np.float32), axes=[ax.Y])
+        b = be.NumPyTensor(np.array([3, 5], dtype=np.float32), axes=[ax.Y])
+        c = a + b
+        enp = be.NumPyTransformer(results=[a, b, c])
+        result = enp.evaluate()
+        print(result[c])
+
 
 test_constant_init()
 test_constant_add()
