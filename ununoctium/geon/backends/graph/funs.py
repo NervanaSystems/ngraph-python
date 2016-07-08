@@ -1,4 +1,5 @@
 import geon.backends.graph.dataloaderbackend
+import geon.backends.graph.npbackend
 import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope, next_name_scope

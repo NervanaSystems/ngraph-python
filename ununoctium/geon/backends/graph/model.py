@@ -125,8 +125,8 @@ class Model(GraphComponent):
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.graph.input.value = x.array
-            self.graph.target.value = t.array
+            self.graph.input.value = x
+            self.graph.target.value = t
             self.optimizer.optimize(self.epoch_index)
 
             vals = self.enp.evaluate()
@@ -149,11 +149,11 @@ class Model(GraphComponent):
             dataset.reset()
             enp = nptransform.NumPyTransformer(results=[self.graph.cost])
             for x, t in dataset:
-                self.graph.input.value = x.array
-                self.graph.target.value = t.array
+                self.graph.input.value = x
+                self.graph.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset.bsz)
-                nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
-                    x[0].array.shape[1] // dataset.bsz
+                nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
+                    x[0].shape[1] // dataset.bsz
                 vals = enp.evaluate()
                 batch_cost = vals[self.graph.cost]
                 nprocessed += bsz
@@ -180,11 +180,11 @@ class Model(GraphComponent):
             error = metric(self.output, self.graph.target)
             enp = nptransform.NumPyTransformer(results=[error])
             for x, t in dataset:
-                self.graph.input.value = x.array
-                self.graph.target.value = t.array
+                self.graph.input.value = x
+                self.graph.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset.bsz)
-                nsteps = x.array.shape[1] // dataset.bsz if not isinstance(x, list) else \
-                    x[0].array.shape[1] // dataset.bsz
+                nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
+                    x[0].shape[1] // dataset.bsz
                 calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
                 error_val = vals[error]

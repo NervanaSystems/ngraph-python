@@ -4,7 +4,6 @@ from neon.backends.backend import Backend
 
 from geon.backends.graph.transform import RNG
 
-
 class BackendNDArray(np.ndarray):
 
     def __setitem__(self, key, value):
@@ -49,8 +48,8 @@ class OneHot(object):
         return
 
 
-class DataloaderBackend(Backend):
-    backend_name = 'dataloader'
+class NumPyBackend(Backend):
+    backend_name = 'NumPy'
 
     def __init__(self,
                  rng_seed=None,
@@ -65,13 +64,13 @@ class DataloaderBackend(Backend):
                  deterministic=None,
                  cache_dir=None
                  ):
-        super(DataloaderBackend, self).__init__(rng_seed, default_dtype, compat_mode=compat_mode)
+        super(NumPyBackend, self).__init__(rng_seed, default_dtype, compat_mode=compat_mode)
         # CPU for now.  Dataloader needs to know where it will put the data
         self.device_type = 0
         self.device_id = 0
 
     def cleanup_backend(self):
-        super(DataloaderBackend, self).cleanup_backend()
+        super(NumPyBackend, self).cleanup_backend()
 
     def gen_rng(self, seed=None):
         """
@@ -148,7 +147,6 @@ class DataloaderBackend(Backend):
             :py:func:`~neon.backends.Backend.zeros`,
             :py:func:`~neon.backends.Backend.ones`
         """
-
         return np.empty(shape=shape, dtype=dtype).view(BackendNDArray)
 
     def zeros(self, shape, dtype=None, name=None, persist_values=True,
