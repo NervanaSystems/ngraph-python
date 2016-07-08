@@ -1604,7 +1604,7 @@ class Constant(AllocationOp):
 
     @property
     def graph_label(self):
-        return str(self.const)
+        return str(self.const) if self.name is None else self.name
         
     @property
     def axes(self):
