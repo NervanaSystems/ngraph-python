@@ -1225,6 +1225,10 @@ class Tensor(Op):
     def visit(self, visitor, **kargs):
         return visitor.visit_tensor(self, **kargs)
 
+    #@property
+    #def graph_label(self):
+    #    return self.__class__.__name__ + '\n' + str(self.tensor_axes_info.shapes)
+
     @property
     def output(self):
         return self
@@ -1619,7 +1623,7 @@ class Constant(AllocationOp):
 
     @property
     def graph_label(self):
-        return str(self.const)
+        return str(self.const) if self.name is None else self.name
         
     @property
     def axes(self):
