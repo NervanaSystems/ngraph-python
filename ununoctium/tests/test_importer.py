@@ -1,31 +1,46 @@
 # ----------------------------------------------------------------------------
 # load TensorFlow's computation graph in protobuf and convert it to Neon's AST graph
 # ----------------------------------------------------------------------------
+'''
+Note that the TF package imported here is the local graphiti version.
 
-# note that the tensorflow package imported here is the local graphiti version.
+If the protobuf (.pb) file does not exist, you might need to first run the TensorFlow script to
+generate the protobuf file:
 
-# in case the .pb file does not exist, you might need to first execute the TensorFlow script first
-# cd ../../tf_benchmark/
-# python create_sample_graph.py
+python ../../tf_benchmark/create_sample_graph.py
 
+'''
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-from util.importer import import_graph_def
+import geon.backends.graph.funs as be
+from util.importer import create_neon_graph
 import geon.backends.graph.analysis as analysis
+from geon.backends.graph.environment import Environment
 
-def load_tf_graph(pb_file):
+def test_create_neon_graph(pb_file, execute=False):
   print("loading graph")
   graph_def = tf.GraphDef()
 
+  env = Environment()
+
   with open(pb_file, 'rb') as f:
     graph_def.ParseFromString(f.read()) # read serialized binary file only
-    imported_graph = import_graph_def(graph_def)
+    ast_graph, var_names = create_neon_graph(graph_def, env)
+    print(ast_graph)
 
-    dataflow = analysis.DataFlowGraph([imported_graph])
+    dataflow = analysis.DataFlowGraph([ast_graph])
     dataflow.view()
 
-load_tf_graph("../../tf_benchmark/sample/sample_graph.pb")
+    if execute:
+      with be.bound_environment(env):
+        enp = be.NumPyTransformer(results=[ast_graph])
+        result = enp.evaluate()
+        print(result[ast_graph])
+
+# test_create_neon_graph("../../tf_benchmark/sample/constant_graph.pb", False)
+# test_create_neon_graph("../../tf_benchmark/sample/variable_graph.pb", False)
+test_create_neon_graph("../../tf_benchmark/sample/variable_graph_froze.pb", True)
