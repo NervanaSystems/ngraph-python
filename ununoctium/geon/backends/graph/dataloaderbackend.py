@@ -19,6 +19,12 @@ class BackendNDArray(np.ndarray):
         else:
             super(BackendNDArray, self).__setslice__(i, j, value)
 
+    def __bool__(self):
+        return True
+
+    def __nonzero__(self):
+        return True
+
     def raw(self):
         return self.ctypes.data
 
@@ -33,20 +39,13 @@ class OneHot(object):
 
     def apply(self, array, key):
         array[key] = 0
-        idx = self.idx
+        idx = self.idx.reshape(-1)
         axis = self.axis
-        indidx = idx.reshape(-1)
-        indarr = array.reshape(-1)
-        idxstride = idx.strides[1 - axis] / idx.dtype.alignment
-        arrstride0 = array.strides[1 - axis] / array.dtype.alignment
-        arrstride1 = array.strides[axis] / array.dtype.alignment
-        iarr = 0
-        iidx = 0
-        for i in xrange(idx.shape[1 - axis]):
-            indarr[iarr + arrstride1 * indidx[iidx]] = 1
-            iarr += arrstride0
-            iidx += idxstride
-        return
+        if axis is 1:
+            array = array.transpose()
+        for i in xrange(idx.shape[0]):
+            array[idx[i], i] = 1
+        pass
 
 
 class DataloaderBackend(Backend):
@@ -72,6 +71,13 @@ class DataloaderBackend(Backend):
 
     def cleanup_backend(self):
         super(DataloaderBackend, self).cleanup_backend()
+
+    def copy_transpose(self, a, out, axes=None, repeat=1):
+        """
+        Function to perform a fast copy transpose/dimshuffle operation.
+        Works just like numpy.transpose, but requires an output tensor argument.
+        """
+        out[:] = np.transpose(a, axes).copy()
 
     def gen_rng(self, seed=None):
         """
@@ -103,7 +109,10 @@ class DataloaderBackend(Backend):
         """
         if axis not in (0, 1):
             raise ValueError("bad axis for onehot")
-        return OneHot("onehot", idx=indices, axis=axis)
+        result = OneHot("onehot", idx=indices, axis=axis)
+        if out is not None:
+            out[:] = result
+        return result
 
     def empty(self, shape, dtype=None, name=None, persist_values=True,
               parallel=False, distributed=False):
@@ -148,7 +157,8 @@ class DataloaderBackend(Backend):
             :py:func:`~neon.backends.Backend.zeros`,
             :py:func:`~neon.backends.Backend.ones`
         """
-
+        if dtype is None:
+            dtype=np.float32
         return np.empty(shape=shape, dtype=dtype).view(BackendNDArray)
 
     def zeros(self, shape, dtype=None, name=None, persist_values=True,
@@ -264,7 +274,9 @@ class DataloaderBackend(Backend):
             :py:func:`~neon.backends.backend.Backend.zeros`,
             :py:func:`~neon.backends.backend.Backend.ones`
         """
-        raise NotImplementedError()
+        if dtype is None:
+            dtype = np.float32
+        return np.array(ary, dtype).view(BackendNDArray)
 
     def ones(self, shape, dtype=None, name=None, persist_values=True,
              parallel=False, distributed=False):

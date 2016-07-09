@@ -9,7 +9,22 @@ from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
 import geon.backends.graph.nptransform as nptransform
 import geon.backends.graph.analysis as analysis
+import geon.backends.graph.arrayaxes as arrayaxes
 
+from neon.data import ArrayIterator, DataLoader
+
+
+def dataset_nclasses(dataset):
+    if isinstance(dataset, ArrayIterator):
+        return dataset.nclass
+    elif isinstance(dataset, DataLoader):
+        return dataset.nclasses
+
+def dataset_batchsize(dataset):
+    if isinstance(dataset, ArrayIterator):
+        return dataset.be.bsz
+    elif isinstance(dataset, DataLoader):
+        return dataset.bsz
 
 class Model(GraphComponent):
     def __init__(self, layers, name=None, optimizer=None, **kargs):
@@ -82,10 +97,12 @@ class Model(GraphComponent):
                 self.graph.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
                     axis.length = length
-                for axis, length in zip(target_axes, (dataset.nclasses,)):
+                for axis, length in zip(target_axes, [dataset_nclasses(dataset)]):
                     axis.length = length
-                ax.N.length = dataset.bsz
+                ax.N.length = dataset_batchsize(dataset)
                 ax.Phi.length = 2
+                self.batch_input_shape = arrayaxes.axes_shape(batch_input_axes)
+                self.batch_target_shape = arrayaxes.axes_shape(batch_target_axes)
 
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
@@ -123,8 +140,8 @@ class Model(GraphComponent):
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.graph.input.value = x
-            self.graph.target.value = t
+            self.graph.input.value = x.reshape(self.batch_input_shape)
+            self.graph.target.value = t.reshape(self.batch_target_shape)
             self.optimizer.optimize(self.epoch_index)
 
             vals = self.enp.evaluate()
@@ -180,8 +197,8 @@ class Model(GraphComponent):
             for x, t in dataset:
                 self.graph.input.value = x
                 self.graph.target.value = t
-                bsz = min(dataset.ndata - nprocessed, dataset.bsz)
-                nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
+                bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
+                nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz
                 calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
