@@ -12,38 +12,42 @@ from __future__ import print_function
 
 import tensorflow as tf
 from tensorflow.python.training.saver import read_meta_graph_file
+from freeze_graph import freeze_graph
 
-def create_variable_graph():
+def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
   '''
     Create a sample graph with two variables.
     Save the graph in metagraph, checkpoint and
   '''
 
-  biases = tf.Variable(tf.zeros([200]), name='biases')
-  weight = tf.Variable(tf.random_normal([784, 200], stddev=0.35), name="weights")
+  x = tf.Variable(tf.random_normal([1, 3], stddev=0.35), name="input")
+  weight = tf.Variable(tf.random_normal([3, 5], stddev=0.35), name="weights")
+  biases = tf.Variable(tf.ones([1, 5]), name='biases')
+
+  result = tf.matmul(x, weight) + biases
 
   init_op = tf.initialize_all_variables()
 
-  saver = tf.train.Saver([biases, weight])
+  saver = tf.train.Saver([biases, weight, x])
 
   with tf.Session() as sess:
     sess.run(init_op)
-    graph_name = "variable_graph"
+    sess.run(result)
 
     # Saver saves variables into a checkpoint file.
     # In addition, the save function implicitly calls tf.export_meta_graph(), which generates ckpt.meta file.
-    save_path = saver.save(sess, "./model.ckpt")
-    print("Variables saved in file: %s" % save_path)
+    save_path = saver.save(sess, checkpoint)
+    print("Variables saved in file: %s" % checkpoint)
 
     # Save the computation graph only
-    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb.txt", True)  # The graph is written as a text proto
-    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb", False)  # The graph is written as a binary proto
-    print("Variables saved in file: %s" % graph_name + ".pb")
+    tf.train.write_graph(sess.graph_def, "./", graph_pbtxt, True)  # The graph is written as a text proto
+    tf.train.write_graph(sess.graph_def, "./", graph_pb, False)  # The graph is written as a binary proto
+    print("GraphDef saved in file: %s" % graph_pb)
 
-def restore_graph_pb():
+def restore_graph_pb(graph_pb):
   '''
-    Restore from the graph protobuf file and the checkpoint file
-    Need the original graph building steps.
+    Restore from the graph protobuf file and the checkpoint file.
+    This needs the original graph construction steps.
   '''
 
   biases = tf.Variable(tf.zeros([200]), name='biases')
@@ -51,13 +55,11 @@ def restore_graph_pb():
   saver = tf.train.Saver([biases, weight])
 
   with tf.Session() as sess:
-    graph_name = "variable_graph"
-
     # Restore the computation graph
     # the computation graph can also be restored from ckpt.meta file
     print("loading graph")
     graph_def = tf.GraphDef()
-    with open(graph_name + ".pb", 'rb') as f:
+    with open(graph_pb, 'rb') as f:
       graph_def.ParseFromString(f.read())  # read serialized binary file only
       tf.import_graph_def(graph_def, name='')
 
@@ -67,22 +69,14 @@ def restore_graph_pb():
       saver.restore(sess, ckpt.model_checkpoint_path)
       print("variable restored.")
 
-      for v in tf.all_variables():
-        print(v.name)
-        shape = v.get_shape()
-        print(len(shape))
-        print(v.value)
-        tensor_value = v.eval()
-        print(tensor_value)
-
-def restore_meta_graph():
+def restore_meta_graph(meta_graph):
   '''
-    Restore from the metagraph file and the checkpoint file.
+    Restore from the metagraph (.meta) file and the checkpoint file.
     No need for building graph from scratch.
   '''
 
   with tf.Session() as sess:
-    meta_graph_def = read_meta_graph_file("model.ckpt.meta")
+    meta_graph_def = read_meta_graph_file(meta_graph)
     saver = tf.train.import_meta_graph(meta_graph_def)
     print(meta_graph_def.graph_def)
 
@@ -101,8 +95,13 @@ def restore_meta_graph():
         print(tensor_value)
 
 def main(_):
-  create_variable_graph()
-  restore_meta_graph()
+  graph_pbtxt = "variable_graph.pb.txt"
+  graph_pb = "variable_graph.pb"
+  checkpoint = "model.ckpt"
+  meta_graph = "model.ckpt.meta"
+
+  create_variable_graph(graph_pbtxt, graph_pb, checkpoint)
+  restore_meta_graph(meta_graph)
 
 if __name__ == '__main__':
   tf.app.run()
