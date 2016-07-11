@@ -44,8 +44,10 @@ class Node(NameableValue):
 
     @property
     def graph_label(self):
+        if self.name != self.id:
+            return self.name.split('.')[-1]    
         return self.__class__.__name__
-
+    
     @property
     def args(self):
         """All the inputs to this node"""

@@ -10,7 +10,7 @@ class Compounded(be.Model):
 
         g.X = be.placeholder(axes=(g.L[0],g.BS))
         g.Y = be.placeholder(axes=(g.L[-1],g.BS))
-        g.W = [be.placeholder(axes=(L_np1, L_n), name = 'W%d'%i) for i,(L_np1, L_n) in enumerate(zip(g.L[1:], g.L[:-1]))]
+        g.W = [be.Variable(axes=(L_np1, L_n), name = 'W%d'%i) for i,(L_np1, L_n) in enumerate(zip(g.L[1:], g.L[:-1]))]
         
         activation = be.tanh
         g.A = [act[0](be.dot(g.W[0],g.X))]

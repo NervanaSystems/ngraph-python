@@ -53,7 +53,7 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
 
     def configure(self, cost):
-        self.learning_rate_placeholder = be.placeholder(axes=()) 
+        self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate') 
         learning_rate_value = self.learning_rate_placeholder
         params = cost.parameters()
         grads = [be.deriv(cost, param) for param in params]
@@ -73,7 +73,6 @@ class GradientDescentMomentum(Optimizer):
         for param, grad, velocity in zip(params, grads, velocities)]
 
         param_updates = [be.assign(lvalue=param, rvalue=param+velocity) for param, velocity in zip(params, velocities)]
-
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):

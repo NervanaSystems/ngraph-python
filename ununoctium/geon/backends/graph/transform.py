@@ -1225,10 +1225,6 @@ class Tensor(Op):
     def visit(self, visitor, **kargs):
         return visitor.visit_tensor(self, **kargs)
 
-    #@property
-    #def graph_label(self):
-    #    return self.__class__.__name__ + '\n' + str(self.tensor_axes_info.shapes)
-
     @property
     def output(self):
         return self
@@ -1404,6 +1400,10 @@ class ComputationOp(Tensor):
 
         self.batch_axes = AxesComp.as_axes(batch_axes)
 
+    @property
+    def graph_label(self):
+        return self.__class__.__name__
+        
     def visit(self, visitor):
         return self.visit_computation(self)
 
@@ -1566,10 +1566,6 @@ class placeholder(AllocationOp):
 
     def generate_adjoints(self, tape, delta):
         pass
-
-    @property
-    def graph_label(self):
-        return self.name.split('.')[-1]
         
     @property
     def value(self):
@@ -1623,7 +1619,12 @@ class Constant(AllocationOp):
 
     @property
     def graph_label(self):
-        return str(self.const) if self.name is None else self.name
+        shapes = self.tensor_axes_info.shapes
+        if not shapes or max(shapes)<=2:
+            return str(self.const)
+        if self.name==self.id:
+            return 'Constant'
+        return self.name
         
     @property
     def axes(self):
@@ -1899,6 +1900,7 @@ class less_equal(ElementWiseBoolean):
 
 
 class softmax(ComputationOp):
+
     def __init__(self, x, **kargs):
         m = Temporary(axes=AxesComp.as_axes(get_batch_axes()))
         super(softmax, self).__init__(args=(x, m), **kargs)
@@ -1975,7 +1977,7 @@ class sum(ComputationOp):
             evaluator.set_item(out, (), x)
         else:
             evaluator.sum(x, self.mode, out)
-
+        
     @property
     def axes(self):
         if self.out_axes is not None:
@@ -2037,6 +2039,7 @@ class Pad(ComputationOp):
 class Variable(AllocationOp):
     def __init__(self, **kargs):
         super(Variable, self).__init__(**kargs)
+        self.tensor_axes_info.read_only = True
 
     def visit(self, visitor):
         return self.visit_variable(self)
@@ -2324,9 +2327,6 @@ class Function(NameableValue):
         self.args = args
         self.defs = defs
 
-    @property
-    def graph_label(self):
-        return self.__class__.__name__
 
     @property
     def inputs(self):
