@@ -1655,10 +1655,6 @@ class NumPyTensor(AllocationOp):
     def generate_adjoints(self, adjoints, delta):
         pass
 
-    @property
-    def graph_label(self):
-        return str(self.nptensor)
-
     def __str__(self):
         return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.nptensor)
 
