@@ -7,6 +7,7 @@ from neon.backends.backend import Block
 import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
+import geon.backends.graph.transform as transform
 import geon.backends.graph.nptransform as nptransform
 import geon.backends.graph.analysis as analysis
 import geon.backends.graph.arrayaxes as arrayaxes
@@ -106,10 +107,16 @@ class Model(GraphComponent):
 
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
+
+                transform.Op.simple_prune([self.cost.mean_cost, updates])
+
                 dataflow = analysis.DataFlowGraph([self.cost.mean_cost, updates])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
+
+                dataflow.view()
+
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
                 #dataflow.render('cifar_mlp.gv', True)             
                 self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])

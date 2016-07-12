@@ -66,6 +66,9 @@ class Node(NameableValue):
         for arg in self.__args:
             arg.users.add(self)
 
+    def replace_arg(self, old, new):
+        self.args = [new if arg is old else arg for arg in self.args]
+
     def as_nodes(self, args):
         return tuple(self.as_node(arg) for arg in args)
 

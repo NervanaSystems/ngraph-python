@@ -650,7 +650,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def visit_sum(self, sum, reduction_axes, x, y):
+    def visit_sum(self, sum, reduction_axes, x):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -763,7 +763,7 @@ class Visitor(nodes.Visitor):
     def visit_all_reduce(self, all_reduce, x):
         return self.visit_elemenwise(all_reduce)
 
-    def visit_placheolder(self, placeholder):
+    def visit_placeholder(self, placeholder):
         return self.visit_allocation(placeholder)
 
     def visit_fill(self, fill, const):
@@ -820,7 +820,7 @@ class Visitor(nodes.Visitor):
     def visit_softmax(self, softmax, x, y):
         return self.visit_computation(softmax)
 
-    def visit_sum(self, sum, reduction_axes, x, y):
+    def visit_sum(self, sum, reduction_axes, x):
         return self.visit_elementwise(sum)
 
     def visit_variable(self, variable):
@@ -878,6 +878,56 @@ class Visitor(nodes.Visitor):
         return self.visit_elementwise(tanh)
 
 
+class SimplePrune(Visitor):
+    def __init__(self):
+        self.reps = []
+
+    def init(self):
+        self.reps = []
+
+    def visit_multiply(self, multiply, x, y):
+        rep = None
+        if isinstance(x, Constant):
+            if x.const == 0:
+                rep = x
+            elif x.const == 1:
+                rep = y
+        elif isinstance(y, Constant):
+            if y.const == 0:
+                rep = y
+            elif y.const == 1:
+                rep = x
+        if rep is not None:
+            self.reps.append((multiply, rep))
+
+    def visit_add(self, add, x, y):
+        rep = None
+        if isinstance(x, Constant):
+            if x.const == 0:
+                rep = y
+        elif isinstance(y, Constant):
+            if y.const == 0:
+                rep = x
+        if rep is not None:
+            self.reps.append((add, rep))
+
+    def visit_sum(self, sum, reduction_axes, x):
+        rep = None
+        if isinstance(x, Constant):
+            val = x.const*axes_size(reduction_axes)
+            self.reps.append((sum, Constant(val)))
+
+    def do_replacements(self):
+        for old, rep in self.reps:
+            old_users = set(old.users)
+            for user in old_users:
+                user.replace_arg(old, rep)
+            for arg in old.args:
+                if old in arg.users:
+                    arg.users.remove(old)
+        return len(self.reps) > 0
+
+
 class Op(nodes.Node):
     """Any operation that can be in an AST"""
 
@@ -927,7 +977,7 @@ class Op(nodes.Node):
             if o in self._adjoints:
                 scale = o.scale
                 adjoint = self._adjoints[o]
-                if scale != 1.0:
+                if scale is not None:
                     adjoint = adjoint * scale
                 o.generate_adjoints(self._adjoints, adjoint, *o.args)
         return self._adjoints
@@ -969,6 +1019,17 @@ class Op(nodes.Node):
     @property
     def ops(self):
         return []
+
+    @staticmethod
+    def simple_prune(results):
+        pruner = SimplePrune()
+
+        has_work = True
+        while has_work:
+            pruner.init()
+            for op in Op.ordered_ops(results):
+                op.visit(pruner)
+            has_work = pruner.do_replacements()
 
     def evaluate(self, evaluator, *args):
         """Process op"""
@@ -1206,7 +1267,7 @@ class AxesAppendComp(AxesComp):
 
 
 class Tensor(Op):
-    def __init__(self, dtype=None, axes=None, scale=1, **kwds):
+    def __init__(self, dtype=None, axes=None, scale=None, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
@@ -1219,7 +1280,7 @@ class Tensor(Op):
         self.__tensor_axes_info = None
         self.__call_info = None
 
-        # Derivative will be scaled by this if not 1.0
+        # Derivative will be scaled by this
         self.scale = scale
 
     def visit(self, visitor, **kargs):
@@ -1279,7 +1340,10 @@ class Tensor(Op):
     def __rpow__(self, val):
         return power(val, self)
 
-    # Python uses eq for comparing keys
+    # Python always uses eq for comparing keys, so if we override __eq__ we
+    # cannot have sets of tensors, or using them as dictionary keys.  So,
+    # we must use Equal explicitly in transfrom.  defmod and define __eq__
+    # if it can ensure that its nodes do not need to be used as keys.
     # def __eq__(self, val):
     #    return equal(self, val)
 
@@ -1405,7 +1469,7 @@ class ComputationOp(Tensor):
         return self.__class__.__name__
         
     def visit(self, visitor):
-        return self.visit_computation(self)
+        return visitor.visit_computation(self)
 
 
 class RNG(AllocationOp):
@@ -1612,7 +1676,7 @@ class Constant(AllocationOp):
         self.initializers.append(Fill(self, const))
 
     def visit(self, visitor):
-        return self.visit_constant(self, self.const)
+        return visitor.visit_constant(self, self.const)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1952,7 +2016,7 @@ class sum(ComputationOp):
         self.mode = None
 
     def visit(self, visitor):
-        return visitor.visit_sum(self, self.reduction_axes, *self.args)
+        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
 
     def compute_call_info(self):
         x, = self.args
@@ -2042,7 +2106,7 @@ class Variable(AllocationOp):
         self.tensor_axes_info.read_only = True
 
     def visit(self, visitor):
-        return self.visit_variable(self)
+        return visitor.visit_variable(self)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -2053,7 +2117,7 @@ class Temporary(AllocationOp):
         super(Temporary, self).__init__(tags=['temp'], **kargs)
 
     def visit(self, visitor):
-        return self.visit_temporary(self)
+        return visitor.visit_temporary(self)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -2110,8 +2174,8 @@ class maximum(ElementWise):
         evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta * (self == x))
-        y.generate_add_delta(adjoints, delta * (self == y))
+        x.generate_add_delta(adjoints, delta * equal(self, x))
+        y.generate_add_delta(adjoints, delta * equal(self, y))
 
 
 class minimum(ElementWise):
@@ -2125,8 +2189,8 @@ class minimum(ElementWise):
         evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta * (self == x))
-        y.generate_add_delta(adjoints, delta * (self == y))
+        x.generate_add_delta(adjoints, delta * equal(self, x))
+        y.generate_add_delta(adjoints, delta * equal(self, y))
 
 
 class multiply(ElementWise):
