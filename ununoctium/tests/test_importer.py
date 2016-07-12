@@ -29,17 +29,18 @@ def test_create_neon_graph(pb_file, execute=False):
 
   with open(pb_file, 'rb') as f:
     graph_def.ParseFromString(f.read()) # read serialized binary file only
-    ast_graph, var_names = create_neon_graph(graph_def, env)
-    print(ast_graph)
 
-    dataflow = analysis.DataFlowGraph([ast_graph])
-    dataflow.view()
+  ast_graph = create_neon_graph(graph_def, env)
+  print(ast_graph)
 
-    if execute:
-      with be.bound_environment(env):
-        enp = be.NumPyTransformer(results=[ast_graph])
-        result = enp.evaluate()
-        print(result[ast_graph])
+  dataflow = analysis.DataFlowGraph([ast_graph.last_op])
+  dataflow.view()
+
+  if execute:
+    with be.bound_environment(env):
+      enp = be.NumPyTransformer(results=[ast_graph.last_op])
+      result = enp.evaluate()
+      print(result[ast_graph.last_op])
 
 # test_create_neon_graph("../../tf_benchmark/sample/constant_graph.pb", False)
 # test_create_neon_graph("../../tf_benchmark/sample/variable_graph.pb", False)
