@@ -1713,15 +1713,15 @@ class NumPyTensor(AllocationOp):
 
         self.tensor_axes_info.alloc = allocator
 
+    @property
+    def graph_label(self):
+        return str(self.nptensor.shape)
+
     def visit(self, visitor):
         return self.visit_numpy_tensor(self, self.nptensor)
 
     def generate_adjoints(self, adjoints, delta):
         pass
-
-    @property
-    def graph_label(self):
-        return str(self.nptensor)
 
     def __str__(self):
         return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.nptensor)

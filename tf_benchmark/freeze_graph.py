@@ -125,10 +125,6 @@ def freeze_graph(input_graph, input_saver, input_binary, input_checkpoint,
 
 
 def main(unused_args):
-  FLAGS.input_graph = 'variable_graph.pb.txt'
-  FLAGS.input_checkpoint = 'model.ckpt'
-  FLAGS.output_graph = 'variable_graph_froze.pb'
-  FLAGS.output_node_names = 'add'
   freeze_graph(FLAGS.input_graph, FLAGS.input_saver, FLAGS.input_binary,
                FLAGS.input_checkpoint, FLAGS.output_node_names,
                FLAGS.restore_op_name, FLAGS.filename_tensor_name,

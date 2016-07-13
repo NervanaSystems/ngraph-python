@@ -32,8 +32,6 @@
 # epoch: 9 time: 5.81s train_error: 62.86 test_error: 63.13 train_loss: 2.594
 
 from geon.backends.graph.graphneon import *
-import geon.backends.graph.graph as graph
-import geon.backends.graph.pycudatransform as evaluation
 
 import numpy as np
 from timeit import default_timer
@@ -57,23 +55,13 @@ def linear(ns, x, axes, init=None, bias=None):
         result = result + ns.bias
     return result
 
-def affine(x, activation, **kargs):
-    return activation(linear(x, **kargs))
-
-
 @be.with_name_scope
-def mlp(ns, x, shape_spec, axes, **kargs):
-    value = x
-    with be.name_scope_list('L') as name_scopes:
-        for hidden_axes, hidden_shapes in shape_spec:
-            for shape in hidden_shapes:
-                with be.next_name_scope(name_scopes) as nns:
-                    nns.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
-                    value = affine(value, activation=be.tanh, axes=nns.axes, **kargs)
-        with be.next_name_scope(name_scopes):
-            value = affine(value, activation=be.softmax, axes=axes, **kargs)
-    return value
+def mlp(ns, x, y):
+    nns_axes = (be.AxisVar(like=ax.Y, length=200),)
+    value = be.tanh(linear(x, axes=nns_axes, init=Uniform(-0.1, 0.1)))
+    value = be.softmax(linear(value, axes=y.axes, init=Uniform(-0.1, 0.1)))
 
+    return value
 
 class MyTest(be.Model):
     def __init__(self, **kargs):
@@ -86,33 +74,9 @@ class MyTest(be.Model):
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))
 
-        layers = [((ax.Y,), [(200,)])]
-
-        uni = Uniform(-0.1, 0.1)
-        g.value = mlp(g.x, shape_spec=layers, axes=g.y.axes, init=uni)
+        g.value = mlp(g.x, g.y)
 
         g.loss = be.cross_entropy_multi(g.value, g.y)
-
-    @be.with_graph_scope
-    def get_initial_params(self, train, test):
-        with be.bound_environment() as env:
-            g = self.graph
-            ax.N.length = train.bsz
-            c, h, w = train.shape
-            ax.C.length = c
-            ax.H.length = h
-            ax.W.length = w
-            ax.Y.length = train.nclasses
-
-            g.params = g.value.parameters()
-
-            enp = evaluation.NumPyEvaluator(results=[self.graph.value] + g.params)
-
-            for mb_idx, (xraw, yraw) in enumerate(train):
-                g.x.value = xraw.array
-                g.y.value = yraw.array
-                vals = enp.evaluate()
-                break
 
     @be.with_graph_scope
     def train(self, train, test):
@@ -142,9 +106,6 @@ class MyTest(be.Model):
 
             enp = be.NumPyTransformer(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
 
-            start_test = default_timer()
-            test_error = self.test(env, test, True)
-
             for epoch in range(args.epochs):
                 # TODO: need to fix that the processed data does not equal to the actual number of the data
                 start_train = default_timer()
@@ -155,23 +116,26 @@ class MyTest(be.Model):
                 nprocessed = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    graph.x.value = xraw.array
-                    graph.y.value = yraw.array
+                    graph.x.value = xraw
+                    graph.y.value = yraw
 
                     vals = enp.evaluate()
 
                     train_loss += vals[graph.loss] / train.bsz
                     train_error += np.sum(np.not_equal(np.argmax(vals[graph.value], axis=0),
-                                                       np.argmax(yraw.array, axis=0))) / float(train.bsz)
+                                                       np.argmax(yraw, axis=0))) / float(train.bsz)
                     n_bs += 1
-                    nprocessed += xraw.array.shape[1]
+                    nprocessed += xraw.shape[1]
 
                 train_loss /= n_bs
                 train_error = train_error / n_bs * 100
                 test_error = self.test(env, test)
 
-                print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} train_loss: {:.3f}'.format(
-                    epoch, default_timer() - start_train, float(train_error), test_error, float(train_loss)))
+                print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} '.format(
+                    epoch, default_timer() - start_train, float(train_error), test_error))
+
+                #TODO: figure out why train_loss is not scalar
+
                 train.reset()
 
     @be.with_graph_scope
@@ -184,12 +148,12 @@ class MyTest(be.Model):
             n_bs = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
                 # TODO: need to fix that the processed data does not equal to the actual number of the data
-                graph.x.value = xraw.array
-                graph.y.value = yraw.array
+                graph.x.value = xraw
+                graph.y.value = yraw
                 vals = enp.evaluate()
 
                 test_error += np.sum(np.not_equal(np.argmax(vals[graph.value], axis=0),
-                                                  np.argmax(yraw.array, axis=0)))
+                                                  np.argmax(yraw, axis=0)))
                 n_bs += 1
 
             return float(test_error / float(test.bsz) / n_bs * 100)
@@ -202,5 +166,4 @@ test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **
 
 
 geon_model = MyTest()
-# geon_model.get_initial_params(train, test)
 geon_model.train(train, test)
