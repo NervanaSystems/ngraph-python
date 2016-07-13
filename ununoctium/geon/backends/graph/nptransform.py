@@ -121,6 +121,10 @@ class NumPyTransformer(Transformer):
 
     def sum(self, x, axis, out):
         np.sum(x, axis=axis, out=out)
+        m = np.amin(out)
+        M = np.amax(out)
+        if m == 0 and M == 0:
+            pass
 
     def tanh(self, x, out):
         np.tanh(x, out=out)

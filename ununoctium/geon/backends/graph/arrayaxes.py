@@ -177,16 +177,13 @@ class TensorDescription(object):
         strides = []
         for axis in reaxes:
             component_axes = flatten_axes(axis)
-            if len(component_axes) == 0:
-                strides.append(0)
-            else:
-                try:
-                    strides.append(self[component_axes[-1]].stride)
-                except KeyError:
-                    if not broadcast:
-                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
-                    else:
-                        strides.append(0)
+            try:
+                strides.append(self[component_axes[-1]].stride)
+            except KeyError:
+                if not broadcast:
+                    raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
+                else:
+                    strides.append(0)
         shape = tuple(axes_shape(reaxes))
         return TensorDescription(reaxes, dtype=self.dtype, shape=shape, strides=strides, offset=self.offset,
                                  buffer=self.buffer)
@@ -216,17 +213,19 @@ class TensorDescription(object):
 
 
 def canonicalize_axes(axes):
-    def canonic(x):
+    caxes = []
+    for x in axes:
         if isinstance(x, collections.Iterable):
-            x = tuple(x)
+            if len(x) == 0:
+                continue
             if len(x) == 1:
-                return x[0]
+                caxes.extend(x)
             else:
-                return x
+                caxes.append(tuple(x))
         else:
-            return x
+            caxes.append(x)
 
-    return tuple(canonic(x) for x in axes)
+    return tuple(caxes)
 
 
 def axis_ids(axes):

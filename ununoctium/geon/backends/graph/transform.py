@@ -116,10 +116,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         return op.tensor_axes_info.tensor_description.value
 
     def set_value(self, op, tensor):
-        tensor_description = op.tensor_axes_info.tensor_description
-        tensor_description.value = tensor
-        for td in tensor_description.views:
-            td.value = self.tensor_view(td)
+        op.tensor_axes_info.set_tensor(self, tensor)
 
     # Allocators
     # TODO Should this be combined with tensor_view?
@@ -885,6 +882,10 @@ class SimplePrune(Visitor):
     def init(self):
         self.reps = []
 
+    def visit_negative(self, negative, x):
+        if isinstance(x, Constant):
+            self.reps.append((negative, Constant(-x.const)))
+
     def visit_multiply(self, multiply, x, y):
         rep = None
         if isinstance(x, Constant):
@@ -892,11 +893,15 @@ class SimplePrune(Visitor):
                 rep = x
             elif x.const == 1:
                 rep = y
+            elif x.const == -1:
+                rep = negative(y)
         elif isinstance(y, Constant):
             if y.const == 0:
                 rep = y
             elif y.const == 1:
                 rep = x
+            elif y.const == -1:
+                rep = negative(x)
         if rep is not None:
             self.reps.append((multiply, rep))
 
@@ -1087,7 +1092,6 @@ class TensorAxesInfo(object):
             else:
                 tensor = evaluator.empty(self.tensor_description)
             self.set_tensor(evaluator, tensor)
-            self.tensor_description.value = tensor
 
     def get_or_default(self, axes, default_function):
         axes = canonicalize_axes(axes)

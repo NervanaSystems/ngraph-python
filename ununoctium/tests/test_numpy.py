@@ -49,13 +49,13 @@ def test_constants():
         x.value = aval
         cval, s = execute([d, d2])
         assert np.array_equal(cval, aval*2)
-        assert s[()] == np.dot(aval, aval)
+        assert s[()] == np.dot(aval.flatten(), aval.flatten())
 
         x.value = u
-        cval, s = execute([d, l2])
+        cval, s = execute([d, d2])
         u2 = u*2
         assert np.array_equal(cval, u2)
-        assert s[()] == bp.dot(u, u)
+        assert s[()] == np.dot(u.flatten(), u.flatten())
 
 
 
