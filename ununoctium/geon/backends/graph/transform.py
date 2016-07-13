@@ -643,7 +643,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def visit_softmax(self, softmax, x):
+    def visit_softmax(self, softmax, x, sx):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -671,7 +671,15 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_max(self, max, x, y):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def visit_maximum(self, maximum, x, y):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_min(self, min, x, y):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -693,6 +701,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
     @abc.abstractmethod
     def visit_reciprocal(self, reciprocal, x):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_reduction(self, reduction, x):
+        raise NotImplmentedError()
 
     @abc.abstractmethod
     def visit_sgn(self, sgn, x):
@@ -814,11 +826,14 @@ class Visitor(nodes.Visitor):
     def visit_less_equal(self, less_equal, x, y):
         return self.visit_elementwise_boolean(less_equal)
 
-    def visit_softmax(self, softmax, x, y):
+    def visit_reduction(self, reduction, x):
+        return self.visit_computation(reduction)
+
+    def visit_softmax(self, softmax, x, sx):
         return self.visit_computation(softmax)
 
     def visit_sum(self, sum, reduction_axes, x):
-        return self.visit_elementwise(sum)
+        return self.visit_reduction(sum)
 
     def visit_variable(self, variable):
         return self.visit_allocation(variable)
@@ -835,8 +850,14 @@ class Visitor(nodes.Visitor):
     def visit_safelog(self, safelog, x):
         return self.visit_elementwise(safelog)
 
+    def visit_max(self, max, x, y):
+        return self.visit_reduction(max)
+
     def visit_maximum(self, maximum, x, y):
         return self.visit_elementwise(maximum)
+
+    def visit_min(self, min, x, y):
+        return self.visit_reduction(min)
 
     def visit_minimum(self, minimum, x, y):
         return self.visit_elementwise(minimum)
@@ -1968,45 +1989,26 @@ class less_equal(ElementWiseBoolean):
 
 
 class softmax(ComputationOp):
-
     def __init__(self, x, **kargs):
-        m = Temporary(axes=AxesComp.as_axes(get_batch_axes()))
-        super(softmax, self).__init__(args=(x, m), **kargs)
+        self.x = x
+        exps = exp(x-max(x))
+        self.z = sum(exps)
+        super(softmax, self).__init__(args=(exps/self.z,), **kargs)
 
     def visit(self, visitor):
-        return visitor.visit_softmax(self, *self.args)
-
-    def compute_call_info(self):
-        x, m = self.args
-        batch_axes = self.batch_axes.value
-        softmax_axes = axes_sub(x.resolved_axes, batch_axes)
-        if softmax_axes == ():
-            raise ValueError('Empty softmax')
-
-        xs = x.reaxe([softmax_axes, batch_axes])
-        ms = m.reaxe([softmax_axes, batch_axes])
-        out = self.reaxe([softmax_axes, batch_axes])
-        return [out, xs, m.reaxe(batch_axes), ms]
-
-    def evaluate(self, evaluator, out, x, m, ms):
-        evaluator.max(x, 0, m)
-        evaluator.subtract(x, ms, out)
-        evaluator.exp(out, out)
-        evaluator.sum(out, 0, m)
-        evaluator.divide(out, ms, out)
+        return visitor.visit_softmax(self, self.x, *self.args)
 
     @property
     def axes(self):
-        x, m = self.args
-        return x.axes
+        return self.x.axes
 
-    def generate_adjoints(self, adjoints, delta, x, m):
+    def generate_adjoints(self, adjoints, delta, x):
         z = delta * self
-        zs = sum(z, reduction_axes=AxesSubComp(x.axes, self.batch_axes))
-        x.generate_add_delta(adjoints, (z - zs * self))
+        zs = sum(z, reduction_axes=AxesSubComp(self.x.axes, self.batch_axes))
+        self.x.generate_add_delta(adjoints, (z - zs * self))
 
 
-class sum(ComputationOp):
+class ReductionOp(ComputationOp):
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
@@ -2016,11 +2018,8 @@ class sum(ComputationOp):
                 self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
         else:
             self.reduction_axes = AxesComp.as_axes(reduction_axes)
-        super(sum, self).__init__(args=(x,), **kargs)
+        super(ReductionOp, self).__init__(args=(x,), **kargs)
         self.mode = None
-
-    def visit(self, visitor):
-        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
 
     def compute_call_info(self):
         x, = self.args
@@ -2034,10 +2033,62 @@ class sum(ComputationOp):
         else:
             x_axes = x.resolved_axes
             np_out_axes = self.resolved_axes
-            sum_axes = [reduction_axes]
-            sum_axes.extend(np_out_axes)
+            red_axes = [reduction_axes]
+            red_axes.extend(np_out_axes)
             self.mode = 0
-            return [self.reaxe(np_out_axes), x.reaxe(sum_axes)]
+            return [self.reaxe(np_out_axes), x.reaxe(red_axes)]
+
+    @property
+    def axes(self):
+        if self.out_axes is not None:
+            return self.out_axes
+        return AxesSubComp(self.args[0].axes, self.reduction_axes)
+
+
+class max(ReductionOp):
+    def __init__(self, x, **kargs):
+        super(max, self).__init__(x, **kargs)
+
+    def visit(self, visitor):
+        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
+
+
+    def evaluate(self, evaluator, out, x):
+        if self.mode is 'copy':
+            # TODO Change this to a node replace
+            evaluator.set_item(out, (), x)
+        else:
+            evaluator.max(x, self.mode, out)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*equal(self, x))
+
+
+class min(ReductionOp):
+    def __init__(self, x, **kargs):
+        super(min, self).__init__(x, **kargs)
+
+    def visit(self, visitor):
+        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
+
+
+    def evaluate(self, evaluator, out, x):
+        if self.mode is 'copy':
+            # TODO Change this to a node replace
+            evaluator.set_item(out, (), x)
+        else:
+            evaluator.min(x, self.mode, out)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta*equal(self, x))
+
+
+class sum(ReductionOp):
+    def __init__(self, x, **kargs):
+        super(sum, self).__init__(x, **kargs)
+
+    def visit(self, visitor):
+        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
 
     def evaluate(self, evaluator, out, x):
         if self.mode is 'copy':
@@ -2045,12 +2096,6 @@ class sum(ComputationOp):
             evaluator.set_item(out, (), x)
         else:
             evaluator.sum(x, self.mode, out)
-        
-    @property
-    def axes(self):
-        if self.out_axes is not None:
-            return self.out_axes
-        return AxesSubComp(self.args[0].axes, self.reduction_axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
@@ -2149,7 +2194,10 @@ class log(ElementWise):
         return visitor.visit_log(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta / x)
+        if isinstance(x, exp):
+            x.args[0].generate_add_delta(adjoints, delta)
+        else:
+            x.generate_add_delta(adjoints, delta / x)
 
     def evaluate(self, evaluator, out, x):
         evaluator.log(x, out)
