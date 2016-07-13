@@ -4,7 +4,7 @@ import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope, next_name_scope
 from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
-from geon.backends.graph.environment import bound_environment
+from geon.backends.graph.environment import bound_environment, Environment
 
 from geon.backends.graph.transform import deriv, placeholder, Variable, Constant, linear_map_axes, sample_axes, \
     batch_axes, assign

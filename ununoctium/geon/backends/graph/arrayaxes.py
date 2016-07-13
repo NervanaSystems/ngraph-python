@@ -167,7 +167,8 @@ class TensorDescription(object):
             return offset
 
     def reaxe(self, reaxes, broadcast=True):
-        if self.axes == tuple(reaxes):
+        reaxes = canonicalize_axes(reaxes)
+        if self.axes == reaxes:
             return self
 
         # Format of reaxes:

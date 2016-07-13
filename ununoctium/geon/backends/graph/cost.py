@@ -55,7 +55,7 @@ class CrossEntropyBinary(Cost):
     the deriviate that saves computation.
     """
 
-    def __init__(self, scale=1):
+    def __init__(self, scale=None):
         """
         Args:
             scale (float, optional): Amount by which to scale the backpropagated error (default: 1)
