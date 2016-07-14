@@ -1989,14 +1989,21 @@ class less_equal(ElementWiseBoolean):
 
 
 class softmax(ComputationOp):
-    def __init__(self, x, **kargs):
+    def __init__(self, x, softmax_axes=None, **kargs):
+        if softmax_axes is None:
+            softmax_axes = tensor_sample_axes(x, **kargs)
+        self.softmax_axes = softmax_axes
         self.x = x
-        exps = exp(x-max(x))
-        self.z = sum(exps)
+        exps = exp(x-max(x, reduction_axes=softmax_axes))
+        self.z = sum(exps, reduction_axes=softmax_axes)
         super(softmax, self).__init__(args=(exps/self.z,), **kargs)
 
     def visit(self, visitor):
         return visitor.visit_softmax(self, self.x, *self.args)
+
+    def compute_tensor_axes_info(self):
+        smax, = self.args
+        return smax.tensor_axes_info
 
     @property
     def axes(self):
@@ -2192,10 +2199,23 @@ class log(ElementWise):
         return visitor.visit_log(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        if isinstance(x, exp):
-            x.args[0].generate_add_delta(adjoints, delta)
-        else:
-            x.generate_add_delta(adjoints, delta / x)
+        def do_adjoint(delta, x):
+
+            if isinstance(x, softmax):
+                x, = x.args
+
+            if isinstance(x, divide):
+                a, b = x.args
+                do_adjoints(delta, a)
+                do_adjoints(-delta, b)
+
+            elif isinstance(x, exp):
+                x.args[0].generate_add_delta(adjoints, delta)
+
+            else:
+                x.generate_add_delta(adjoints, delta / x)
+
+        do_adjoints(delta, x)
 
     def evaluate(self, evaluator, out, x):
         evaluator.log(x, out)

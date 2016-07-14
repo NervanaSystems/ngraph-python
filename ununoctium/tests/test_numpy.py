@@ -1,11 +1,11 @@
 from geon.backends.graph.graph_test_utils import *
 
-env = be.Environment()
+
 rng = RandomTensorGenerator(0, np.float32)
 
 
 def test_constants():
-    with be.bound_environment(env):
+    with be.bound_environment():
         # Simple evaluation of a scalar
         val = 5
         x = be.Constant(5)
@@ -53,7 +53,7 @@ def test_constants():
 
 
 def test_reduction():
-    with be.bound_environment(env):
+    with be.bound_environment():
         ax.C.length = 4
         ax.W.length = 10
         ax.H.length = 20
@@ -64,10 +64,9 @@ def test_reduction():
         p_u.value = u
 
         for npred, bered, red in [(np.sum, be.sum, 'sum'), (np.max, be.max, 'max'), (np.min, be.min, 'min')]:
-
-            cured = npred(u, 0) # WH
-            wured = npred(u, 1) # CH
-            hured = npred(u, 2) # CW
+            cured = npred(u, 0)  # WH
+            wured = npred(u, 1)  # CH
+            hured = npred(u, 2)  # CW
 
             cred, wred, hred = execute(
                 [bered(p_u, reduction_axes=[ax.C]),
@@ -88,3 +87,60 @@ def test_reduction():
 
             assert np.array_equal(cwured, cwmax), red
             assert np.array_equal(whured, whmax), red
+
+
+def np_softmax(x, axis):
+    # Shape for broadcasts
+    shape = list(x.shape)
+    shape[axis] = 1
+
+    exps = np.exp(x - np.max(x, axis).reshape(shape))
+    return exps / np.sum(exps, axis).reshape(shape)
+
+
+def test_np_softmax():
+    with be.bound_environment():
+        ax.N.length = 128
+        ax.C.length = 20
+
+        # set up some distributions
+        u = np.empty((ax.C.length, ax.N.length))
+        u = rng.uniform(0, 1, [ax.C, ax.N])
+        u = u / sum(u, 0).reshape(1, ax.N.length)
+
+        # Put them in pre-softmax form
+        x = np.log(u) + rng.uniform(-5000, 5000, [ax.N]).reshape(1, ax.N.length)
+
+        s = np_softmax(x, 0)
+        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
+
+def test_softmax():
+    with be.bound_environment():
+        ax.W.length = 128
+        ax.N.length = 10
+        be.set_batch_axes([ax.N])
+        axes = [ax.W, ax.N]
+
+        # set up some distributions
+        u = rng.uniform(0, 1, [ax.W, ax.N])
+        u = u / sum(u, 0).reshape(1, ax.N.length)
+
+        # Put them in pre-softmax form
+        x = np.log(u) + rng.uniform(-5000, 5000, [ax.N]).reshape(1, ax.N.length)
+        p_x = be.placeholder(axes=axes)
+        p_x.value = x
+
+        s, = execute([be.softmax(p_x, softmax_axes=[ax.W])])
+        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
+        x = rng.uniform(-5000, 5000, [ax.W, ax.N])
+        p_x.value = x
+        u = np_softmax(x, 0)
+        s, = execute([be.softmax(p_x, softmax_axes=[ax.W])])
+        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
+        # Test with softmax_axis default
+        s, = execute([be.softmax(p_x)])
+        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
