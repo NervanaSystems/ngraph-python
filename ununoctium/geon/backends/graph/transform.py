@@ -2052,7 +2052,6 @@ class max(ReductionOp):
     def visit(self, visitor):
         return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
 
-
     def evaluate(self, evaluator, out, x):
         if self.mode is 'copy':
             # TODO Change this to a node replace
@@ -2070,7 +2069,6 @@ class min(ReductionOp):
 
     def visit(self, visitor):
         return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
-
 
     def evaluate(self, evaluator, out, x):
         if self.mode is 'copy':
