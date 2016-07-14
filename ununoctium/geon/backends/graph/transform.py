@@ -2199,7 +2199,7 @@ class log(ElementWise):
         return visitor.visit_log(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        def do_adjoint(delta, x):
+        def do_adjoints(delta, x):
 
             if isinstance(x, softmax):
                 x, = x.args

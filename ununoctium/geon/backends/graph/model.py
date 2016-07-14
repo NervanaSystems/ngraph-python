@@ -108,14 +108,14 @@ class Model(GraphComponent):
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
 
-                transform.Op.simple_prune([self.cost.mean_cost, updates])
+                #transform.Op.simple_prune([self.cost.mean_cost, updates])
 
                 dataflow = analysis.DataFlowGraph([self.cost.mean_cost, updates])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                dataflow.view()
+                #dataflow.view()
 
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
                 #dataflow.render('cifar_mlp.gv', True)             
