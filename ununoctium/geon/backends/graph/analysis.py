@@ -249,5 +249,3 @@ def color(interference):
         na.style = {'style':'filled', 'fillcolor': cmap[na.tensor_axes_info.buffer.color]}
     total_mem = sum([x.size for x in buffers])
     return total_mem
-
-    
