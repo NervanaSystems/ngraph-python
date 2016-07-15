@@ -990,16 +990,19 @@ class Op(nodes.Node):
         """
         nodes.Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
-    @property
-    def adjoints(self):
+    def adjoints(self, initial_adjoint=None):
         if self._adjoints is not None:
             return self._adjoints
+
+        if initial_adjoint is None:
+            initial_adjoint = Constant(1)
+        self.initial_adjoint = initial_adjoint
 
         self._adjoints = weakref.WeakKeyDictionary()
         ordered_ops = []
         Op.get_ordered_ops(self, ordered_ops)
-        self._adjoints[self] = Op.as_op(1)
-        for o in reversed(ordered_ops):
+        self._adjoints[self] = self.initial_adjoint
+        for o in list(reversed(ordered_ops)):
             if o in self._adjoints:
                 scale = o.scale
                 adjoint = self._adjoints[o]
@@ -2431,8 +2434,8 @@ def mean(x, **kargs):
     return sum(x, **kargs) / tensor_size(x, **kargs)
 
 
-def deriv(dep, indep):
-    return dep.adjoints[indep]
+def deriv(dep, indep, initial_adjoint=None):
+    return dep.adjoints(initial_adjoint)[indep]
 
 
 def cross_entropy_multi(y, t, usebits=False, out_axes=None):
