@@ -180,7 +180,7 @@ def test_softmax():
         axes = [ax.W]
         ax.W.length = 20
 
-        x = rng.uniform(0, 1, [ax.W])
+        x = rng.uniform(0, 1, axes)
         p_x = be.placeholder(axes=axes)
         p_x.value = x
 
@@ -195,6 +195,15 @@ def test_softmax():
         tdsx = transform_derivative(sx, p_x)
         assert np.allclose(npadiff, tdsx, atol=1e-2, rtol=1e-2)
 
+        # Now try cross-entropy
+        t = np_softmax(rng.uniform(0, 1, axes), 0)
+        p_t = be.placeholder(axes=axes)
+        p_t.value = t
+
+        ce = be.cross_entropy_multi(sx, p_t)
+        ndce = transform_numeric_derivative(ce, p_x, .001)
+        tdce = transform_derivative(ce, p_x)
+        assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
 
 
 
