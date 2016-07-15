@@ -98,6 +98,29 @@ def np_softmax(x, axis):
     return exps / np.sum(exps, axis).reshape(shape)
 
 
+def adiff_softmax(x):
+    """
+    The version of the diff we use in autodiff, without batch axis.
+    :param x:
+    :return:
+    """
+    def softmax_adiff(y_, y):
+        z = y_ * y
+        zs = z.sum()
+        x_ = z - zs * y
+        return x_
+
+    y = np_softmax(x, 0)
+    n = x.shape[0]
+    result = np.zeros((n,n))
+    y_ = np.zeros_like(x)
+    for i in range(n):
+        y_[i] = 1
+        result[i,:] = softmax_adiff(y_, y)
+        y_[i] = 0
+    return result
+
+
 def test_np_softmax():
     with be.bound_environment():
         ax.N.length = 128
@@ -113,6 +136,15 @@ def test_np_softmax():
 
         s = np_softmax(x, 0)
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
+        # Drop batch axis and test the derivative
+        x0 = x[:,0]
+        def np_softmax_0(x):
+            return np_softmax(x, 0)
+
+        a = numeric_derivative(np_softmax_0, x0, .001)
+        s = adiff_softmax(x0)
+        assert np.allclose(s, a, atol=1e-2, rtol=1e-2)
 
 
 def test_softmax():
@@ -143,4 +175,27 @@ def test_softmax():
         # Test with softmax_axis default
         s, = execute([be.softmax(p_x)])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+
+        # Now try the derivative
+        axes = [ax.W]
+        ax.W.length = 20
+
+        x = rng.uniform(0, 1, [ax.W])
+        p_x = be.placeholder(axes=axes)
+        p_x.value = x
+
+        sx = be.softmax(p_x, softmax_axes=axes)
+        sxval, = execute([sx])
+
+        npadiff = adiff_softmax(x)
+        ndsx = transform_numeric_derivative(sx, p_x, .001)
+
+        assert np.allclose(npadiff, ndsx, atol=1e-2, rtol=1e-2)
+
+        tdsx = transform_derivative(sx, p_x)
+        assert np.allclose(npadiff, tdsx, atol=1e-2, rtol=1e-2)
+
+
+
+
 
