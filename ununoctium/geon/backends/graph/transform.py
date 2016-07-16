@@ -15,7 +15,6 @@ from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
     canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size, axes_sizes
-
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
@@ -29,6 +28,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.environment = environment
         self.results = results
         self.opids = dict()
+
+        Op.simple_prune(results)
+
+        # print 'The memory footprint is {} MB'.format(memory*10**-6)
+        # dataflow.render('cifar_mlp.gv', True)
 
         self.ops = Op.ordered_ops(self.results)
         self.initializers = self.ordered_initializers(self.ops)
@@ -113,7 +117,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         return r
 
     def value(self, op):
-        return op.tensor_axes_info.tensor_description.value
+        return op.tensor_axes_info.reaxe(op.axes.value).value
 
     def set_value(self, op, tensor):
         op.tensor_axes_info.set_tensor(self, tensor)
@@ -587,6 +591,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_broadcast(self, broadcast, x):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def visit_absolute(self, absolute, x):
         raise NotImplementedError()
 
@@ -784,6 +792,9 @@ class Visitor(nodes.Visitor):
     def visit_numpy_tensor(self, numpy_tensor, nptensor):
         return self.visit_allocation(numpy_tensor)
 
+    def visit_broadcast(self, broadcast, x):
+        return self.visit_tensor(broadcast)
+
     def visit_absolute(self, absolute, x):
         return self.visit_elementwise(absolute)
 
@@ -848,7 +859,7 @@ class Visitor(nodes.Visitor):
         return self.visit_elementwise(log)
 
     def visit_safelog(self, safelog, x):
-        return self.visit_elementwise(safelog)
+        return self.visit_log(safelog, x)
 
     def visit_max(self, max, x, y):
         return self.visit_reduction(max)
@@ -897,15 +908,35 @@ class Visitor(nodes.Visitor):
 
 
 class SimplePrune(Visitor):
-    def __init__(self):
+    def __init__(self, results):
+        self.results = results
         self.reps = []
 
     def init(self):
         self.reps = []
 
-    def visit_negative(self, negative, x):
+    def constant_arg(self, x):
         if isinstance(x, Constant):
-            self.reps.append((negative, Constant(-x.const)))
+            return x.const
+        if isinstance(x, Broadcast):
+            return constant_arg(x.args[0])
+
+    def add_rep(self, op, replacement):
+        # Can't replace op if its being returned
+        if op not in self.results:
+            self.reps.append((op, replacement))
+
+    def visit_negative(self, negative, x):
+        if isinstance(x, Broadcast):
+            bx = x.args[0]
+            if isinstance(bx, Constant):
+                self.add_rep(negative, Broadcast(Constant(bx.const), axes=x.axes))
+        elif isinstance(x, Constant):
+            self.add_rep(negative, Constant(-x.const))
+
+    def visit_broadcast(self, broadcast, x):
+        if isinstance(x, Broadcast):
+            self.add_rep(broadcast, Broadcast(x.args[0], axes=broadcast.axes))
 
     def visit_multiply(self, multiply, x, y):
         rep = None
@@ -924,7 +955,7 @@ class SimplePrune(Visitor):
             elif y.const == -1:
                 rep = negative(x)
         if rep is not None:
-            self.reps.append((multiply, rep))
+            self.add_rep(multiply, rep)
 
     def visit_add(self, add, x, y):
         rep = None
@@ -935,13 +966,25 @@ class SimplePrune(Visitor):
             if y.const == 0:
                 rep = x
         if rep is not None:
-            self.reps.append((add, rep))
+            self.add_rep(add, rep)
 
     def visit_sum(self, sum, reduction_axes, x):
         rep = None
         if isinstance(x, Constant):
             val = x.const*axes_size(reduction_axes)
-            self.reps.append((sum, Constant(val)))
+            self.add_rep(sum, Constant(val))
+
+    def visit_log(self, log, x):
+        if isinstance(x, softmax):
+            x, = x.args
+        if isinstance(x, divide):
+            num, denom = x.args
+            if isinstance(num, exp):
+                exp_x, = num.args
+                self.add_rep(log, exp_x - type(log)(denom))
+        elif isinstance(x, exp):
+            exp_x, = x.args
+            self.add_rep(log, exp_x)
 
     def do_replacements(self):
         for old, rep in self.reps:
@@ -990,15 +1033,17 @@ class Op(nodes.Node):
         """
         nodes.Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
-    def adjoints(self, initial_adjoint=None):
+    def adjoints(self):
         if self._adjoints is not None:
             return self._adjoints
 
-        if initial_adjoint is None:
+        if len(self.axes.value) == 0:
             initial_adjoint = Constant(1)
+        else:
+            initial_adjoint = placeholder(axes=self.axes)
         self.initial_adjoint = initial_adjoint
 
-        self._adjoints = weakref.WeakKeyDictionary()
+        self._adjoints = dict()
         ordered_ops = []
         Op.get_ordered_ops(self, ordered_ops)
         self._adjoints[self] = self.initial_adjoint
@@ -1051,7 +1096,7 @@ class Op(nodes.Node):
 
     @staticmethod
     def simple_prune(results):
-        pruner = SimplePrune()
+        pruner = SimplePrune(results)
 
         has_work = True
         while has_work:
@@ -1104,10 +1149,13 @@ class TensorAxesInfo(object):
 
     def set_tensor(self, evaluator, tensor):
         self.tensor_description.value = tensor
+        self.update_views(evaluator, True)
+
+    def update_views(self, evaluator, force):
         for view in self.views.values():
             if view.tensor_description is self.tensor_description:
                 continue
-            view.update_tensor(evaluator)
+            view.update_tensor(evaluator, force)
 
     def allocate(self, evaluator):
         if self.tensor_description.value is None:
@@ -1116,6 +1164,8 @@ class TensorAxesInfo(object):
             else:
                 tensor = evaluator.empty(self.tensor_description)
             self.set_tensor(evaluator, tensor)
+        else:
+            self.update_views(evaluator, False)
 
     def get_or_default(self, axes, default_function):
         axes = canonicalize_axes(axes)
@@ -1147,9 +1197,10 @@ class TensorViewInfo(object):
     def value(self):
         return self.tensor_description.value
 
-    def update_tensor(self, evaluator):
+    def update_tensor(self, evaluator, force):
         tensor_description = self.tensor_description
-        tensor_description.value = evaluator.tensor_view(tensor_description)
+        if force or tensor_description.value is None:
+            tensor_description.value = evaluator.tensor_view(tensor_description)
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
@@ -1253,7 +1304,7 @@ class ValueAxesComp(AxesComp):
         self.x = x
 
     def resolve(self):
-        return self.x.resolved_axes
+        return self.x.axes.value
 
 
 class AxesSubComp(AxesComp):
@@ -1323,6 +1374,15 @@ class Tensor(Op):
         return self.__axes
 
     def generate_add_delta(self, adjoints, delta):
+        delta_axes = delta.axes.value
+        self_axes = self.axes.value
+        reduction_axes = axes_sub(delta_axes, self_axes)
+        if reduction_axes:
+            delta = sum(delta, reduction_axes=reduction_axes)
+        broadcast_axes = axes_sub(self_axes, delta_axes)
+        if broadcast_axes:
+            delta = Broadcast(delta, axes=self.axes)
+
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -1436,7 +1496,7 @@ class Tensor(Op):
         return self.__call_info
 
     def compute_call_info(self):
-        return [self.reaxe(self.resolved_axes)]
+        return [self.reaxe(self.axes.value)]
 
     def evaluate_call_info(self, evaluator, *args):
         call_args = [arg.value for arg in args]
@@ -1458,6 +1518,19 @@ class Tensor(Op):
         return mean(self, out_axes=out_axes, **kargs)
 
 
+class Broadcast(Tensor):
+    def __init__(self, x, **kargs):
+        super(Broadcast, self).__init__(args=(x,), **kargs)
+
+    def compute_tensor_axes_info(self):
+        x, = self.args
+        return x.tensor_axes_info
+
+    def visit(self, visitor):
+        x, = self.args
+        return visitor.visit_broadcast(self, x)
+
+
 class AllocationOp(Tensor):
     def __init__(self, init=None, initial_value=None, initializers=[], **kargs):
         super(AllocationOp, self).__init__(**kargs)
@@ -1470,7 +1543,7 @@ class AllocationOp(Tensor):
             self.initializers.append(assign(self, initial_value))
 
     def visit(self, visitor):
-        return self.visit_allocation(self)
+        return visitor.visit_allocation(self)
 
 
 class ComputationOp(Tensor):
@@ -1506,7 +1579,7 @@ class RNG(AllocationOp):
         self.seed = seed
 
     def visit(self, visitor):
-        return self.visit_RNG(self)
+        return visitor.visit_RNG(self)
 
     def compute_tensor_axes_info(self):
         tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
@@ -1535,7 +1608,7 @@ class RNGOp(AllocationOp):
 
     def compute_call_info(self):
         rng, = self.args
-        return [rng.reaxe(rng.resolved_axes)]
+        return [rng.reaxe(rng.axes.value)]
 
 
 class Uniform(RNGOp):
@@ -1550,7 +1623,7 @@ class Uniform(RNGOp):
         self.tensor_axes_info.alloc = allocator
 
     def visit(self, visitor):
-        return self.visit_uniform(self, self.low, self.high, *self.args)
+        return visitor.visit_uniform(self, self.low, self.high, *self.args)
 
 
 class VoidOp(ComputationOp):
@@ -1587,8 +1660,8 @@ class SetItem(VoidOp):
     def compute_call_info(self):
         tensor, val = self.args
         call_info = super(SetItem, self).compute_call_info()
-        call_info.append(tensor.reaxe(tensor.resolved_axes))
-        call_info.append(val.reaxe(tensor.resolved_axes))
+        call_info.append(tensor.reaxe(tensor.axes.value))
+        call_info.append(val.reaxe(tensor.axes.value))
         return call_info
 
     def evaluate(self, evaluator, tensor, val):
@@ -1608,7 +1681,7 @@ class ElementWise(ComputationOp):
         super(ElementWise, self).__init__(**kargs)
 
     def visit(self, visitor):
-        return self.visit_elementwise(self)
+        return visitor.visit_elementwise(self)
 
     @property
     def axes(self):
@@ -1621,7 +1694,7 @@ class ElementWise(ComputationOp):
     def compute_call_info(self):
         ci = super(ElementWise, self).compute_call_info()
         for arg in self.args:
-            ci.append(arg.reaxe(self.resolved_axes))
+            ci.append(arg.reaxe(self.axes.value))
         return ci
 
 
@@ -1686,7 +1759,7 @@ class Fill(VoidOp):
     def compute_call_info(self):
         tensor, = self.args
         call_info = super(Fill, self).compute_call_info()
-        call_info.append(tensor.reaxe(tensor.resolved_axes))
+        call_info.append(tensor.reaxe(tensor.axes.value))
         return call_info
 
     def evaluate(self, evaluator, tensor):
@@ -1746,7 +1819,7 @@ class NumPyTensor(AllocationOp):
         return str(self.nptensor.shape)
 
     def visit(self, visitor):
-        return self.visit_numpy_tensor(self, self.nptensor)
+        return visitor.visit_numpy_tensor(self, self.nptensor)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1780,8 +1853,8 @@ class add(ElementWise):
         evaluator.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta, out_axes=x.axes))
-        y.generate_add_delta(adjoints, sum(delta, out_axes=y.axes))
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, delta)
 
 
 class argmax(ComputationOp):
@@ -1835,7 +1908,7 @@ class cos(ElementWise):
         super(cos, self).__init__(args=(x,), **kargs)
 
     def visit(self, visitor):
-        return self.visit_cos(self, *self.args)
+        return visitor.visit_cos(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * sin(x))
@@ -1888,7 +1961,7 @@ class dot(ComputationOp):
         if len(x_axes) is 0 or len(y_axes) is 0:
             # TODO turn this into multiply ahead of time
             self.multiply = True
-            return [self.reaxe(self.resolved_axes), x.reaxe(x.resolved_axes), y.reaxe(y.resolved_axes)]
+            return [self.reaxe(self.axes.value), x.reaxe(x.axes.value), y.reaxe(y.axes.value)]
             np.multiply(x, y, out=out)
             return
 
@@ -2037,12 +2110,12 @@ class ReductionOp(ComputationOp):
 
         if len(reduction_axes) == 0:
             # TODO do this as a reaxe to 1d or something
-            xr = x.reaxe(self.resolved_axes)
+            xr = x.reaxe(self.axes.value)
             self.mode = 'copy'
-            return [self.reaxe(self.resolved_axes), xr]
+            return [self.reaxe(self.axes.value), xr]
         else:
-            x_axes = x.resolved_axes
-            np_out_axes = self.resolved_axes
+            x_axes = x.axes.value
+            np_out_axes = self.axes.value
             red_axes = [reduction_axes]
             red_axes.extend(np_out_axes)
             self.mode = 0
@@ -2070,7 +2143,7 @@ class max(ReductionOp):
             evaluator.max(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*equal(self, x))
+        x.generate_add_delta(adjoints, equal(x, self)*delta)
 
 
 class min(ReductionOp):
@@ -2088,7 +2161,7 @@ class min(ReductionOp):
             evaluator.min(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*equal(self, x))
+        x.generate_add_delta(adjoints, equal(x, self)*delta)
 
 
 class sum(ReductionOp):
@@ -2188,7 +2261,7 @@ class exp(ElementWise):
         return visitor.visit_exp(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta)
+        x.generate_add_delta(adjoints, delta*self)
 
     def evaluate(self, evaluator, out, x):
         evaluator.exp(x, out)
@@ -2204,7 +2277,7 @@ class log(ElementWise):
     def generate_adjoints(self, adjoints, delta, x):
         def do_adjoints(delta, x):
 
-            if isinstance(x, softmax):
+            if False and isinstance(x, softmax):
                 x, = x.args
 
             if isinstance(x, divide):
@@ -2274,8 +2347,8 @@ class multiply(ElementWise):
         return visitor.visit_multiply(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, sum(delta * y, out_axes=x.axes))
-        y.generate_add_delta(adjoints, sum(x * delta, out_axes=y.axes))
+        x.generate_add_delta(adjoints, delta * y)
+        y.generate_add_delta(adjoints, x * delta)
 
     def evaluate(self, evaluator, out, x, y):
         evaluator.multiply(x, y, out)
@@ -2434,8 +2507,8 @@ def mean(x, **kargs):
     return sum(x, **kargs) / tensor_size(x, **kargs)
 
 
-def deriv(dep, indep, initial_adjoint=None):
-    return dep.adjoints(initial_adjoint)[indep]
+def deriv(dep, indep):
+    return dep.adjoints()[indep]
 
 
 def cross_entropy_multi(y, t, usebits=False, out_axes=None):

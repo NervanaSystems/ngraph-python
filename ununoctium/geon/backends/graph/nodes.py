@@ -132,7 +132,7 @@ class Node(NameableValue):
         name = ''
         if self.name is not None:
             name = '{' + self.name + '}'
-        return '{seqid}:{cls}{name}'.format(name=name, seqid=self.seqid, cls=self.__class__.__name__)
+        return '{cls}{name}'.format(name=name, cls=self.__class__.__name__)
 
     def _abbrev_value(self, value):
         if isinstance(value, Node):

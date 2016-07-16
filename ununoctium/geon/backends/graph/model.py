@@ -108,18 +108,17 @@ class Model(GraphComponent):
                 self.initialize(self.graph.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
 
-                #transform.Op.simple_prune([self.cost.mean_cost, updates])
+                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
 
-                dataflow = analysis.DataFlowGraph([self.cost.mean_cost, updates])
+                dataflow = analysis.DataFlowGraph(self.enp.results)
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                #dataflow.view()
+                dataflow.view()
 
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
-                #dataflow.render('cifar_mlp.gv', True)             
-                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
+                #dataflow.render('cifar_mlp.gv', True)
 
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:

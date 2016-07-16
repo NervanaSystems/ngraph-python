@@ -91,28 +91,30 @@ def transform_derivative(f, px):
     x = px.value
     fshape = axes_shape(f.axes.value)
     xshape = axes_shape(px.axes.value)
-    dfdxshape = list(fshape)
-    dfdxshape.extend(xshape)
-    npdfdx = np.empty(dfdxshape, dtype=x.dtype)
 
-    dindex = [slice(None) for _ in fshape]
-    dindex.extend((0 for _ in xshape))
-
-    adjoint = np.zeros(fshape, dtype=x.dtype)
-    padjoint = be.placeholder(axes=f.axes)
-    padjoint.value = adjoint
-
-    dfdx = be.deriv(f, px, padjoint)
+    dfdx = be.deriv(f, px)
 
     trans = be.NumPyTransformer(results=[dfdx])
+    if len(fshape) is 0:
+        return trans.evaluate()[dfdx]
+    else:
+        dfdxshape = list(fshape)
+        dfdxshape.extend(xshape)
+        npdfdx = np.empty(dfdxshape, dtype=x.dtype)
 
-    idxiter = np.nditer(adjoint, flags=['multi_index'], op_flags=['readwrite'])
-    for xiter in idxiter:
-        xiter[...] = 1
-        df = trans.evaluate()[dfdx]
-        xindex = idxiter.multi_index
-        dindex[len(fshape):] = xindex
-        npdfdx[tuple(dindex)] = df
-        xiter[...] = 0
+        dindex = [0 for _ in fshape]
+        dindex.extend([slice(None) for _ in xshape])
 
-    return npdfdx
+        adjoint = np.zeros(fshape, dtype=x.dtype)
+        f.initial_adjoint.value = adjoint
+
+        idxiter = np.nditer(adjoint, flags=['multi_index'], op_flags=['readwrite'])
+        for dfdxiter in idxiter:
+            dfdxiter[...] = 1
+            df = trans.evaluate()[dfdx]
+            xindex = idxiter.multi_index
+            dindex[0:len(fshape)] = xindex
+            npdfdx[tuple(dindex)] = df
+            dfdxiter[...] = 0
+
+        return npdfdx
