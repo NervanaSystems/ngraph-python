@@ -1,6 +1,5 @@
 from geon.backends.graph.graph_test_utils import *
 
-
 rng = RandomTensorGenerator(0, np.float32)
 
 
@@ -79,20 +78,20 @@ def test_reduction():
 
 
 def test_reduction_deriv():
-    # TODO numerical min/max deriv needs to ensure that no x values are within delta of the extremum, for example
-    # by quantizing u to multiples of 2delta
     with be.bound_environment():
         delta = .001
         ax.C.length = 4
-        ax.W.length = 20
-        ax.H.length = 20
+        ax.W.length = 10
+        ax.H.length = 10
         axes = [ax.C, ax.W, ax.H]
 
-        u = rng.uniform(-1.0, 1.0, axes)
+        u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
         p_u = be.placeholder(axes=axes)
         p_u.value = u
 
+        # Need to test max/min differently since if two elements are extremums
+        # and we modify one, the derivative will change.
         for npred, bered, red in [(np.sum, be.sum, 'sum')]:
             for reduction_axes in [[ax.C],
                                    [ax.W],
@@ -101,9 +100,10 @@ def test_reduction_deriv():
                                    [ax.W, ax.H]]:
                 dims = tuple(axes.index(axis) for axis in reduction_axes)
                 graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-                drgaph_val_num = transform_numeric_derivative(graph_reduce, p_u, delta)
+                dgraph_val_num = transform_numeric_derivative(graph_reduce, p_u, delta)
                 dgraph_val = transform_derivative(graph_reduce, p_u)
-                assert np.allclose(drgaph_val_num, dgraph_val, atol=1e-2, rtol=1e-2), 'red:{red}, axes:{axes}'.format(red=red, axes=reduction_axes)
+                assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1, rtol=1e-1), 'red:{red}, axes:{axes}'.format(
+                    red=red, axes=reduction_axes)
 
 
 def test_elementwise_ops_matched_args():
@@ -221,6 +221,7 @@ def adiff_softmax(x):
     :param x:
     :return:
     """
+
     def softmax_adiff(y_, y):
         z = y_ * y
         zs = z.sum()
@@ -229,11 +230,11 @@ def adiff_softmax(x):
 
     y = np_softmax(x, 0)
     n = x.shape[0]
-    result = np.zeros((n,n))
+    result = np.zeros((n, n))
     y_ = np.zeros_like(x)
     for i in range(n):
         y_[i] = 1
-        result[i,:] = softmax_adiff(y_, y)
+        result[i, :] = softmax_adiff(y_, y)
         y_[i] = 0
     return result
 
@@ -255,7 +256,8 @@ def test_np_softmax():
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Drop batch axis and test the derivative
-        x0 = x[:,0]
+        x0 = x[:, 0]
+
         def np_softmax_0(x):
             return np_softmax(x, 0)
 
@@ -264,12 +266,9 @@ def test_np_softmax():
         assert np.allclose(s, a, atol=1e-2, rtol=1e-2)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None):
-    logscale = np.float(1. / np.log(2.0) if usebits else 1.)
-    return -sum(safelog(y) * t, out_axes=out_axes) * logscale
-
 def np_cross_entropy_multi(y, t, axis=None):
-    return -np.sum(np.log(y)*t, axis=axis)
+    return -np.sum(np.log(y) * t, axis=axis)
+
 
 def test_softmax():
     with be.bound_environment():
@@ -303,7 +302,7 @@ def test_softmax():
         # Now try the derivative
         axes = [ax.W, ax.N]
         ax.W.length = 3
-        ax.N.length =10
+        ax.N.length = 10
 
         x = rng.uniform(0, 1, axes)
         p_x = be.placeholder(axes=axes)
@@ -312,10 +311,10 @@ def test_softmax():
         sx = be.softmax(p_x)
         sxval, = execute([sx])
 
-        #npadiff = adiff_softmax(x)
+        # npadiff = adiff_softmax(x)
         ndsx = transform_numeric_derivative(sx, p_x, .001)
 
-        #assert np.allclose(npadiff, ndsx, atol=1e-2, rtol=1e-2)
+        # assert np.allclose(npadiff, ndsx, atol=1e-2, rtol=1e-2)
 
         tdsx = transform_derivative(sx, p_x)
         assert np.allclose(ndsx, tdsx, atol=1e-2, rtol=1e-2)
@@ -333,12 +332,9 @@ def test_softmax():
 
         def np_all(x):
             return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
+
         npdce = numeric_derivative(np_all, x, .001)
 
         ndce = transform_numeric_derivative(ce, p_x, .001)
         tdce = transform_derivative(ce, p_x)
         assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
-
-
-
-

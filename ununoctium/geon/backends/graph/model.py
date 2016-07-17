@@ -115,7 +115,7 @@ class Model(GraphComponent):
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                dataflow.view()
+                #dataflow.view()
 
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
                 #dataflow.render('cifar_mlp.gv', True)
@@ -143,6 +143,7 @@ class Model(GraphComponent):
         """
         epoch = self.epoch_index
         self.total_cost = 0
+        batch = 0
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
@@ -154,7 +155,7 @@ class Model(GraphComponent):
             batch_cost = vals[self.cost.mean_cost]
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
-
+            batch = batch + 1
             callbacks.on_minibatch_end(epoch, mb_idx)
 
         # now we divide total cost by the number of batches,

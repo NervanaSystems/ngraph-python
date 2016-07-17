@@ -15,9 +15,11 @@ from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
 from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
     canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size, axes_sizes
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
+try:
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+except:
+    pass
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
@@ -1122,7 +1124,7 @@ class TensorAxesInfo(object):
 
     def __init__(self, axes, alloc=None, read_only=False, tags=(), dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
-        axes = tuple(axes)
+        axes = canonicalize_axes(axes)
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
         self.alloc = alloc
@@ -1176,6 +1178,7 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
+        reaxe = canonicalize_axes(reaxe)
         return self.get_or_default(reaxe, lambda: TensorReaxeViewInfo(tensor_axes_info=self, reaxes=reaxe,
                                                                       idx=len(self.views)))
 
@@ -1208,7 +1211,7 @@ class TensorReaxeViewInfo(TensorViewInfo):
 
     def __init__(self, reaxes, **kargs):
         super(TensorReaxeViewInfo, self).__init__(**kargs)
-        self.reaxes = reaxes
+        self.reaxes = canonicalize_axes(reaxes)
         self.__tensor_description = None
 
     @property

@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 from geon.backends.graph.arrayaxes import axes_shape
@@ -16,6 +17,13 @@ class RandomTensorGenerator(object):
 
     def uniform(self, low, high, axes):
         return np.array(self.rng.uniform(low, high, axes_shape(axes)), dtype=self.dtype)
+
+    def discrete_uniform(self, low, high, quantum, axes):
+        n = math.floor((high - low)/quantum)
+        result = np.array(self.rng.random_integers(0, n, axes_shape(axes)), dtype=self.dtype)
+        np.multiply(result, quantum, result)
+        np.add(result, low, result)
+        return result
 
 
 def execute(nodes):
@@ -36,7 +44,7 @@ def shape(x):
         return ()
 
 
-def numeric_derivative(f, x, delta):
+def numeric_derivative(f, x, dx):
     """
     Computer df/dx at x numerically.
 
@@ -44,13 +52,13 @@ def numeric_derivative(f, x, delta):
 
     :param f: Tensor function.
     :param x: Derivative position.
-    :param delta: scalar dx change in each dimension
+    :param dx: scalar dx change in each dimension
     :return: Derivative, with f(x), x indexing, i.e. if f is 2x4 and x is 3x7, result is 2x4x3x7.
     """
     xshape = shape(x)
     # Copy because we always compute into the same place
-    fx = np.copy(f(x))
-    fshape = shape(fx)
+    y = np.copy(f(x))
+    fshape = shape(y)
     dshape = list(fshape)
     dshape.extend(xshape)
     d = np.zeros(shape=dshape, dtype=np.float32)
@@ -60,17 +68,16 @@ def numeric_derivative(f, x, delta):
     idxiter = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
     for xiter in idxiter:
         old_x = np.float32(xiter)
-        xiter[...] = old_x + delta
-        fdx = f(x) - fx
-        xindex = idxiter.multi_index
-        dindex[len(fshape):] = xindex
-        d[tuple(dindex)] = (fdx / delta)
+        xiter[...] = old_x + dx
+        dy = f(x) - y
+        dindex[len(fshape):] = idxiter.multi_index
+        d[tuple(dindex)] = (dy / dx)
         xiter[...] = old_x
 
     return d
 
 
-def transform_numeric_derivative(f, p_x, delta):
+def transform_numeric_derivative(f, p_x, dx):
     trans = be.NumPyTransformer(results=[f])
 
     def trans_softmax(x):
@@ -78,7 +85,7 @@ def transform_numeric_derivative(f, p_x, delta):
         result = trans.evaluate()
         return result[f]
 
-    return numeric_derivative(trans_softmax, p_x.value, delta)
+    return numeric_derivative(trans_softmax, p_x.value, dx)
 
 
 def transform_derivative(f, px):
@@ -112,8 +119,7 @@ def transform_derivative(f, px):
         for dfdxiter in idxiter:
             dfdxiter[...] = 1
             df = trans.evaluate()[dfdx]
-            xindex = idxiter.multi_index
-            dindex[0:len(fshape)] = xindex
+            dindex[0:len(fshape)] = idxiter.multi_index
             npdfdx[tuple(dindex)] = df
             dfdxiter[...] = 0
 

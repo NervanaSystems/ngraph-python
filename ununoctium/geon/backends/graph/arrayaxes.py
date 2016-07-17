@@ -141,8 +141,8 @@ class TensorDescription(object):
                 if verify:
                     assert axis.length <= size, "An dimension size cannot be less than the dimension length"
                 self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
-                stride = stride * size
                 strides.append(stride)
+                stride = stride * size
             self.strides = tuple(reversed(strides))
         else:
             assert len(strides) == self.ndim
