@@ -33,7 +33,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.results = results
         self.opids = dict()
 
-        #Op.simple_prune(results)
+        Op.simple_prune(results)
 
         # print 'The memory footprint is {} MB'.format(memory*10**-6)
         # dataflow.render('cifar_mlp.gv', True)
@@ -919,28 +919,14 @@ class SimplePrune(Visitor):
     def init(self):
         self.reps = []
 
-    def constant_arg(self, x):
-        if isinstance(x, Constant):
-            return x.const
-        if isinstance(x, Broadcast):
-            return self.constant_arg(x.args[0])
-
     def add_rep(self, op, replacement):
         # Can't replace op if its being returned
         if op not in self.results:
             self.reps.append((op, replacement))
 
     def visit_negative(self, negative, x):
-        if isinstance(x, Broadcast):
-            bx = x.args[0]
-            if isinstance(bx, Constant):
-                self.add_rep(negative, Broadcast(Constant(bx.const), axes=x.axes))
-        elif isinstance(x, Constant):
+        if isinstance(x, Constant):
             self.add_rep(negative, Constant(-x.const))
-
-    def visit_broadcast(self, broadcast, x):
-        if isinstance(x, Broadcast):
-            self.add_rep(broadcast, Broadcast(x.args[0], axes=broadcast.axes))
 
     def visit_multiply(self, multiply, x, y):
         rep = None
@@ -995,9 +981,6 @@ class SimplePrune(Visitor):
             old_users = set(old.users)
             for user in old_users:
                 user.replace_arg(old, rep)
-            for arg in old.args:
-                if old in arg.users:
-                    arg.users.remove(old)
         return len(self.reps) > 0
 
 
@@ -1384,9 +1367,6 @@ class Tensor(Op):
         reduction_axes = axes_sub(delta_axes, self_axes)
         if reduction_axes:
             delta = sum(delta, reduction_axes=reduction_axes)
-        broadcast_axes = axes_sub(self_axes, delta_axes)
-        if broadcast_axes:
-            delta = Broadcast(delta, axes=self.axes)
 
         if self not in adjoints:
             adjoints[self] = delta
@@ -1524,6 +1504,10 @@ class Tensor(Op):
 
 
 class Broadcast(Tensor):
+    """
+    Used to add additional axes for a returned derivative.
+
+    """
     def __init__(self, x, **kargs):
         super(Broadcast, self).__init__(args=(x,), **kargs)
 
@@ -2325,8 +2309,8 @@ class maximum(ElementWise):
         evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta * equal(self, x))
-        y.generate_add_delta(adjoints, delta * equal(self, y))
+        x.generate_add_delta(adjoints, equal(self, x)*delta)
+        y.generate_add_delta(adjoints, equal(self, y)*delta)
 
 
 class minimum(ElementWise):
@@ -2340,8 +2324,8 @@ class minimum(ElementWise):
         evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta * equal(self, x))
-        y.generate_add_delta(adjoints, delta * equal(self, y))
+        x.generate_add_delta(adjoints, equal(self, x)*delta)
+        y.generate_add_delta(adjoints, equal(self, y)*delta)
 
 
 class multiply(ElementWise):
@@ -2513,7 +2497,12 @@ def mean(x, **kargs):
 
 
 def deriv(dep, indep):
-    return dep.adjoints()[indep]
+    Op.simple_prune([dep, indep])
+    adjoint = dep.adjoints()[indep]
+    if adjoint.axes.value == indep.axes.value:
+        return adjoint
+    else:
+        return Broadcast(adjoint, axes=indep.axes)
 
 
 def cross_entropy_multi(y, t, usebits=False, out_axes=None):

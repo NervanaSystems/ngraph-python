@@ -43,13 +43,21 @@ def tensorview(tensor_description, buffer):
 
 # A scalar
 td0 = TensorDescription(axes=())
-e0 = empty(td0)
 
 # A simple vector
 td1 = TensorDescription(axes=[ax.A])
-e1 = empty(td1)
 
 td2 = TensorDescription(axes=[ax.A, ax.B])
+
+
+def test_strides():
+    assert td1.strides[-1] == td1.dtype.itemsize
+    assert td2.strides[-1] == td2.dtype.itemsize
+    assert td2.strides[-2] == td2.dtype.itemsize * td2.shape[-1]
+
+
+e0 = empty(td0)
+e1 = empty(td1)
 e2 = empty(td2)
 
 
@@ -57,6 +65,7 @@ def test_simple_tensors():
     assert e0.shape == td0.shape
     assert e1.shape == td1.shape
     assert e2.shape == td2.shape
+
 
 td0_1 = td0.reaxe([ax.A])
 e0_1 = tensorview(td0_1, e0)
@@ -108,17 +117,13 @@ def test_views():
     assert e2_1a.shape == (ax.A.length * ax.B.length,)
 
     def val3(i, j):
-        return (i+1)*(j+2)
+        return (i + 1) * (j + 2)
 
     for i in xrange(ax.A.length):
         for j in xrange(ax.B.length):
-            e2[i,j] = val3(i, j)
+            e2[i, j] = val3(i, j)
 
     for i in xrange(ax.A.length):
         for j in xrange(ax.B.length):
             assert e2[i, j] == val3(i, j)
             assert e2_2a[j, i] == val3(i, j)
-
-
-
-
