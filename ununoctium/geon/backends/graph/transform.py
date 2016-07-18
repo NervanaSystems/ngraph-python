@@ -31,7 +31,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.results = results
         self.opids = dict()
 
-        Op.simple_prune(results)
+        #Op.simple_prune(results)
 
         # print 'The memory footprint is {} MB'.format(memory*10**-6)
         # dataflow.render('cifar_mlp.gv', True)
@@ -1023,7 +1023,7 @@ class Op(nodes.Node):
                 params.append(node)
             unvisited.extend(node.args)
 
-        return params
+        return set(params)
 
     def visit(self, visitor, **kargs):
         return visitor.visit_op(self, **kargs)

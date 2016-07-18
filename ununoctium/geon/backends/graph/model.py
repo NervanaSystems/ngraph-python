@@ -60,7 +60,7 @@ class Model(GraphComponent):
 
         self.cost = cost
         if cost is not None:
-            self.cost.initialize(self.output, self.graph.target)
+            self.cost.initialize(self.output, self.target)
 
         self.initialized = True
         return self.output
@@ -94,8 +94,8 @@ class Model(GraphComponent):
                 batch_target_axes = target_axes + (ax.N,)
                 be.set_batch_axes([ax.N])
                 be.set_phase_axes([ax.Phi])
-                self.graph.input = be.placeholder(axes=batch_input_axes)
-                self.graph.target = be.placeholder(axes=batch_target_axes)
+                self.input = be.placeholder(axes=batch_input_axes)
+                self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
                     axis.length = length
                 for axis, length in zip(target_axes, [dataset_nclasses(dataset)]):
@@ -105,7 +105,7 @@ class Model(GraphComponent):
                 self.batch_input_shape = arrayaxes.axes_shape(batch_input_axes)
                 self.batch_target_shape = arrayaxes.axes_shape(batch_target_axes)
 
-                self.initialize(self.graph.input, cost)
+                self.initialize(self.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
 
                 self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
@@ -147,8 +147,8 @@ class Model(GraphComponent):
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.graph.input.value = x.reshape(self.batch_input_shape)
-            self.graph.target.value = t.reshape(self.batch_target_shape)
+            self.input.value = x.reshape(self.batch_input_shape)
+            self.target.value = t.reshape(self.batch_target_shape)
             self.optimizer.optimize(self.epoch_index)
 
             vals = self.enp.evaluate()
@@ -171,8 +171,8 @@ class Model(GraphComponent):
             dataset.reset()
             enp = nptransform.NumPyTransformer(results=[self.cost.mean_cost])
             for x, t in dataset:
-                self.graph.input.value = x
-                self.graph.target.value = t
+                self.input.value = x
+                self.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset.bsz)
                 nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz
@@ -199,11 +199,11 @@ class Model(GraphComponent):
             running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
             nprocessed = 0
             dataset.reset()
-            error = metric(self.output, self.graph.target)
+            error = metric(self.output, self.target)
             enp = nptransform.NumPyTransformer(results=[error])
             for x, t in dataset:
-                self.graph.input.value = x
-                self.graph.target.value = t
+                self.input.value = x
+                self.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz
