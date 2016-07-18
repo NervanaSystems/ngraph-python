@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import str
 import collections
 import weakref
 import inspect
@@ -157,7 +159,7 @@ class Tensor(Defmod):
     def __rmul__(self, val):
         return multiply(val, self)
 
-    def __div__(self, val):
+    def __truediv__(self, val):
         return divide(self, val)
 
     def __rdiv__(self, val):

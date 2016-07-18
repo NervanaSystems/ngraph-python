@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import zip
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader
 import geon.backends.graph.dataloaderbackend
@@ -68,7 +70,7 @@ class MyRnn(be.Model):
 
         # This is what we want for training, perhaps added to a parameter regularization
         e = g.y-g.y_
-        g.error = be.dot(e, e)/e.size
+        g.error = be.dot(e, e) / e.size
 
         # L2 regularizer of parameters
         reg = None

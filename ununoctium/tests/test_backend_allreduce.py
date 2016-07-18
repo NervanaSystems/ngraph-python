@@ -22,6 +22,7 @@ The output of the model script should have the following format:
     epoch: 0 time: 5.83s train_error: 71.70 test_error: 68.75 train_loss: 2.907
 Use test_model_init.py as the template for developing any other models
 """
+from builtins import map, str, zip
 import os
 import argparse
 import time
@@ -85,7 +86,7 @@ def analyze_test_results(test_results):
     """
     # take average for each of the test's output
     average_test_resuts = dict()
-    for test, res in test_results.items():
+    for test, res in list(test_results.items()):
         numeric_res = [tuple(map(float,itt.compress(i, (0,1,1,1,1)))) for i in res]
         avg_numeric_res = tuple(round(np.mean(i),3) for i in zip(*numeric_res))
         average_test_resuts[test] = avg_numeric_res
@@ -120,7 +121,7 @@ def run_tests(args):
     threads_set = set([0,1,2])
     threads_set.add(args.n)
     tests = dict((thrd,[]) for thrd in threads_set)
-    for test,res in tests.items():
+    for test,res in list(tests.items()):
         args.n = test
         args.mpi_flag = (test > 0)
         cmd = make_run_cmd(args)

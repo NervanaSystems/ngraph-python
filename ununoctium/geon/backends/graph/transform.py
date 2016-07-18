@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object, str
 from future.utils import with_metaclass
 import abc
 
@@ -714,7 +716,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
 
     @abc.abstractmethod
     def visit_reduction(self, reduction, x):
-        raise NotImplmentedError()
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def visit_sgn(self, sgn, x):
@@ -921,7 +923,7 @@ class SimplePrune(Visitor):
         if isinstance(x, Constant):
             return x.const
         if isinstance(x, Broadcast):
-            return constant_arg(x.args[0])
+            return self.constant_arg(x.args[0])
 
     def add_rep(self, op, replacement):
         # Can't replace op if its being returned
@@ -1154,7 +1156,7 @@ class TensorAxesInfo(object):
         self.update_views(evaluator, True)
 
     def update_views(self, evaluator, force):
-        for view in self.views.values():
+        for view in list(self.views.values()):
             if view.tensor_description is self.tensor_description:
                 continue
             view.update_tensor(evaluator, force)
@@ -1171,7 +1173,7 @@ class TensorAxesInfo(object):
 
     def get_or_default(self, axes, default_function):
         axes = canonicalize_axes(axes)
-        if self.views.has_key(axes):
+        if axes in self.views:
             return self.views[axes]
         result = default_function()
         self.views[axes] = result
@@ -1419,7 +1421,7 @@ class Tensor(Op):
     def __rmul__(self, val):
         return multiply(val, self)
 
-    def __div__(self, val):
+    def __truediv__(self, val):
         return divide(self, val)
 
     def __rdiv__(self, val):
@@ -2546,7 +2548,7 @@ class Function(NameableValue):
         return self.use
 
 
-class Buffer:
+class Buffer(object):
     
     def __init__(self, color, size):
         self.color = color
@@ -2554,3 +2556,4 @@ class Buffer:
         self.data = None
         
     
+
