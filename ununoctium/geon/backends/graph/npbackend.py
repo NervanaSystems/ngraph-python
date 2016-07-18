@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object, range
 import numpy as np
 
 from neon.backends.backend import Backend
@@ -41,7 +43,7 @@ class OneHot(object):
         arrstride1 = array.strides[axis] / array.dtype.alignment
         iarr = 0
         iidx = 0
-        for i in xrange(idx.shape[1 - axis]):
+        for i in range(idx.shape[1 - axis]):
             indarr[iarr + arrstride1 * indidx[iidx]] = 1
             iarr += arrstride0
             iidx += idxstride

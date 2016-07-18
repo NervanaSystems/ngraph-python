@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import zip
 import numpy as np
 
 from geon.backends.graph.names import NameableValue, name_scope

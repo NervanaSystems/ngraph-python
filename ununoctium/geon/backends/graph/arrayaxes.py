@@ -1,4 +1,5 @@
 from __future__ import division
+from builtins import object, zip
 from future.utils import with_metaclass
 
 from abc import ABCMeta
@@ -137,7 +138,7 @@ class TensorDescription(object):
         if strides is None:
             strides = []
             stride = self.dtype.itemsize
-            for axis, size in reversed(zip(self.axes, self.sizes)):
+            for axis, size in reversed(list(zip(self.axes, self.sizes))):
                 if verify:
                     assert axis.length <= size, "An dimension size cannot be less than the dimension length"
                 self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
