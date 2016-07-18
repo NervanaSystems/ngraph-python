@@ -36,20 +36,16 @@ uninstall:
 test:
 	@echo Running unit tests...
 	@py.test $(TEST_OPTS) $(TEST_DIRS)
-	@echo
 
 style:
-	@flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
-	@pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv *
-	@echo
+	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) || true # ignore errors
+	pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv * || true # ignore errors
 
 lint:
-	@pylint --output-format=colorized geon
-	@echo
+	pylint --output-format=colorized geon
 
 lint3k:
-	@pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
-	@echo
+	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 check:
 	@echo "Running style checks.  Number of style errors is... "
