@@ -13,18 +13,22 @@ cd private-neon
 make PY=2 # or "make PY=3" to instead build a Python 3 virtual environment.
 . .venv/bin/activate
 cd ../graphiti/ununoctium
-pip install -r requirements.txt
-pip install -e .
+make install
 ```
 
 To uninstall graphiti from your virtual env:
 ```
-pip uninstall Graphiti
+make uninstall
 ```
 
 To run the unit tests:
 ```
-make
+make test
+```
+
+Before checking in code, ensure no "make style" errors
+```
+make style; make lint3k
 ```
 
 ## Examples
