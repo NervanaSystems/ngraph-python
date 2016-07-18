@@ -1562,7 +1562,7 @@ class ComputationOp(Tensor):
 
     @property
     def graph_label(self):
-        return self.__class__.__name__
+        return self.__class__.__name__  + '[' + self.name + ']'
         
     def visit(self, visitor):
         return visitor.visit_computation(self)
@@ -2540,7 +2540,7 @@ def cross_entropy_binary(y, t, out_axes=None):
     return sum(a + b, out_axes=out_axes)
 
 
-class Function(NameableValue):
+class Function(nodes.Node):
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.backends.graph.analysis import Digraph

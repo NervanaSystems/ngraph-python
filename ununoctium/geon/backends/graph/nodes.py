@@ -46,7 +46,7 @@ class Node(NameableValue):
     def graph_label(self):
         if self.name != self.id:
             return self.name.split('.')[-1]    
-        return self.__class__.__name__
+        return self.__class__.__name__ + '[' + self.name + ']'
     
     @property
     def args(self):
@@ -166,6 +166,7 @@ class Node(NameableValue):
         return result
     
     def __repr__(self):
+        return self.graph_label
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
 
 

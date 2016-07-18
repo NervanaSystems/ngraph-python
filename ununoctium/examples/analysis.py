@@ -27,7 +27,7 @@ class GraphitiMLP(Model):
         dW = [deriv(Error, w) for w in W]
 
         #Fusion analysis
-        dataflow = DataFlowGraph([Error] + dW if bprop else [Error])
+        dataflow = DataFlowGraph(dW if bprop else [Error])
         fused = KernelFlowGraph(dataflow)
         #Liveness analysis
         liveness = fused.liveness()
@@ -35,6 +35,8 @@ class GraphitiMLP(Model):
         interference = InterferenceGraph(liveness)
         self.memory = color(interference)
         self.dataflow = dataflow
+        fused.view()
+        #interference.render('interference')
 
 class MXNetMLP(Model):
 
@@ -70,9 +72,9 @@ class MXNetMLP(Model):
     
     
 
-layers = [1024, 256, 512, 10]
+layers = [1024, 1200, 100]
 batch = 32000
-bprop = False
+bprop = True
 
 graphiti = GraphitiMLP(layers, batch, bprop)
 mxnet = MXNetMLP(layers, batch, bprop)
