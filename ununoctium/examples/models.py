@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import range, zip
 from geon.backends.graph.graphneon import *
 
 import geon.backends.graph.graph as graph
@@ -125,7 +127,7 @@ class MyTest(be.Model):
                     graph.x.value = xraw
                     graph.y.value = yraw
                     vals = enp.evaluate()
-                    training_error += vals[graph.error]/train.bsz
+                    training_error += vals[graph.error] / train.bsz
                     training_n += 1
                     # break
 
@@ -150,7 +152,7 @@ class MyTest(be.Model):
                 total_error += vals[graph.error] / test.bsz
                 n += 1
                 # break
-            print("Test error: {e}".format(e=total_error/n))
+            print("Test error: {e}".format(e=total_error / n))
 
 
 y = MyTest()

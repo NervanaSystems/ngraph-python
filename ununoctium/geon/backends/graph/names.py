@@ -1,3 +1,4 @@
+from builtins import next, object
 from contextlib import contextmanager
 from functools import wraps
 
@@ -40,7 +41,7 @@ def name_scope_list(name):
 
 @contextmanager
 def next_name_scope(name_scope_list):
-    ns = name_scope_list.next()
+    ns = next(name_scope_list)
     with name_scope(name_scope=ns):
         yield (ns)
 
@@ -147,7 +148,7 @@ class NameScopeListExtender(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         name_scope_list = self.name_scope_list
         name = '[{len}]'.format(len=len(name_scope_list))
         val = NameScope(parent=name_scope_list, name=name)

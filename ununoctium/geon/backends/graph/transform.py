@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object, str
 from future.utils import with_metaclass
 import abc
 
@@ -1104,7 +1106,7 @@ class TensorAxesInfo(object):
 
     def set_tensor(self, evaluator, tensor):
         self.tensor_description.value = tensor
-        for view in self.views.values():
+        for view in list(self.views.values()):
             if view.tensor_description is self.tensor_description:
                 continue
             view.update_tensor(evaluator)
@@ -1119,7 +1121,7 @@ class TensorAxesInfo(object):
 
     def get_or_default(self, axes, default_function):
         axes = canonicalize_axes(axes)
-        if self.views.has_key(axes):
+        if axes in self.views:
             return self.views[axes]
         result = default_function()
         self.views[axes] = result
@@ -1356,7 +1358,7 @@ class Tensor(Op):
     def __rmul__(self, val):
         return multiply(val, self)
 
-    def __div__(self, val):
+    def __truediv__(self, val):
         return divide(self, val)
 
     def __rdiv__(self, val):
@@ -2470,7 +2472,7 @@ class Function(NameableValue):
         return self.use
 
 
-class Buffer:
+class Buffer(object):
     
     def __init__(self, color, size):
         self.color = color
@@ -2478,3 +2480,4 @@ class Buffer:
         self.data = None
         
     
+

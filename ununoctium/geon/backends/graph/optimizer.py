@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object, zip
 import geon.backends.graph.funs as be
 from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, PolySchedule
 from neon.initializers import Constant
@@ -16,8 +18,8 @@ def clip_gradient_norm(grad_list, clip_norm, bsz):
             s = term
         else:
             s = s + term
-    s = s/bsz
-    return clip_norm/be.max(s, clip_norm)
+    s = s / bsz
+    return clip_norm / be.max(s, clip_norm)
 
 
 def clip_gradient_value(grad, clip_value=None):

@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import str
+from builtins import object, str
 import numpy as np
 import geon.backends.graph.funs as be
 

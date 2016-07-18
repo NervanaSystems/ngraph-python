@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object
 import geon.backends.graph.funs as be
 
 
