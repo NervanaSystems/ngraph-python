@@ -118,7 +118,7 @@ class Model(GraphComponent):
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                dataflow.view()
+                #dataflow.view()
 
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
                 #dataflow.render('cifar_mlp.gv', True)

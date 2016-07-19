@@ -65,12 +65,10 @@ valid_set = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
 # setup weight initialization function
 init_norm = Gaussian(loc=0.0, scale=0.01)
-#init_norm = Uniform(low=-.01, high=.01)
 
 # setup model layers
 layers = [Affine(nout=100, init=init_norm, activation=Rectlin()),
           Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True))]
-          #Affine(nout=10, init=init_norm, activation=Softmax())]
 
 # setup cost function as CrossEntropy
 #cost = GeneralizedCost(costfunc=CrossEntropyMulti())
