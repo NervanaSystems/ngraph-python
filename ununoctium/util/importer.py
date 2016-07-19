@@ -15,17 +15,20 @@ import numpy as np
 
 # known operators that can be processed by Neon graph importer
 known_ops = [
-  'Add', 'Div', 'MatMul', 'Mean',
+  'Add', 'Div', 'MatMul', 'Maximum', 'Mean',
   'Identity', 'Relu',
-  'Const', 'Variable', 'Placeholder',
+  'Const', 'Variable', 'Placeholder', 'Range',
   'Assign', 'Cast',
   'SparseSoftmaxCrossEntropyWithLogits',
+  'Shape', 'Rank', 'Size',
+  'Prod',
 ]
 
 two_inputs_ops = {
   'Add': be.add,
   'Div': be.divide,
   'MatMul': be.dot,
+  'Maximum': be.maximum,
   # 'Mul': np.multiply,
 }
 
@@ -179,7 +182,25 @@ def create_neon_graph(graph_def, env):
         logscale = -np.float(1. / np.log(2.0))
         op = be.sum(be.safelog(name_to_op[inputs[0]]) * name_to_op[inputs[1]], out_axes=(batch_axis,)) * logscale
       elif op_type == 'Mean':
+        # TODO: use the attribute of kee_dims
+        keep_dims = node.attr['keep_dims']
         op = be.mean(name_to_op[inputs[0]])
+      elif op_type == 'Shape':
+        op = name_to_op[inputs[0]].shape
+      elif op_type == 'Rank':
+        op = len(name_to_op[inputs[0]].shape)
+      elif op_type == 'Size':
+        op = name_to_op[inputs[0]].size
+      elif op_type == 'Range':
+        assert(len(inputs) == 3)
+        start = inputs[0]
+        limit = inputs[1]
+        delta = inputs[2]
+        op = np.range(start, limit, delta)
+      elif op_type == 'Prod':
+        #TODO: use be.reduce_prod
+        keep_dims = inputs[1]
+        op = np.prod(inputs[0])
 
       name_to_op[node.name] = op
       last_node = node.name
