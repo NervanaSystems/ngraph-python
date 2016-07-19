@@ -15,8 +15,8 @@ import geon.backends.graph.nodes as nodes
 import geon.backends.graph.typing as typing
 from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
-from geon.backends.graph.arrayaxes import get_batch_axes, set_batch_axes, find_axes_in_axes, TensorDescription, \
-    canonicalize_axes, axes_sub, axes_intersect, axes_append, axes_size, axes_sizes
+from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription,\
+    AxisIDTuple, Axes, AxesAxis
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -1115,7 +1115,7 @@ class TensorAxesInfo(object):
 
     def __init__(self, axes, alloc=None, read_only=False, tags=(), dtype=np.float32, **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
-        axes = canonicalize_axes(axes)
+        axes = Axes(*axes)
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
         self.alloc = alloc
@@ -1135,7 +1135,7 @@ class TensorAxesInfo(object):
 
     @property
     def shapes(self):
-       return axes_sizes(self.axes)
+        return self.tensor_description.shape
 
     @property
     def value(self):
@@ -1162,7 +1162,6 @@ class TensorAxesInfo(object):
             self.update_views(evaluator, False)
 
     def get_or_default(self, axes, default_function):
-        axes = canonicalize_axes(axes)
         if axes in self.views:
             return self.views[axes]
         result = default_function()
@@ -1170,9 +1169,25 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        reaxe = canonicalize_axes(reaxe)
-        return self.get_or_default(reaxe, lambda: TensorReaxeViewInfo(tensor_axes_info=self, reaxes=reaxe,
-                                                                      idx=len(self.views)))
+        return self.get_or_default(reaxe,
+                                   lambda: TensorReaxeViewInfo(
+                                       tensor_axes_info=self,
+                                       reaxes=reaxe,
+                                       idx=len(self.views)))
+
+    def dot_reaxe_left(self, red_axis_ids):
+        return self.get_or_default(red_axis_ids,
+                                   lambda: DotLeftViewInfo(
+                                       tensor_axes_info=self,
+                                       red_axis_ids=red_axis_ids,
+                                       idx=len(self.views)))
+
+    def dot_reaxe_right(self, red_axis_ids):
+        return self.get_or_default(red_axis_ids,
+                                   lambda: DotRightViewInfo(
+                                       tensor_axes_info=self,
+                                       red_axis_ids=red_axis_ids,
+                                       idx=len(self.views)))
 
 
 class TensorViewInfo(object):
@@ -1203,13 +1218,41 @@ class TensorReaxeViewInfo(TensorViewInfo):
 
     def __init__(self, reaxes, **kargs):
         super(TensorReaxeViewInfo, self).__init__(**kargs)
-        self.reaxes = canonicalize_axes(reaxes)
+        self.reaxes = Axes(*reaxes)
         self.__tensor_description = None
 
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
             self.__tensor_description = self.tensor_axes_info.tensor_description.reaxe(self.reaxes)
+        return self.__tensor_description
+
+
+class DotLeftViewInfo(TensorViewInfo):
+    def __init__(self, red_axis_ids, **kargs):
+        super(DotLeftViewInfo, self).__init__(**kargs)
+        self.red_axis_ids = red_axis_ids
+        self.__tensor_description = None
+
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = self.tensor_axes_info.\
+                tensor_description.dot_reaxe_left(self.red_axis_ids)
+        return self.__tensor_description
+
+
+class DotRightViewInfo(TensorViewInfo):
+    def __init__(self, red_axis_ids, **kargs):
+        super(DotRightViewInfo, self).__init__(**kargs)
+        self.red_axis_ids = red_axis_ids
+        self.__tensor_description = None
+
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = self.tensor_axes_info.\
+                tensor_description.dot_reaxe_right(self.red_axis_ids)
         return self.__tensor_description
 
 
@@ -1227,7 +1270,7 @@ class AxesComp(object):
         elif axes is None:
             return None
         else:
-            return LiteralAxesComp(axes=axes, **kargs)
+            return LiteralAxesComp(axes=Axes(*axes), **kargs)
 
     @property
     def value(self):
@@ -1313,7 +1356,7 @@ class AxesSubComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return axes_sub(x_axes, y_axes)
+        return AxisIDTuple.sub(x_axes, y_axes).as_axes()
 
 
 class AxesIntersectComp(AxesComp):
@@ -1325,7 +1368,7 @@ class AxesIntersectComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return axes_intersect(x_axes, y_axes)
+        return AxisIDTuple.intersect(x_axes, y_axes).as_axes()
 
 
 class AxesAppendComp(AxesComp):
@@ -1337,7 +1380,7 @@ class AxesAppendComp(AxesComp):
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return axes_append(x_axes, y_axes)
+        return AxisIDTuple.append(x_axes, y_axes).as_axes()
 
 
 class Tensor(Op):
@@ -1500,6 +1543,12 @@ class Tensor(Op):
 
     def reaxe(self, reaxe):
         return self.tensor_axes_info.reaxe(reaxe)
+
+    def dot_reaxe_left(self, red_axis_ids):
+        return self.tensor_axes_info.dot_reaxe_left(red_axis_ids)
+
+    def dot_reaxe_right(self, red_axis_ids):
+        return self.tensor_axes_info.dot_reaxe_right(red_axis_ids)
 
     # Required for parameter initializers
     @property
@@ -1966,40 +2015,15 @@ class dot(ComputationOp):
 
     def compute_call_info(self):
         x, y = self.args
+        red_axis_ids = self.reduction_axes.value.as_axis_ids()
+        a, b = x.dot_reaxe_left(red_axis_ids), y.dot_reaxe_right(red_axis_ids)
+        a_axes, b_axes = a.tensor_description.axes, b.tensor_description.axes
 
-        x_axes = x.axes.value
-        y_axes = y.axes.value
-        out_axes = self.axes.value
-        red_axes = self.reduction_axes.value
-
-        if len(x_axes) is 0 or len(y_axes) is 0:
-            # TODO turn this into multiply ahead of time
-            self.multiply = True
-            return [self.reaxe(self.axes.value), x.reaxe(x.axes.value), y.reaxe(y.axes.value)]
-            np.multiply(x, y, out=out)
-            return
-
-        xi = find_axes_in_axes(red_axes, x_axes)
-        if xi == -1:
-            raise IncompatibleShapesError()
-        yi = find_axes_in_axes(red_axes, y_axes)
-        if yi == -1:
-            raise IncompatibleShapesError()
-
-        xl = x_axes[0:xi]
-        xr = x_axes[xi + len(red_axes):]
-        yl = y_axes[0:yi]
-        yr = y_axes[yi + len(red_axes):]
-
-        al = axes_append(xl, xr)
-        br = axes_append(yl, yr)
-
-        a = x.reaxe((al, red_axes))
-        b = y.reaxe((red_axes, br))
-        if axes_intersect(al, br):
-            # Can't handle yet
-            raise IncompatibleShapesError()
-        o = self.reaxe((al, br))
+        o_axes = (
+            a_axes.as_axis_ids()[:-1] +
+            b_axes.as_axis_ids()[1:]
+        ).as_axes()
+        o = self.reaxe(o_axes)
         return [o, a, b]
 
     def evaluate(self, evaluator, out, x, y):
