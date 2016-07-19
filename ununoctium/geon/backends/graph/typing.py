@@ -1,4 +1,6 @@
+from builtins import object
 import numpy as np
+from future.utils import with_metaclass
 
 
 class TypeDescriptorMetaType(type):
@@ -14,9 +16,7 @@ class TypeDescriptorMetaType(type):
         return super(TypeDescriptorMetaType, cls).__call__(*args)
 
 
-class TypeDescriptor(object):
-    __metaclass__ = TypeDescriptorMetaType
-
+class TypeDescriptor(with_metaclass(TypeDescriptorMetaType, object)):
     def __init__(self, **kargs):
         super(TypeDescriptor, self).__init__(**kargs)
 

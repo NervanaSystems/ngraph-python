@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import zip
 import numpy as np
 
 from geon.backends.graph.names import NameableValue, name_scope
@@ -7,6 +9,7 @@ from neon.backends.backend import Block
 import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
+import geon.backends.graph.transform as transform
 import geon.backends.graph.nptransform as nptransform
 import geon.backends.graph.analysis as analysis
 import geon.backends.graph.arrayaxes as arrayaxes
@@ -59,7 +62,7 @@ class Model(GraphComponent):
 
         self.cost = cost
         if cost is not None:
-            self.cost.initialize(self.output, self.graph.target)
+            self.cost.initialize(self.output, self.target)
 
         self.initialized = True
         return self.output
@@ -93,8 +96,8 @@ class Model(GraphComponent):
                 batch_target_axes = target_axes + (ax.N,)
                 be.set_batch_axes([ax.N])
                 be.set_phase_axes([ax.Phi])
-                self.graph.input = be.placeholder(axes=batch_input_axes)
-                self.graph.target = be.placeholder(axes=batch_target_axes)
+                self.input = be.placeholder(axes=batch_input_axes)
+                self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
                     axis.length = length
                 for axis, length in zip(target_axes, [dataset_nclasses(dataset)]):
@@ -104,15 +107,21 @@ class Model(GraphComponent):
                 self.batch_input_shape = arrayaxes.axes_shape(batch_input_axes)
                 self.batch_target_shape = arrayaxes.axes_shape(batch_target_axes)
 
-                self.initialize(self.graph.input, cost)
+                self.initialize(self.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
-                dataflow = analysis.DataFlowGraph([self.cost.mean_cost, updates])
+
+                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
+
+                dataflow = analysis.DataFlowGraph(self.enp.results)
+                #dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
+
+                #dataflow.view()
+
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
-                #dataflow.render('cifar_mlp.gv', True)             
-                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
+                #dataflow.render('cifar_mlp.gv', True)
 
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:
@@ -137,18 +146,19 @@ class Model(GraphComponent):
         """
         epoch = self.epoch_index
         self.total_cost = 0
+        batch = 0
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.graph.input.value = x.reshape(self.batch_input_shape)
-            self.graph.target.value = t.reshape(self.batch_target_shape)
+            self.input.value = x.reshape(self.batch_input_shape)
+            self.target.value = t.reshape(self.batch_target_shape)
             self.optimizer.optimize(self.epoch_index)
 
             vals = self.enp.evaluate()
             batch_cost = vals[self.cost.mean_cost]
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
-
+            batch = batch + 1
             callbacks.on_minibatch_end(epoch, mb_idx)
 
         # now we divide total cost by the number of batches,
@@ -164,8 +174,8 @@ class Model(GraphComponent):
             dataset.reset()
             enp = nptransform.NumPyTransformer(results=[self.cost.mean_cost])
             for x, t in dataset:
-                self.graph.input.value = x
-                self.graph.target.value = t
+                self.input.value = x
+                self.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset.bsz)
                 nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz
@@ -192,11 +202,11 @@ class Model(GraphComponent):
             running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
             nprocessed = 0
             dataset.reset()
-            error = metric(self.output, self.graph.target)
+            error = metric(self.output, self.target)
             enp = nptransform.NumPyTransformer(results=[error])
             for x, t in dataset:
-                self.graph.input.value = x
-                self.graph.target.value = t
+                self.input.value = x
+                self.target.value = t
                 bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(x, list) else \
                     x[0].shape[1] // dataset.bsz

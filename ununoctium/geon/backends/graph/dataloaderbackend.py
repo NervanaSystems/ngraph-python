@@ -1,3 +1,4 @@
+from builtins import object, range
 import numpy as np
 
 from neon.backends.backend import Backend
@@ -22,6 +23,7 @@ class BackendNDArray(np.ndarray):
     def __bool__(self):
         return True
 
+    # Needed for Python 2.x
     def __nonzero__(self):
         return True
 
@@ -43,7 +45,7 @@ class OneHot(object):
         axis = self.axis
         if axis is 1:
             array = array.transpose()
-        for i in xrange(idx.shape[0]):
+        for i in range(idx.shape[0]):
             array[idx[i], i] = 1
         pass
 

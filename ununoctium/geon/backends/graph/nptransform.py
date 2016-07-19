@@ -23,6 +23,9 @@ class NumPyTransformer(Transformer):
         return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
                           offset=tensor_description.offset, strides=tensor_description.strides)
 
+    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
+        return rng.normal(loc, scale, tensor_description.sizes)
+
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
         return rng.uniform(low, high, tensor_description.sizes)
 
@@ -32,10 +35,6 @@ class NumPyTransformer(Transformer):
 
     def set_item(self, tensor, item, value):
         tensor.__setitem__(item, value)
-
-    # NumPy-specific
-    def rng_uniform(self, rng, low, high, out):
-        out[:] = rng.uniform(low, high, out.shape)
 
     # Operations
     def absolute(self, x, out):
@@ -126,6 +125,18 @@ class NumPyTransformer(Transformer):
         np.tanh(x, out=out)
 
 
+class NPNormal(AllocationOp):
+    def __init__(self, rng, loc, scale, **kargs):
+        super(NPNormal, self).__init__(args=(rng,), **kargs)
+        self.loc = loc
+        self.scale = scale
+
+    def compute_tensor_axes_info(self):
+        rng, = self.args
+        tensor_axes_info = super(NPNormal, self).compute_tensor_axes_info()
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_normal_tensor(rng, tensor_description, self.loc, self.scale)
+
+
 class NPUniform(AllocationOp):
     def __init__(self, rng, low, high, **kargs):
         super(NPUniform, self).__init__(args=(rng,), **kargs)
@@ -136,8 +147,3 @@ class NPUniform(AllocationOp):
         rng, = self.args
         tensor_axes_info = super(NPUniform, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
-
-
-class NumPyTransformVisitor(Visitor):
-    def visit_uniform(self, uniform, low, high, rng):
-        pass

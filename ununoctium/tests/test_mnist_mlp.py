@@ -1,3 +1,4 @@
+from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
 from geon.backends.graph.graphneon import *
 import geon.backends.graph.analysis as analysis

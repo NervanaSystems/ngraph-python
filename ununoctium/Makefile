@@ -1,25 +1,62 @@
 # set empty to prevent any implicit rules from firing.
 .SUFFIXES:
 
-# Choose default Python version; overrideable with "make python2" or "make python3".
+# Extract virtualenv Python version
 PY := $(shell python --version 2>&1  | cut -c8)
+ifeq ($(PY), 2)
+	PYLINT3K_ARGS := --disable=no-absolute-import
+else
+	PYLINT3K_ARGS :=
+endif
+
+# style checking related
+STYLE_CHECK_OPTS :=
+STYLE_CHECK_DIRS := geon tests examples
 
 # pytest options
 TEST_OPTS :=
 TEST_DIRS := tests/
 
-.PHONY: test clean
+ifndef VIRTUAL_ENV
+   $(error You must activate private-neon virtual environment before continuing)
+endif
 
-default: test
+.PHONY: env default install uninstall clean test style lint lint3k check
 
-all:
-	$(MAKE) PY=3 TEST_OPTS='$(TEST_OPTS)' test
-	$(MAKE) PY=2 TEST_OPTS='$(TEST_OPTS)' test
+default: install
 
-python2: PYLINT3K_ARGS := --disable=no-absolute-import
-python3: PYLINT3K_ARGS :=
+install:
+	@pip install -r requirements.txt
+	@pip install -e .
+
+uninstall:
+	@pip uninstall -y Graphiti
+	@pip uninstall -r requirements.txt
 
 test:
 	@echo Running unit tests...
-	@. $(ACTIVATE); py.test $(TEST_OPTS) $(TEST_DIRS)
+	@py.test $(TEST_OPTS) $(TEST_DIRS)
+
+style:
+	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) || true # ignore errors
+	pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv * || true # ignore errors
+
+lint:
+	pylint --output-format=colorized geon
+
+lint3k:
+	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
+
+check:
+	@echo "Running style checks.  Number of style errors is... "
+	-@flake8 --count $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) \
+	  > /dev/null
 	@echo
+	@echo "Number of missing docstrings is..."
+	-@pylint --disable=all --enable=missing-docstring -r n \
+	  geon | grep "^C" | wc -l
+	@echo
+	@echo "Running unit tests..."
+	-@py.test $(TEST_DIRS) | tail -1 | cut -f 2,3 -d ' '
+	@echo
+

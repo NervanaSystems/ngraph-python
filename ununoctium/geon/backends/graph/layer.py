@@ -1,6 +1,9 @@
+from __future__ import division
+from builtins import object, range, zip
 from geon.backends.graph.names import NameableValue, NameScope
 import geon.backends.graph.funs as be
 import geon.backends.graph.arrayaxes as arrayaxes
+from functools import reduce
 
 
 # TODO These are stubs for implementing Neon's layers
@@ -840,7 +843,7 @@ class GeneralizedCost(object):
         """
         self.costs = self.costfunc(inputs, targets)
         self.total_cost = be.sum(self.costs, out_axes=())
-        self.mean_cost = self.total_cost/be.tensor_size(self.costs, out_axes=())
+        self.mean_cost = self.total_cost / be.tensor_size(self.costs, out_axes=())
 
 
 class BatchNorm(Layer):

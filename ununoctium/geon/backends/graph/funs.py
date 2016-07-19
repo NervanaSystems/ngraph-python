@@ -4,16 +4,17 @@ import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope, next_name_scope
 from geon.backends.graph.graph import Model, with_graph_scope, with_environment, get_current_environment
-from geon.backends.graph.environment import bound_environment
+from geon.backends.graph.environment import bound_environment, Environment
 
 from geon.backends.graph.transform import deriv, placeholder, Variable, Constant, linear_map_axes, sample_axes, \
     batch_axes, assign
 from geon.backends.graph.arrayaxes import axes_list, Axis, AxisVar, \
     set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 
-from geon.backends.graph.transform import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, maximum, \
-    mean, minimum, multiply, greater, greater_equal, less, less_equal, power
-from geon.backends.graph.transform import negative, not_equal, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
+from geon.backends.graph.transform import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
+    maximum, \
+    mean, min, minimum, multiply, greater, greater_equal, less, less_equal, power
+from geon.backends.graph.transform import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
 from geon.backends.graph.transform import tanh, safelog, cross_entropy_binary, cross_entropy_multi
 from geon.backends.graph.transform import doall, RNG, NumPyTensor, Temporary, tensor_size
@@ -64,18 +65,6 @@ def log2(self, a, out=None):
 
 
 def make_binary_mask(self, out, keepthresh=None):
-    pass
-
-
-def max(self, axis=None, out=None, keepdims=None):
-    pass
-
-
-def min(self, a, axis=None, out=None, keepdims=None):
-    pass
-
-
-def onehot(self, indices, axis, out=None):
     pass
 
 

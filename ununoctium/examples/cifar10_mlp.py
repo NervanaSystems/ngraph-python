@@ -29,7 +29,7 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 
-
+np.seterr(divide='raise', over='raise', invalid='raise')
 mlp.fit(train, input_axes=(ax.C, ax.H, ax.W), target_axes=(ax.Y,), optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 
 print('Misclassification error = %.1f%%' % (mlp.eval(test, metric=Misclassification())*100))

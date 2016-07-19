@@ -2,9 +2,8 @@
 # importing TensorFlow GraphDef protobuf and convert to Neon computation graph.
 # ----------------------------------------------------------------------------
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
+from builtins import str
 
 from neon.initializers import Uniform
 import geon.backends.graph.funs as be

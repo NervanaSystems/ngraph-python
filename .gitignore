@@ -36,3 +36,5 @@ neon/backends/kernels/dump
 *.lst
 *.rec
 *.egg
+*.gv
+*.gv.pdf
