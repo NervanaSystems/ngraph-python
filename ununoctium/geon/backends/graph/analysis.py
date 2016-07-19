@@ -3,7 +3,6 @@ from collections import defaultdict
 from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product
-from geon.backends.graph.arrayaxes import axes_sizes
 from functools import reduce
 
 class Digraph(object):
