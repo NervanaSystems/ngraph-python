@@ -16,8 +16,8 @@ def test_constants():
         ax.W.length = 10
         ax.H.length = 20
         aaxes = [ax.W, ax.H]
-        ashape = arrayaxes.axes_shape(aaxes)
-        asize = arrayaxes.axes_size(aaxes)
+        ashape = aaxes.lengths
+        asize = aaxes.size
         aval = np.arange(asize, dtype=np.float32).reshape(ashape)
 
         # Pass a NumPy array through as a constant
