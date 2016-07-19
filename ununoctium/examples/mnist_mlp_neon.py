@@ -41,16 +41,20 @@ Examples:
         the values stored in the checkpoint file named checkpoint.pkl.
 
 """
-from geon.backends.graph.graphneon import *
+
+from neon.callbacks.callbacks import Callbacks
 from neon.data import ArrayIterator, load_mnist
 from neon.initializers import Gaussian
+from neon.layers import GeneralizedCost, Affine
+from neon.models import Model
+from neon.optimizers import GradientDescentMomentum
+from neon.transforms import Rectlin, Logistic, CrossEntropyBinary, Misclassification
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
-parser.set_defaults(backend='dataloader')
 
 args = parser.parse_args()
 
@@ -65,15 +69,12 @@ valid_set = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
 # setup weight initialization function
 init_norm = Gaussian(loc=0.0, scale=0.01)
-#init_norm = Uniform(low=-.01, high=.01)
 
 # setup model layers
 layers = [Affine(nout=100, init=init_norm, activation=Rectlin()),
           Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True))]
-          #Affine(nout=10, init=init_norm, activation=Softmax())]
 
 # setup cost function as CrossEntropy
-#cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 
 # setup optimizer
@@ -86,9 +87,8 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
 
-np.seterr(divide='raise', over='raise', invalid='raise')
 # run fit
-mlp.fit(train_set, input_axes=(ax.C, ax.H, ax.W), target_axes=(ax.Y,), optimizer=optimizer,
+mlp.fit(train_set, optimizer=optimizer,
         num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 error_rate = mlp.eval(valid_set, metric=Misclassification())
 neon_logger.display('Misclassification error = %.1f%%' % (error_rate * 100))

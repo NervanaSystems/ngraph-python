@@ -113,11 +113,12 @@ class Model(GraphComponent):
                 self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
 
                 dataflow = analysis.DataFlowGraph(self.enp.results)
+                #dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                #dataflow.view()
+                dataflow.view()
 
                 #print 'The memory footprint is {} MB'.format(memory*10**-6)
                 #dataflow.render('cifar_mlp.gv', True)

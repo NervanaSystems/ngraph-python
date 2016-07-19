@@ -57,25 +57,25 @@ class GradientDescentMomentum(Optimizer):
     def configure(self, cost):
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate') 
         learning_rate_value = self.learning_rate_placeholder
-        params = cost.parameters()
+        variables = list(cost.parameters())
         # TODO Get bsz from placeholder
-        grads = [be.deriv(cost, param)/128.0 for param in params]
-        velocities = [be.Temporary(axes=param.axes, init=Constant(0)) for param in params]
+        grads = [be.deriv(cost, variable)/128.0 for variable in variables]
+        velocities = [be.Temporary(axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1
         if self.gradient_clip_norm:
             scale_factor = clip_gradient_norm(grads)
         if self.gradient_clip_value is not None:
-            grads = [clip_gradient_value(param, self.gradient_clip_value) for grade in grads]
+            grads = [clip_gradient_value(variable, self.gradient_clip_value) for grade in grads]
 
         velocity_updates = [
             be.assign(
                 lvalue = velocity,
-                rvalue =  velocity * self.momentum_coef - learning_rate_value * (scale_factor * grad + self.wdecay * param)
+                rvalue =  velocity * self.momentum_coef - learning_rate_value * (scale_factor * grad + self.wdecay * variable)
             )
-        for param, grad, velocity in zip(params, grads, velocities)]
+        for variable, grad, velocity in zip(variables, grads, velocities)]
 
-        param_updates = [be.assign(lvalue=param, rvalue=param+velocity) for param, velocity in zip(params, velocities)]
+        param_updates = [be.assign(lvalue=variable, rvalue=variable+velocity) for variable, velocity in zip(variables, velocities)]
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):

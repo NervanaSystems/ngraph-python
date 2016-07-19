@@ -173,6 +173,18 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
+        """
+        Allocate a tensor initialized with a uniform distribution.
+
+        :param rng: Random number generator
+        :param tensor_description: Description of the tensor's type, shape, size, and strides.
+        :param loc:
+        :param scale:
+        :return: Reference to normal distribution.
+        """
+        raise NotImplementedError()
+
     @abc.abstractmethod
     def tensor_view(self, tensor_description):
         """
@@ -192,19 +204,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         :param out: Tensor to initialize
         :param value: Scalar value.
-        :return:
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def rng_uniform(self, rng, low, high, out):
-        """
-        Initializes out with a uniform distribution
-
-        :param rng: Random number generator
-        :param low: low end of range
-        :param high: upper end of range
-        :param out: tensor to be initialized
         :return:
         """
         raise NotImplementedError()
@@ -555,6 +554,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_normal(self, normal, loc, scale, rng):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def visit_uniform(self, uniform, low, high, rng):
         raise NotImplementedError()
 
@@ -765,6 +768,9 @@ class Visitor(nodes.Visitor):
 
     def visit_rngop(self, rngop, rng):
         return self.visit_computation(rngop)
+
+    def visit_normal(self, normal, loc, scale, rng):
+        return self.visit_rngop(normal, rng)
 
     def visit_uniform(self, uniform, low, high, rng):
         return self.visit_rngop(uniform, rng)
@@ -1582,6 +1588,9 @@ class RNG(AllocationOp):
     def uniform(self, low=0.0, high=1.0, size=None, **kargs):
         return Uniform(rng=self, low=low, high=high, size=size, **kargs)
 
+    def normal(self, loc, scale, size, **kargs):
+        return Normal(rng=self, loc=loc, scale=scale, size=size, **kargs)
+
 
 class RNGOp(AllocationOp):
     def __init__(self, rng, axes, **kargs):
@@ -1598,6 +1607,21 @@ class RNGOp(AllocationOp):
     def compute_call_info(self):
         rng, = self.args
         return [rng.reaxe(rng.axes.value)]
+
+
+class Normal(RNGOp):
+    def __init__(self, loc=0.0, scale=1.0, size=None, **kargs):
+        super(Normal, self).__init__(axes=size, **kargs)
+        self.loc = loc
+        self.scale = scale
+
+        def allocator(transformer, tensor_description):
+            rng, = self.call_info
+            return transformer.rng_normal_tensor(rng.value, tensor_description, loc, scale)
+        self.tensor_axes_info.alloc = allocator
+
+    def visit(self, visitor):
+        return visitor.visit_uniform(self, self.loc, self.scale, *self.args)
 
 
 class Uniform(RNGOp):

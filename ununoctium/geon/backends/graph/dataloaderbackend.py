@@ -23,6 +23,10 @@ class BackendNDArray(np.ndarray):
     def __bool__(self):
         return True
 
+    # Needed for Python 2.x
+    def __nonzero__(self):
+        return True
+
     def raw(self):
         return self.ctypes.data
 
