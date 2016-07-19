@@ -16,14 +16,19 @@ env = Environment()
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
+# Inference Graph
 pb_file = "../../tf_benchmark/mnist/mnist_mlp_graph_froze.pb"
+
+
+# Training graph
 pb_file = "../../tf_benchmark/mnist/mnist_mlp_graph.pb"
+end_node = 'ScalarSummary/tags'
 
 graph_def = tf.GraphDef()
 with open(pb_file, 'rb') as f:
     graph_def.ParseFromString(f.read())
 
-ast_graph = create_neon_graph(graph_def, env)
+ast_graph = create_neon_graph(graph_def, env, end_node)
 
 dataflow = analysis.DataFlowGraph([ast_graph.last_op])
 dataflow.view()

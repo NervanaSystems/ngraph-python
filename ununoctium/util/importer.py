@@ -93,7 +93,7 @@ def scan_variables(graph_def, env):
 
   return name_to_axes, var_to_init, batch_axis
 
-def create_neon_graph(graph_def, env):
+def create_neon_graph(graph_def, env, end_node=None):
   '''
   create Neon's transformer graph from a frozen GraphDef protobuf
 
@@ -107,19 +107,21 @@ def create_neon_graph(graph_def, env):
   name_to_axes, var_to_init, batch_axis = scan_variables(graph_def, env)
 
   for node in graph_def.node:
-    if node.name == 'ScalarSummary/tags':
+    if node.name == end_node:
       break
 
-    if node.op not in known_ops:
+    op_type = node.op
+
+    if op_type not in known_ops:
       # TODO: raise unrecognized operator error
       print("unrecognized operator: " + op_type)
       continue
 
+    print(node)
+
     inputs = []
     for i, input_name in enumerate([x for x in node.input]):
       inputs.append(input_name)
-
-    op_type = node.op
 
     with be.bound_environment(env):
       if op_type in two_inputs_ops:
@@ -168,6 +170,8 @@ def create_neon_graph(graph_def, env):
             op = be.NumPyTensor(np_val, axes=[in_axis], name=node.name)
           else:
             op = np_val
+        else:
+          op = np_val
 
       elif op_type == 'Variable':
         op = be.Variable(axes=name_to_axes[node.name], init=Uniform(-.001, .001), name=node.name)
@@ -187,15 +191,15 @@ def create_neon_graph(graph_def, env):
       elif op_type == 'Shape':
         op = name_to_op[inputs[0]].shape
       elif op_type == 'Rank':
-        op = len(name_to_op[inputs[0]].shape)
+        op = len(name_to_op[inputs[0]].axes.value)
       elif op_type == 'Size':
         op = name_to_op[inputs[0]].size
       elif op_type == 'Range':
         assert(len(inputs) == 3)
-        start = inputs[0]
-        limit = inputs[1]
-        delta = inputs[2]
-        op = np.range(start, limit, delta)
+        start = name_to_op[inputs[0]]
+        limit = name_to_op[inputs[1]]
+        delta = name_to_op[inputs[2]]
+        op = np.arange(start, limit, delta)
       elif op_type == 'Prod':
         #TODO: use be.reduce_prod
         keep_dims = inputs[1]
