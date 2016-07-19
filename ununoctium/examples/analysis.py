@@ -72,7 +72,7 @@ class MXNetMLP(Model):
     
     
 
-layers = [1024, 1200, 100]
+layers = [1024, 256, 512, 128, 200, 300, 500, 100]
 batch = 32000
 bprop = True
 

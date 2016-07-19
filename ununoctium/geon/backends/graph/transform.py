@@ -1119,6 +1119,7 @@ class TensorAxesInfo(object):
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
         self.alloc = alloc
+        self.buffer = None
         self.read_only = read_only
         self.dtype = np.dtype(dtype)
         self.tags = set(tags)

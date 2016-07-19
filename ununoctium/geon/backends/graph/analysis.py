@@ -1,6 +1,6 @@
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer
+from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product
 from geon.backends.graph.arrayaxes import axes_sizes
@@ -88,11 +88,19 @@ class KernelFlowGraph(DataFlowGraph):
 
     @staticmethod
     def _fusible(op1, op2):
-        shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
         if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
             return False
+            
+        shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
         if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1==shapes2:
             return True
+        #reduction(elementwise)
+        if isinstance(op1, ElementWise) and isinstance(op2, ReductionOp):
+            return True
+        #elementwise(reduction)
+        if isinstance(op1, ReductionOp) and isinstance(op2, ElementWise):
+            return True
+        
         return False
         
     def _graphviz(self, name=''):
