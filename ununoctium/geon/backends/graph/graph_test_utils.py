@@ -1,3 +1,5 @@
+from __future__ import division
+from builtins import object
 import math
 import numpy as np
 
@@ -19,7 +21,7 @@ class RandomTensorGenerator(object):
         return np.array(self.rng.uniform(low, high, axes_shape(axes)), dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
-        n = math.floor((high - low)/quantum)
+        n = math.floor((high - low) / quantum)
         result = np.array(self.rng.random_integers(0, n, axes_shape(axes)), dtype=self.dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)

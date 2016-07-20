@@ -1,3 +1,4 @@
+from __future__ import print_function
 import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 import geon.backends.graph.funs as be
@@ -33,7 +34,7 @@ class Eval(be.Model):
 
         enp = evaluation.NumPyEvaluator(results=(self.graph.x2, self.graph.z, self.graph.w))
         resultnp = enp.evaluate()
-        print resultnp
+        print(resultnp)
 
         # epc = evaluation.PyCUDAEvaluator(results=(self.naming.z, self.naming.w))
         # epc.set_input(self.naming.x, xa)

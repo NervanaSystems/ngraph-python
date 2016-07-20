@@ -21,6 +21,7 @@
 """
 The number of processed data should equal the number of test data.
 """
+from __future__ import print_function
 
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader

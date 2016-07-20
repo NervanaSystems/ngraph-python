@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 from builtins import zip
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader

@@ -1,3 +1,4 @@
+from __future__ import print_function
 from geon.backends.graph.graphneon import *
 
 # parse the command line arguments (generates the backend)
