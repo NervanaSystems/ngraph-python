@@ -1,26 +1,12 @@
 # Use TF's Graph with Neon
 
-
 ## Setup
 
-Assume that you have installed TensorFlow via [virtualenv](https://www.tensorflow.org/versions/r0.9/get_started/os_setup.html#virtualenv-installation).
-
-### install protobuf
-
-In the virtual environment of Neon, install the custom binary protobuf pip package. 
+Tensorflow is currently installed as part of ununoctium:
 
 ```
-$ source PATH_TO_NEON/bin/.venv2/bin/activate
-
-(.venv2)$ pip install --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/protobuf-3.0.0b2.post2-cp27-none-linux_x86_64.whl
-
-```
-The above version is for Ubuntu/Linux 64-bit, more versions can be found [here](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/g3doc/get_started/os_setup.md#protobuf-library-related-issues).
-
-### install graphviz
-
-```
-(.venv2)$ pip install graphviz
+cd ununoctium
+make install
 ```
 
 ## Run TF's Inference Graph
@@ -65,10 +51,10 @@ Note that TensorFlow also saves a [MetaGraph](https://www.tensorflow.org/version
 
 #### 1.3 Starts training
 
-To run the training script, first activate the virtual environment:
+To run the training script, first activate the virtual environment, for example:
 
 ```
-$ source ~/tensorflow/bin/activate  
+$ source ~/code/private-neon/.venv/bin/activate
 ```
 
 Then execute the stript `tf_benchmark/mnist/fully_connected_feed.py`
@@ -100,20 +86,17 @@ We provide bash script inside each example folder for convenience. So simply `./
 
 ### 3. Execute the frozen graph with Neon's graph backend
 
-Activate the virtual environment of Neon
+Activate the virtual environment, for example:
 
 ```
-$ export PYTHONPATH=~/code/graphiti/ununoctium/
-$ source ~/code/private-neon/.venv2/bin/activate
+$ source ~/code/private-neon/.venv/bin/activate
 ```
+
 Execute the following script will convert the frozen graph into Neon's graph and execute it.
 
 ```
 (.venv2)$ cd ununoctium/tests/
 (.venv2)$ python test_mnist_mlp.py
 ``` 
-
-Note that the `test_mnist_mlp.py` calls TensorFlow for deserilization. However, currently we cannot activate two virtual environment (Neon and TensorFlow) at the same time. A temporary solution is to copy the source and binary of TensorFlow into `graphiti/ununoctium/`.
-
 
 ## Run TF's Training Graph
