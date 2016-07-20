@@ -1142,6 +1142,7 @@ class TensorAxesInfo(object):
         return self.tensor_description.value
 
     def set_tensor(self, evaluator, tensor):
+        print type(tensor)
         self.tensor_description.value = tensor
         self.update_views(evaluator, True)
 

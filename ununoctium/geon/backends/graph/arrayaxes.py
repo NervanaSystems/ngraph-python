@@ -127,6 +127,9 @@ class Axes(tuple):
     def __getslice__(self, i, j):
         return self.__getitem__(slice(i, j))
 
+    def __add__(self, other):
+        return Axes(*(tuple(self) + tuple(other)))
+
     # TODO: delete this method, the size should come from the tensor
     @property
     def size(self):
