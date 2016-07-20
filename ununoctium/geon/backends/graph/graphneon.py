@@ -10,7 +10,7 @@ from geon.backends.graph.cost import CrossEntropyBinary, CrossEntropyMulti, SumS
 from geon.backends.graph.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, Logistic
 from geon.backends.graph.model import Model
 from geon.backends.graph.optimizer import GradientDescentMomentum
+from geon.backends.graph.arrayaxes import Axes
 
 from geon.backends.graph.callbacks import *
 from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, PolySchedule
-

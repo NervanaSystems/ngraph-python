@@ -17,9 +17,9 @@ def test_constants():
 
         ax.W.length = 10
         ax.H.length = 20
-        aaxes = [ax.W, ax.H]
-        ashape = arrayaxes.axes_shape(aaxes)
-        asize = arrayaxes.axes_size(aaxes)
+        aaxes = Axes(ax.W, ax.H)
+        ashape = aaxes.lengths
+        asize = aaxes.size
         aval = np.arange(asize, dtype=np.float32).reshape(ashape)
 
         # Pass a NumPy array through as a constant
@@ -58,7 +58,7 @@ def test_reduction():
         ax.C.length = 4
         ax.W.length = 4
         ax.H.length = 4
-        axes = [ax.C, ax.W, ax.H]
+        axes = Axes(ax.C, ax.W, ax.H)
 
         u = rng.uniform(-1.0, 1.0, axes)
         p_u = be.placeholder(axes=axes)
@@ -85,7 +85,7 @@ def test_reduction_deriv():
         ax.C.length = 4
         ax.W.length = 10
         ax.H.length = 10
-        axes = [ax.C, ax.W, ax.H]
+        axes = Axes(ax.C, ax.W, ax.H)
 
         u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
@@ -248,11 +248,11 @@ def test_np_softmax():
 
         # set up some distributions
         u = np.empty((ax.C.length, ax.N.length))
-        u = rng.uniform(0, 1, [ax.C, ax.N])
+        u = rng.uniform(0, 1, Axes(ax.C, ax.N))
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000, [ax.N]).reshape(1, ax.N.length)
+        x = np.log(u) + rng.uniform(-5000, 5000, Axes(ax.N)).reshape(1, ax.N.length)
 
         s = np_softmax(x, 0)
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
@@ -280,21 +280,21 @@ def test_softmax():
         axes = [ax.W, ax.N]
 
         # set up some distributions
-        u = rng.uniform(0, 1, [ax.W, ax.N])
+        u = rng.uniform(0, 1, Axes(ax.W, ax.N))
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000, [ax.N]).reshape(1, ax.N.length)
+        x = np.log(u) + rng.uniform(-5000, 5000, Axes(ax.N)).reshape(1, ax.N.length)
         p_x = be.placeholder(axes=axes)
         p_x.value = x
 
-        s, = execute([be.softmax(p_x, softmax_axes=[ax.W])])
+        s, = execute([be.softmax(p_x, softmax_axes=Axes(ax.W))])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        x = rng.uniform(-5000, 5000, [ax.W, ax.N])
+        x = rng.uniform(-5000, 5000, Axes(ax.W, ax.N))
         p_x.value = x
         u = np_softmax(x, 0)
-        s, = execute([be.softmax(p_x, softmax_axes=[ax.W])])
+        s, = execute([be.softmax(p_x, softmax_axes=Axes(ax.W))])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Test with softmax_axis default
@@ -302,7 +302,7 @@ def test_softmax():
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Now try the derivative
-        axes = [ax.W, ax.N]
+        axes = Axes(ax.W, ax.N)
         ax.W.length = 3
         ax.N.length = 10
 
@@ -340,3 +340,11 @@ def test_softmax():
         ndce = transform_numeric_derivative(ce, p_x, .001)
         tdce = transform_derivative(ce, p_x)
         assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
+
+if __name__ == '__main__':
+    test_constants()
+    test_softmax()
+    test_np_softmax()
+    test_elementwise_ops_unmatched_args()
+    test_reduction()
+    test_reduction_deriv()

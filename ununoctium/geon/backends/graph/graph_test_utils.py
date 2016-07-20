@@ -1,11 +1,11 @@
 from __future__ import division
 from builtins import object
+
 import math
 import numpy as np
 
-from geon.backends.graph.arrayaxes import axes_shape
 from geon.backends.graph.graphneon import *
-import geon.backends.graph.arrayaxes as arrayaxes
+from geon.backends.graph.arrayaxes import Axes
 
 
 class RandomTensorGenerator(object):
@@ -18,11 +18,11 @@ class RandomTensorGenerator(object):
         self.rng = np.random.RandomState(seed=seed)
 
     def uniform(self, low, high, axes):
-        return np.array(self.rng.uniform(low, high, axes_shape(axes)), dtype=self.dtype)
+        return np.array(self.rng.uniform(low, high, axes.lengths), dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
         n = math.floor((high - low) / quantum)
-        result = np.array(self.rng.random_integers(0, n, axes_shape(axes)), dtype=self.dtype)
+        result = np.array(self.rng.random_integers(0, n, axes.lengths), dtype=self.dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result
@@ -98,8 +98,8 @@ def transform_derivative(f, px):
     :return:
     """
     x = px.value
-    fshape = axes_shape(f.axes.value)
-    xshape = axes_shape(px.axes.value)
+    fshape = f.axes.value.lengths
+    xshape = px.axes.value.lengths
 
     dfdx = be.deriv(f, px)
 

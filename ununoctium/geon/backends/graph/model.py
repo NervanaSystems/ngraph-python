@@ -92,10 +92,10 @@ class Model(GraphComponent):
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
                 # TODO Move this axis initialization into a util
-                batch_input_axes = input_axes + (ax.N,)
-                batch_target_axes = target_axes + (ax.N,)
-                be.set_batch_axes([ax.N])
-                be.set_phase_axes([ax.Phi])
+                batch_input_axes = input_axes + arrayaxes.Axes(ax.N,)
+                batch_target_axes = target_axes + arrayaxes.Axes(ax.N,)
+                be.set_batch_axes(arrayaxes.Axes(ax.N,))
+                be.set_phase_axes(arrayaxes.Axes(ax.Phi,))
                 self.input = be.placeholder(axes=batch_input_axes)
                 self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
@@ -104,8 +104,8 @@ class Model(GraphComponent):
                     axis.length = length
                 ax.N.length = dataset_batchsize(dataset)
                 ax.Phi.length = 2
-                self.batch_input_shape = arrayaxes.axes_shape(batch_input_axes)
-                self.batch_target_shape = arrayaxes.axes_shape(batch_target_axes)
+                self.batch_input_shape = batch_input_axes.lengths
+                self.batch_target_shape = batch_target_axes.lengths
 
                 self.initialize(self.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
