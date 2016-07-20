@@ -1,3 +1,4 @@
+from builtins import range
 import numpy as np
 
 from geon.backends.graph.arrayaxes import Axis, axes_sub, canonicalize_axes, TensorDescription, axes_shape, axes_size
@@ -90,27 +91,27 @@ def test_views():
 
     assert e0_1.shape == td0_1.shape
     e0[()] = val
-    for i in xrange(e1.shape[0]):
+    for i in range(e1.shape[0]):
         assert e0_1[i] == val
 
     assert e0_2.shape == td0_2.shape
-    for i in xrange(e2.shape[0]):
-        for j in xrange(e2.shape[1]):
+    for i in range(e2.shape[0]):
+        for j in range(e2.shape[1]):
             assert e0_2[i, j] == val
 
     assert e1_2a.shape == (ax.A.length, ax.B.length)
     assert e1_2b.shape == (ax.B.length, ax.A.length)
     assert e1_2c.shape == (ax.B.length * ax.C.length, ax.A.length)
 
-    for i in xrange(ax.A.length):
+    for i in range(ax.A.length):
         e1[i] = val * i
 
-    for i in xrange(ax.A.length):
+    for i in range(ax.A.length):
         assert e1[i] == val * i
-        for j in xrange(ax.B.length):
+        for j in range(ax.B.length):
             assert e1_2a[i, j] == val * i
             assert e1_2b[j, i] == val * i
-        for j in xrange(ax.B.length * ax.C.length):
+        for j in range(ax.B.length * ax.C.length):
             assert e1_2c[j, i] == val * i
 
     assert e2_2a.shape == (ax.B.length, ax.A.length)
@@ -119,11 +120,11 @@ def test_views():
     def val3(i, j):
         return (i + 1) * (j + 2)
 
-    for i in xrange(ax.A.length):
-        for j in xrange(ax.B.length):
+    for i in range(ax.A.length):
+        for j in range(ax.B.length):
             e2[i, j] = val3(i, j)
 
-    for i in xrange(ax.A.length):
-        for j in xrange(ax.B.length):
+    for i in range(ax.A.length):
+        for j in range(ax.B.length):
             assert e2[i, j] == val3(i, j)
             assert e2_2a[j, i] == val3(i, j)

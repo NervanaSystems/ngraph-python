@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 from builtins import range, zip
 from geon.backends.graph.graphneon import *
 

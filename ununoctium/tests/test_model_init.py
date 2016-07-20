@@ -31,7 +31,7 @@
 # epoch: 8 time: 6.36s train_error: 62.89 test_error: 64.12 train_loss: 2.606
 # epoch: 9 time: 5.81s train_error: 62.86 test_error: 63.13 train_loss: 2.594
 
-from __future__ import division
+from __future__ import division, print_function
 from builtins import range, zip
 from geon.backends.graph.graphneon import *
 

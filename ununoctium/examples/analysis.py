@@ -1,9 +1,11 @@
+from __future__ import print_function
 from builtins import range, zip
 from geon.backends.graph.funs import *
 from geon.backends.graph.analysis import *
 
 import mxnet as mx
 import mxnet.symbol as sym
+from functools import reduce
 
 class GraphitiMLP(Model):
     def __init__(self, L, BS, bprop=True, **kargs):
@@ -79,6 +81,6 @@ bprop = True
 graphiti = GraphitiMLP(layers, batch, bprop)
 mxnet = MXNetMLP(layers, batch, bprop)
 
-print 'Graphiti: {:.2f} MiB'.format(graphiti.memory*1024**-2)
-print 'MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory*1024**-2)
+print('Graphiti: {:.2f} MiB'.format(graphiti.memory*1024**-2))
+print('MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory*1024**-2))
 

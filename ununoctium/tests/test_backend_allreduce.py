@@ -22,6 +22,7 @@ The output of the model script should have the following format:
     epoch: 0 time: 5.83s train_error: 71.70 test_error: 68.75 train_loss: 2.907
 Use test_model_init.py as the template for developing any other models
 """
+from __future__ import print_function
 from builtins import map, str, zip
 import os
 import argparse
@@ -97,18 +98,18 @@ def analyze_test_results(test_results):
         To print the analyzed results. 
         Format: {"MPI_thread_num":(train_time, train_error, test_error, train_loss)}
         """
-        print "\t\tAnalyzed results:"
+        print("\t\tAnalyzed results:")
 
         headers = ['MPI_thrds', 'train_time', 'train_error', 'test_error', 'train_loss']
         table_content = []
 
         row_format ="{:>16}" * (len(headers) + 1)
-        print row_format.format("", *headers)    
+        print(row_format.format("", *headers))
 
         for thrds, res in sorted(results.items()):
             row_content = [thrds] + list(res)
             table_content.append(row_content)
-            print row_format.format("", *row_content)
+            print(row_format.format("", *row_content))
     
     print_analyzed_test_results(average_test_resuts)
 
@@ -126,7 +127,7 @@ def run_tests(args):
         args.mpi_flag = (test > 0)
         cmd = make_run_cmd(args)
         # run a blocking process
-        print cmd
+        print(cmd)
         proc = Popen(cmd, stdout=PIPE, stderr=PIPE,shell=True)
         proc.wait()
         proc_out, proc_err = proc.communicate()
