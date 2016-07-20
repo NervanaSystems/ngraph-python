@@ -79,7 +79,7 @@ def canonicalize(seq):
                 continue
             elif x.single:
                 x = x.axes[0]
-        elif is_collection(x):
+        elif isinstance(x, collections.Iterable):
             x = canonicalize(x)
             if len(x) == 0:
                 continue
@@ -89,14 +89,6 @@ def canonicalize(seq):
                 x = AxesAxis(Axes(*x))
         elems.append(x)
     return elems
-
-
-def is_collection(x):
-    return isinstance(x, collections.Iterable)
-
-
-def is_single(x):
-    return not isinstance(x, collections.Iterable)
 
 
 def no_duplicates(arr):
@@ -165,7 +157,7 @@ class Axes(tuple):
 
 # func(agg, elem) -> agg
 def reduce_nested(elem, agg, func):
-    if is_collection(elem):
+    if isinstance(elem, collections.Iterable):
         for sub in elem:
             agg = reduce_nested(sub, agg, func)
         return agg
@@ -286,15 +278,6 @@ def reduce_strides(strides):
                  for elem in strides)
 
 
-def can_be_nested_strides(strides):
-    for stride in strides:
-        if is_collection(stride) and not can_be_nested_strides(stride):
-                return False
-    strides = reduce_strides(strides)
-
-    return all([strides[i] >= strides[i + 1] for i in range(len(strides) - 1)])
-
-
 class TensorDescription(object):
     """Axes information about an allocated tensor"""
     def __init__(self, axes, dtype=np.dtype(np.float32), full_shape=None,
@@ -339,7 +322,7 @@ class TensorDescription(object):
             "Strides must have same number of dimensions as axes"
 
     def __getitem__(self, item):
-        assert is_collection(item)
+        assert isinstance(item, collections.Iterable)
         assert len(item) == self.ndim
 
         offset = self.offset
@@ -431,7 +414,7 @@ class TensorDescription(object):
     def reaxe_with_axis_ids(self, new_axis_id_tuple):
         # This function does not allow any unrolling of axes
         # The argument is a tuple of axis ids.
-        # The indexes of the axis ids refer to the existing order of axes
+        # The indices of the axis ids refer to the existing order of axes
         old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
         return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
                                          old_poss=old_poss,
