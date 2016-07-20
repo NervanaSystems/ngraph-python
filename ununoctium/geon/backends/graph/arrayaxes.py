@@ -111,7 +111,7 @@ class Axes(tuple):
 
     @property
     def full_lengths(self):
-        return tuple(x.axes.unreduced_lengths if isinstance(x, AxesAxis)
+        return tuple(x.axes.full_lengths if isinstance(x, AxesAxis)
                      else x.length for x in self)
 
     @property

@@ -28,10 +28,10 @@ class NumPyTransformer(Transformer):
             return tensor_description.buffer.value
 
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        return rng.normal(loc, scale, tensor_description.sizes)
+        return rng.normal(loc, scale, tensor_description.sizes).astype(tensor_description.dtype)
 
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        return rng.uniform(low, high, tensor_description.sizes)
+        return rng.uniform(low, high, tensor_description.sizes).astype(tensor_description.dtype)
 
     # Side-effects
     def fill(self, out, value):

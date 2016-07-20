@@ -1932,7 +1932,8 @@ class argmax(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
+        return [self.reaxe(Axes(self.axes.value)),
+                x.reaxe(Axes(self.max_axes.value, self.axes.value))]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmax(x, out)
@@ -1955,7 +1956,8 @@ class argmin(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
+        return [self.reaxe(Axes(self.axes.value)),
+                x.reaxe(Axes(self.min_axes.value, self.axes.value))]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmin(x, out)
