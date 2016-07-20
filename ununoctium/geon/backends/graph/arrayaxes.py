@@ -348,15 +348,15 @@ class TensorDescription(object):
                 return -1
 
         for axis in new_axes:
-            if isinstance(axis, AxesAxis):
+            old_pos = get_old_axis(axis)
+            if old_pos == -1 and isinstance(axis, AxesAxis):
                 poss = []
                 for sub in axis.axes:
                     assert not isinstance(sub, AxesAxis)
                     poss.append(get_old_axis(sub))
                 old_poss.append(tuple(poss))
             else:
-                old_poss.append(get_old_axis(axis))
-
+                old_poss.append(old_pos)
         return old_poss
 
     def split_reduce_at(self, div_point):

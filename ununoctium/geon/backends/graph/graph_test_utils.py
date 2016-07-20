@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 from geon.backends.graph.graphneon import *
-import geon.backends.graph.arrayaxes as arrayaxes
+from geon.backends.graph.arrayaxes import Axes
 
 
 class RandomTensorGenerator(object):

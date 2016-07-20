@@ -1414,7 +1414,7 @@ class Tensor(Op):
     def generate_add_delta(self, adjoints, delta):
         delta_axes = delta.axes.value
         self_axes = self.axes.value
-        reduction_axes = axes_sub(delta_axes, self_axes)
+        reduction_axes = AxisIDTuple.sub(delta_axes, self_axes).as_axes()
         if reduction_axes:
             delta = sum(delta, reduction_axes=reduction_axes)
 
@@ -2152,10 +2152,10 @@ class ReductionOp(ComputationOp):
             self.mode = 'copy'
             return [self.reaxe(self.axes.value), xr]
         else:
-            x_axes = x.axes.value
             np_out_axes = self.axes.value
-            red_axes = [reduction_axes]
+            red_axes = [AxesAxis(reduction_axes)]
             red_axes.extend(np_out_axes)
+            red_axes = Axes(*red_axes)
             self.mode = 0
             return [self.reaxe(np_out_axes), x.reaxe(red_axes)]
 
