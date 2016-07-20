@@ -341,10 +341,40 @@ def test_softmax():
         tdce = transform_derivative(ce, p_x)
         assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
 
+
+def np_sig(x):
+        return np.reciprocal(np.exp(-x)+1)
+
+
+def test_logistic():
+    with be.bound_environment():
+        ax.W.length = 128
+        ax.N.length = 10
+        be.set_batch_axes([ax.N])
+        axes = [ax.W, ax.N]
+        delta = .001
+
+        # set up some distributions
+        u = rng.uniform(-10, 10, axes=axes)
+        p_u = be.placeholder(axes=axes)
+        p_u.value = u
+
+        sig_u = be.sig(p_u)
+
+        sig_np = np_sig(u)
+        sig_graph, = execute([sig_u])
+        assert np.allclose(sig_np, sig_graph)
+
+        dsigdu_graph = transform_derivative(sig_u, p_u)
+        dsigdu_num = transform_numeric_derivative(sig_u, p_u, delta)
+        assert np.allclose(dsigdu_graph, dsigdu_num, atol=1e-2, rtol=1e-2)
+
+
 if __name__ == '__main__':
     test_constants()
     test_softmax()
     test_np_softmax()
+    tesT_logistic()
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()

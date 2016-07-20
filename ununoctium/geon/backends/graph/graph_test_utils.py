@@ -18,11 +18,11 @@ class RandomTensorGenerator(object):
         self.rng = np.random.RandomState(seed=seed)
 
     def uniform(self, low, high, axes):
-        return np.array(self.rng.uniform(low, high, axes.lengths), dtype=self.dtype)
+        return np.array(self.rng.uniform(low, high, Axes(*axes).lengths), dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
         n = math.floor((high - low) / quantum)
-        result = np.array(self.rng.random_integers(0, n, axes.lengths), dtype=self.dtype)
+        result = np.array(self.rng.random_integers(0, n, Axes(*axes).lengths), dtype=self.dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result

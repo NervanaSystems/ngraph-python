@@ -1142,7 +1142,6 @@ class TensorAxesInfo(object):
         return self.tensor_description.value
 
     def set_tensor(self, evaluator, tensor):
-        print type(tensor)
         self.tensor_description.value = tensor
         self.update_views(evaluator, True)
 
@@ -2235,7 +2234,7 @@ class tensor_size(ComputationOp):
 
     def evaluate(self, evaluator, out):
         resolved_reduction_axes = self.reduction_axes.value
-        size = axes_size(resolved_reduction_axes)
+        size = resolved_reduction_axes.size
         evaluator.fill(out, size)
 
     @property
@@ -2561,9 +2560,7 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None):
 
 
 def cross_entropy_binary(y, t, out_axes=None):
-    a = - safelog(y) * t
-    b = - safelog(1 - y) * (1 - t)
-    return sum(a + b, out_axes=out_axes)
+    return -sum(safelog(y) * t + safelog(1 - y) * (1 - t), out_axes=out_axes)
 
 
 class Function(nodes.Node):

@@ -20,8 +20,12 @@ class NumPyTransformer(Transformer):
         return np.random.RandomState(seed=seed)
 
     def tensor_view(self, tensor_description):
-        return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
-                          offset=tensor_description.offset, strides=tensor_description.strides)
+        if isinstance(tensor_description.buffer.value, np.ndarray):
+            return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
+                              offset=tensor_description.offset, strides=tensor_description.strides)
+        else:
+            # Non-tensor value
+            return tensor_description.buffer.value
 
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
         return rng.normal(loc, scale, tensor_description.sizes)
