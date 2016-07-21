@@ -1,5 +1,6 @@
 from __future__ import division
 from future.utils import with_metaclass
+from functools import reduce
 
 from abc import ABCMeta
 import collections
@@ -309,7 +310,7 @@ class TensorDescription(object):
             # TODO: deduce strides of nested axes.
             full_strides = []
             stride = self.dtype.itemsize
-            for axis, full_size in reversed(zip(self.axes, self.full_sizes)):
+            for axis, full_size in reversed(list(zip(self.axes, self.full_sizes))):
                 assert not isinstance(axis, AxesAxis)
                 full_strides.append(stride)
                 stride *= full_size
