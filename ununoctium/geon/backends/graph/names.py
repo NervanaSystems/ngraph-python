@@ -124,6 +124,7 @@ class Parented(NameableValue):
 
 
 class NameScope(Parented):
+
     def __init__(self, **kargs):
         super(NameScope, self).__init__(**kargs)
 

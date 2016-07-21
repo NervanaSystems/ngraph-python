@@ -4,8 +4,15 @@ from future.utils import with_metaclass
 
 
 class TypeDescriptorMetaType(type):
+
     def __new__(cls, name, parents, attrs):
-        return super(TypeDescriptorMetaType, cls).__new__(cls, name, parents, attrs)
+        return super(
+            TypeDescriptorMetaType,
+            cls).__new__(
+            cls,
+            name,
+            parents,
+            attrs)
 
     def __call__(cls, *args, **kargs):
         return super(TypeDescriptorMetaType, cls).__call__(*args, **kargs)
@@ -17,11 +24,13 @@ class TypeDescriptorMetaType(type):
 
 
 class TypeDescriptor(with_metaclass(TypeDescriptorMetaType, object)):
+
     def __init__(self, **kargs):
         super(TypeDescriptor, self).__init__(**kargs)
 
 
 class Void(TypeDescriptor):
+
     def __init__(self, **kargs):
         super(Void, self).__init__(**kargs)
 
@@ -30,6 +39,7 @@ class Void(TypeDescriptor):
 
 
 class DType(TypeDescriptor):
+
     def __init__(self, dt=np.float32, **kargs):
         super(DType, self).__init__(**kargs)
         self.__dtype = np.dtype(dt)
@@ -47,6 +57,7 @@ class DType(TypeDescriptor):
 
 
 class Axes(TypeDescriptor):
+
     def __init__(self, *axes, **kargs):
         super(Axes, self).__init__(**kargs)
         self.axes = axes
@@ -56,6 +67,7 @@ class Axes(TypeDescriptor):
 
 
 class Array(TypeDescriptor):
+
     def __init__(self, axes, dtype=np.float32, **kargs):
         super(Array, self).__init__(**kargs)
         if dtype is None:
@@ -64,10 +76,12 @@ class Array(TypeDescriptor):
         self.axes = axes
 
     def __repr__(self):
-        return 'ArrayType[{dtype},{axes}]'.format(dtype=self.type, axes=self.axes)
+        return 'ArrayType[{dtype},{axes}]'.format(
+            dtype=self.type, axes=self.axes)
 
 
 class Tuple(TypeDescriptor):
+
     def __init__(self, dtype, elt_types, **kargs):
         super(Tuple, self).__init__(**kargs)
         self.elt_type = elt_types

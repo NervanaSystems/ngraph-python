@@ -7,7 +7,7 @@ from __future__ import print_function
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
 import numpy as np
-from neon.initializers import Constant
+# from neon.initializers import Constant
 
 
 def test_constant_init():

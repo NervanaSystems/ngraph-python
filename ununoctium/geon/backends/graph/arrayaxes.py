@@ -15,6 +15,7 @@ from geon.backends.graph.environment import get_current_environment
 
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
+
     def __init__(self, length, **kargs):
         super(Axis, self).__init__(**kargs)
         self.__length = length
@@ -53,6 +54,7 @@ class AxisVar(Axis):
 
 
 class AxisID(object):
+
     def __init__(self, axis, idx, **kargs):
         assert isinstance(idx, int)
         super(AxisID, self).__init__(**kargs)
@@ -102,6 +104,7 @@ def no_duplicates(arr):
 
 
 class Axes(tuple):
+
     def __new__(cls, *seq):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
             assert len(seq) == 1
@@ -181,6 +184,7 @@ def with_axes_as_axis_ids(f):
 
 
 class AxisIDTuple(tuple):
+
     def __new__(cls, *seq):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
             assert len(seq) == 1
@@ -250,6 +254,7 @@ class AxisIDTuple(tuple):
 
 
 class AxesAxis(Axis):
+
     def __init__(self, axes, **kargs):
         assert isinstance(axes, Axes)
         length = reduce(operator.mul, axes.lengths, 1)
@@ -284,6 +289,7 @@ def reduce_strides(strides):
 
 class TensorDescription(object):
     """Axes information about an allocated tensor"""
+
     def __init__(self, axes, dtype=np.dtype(np.float32), full_shape=None,
                  buffer=None, value=None, full_strides=None, full_sizes=None,
                  offset=0, **kargs):
@@ -310,7 +316,8 @@ class TensorDescription(object):
             # TODO: deduce strides of nested axes.
             full_strides = []
             stride = self.dtype.itemsize
-            for axis, full_size in reversed(list(zip(self.axes, self.full_sizes))):
+            for axis, full_size in reversed(
+                    list(zip(self.axes, self.full_sizes))):
                 assert not isinstance(axis, AxesAxis)
                 full_strides.append(stride)
                 stride *= full_size

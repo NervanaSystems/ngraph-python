@@ -33,7 +33,7 @@
 
 from __future__ import division, print_function
 from builtins import range, zip
-from geon.backends.graph.graphneon import *
+from geon.backends.graph.graphneon import *  # noqa
 
 import numpy as np
 from timeit import default_timer
@@ -48,14 +48,17 @@ parser.add_argument('-mpi_flag', action='store_true')
 
 args = parser.parse_args()
 
+
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
-    ns.weights = be.Variable(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+    ns.weights = be.Variable(axes=be.linear_map_axes(
+        be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
         ns.bias = be.Variable(axes=result.axes.sample, init=bias)
         result = result + ns.bias
     return result
+
 
 @be.with_name_scope
 def mlp(ns, x, y):
@@ -65,7 +68,9 @@ def mlp(ns, x, y):
 
     return value
 
+
 class MyTest(be.Model):
+
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
         g = self.graph
@@ -96,7 +101,8 @@ class MyTest(be.Model):
             graph.params = graph.loss.parameters()
             derivs = [be.deriv(graph.loss, param) for param in graph.params]
             # check for the mpi_flag
-            # if the flag is set, we add an AllReduce node after each derivs node to synch up
+            # if the flag is set, we add an AllReduce node after each derivs
+            # node to synch up
             synced_derivs = []
             if args.mpi_flag:
                 synced_derivs = [be.AllReduce(deriv) for deriv in derivs]
@@ -104,12 +110,27 @@ class MyTest(be.Model):
                 synced_derivs = derivs
 
             updates = be.doall(
-                all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(graph.params, synced_derivs)])
+                all=[
+                    be.assign(
+                        param,
+                        param -
+                        learning_rate *
+                        deriv) for param,
+                    deriv in zip(
+                        graph.params,
+                        synced_derivs)])
 
-            enp = be.NumPyTransformer(results=[self.graph.value, graph.loss, updates] + synced_derivs + graph.params)
+            enp = be.NumPyTransformer(
+                results=[
+                    self.graph.value,
+                    graph.loss,
+                    updates] +
+                synced_derivs +
+                graph.params)
 
             for epoch in range(args.epochs):
-                # TODO: need to fix that the processed data does not equal to the actual number of the data
+                # TODO: need to fix that the processed data does not equal to
+                # the actual number of the data
                 start_train = default_timer()
 
                 train_loss = 0
@@ -124,8 +145,8 @@ class MyTest(be.Model):
                     vals = enp.evaluate()
 
                     train_loss += vals[graph.loss] / float(train.bsz)
-                    train_error += np.sum(np.not_equal(np.argmax(vals[graph.value], axis=0),
-                                                       np.argmax(yraw, axis=0))) / float(train.bsz)
+                    train_error += np.sum(np.not_equal(np.argmax(
+                        vals[graph.value], axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
                     n_bs += 1
                     nprocessed += xraw.shape[1]
 
@@ -136,7 +157,7 @@ class MyTest(be.Model):
                 print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} '.format(
                     epoch, default_timer() - start_train, float(train_error), test_error))
 
-                #TODO: figure out why train_loss is not scalar
+                # TODO: figure out why train_loss is not scalar
 
                 train.reset()
 
@@ -144,18 +165,24 @@ class MyTest(be.Model):
     def test(self, env, test, printParam=False):
         graph = self.graph
         with be.bound_environment(env):
-            enp = be.NumPyTransformer(results=[self.graph.value] + graph.params)
+            enp = be.NumPyTransformer(
+                results=[self.graph.value] + graph.params)
 
             test_error = 0
             n_bs = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
-                # TODO: need to fix that the processed data does not equal to the actual number of the data
+                # TODO: need to fix that the processed data does not equal to
+                # the actual number of the data
                 graph.x.value = xraw
                 graph.y.value = yraw
                 vals = enp.evaluate()
 
-                test_error += np.sum(np.not_equal(np.argmax(vals[graph.value], axis=0),
-                                                  np.argmax(yraw, axis=0)))
+                test_error += np.sum(
+                    np.not_equal(
+                        np.argmax(
+                            vals[
+                                graph.value], axis=0), np.argmax(
+                            yraw, axis=0)))
                 n_bs += 1
 
             return float(test_error / float(test.bsz) / n_bs * 100)
@@ -163,8 +190,10 @@ class MyTest(be.Model):
 # data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                       repo_dir=args.data_dir, subset_pct=args.subset_pct)
-train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
-test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
+train = ImageLoader(set_name='train', shuffle=False,
+                    do_transforms=False, **imgset_options)
+test = ImageLoader(set_name='validation', shuffle=False,
+                   do_transforms=False, **imgset_options)
 
 
 geon_model = MyTest()

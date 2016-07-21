@@ -58,10 +58,12 @@ args = parser.parse_args()
 # setup data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                       repo_dir=args.data_dir, subset_pct=args.subset_pct)
-train = ImageLoader(set_name='train', shuffle=True, do_transforms=True, **imgset_options)
-test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
+train = ImageLoader(set_name='train', shuffle=True,
+                    do_transforms=True, **imgset_options)
+test = ImageLoader(set_name='validation', shuffle=False,
+                   do_transforms=False, **imgset_options)
 
-init_uni0 = Uniform(low=-0.002 , high=0.002)
+init_uni0 = Uniform(low=-0.002, high=0.002)
 init_uni1 = Uniform(low=-0.1, high=0.1)
 opt_gdm = GradientDescentMomentum(learning_rate=0.0001, momentum_coef=0.9)
 
@@ -76,6 +78,8 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 
-mlp.fit(train, optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
+mlp.fit(train, optimizer=opt_gdm, num_epochs=args.epochs,
+        cost=cost, callbacks=callbacks)
 
-print('Misclassification error = %.1f%%' % (mlp.eval(test, metric=Misclassification())*100))
+print('Misclassification error = %.1f%%' %
+      (mlp.eval(test, metric=Misclassification()) * 100))

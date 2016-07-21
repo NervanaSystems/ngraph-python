@@ -41,13 +41,13 @@ Examples:
         the values stored in the checkpoint file named checkpoint.pkl.
 
 """
-from geon.backends.graph.graphneon import *
+from geon.backends.graph.graphneon import *  # noqa
 from neon.data import ArrayIterator, load_mnist
 from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
-from geon.backends.graph.analysis import DataFlowGraph
+# from geon.backends.graph.analysis import DataFlowGraph
 
 
 # parse the command line arguments
@@ -88,7 +88,17 @@ callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
 
 np.seterr(divide='raise', over='raise', invalid='raise')
 # run fit
-mlp.fit(train_set, input_axes=Axes(ax.C, ax.H, ax.W), target_axes=Axes(ax.Y), optimizer=optimizer,
-        num_epochs=args.epochs, cost=cost, callbacks=callbacks)
+mlp.fit(
+    train_set,
+    input_axes=Axes(
+        ax.C,
+        ax.H,
+        ax.W),
+    target_axes=Axes(
+        ax.Y),
+    optimizer=optimizer,
+    num_epochs=args.epochs,
+    cost=cost,
+    callbacks=callbacks)
 error_rate = mlp.eval(valid_set, metric=Misclassification())
 neon_logger.display('Misclassification error = %.1f%%' % (error_rate * 100))

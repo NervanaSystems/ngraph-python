@@ -146,7 +146,8 @@ class MeanSquared(Cost):
         """
         Define the cost function and its gradient as lambda functions.
         """
-        self.func = lambda y, t: self.be.mean(self.be.square(y - t), axis=0) / 2.
+        self.func = lambda y, t: self.be.mean(
+            self.be.square(y - t), axis=0) / 2.
         self.funcgrad = lambda y, t: (y - t) / y.shape[0]
 
 
@@ -248,7 +249,8 @@ class TopKMisclassification(Metric):
         self.topk = self.be.iobuf(1)
 
         self.k = k
-        self.metric_names = ['LogLoss', 'Top1Misclass', 'Top' + str(k) + 'Misclass']
+        self.metric_names = ['LogLoss', 'Top1Misclass',
+                             'Top' + str(k) + 'Misclass']
 
     def __call__(self, y, t, calcrange=slice(0, None)):
         """
@@ -267,7 +269,8 @@ class TopKMisclassification(Metric):
         self.correctProbs[:] = be.sum(y * t, axis=0)
         nSlots = self.k - be.sum((y > self.correctProbs), axis=0)
         nEq = be.sum(y == self.correctProbs, axis=0)
-        self.topk[:] = 1. - (nSlots > 0) * ((nEq <= nSlots) * (1 - nSlots / nEq) + nSlots / nEq)
+        self.topk[:] = 1. - (nSlots > 0) * ((nEq <= nSlots) *
+                                            (1 - nSlots / nEq) + nSlots / nEq)
         self.top1[:] = 1. - (be.max(y, axis=0) == self.correctProbs) / nEq
         self.correctProbs[:] = -be.safelog(self.correctProbs)
         return np.array((self.correctProbs.get()[:, calcrange].mean(),
@@ -389,10 +392,12 @@ class PrecisionRecall(Metric):
         self.token_stats[:, 2] = self.be.sum(t, axis=1)
 
         # Precision
-        self.outputs[:, 0] = self.token_stats[:, 0] / (self.token_stats[:, 1] + self.eps)
+        self.outputs[:, 0] = self.token_stats[
+            :, 0] / (self.token_stats[:, 1] + self.eps)
 
         # Recall
-        self.outputs[:, 1] = self.token_stats[:, 0] / (self.token_stats[:, 2] + self.eps)
+        self.outputs[:, 1] = self.token_stats[
+            :, 0] / (self.token_stats[:, 2] + self.eps)
 
         return self.outputs.get().mean(axis=0)
 
@@ -437,9 +442,8 @@ class ObjectDetection(Metric):
         """
 
         self.detectionMetric = self.be.empty((1, t[self.bbox_ind][0].shape[1]))
-        self.detectionMetric[:] = self.be.sum(self.smoothL1(y[self.bbox_ind] -
-                                                            t[self.bbox_ind][0] *
-                                                            t[self.bbox_ind][1]), axis=0)
+        self.detectionMetric[:] = self.be.sum(self.smoothL1(
+            y[self.bbox_ind] - t[self.bbox_ind][0] * t[self.bbox_ind][1]), axis=0)
 
         self.preds = self.be.empty((1, y[self.label_ind].shape[1]))
         self.hyps = self.be.empty((1, t[self.label_ind].shape[1]))
