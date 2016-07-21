@@ -1410,6 +1410,7 @@ class AxesAppendComp(AxesComp):
 
 
 class AxesSliceComp(AxesComp):
+
     def __init__(self, x, lower=0, upper=None, **kargs):
         super(AxesSliceComp, self).__init__(**kargs)
         self.x = AxesComp.as_axes(x)
