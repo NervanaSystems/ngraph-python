@@ -3,16 +3,17 @@ from contextlib import contextmanager
 import weakref
 import threading
 
-# TODO Store default values directly with the keys, i.e. a default axis length is stored in the axis.
-# TODO When acessing values from the environment, pass the default value.  This lets us get rid of the
-# TODO environment that is used to hold default values, and some of the @with_environment uses.  Can
-# TODO have an Empty object if we need a way to throw on undefined values
+# TODO:
+# Store default values directly with the keys, i.e. a default axis length is stored in the axis.
+# When acessing values from the environment, pass the default value.  This lets us get rid of the
+# environment that is used to hold default values, and some of the @with_environment uses.  Can
+# have an Empty object if we need a way to throw on undefined values
 
-# TODO store a "batch" attribute on an axis in the environment, so that a @with_batch_axes
-# TODO can automatcially tag those axes as batch.
+# store a "batch" attribute on an axis in the environment, so that a @with_batch_axes
+# can automatcially tag those axes as batch.
 
-# TODO replace the special-cases in the environment with a kind argument to access/set so we don't
-# TODO need all these special-purpose methods
+# replace the special-cases in the environment with a kind argument to access/set so we don't
+# need all these special-purpose methods
 
 __thread_state = threading.local()
 
@@ -60,6 +61,7 @@ def get_current_environment():
 
 
 class EnvironmentProxy(object):
+
     def __init__(self):
         pass
 
@@ -83,6 +85,7 @@ def bound_environment(environment=None, create=True):
 
 
 class Environment(object):
+
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
         self.parent = parent
@@ -107,7 +110,8 @@ class Environment(object):
         self.values[key] = value
 
     def get_value(self, key, default):
-        return self._chained_search('values', key, default=default, use_default=True)
+        return self._chained_search(
+            'values', key, default=default, use_default=True)
 
     def set_value(self, key, value):
         self.values[key] = value

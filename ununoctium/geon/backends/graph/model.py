@@ -32,6 +32,7 @@ def dataset_batchsize(dataset):
 
 
 class Model(GraphComponent):
+
     def __init__(self, layers, name=None, optimizer=None, **kargs):
         super(Model, self).__init__(**kargs)
         self.initialized = False
@@ -40,7 +41,8 @@ class Model(GraphComponent):
         self.finished = False
 
         self.optimizer = optimizer
-        # Wrap the list of layers in a Sequential container if a raw list of layers
+        # Wrap the list of layers in a Sequential container if a raw list of
+        # layers
         if type(layers) in (Sequential, Tree, SingleOutputTree):
             self.layers = layers
         else:
@@ -68,7 +70,15 @@ class Model(GraphComponent):
         self.initialized = True
         return self.output
 
-    def fit(self, dataset, input_axes, target_axes, cost, optimizer, num_epochs, callbacks):
+    def fit(
+            self,
+            dataset,
+            input_axes,
+            target_axes,
+            cost,
+            optimizer,
+            num_epochs,
+            callbacks):
         """
         Trains the model parameters on a dataset by minimizing the cost function through
         gradient descent and updates the layer weights according to a learning rule
@@ -101,7 +111,9 @@ class Model(GraphComponent):
                 self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
                     axis.length = length
-                for axis, length in zip(target_axes, [dataset_nclasses(dataset)]):
+                for axis, length in zip(
+                    target_axes, [
+                        dataset_nclasses(dataset)]):
                     axis.length = length
                 ax.N.length = dataset_batchsize(dataset)
                 ax.Phi.length = 2
@@ -111,12 +123,14 @@ class Model(GraphComponent):
                 self.initialize(self.input, cost)
                 updates = self.optimizer.configure(self.cost.total_cost)
 
-                self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
+                self.enp = be.NumPyTransformer(
+                    results=[self.cost.mean_cost, updates])
 
                 dataflow = analysis.DataFlowGraph(self.enp.results)
                 # dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
-                interference = analysis.InterferenceGraph(kernelflow.liveness())
+                interference = analysis.InterferenceGraph(
+                    kernelflow.liveness())
                 memory = analysis.color(interference)
 
                 # dataflow.view()
@@ -200,7 +214,8 @@ class Model(GraphComponent):
         """
         self.initialize(dataset)
         with be.bound_environment(self.environment):
-            running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
+            running_error = np.zeros(
+                (len(metric.metric_names)), dtype=np.float32)
             nprocessed = 0
             dataset.reset()
             error = metric(self.output, self.target)
@@ -208,9 +223,10 @@ class Model(GraphComponent):
             for x, t in dataset:
                 self.input.value = x
                 self.target.value = t
-                bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
-                nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(x, list) else \
-                    x[0].shape[1] // dataset.bsz
+                bsz = min(dataset.ndata - nprocessed,
+                          dataset_batchsize(dataset))
+                nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(
+                    x, list) else x[0].shape[1] // dataset.bsz
                 calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
                 error_val = vals[error]

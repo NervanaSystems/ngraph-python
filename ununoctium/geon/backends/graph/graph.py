@@ -30,6 +30,7 @@ class GraphComponent(with_metaclass(GraphMetaclass, object)):
 
 
 class Model(GraphComponent):
+
     def __init__(self, **kargs):
         super(Model, self).__init__(**kargs)
 

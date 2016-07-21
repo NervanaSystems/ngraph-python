@@ -66,7 +66,8 @@ class DataloaderBackend(Backend):
                  deterministic=None,
                  cache_dir=None
                  ):
-        super(DataloaderBackend, self).__init__(rng_seed, default_dtype, compat_mode=compat_mode)
+        super(DataloaderBackend, self).__init__(
+            rng_seed, default_dtype, compat_mode=compat_mode)
         # CPU for now.  Dataloader needs to know where it will put the data
         self.device_type = 0
         self.device_id = 0
@@ -160,7 +161,7 @@ class DataloaderBackend(Backend):
             :py:func:`~neon.backends.Backend.ones`
         """
         if dtype is None:
-            dtype=np.float32
+            dtype = np.float32
         return np.empty(shape=shape, dtype=dtype).view(BackendNDArray)
 
     def zeros(self, shape, dtype=None, name=None, persist_values=True,
@@ -204,7 +205,7 @@ class DataloaderBackend(Backend):
         """
         return np.zeros(shape=shape, dtype=dtype).view(BackendNDArray)
 
-    ### STUBS
+    # STUBS
     def rng_get_state(self, state):
         """
         Get the random number generator state to a specific state.
@@ -1391,7 +1392,16 @@ class DataloaderBackend(Backend):
         """
         raise NotImplementedError()
 
-    def compound_bprop_lut(self, nin, inputs, error, error_t, dW, pad_idx, alpha=1.0, beta=0):
+    def compound_bprop_lut(
+            self,
+            nin,
+            inputs,
+            error,
+            error_t,
+            dW,
+            pad_idx,
+            alpha=1.0,
+            beta=0):
         """
         Backward propagate lookup table layer.
 

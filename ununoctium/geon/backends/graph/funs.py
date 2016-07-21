@@ -9,7 +9,7 @@ from geon.backends.graph.environment import bound_environment, Environment
 from geon.backends.graph.transform import deriv, placeholder, Variable, Constant, linear_map_axes, sample_axes, \
     batch_axes, assign
 from geon.backends.graph.arrayaxes import Axis, AxisVar, \
-      set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
+    set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 
 from geon.backends.graph.transform import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
     maximum, \

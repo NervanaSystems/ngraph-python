@@ -4,6 +4,7 @@ from geon.backends.graph.transform import Op, Transformer, AllocationOp, Visitor
 
 
 class NumPyTransformer(Transformer):
+
     def __init__(self, **kargs):
         super(NumPyTransformer, self).__init__(**kargs)
 
@@ -21,17 +22,25 @@ class NumPyTransformer(Transformer):
 
     def tensor_view(self, tensor_description):
         if isinstance(tensor_description.buffer.value, np.ndarray):
-            return np.ndarray(shape=tensor_description.shape, dtype=tensor_description.dtype, buffer=tensor_description.buffer.value,
-                              offset=tensor_description.offset, strides=tensor_description.strides)
+            return np.ndarray(
+                shape=tensor_description.shape,
+                dtype=tensor_description.dtype,
+                buffer=tensor_description.buffer.value,
+                offset=tensor_description.offset,
+                strides=tensor_description.strides)
         else:
             # Non-tensor value
             return tensor_description.buffer.value
 
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        return rng.normal(loc, scale, tensor_description.sizes).astype(tensor_description.dtype)
+        return rng.normal(
+            loc, scale, tensor_description.sizes).astype(
+            tensor_description.dtype)
 
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        return rng.uniform(low, high, tensor_description.sizes).astype(tensor_description.dtype)
+        return rng.uniform(
+            low, high, tensor_description.sizes).astype(
+            tensor_description.dtype)
 
     # Side-effects
     def fill(self, out, value):
@@ -130,6 +139,7 @@ class NumPyTransformer(Transformer):
 
 
 class NPNormal(AllocationOp):
+
     def __init__(self, rng, loc, scale, **kargs):
         super(NPNormal, self).__init__(args=(rng,), **kargs)
         self.loc = loc
@@ -138,10 +148,12 @@ class NPNormal(AllocationOp):
     def compute_tensor_axes_info(self):
         rng, = self.args
         tensor_axes_info = super(NPNormal, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_normal_tensor(rng, tensor_description, self.loc, self.scale)
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_normal_tensor(
+            rng, tensor_description, self.loc, self.scale)
 
 
 class NPUniform(AllocationOp):
+
     def __init__(self, rng, low, high, **kargs):
         super(NPUniform, self).__init__(args=(rng,), **kargs)
         self.low = low
@@ -150,4 +162,5 @@ class NPUniform(AllocationOp):
     def compute_tensor_axes_info(self):
         rng, = self.args
         tensor_axes_info = super(NPUniform, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: \
+            evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
