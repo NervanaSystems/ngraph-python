@@ -1164,7 +1164,7 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        return self.get_or_default(reaxe,
+        return self.get_or_default(Axes(*reaxe),
                                    lambda: TensorReaxeViewInfo(
                                        tensor_axes_info=self,
                                        reaxes=reaxe,
