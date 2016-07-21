@@ -53,6 +53,25 @@ class AxisVar(Axis):
         return 'AxisVar({name})'.format(name=self.name)
 
 
+class NumericAxis(Axis):
+    cache = {}
+
+    def __new__(cls, length=None, **kargs):
+        if length in NumericAxis.cache:
+            return NumericAxis.cache[length]
+
+        axis = super(NumericAxis, cls).__new__(cls, length=length, **kargs)
+        NumericAxis.cache[length] = axis
+
+        return axis
+
+    def __init__(self, length=None, **kargs):
+        super(NumericAxis, self).__init__(length=length, **kargs)
+
+    def __repr__(self):
+        return 'NumericAxis({length})'.format(length=self.length)
+
+
 class AxisID(object):
 
     def __init__(self, axis, idx, **kargs):
@@ -466,12 +485,43 @@ class TensorDescription(object):
                 full_shape.append(fsh)
                 full_sizes.append(fsi)
                 full_strides.append(fst)
+
+        new_axes, full_shape, full_strides, full_sizes\
+            = self.maybe_collapse_numerics(
+                new_axes, full_shape, full_strides, full_sizes
+            )
         return TensorDescription(new_axes, dtype=self.dtype,
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=self.offset,
                                  buffer=self.buffer)
+
+    def maybe_collapse_numerics(self, axes, full_shape,
+                                full_strides, full_sizes):
+        def all_numeric(axes):
+            return all([isinstance(axis, NumericAxis) for axis in axes])
+
+        new_axes = []
+        new_shape = []
+        new_strides = []
+        new_sizes = []
+        for axis, sh, st, si in\
+                zip(axes, full_shape, full_strides, full_sizes):
+            if isinstance(axis, AxesAxis) and all_numeric(axis.axes):
+                new_axes.append(NumericAxis(reduce_nested(
+                    axis.axes.lengths, 1, operator.mul
+                )))
+                new_shape.append(reduce_nested(sh, 1, operator.mul))
+                new_strides.append(int(reduce_nested(st, float('inf'), min)))
+                new_sizes.append(reduce_nested(si, 1, operator.mul))
+            else:
+                new_axes.append(axis)
+                new_shape.append(sh)
+                new_strides.append(st)
+                new_sizes.append(si)
+        return Axes(*new_axes), tuple(new_shape),\
+            tuple(new_strides), tuple(new_sizes)
 
     def slice(self, slices):
         assert len(slices) == self.ndim
