@@ -1,10 +1,10 @@
 from __future__ import division
 from builtins import str
 import collections
-import weakref
-import inspect
+# import weakref
+# import inspect
 
-from geon.backends.graph.names import NameableValue
+# from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 from geon.backends.graph.nodes import Node
 
@@ -180,6 +180,10 @@ class Tensor(Defmod):
 
     def __getitem__(self, key):
         return TensorGetItem(self, key)
+
+
+class Pow(Tensor):
+    pass
 
 
 class TensorSize(Tensor):
@@ -396,12 +400,6 @@ class dot(ComputedTensor):
 
     def _repr_attrs(self, *attrs):
         return super(dot, self)._repr_attrs('r_axes', *attrs)
-
-
-class sum(Reduction):
-
-    def __init__(self, x, **kargs):
-        super(sum, self).__init__(args=(x,), **kargs)
 
 
 class exp(ElementWise):

@@ -20,7 +20,7 @@ scaling with the fp16 data format.
 from __future__ import division
 
 import numpy as np
-from geon.backends.graph.graphneon import *
+from geon.backends.graph.graphneon import *  # noqa
 from neon import logger as neon_logger
 
 
@@ -33,15 +33,17 @@ args = parser.parse_args()
 # setup data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                       repo_dir=args.data_dir, subset_pct=args.subset_pct)
-train = ImageLoader(set_name='train', shuffle=True, do_transforms=True, **imgset_options)
-test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
+train = ImageLoader(set_name='train', shuffle=True,
+                    do_transforms=True, **imgset_options)
+test = ImageLoader(set_name='validation', shuffle=False,
+                   do_transforms=False, **imgset_options)
 
 # hyperparameters
 if args.datatype in [np.float16]:
     cost_scale = 10.
 num_epochs = args.epochs
 
-#TODO Switch to momentum
+# TODO Switch to momentum
 init_uni = Uniform(low=-0.1, high=0.1)
 if args.datatype in [np.float32, np.float64]:
     opt_gdm = GradientDescentMomentum(learning_rate=0.01,

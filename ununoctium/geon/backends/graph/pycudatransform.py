@@ -5,7 +5,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 
-from geon.backends.graph.transform import Op, Transformer
+from geon.backends.graph.transform import Transformer
 
 # Initialize CUDA
 cuda.init()

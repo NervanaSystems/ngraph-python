@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 
-from neon.initializers import Uniform, Constant, Array
+from neon.initializers import Constant, Array
 
 '''
 Test the usage of be.Variable
@@ -55,7 +55,8 @@ def test_init_2D_variable():
 def test_init_1D_variable_from_numpy_array():
     with be.bound_environment():
         ax.Y.length = 10
-        npvar = be.NumPyTensor(np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
+        npvar = be.NumPyTensor(
+            np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
         hello = be.Variable(axes=[ax.Y], init=Array(npvar))
 
         enp = be.NumPyTransformer(results=[hello])
@@ -65,11 +66,13 @@ def test_init_1D_variable_from_numpy_array():
 
         print("pass numpy variable initialization")
 
+
 def test_assign_1D_variable_with_numpy_tensor():
     with be.bound_environment():
         ax.Y.length = 10
         hello = be.Variable(axes=[ax.Y])
-        npvar = be.NumPyTensor(np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
+        npvar = be.NumPyTensor(
+            np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
 
         hello = npvar
         enp = be.NumPyTransformer(results=[hello])
@@ -78,13 +81,15 @@ def test_assign_1D_variable_with_numpy_tensor():
 
         print("pass 1D numpy tensor assignment")
 
+
 def test_assign_2D_variable_with_numpy_tensor():
     with be.bound_environment():
         ax.M.length = 3
         ax.N.length = 2
 
         var = be.Variable(axes=[ax.M, ax.N])
-        npvar = be.NumPyTensor(np.array([[1,1],[2,2],[3,3]]), axes=[ax.M, ax.N])
+        npvar = be.NumPyTensor(
+            np.array([[1, 1], [2, 2], [3, 3]]), axes=[ax.M, ax.N])
 
         var = npvar
         enp = be.NumPyTransformer(results=[var])
@@ -100,4 +105,3 @@ test_init_1D_variable_from_numpy_array()
 
 test_assign_1D_variable_with_numpy_tensor()
 test_assign_2D_variable_with_numpy_tensor()
-

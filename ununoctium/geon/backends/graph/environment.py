@@ -1,6 +1,5 @@
 from builtins import object
 from contextlib import contextmanager
-import weakref
 import threading
 
 # TODO:

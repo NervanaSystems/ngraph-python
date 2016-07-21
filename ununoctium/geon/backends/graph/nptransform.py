@@ -1,6 +1,6 @@
 import numpy as np
 
-from geon.backends.graph.transform import Op, Transformer, AllocationOp, Visitor
+from geon.backends.graph.transform import Transformer, AllocationOp
 
 
 class NumPyTransformer(Transformer):

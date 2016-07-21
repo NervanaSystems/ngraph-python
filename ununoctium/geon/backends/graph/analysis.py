@@ -132,19 +132,19 @@ class KernelFlowGraph(DataFlowGraph):
             dot.node(x.id, x.graph_label, x.style)
         # Edges
         edges = {(a, b) for a, _ in list(self.successors.items()) for b in _}
-        sorts = {x: x.ops.topsort()
-                 for x in self.successors if isinstance(x, Function)}
-        firsts = {x: sorts[x][0] if isinstance(
-            x, Function) else x for x in self.successors}
-        lasts = {
-            x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}
+#       sorts = {x: x.ops.topsort()
+#                for x in self.successors if isinstance(x, Function)}
+#       firsts = {x: sorts[x][0] if isinstance(
+#           x, Function) else x for x in self.successors}
+#       lasts = {
+#           x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}
         for a, b in edges:
             kw = {}
             if isinstance(a, Function):
                 kw['ltail'] = 'cluster_{}'.format(a.id)
             if isinstance(b, Function):
                 kw['lhead'] = 'cluster_{}'.format(b.id)
-            edge = dot.edge(lasts[a].id, firsts[b].id, **kw)
+#           edge = dot.edge(lasts[a].id, firsts[b].id, **kw)
         return dot
 
     def _compute_paths(self):

@@ -1,6 +1,8 @@
 from __future__ import division
 from builtins import object, range, zip
-from geon.backends.graph.names import NameableValue, NameScope
+import math
+import numpy as np
+# from geon.backends.graph.names import NameableValue, NameScope
 import geon.backends.graph.funs as be
 import geon.backends.graph.arrayaxes as arrayaxes
 from functools import reduce
@@ -253,10 +255,10 @@ class ConvLayer(object):
         self.dimI2 = (C * D * H * W, N)
         self.dimF2 = (C * T * R * S, K)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeF = reduce(mul, self.dimF, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
-        self.nOut = reduce(mul, self.MPQ, 1) * K
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeF = reduce(np.multiply, self.dimF, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
+        self.nOut = reduce(np.multiply, self.MPQ, 1) * K
 
         if all(x == 1 for x in self.TRS) and \
                 all(p == 0 for p in self.padding) and \
@@ -302,14 +304,14 @@ class ConvLayer(object):
 
     def fprop_conv(self, I, F, O):
 
-        if X is None:
-            X = O
+        # if X is None:
+        #     X = O
 
         I = I._tensor.reshape(self.dimI)
         O = O._tensor.reshape(self.dimO)
         F = F._tensor.reshape(self.dimF)
-        if bsum is not None:
-            bsum = bsum._tensor.reshape((O.shape[0], 1))
+        if self.bsum is not None:
+            self.bsum = self.bsum._tensor.reshape((O.shape[0], 1))
 
         # 1x1 conv can be cast as a simple dot operation
         if self.dot:
@@ -526,11 +528,11 @@ class DeconvLayer(ConvLayer):
         self.dimI2 = (C * D * H * W, N)
         self.dimF2 = (C * T * R * S, K)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeF = reduce(mul, self.dimF, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeF = reduce(np.multiply, self.dimF, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
         # nOut has to change because P and Q are now the inputs
-        self.nOut = reduce(mul, self.DHW, 1) * C
+        self.nOut = reduce(np.multiply, self.DHW, 1) * C
 
         if all(x == 1 for x in self.TRS) and \
                 all(p == 0 for p in self.padding) and \
@@ -628,9 +630,9 @@ class PoolLayer(object):
         self.dimF2 = None
         self.dimI2 = (C * D * H * W, N)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
-        self.nOut = reduce(mul, self.MPQ, 1) * K
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
+        self.nOut = reduce(np.multiply, self.MPQ, 1) * K
 
         self.kSlice = [self.pool_slice(k, J, C, pad_c, str_c)
                        for k in range(K)]

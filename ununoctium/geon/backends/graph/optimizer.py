@@ -1,8 +1,7 @@
 from __future__ import division
 from builtins import object, zip
 import geon.backends.graph.funs as be
-from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, \
-    PolySchedule
+from neon.optimizers.optimizer import ExpSchedule
 from neon.initializers import Constant
 
 

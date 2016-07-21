@@ -2,18 +2,25 @@ from __future__ import print_function
 from builtins import next, zip
 import geon.backends.graph.defmod as nm
 import geon.backends.graph.axis as ax
-import geon.backends.graph.analysis as analysis
+# import geon.backends.graph.analysis as analysis
 from neon.initializers import Uniform
+
 
 @nm.with_name_scope
 def linear(m, x, x_axes, axes, batch_axes=(), init=None):
-    m.weights = nm.Variable(axes=axes + x_axes - batch_axes, init=init, tags='parameter')
+    m.weights = nm.Variable(axes=axes + x_axes -
+                            batch_axes, init=init, tags='parameter')
     m.bias = nm.Variable(axes=axes, init=init, tags='parameter')
     return nm.dot(m.weights, x) + m.bias
 
 
 def affine(x, activation, batch_axes=None, **kargs):
-    return activation(linear(x, batch_axes=batch_axes, **kargs), batch_axes=batch_axes)
+    return activation(
+        linear(
+            x,
+            batch_axes=batch_axes,
+            **kargs),
+        batch_axes=batch_axes)
 
 
 @nm.with_name_scope
@@ -26,10 +33,12 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
                 layer.axes = tuple(nm.Axis(like=axis) for axis in hidden_axes)
                 for axis, length in zip(layer.axes, shape):
                     axis.length = length
-                value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
+                value = affine(value, activation=hidden_activation,
+                               x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
         next(layers)
-        value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
+        value = affine(value, activation=activation,
+                       x_axes=last_axes, axes=axes, **kargs)
     return value
 
 
@@ -49,6 +58,7 @@ def cross_entropy(y, t):
 
 
 class MyTest(nm.Model):
+
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
 
@@ -61,26 +71,38 @@ class MyTest(nm.Model):
 
         layers = [(nm.tanh, (ax.H, ax.W), [(16, 16)] * 1 + [(4, 4)])]
 
-        g.value = mlp(g.x, activation=nm.softmax, x_axes=g.x.axes, shape_spec=layers, axes=g.y.axes, batch_axes=(ax.N,),
-                      init=uni)
+        g.value = mlp(
+            g.x,
+            activation=nm.softmax,
+            x_axes=g.x.axes,
+            shape_spec=layers,
+            axes=g.y.axes,
+            batch_axes=(
+                ax.N,
+            ),
+            init=uni)
 
         g.error = cross_entropy(g.value, g.y)
         print(g.error)
         # L2 regularizer of parameters
         reg = None
-        for param in nm.find_all(types=nm.Variable, tags='parameter', used_by=g.value):
+        for param in nm.find_all(
+                types=nm.Variable,
+                tags='parameter',
+                used_by=g.value):
             l2 = L2(param)
             if reg is None:
                 reg = l2
             else:
                 reg = reg + l2
         g.loss = g.error + .01 * reg
-        
+
     @nm.with_graph_scope
     @nm.with_environment
     def dump(self):
         for _ in nm.get_all_defs():
-            print('{s} # File "{filename}", line {lineno}'.format(s=_, filename=_.filename, lineno=_.lineno))
+            print('{s} # File "{filename}", line {lineno}'.format(
+                s=_, filename=_.filename, lineno=_.lineno))
 
 
 MyTest().dump()

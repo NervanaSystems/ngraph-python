@@ -2,16 +2,16 @@ from __future__ import division
 from builtins import zip
 import numpy as np
 
-from geon.backends.graph.names import NameableValue, name_scope
-from geon.backends.graph.environment import bound_environment, captured_ops
+from geon.backends.graph.names import name_scope
+from geon.backends.graph.environment import bound_environment
 from geon.backends.graph.graph import GraphComponent
-from neon.backends.backend import Block
+# from neon.backends.backend import Block
 import geon.backends.graph.axis as ax
 from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
 import geon.backends.graph.funs as be
-import geon.backends.graph.transform as transform
+# import geon.backends.graph.transform as transform
 import geon.backends.graph.nptransform as nptransform
-import geon.backends.graph.analysis as analysis
+# import geon.backends.graph.analysis as analysis
 import geon.backends.graph.arrayaxes as arrayaxes
 
 from neon.data import ArrayIterator, DataLoader
@@ -126,12 +126,11 @@ class Model(GraphComponent):
                 self.enp = be.NumPyTransformer(
                     results=[self.cost.mean_cost, updates])
 
-                dataflow = analysis.DataFlowGraph(self.enp.results)
+                # dataflow = analysis.DataFlowGraph(self.enp.results)
                 # dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
-                kernelflow = analysis.KernelFlowGraph(dataflow)
-                interference = analysis.InterferenceGraph(
-                    kernelflow.liveness())
-                memory = analysis.color(interference)
+                # kernelflow = analysis.KernelFlowGraph(dataflow)
+                # interference = analysis.InterferenceGraph(kernelflow.liveness())
+                # memory = analysis.color(interference)
 
                 # dataflow.view()
 
@@ -227,7 +226,7 @@ class Model(GraphComponent):
                           dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(
                     x, list) else x[0].shape[1] // dataset.bsz
-                calcrange = slice(0, nsteps * bsz)
+                # calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
                 error_val = vals[error]
                 running_error += error_val * bsz * nsteps

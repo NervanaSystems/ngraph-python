@@ -11,8 +11,8 @@ class GraphMetaclass(type):
         return super(GraphMetaclass, cls).__new__(cls, name, parents, attrs)
 
     def __call__(cls, *args, **kargs):
-        with bound_environment(environment=Environment()) as environment:
-            with name_scope(name_scope=NameScope(name="graph", parent=None)) as naming:
+        with bound_environment(environment=Environment()):
+            with name_scope(name_scope=NameScope(name="graph", parent=None)):
                 return super(GraphMetaclass, cls).__call__(*args, **kargs)
 
 

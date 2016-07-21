@@ -60,3 +60,8 @@ check:
 	-@py.test $(TEST_DIRS) | tail -1 | cut -f 2,3 -d ' '
 	@echo
 
+fixstyle: autopep8
+
+autopep8:
+	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
+	@echo run "git diff" to see what may need to be checked in and "make style" to see what work remains

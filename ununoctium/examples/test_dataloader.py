@@ -36,13 +36,16 @@ args.epochs = 1
 # setup data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                       repo_dir=args.data_dir, subset_pct=args.subset_pct)
-train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
-test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
+train = ImageLoader(set_name='train', shuffle=False,
+                    do_transforms=False, **imgset_options)
+test = ImageLoader(set_name='validation', shuffle=False,
+                   do_transforms=False, **imgset_options)
 
 # TODO: not all data are used for training and testing
 nprocessed = 0
 for x, t in test:
-    nsteps = x.shape[1] // 128 if not isinstance(x, list) else x[0].shape[1] // 128
+    nsteps = x.shape[
+        1] // 128 if not isinstance(x, list) else x[0].shape[1] // 128
     nprocessed += 128
 print("processed #test data: {:d}".format(nprocessed))
 print("#test data: {:d}".format(test.ndata))

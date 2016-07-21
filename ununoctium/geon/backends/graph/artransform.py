@@ -1,12 +1,8 @@
 import numpy as np
-
-from geon.backends.graph.transform import Transformer, AllocationOp, Visitor
-
-import argon.neon_backend.ar_backend
-from argon.neon_backend.ar_backend import ArBackend
-
+from argon.neon_backend.ar_backend import AMStatusCode
 from neon import NervanaObject
-from neon.backends.backend import OpTreeNode
+# from neon.backends.backend import OpTreeNode
+from geon.backends.graph.transform import Transformer, AllocationOp, Visitor
 
 from mpi4py import MPI
 
@@ -177,6 +173,7 @@ class ArgonUniform(AllocationOp):
         tensor_axes_info = super(ArgonUniform, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = lambda evaluator, tensor_description: \
             evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
+
 
 class ArgonTransformVisitor(Visitor):
 

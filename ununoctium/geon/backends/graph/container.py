@@ -1,8 +1,8 @@
 import collections
 
-from neon.layers.container import flatten
+# from neon.layers.container import flatten # interferes with local flatten()
 
-from geon.backends.graph.names import NameScope
+# from geon.backends.graph.names import NameScope
 from geon.backends.graph.layer import Layer, BranchNode
 
 
@@ -38,7 +38,7 @@ class Sequential(LayerContainer):
         super(Sequential, self).__init__(**kargs)
         self.layers = [l for l in flatten(layers)]
         self._layers = [x for x in self.layers if type(x) not in (BranchNode,)]
-        root = self._layers[0]
+#       root = self._layers[0]
 
     def configure(self, in_obj):
         """
