@@ -2,41 +2,12 @@ import numpy as np
 import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
+from geon.backends.graph.graph_test_utils import *
 
 '''
 Test graphiti's implementation of the dot product.
 
 '''
-
-
-def in_bound_environment(f):
-    def wrapper(*args, **kargs):
-        with be.bound_environment():
-            return f(*args, **kargs)
-
-    return wrapper
-
-
-def with_error_settings(**new_settings):
-    def decorator(f):
-        def wrapper(*args, **kargs):
-            old_settings = np.geterr()
-
-            np.seterr(**new_settings)
-            ret = f(*args, **kargs)
-
-            np.seterr(**old_settings)
-
-            return ret
-
-        return wrapper
-
-    return decorator
-
-
-def raise_all_numpy_errors(f):
-    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
-    return with_error_settings(**settings)(f)
 
 
 def evaluate(result):
