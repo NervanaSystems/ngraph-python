@@ -1394,15 +1394,34 @@ class AxesIntersectComp(AxesComp):
 
 class AxesAppendComp(AxesComp):
 
-    def __init__(self, x, y, **kargs):
+    def __init__(self, x, y, allow_repeated=False, **kargs):
         super(AxesAppendComp, self).__init__(**kargs)
         self.x = AxesComp.as_axes(x)
         self.y = AxesComp.as_axes(y)
+        self.allow_repeated = allow_repeated
 
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return AxisIDTuple.append(x_axes, y_axes).as_axes()
+        if self.allow_repeated:
+            return x_axes + y_axes
+        else:
+            return AxisIDTuple.append(x_axes, y_axes).as_axes()
+
+
+class AxesSliceComp(AxesComp):
+    def __init__(self, x, lower=0, upper=None, **kargs):
+        super(AxesSliceComp, self).__init__(**kargs)
+        self.x = AxesComp.as_axes(x)
+        self.lower = lower
+        self.upper = upper
+
+    def resolve(self):
+        x_axes = self.x.value
+        if self.upper:
+            return x_axes[self.lower:self.upper]
+        else:
+            return Axes(x_axes[self.lower])
 
 
 class Tensor(Op):
@@ -2049,18 +2068,34 @@ class divide(ElementWise):
 
 class dot(ComputationOp):
 
-    def __init__(self, x, y, reduction_axes=None, out_axes=None, **kargs):
-        self.out_axes = AxesComp.as_axes(out_axes)
-        if reduction_axes is None:
-            self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
+    def __init__(self, x, y, reduction_axes=None, out_axes=None,
+                 numpy_matching=False, **kargs):
+        self.numpy_matching = numpy_matching
+
+        if numpy_matching:
+            self.out_axes = AxesAppendComp(
+                AxesAppendComp(
+                    AxesSliceComp(x.axes, 0, -1),
+                    AxesSliceComp(y.axes, 0, -2),
+                    allow_repeated=True
+                ),
+                AxesSliceComp(y.axes, -1),
+                allow_repeated=True
+            )
+            self.reduction_axes = AxesSliceComp(x.axes, -1, -1)
+            self.multiply = False
         else:
-            self.reduction_axes = AxesComp.as_axes(reduction_axes)
+            self.out_axes = AxesComp.as_axes(out_axes)
+            if reduction_axes is None:
+                self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
+            else:
+                self.reduction_axes = AxesComp.as_axes(reduction_axes)
 
-        if out_axes is not None:
-            self.reduction_axes = AxesSubComp(
-                self.reduction_axes, self.out_axes)
+            if out_axes is not None:
+                self.reduction_axes = AxesSubComp(
+                    self.reduction_axes, self.out_axes)
 
-        self.multiply = False
+            self.multiply = False
 
         super(dot, self).__init__(args=(x, y), **kargs)
 
@@ -2073,15 +2108,21 @@ class dot(ComputationOp):
 
     def compute_call_info(self):
         x, y = self.args
-        red_axis_ids = self.reduction_axes.value.as_axis_ids()
-        a, b = x.dot_reaxe_left(red_axis_ids), y.dot_reaxe_right(red_axis_ids)
-        a_axes, b_axes = a.tensor_description.axes, b.tensor_description.axes
+        if self.numpy_matching:
+            o, a, b = self.reaxe(self.axes.value),\
+                x.reaxe(x.axes.value), y.reaxe(y.axes.value)
+        else:
+            red_axis_ids = self.reduction_axes.value.as_axis_ids()
+            a, b = x.dot_reaxe_left(red_axis_ids),\
+                y.dot_reaxe_right(red_axis_ids)
+            a_axes, b_axes = a.tensor_description.axes,\
+                b.tensor_description.axes
 
-        o_axes = (
-            a_axes.as_axis_ids()[:-1] +
-            b_axes.as_axis_ids()[1:]
-        ).as_axes()
-        o = self.reaxe(o_axes)
+            o_axes = (
+                a_axes.as_axis_ids()[:-1] +
+                b_axes.as_axis_ids()[1:]
+            ).as_axes()
+            o = self.reaxe(o_axes)
         return [o, a, b]
 
     def evaluate(self, evaluator, out, x, y):
