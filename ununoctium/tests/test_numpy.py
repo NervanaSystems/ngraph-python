@@ -76,7 +76,8 @@ def test_reduction():
                 npval = npred(u, dims)
                 graph_reduce = bered(p_u, reduction_axes=reduction_axes)
                 graph_val, = execute([graph_reduce])
-                assert np.array_equal(npval, graph_val), 'red:{red}, axes:{axes}'.format(red=red, axes=reduction_axes)
+                assert np.array_equal(npval, graph_val), 'red:{red}, axes:{axes}'.format(red=red,
+                                                                                         axes=reduction_axes)
 
 
 def test_reduction_deriv():
@@ -104,7 +105,8 @@ def test_reduction_deriv():
                 graph_reduce = bered(p_u, reduction_axes=reduction_axes)
                 dgraph_val_num = transform_numeric_derivative(graph_reduce, p_u, delta)
                 dgraph_val = transform_derivative(graph_reduce, p_u)
-                assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1, rtol=1e-1), 'red:{red}, axes:{axes}'.format(
+                assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1,
+                                   rtol=1e-1), 'red:{red}, axes:{axes}'.format(
                     red=red, axes=reduction_axes)
 
 
@@ -343,7 +345,7 @@ def test_softmax():
 
 
 def np_sig(x):
-        return np.reciprocal(np.exp(-x)+1)
+    return np.reciprocal(np.exp(-x) + 1)
 
 
 def test_logistic():

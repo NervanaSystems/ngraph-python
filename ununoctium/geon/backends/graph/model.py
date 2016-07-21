@@ -23,11 +23,13 @@ def dataset_nclasses(dataset):
     elif isinstance(dataset, DataLoader):
         return dataset.nclasses
 
+
 def dataset_batchsize(dataset):
     if isinstance(dataset, ArrayIterator):
         return dataset.be.bsz
     elif isinstance(dataset, DataLoader):
         return dataset.bsz
+
 
 class Model(GraphComponent):
     def __init__(self, layers, name=None, optimizer=None, **kargs):
@@ -92,10 +94,10 @@ class Model(GraphComponent):
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
                 # TODO Move this axis initialization into a util
-                batch_input_axes = input_axes + arrayaxes.Axes(ax.N,)
-                batch_target_axes = target_axes + arrayaxes.Axes(ax.N,)
-                be.set_batch_axes(arrayaxes.Axes(ax.N,))
-                be.set_phase_axes(arrayaxes.Axes(ax.Phi,))
+                batch_input_axes = input_axes + arrayaxes.Axes(ax.N, )
+                batch_target_axes = target_axes + arrayaxes.Axes(ax.N, )
+                be.set_batch_axes(arrayaxes.Axes(ax.N, ))
+                be.set_phase_axes(arrayaxes.Axes(ax.Phi, ))
                 self.input = be.placeholder(axes=batch_input_axes)
                 self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):
@@ -113,15 +115,15 @@ class Model(GraphComponent):
                 self.enp = be.NumPyTransformer(results=[self.cost.mean_cost, updates])
 
                 dataflow = analysis.DataFlowGraph(self.enp.results)
-                #dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
+                # dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
                 kernelflow = analysis.KernelFlowGraph(dataflow)
                 interference = analysis.InterferenceGraph(kernelflow.liveness())
                 memory = analysis.color(interference)
 
-                #dataflow.view()
+                # dataflow.view()
 
-                #print 'The memory footprint is {} MB'.format(memory*10**-6)
-                #dataflow.render('cifar_mlp.gv', True)
+                # print 'The memory footprint is {} MB'.format(memory*10**-6)
+                # dataflow.render('cifar_mlp.gv', True)
 
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:

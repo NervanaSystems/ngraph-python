@@ -3,22 +3,19 @@ from builtins import object, str
 from future.utils import with_metaclass
 import abc
 
-from contextlib import contextmanager
 import weakref
 import numbers
-import collections
 
 import numpy as np
 
-from geon.backends.graph.names import NameableValue
 import geon.backends.graph.nodes as nodes
-import geon.backends.graph.typing as typing
-from geon.backends.graph.errors import *
 from geon.backends.graph.environment import get_current_environment, get_current_ops, captured_ops
-from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription,\
+from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, AxesAxis
+
 try:
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
 except:
     pass
@@ -55,7 +52,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # Determine required views
         for op in ordered_ops:
             op.call_info
-
 
     def ordered_initializers(self, ordered_ops):
         todo = set(ordered_ops)
@@ -965,9 +961,8 @@ class SimplePrune(Visitor):
             self.add_rep(add, rep)
 
     def visit_sum(self, sum, reduction_axes, x):
-        rep = None
         if isinstance(x, Constant):
-            val = x.const*axes_size(reduction_axes)
+            val = x.const * reduction_axes.size
             self.add_rep(sum, Constant(val))
 
     def visit_log(self, log, x):
@@ -1237,7 +1232,7 @@ class DotLeftViewInfo(TensorViewInfo):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            self.__tensor_description = self.tensor_axes_info.\
+            self.__tensor_description = self.tensor_axes_info. \
                 tensor_description.dot_reaxe_left(self.red_axis_ids)
         return self.__tensor_description
 
@@ -1251,7 +1246,7 @@ class DotRightViewInfo(TensorViewInfo):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            self.__tensor_description = self.tensor_axes_info.\
+            self.__tensor_description = self.tensor_axes_info. \
                 tensor_description.dot_reaxe_right(self.red_axis_ids)
         return self.__tensor_description
 
@@ -1564,6 +1559,7 @@ class Broadcast(Tensor):
     Used to add additional axes for a returned derivative.
 
     """
+
     def __init__(self, x, **kargs):
         super(Broadcast, self).__init__(args=(x,), **kargs)
 
@@ -1601,7 +1597,6 @@ class ComputationOp(Tensor):
         self.dtype = dtype
         self.defs = {self}
 
-
         for arg in self.args:
             arg.users.add(self)
 
@@ -1612,8 +1607,8 @@ class ComputationOp(Tensor):
 
     @property
     def graph_label(self):
-        return self.__class__.__name__  + '[' + self.name + ']'
-        
+        return self.__class__.__name__ + '[' + self.name + ']'
+
     def visit(self, visitor):
         return visitor.visit_computation(self)
 
@@ -1628,7 +1623,8 @@ class RNG(AllocationOp):
 
     def compute_tensor_axes_info(self):
         tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng(seed=self.seed)
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng(
+            seed=self.seed)
         return tensor_axes_info
 
     @property
@@ -1668,6 +1664,7 @@ class Normal(RNGOp):
         def allocator(transformer, tensor_description):
             rng, = self.call_info
             return transformer.rng_normal_tensor(rng.value, tensor_description, loc, scale)
+
         self.tensor_axes_info.alloc = allocator
 
     def visit(self, visitor):
@@ -1683,6 +1680,7 @@ class Uniform(RNGOp):
         def allocator(transformer, tensor_description):
             rng, = self.call_info
             return transformer.rng_uniform_tensor(rng.value, tensor_description, low, high)
+
         self.tensor_axes_info.alloc = allocator
 
     def visit(self, visitor):
@@ -1772,7 +1770,8 @@ class AllReduce(ElementWise):
         x_val = x  # read data from GPU to CPU -- expensive!
         recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
         comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
-        recv_buffer = recv_buffer / comm.Get_size()  # Normalize the results to the number of MPI threads
+        # Normalize the results to the number of MPI threads
+        recv_buffer = recv_buffer / comm.Get_size()
         out[:] = recv_buffer
 
 
@@ -1794,7 +1793,7 @@ class placeholder(AllocationOp):
 
     def generate_adjoints(self, tape, delta):
         pass
-        
+
     @property
     def value(self):
         return get_current_environment()[self]
@@ -1848,12 +1847,12 @@ class Constant(AllocationOp):
     @property
     def graph_label(self):
         shapes = self.tensor_axes_info.shapes
-        if not shapes or max(shapes)<=2:
+        if not shapes or max(shapes) <= 2:
             return str(self.const)
-        if self.name==self.id:
+        if self.name == self.id:
             return 'Constant'
         return self.name
-        
+
     @property
     def axes(self):
         return AxesComp.as_axes((()))
@@ -1932,8 +1931,7 @@ class argmax(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe(Axes(self.axes.value)),
-                x.reaxe(Axes(self.max_axes.value, self.axes.value))]
+        return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmax(x, out)
@@ -1956,8 +1954,7 @@ class argmin(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe(Axes(self.axes.value)),
-                x.reaxe(Axes(self.min_axes.value, self.axes.value))]
+        return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmin(x, out)
@@ -2040,7 +2037,8 @@ class dot(ComputationOp):
             return self.out_axes
         else:
             x, y = self.args
-            return AxesAppendComp(AxesSubComp(x.axes, self.reduction_axes), AxesSubComp(y.axes, self.reduction_axes))
+            return AxesAppendComp(AxesSubComp(x.axes, self.reduction_axes),
+                                  AxesSubComp(y.axes, self.reduction_axes))
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, dot(delta, y, out_axes=x.axes))
@@ -2061,7 +2059,6 @@ class equal(ElementWiseBoolean):
 
     def evaluate(self, evaluator, out, x, y):
         evaluator.equal(x, y, out)
-
 
 
 class not_equal(ElementWiseBoolean):
@@ -2110,9 +2107,9 @@ class softmax(ComputationOp):
             softmax_axes = tensor_sample_axes(x, **kargs)
         self.softmax_axes = softmax_axes
         self.x = x
-        exps = exp(x-max(x, reduction_axes=softmax_axes))
+        exps = exp(x - max(x, reduction_axes=softmax_axes))
         self.z = sum(exps, reduction_axes=softmax_axes)
-        super(softmax, self).__init__(args=(exps/self.z,), **kargs)
+        super(softmax, self).__init__(args=(exps / self.z,), **kargs)
 
     def visit(self, visitor):
         return visitor.visit_softmax(self, self.x, *self.args)
@@ -2183,7 +2180,7 @@ class max(ReductionOp):
             evaluator.max(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, equal(x, self)*delta)
+        x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
 class min(ReductionOp):
@@ -2201,7 +2198,7 @@ class min(ReductionOp):
             evaluator.min(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, equal(x, self)*delta)
+        x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
 class sum(ReductionOp):
@@ -2223,7 +2220,7 @@ class sum(ReductionOp):
 
 
 class tensor_size(ComputationOp):
-    def __init__(self, x, reduction_axes=None, out_axes=None,  **kargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             if out_axes is None:
@@ -2301,7 +2298,7 @@ class exp(ElementWise):
         return visitor.visit_exp(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta*self)
+        x.generate_add_delta(adjoints, delta * self)
 
     def evaluate(self, evaluator, out, x):
         evaluator.exp(x, out)
@@ -2360,8 +2357,8 @@ class maximum(ElementWise):
         evaluator.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, equal(self, x)*delta)
-        y.generate_add_delta(adjoints, equal(self, y)*delta)
+        x.generate_add_delta(adjoints, equal(self, x) * delta)
+        y.generate_add_delta(adjoints, equal(self, y) * delta)
 
 
 class minimum(ElementWise):
@@ -2375,8 +2372,8 @@ class minimum(ElementWise):
         evaluator.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, equal(self, x)*delta)
-        y.generate_add_delta(adjoints, equal(self, y)*delta)
+        x.generate_add_delta(adjoints, equal(self, x) * delta)
+        y.generate_add_delta(adjoints, equal(self, y) * delta)
 
 
 class multiply(ElementWise):
@@ -2574,12 +2571,11 @@ class Function(nodes.Node):
         for op in self.ops.topsort():
             # Kernel defines the def of each operation
             defs |= set([op])
-            #Kernel uses the args of each operation
-            #except whatever is being defined
+            # Kernel uses the args of each operation
+            # except whatever is being defined
             args |= set(op.args) - defs
         self.args = args
         self.defs = defs
-
 
     @property
     def inputs(self):
@@ -2587,11 +2583,7 @@ class Function(nodes.Node):
 
 
 class Buffer(object):
-    
     def __init__(self, color, size):
         self.color = color
         self.size = size
         self.data = None
-        
-    
-

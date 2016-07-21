@@ -45,9 +45,9 @@ class Node(NameableValue):
     @property
     def graph_label(self):
         if self.name != self.id:
-            return self.name.split('.')[-1]    
+            return self.name.split('.')[-1]
         return self.__class__.__name__ + '[' + self.name + ']'
-    
+
     @property
     def args(self):
         """All the inputs to this node"""
@@ -120,7 +120,8 @@ class Node(NameableValue):
 
     @property
     def file_info(self):
-        return 'File "{filename}", line {lineno}'.format(filename=self.filename, lineno=self.lineno)
+        return 'File "{filename}", line {lineno}'.format(filename=self.filename,
+                                                         lineno=self.lineno)
 
     def _repr_body(self):
         return self._abbrev_args(self._repr_attrs())
@@ -164,7 +165,7 @@ class Node(NameableValue):
             else:
                 result = s
         return result
-    
+
     def __repr__(self):
         return self.graph_label
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())

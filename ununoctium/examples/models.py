@@ -2,7 +2,6 @@ from __future__ import division, print_function
 from builtins import range, zip
 from geon.backends.graph.graphneon import *
 
-import geon.backends.graph.graph as graph
 import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 
@@ -13,9 +12,11 @@ parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
 args = parser.parse_args()
 
+
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
-    ns.weights = be.Variable(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+    ns.weights = be.Variable(axes=be.linear_map_axes(be.sample_axes(x.axes), be.sample_axes(axes)),
+                             init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
         ns.bias = be.Variable(axes=be.sample_axes(result), init=bias)
@@ -34,7 +35,8 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_name_scope(name_scopes) as nns:
-                    nns.axes = tuple(be.AxisVar(like=axis, length=length) for axis, length in zip(hidden_axes, shape))
+                    nns.axes = tuple(
+                        be.AxisVar(length=length) for axis, length in zip(hidden_axes, shape))
                     value = affine(value, activation=hidden_activation, axes=nns.axes, **kargs)
         with be.next_name_scope(name_scopes):
             value = affine(value, activation=activation, axes=axes, **kargs)
@@ -42,10 +44,11 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
 
 
 def grad_descent(cost):
-    learning_rate = be.placeholder(axes=())
+    learning_rate = be.placeholder(axes=(), name='learning_rate')
     params = cost.parameters()
     derivs = [be.deriv(cost, param) for param in params]
-    updates = be.doall(all=[be.assign(param, param - learning_rate * deriv) for param, deriv in zip(params, derivs)])
+    updates = be.doall(all=[be.assign(param, param - learning_rate * deriv) for param, deriv in
+                            zip(params, derivs)])
     return learning_rate, updates
 
 
@@ -63,12 +66,13 @@ class MyTest(be.Model):
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))
 
-        #layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
+        # layers = [(be.tanh, (g.H, g.W), [(16, 16)] * 1 + [(4, 4)])]
         layers = [(be.tanh, (ax.Y,), [(200,)])]
 
         g.value = mlp(g.x, activation=be.softmax, shape_spec=layers, axes=g.y.axes, init=uni)
 
-        g.error = be.cross_entropy_multi(g.value, g.y)
+        g.errors = be.cross_entropy_multi(g.value, g.y)
+        g.error = be.sum(g.errors, out_axes=())
 
         # L2 regularizer of parameters
         reg = None
@@ -88,7 +92,6 @@ class MyTest(be.Model):
         g.x.value = np.empty((3, 32, 32, 128))
         g.y.value = np.empty((1000, 128))
 
-        learning_rate = be.placeholder(axes=())
         params = g.error.parameters()
         derivs = [be.deriv(g.error, param) for param in params]
 
@@ -103,8 +106,8 @@ class MyTest(be.Model):
                                   repo_dir=args.data_dir, subset_pct=args.subset_pct)
 
             train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
-            #train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
-            test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
+            test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False,
+                               **imgset_options)
 
             graph = self.graph
             ax.N.length = train.bsz
@@ -123,15 +126,15 @@ class MyTest(be.Model):
                 training_error = 0
                 training_n = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
-                for mb_idx, (xraw, yraw) in enumerate(train):
-                    graph.x.value = xraw
-                    graph.y.value = yraw
+                for mb_idx, (x, y) in enumerate(train):
+                    graph.x.value = x
+                    graph.y.value = y
                     vals = enp.evaluate()
                     training_error += vals[graph.error] / train.bsz
                     training_n += 1
                     # break
 
-                print('Training error: {e}'.format(e=training_error/training_n))
+                print('Training error: {e}'.format(e=training_error / training_n))
                 self.test(env, test)
 
                 train.reset()
@@ -156,6 +159,6 @@ class MyTest(be.Model):
 
 
 y = MyTest()
-#y.dump()
+# y.dump()
 env = y.train()
-#y.test(env)
+# y.test(env)

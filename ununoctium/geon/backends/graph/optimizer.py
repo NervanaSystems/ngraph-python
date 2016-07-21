@@ -1,7 +1,8 @@
 from __future__ import division
 from builtins import object, zip
 import geon.backends.graph.funs as be
-from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, PolySchedule
+from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, \
+    PolySchedule
 from neon.initializers import Constant
 
 
@@ -55,11 +56,11 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
 
     def configure(self, cost):
-        self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate') 
+        self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.parameters())
         # TODO Get bsz from placeholder
-        grads = [be.deriv(cost, variable)/128.0 for variable in variables]
+        grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
         velocities = [be.Temporary(axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1
@@ -70,12 +71,14 @@ class GradientDescentMomentum(Optimizer):
 
         velocity_updates = [
             be.assign(
-                lvalue = velocity,
-                rvalue =  velocity * self.momentum_coef - learning_rate_value * (scale_factor * grad + self.wdecay * variable)
+                lvalue=velocity,
+                rvalue=velocity * self.momentum_coef - learning_rate_value * (
+                scale_factor * grad + self.wdecay * variable)
             )
-        for variable, grad, velocity in zip(variables, grads, velocities)]
+            for variable, grad, velocity in zip(variables, grads, velocities)]
 
-        param_updates = [be.assign(lvalue=variable, rvalue=variable+velocity) for variable, velocity in zip(variables, velocities)]
+        param_updates = [be.assign(lvalue=variable, rvalue=variable + velocity) for
+                         variable, velocity in zip(variables, velocities)]
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):
