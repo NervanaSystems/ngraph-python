@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import str
+from builtins import object, str
 import numpy as np
 import geon.backends.graph.funs as be
 
@@ -55,7 +55,7 @@ class CrossEntropyBinary(Cost):
     the deriviate that saves computation.
     """
 
-    def __init__(self, scale=1):
+    def __init__(self, scale=None):
         """
         Args:
             scale (float, optional): Amount by which to scale the backpropagated error (default: 1)

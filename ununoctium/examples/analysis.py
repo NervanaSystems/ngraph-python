@@ -1,8 +1,11 @@
+from __future__ import print_function
+from builtins import range, zip
 from geon.backends.graph.funs import *
 from geon.backends.graph.analysis import *
 
 import mxnet as mx
 import mxnet.symbol as sym
+from functools import reduce
 
 class GraphitiMLP(Model):
     def __init__(self, L, BS, bprop=True, **kargs):
@@ -26,7 +29,7 @@ class GraphitiMLP(Model):
         dW = [deriv(Error, w) for w in W]
 
         #Fusion analysis
-        dataflow = DataFlowGraph([Error] + dW if bprop else [Error])
+        dataflow = DataFlowGraph(dW if bprop else [Error])
         fused = KernelFlowGraph(dataflow)
         #Liveness analysis
         liveness = fused.liveness()
@@ -34,6 +37,8 @@ class GraphitiMLP(Model):
         interference = InterferenceGraph(liveness)
         self.memory = color(interference)
         self.dataflow = dataflow
+        fused.view()
+        #interference.render('interference')
 
 class MXNetMLP(Model):
 
@@ -69,13 +74,13 @@ class MXNetMLP(Model):
     
     
 
-layers = [1024, 256, 512, 10]
+layers = [1024, 256, 512, 128, 200, 300, 500, 100]
 batch = 32000
-bprop = False
+bprop = True
 
 graphiti = GraphitiMLP(layers, batch, bprop)
 mxnet = MXNetMLP(layers, batch, bprop)
 
-print 'Graphiti: {:.2f} MiB'.format(graphiti.memory*1024**-2)
-print 'MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory*1024**-2)
+print('Graphiti: {:.2f} MiB'.format(graphiti.memory*1024**-2))
+print('MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory*1024**-2))
 

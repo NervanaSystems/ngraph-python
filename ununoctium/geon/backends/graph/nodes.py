@@ -45,9 +45,9 @@ class Node(NameableValue):
     @property
     def graph_label(self):
         if self.name != self.id:
-            return self.name.split('.')[-1]    
-        return self.__class__.__name__
-    
+            return self.name.split('.')[-1]
+        return self.__class__.__name__ + '[' + self.name + ']'
+
     @property
     def args(self):
         """All the inputs to this node"""
@@ -65,6 +65,9 @@ class Node(NameableValue):
         self.__args = self.as_nodes(args)
         for arg in self.__args:
             arg.users.add(self)
+
+    def replace_arg(self, old, new):
+        self.args = [new if arg is old else arg for arg in self.args]
 
     def as_nodes(self, args):
         return tuple(self.as_node(arg) for arg in args)
@@ -117,7 +120,8 @@ class Node(NameableValue):
 
     @property
     def file_info(self):
-        return 'File "{filename}", line {lineno}'.format(filename=self.filename, lineno=self.lineno)
+        return 'File "{filename}", line {lineno}'.format(filename=self.filename,
+                                                         lineno=self.lineno)
 
     def _repr_body(self):
         return self._abbrev_args(self._repr_attrs())
@@ -129,7 +133,7 @@ class Node(NameableValue):
         name = ''
         if self.name is not None:
             name = '{' + self.name + '}'
-        return '{seqid}:{cls}{name}'.format(name=name, seqid=self.seqid, cls=self.__class__.__name__)
+        return '{cls}{name}'.format(name=name, cls=self.__class__.__name__)
 
     def _abbrev_value(self, value):
         if isinstance(value, Node):
@@ -161,8 +165,9 @@ class Node(NameableValue):
             else:
                 result = s
         return result
-    
+
     def __repr__(self):
+        return self.graph_label
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
 
 

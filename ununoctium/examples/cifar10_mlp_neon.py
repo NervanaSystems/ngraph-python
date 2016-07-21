@@ -38,6 +38,7 @@
 """
 Small CIFAR10 based MLP with fully connected layers.
 """
+from __future__ import print_function
 
 from neon.initializers import Uniform
 from neon.layers import GeneralizedCost, Affine

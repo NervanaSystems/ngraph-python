@@ -4,31 +4,31 @@ graphiti/ununoctium is Nervana's neon graph backend.
 
 ## Installation
 
-First ensure you have [private-neon](https://github.com/NervanaSystems/private-neon) installed,
-along with the other python packages defined in the `requirements.txt`.
+First ensure you have [private-neon](https://github.com/NervanaSystems/private-neon) checked out and built.
 
-If you run neon in a virtualenv, activate it then do:
-```
-cd ununoctium
-pip install -r requirements.txt
-pip install -e .
-```
+To install Graphiti into your private-neon virtual env:
 
-If you'd prefer to install system-wide do:
 ```
-cd unonoctium
-pip install -r requirements.txt
-pip install .
+cd private-neon
+make PY=2 # or "make PY=3" to instead build a Python 3 virtual environment.
+. .venv/bin/activate
+cd ../graphiti/ununoctium
+make install
 ```
 
-To uninstall:
+To uninstall graphiti from your virtual env:
 ```
-pip uninstall Graphiti
+make uninstall
 ```
 
 To run the unit tests:
 ```
-make
+make test
+```
+
+Before checking in code, ensure no "make style" errors
+```
+make style; make lint3k
 ```
 
 ## Examples

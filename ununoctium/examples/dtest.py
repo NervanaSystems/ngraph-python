@@ -1,3 +1,5 @@
+from __future__ import print_function
+from builtins import next, zip
 import geon.backends.graph.defmod as nm
 import geon.backends.graph.axis as ax
 import geon.backends.graph.analysis as analysis
@@ -26,7 +28,7 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
                     axis.length = length
                 value = affine(value, activation=hidden_activation, x_axes=last_axes, axes=layer.axes, **kargs)
                 last_axes = value.axes
-        layers.next()
+        next(layers)
         value = affine(value, activation=activation, x_axes=last_axes, axes=axes, **kargs)
     return value
 
@@ -63,7 +65,7 @@ class MyTest(nm.Model):
                       init=uni)
 
         g.error = cross_entropy(g.value, g.y)
-        print g.error
+        print(g.error)
         # L2 regularizer of parameters
         reg = None
         for param in nm.find_all(types=nm.Variable, tags='parameter', used_by=g.value):

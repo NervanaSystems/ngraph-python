@@ -1,3 +1,4 @@
+from __future__ import print_function
 from geon.backends.graph.graphneon import *
 
 # parse the command line arguments (generates the backend)
@@ -20,7 +21,7 @@ opt_gdm = GradientDescentMomentum(learning_rate=0.0001, momentum_coef=0.9)
 
 # set up the model layers
 layers = [Affine(nout=200, init=init_uni0, activation=Rectlin()),
-          Affine(nout=train.nclasses, axes=(ax.Y,), init=init_uni1, activation=Softmax())]
+          Affine(nout=train.nclasses, axes=Axes(ax.Y,), init=init_uni1, activation=Softmax())]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
@@ -29,7 +30,7 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 
-
-mlp.fit(train, input_axes=(ax.C, ax.H, ax.W), target_axes=(ax.Y,), optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
+np.seterr(divide='raise', over='raise', invalid='raise')
+mlp.fit(train, input_axes=Axes(ax.C, ax.H, ax.W), target_axes=Axes(ax.Y,), optimizer=opt_gdm, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 
 print('Misclassification error = %.1f%%' % (mlp.eval(test, metric=Misclassification())*100))

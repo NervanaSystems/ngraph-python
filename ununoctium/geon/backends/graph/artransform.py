@@ -158,7 +158,7 @@ class ArgonTransformer(Transformer):
         recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
         comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
         recv_buffer = recv_buffer / comm.Get_size()  # Normalize the results to the number of MPI threads
-        out[:] = recv_buffer
+        out.set(recv_buffer)
 
 
 class ArgonUniform(AllocationOp):

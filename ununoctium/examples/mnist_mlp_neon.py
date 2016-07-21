@@ -41,18 +41,20 @@ Examples:
         the values stored in the checkpoint file named checkpoint.pkl.
 
 """
-from geon.backends.graph.graphneon import *
+
+from neon.callbacks.callbacks import Callbacks
 from neon.data import ArrayIterator, load_mnist
 from neon.initializers import Gaussian
+from neon.layers import GeneralizedCost, Affine
+from neon.models import Model
+from neon.optimizers import GradientDescentMomentum
+from neon.transforms import Rectlin, Logistic, CrossEntropyBinary, Misclassification
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
-
-from geon.backends.graph.analysis import DataFlowGraph
 
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
-parser.set_defaults(backend='dataloader')
 
 args = parser.parse_args()
 
@@ -73,9 +75,8 @@ layers = [Affine(nout=100, init=init_norm, activation=Rectlin()),
           Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True))]
 
 # setup cost function as CrossEntropy
-cost = GeneralizedCost(costfunc=CrossEntropyMulti())
+cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 
-# cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 # setup optimizer
 optimizer = GradientDescentMomentum(
     0.1, momentum_coef=0.9, stochastic_round=args.rounding)
@@ -86,9 +87,8 @@ mlp = Model(layers=layers)
 # configure callbacks
 callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
 
-np.seterr(divide='raise', over='raise', invalid='raise')
 # run fit
-mlp.fit(train_set, input_axes=Axes(ax.C, ax.H, ax.W), target_axes=Axes(ax.Y), optimizer=optimizer,
+mlp.fit(train_set, optimizer=optimizer,
         num_epochs=args.epochs, cost=cost, callbacks=callbacks)
 error_rate = mlp.eval(valid_set, metric=Misclassification())
 neon_logger.display('Misclassification error = %.1f%%' % (error_rate * 100))

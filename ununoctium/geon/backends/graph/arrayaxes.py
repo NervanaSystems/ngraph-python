@@ -1,9 +1,11 @@
 from __future__ import division
 from future.utils import with_metaclass
+from functools import reduce
 
 from abc import ABCMeta
 import collections
-import math
+import operator
+import types
 import weakref
 
 import numpy as np
@@ -13,36 +15,19 @@ from geon.backends.graph.environment import get_current_environment
 
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
-    def __init__(self, length, like=None, **kargs):
+    def __init__(self, length, **kargs):
         super(Axis, self).__init__(**kargs)
-        self._length = length
-        if like is not None:
-            self.like = like.axis
-        else:
-            self.like = None
+        self.__length = length
 
     def __getitem__(self, key):
-        if key == self.idx:
-            return self
         return AxisID(self, key)
 
     @property
     def length(self):
-        return self._length
-
-    @property
-    def idx(self):
-        return 0
-
-    @property
-    def axis(self):
-        return self
-
-    def as_axisid(self):
-        return self[0]
+        return self.__length
 
     def __repr__(self):
-        return 'Axis({name})'.format(name=self.name or self.like)
+        return 'Axis({name})'.format(name=self.name)
 
 
 class AxisVar(Axis):
@@ -64,35 +49,19 @@ class AxisVar(Axis):
         get_current_environment()[self] = item
 
     def __repr__(self):
-        return 'AxisVar({name})'.format(name=self.name or self.like)
+        return 'AxisVar({name})'.format(name=self.name)
 
 
 class AxisID(object):
     def __init__(self, axis, idx, **kargs):
+        assert isinstance(idx, int)
         super(AxisID, self).__init__(**kargs)
         self.axis = axis
         self.idx = idx
 
-    def __getitem__(self, key):
-        if key == self.axis.idx:
-            return self.axis
-        if key == self.idx:
-            return self
-        return AxisID(self.axis, key)
-
-    def as_axisid(self):
-        return self
-
-    @property
-    def length(self):
-        return self.axis.length
-
-    @length.setter
-    def length(self, length):
-        self.axis.length = length
-
     def __eq__(self, other):
-        return isinstance(other, AxisID) and self.axis == other.axis and self.idx == other.idx
+        return isinstance(other, AxisID) \
+            and self.axis == other.axis and self.idx == other.idx
 
     def __hash__(self):
         return hash(self.axis) + hash(self.idx)
@@ -100,262 +69,444 @@ class AxisID(object):
     def __repr__(self):
         return '{axis}[{idx}])'.format(axis=self.axis, idx=self.idx)
 
-
-Axis.register(AxisID)
-
 TensorAxisInfo = collections.namedtuple('TensorAxisInfo', ['length', 'stride'])
+
+
+def canonicalize(seq):
+    elems = []
+    for x in seq:
+        if isinstance(x, AxesAxis):
+            if x.empty:
+                continue
+            elif x.single:
+                x = x.axes[0]
+        elif isinstance(x, collections.Iterable):
+            x = canonicalize(x)
+            if len(x) == 0:
+                continue
+            elif len(x) == 1:
+                x = x[0]
+            else:
+                x = AxesAxis(Axes(*x))
+        elems.append(x)
+    return elems
+
+
+def no_duplicates(arr):
+    s = set()
+    for x in enumerate(arr):
+        if x in s:
+            return False
+        s.add(x)
+    return True
+
+
+class Axes(tuple):
+    def __new__(cls, *seq):
+        if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
+            assert len(seq) == 1
+            seq = tuple(seq[0])
+        seq = canonicalize(seq)
+        assert all([isinstance(x, Axis) for x in seq])
+        return tuple.__new__(cls, seq)
+
+    @property
+    def full_lengths(self):
+        return tuple(x.axes.full_lengths if isinstance(x, AxesAxis)
+                     else x.length for x in self)
+
+    @property
+    def lengths(self):
+        return tuple(x.length for x in self)
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return Axes(*super(Axes, self).__getitem__(item))
+        else:
+            return super(Axes, self).__getitem__(item)
+
+    def __getslice__(self, i, j):
+        return self.__getitem__(slice(i, j))
+
+    def __add__(self, other):
+        return Axes(*(tuple(self) + tuple(other)))
+
+    # TODO: delete this method, the size should come from the tensor
+    @property
+    def size(self):
+        size = 1
+        for x in self:
+            size *= x.length
+        return size
+
+    def as_axis_ids(self):
+        m = collections.defaultdict(int)
+        elems = []
+
+        for x in self:
+            index = m[x]
+            m[x] = index + 1
+            elems.append(AxisID(x, index))
+
+        return AxisIDTuple(*elems)
+
+    def __repr__(self):
+        s = 'Axes('
+        for i, x in enumerate(self):
+            s += repr(x)
+            s += ', '
+        s += ')'
+        return s
+
+
+# func(agg, elem) -> agg
+def reduce_nested(elem, agg, func):
+    if isinstance(elem, collections.Iterable):
+        for sub in elem:
+            agg = reduce_nested(sub, agg, func)
+        return agg
+    else:
+        return func(agg, elem)
+
+
+def with_axes_as_axis_ids(f):
+    def wrapper(*args):
+        new_args = []
+        for a in args:
+            if isinstance(a, Axes):
+                a = a.as_axis_ids()
+            new_args.append(a)
+        return f(*new_args)
+    return wrapper
+
+
+class AxisIDTuple(tuple):
+    def __new__(cls, *seq):
+        if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
+            assert len(seq) == 1
+            seq = tuple(seq[0])
+        seq = [x[0] if isinstance(x, Axis) else x for x in seq]
+        assert all([isinstance(x, AxisID) for x in seq])
+        return tuple.__new__(cls, seq)
+
+    def as_axes(self):
+        return Axes(x.axis for x in self)
+
+    @staticmethod
+    @with_axes_as_axis_ids
+    def sub(at1, at2):
+        assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
+        return AxisIDTuple(_ for _ in at1 if _ not in at2)
+
+    @staticmethod
+    @with_axes_as_axis_ids
+    def intersect(at1, at2):
+        assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
+        return AxisIDTuple(_ for _ in at1 if _ in at2)
+
+    @staticmethod
+    @with_axes_as_axis_ids
+    def append(*at_list):
+        assert all([isinstance(at, AxisIDTuple) for at in at_list])
+        elems = []
+        for at in at_list:
+            for x in at:
+                if x not in elems:
+                    elems.append(x)
+        return AxisIDTuple(*elems)
+
+    @staticmethod
+    @with_axes_as_axis_ids
+    def find(subaxes, axes):
+        assert isinstance(subaxes, AxisIDTuple)\
+            and isinstance(axes, AxisIDTuple)
+        for i in range(len(axes)):
+            if axes[i:i + len(subaxes)] == subaxes:
+                return i
+        raise ValueError('Could not find subaxes')
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return AxisIDTuple(*super(AxisIDTuple, self).__getitem__(item))
+        else:
+            return super(AxisIDTuple, self).__getitem__(item)
+
+    def __getslice__(self, i, j):
+        return self.__getitem__(slice(i, j))
+
+    def __add__(self, other):
+        return AxisIDTuple.append(self, other)
+
+    def __sub__(self, other):
+        return AxisIDTuple.sub(self, other)
+
+    def __repr__(self):
+        s = 'AxisIDTuple('
+        for i, x in enumerate(self):
+            s += repr(x)
+            s += ', '
+        s += ')'
+        return s
+
+
+class AxesAxis(Axis):
+    def __init__(self, axes, **kargs):
+        assert isinstance(axes, Axes)
+        length = reduce(operator.mul, axes.lengths, 1)
+        super(AxesAxis, self).__init__(length=length, **kargs)
+        self.__axes = axes
+
+    @property
+    def empty(self):
+        return len(self.__axes) == 0
+
+    @property
+    def single(self):
+        return len(self.__axes) == 1
+
+    @property
+    def axes(self):
+        return self.__axes
+
+    def __repr__(self):
+        s = 'AxesAxis('
+        for i, x in enumerate(self.axes):
+            s += repr(x)
+            s += ', '
+        s += ')'
+        return s
+
+
+def reduce_strides(strides):
+    return tuple(int(reduce_nested(elem, float('inf'), min))
+                 for elem in strides)
 
 
 class TensorDescription(object):
     """Axes information about an allocated tensor"""
-
-    def __init__(self, axes, dtype=np.dtype(np.float32), shape=None, sizes=None, strides=None, offset=0, verify=True,
-                 buffer=None, value=None, **kargs):
+    def __init__(self, axes, dtype=np.dtype(np.float32), full_shape=None,
+                 buffer=None, value=None, full_strides=None, full_sizes=None,
+                 offset=0, **kargs):
         super(TensorDescription, self).__init__(**kargs)
-        self.dtype = np.dtype(dtype)
-        self.axes = tuple(canonicalize_axes(axes))
-        self.ndim = len(self.axes)
-        self.offset = offset
-        self.__buffer = buffer
+        # TODO: get the default type from the backend. May not always be numpy.
+        # TODO: support flattening, unflattening, other complex reshapes
+        axes = Axes(*axes)
         self.value = value
+        self.__buffer = buffer
+        self.dtype = dtype
+        self.axes = axes
+        self.offset = offset
+        self.ndim = len(self.axes)
         self.views = weakref.WeakSet()
+        self.full_shape = full_shape if full_shape is not None \
+            else self.axes.full_lengths
+        self.full_sizes = full_sizes if full_sizes is not None \
+            else self.axes.full_lengths
 
         if buffer is not None:
             buffer.views.add(self)
 
-        if shape is None:
-            shape = tuple(axes_sizes(self.axes))
-        self.shape = shape
-
-        if sizes is None:
-            self.sizes = self.shape
-        else:
-            self.sizes = tuple(sizes)
-            assert len(self.sizes) == self.ndim, "Sizes must have same number of dimensions as axes"
-
-        self.axes_info = collections.OrderedDict()
-        if strides is None:
-            strides = []
+        if full_strides is None:
+            # TODO: deduce strides of nested axes.
+            full_strides = []
             stride = self.dtype.itemsize
-            for axis, size in reversed(zip(self.axes, self.sizes)):
-                if verify:
-                    assert axis.length <= size, "An dimension size cannot be less than the dimension length"
-                self.axes_info[axis] = TensorAxisInfo(length=axis.length, stride=stride)
-                stride = stride * size
-                strides.append(stride)
-            self.strides = tuple(reversed(strides))
+            for axis, full_size in reversed(list(zip(self.axes, self.full_sizes))):
+                assert not isinstance(axis, AxesAxis)
+                full_strides.append(stride)
+                stride *= full_size
+            self.full_strides = tuple(reversed(full_strides))
         else:
-            assert len(strides) == self.ndim
-            self.strides = tuple(strides)
-            for axis, length, stride in zip(self.axes, axes_shape(self.axes), self.strides):
-                self.axes_info[axis] = TensorAxisInfo(length=length, stride=stride)
+            self.full_strides = full_strides
 
-    @property
-    def buffer(self):
-        return self.__buffer or self
+        assert len(self.full_shape) == self.ndim, \
+            "Shape must have same number of dimensions as axes"
+        assert len(self.full_sizes) == self.ndim, \
+            "Sizes must have same number of dimensions as axes"
+        assert len(self.full_strides) == self.ndim, \
+            "Strides must have same number of dimensions as axes"
 
     def __getitem__(self, item):
-        if isinstance(item, Axis):
-            return self.axes_info[item]
+        assert isinstance(item, collections.Iterable)
+        assert len(item) == self.ndim
 
-        elif isinstance(item, collections.Iterable):
-            assert len(item) == self.ndim
-            offset = self.offset
-            for idx, axis_info in zip(item, self.axes_info):
-                assert 0 <= idx and idx < axis_info.length
-                offset = offset + idx * axis_info.stride
-            return offset
+        offset = self.offset
+        for idx, axis, length, stride in \
+                zip(item, self.axes, self.shape, self.strides):
+            assert 0 <= idx and idx < length
+            offset = offset + idx * stride
+        return offset
 
-    def reaxe(self, reaxes, broadcast=True):
-        if self.axes == tuple(reaxes):
-            return self
+    def try_guess_positions(self, new_axes):
+        # Supports broadcast and combining one level of axes
+        # Does not support unrolling
+        old_poss = []
 
-        # Format of reaxes:
-        # Axis: position is an axis
-        # tuple of axes: position is combination of the axes
-        strides = []
-        for axis in reaxes:
-            component_axes = flatten_axes(axis)
-            if len(component_axes) == 0:
-                strides.append(0)
+        used_set = set()
+
+        def get_old_axis(new_axis):
+            for i, axis in enumerate(self.axes):
+                if i not in used_set and axis == new_axis:
+                    used_set.add(i)
+                    return i
             else:
-                try:
-                    strides.append(self[component_axes[-1]].stride)
-                except KeyError:
-                    if not broadcast:
-                        raise ValueError('Cannot reaxe with axis {a} not in axes'.format(a=axis))
-                    else:
-                        strides.append(0)
-        shape = tuple(axes_shape(reaxes))
-        return TensorDescription(reaxes, dtype=self.dtype, shape=shape, strides=strides, offset=self.offset,
+                return -1
+
+        for axis in new_axes:
+            old_pos = get_old_axis(axis)
+            if old_pos == -1 and isinstance(axis, AxesAxis):
+                poss = []
+                for sub in axis.axes:
+                    assert not isinstance(sub, AxesAxis)
+                    poss.append(get_old_axis(sub))
+                old_poss.append(tuple(poss))
+            else:
+                old_poss.append(old_pos)
+        return old_poss
+
+    def split_reduce_at(self, div_point):
+        def pos_tup(lower, upper):
+            if lower == upper - 1:
+                return lower
+            else:
+                return tuple(range(lower, upper))
+        if div_point == 0 or div_point == self.ndim:
+            new_axes = Axes(AxesAxis(self.axes))
+            old_poss = (pos_tup(0, self.ndim),)
+        else:
+            new_axes = Axes(
+                AxesAxis(self.axes[:div_point]),
+                AxesAxis(self.axes[div_point:])
+            )
+            old_poss = (
+                pos_tup(0, div_point),
+                pos_tup(div_point, self.ndim)
+            )
+        return self.reaxe_with_positions(new_axes, old_poss)
+
+    def dot_reaxe_left(self, red_axis_ids):
+        old_axis_ids = self.axes.as_axis_ids()
+        idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
+        axis_ids = old_axis_ids[:idx]\
+            + old_axis_ids[idx + len(red_axis_ids):]\
+            + red_axis_ids
+        div_point = len(old_axis_ids) - len(red_axis_ids)
+        return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
+
+    def dot_reaxe_right(self, red_axis_ids):
+        old_axis_ids = self.axes.as_axis_ids()
+        idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
+        axis_ids = red_axis_ids + old_axis_ids[:idx]\
+            + old_axis_ids[idx + len(red_axis_ids):]
+        div_point = len(red_axis_ids)
+        return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
+
+    def reaxe(self, new_axes, broadcast=True):
+        new_axes = Axes(*new_axes)
+        old_poss = self.try_guess_positions(new_axes)
+        return self.reaxe_with_positions(new_axes, old_poss, broadcast)
+
+    def reaxe_with_axis_ids_positions(self, new_axis_id_tuple):
+        old_axis_ids = self.axes.as_axis_ids()
+
+        old_poss = []
+        for axis_id in new_axis_id_tuple:
+            for i, old_axis_id in enumerate(old_axis_ids):
+                if axis_id == old_axis_id:
+                    old_poss.append(i)
+        return old_poss
+
+    def reaxe_with_axis_ids(self, new_axis_id_tuple):
+        # This function does not allow any unrolling of axes
+        # The argument is a tuple of axis ids.
+        # The indices of the axis ids refer to the existing order of axes
+        old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
+        return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
+                                         old_poss=old_poss,
+                                         broadcast=False)
+
+    def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
+        assert len(new_axes) == len(old_poss)
+
+        full_shape = []
+        full_sizes = []
+        full_strides = []
+
+        def old_info(axis, old_pos):
+            if old_pos == -1:
+                full_length = axis.axes.full_lengths\
+                    if isinstance(axis, AxesAxis) else axis.length
+                return full_length, full_length, 0
+            else:
+                return self.full_shape[old_pos],\
+                    self.full_sizes[old_pos], self.full_strides[old_pos]
+
+        for axis, old_pos in zip(new_axes, old_poss):
+            if isinstance(axis, AxesAxis):
+                sub_shape = []
+                sub_sizes = []
+                sub_strides = []
+                for sub, sub_pos in zip(axis.axes, old_pos):
+                    assert not isinstance(sub, AxesAxis)
+                    fsh, fsi, fst = old_info(sub, sub_pos)
+                    sub_shape.append(fsh)
+                    sub_sizes.append(fsi)
+                    sub_strides.append(fst)
+                full_shape.append(tuple(sub_shape))
+                full_sizes.append(tuple(sub_sizes))
+                full_strides.append(tuple(sub_strides))
+            else:
+                fsh, fsi, fst = old_info(axis, old_pos)
+                full_shape.append(fsh)
+                full_sizes.append(fsi)
+                full_strides.append(fst)
+        return TensorDescription(new_axes, dtype=self.dtype,
+                                 full_shape=tuple(full_shape),
+                                 full_strides=tuple(full_strides),
+                                 full_sizes=tuple(full_sizes),
+                                 offset=self.offset,
                                  buffer=self.buffer)
 
     def slice(self, slices):
         assert len(slices) == self.ndim
         base_index = []
-        shape = []
         strides = []
         axes = []
-        for s, stride, length, axis in zip(slices, self.strides, self.shape, self.axes):
+        shape = []
+
+        for s, stride, length, axis in \
+                zip(slices, self.strides, self.shape, self.axes):
             if isinstance(s, slice):
-                # Keep slice dimensions
                 start, stop, step = slice.indices(length)
                 base_index.append(start)
                 strides.append(stride * step)
-                shape.append((stop - start) // step)
                 axes.append(axis)
+                shape.append((stop - start) // step)
             else:
-                # Omit fixed dimensions
                 base_index.append(s)
 
         offset = self[base_index]
 
-        return TensorDescription(axes, dtype=self.dtype, shape=shape, strides=strides, offset=offset,
+        return TensorDescription(axes, dtype=self.dtype,
+                                 shape=shape, strides=strides, offset=offset,
                                  buffer=self.buffer)
 
+    @property
+    def strides(self):
+        return reduce_strides(self.full_strides)
 
-def canonicalize_axes(axes):
-    def canonic(x):
-        if isinstance(x, collections.Iterable):
-            x = tuple(x)
-            if len(x) == 1:
-                return x[0]
-            else:
-                return x
-        else:
-            return x
+    @property
+    def shape(self):
+        return tuple(reduce_nested(_, 1, operator.mul)
+                     for _ in self.full_shape)
 
-    return tuple(canonic(x) for x in axes)
+    @property
+    def sizes(self):
+        return tuple(reduce_nested(_, 1, operator.mul)
+                     for _ in self.full_sizes)
 
-
-def axis_ids(axes):
-    """Return a list of axes with unique axis indices"""
-    result = []
-    for axis in axes:
-        if axis in result:
-            axis = axis.axis
-            while axis in result or axis in axes:
-                axis = axis[axis.idx + 1]
-        result.append(axis)
-    return result
-
-
-def find_axes_in_axes(subaxes, axes):
-    subaxes = axis_ids(subaxes)
-    axes = axis_ids(axes)
-    if not subaxes:
-        return 0
-    head = subaxes[0]
-    for i, axis in enumerate(axes):
-        if head == axis and axes[i:i + len(subaxes)] == subaxes:
-            return i
-    return -1
-
-
-def axes_sub(x, y):
-    """Returns x with elements from y removed"""
-    return [_ for _ in axis_ids(x) if _ not in axis_ids(y)]
-
-
-def axes_intersect(x, y):
-    """Returns intersection of x and y in x order"""
-    return [_ for _ in axis_ids(x) if _ in axis_ids(y)]
-
-
-def axes_append(*axes_list):
-    """Returns x followed by elements of y not in x"""
-    result = []
-    for axes in axes_list:
-        ids = axis_ids(axes)
-        for axis_id in ids:
-            if axis_id not in result:
-                result.append(axis_id)
-    return result
-
-
-def axes_replace(axes, replace, replacements):
-    """Returns axes with those axes in replace replace by those in replacements"""
-    ids = axis_ids(axes)
-    r = dict()
-    for k in ids:
-        r[k] = k
-    for k, v in zip(axis_ids(replace), axis_ids(replacements)):
-        r[k] = v
-    return [r[axis] for axis in ids]
-
-
-def axes_list(axes, shape_list):
-    result = []
-    for shape in shape_list:
-        for axis, size in zip(axes, shape):
-            axis.length = size
-        result.append(axes)
-        axes = [axis.prime() for axis in axes]
-    return result
-
-
-def flatten_axes(axes):
-    """Return axes with all tuples expanded."""
-    result = []
-
-    def flatten1(axes):
-        if isinstance(axes, collections.Sequence):
-            for _ in axes:
-                flatten1(_)
-        else:
-            result.append(axes)
-
-    flatten1(axes)
-    return result
-
-
-def axes_shape(axes):
-    shape = []
-    for axis in axes:
-        length = 1
-        for caxis in flatten_axes(axis):
-            length = length * caxis.length
-        shape.append(length)
-    return shape
-
-
-def axes_size(axes):
-    size = 1
-    for axis in axes:
-        for caxis in flatten_axes(axis):
-            size *= caxis.length
-    return size
-
-
-def axes_sizes(axes):
-    return [axis.length for axis in axes]
-
-
-def output_dim(self, X, F, padding, strides, pooling=False, cafe_compatibility=False):
-    """
-    Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-    Arguments:
-        X (int): input data dimension
-        F (int): filter dimension
-        padding (int): padding on each side
-        strides (int): striding
-        pooling (bool): flag for setting pooling layer size
-    """
-
-    if cafe_compatibility and pooling:
-        size = int(math.ceil((float(X - F + 2 * padding) / strides))) + 1
-        if padding > 0 and (size - 1) * strides >= X + padding:
-            # decrement size if last pooling op is completely in padding
-            size -= 1
-    else:
-        # normal neon output size determination
-        size = ((X - F + 2 * padding) // strides) + 1
-
-    if pooling and padding >= F:
-        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, F))
-
-    return size
+    @property
+    def buffer(self):
+        return self.__buffer or self
 
 
 def get_batch_axes(default=()):
