@@ -113,6 +113,11 @@ class NumPyTransformer(Transformer):
     def not_equal(self, x, y, out):
         np.not_equal(x, y, out=out)
 
+    def onehot(self, x, out):
+        out[:] = 0
+        for i in range(len(x)):
+            out[x[i], i] = 1
+
     def reciprocal(self, x, out):
         np.reciprocal(x, out=out)
 
