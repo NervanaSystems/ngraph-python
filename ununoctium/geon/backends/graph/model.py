@@ -40,7 +40,6 @@ class Model(GraphComponent):
         self.finished = False
 
         self.optimizer = optimizer
-
         # Wrap the list of layers in a Sequential container if a raw list of layers
         if type(layers) in (Sequential, Tree, SingleOutputTree):
             self.layers = layers

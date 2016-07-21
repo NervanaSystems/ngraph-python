@@ -47,6 +47,8 @@ from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
+from geon.backends.graph.analysis import DataFlowGraph
+
 
 # parse the command line arguments
 parser = NeonArgparser(__doc__)
@@ -71,9 +73,9 @@ layers = [Affine(nout=100, init=init_norm, activation=Rectlin()),
           Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True))]
 
 # setup cost function as CrossEntropy
-#cost = GeneralizedCost(costfunc=CrossEntropyMulti())
-cost = GeneralizedCost(costfunc=CrossEntropyBinary())
+cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
+# cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 # setup optimizer
 optimizer = GradientDescentMomentum(
     0.1, momentum_coef=0.9, stochastic_round=args.rounding)

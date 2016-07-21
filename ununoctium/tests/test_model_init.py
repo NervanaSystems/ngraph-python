@@ -69,7 +69,7 @@ class MyTest(be.Model):
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
         g = self.graph
-
+        
         be.set_batch_axes([ax.N])
         be.set_phase_axes([ax.Phi])
 
@@ -165,7 +165,6 @@ imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
                       repo_dir=args.data_dir, subset_pct=args.subset_pct)
 train = ImageLoader(set_name='train', shuffle=False, do_transforms=False, **imgset_options)
 test = ImageLoader(set_name='validation', shuffle=False, do_transforms=False, **imgset_options)
-
 
 geon_model = MyTest()
 geon_model.train(train, test)

@@ -13,13 +13,6 @@ from geon.backends.graph.environment import get_current_environment, get_current
 from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, AxesAxis
 
-try:
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-except:
-    pass
-
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
     def __init__(self, results, error=None, initialize=False, environment=None, **kvargs):
@@ -520,6 +513,15 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         :param x:
         :param out:
         :return:
+        """
+        raise NotImplementedError()
+
+    def allreduce(self, x, out):
+        """
+        MPI allreduce 
+        :param x:
+        :param out:
+        :return: 
         """
         raise NotImplementedError()
 
@@ -1767,12 +1769,7 @@ class AllReduce(ElementWise):
         return visitor.visit_all_reduce(self, *self.args)
 
     def evaluate(self, evaluator, out, x):
-        x_val = x  # read data from GPU to CPU -- expensive!
-        recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
-        comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
-        # Normalize the results to the number of MPI threads
-        recv_buffer = recv_buffer / comm.Get_size()
-        out[:] = recv_buffer
+        return evaluator.allreduce(x,out)
 
 
 class placeholder(AllocationOp):
