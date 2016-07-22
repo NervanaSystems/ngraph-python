@@ -2598,10 +2598,9 @@ class onehot(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        out_axes = Axes(Axes(self.axis), AxesSubComp(self.axes, Axes(self.axis)).value)
-        in_axes = Axes(x.axes.value)
-        ci = [self.reaxe(out_axes),
-                x.reaxe(in_axes)]
+        ci = [self.reaxe(Axes(Axes(self.axis),
+                              AxesSubComp(self.axes, Axes(self.axis)).value)),
+              x.reaxe(Axes(x.axes.value))]
         return ci
 
     def evaluate(self, evaluator, out, x):

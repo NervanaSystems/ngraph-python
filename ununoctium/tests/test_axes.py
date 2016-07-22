@@ -19,7 +19,6 @@ def test_axes_equal():
     assert a1 == a2
 
 
-
 def to_nested_tup(axes):
     return tuple(to_nested_tup(axis.axes) if
                  isinstance(axis, arrax.AxesAxis) else axis for axis in axes)

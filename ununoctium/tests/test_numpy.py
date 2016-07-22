@@ -1,6 +1,6 @@
 from __future__ import division
 from builtins import range
-from geon.backends.graph.graph_test_utils import *
+from geon.backends.graph.graph_test_utils import *  # noqa
 
 rng = RandomTensorGenerator(0, np.float32)
 
