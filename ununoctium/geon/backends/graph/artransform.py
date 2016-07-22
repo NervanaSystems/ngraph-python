@@ -1,10 +1,10 @@
-import numpy as np
+# import numpy as np
 
 from geon.backends.graph.transform import Transformer, AllocationOp, Visitor
 from geon.backends.graph.mpihandle import MPIHandle
 
-import argon.neon_backend.ar_backend
-from argon.neon_backend.ar_backend import ArBackend
+# import argon.neon_backend.ar_backend
+# from argon.neon_backend.ar_backend import ArBackend
 
 from neon import NervanaObject
 
