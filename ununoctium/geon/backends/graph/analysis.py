@@ -15,7 +15,7 @@
 from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, \
+from geon.backends.graph.graphop import ComputationOp, AllocationOp, ElementWise, Function, \
     Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product
@@ -97,7 +97,7 @@ class DataFlowGraph(Digraph):
             x, AllocationOp) and x.tensor_axes_info.read_only}
         liveness[order[-1]] = set(self.outputs) | keeps
         # Update
-        for current, previous in reversed(zip(order[1:], order[:-1])):
+        for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             args = {x for x in current.args if not isinstance(x, Constant)}
             liveness[previous] = args | (liveness[current] - set(current.defs))
         return liveness
