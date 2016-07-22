@@ -7,31 +7,29 @@ import argon.neon_backend.ar_backend
 from argon.neon_backend.ar_backend import ArBackend
 
 from neon import NervanaObject
-from neon.backends.backend import OpTreeNode 
 
-
-
-WITHNP = False
 
 class ArgonTransformer(Transformer):
-        
+
     def __init__(self, **kargs):
         super(ArgonTransformer, self).__init__(**kargs)
-        self.be = NervanaObject.be 
-        
-        
+        self.be = NervanaObject.be
+
     # allocators
     def empty(self, tensor_description):
         # TODO: Just to stop ar_backend error, should be replaced appropriately
-        ## Just a placeholder for now
+        # Just a placeholder for now
         # bufshape = self.reshape(tensor_description.sizes)
         tensor_shape = tensor_description.sizes
         if len(tensor_shape) == 0:
             tensor_shape = 1
         elif len(tensor_shape) == 1:
-            tensor_shape = (tensor_shape[0],1)
+            tensor_shape = (tensor_shape[0], 1)
 
-        return self.be.empty(tensor_shape, dtype=tensor_description.dtype, persist_values=True)
+        return self.be.empty(
+            tensor_shape,
+            dtype=tensor_description.dtype,
+            persist_values=True)
 
     def nparray(self, tensor_description, array):
         raise NotImplementedError()
@@ -60,8 +58,8 @@ class ArgonTransformer(Transformer):
 
     def add(self, x, y, out):
         raise NotImplementedError()
-                
-    # this function has 
+
+    # this function has
     def argmax(self, x, out, axis=0):
         raise NotImplementedError()
 
@@ -76,7 +74,7 @@ class ArgonTransformer(Transformer):
 
     def dot(self, x, y, out):
         raise NotImplementedError()
-        
+
     def equal(self, x, y, out):
         raise NotImplementedError()
 
@@ -94,7 +92,7 @@ class ArgonTransformer(Transformer):
 
     def less_equal(self, x, y, out):
         raise NotImplementedError()
-        
+
     def log(self, x, out):
         raise NotImplementedError()
 
@@ -144,18 +142,16 @@ class ArgonTransformer(Transformer):
         raise NotImplementedError()
 
     def check_argon_error(self, err):
-        err_code = AMStatusCode(err.code)
-        if err_code != AMStatusCode.S_OK:
-            raise RuntimeError("Argon error: {}".format(err_code))
+        raise NotImplementedError()
 
     def allreduce(self, x, out):
         x_val = x.get()  # read data from Argon to CPU -- expensive!
         recv_buffer = MPIHandle().allreduceAvg(x_val)
         out.set(recv_buffer)
-        
 
 
 class ArgonUniform(AllocationOp):
+
     def __init__(self, rng, low, high, **kargs):
         super(ArgonUniform, self).__init__(args=(rng,), **kargs)
         self.low = low
@@ -164,9 +160,11 @@ class ArgonUniform(AllocationOp):
     def compute_tensor_axes_info(self):
         rng, = self.args
         tensor_axes_info = super(ArgonUniform, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
+        tensor_axes_info.alloc = lambda evaluator, tensor_description: \
+            evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
 
 
 class ArgonTransformVisitor(Visitor):
+
     def visit_uniform(self, uniform, low, high, rng):
         pass

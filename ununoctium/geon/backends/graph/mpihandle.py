@@ -41,7 +41,6 @@ class MPIHandle(object):
         mpi_size = comm.Get_size()
         return (self.allreduce(x, op="sum") / mpi_size)
 
-
     def bcast(self, value, root=0):
         raise NotImplementedError()
 

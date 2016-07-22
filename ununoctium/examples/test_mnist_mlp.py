@@ -1,6 +1,6 @@
 from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
-from geon.backends.graph.graphneon import *
+from geon.backends.graph.graphneon import *  # noqa
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
@@ -36,16 +36,14 @@ dataflow.view()
 print(ast_graph.last_op)
 
 with be.bound_environment(env):
-     for mb_idx, (xraw, yraw) in enumerate(test_data):
-          # ast_graph.x.value = xraw.get()
-          ast_graph.x.value = xraw
-          ast_graph.y.value = yraw
+    for mb_idx, (xraw, yraw) in enumerate(test_data):
+        # ast_graph.x.value = xraw.get()
+        ast_graph.x.value = xraw
+        ast_graph.y.value = yraw
 
-          enp = be.NumPyTransformer(results=[ast_graph.last_op])
-          result = enp.evaluate()[ast_graph.last_op]
-          print(result)
+        enp = be.NumPyTransformer(results=[ast_graph.last_op])
+        result = enp.evaluate()[ast_graph.last_op]
+        print(result)
 
-          if mb_idx == 0: break
-
-
-
+        if mb_idx == 0:
+            break

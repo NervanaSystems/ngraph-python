@@ -21,27 +21,29 @@ from util.importer import create_neon_graph
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
+
 def test_create_neon_graph(pb_file, execute=False):
-  print("loading graph")
-  graph_def = tf.GraphDef()
+    print("loading graph")
+    graph_def = tf.GraphDef()
 
-  env = Environment()
+    env = Environment()
 
-  with open(pb_file, 'rb') as f:
-    graph_def.ParseFromString(f.read()) # read serialized binary file only
+    with open(pb_file, 'rb') as f:
+        graph_def.ParseFromString(f.read())  # read serialized binary file only
 
-  ast_graph = create_neon_graph(graph_def, env)
-  print(ast_graph)
+    ast_graph = create_neon_graph(graph_def, env)
+    print(ast_graph)
 
-  dataflow = analysis.DataFlowGraph([ast_graph.last_op])
-  dataflow.view()
+    dataflow = analysis.DataFlowGraph([ast_graph.last_op])
+    dataflow.view()
 
-  if execute:
-    with be.bound_environment(env):
-      enp = be.NumPyTransformer(results=[ast_graph.last_op])
-      result = enp.evaluate()
-      print(result[ast_graph.last_op])
+    if execute:
+        with be.bound_environment(env):
+            enp = be.NumPyTransformer(results=[ast_graph.last_op])
+            result = enp.evaluate()
+            print(result[ast_graph.last_op])
 
 # test_create_neon_graph("../../tf_benchmark/sample/constant_graph.pb", False)
 # test_create_neon_graph("../../tf_benchmark/sample/variable_graph.pb", False)
-test_create_neon_graph("../../tf_benchmark/sample/variable_graph_froze.pb", True)
+test_create_neon_graph(
+    "../../tf_benchmark/sample/variable_graph_froze.pb", True)

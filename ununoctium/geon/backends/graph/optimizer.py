@@ -1,8 +1,7 @@
 from __future__ import division
 from builtins import object, zip
 import geon.backends.graph.funs as be
-from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, \
-    PolySchedule
+from neon.optimizers.optimizer import ExpSchedule
 from neon.initializers import Constant
 
 
@@ -31,6 +30,7 @@ def clip_gradient_value(grad, clip_value=None):
 
 
 class Optimizer(object):
+
     def __init__(self, name=None, **kargs):
         super(Optimizer, self).__init__(**kargs)
         self.name = name
@@ -43,9 +43,18 @@ class Optimizer(object):
 
 
 class GradientDescentMomentum(Optimizer):
-    def __init__(self, learning_rate, momentum_coef=0.0, stochastic_round=False,
-                 wdecay=0.0, gradient_clip_norm=None, gradient_clip_value=None,
-                 name=None, schedule=ExpSchedule(1.0), **kargs):
+
+    def __init__(
+            self,
+            learning_rate,
+            momentum_coef=0.0,
+            stochastic_round=False,
+            wdecay=0.0,
+            gradient_clip_norm=None,
+            gradient_clip_value=None,
+            name=None,
+            schedule=ExpSchedule(1.0),
+            **kargs):
         super(GradientDescentMomentum, self).__init__(**kargs)
         self.learning_rate = learning_rate
         self.momentum_coef = momentum_coef
@@ -61,26 +70,35 @@ class GradientDescentMomentum(Optimizer):
         variables = list(cost.parameters())
         # TODO Get bsz from placeholder
         grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
-        velocities = [be.Temporary(axes=variable.axes, init=Constant(0)) for variable in variables]
+        velocities = [be.Temporary(
+            axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1
         if self.gradient_clip_norm:
             scale_factor = clip_gradient_norm(grads)
         if self.gradient_clip_value is not None:
-            grads = [clip_gradient_value(variable, self.gradient_clip_value) for grade in grads]
+            grads = [clip_gradient_value(
+                variable, self.gradient_clip_value) for grade in grads]
 
         velocity_updates = [
             be.assign(
                 lvalue=velocity,
                 rvalue=velocity * self.momentum_coef - learning_rate_value * (
-                scale_factor * grad + self.wdecay * variable)
+                    scale_factor * grad + self.wdecay * variable)
             )
             for variable, grad, velocity in zip(variables, grads, velocities)]
 
-        param_updates = [be.assign(lvalue=variable, rvalue=variable + velocity) for
-                         variable, velocity in zip(variables, velocities)]
+        param_updates = [
+            be.assign(
+                lvalue=variable,
+                rvalue=variable +
+                velocity) for variable,
+            velocity in zip(
+                variables,
+                velocities)]
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):
-        learning_rate = self.schedule.get_learning_rate(self.learning_rate, epoch)
+        learning_rate = self.schedule.get_learning_rate(
+            self.learning_rate, epoch)
         self.learning_rate_placeholder.value = learning_rate

@@ -1,6 +1,8 @@
 from __future__ import division
 from builtins import object, range, zip
-from geon.backends.graph.names import NameableValue, NameScope
+import math
+import numpy as np
+# from geon.backends.graph.names import NameableValue, NameScope
 import geon.backends.graph.funs as be
 import geon.backends.graph.arrayaxes as arrayaxes
 from functools import reduce
@@ -9,7 +11,14 @@ from functools import reduce
 # TODO These are stubs for implementing Neon's layers
 
 class Layer(object):
-    def __init__(self, name=None, graph=None, axes=None, parallelism="Unknown", **kargs):
+
+    def __init__(
+            self,
+            name=None,
+            graph=None,
+            axes=None,
+            parallelism="Unknown",
+            **kargs):
         super(Layer, self).__init__(**kargs)
         self.name = name
         self.axes = axes
@@ -24,21 +33,25 @@ class Layer(object):
 
 
 class BranchNode(Layer):
+
     def __init__(self, **kargs):
         super(BranchNode, self).__init__(**kargs)
 
 
 class SkipNode(Layer):
+
     def __init__(self, **kargs):
         super(SkipNode, self).__init__(**kargs)
 
 
 class Pooling(Layer):
+
     def __init__(self, fshape, op="max", strides={}, padding={}, **kargs):
         super(Pooling, self).__init__(**kargs)
 
 
 class ParameterLayer(Layer):
+
     def __init__(self, init=None, **kargs):
         super(ParameterLayer, self).__init__(**kargs)
         self.has_params = True
@@ -84,7 +97,8 @@ class Convolution(ParameterLayer):
         self.dtype = dtype
 
         if isinstance(fshape, tuple) or isinstance(fshape, list):
-            fkeys = ('R', 'S', 'K') if len(fshape) == 3 else ('T', 'R', 'S', 'K')
+            fkeys = ('R', 'S', 'K') if len(
+                fshape) == 3 else ('T', 'R', 'S', 'K')
             fshape = {k: x for k, x in zip(fkeys, fshape)}
         if isinstance(strides, int):
             strides = {'str_h': strides, 'str_w': strides}
@@ -99,10 +113,13 @@ class Convolution(ParameterLayer):
         padstr_str = ",".join(("%d",) * spatial_dim)
         padstr_dim = ([] if spatial_dim == 2 else ['d']) + ['h', 'w']
 
-        pad_tuple = tuple(self.convparams[k] for k in ['pad_' + d for d in padstr_dim])
-        str_tuple = tuple(self.convparams[k] for k in ['str_' + d for d in padstr_dim])
+        pad_tuple = tuple(self.convparams[k]
+                          for k in ['pad_' + d for d in padstr_dim])
+        str_tuple = tuple(self.convparams[k]
+                          for k in ['str_' + d for d in padstr_dim])
 
-        fmt_tuple = (self.name,) + self.in_shape + self.out_shape + pad_tuple + str_tuple
+        fmt_tuple = (self.name,) + self.in_shape + \
+            self.out_shape + pad_tuple + str_tuple
         fmt_string = "Convolution Layer '%s': " + \
                      spatial_str + " inputs, " + spatial_str + " outputs, " + \
                      padstr_str + " padding, " + padstr_str + " stride"
@@ -124,7 +141,8 @@ class Convolution(ParameterLayer):
         super(Convolution, self).configure(in_obj)
         if self.nglayer is None:
             assert isinstance(self.in_shape, tuple)
-            ikeys = ('C', 'H', 'W') if len(self.in_shape) == 3 else ('C', 'D', 'H', 'W')
+            ikeys = ('C', 'H', 'W') if len(
+                self.in_shape) == 3 else ('C', 'D', 'H', 'W')
             shapedict = {k: x for k, x in zip(ikeys, self.in_shape)}
             shapedict['N'] = self.be.bsz
             self.convparams.update(shapedict)
@@ -150,8 +168,13 @@ class Convolution(ParameterLayer):
             Tensor: output data
         """
         self.inputs = inputs
-        self.be.fprop_conv(self.nglayer, inputs, self.W, self.outputs, beta=beta,
-                           bsum=self.batch_sum)
+        self.be.fprop_conv(
+            self.nglayer,
+            inputs,
+            self.W,
+            self.outputs,
+            beta=beta,
+            bsum=self.batch_sum)
         return self.outputs
 
     def bprop(self, error, alpha=1.0, beta=0.0):
@@ -206,9 +229,12 @@ class ConvLayer(object):
         self.cafe_compatibility = cafe_compatibility
 
         # Compute the output spatial dimensions
-        M = arrayaxes.output_dim(D, T, pad_d, str_d, cafe_compatibility=cafe_compatibility)
-        P = arrayaxes.output_dim(H, R, pad_h, str_h, cafe_compatibility=cafe_compatibility)
-        Q = arrayaxes.output_dim(W, S, pad_w, str_w, cafe_compatibility=cafe_compatibility)
+        M = arrayaxes.output_dim(
+            D, T, pad_d, str_d, cafe_compatibility=cafe_compatibility)
+        P = arrayaxes.output_dim(
+            H, R, pad_h, str_h, cafe_compatibility=cafe_compatibility)
+        Q = arrayaxes.output_dim(
+            W, S, pad_w, str_w, cafe_compatibility=cafe_compatibility)
 
         self.C = C
         self.K = K
@@ -229,10 +255,10 @@ class ConvLayer(object):
         self.dimI2 = (C * D * H * W, N)
         self.dimF2 = (C * T * R * S, K)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeF = reduce(mul, self.dimF, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
-        self.nOut = reduce(mul, self.MPQ, 1) * K
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeF = reduce(np.multiply, self.dimF, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
+        self.nOut = reduce(np.multiply, self.MPQ, 1) * K
 
         if all(x == 1 for x in self.TRS) and \
                 all(p == 0 for p in self.padding) and \
@@ -242,9 +268,12 @@ class ConvLayer(object):
         else:
             self.dot = False
 
-            self.mSlice = [self.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
-            self.pSlice = [self.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
-            self.qSlice = [self.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
+            self.mSlice = [self.fprop_slice(
+                m, T, D, pad_d, str_d) for m in range(M)]
+            self.pSlice = [self.fprop_slice(
+                p, R, H, pad_h, str_h) for p in range(P)]
+            self.qSlice = [self.fprop_slice(
+                q, S, W, pad_w, str_w) for q in range(Q)]
 
     def fprop_slice(self, q, S, X, padding, strides):
         firstF = 0
@@ -258,20 +287,31 @@ class ConvLayer(object):
             dif = x2 - X + 1
             lastF -= dif
             x2 -= dif
-        return (slice(firstF, lastF + 1), slice(qs, x2 + 1), lastF - firstF + 1)
+        return (
+            slice(
+                firstF,
+                lastF +
+                1),
+            slice(
+                qs,
+                x2 +
+                1),
+            lastF -
+            firstF +
+            1)
 
     #####
 
     def fprop_conv(self, I, F, O):
 
-        if X is None:
-            X = O
+        # if X is None:
+        #     X = O
 
         I = I._tensor.reshape(self.dimI)
         O = O._tensor.reshape(self.dimO)
         F = F._tensor.reshape(self.dimF)
-        if bsum is not None:
-            bsum = bsum._tensor.reshape((O.shape[0], 1))
+        if self.bsum is not None:
+            self.bsum = self.bsum._tensor.reshape((O.shape[0], 1))
 
         # 1x1 conv can be cast as a simple dot operation
         if self.dot:
@@ -302,8 +342,20 @@ class ConvLayer(object):
 
     #####
 
-    def xprop_conv(self, I, F, O, X=None, bias=None, bsum=None, alpha=1.0, beta=0.0,
-                   relu=False, brelu=False, slope=0.0, backward=False):
+    def xprop_conv(
+            self,
+            I,
+            F,
+            O,
+            X=None,
+            bias=None,
+            bsum=None,
+            alpha=1.0,
+            beta=0.0,
+            relu=False,
+            brelu=False,
+            slope=0.0,
+            backward=False):
 
         if X is None:
             X = O
@@ -362,8 +414,8 @@ class ConvLayer(object):
                     slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
 
                     if beta:
-                        O[:, m, p, q, :] = alpha * np.dot(slicedF.T, slicedI) + \
-                                           beta * X[:, m, p, q, :]
+                        O[:, m, p, q, :] = alpha * \
+                            np.dot(slicedF.T, slicedI) + beta * X[:, m, p, q, :]
                     else:
                         O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
@@ -404,7 +456,8 @@ class ConvLayer(object):
 
                     slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                     slicedE = E[:, m, p, q, :]
-                    update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                    update = np.dot(slicedI, slicedE.T).reshape(
+                        (C, tlen, rlen, slen, K))
                     if alpha == 1.0:
                         U[:, sliceT, sliceR, sliceS, :] += update
                     else:
@@ -475,11 +528,11 @@ class DeconvLayer(ConvLayer):
         self.dimI2 = (C * D * H * W, N)
         self.dimF2 = (C * T * R * S, K)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeF = reduce(mul, self.dimF, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeF = reduce(np.multiply, self.dimF, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
         # nOut has to change because P and Q are now the inputs
-        self.nOut = reduce(mul, self.DHW, 1) * C
+        self.nOut = reduce(np.multiply, self.DHW, 1) * C
 
         if all(x == 1 for x in self.TRS) and \
                 all(p == 0 for p in self.padding) and \
@@ -489,12 +542,18 @@ class DeconvLayer(ConvLayer):
         else:
             self.dot = False
 
-            self.dSlice = [self.bprop_slice(d, T, M, pad_d, str_d) for d in range(D)]
-            self.hSlice = [self.bprop_slice(h, R, P, pad_h, str_h) for h in range(H)]
-            self.wSlice = [self.bprop_slice(w, S, Q, pad_w, str_w) for w in range(W)]
-            self.mSlice = [self.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
-            self.pSlice = [self.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
-            self.qSlice = [self.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
+            self.dSlice = [self.bprop_slice(
+                d, T, M, pad_d, str_d) for d in range(D)]
+            self.hSlice = [self.bprop_slice(
+                h, R, P, pad_h, str_h) for h in range(H)]
+            self.wSlice = [self.bprop_slice(
+                w, S, Q, pad_w, str_w) for w in range(W)]
+            self.mSlice = [self.fprop_slice(
+                m, T, D, pad_d, str_d) for m in range(M)]
+            self.pSlice = [self.fprop_slice(
+                p, R, H, pad_h, str_h) for p in range(P)]
+            self.qSlice = [self.fprop_slice(
+                q, S, W, pad_w, str_w) for q in range(Q)]
 
 
 class PoolLayer(object):
@@ -571,14 +630,18 @@ class PoolLayer(object):
         self.dimF2 = None
         self.dimI2 = (C * D * H * W, N)
         self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(mul, self.dimI, 1)
-        self.sizeO = reduce(mul, self.dimO, 1)
-        self.nOut = reduce(mul, self.MPQ, 1) * K
+        self.sizeI = reduce(np.multiply, self.dimI, 1)
+        self.sizeO = reduce(np.multiply, self.dimO, 1)
+        self.nOut = reduce(np.multiply, self.MPQ, 1) * K
 
-        self.kSlice = [self.pool_slice(k, J, C, pad_c, str_c) for k in range(K)]
-        self.mSlice = [self.pool_slice(m, T, D, pad_d, str_d) for m in range(M)]
-        self.pSlice = [self.pool_slice(p, R, H, pad_h, str_h) for p in range(P)]
-        self.qSlice = [self.pool_slice(q, S, W, pad_w, str_w) for q in range(Q)]
+        self.kSlice = [self.pool_slice(k, J, C, pad_c, str_c)
+                       for k in range(K)]
+        self.mSlice = [self.pool_slice(m, T, D, pad_d, str_d)
+                       for m in range(M)]
+        self.pSlice = [self.pool_slice(p, R, H, pad_h, str_h)
+                       for p in range(P)]
+        self.qSlice = [self.pool_slice(q, S, W, pad_w, str_w)
+                       for q in range(Q)]
 
     def pool_slice(self, q, S, X, padding, strides):
         qs = q * strides - padding
@@ -593,11 +656,13 @@ class PoolLayer(object):
 
 
 class Deconvolution(ParameterLayer):
+
     def __init__(self, fshape, strides={}, padding={}, bsum=False, **kargs):
         super(Deconvolution, self).__init__(**kargs)
 
 
 class Linear(ParameterLayer):
+
     def __init__(self, nout, bsum=False, **kargs):
         super(Linear, self).__init__(**kargs)
         self.nout = nout
@@ -618,9 +683,15 @@ class Linear(ParameterLayer):
         """
         in_obj = super(Linear, self).configure(in_obj)
 
-        v = be.Variable(axes=be.linear_map_axes(be.sample_axes(in_obj.axes),
-                                                self.axes or [be.Axis(self.nout, name='Hidden')]),
-                        init=self.init)
+        v = be.Variable(
+            axes=be.linear_map_axes(
+                be.sample_axes(
+                    in_obj.axes),
+                self.axes or [
+                    be.Axis(
+                        self.nout,
+                        name='Hidden')]),
+            init=self.init)
         return be.dot(v, in_obj)
 
 
@@ -690,12 +761,20 @@ class Activation(Layer):
 
 
 class DataTransform(Layer):
+
     def __init__(self, transform, **kargs):
         super(DataTransform, self).__init__(**kargs)
 
 
 class ColorNoise(Layer):
-    def __init__(self, colorpca=None, colorstd=None, noise_coeff=0.1, name="ColorNoiseLayer", **kargs):
+
+    def __init__(
+            self,
+            colorpca=None,
+            colorstd=None,
+            noise_coeff=0.1,
+            name="ColorNoiseLayer",
+            **kargs):
         super(ColorNoise, self).__init__(name=name, **kargs)
 
 
@@ -704,7 +783,13 @@ class CompoundLayer(list):
     Base class for macro layers.
     """
 
-    def __init__(self, bias=None, batch_norm=False, activation=None, name=None, axes=None):
+    def __init__(
+            self,
+            bias=None,
+            batch_norm=False,
+            activation=None,
+            name=None,
+            axes=None):
         if batch_norm and (bias is not None):
             raise AttributeError('Batchnorm and bias cannot be combined')
         self.activation = activation
@@ -742,7 +827,8 @@ class Affine(CompoundLayer):
                  batch_norm=False, activation=None, name=None, **kargs):
         super(Affine, self).__init__(bias=bias, batch_norm=batch_norm,
                                      activation=activation, name=name, **kargs)
-        self.append(Linear(nout, init=init, bsum=batch_norm, name=name, axes=self.axes))
+        self.append(Linear(nout, init=init, bsum=batch_norm,
+                           name=name, axes=self.axes))
         self.add_postfilter_layers()
 
 
@@ -778,9 +864,14 @@ class Conv(CompoundLayer):
                  name=None):
         super(Conv, self).__init__(bias=bias, batch_norm=batch_norm,
                                    activation=activation, name=name)
-        self.append(Convolution(fshape=fshape, strides=strides, padding=padding,
-                                init=init, bsum=batch_norm,
-                                name=name))
+        self.append(
+            Convolution(
+                fshape=fshape,
+                strides=strides,
+                padding=padding,
+                init=init,
+                bsum=batch_norm,
+                name=name))
         self.add_postfilter_layers()
 
 
@@ -789,26 +880,49 @@ class Deconv(CompoundLayer):
     Same as Conv layer, but implements a composite deconvolution layer.
     """
 
-    def __init__(self, fshape, init, strides={}, padding={}, bias=None, batch_norm=False,
-                 activation=None, name=None):
+    def __init__(
+            self,
+            fshape,
+            init,
+            strides={},
+            padding={},
+            bias=None,
+            batch_norm=False,
+            activation=None,
+            name=None):
         super(Deconv, self).__init__(bias=bias, batch_norm=batch_norm,
                                      activation=activation, name=name)
-        self.append(Deconvolution(fshape=fshape, strides=strides, padding=padding,
-                                  init=init, bsum=batch_norm))
+        self.append(
+            Deconvolution(
+                fshape=fshape,
+                strides=strides,
+                padding=padding,
+                init=init,
+                bsum=batch_norm))
         self.add_postfilter_layers()
 
 
 class LRN(Layer):
-    def __init__(self, depth, alpha=1., beta=0., ascale=1., bpower=1., **kargs):
+
+    def __init__(
+            self,
+            depth,
+            alpha=1.,
+            beta=0.,
+            ascale=1.,
+            bpower=1.,
+            **kargs):
         super(LRN, self).__init__(**kargs)
 
 
 class Dropout(Layer):
+
     def __init__(self, keep=0.5, **kargs):
         super(Dropout, self).__init__(**kargs)
 
 
 class LookupTable(ParameterLayer):
+
     def __init__(self, vocab_size, embedding_dim, init, update=True,
                  pad_idx=None, **kargs):
         super(LookupTable, self).__init__(**kargs)
@@ -843,14 +957,17 @@ class GeneralizedCost(object):
         """
         self.costs = self.costfunc(inputs, targets)
         self.total_cost = be.sum(self.costs, out_axes=())
-        self.mean_cost = self.total_cost / be.tensor_size(self.costs, out_axes=())
+        self.mean_cost = self.total_cost / \
+            be.tensor_size(self.costs, out_axes=())
 
 
 class BatchNorm(Layer):
+
     def __init__(self, rho=0.9, eps=1e-3, **kargs):
         super(BatchNorm, self).__init__(**kargs)
 
 
 class BatchNormAutodiff(BatchNorm):
+
     def __init__(self, rho=0.99, eps=1e-6, **kargs):
         super(BatchNormAutodiff, self).__init__(**kargs)

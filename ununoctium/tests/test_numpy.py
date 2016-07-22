@@ -1,6 +1,6 @@
 from __future__ import division
 from builtins import range
-from geon.backends.graph.graph_test_utils import *
+from geon.backends.graph.graph_test_utils import *  # noqa
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -76,8 +76,9 @@ def test_reduction():
                 npval = npred(u, dims)
                 graph_reduce = bered(p_u, reduction_axes=reduction_axes)
                 graph_val, = execute([graph_reduce])
-                assert np.array_equal(npval, graph_val), 'red:{red}, axes:{axes}'.format(red=red,
-                                                                                         axes=reduction_axes)
+                assert np.array_equal(
+                    npval, graph_val), 'red:{red}, axes:{axes}'.format(
+                    red=red, axes=reduction_axes)
 
 
 def test_reduction_deriv():
@@ -101,9 +102,10 @@ def test_reduction_deriv():
                                    [ax.H],
                                    [ax.C, ax.W],
                                    [ax.W, ax.H]]:
-                dims = tuple(axes.index(axis) for axis in reduction_axes)
+                # dims = tuple(axes.index(axis) for axis in reduction_axes)
                 graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-                dgraph_val_num = transform_numeric_derivative(graph_reduce, p_u, delta)
+                dgraph_val_num = transform_numeric_derivative(
+                    graph_reduce, p_u, delta)
                 dgraph_val = transform_derivative(graph_reduce, p_u)
                 assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1,
                                    rtol=1e-1), 'red:{red}, axes:{axes}'.format(
@@ -112,7 +114,7 @@ def test_reduction_deriv():
 
 def test_elementwise_ops_matched_args():
     with be.bound_environment():
-        delta = .001
+        # delta = .001
         ax.W.length = 20
         ax.H.length = 20
         ax.N.length = 128
@@ -133,14 +135,17 @@ def test_elementwise_ops_matched_args():
             top = beop(p_u, p_v)
 
             uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4, rtol=1e-4), 'op:{op}'.format(op=op)
+            assert np.allclose(uv_np, uv_t, atol=1e-4,
+                               rtol=1e-4), 'op:{op}'.format(op=op)
             duvdunum = transform_numeric_derivative(top, p_u, .001)
             dudvdut = transform_derivative(top, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-4, rtol=1e-4), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdunum, dudvdut, atol=1e-4,
+                               rtol=1e-4), 'op:{op}'.format(op=op)
 
             duvdvnum = transform_numeric_derivative(top, p_v, .001)
             dudvdvt = transform_derivative(top, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
         for npop, beop, op in [(np.exp, be.exp, 'exp'),
                                (np.log, be.log, 'log'),
@@ -152,15 +157,17 @@ def test_elementwise_ops_matched_args():
             top = beop(p_u)
 
             u_t, = execute([top])
-            assert np.allclose(u_np, u_t, atol=1e-4, rtol=1e-4), 'op:{op}'.format(op=op)
+            assert np.allclose(u_np, u_t, atol=1e-4,
+                               rtol=1e-4), 'op:{op}'.format(op=op)
             dudunum = transform_numeric_derivative(top, p_u, .001)
             dudut = transform_derivative(top, p_u)
-            assert np.allclose(dudunum, dudut, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(dudunum, dudut, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
 
 def test_elementwise_ops_unmatched_args():
     with be.bound_environment():
-        delta = .001
+        # delta = .001
         ax.W.length = 5
         ax.H.length = 5
         ax.N.length = 32
@@ -186,28 +193,34 @@ def test_elementwise_ops_unmatched_args():
             top = beop(p_u, p_v)
 
             uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4, rtol=1e-4), 'op:{op}'.format(op=op)
+            assert np.allclose(uv_np, uv_t, atol=1e-4,
+                               rtol=1e-4), 'op:{op}'.format(op=op)
             duvdunum = transform_numeric_derivative(top, p_u, .001)
             dudvdut = transform_derivative(top, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdunum, dudvdut, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
             duvdvnum = transform_numeric_derivative(top, p_v, .001)
             dudvdvt = transform_derivative(top, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
             # v op u
             uv_np = npop(v, u.reshape(broadcast_dims))
             top = beop(p_v, p_u)
 
             uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4, rtol=1e-4), 'op:{op}'.format(op=op)
+            assert np.allclose(uv_np, uv_t, atol=1e-4,
+                               rtol=1e-4), 'op:{op}'.format(op=op)
             duvdunum = transform_numeric_derivative(top, p_u, .001)
             dudvdut = transform_derivative(top, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdunum, dudvdut, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
             duvdvnum = transform_numeric_derivative(top, p_v, .001)
             dudvdvt = transform_derivative(top, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3, rtol=1e-3), 'op:{op}'.format(op=op)
+            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
+                               rtol=1e-3), 'op:{op}'.format(op=op)
 
 
 def np_softmax(x, axis):
@@ -254,7 +267,8 @@ def test_np_softmax():
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000, Axes(ax.N)).reshape(1, ax.N.length)
+        x = np.log(u) + rng.uniform(-5000, 5000,
+                                    Axes(ax.N)).reshape(1, ax.N.length)
 
         s = np_softmax(x, 0)
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
@@ -286,7 +300,8 @@ def test_softmax():
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000, Axes(ax.N)).reshape(1, ax.N.length)
+        x = np.log(u) + rng.uniform(-5000, 5000,
+                                    Axes(ax.N)).reshape(1, ax.N.length)
         p_x = be.placeholder(axes=axes)
         p_x.value = x
 
@@ -337,7 +352,7 @@ def test_softmax():
         def np_all(x):
             return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
 
-        npdce = numeric_derivative(np_all, x, .001)
+#       npdce = numeric_derivative(np_all, x, .001)
 
         ndce = transform_numeric_derivative(ce, p_x, .001)
         tdce = transform_derivative(ce, p_x)
@@ -376,7 +391,7 @@ if __name__ == '__main__':
     test_constants()
     test_softmax()
     test_np_softmax()
-    tesT_logistic()
+    test_logistic()
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()

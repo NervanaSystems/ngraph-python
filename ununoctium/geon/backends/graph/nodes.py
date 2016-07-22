@@ -8,6 +8,7 @@ from geon.backends.graph.names import NameableValue
 
 
 class Node(NameableValue):
+
     def __init__(self, args=(), tags=None, **kargs):
         super(Node, self).__init__(**kargs)
         self.users = weakref.WeakSet()
@@ -17,7 +18,11 @@ class Node(NameableValue):
         self.defs = set()
 
         if tags is not None:
-            if isinstance(tags, collections.Iterable) and not isinstance(tags, str):
+            if isinstance(
+                    tags,
+                    collections.Iterable) and not isinstance(
+                    tags,
+                    str):
                 self.tags.update(tags)
             else:
                 self.tags.add(tags)
@@ -31,7 +36,8 @@ class Node(NameableValue):
             while frame.f_locals.get('self', None) is self:
                 frame = frame.f_back
             while frame:
-                filename, lineno, function, code_context, index = inspect.getframeinfo(frame)
+                filename, lineno, function, code_context, index = inspect.getframeinfo(
+                    frame)
                 if -1 == filename.find('geon/backends/graph'):
                     break
                 frame = frame.f_back
@@ -120,8 +126,8 @@ class Node(NameableValue):
 
     @property
     def file_info(self):
-        return 'File "{filename}", line {lineno}'.format(filename=self.filename,
-                                                         lineno=self.lineno)
+        return 'File "{filename}", line {lineno}'.format(
+            filename=self.filename, lineno=self.lineno)
 
     def _repr_body(self):
         return self._abbrev_args(self._repr_attrs())
@@ -172,11 +178,13 @@ class Node(NameableValue):
 
 
 class AbstractVisitor(with_metaclass(abc.ABCMeta, object)):
+
     @abc.abstractmethod
     def visit_node(self, node):
         raise NotImplementedError()
 
 
 class Visitor(AbstractVisitor):
+
     def visit_node(self, node):
         pass

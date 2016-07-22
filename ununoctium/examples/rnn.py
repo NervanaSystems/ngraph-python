@@ -2,11 +2,11 @@ from __future__ import division, print_function
 from builtins import zip
 from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader
-import geon.backends.graph.dataloaderbackend
+# import geon.backends.graph.dataloaderbackend
 
 import geon.backends.graph.defmod as be
-import geon.backends.graph.graph as graph
-import geon.backends.graph.pycudatransform as evaluation
+# import geon.backends.graph.graph as graph
+# import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 
 
@@ -61,15 +61,17 @@ class MyRnn(be.Model):
         Hb = be.Variable(axes=(g.H,))
 
         g.t = be.Var(g.T)
-        h[:, g.t+1] = be.sig(be.dot(h[:, g.t], HWh)+be.dot(g.x[g.T], HWx)+Hb)
+        h[:, g.t + 1] = be.sig(be.dot(h[:, g.t], HWh) +
+                               be.dot(g.x[g.T], HWx) + Hb)
 
         YW = be.Variable(axes=(g.H, g.Y))
         Yb = be.Variable(axes=(g.Y))
         # This is the value we want for inference
-        g.y = be.tanh(be.dot(h, YW)+Yb)
+        g.y = be.tanh(be.dot(h, YW) + Yb)
 
-        # This is what we want for training, perhaps added to a parameter regularization
-        e = g.y-g.y_
+        # This is what we want for training, perhaps added to a parameter
+        # regularization
+        e = g.y - g.y_
         g.error = be.dot(e, e) / e.size
 
         # L2 regularizer of parameters
@@ -85,11 +87,15 @@ class MyRnn(be.Model):
     @be.with_graph_scope
     @be.with_environment
     def train(self, epochs):
-        g  = self.graph
+        g = self.graph
 
         # setup data provider
-        imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
-                              repo_dir=args.data_dir, subset_pct=args.subset_pct)
+        imgset_options = dict(
+            inner_size=32,
+            scale_range=40,
+            aspect_ratio=110,
+            repo_dir=args.data_dir,
+            subset_pct=args.subset_pct)
 
         train = ImageLoader(set_name='train', shuffle=True, **imgset_options)
 
@@ -101,9 +107,11 @@ class MyRnn(be.Model):
         params = g.loss.parameters()
         derivs = [be.deriv(g.loss, param) for param in params]
 
-        updates = be.doall(all=[be.decrement(param, learning_rate * deriv) for param, deriv in zip(params, derivs)])
+        updates = be.doall(all=[be.decrement(param, learning_rate * deriv)
+                                for param, deriv in zip(params, derivs)])
 
-        enp = be.NumPyTransformer(results=[self.graph.value, g.error, updates]+derivs)
+        enp = be.NumPyTransformer(
+            results=[self.graph.value, g.error, updates] + derivs)
 
         # Some future data loader
         for epoch_no, batches in train:

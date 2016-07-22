@@ -15,7 +15,14 @@ from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription, \
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
-    def __init__(self, results, error=None, initialize=False, environment=None, **kvargs):
+
+    def __init__(
+            self,
+            results,
+            error=None,
+            initialize=False,
+            environment=None,
+            **kvargs):
         super(Transformer, self).__init__(**kvargs)
         if environment is None:
             environment = get_current_environment()
@@ -518,15 +525,16 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def allreduce(self, x, out):
         """
-        MPI allreduce 
+        MPI allreduce
         :param x:
         :param out:
-        :return: 
+        :return:
         """
         raise NotImplementedError()
 
 
 class AbstractVisitor(nodes.AbstractVisitor):
+
     @abc.abstractmethod
     def visit_op(self, op):
         raise NotImplementedError()
@@ -749,6 +757,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
 
 
 class Visitor(nodes.Visitor):
+
     def visit_op(self, op):
         return self.visit_node(op)
 
@@ -916,6 +925,7 @@ class Visitor(nodes.Visitor):
 
 
 class SimplePrune(Visitor):
+
     def __init__(self, results):
         self.results = results
         self.reps = []
@@ -1049,7 +1059,8 @@ class Op(nodes.Node):
     @staticmethod
     def ordered_ops(results):
         ordered_ops = []
-        nodes.Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
+        nodes.Node.visit_input_closure(
+            results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     @staticmethod
@@ -1110,7 +1121,14 @@ class Op(nodes.Node):
 class TensorAxesInfo(object):
     """Information about a use of a tensor with axes"""
 
-    def __init__(self, axes, alloc=None, read_only=False, tags=(), dtype=np.float32, **kargs):
+    def __init__(
+            self,
+            axes,
+            alloc=None,
+            read_only=False,
+            tags=(),
+            dtype=np.float32,
+            **kargs):
         super(TensorAxesInfo, self).__init__(**kargs)
         axes = Axes(*axes)
         self.axes = axes
@@ -1127,7 +1145,8 @@ class TensorAxesInfo(object):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            self.__tensor_description = TensorDescription(axes=self.axes, dtype=self.dtype)
+            self.__tensor_description = TensorDescription(
+                axes=self.axes, dtype=self.dtype)
         return self.__tensor_description
 
     @property
@@ -1166,7 +1185,7 @@ class TensorAxesInfo(object):
         return result
 
     def reaxe(self, reaxe):
-        return self.get_or_default(reaxe,
+        return self.get_or_default(Axes(*reaxe),
                                    lambda: TensorReaxeViewInfo(
                                        tensor_axes_info=self,
                                        reaxes=reaxe,
@@ -1207,7 +1226,8 @@ class TensorViewInfo(object):
     def update_tensor(self, evaluator, force):
         tensor_description = self.tensor_description
         if force or tensor_description.value is None:
-            tensor_description.value = evaluator.tensor_view(tensor_description)
+            tensor_description.value = evaluator.tensor_view(
+                tensor_description)
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
@@ -1221,11 +1241,13 @@ class TensorReaxeViewInfo(TensorViewInfo):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            self.__tensor_description = self.tensor_axes_info.tensor_description.reaxe(self.reaxes)
+            self.__tensor_description = self.tensor_axes_info.tensor_description.reaxe(
+                self.reaxes)
         return self.__tensor_description
 
 
 class DotLeftViewInfo(TensorViewInfo):
+
     def __init__(self, red_axis_ids, **kargs):
         super(DotLeftViewInfo, self).__init__(**kargs)
         self.red_axis_ids = red_axis_ids
@@ -1240,6 +1262,7 @@ class DotLeftViewInfo(TensorViewInfo):
 
 
 class DotRightViewInfo(TensorViewInfo):
+
     def __init__(self, red_axis_ids, **kargs):
         super(DotRightViewInfo, self).__init__(**kargs)
         self.red_axis_ids = red_axis_ids
@@ -1357,6 +1380,7 @@ class AxesSubComp(AxesComp):
 
 
 class AxesIntersectComp(AxesComp):
+
     def __init__(self, x, y, **kargs):
         super(AxesIntersectComp, self).__init__(**kargs)
         self.x = AxesComp.as_axes(x)
@@ -1369,18 +1393,40 @@ class AxesIntersectComp(AxesComp):
 
 
 class AxesAppendComp(AxesComp):
-    def __init__(self, x, y, **kargs):
+
+    def __init__(self, x, y, allow_repeated=False, **kargs):
         super(AxesAppendComp, self).__init__(**kargs)
         self.x = AxesComp.as_axes(x)
         self.y = AxesComp.as_axes(y)
+        self.allow_repeated = allow_repeated
 
     def resolve(self):
         x_axes = self.x.value
         y_axes = self.y.value
-        return AxisIDTuple.append(x_axes, y_axes).as_axes()
+        if self.allow_repeated:
+            return x_axes + y_axes
+        else:
+            return AxisIDTuple.append(x_axes, y_axes).as_axes()
+
+
+class AxesSliceComp(AxesComp):
+
+    def __init__(self, x, lower=0, upper=None, **kargs):
+        super(AxesSliceComp, self).__init__(**kargs)
+        self.x = AxesComp.as_axes(x)
+        self.lower = lower
+        self.upper = upper
+
+    def resolve(self):
+        x_axes = self.x.value
+        if self.upper:
+            return x_axes[self.lower:self.upper]
+        else:
+            return Axes(x_axes[self.lower])
 
 
 class Tensor(Op):
+
     def __init__(self, dtype=None, axes=None, scale=None, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
@@ -1575,7 +1621,13 @@ class Broadcast(Tensor):
 
 
 class AllocationOp(Tensor):
-    def __init__(self, init=None, initial_value=None, initializers=[], **kargs):
+
+    def __init__(
+            self,
+            init=None,
+            initial_value=None,
+            initializers=[],
+            **kargs):
         super(AllocationOp, self).__init__(**kargs)
         if init is not None:
             with captured_ops(self.initializers):
@@ -1616,6 +1668,7 @@ class ComputationOp(Tensor):
 
 
 class RNG(AllocationOp):
+
     def __init__(self, seed=None, **kargs):
         super(RNG, self).__init__(args=(), **kargs)
         self.seed = seed
@@ -1641,6 +1694,7 @@ class RNG(AllocationOp):
 
 
 class RNGOp(AllocationOp):
+
     def __init__(self, rng, axes, **kargs):
         self.__axes = axes
         super(RNGOp, self).__init__(args=(rng,), **kargs)
@@ -1658,6 +1712,7 @@ class RNGOp(AllocationOp):
 
 
 class Normal(RNGOp):
+
     def __init__(self, loc=0.0, scale=1.0, size=None, **kargs):
         super(Normal, self).__init__(axes=size, **kargs)
         self.loc = loc
@@ -1665,7 +1720,8 @@ class Normal(RNGOp):
 
         def allocator(transformer, tensor_description):
             rng, = self.call_info
-            return transformer.rng_normal_tensor(rng.value, tensor_description, loc, scale)
+            return transformer.rng_normal_tensor(
+                rng.value, tensor_description, loc, scale)
 
         self.tensor_axes_info.alloc = allocator
 
@@ -1674,6 +1730,7 @@ class Normal(RNGOp):
 
 
 class Uniform(RNGOp):
+
     def __init__(self, low=0.0, high=1.0, size=None, **kargs):
         super(Uniform, self).__init__(axes=size, **kargs)
         self.low = low
@@ -1681,7 +1738,8 @@ class Uniform(RNGOp):
 
         def allocator(transformer, tensor_description):
             rng, = self.call_info
-            return transformer.rng_uniform_tensor(rng.value, tensor_description, low, high)
+            return transformer.rng_uniform_tensor(
+                rng.value, tensor_description, low, high)
 
         self.tensor_axes_info.alloc = allocator
 
@@ -1690,6 +1748,7 @@ class Uniform(RNGOp):
 
 
 class VoidOp(ComputationOp):
+
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
         self.__axes = AxesComp.as_axes(())
@@ -1712,6 +1771,7 @@ def assign(lvalue, rvalue):
 
 
 class SetItem(VoidOp):
+
     def __init__(self, tensor, item, val, **kargs):
         super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
         self.item = item
@@ -1732,6 +1792,7 @@ class SetItem(VoidOp):
 
 
 class doall(VoidOp):
+
     def __init__(self, all, **kargs):
         super(doall, self).__init__(args=all, out=all[-1], **kargs)
 
@@ -1740,6 +1801,7 @@ class doall(VoidOp):
 
 
 class ElementWise(ComputationOp):
+
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
 
@@ -1762,6 +1824,7 @@ class ElementWise(ComputationOp):
 
 
 class AllReduce(ElementWise):
+
     def __init__(self, x, **kargs):
         super(AllReduce, self).__init__(args=(x,), **kargs)
 
@@ -1769,7 +1832,7 @@ class AllReduce(ElementWise):
         return visitor.visit_all_reduce(self, *self.args)
 
     def evaluate(self, evaluator, out, x):
-        return evaluator.allreduce(x,out)
+        return evaluator.allreduce(x, out)
 
 
 class placeholder(AllocationOp):
@@ -1802,12 +1865,14 @@ class placeholder(AllocationOp):
     def sync(self, evaluator):
         value = self.value
         if isinstance(value, numbers.Real):
-            evaluator.fill(self.tensor_axes_info.tensor_description.value, value)
+            evaluator.fill(
+                self.tensor_axes_info.tensor_description.value, value)
         else:
             evaluator.set_value(self, value)
 
 
 class Fill(VoidOp):
+
     def __init__(self, tensor, const, **kargs):
         super(Fill, self).__init__(args=(tensor,), **kargs)
         self.const = const
@@ -1832,7 +1897,8 @@ class Constant(AllocationOp):
 
     def __init__(self, const, **kargs):
         self.const = const
-        super(Constant, self).__init__(axes=(), dtype=np.dtype(np.float32), **kargs)
+        super(Constant, self).__init__(
+            axes=(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
 
     def visit(self, visitor):
@@ -1855,7 +1921,8 @@ class Constant(AllocationOp):
         return AxesComp.as_axes((()))
 
     def __str__(self):
-        return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.const)
+        return '<{cl} ({const})>'.format(
+            cl=self.__class__.__name__, const=self.const)
 
 
 class NumPyTensor(AllocationOp):
@@ -1884,10 +1951,12 @@ class NumPyTensor(AllocationOp):
         pass
 
     def __str__(self):
-        return '<{cl} ({const})>'.format(cl=self.__class__.__name__, const=self.nptensor)
+        return '<{cl} ({const})>'.format(
+            cl=self.__class__.__name__, const=self.nptensor)
 
 
 class absolute(ElementWise):
+
     def __init__(self, x, **kargs):
         super(absolute, self).__init__(args=(x,), **kargs)
 
@@ -1902,6 +1971,7 @@ class absolute(ElementWise):
 
 
 class add(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(add, self).__init__(args=(x, y), **kargs)
 
@@ -1917,6 +1987,7 @@ class add(ElementWise):
 
 
 class argmax(ComputationOp):
+
     def __init__(self, x, max_axes=None, **kargs):
         if max_axes is None:
             max_axes = tensor_sample_axes(x)
@@ -1928,7 +1999,8 @@ class argmax(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe([self.max_axes.value, self.axes.value])]
+        return [self.reaxe([self.axes.value]), x.reaxe(
+            [self.max_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmax(x, out)
@@ -1940,6 +2012,7 @@ class argmax(ComputationOp):
 
 
 class argmin(ComputationOp):
+
     def __init__(self, x, min_axes=None, **kargs):
         if min_axes is None:
             min_axes = tensor_sample_axes
@@ -1951,7 +2024,8 @@ class argmin(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe([self.min_axes.value, self.axes.value])]
+        return [self.reaxe([self.axes.value]), x.reaxe(
+            [self.min_axes.value, self.axes.value])]
 
     def evaluate(self, evaluator, out, x):
         evaluator.argmin(x, out)
@@ -1963,6 +2037,7 @@ class argmin(ComputationOp):
 
 
 class cos(ElementWise):
+
     def __init__(self, x, **kargs):
         super(cos, self).__init__(args=(x,), **kargs)
 
@@ -1977,6 +2052,7 @@ class cos(ElementWise):
 
 
 class divide(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(divide, self).__init__(args=(x, y), **kargs)
 
@@ -1992,34 +2068,62 @@ class divide(ElementWise):
 
 
 class dot(ComputationOp):
-    def __init__(self, x, y, reduction_axes=None, out_axes=None, **kargs):
-        self.out_axes = AxesComp.as_axes(out_axes)
-        if reduction_axes is None:
-            self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
+
+    def __init__(self, x, y, reduction_axes=None, out_axes=None,
+                 numpy_matching=False, **kargs):
+        self.numpy_matching = numpy_matching
+
+        if numpy_matching:
+            self.out_axes = AxesAppendComp(
+                AxesAppendComp(
+                    AxesSliceComp(x.axes, 0, -1),
+                    AxesSliceComp(y.axes, 0, -2),
+                    allow_repeated=True
+                ),
+                AxesSliceComp(y.axes, -1),
+                allow_repeated=True
+            )
+            self.reduction_axes = AxesSliceComp(x.axes, -1, -1)
+            self.multiply = False
         else:
-            self.reduction_axes = AxesComp.as_axes(reduction_axes)
+            self.out_axes = AxesComp.as_axes(out_axes)
+            if reduction_axes is None:
+                self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
+            else:
+                self.reduction_axes = AxesComp.as_axes(reduction_axes)
 
-        if out_axes is not None:
-            self.reduction_axes = AxesSubComp(self.reduction_axes, self.out_axes)
+            if out_axes is not None:
+                self.reduction_axes = AxesSubComp(
+                    self.reduction_axes, self.out_axes)
 
-        self.multiply = False
+            self.multiply = False
 
         super(dot, self).__init__(args=(x, y), **kargs)
 
     def visit(self, visitor):
-        return visitor.visit_dot(self, self.reduction_axes, self.out_axes, *self.args)
+        return visitor.visit_dot(
+            self,
+            self.reduction_axes,
+            self.out_axes,
+            *self.args)
 
     def compute_call_info(self):
         x, y = self.args
-        red_axis_ids = self.reduction_axes.value.as_axis_ids()
-        a, b = x.dot_reaxe_left(red_axis_ids), y.dot_reaxe_right(red_axis_ids)
-        a_axes, b_axes = a.tensor_description.axes, b.tensor_description.axes
+        if self.numpy_matching:
+            o, a, b = self.reaxe(self.axes.value),\
+                x.reaxe(x.axes.value), y.reaxe(y.axes.value)
+        else:
+            red_axis_ids = self.reduction_axes.value.as_axis_ids()
+            a, b = x.dot_reaxe_left(red_axis_ids),\
+                y.dot_reaxe_right(red_axis_ids)
+            a_axes, b_axes = a.tensor_description.axes,\
+                b.tensor_description.axes
 
-        o_axes = (
-            a_axes.as_axis_ids()[:-1] +
-            b_axes.as_axis_ids()[1:]
-        ).as_axes()
-        o = self.reaxe(o_axes)
+            o_axes = (
+                a_axes.as_axis_ids()[:-1] +
+                b_axes.as_axis_ids()[1:]
+            ).as_axes()
+            o = self.reaxe(o_axes)
         return [o, a, b]
 
     def evaluate(self, evaluator, out, x, y):
@@ -2043,14 +2147,17 @@ class dot(ComputationOp):
 
 
 class ElementWiseBoolean(ElementWise):
+
     def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
-        super(ElementWiseBoolean, self).__init__(args=(x, y), dtype=dtype, **kargs)
+        super(ElementWiseBoolean, self).__init__(
+            args=(x, y), dtype=dtype, **kargs)
 
     def visit(self, visitor):
         return visitor.visit_elementwise_boolean(self)
 
 
 class equal(ElementWiseBoolean):
+
     def visit(self, visitor):
         return visitor.visit_equal(self, *self.args)
 
@@ -2059,6 +2166,7 @@ class equal(ElementWiseBoolean):
 
 
 class not_equal(ElementWiseBoolean):
+
     def evaluate(self, evaluator, out, x, y):
         evaluator.not_equal(x, y, out)
 
@@ -2067,6 +2175,7 @@ class not_equal(ElementWiseBoolean):
 
 
 class greater(ElementWiseBoolean):
+
     def evaluate(self, evaluator, out, x, y):
         evaluator.greater(x, y, out)
 
@@ -2075,6 +2184,7 @@ class greater(ElementWiseBoolean):
 
 
 class less(ElementWiseBoolean):
+
     def evaluate(self, evaluator, out, x, y):
         evaluator.less(x, y, out)
 
@@ -2083,6 +2193,7 @@ class less(ElementWiseBoolean):
 
 
 class greater_equal(ElementWiseBoolean):
+
     def evaluate(self, evaluator, out, x, y):
         evaluator.greater_equal(x, y, out)
 
@@ -2091,6 +2202,7 @@ class greater_equal(ElementWiseBoolean):
 
 
 class less_equal(ElementWiseBoolean):
+
     def evaluate(self, evaluator, out, x, y):
         evaluator.less_equal(x, y, out)
 
@@ -2099,6 +2211,7 @@ class less_equal(ElementWiseBoolean):
 
 
 class softmax(ComputationOp):
+
     def __init__(self, x, softmax_axes=None, **kargs):
         if softmax_axes is None:
             softmax_axes = tensor_sample_axes(x, **kargs)
@@ -2126,6 +2239,7 @@ class softmax(ComputationOp):
 
 
 class ReductionOp(ComputationOp):
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
@@ -2163,6 +2277,7 @@ class ReductionOp(ComputationOp):
 
 
 class max(ReductionOp):
+
     def __init__(self, x, **kargs):
         super(max, self).__init__(x, **kargs)
 
@@ -2181,6 +2296,7 @@ class max(ReductionOp):
 
 
 class min(ReductionOp):
+
     def __init__(self, x, **kargs):
         super(min, self).__init__(x, **kargs)
 
@@ -2199,6 +2315,7 @@ class min(ReductionOp):
 
 
 class sum(ReductionOp):
+
     def __init__(self, x, **kargs):
         super(sum, self).__init__(x, **kargs)
 
@@ -2217,6 +2334,7 @@ class sum(ReductionOp):
 
 
 class tensor_size(ComputationOp):
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
@@ -2242,12 +2360,14 @@ class tensor_size(ComputationOp):
 
 
 class Slice(ComputationOp):
+
     def __init__(self, slices, x, **kargs):
         super(Slice, self).__init__(args=(x,), **kargs)
         self.slices = slices
 
 
 class Pad(ComputationOp):
+
     def __init__(self, axes, slice, x, **kargs):
         super(Pad, self).__init__(args=(x,), **kargs)
         self._axes = axes
@@ -2265,6 +2385,7 @@ class Pad(ComputationOp):
 
 
 class Variable(AllocationOp):
+
     def __init__(self, **kargs):
         super(Variable, self).__init__(**kargs)
         self.tensor_axes_info.read_only = True
@@ -2277,6 +2398,7 @@ class Variable(AllocationOp):
 
 
 class Temporary(AllocationOp):
+
     def __init__(self, **kargs):
         super(Temporary, self).__init__(tags=['temp'], **kargs)
 
@@ -2288,6 +2410,7 @@ class Temporary(AllocationOp):
 
 
 class exp(ElementWise):
+
     def __init__(self, x, **kargs):
         super(exp, self).__init__(args=(x,), **kargs)
 
@@ -2302,6 +2425,7 @@ class exp(ElementWise):
 
 
 class log(ElementWise):
+
     def __init__(self, x, **kargs):
         super(log, self).__init__(args=(x,), **kargs)
 
@@ -2344,6 +2468,7 @@ class safelog(log):
 
 
 class maximum(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(maximum, self).__init__(args=(x, y), **kargs)
 
@@ -2359,6 +2484,7 @@ class maximum(ElementWise):
 
 
 class minimum(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(minimum, self).__init__(args=(x, y), **kargs)
 
@@ -2374,6 +2500,7 @@ class minimum(ElementWise):
 
 
 class multiply(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(multiply, self).__init__(args=(x, y), **kargs)
 
@@ -2389,6 +2516,7 @@ class multiply(ElementWise):
 
 
 class negative(ElementWise):
+
     def __init__(self, x, **kargs):
         super(negative, self).__init__(args=(x,), **kargs)
 
@@ -2403,6 +2531,7 @@ class negative(ElementWise):
 
 
 class power(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(power, self).__init__(args=(x,), **kargs)
 
@@ -2418,6 +2547,7 @@ class power(ElementWise):
 
 
 class reciprocal(ElementWise):
+
     def __init__(self, x, **kargs):
         super(reciprocal, self).__init__(args=(x,), **kargs)
 
@@ -2432,6 +2562,7 @@ class reciprocal(ElementWise):
 
 
 class sgn(ElementWise):
+
     def __init__(self, x, **kargs):
         super(sgn, self).__init__(args=(x,), **kargs)
 
@@ -2467,6 +2598,7 @@ class sig(ElementWise):
 
 
 class sin(ElementWise):
+
     def __init__(self, x, **kargs):
         super(sin, self).__init__(args=(x,), **kargs)
 
@@ -2481,6 +2613,7 @@ class sin(ElementWise):
 
 
 class sqrt(ElementWise):
+
     def __init__(self, x, **kargs):
         super(sqrt, self).__init__(args=(x,), **kargs)
 
@@ -2495,6 +2628,7 @@ class sqrt(ElementWise):
 
 
 class square(ElementWise):
+
     def __init__(self, x, **kargs):
         super(square, self).__init__(args=(x,), **kargs)
 
@@ -2509,6 +2643,7 @@ class square(ElementWise):
 
 
 class subtract(ElementWise):
+
     def __init__(self, x, y, **kargs):
         super(subtract, self).__init__(args=(x, y), **kargs)
 
@@ -2524,6 +2659,7 @@ class subtract(ElementWise):
 
 
 class tanh(ElementWise):
+
     def __init__(self, x, **kargs):
         super(tanh, self).__init__(args=(x,), **kargs)
 
@@ -2560,6 +2696,7 @@ def cross_entropy_binary(y, t, out_axes=None):
 
 
 class Function(nodes.Node):
+
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.backends.graph.analysis import Digraph
@@ -2580,6 +2717,7 @@ class Function(nodes.Node):
 
 
 class Buffer(object):
+
     def __init__(self, color, size):
         self.color = color
         self.size = size

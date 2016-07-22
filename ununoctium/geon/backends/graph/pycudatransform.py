@@ -5,7 +5,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 
-from geon.backends.graph.transform import Op, Transformer
+from geon.backends.graph.transform import Transformer
 
 # Initialize CUDA
 cuda.init()
@@ -32,7 +32,8 @@ def cuda_device_context(device=None):
         clear_context_caches()
 
 
-# TODO This is mostly historical, and not up to date with the current Transformer
+# TODO This is mostly historical, and not up to date with the current
+# Transformer
 class PyCUDATransformer(Transformer):
     """
     Uses PuCUDA to evaluate.  Not fully tested; PyCUDA does not expose all the NumPy API.
@@ -55,7 +56,9 @@ class PyCUDATransformer(Transformer):
         return result
 
     def zeros(self, tensor_description):
-        return gpuarray.zeros(tensor_description.sizes, tensor_description.dtype)
+        return gpuarray.zeros(
+            tensor_description.sizes,
+            tensor_description.dtype)
 
     # Operations
 

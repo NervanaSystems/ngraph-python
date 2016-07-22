@@ -5,6 +5,7 @@ import geon.backends.graph.funs as be
 
 
 class Eval(be.Model):
+
     def __init__(self, **kargs):
         super(Eval, self).__init__(**kargs)
         g = self.graph
@@ -22,17 +23,18 @@ class Eval(be.Model):
     @be.with_environment
     def run(self):
 
-
         x = np.arange(10, dtype=np.float32) + 1
         y = x * x
 
         self.graph.x.value = x
         self.graph.y.value = y
 
-        gnp = evaluation.GenNumPy(results=(self.graph.x2, self.graph.z, self.graph.w))
+        gnp = evaluation.GenNumPy(
+            results=(self.graph.x2, self.graph.z, self.graph.w))
         gnp.evaluate()
 
-        enp = evaluation.NumPyEvaluator(results=(self.graph.x2, self.graph.z, self.graph.w))
+        enp = evaluation.NumPyEvaluator(
+            results=(self.graph.x2, self.graph.z, self.graph.w))
         resultnp = enp.evaluate()
         print(resultnp)
 

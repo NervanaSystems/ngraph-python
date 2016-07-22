@@ -4,11 +4,12 @@ from builtins import object
 import math
 import numpy as np
 
-from geon.backends.graph.graphneon import *
+from geon.backends.graph.graphneon import *  # noqa
 from geon.backends.graph.arrayaxes import Axes
 
 
 class RandomTensorGenerator(object):
+
     def __init__(self, seed=0, dtype=np.float32):
         self.dtype = dtype
         self.reset(seed)
@@ -18,14 +19,51 @@ class RandomTensorGenerator(object):
         self.rng = np.random.RandomState(seed=seed)
 
     def uniform(self, low, high, axes):
-        return np.array(self.rng.uniform(low, high, Axes(*axes).lengths), dtype=self.dtype)
+        return np.array(
+            self.rng.uniform(
+                low,
+                high,
+                Axes(
+                    *axes).lengths),
+            dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
         n = math.floor((high - low) / quantum)
-        result = np.array(self.rng.random_integers(0, n, Axes(*axes).lengths), dtype=self.dtype)
+        result = np.array(self.rng.random_integers(
+            0, n, Axes(*axes).lengths), dtype=self.dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result
+
+
+def in_bound_environment(f):
+    def wrapper(*args, **kargs):
+        with be.bound_environment():
+            return f(*args, **kargs)
+
+    return wrapper
+
+
+def with_error_settings(**new_settings):
+    def decorator(f):
+        def wrapper(*args, **kargs):
+            old_settings = np.geterr()
+
+            np.seterr(**new_settings)
+            ret = f(*args, **kargs)
+
+            np.seterr(**old_settings)
+
+            return ret
+
+        return wrapper
+
+    return decorator
+
+
+def raise_all_numpy_errors(f):
+    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
+    return with_error_settings(**settings)(f)
 
 
 def execute(nodes):
@@ -117,7 +155,8 @@ def transform_derivative(f, px):
         adjoint = np.zeros(fshape, dtype=x.dtype)
         f.initial_adjoint.value = adjoint
 
-        idxiter = np.nditer(adjoint, flags=['multi_index'], op_flags=['readwrite'])
+        idxiter = np.nditer(
+            adjoint, flags=['multi_index'], op_flags=['readwrite'])
         for dfdxiter in idxiter:
             dfdxiter[...] = 1
             df = trans.evaluate()[dfdx]

@@ -2,41 +2,13 @@ import numpy as np
 import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
+from geon.backends.graph.graph_test_utils import\
+    in_bound_environment, raise_all_numpy_errors
 
 '''
 Test graphiti's implementation of the dot product.
 
 '''
-
-
-def in_bound_environment(f):
-    def wrapper(*args, **kargs):
-        with be.bound_environment():
-            return f(*args, **kargs)
-
-    return wrapper
-
-
-def with_error_settings(**new_settings):
-    def decorator(f):
-        def wrapper(*args, **kargs):
-            old_settings = np.geterr()
-
-            np.seterr(**new_settings)
-            ret = f(*args, **kargs)
-
-            np.seterr(**old_settings)
-
-            return ret
-
-        return wrapper
-
-    return decorator
-
-
-def raise_all_numpy_errors(f):
-    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
-    return with_error_settings(**settings)(f)
 
 
 def evaluate(result):
@@ -55,8 +27,15 @@ def get_random_shape(max_num_axes, max_axis_length):
     return shape
 
 
-def get_random_np_array(max_num_axes, max_axis_length, mean=0, sigma=1, dtype=np.float32):
-    arr = sigma * np.random.randn(*get_random_shape(max_num_axes, max_axis_length)) + mean
+def get_random_np_array(
+        max_num_axes,
+        max_axis_length,
+        mean=0,
+        sigma=1,
+        dtype=np.float32):
+    arr = sigma * \
+        np.random.randn(
+            *get_random_shape(max_num_axes, max_axis_length)) + mean
     arr.dtype = dtype
     return arr
 
@@ -119,10 +98,12 @@ def test_tensor_dot_tensor():
             axis.length = length
 
         tensor1_axes = test['tensor1_axes']
-        tensor1_np = be.NumPyTensor(np.array(test['tensor1'], dtype=np.float32), axes=tensor1_axes)
+        tensor1_np = be.NumPyTensor(
+            np.array(test['tensor1'], dtype=np.float32), axes=tensor1_axes)
         tensor1 = be.Variable(axes=tensor1_axes, initial_value=tensor1_np)
         tensor2_axes = test['tensor2_axes']
-        tensor2_np = be.NumPyTensor(np.array(test['tensor2'], dtype=np.float32), axes=tensor2_axes)
+        tensor2_np = be.NumPyTensor(
+            np.array(test['tensor2'], dtype=np.float32), axes=tensor2_axes)
         tensor2 = be.Variable(axes=tensor2_axes, initial_value=tensor2_np)
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
