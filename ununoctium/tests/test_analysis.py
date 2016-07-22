@@ -58,4 +58,13 @@ def test_coloring():
     print('pass coloring')
 
 
+def test_topsort():
+    edges = {(u, v) for u, vs in dataflow.successors.iteritems() for v in vs}
+    order = dataflow.topsort()
+    for u, v in edges:
+        assert(order.index(u) < order.index(v))
+    print('pass topsort')
+
+
+test_topsort()
 test_coloring()
