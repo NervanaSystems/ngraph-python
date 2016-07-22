@@ -22,20 +22,26 @@ from geon.backends.graph.graph import Model, with_graph_scope, with_environment,
     get_current_environment
 from geon.backends.graph.environment import bound_environment, Environment
 
-from geon.backends.graph.transform import deriv, placeholder, Variable, Constant, linear_map_axes, sample_axes, \
+from geon.backends.graph.graphop import deriv, placeholder, Variable, Constant, linear_map_axes, \
     batch_axes, assign
+from geon.backends.graph.graphop import sample_axes, batch_axes, linear_map_axes, RNG, doall, \
+    AllReduce, placeholder, Constant, NumPyTensor, absolute, add, argmax, argmin, cos, divide, dot, \
+    equal, not_equal, greater, less, greater_equal, less_equal, softmax, max, min, sum, assign, \
+    tensor_size, Variable, Temporary, exp, log, safelog, maximum, minimum, multiply, negative, \
+    onehot, power, reciprocal, sig, sin, sqrt, square, subtract, tanh, deriv, cross_entropy_multi, \
+    cross_entropy_binary
 from geon.backends.graph.arrayaxes import Axis, Axes, AxisVar, NumericAxis,\
     AxisID, AxisIDTuple, set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 
-from geon.backends.graph.transform import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
+from geon.backends.graph.graphop import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
     maximum, \
     mean, min, minimum, multiply, onehot, greater, greater_equal, less, less_equal, power
-from geon.backends.graph.transform import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
+from geon.backends.graph.graphop import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
-from geon.backends.graph.transform import tanh, safelog, cross_entropy_binary, cross_entropy_multi
-from geon.backends.graph.transform import doall, RNG, NumPyTensor, Temporary, tensor_size
+from geon.backends.graph.graphop import tanh, safelog, cross_entropy_binary, cross_entropy_multi
+from geon.backends.graph.graphop import doall, RNG, NumPyTensor, Temporary, tensor_size
 
-from geon.backends.graph.transform import AllReduce
+from geon.backends.graph.graphop import AllReduce
 from geon.backends.graph.nptransform import NumPyTransformer
 
 try:
