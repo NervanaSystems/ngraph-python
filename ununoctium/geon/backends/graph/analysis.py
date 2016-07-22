@@ -1,3 +1,4 @@
+from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
 from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, \
@@ -88,32 +89,33 @@ class DataFlowGraph(Digraph):
         return liveness
 
 
-class KernelFlowGraph(DataFlowGraph):
+def never_fusible(op1, op2):
+    return False
 
-    @staticmethod
-    def _fusible(op1, op2):
-        if not isinstance(
-                op1,
-                ComputationOp) or not isinstance(
-                op2,
-                ComputationOp):
-            return False
 
-        shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
-        if isinstance(
-                op1,
-                ElementWise) and isinstance(
-                op2,
-                ElementWise) and shapes1 == shapes2:
-            return True
-        # reduction(elementwise)
-        if isinstance(op1, ElementWise) and isinstance(op2, ReductionOp):
-            return True
-        # elementwise(reduction)
-        if isinstance(op1, ReductionOp) and isinstance(op2, ElementWise):
-            return True
-
+def gpu_fusible(op1, op2):
+    # Only computations can be merged
+    if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
+
+    shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
+    # Elementwise functions can be merged together if they have the same shapes
+    if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
+        return True
+
+    # Reduction following elementwises can be merged
+    if isinstance(op1, ElementWise) and isinstance(op2, ReductionOp):
+        return True
+
+    # Elementwise following reductions can be merged
+    if isinstance(op1, ReductionOp) and isinstance(op2, ElementWise):
+        return True
+
+    # Everything else cannot be merged
+    return False
+
+
+class KernelFlowGraph(DataFlowGraph):
 
     def _graphviz(self, name=''):
         predecessors = Digraph._invert(self.successors)
@@ -152,8 +154,10 @@ class KernelFlowGraph(DataFlowGraph):
             bad_path_from[v] = set()
             for w in self.successors[v]:
                 path_from[v] |= path_from[w]
-                bad_path_from[v] |= path_from[w] if not KernelFlowGraph._fusible(
-                    v, w) else bad_path_from[w]
+                if self.fusible(v, w):
+                    bad_path_from[v] |= bad_path_from[w]
+                else:
+                    bad_path_from[v] |= path_from[w]
         return path_from, bad_path_from
 
     def between(self, v, w, path_from):
@@ -179,8 +183,9 @@ class KernelFlowGraph(DataFlowGraph):
                 if node != v:
                     connected.add(v)
 
-    def __init__(self, dataflow):
+    def __init__(self, dataflow, fusible=never_fusible):
         # Extracts clusters
+        self.fusible = fusible
         super(KernelFlowGraph, self).__init__(dataflow.outputs)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
