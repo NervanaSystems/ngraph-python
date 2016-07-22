@@ -704,7 +704,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def onehot(self, onehot, x, axis):
+    def visit_onehot(self, onehot, x, axis):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -898,7 +898,7 @@ class Visitor(nodes.Visitor):
     def visit_less_equal(self, less_equal, x, y):
         return self.visit_elementwise_boolean(less_equal)
 
-    def onehot(self, onehot, x, index):
+    def visit_onehot(self, onehot, x, index):
         return self.visit_computation(onehot)
 
     def visit_reduction(self, reduction, x):
@@ -1188,6 +1188,7 @@ class TensorAxesInfo(object):
         self.__tensor_description = None
         self.initializer = None
         self.initialized = False
+        self.views[self.axes] = self
 
     @property
     def tensor_description(self):
@@ -2586,10 +2587,10 @@ class onehot(ComputationOp):
             axis = AxesSubComp(axes, x.axes)
         else:
             if axes is None:
-                x_sample = sample_axes(x)
-                x_batch = batch_axes(x)
-                axes = AxesAppendComp(axis, AxesAppendComp(x_sample, x_batch))
-        super(self, args=(x,), axes=axes, **kargs)
+                x_sample = sample_axes(x.axes)
+                x_batch = batch_axes(x.axes)
+                axes = AxesAppendComp(Axes(axis), AxesAppendComp(x_sample, x_batch))
+        super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
         self.axis = axis
 
     def visit(self, visitor):
@@ -2597,12 +2598,14 @@ class onehot(ComputationOp):
 
     def compute_call_info(self):
         x, = self.args
-
-        return [self.reaxe(AxesAppendComp(self.axis, AxesSubComp(self.axes, self.axis)).value),
-                x.reaxe(Axes(x.axes.value))]
+        out_axes = Axes(Axes(self.axis), AxesSubComp(self.axes, Axes(self.axis)).value)
+        in_axes = Axes(x.axes.value)
+        ci = [self.reaxe(out_axes),
+                x.reaxe(in_axes)]
+        return ci
 
     def evaluate(self, evaluator, out, x):
-        evaluator.onehot(self, x, out)
+        evaluator.onehot(x, out)
 
 
 class power(ElementWise):

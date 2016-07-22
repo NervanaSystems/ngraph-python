@@ -35,6 +35,9 @@ class RandomTensorGenerator(object):
         np.add(result, low, result)
         return result
 
+    def random_integers(self, low, high, axes, dtype=np.int8):
+        return self.rng.random_integers(low, high, Axes(*axes).lengths).astype(dtype)
+
 
 def in_bound_environment(f):
     def wrapper(*args, **kargs):
