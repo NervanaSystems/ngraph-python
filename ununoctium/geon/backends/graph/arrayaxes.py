@@ -60,7 +60,7 @@ class NumericAxis(Axis):
         if length in NumericAxis.cache:
             return NumericAxis.cache[length]
 
-        axis = super(NumericAxis, cls).__new__(cls, length=length, **kargs)
+        axis = super(NumericAxis, cls).__new__(cls, **kargs)
         NumericAxis.cache[length] = axis
 
         return axis
