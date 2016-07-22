@@ -28,7 +28,12 @@ make test
 
 Before checking in code, ensure no "make style" errors
 ```
-make style; make lint3k
+make style
+```
+
+To fix style errors
+```
+make fixstyle
 ```
 
 ## Examples

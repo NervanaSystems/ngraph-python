@@ -137,7 +137,8 @@ class KernelFlowGraph(DataFlowGraph):
 #       firsts = {x: sorts[x][0] if isinstance(
 #           x, Function) else x for x in self.successors}
 #       lasts = {
-#           x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}
+# x: sorts[x][-1] if isinstance(x, Function) else x for x in
+# self.successors}
         for a, b in edges:
             kw = {}
             if isinstance(a, Function):
