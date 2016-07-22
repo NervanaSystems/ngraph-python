@@ -8,17 +8,12 @@ from subprocess import Popen, PIPE
 Test the usage of transformer.allreduce
 
 '''
-from neon.initializers import Constant
 import geon.backends.graph.funs as be
-import geon.backends.graph.axis as ax
 from geon.backends.graph.mpihandle import MPIHandle
 
 
 def test_mpi_allreduce():
     with be.bound_environment():
-        ax.Y.length = 1
-        hello = be.Variable(axes=(ax.Y,), init=Constant(4))
-
         a = np.array([[4, 1, 2, -3, 4],
                       [5, -6, 7, -8, 9]], dtype=np.float32)
 
@@ -28,6 +23,26 @@ def test_mpi_allreduce():
         assert(np.array_equal(a, result))
 
         print("pass mpi allreduce test")
+
+
+def test_mpi_reduce():
+    pass
+
+
+def test_mpi_reduce_avg():
+    pass
+
+
+def test_mpi_scatter():
+    pass
+
+
+def test_mpi_scatterv():
+    pass
+
+
+def test_mpi_gattherv():
+    pass
 
 
 parent_info = os.popen("ps -p %d" % os.getppid()).read().strip().split('\n')

@@ -7,15 +7,15 @@ comm = MPI.COMM_WORLD
 
 class MPIHandle(object):
     MPICallDict = {
-        "max":    MPI.MAX,
-        "min":    MPI.MIN,
-        "sum":    MPI.SUM,
-        "prod":   MPI.PROD,
-        "land":   MPI.LAND,
-        "band":   MPI.LOR,
-        "BOR":    MPI.BOR,
-        "LXOR":   MPI.LXOR,
-        "bxor":   MPI.BXOR,
+        "max": MPI.MAX,
+        "min": MPI.MIN,
+        "sum": MPI.SUM,
+        "prod": MPI.PROD,
+        "land": MPI.LAND,
+        "band": MPI.LOR,
+        "BOR": MPI.BOR,
+        "LXOR": MPI.LXOR,
+        "bxor": MPI.BXOR,
         "maxloc": MPI.MAXLOC,
         "minloc": MPI.MINLOC
     }
