@@ -13,6 +13,12 @@ ax.C = arrax.Axis(20)
 ax.D = arrax.Axis(25)
 
 
+def test_axes_equal():
+    a1 = arrax.Axes(ax.A, ax.B, ax.C)
+    a2 = arrax.Axes(ax.A, ax.B, ax.C)
+    assert a1 == a2
+
+
 def to_nested_tup(axes):
     return tuple(to_nested_tup(axis.axes) if
                  isinstance(axis, arrax.AxesAxis) else axis for axis in axes)

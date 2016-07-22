@@ -387,6 +387,32 @@ def test_logistic():
         assert np.allclose(dsigdu_graph, dsigdu_num, atol=1e-2, rtol=1e-2)
 
 
+def one_hot_comparison(hot_axes, axes):
+    u = rng.random_integers(0, ax.C.length - 1, axes, dtype=np.int8)
+    u_p = be.placeholder(axes=axes, dtype=u.dtype)
+    u_p.value = u
+    v = np.zeros(hot_axes.lengths, dtype=np.float32)
+    udxiter = np.nditer(u, flags=['multi_index'])
+    for uiter in udxiter:
+        vindex = [int(uiter)]
+        vindex.extend(udxiter.multi_index)
+        v[tuple(vindex)] = 1
+
+    v_t, = execute([be.onehot(u_p, axis=ax.C)])
+    assert np.array_equal(v_t, v)
+
+
+def test_onehot():
+    with be.bound_environment():
+        ax.C.length = 4
+        ax.W.length = 32
+        ax.H.length = 32
+        ax.N.length = 128
+        be.set_batch_axes([ax.N])
+
+        one_hot_comparison(Axes(ax.C, ax.N), Axes(ax.N))
+        one_hot_comparison(Axes(ax.C, ax.W, ax.H, ax.N), Axes(ax.W, ax.H, ax.N))
+
 if __name__ == '__main__':
     test_constants()
     test_softmax()
@@ -395,3 +421,4 @@ if __name__ == '__main__':
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()
+    test_onehot()

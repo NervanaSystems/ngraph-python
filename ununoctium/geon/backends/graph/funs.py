@@ -15,7 +15,7 @@ from geon.backends.graph.arrayaxes import Axis, Axes, AxisVar, NumericAxis,\
 
 from geon.backends.graph.transform import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
     maximum, \
-    mean, min, minimum, multiply, greater, greater_equal, less, less_equal, power
+    mean, min, minimum, multiply, onehot, greater, greater_equal, less, less_equal, power
 from geon.backends.graph.transform import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
 from geon.backends.graph.transform import tanh, safelog, cross_entropy_binary, cross_entropy_multi

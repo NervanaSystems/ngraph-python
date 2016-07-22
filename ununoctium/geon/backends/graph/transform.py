@@ -157,6 +157,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
         """
         Allocate a tensor initialized with a uniform distribution.
@@ -169,6 +170,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
         """
         Allocate a tensor initialized with a uniform distribution.
@@ -228,6 +230,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def add(self, x, y, out):
         """
         out = x + y
@@ -239,6 +242,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def argmax(self, x, out):
         """
         Argmax on dim 0 of x.
@@ -249,6 +253,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def argmin(self, x, out):
         """
         Argmin on dim 0 of x.
@@ -259,6 +264,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def cos(self, x, out):
         """
         Cosine.
@@ -269,6 +275,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def divide(self, x, y, out):
         """
         out = x/y
@@ -280,6 +287,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def dot(self, x, y, out):
         """
         Generalized dot using NumPy dimension conventions.
@@ -291,6 +299,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def equal(self, x, y, out):
         """
         Numerical equality.
@@ -302,6 +311,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def exp(self, x, out):
         """
         out = e^x
@@ -312,6 +322,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def greater(self, x, y, out):
         """
         x > y
@@ -323,6 +334,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def greater_equal(self, x, y, out):
         """
         x >= y
@@ -334,6 +346,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def less(self, x, y, out):
         """
         x < y
@@ -345,6 +358,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def less_equal(self, x, y, out):
         """
         x <= y
@@ -356,6 +370,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def log(self, x, out):
         """
         log(x)
@@ -366,6 +381,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def max(self, x, axis, out):
         """
         Maximum x value on axis.
@@ -377,6 +393,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def maximum(self, x, y, out):
         """
         max(x, y)
@@ -388,6 +405,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def min(self, x, axis, out):
         """
         Minimum x value on axis.
@@ -399,6 +417,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def minimum(self, x, y, out):
         """
         min(x, y)
@@ -410,6 +429,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def multiply(self, x, y, out):
         """
         x*y
@@ -421,6 +441,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def negative(self, x, out):
         """
         -x
@@ -431,6 +452,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def not_equal(self, x, y, out):
         """
         x != y
@@ -441,6 +463,17 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def onehot(self, idx, out):
+        """
+
+        :param idx: Index tensor
+        :param out: 2-d tensor, axis 0 gets onehot expansion
+        :return:
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def reciprocal(self, x, out):
         """
         1/x
@@ -451,6 +484,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def sign(self, x, out):
         """
         signum(x)
@@ -461,6 +495,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def sin(self, x, out):
         """
         sine(x)
@@ -471,6 +506,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def sqrt(self, x, out):
         """
         sqrt(x)
@@ -481,6 +517,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def square(self, x, out):
         """
         x^2
@@ -491,6 +528,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def subtract(self, x, y, out):
         """
         x - y
@@ -502,6 +540,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def sum(self, x, axis, out):
         """
         sum of x over axis
@@ -513,6 +552,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def tanh(self, x, out):
         """
         tanh(x)
@@ -661,6 +701,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
 
     @abc.abstractmethod
     def visit_less_equal(self, less_equal, x, y):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def visit_onehot(self, onehot, x, axis):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -853,6 +897,9 @@ class Visitor(nodes.Visitor):
 
     def visit_less_equal(self, less_equal, x, y):
         return self.visit_elementwise_boolean(less_equal)
+
+    def visit_onehot(self, onehot, x, index):
+        return self.visit_computation(onehot)
 
     def visit_reduction(self, reduction, x):
         return self.visit_computation(reduction)
@@ -1141,6 +1188,7 @@ class TensorAxesInfo(object):
         self.__tensor_description = None
         self.initializer = None
         self.initialized = False
+        self.views[self.axes] = self
 
     @property
     def tensor_description(self):
@@ -2528,6 +2576,35 @@ class negative(ElementWise):
 
     def evaluate(self, evaluator, out, x):
         evaluator.negative(x, out)
+
+
+class onehot(ComputationOp):
+
+    def __init__(self, x, axis=None, axes=None, **kargs):
+        if axis is None:
+            if axes is None:
+                raise ValueError('Cannot determine one-hot axis.')
+            axis = AxesSubComp(axes, x.axes)
+        else:
+            if axes is None:
+                x_sample = sample_axes(x.axes)
+                x_batch = batch_axes(x.axes)
+                axes = AxesAppendComp(Axes(axis), AxesAppendComp(x_sample, x_batch))
+        super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
+        self.axis = axis
+
+    def visit(self, visitor):
+        return visitor.visit_onehot(self, self.args[0], self.axis)
+
+    def compute_call_info(self):
+        x, = self.args
+        ci = [self.reaxe(Axes(Axes(self.axis),
+                              AxesSubComp(self.axes, Axes(self.axis)).value)),
+              x.reaxe(Axes(x.axes.value))]
+        return ci
+
+    def evaluate(self, evaluator, out, x):
+        evaluator.onehot(x, out)
 
 
 class power(ElementWise):
