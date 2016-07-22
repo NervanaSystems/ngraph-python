@@ -36,6 +36,36 @@ class RandomTensorGenerator(object):
         return result
 
 
+def in_bound_environment(f):
+    def wrapper(*args, **kargs):
+        with be.bound_environment():
+            return f(*args, **kargs)
+
+    return wrapper
+
+
+def with_error_settings(**new_settings):
+    def decorator(f):
+        def wrapper(*args, **kargs):
+            old_settings = np.geterr()
+
+            np.seterr(**new_settings)
+            ret = f(*args, **kargs)
+
+            np.seterr(**old_settings)
+
+            return ret
+
+        return wrapper
+
+    return decorator
+
+
+def raise_all_numpy_errors(f):
+    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
+    return with_error_settings(**settings)(f)
+
+
 def execute(nodes):
     trans = be.NumPyTransformer(results=nodes)
     result = trans.evaluate()

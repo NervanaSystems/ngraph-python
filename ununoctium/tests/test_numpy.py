@@ -391,7 +391,7 @@ if __name__ == '__main__':
     test_constants()
     test_softmax()
     test_np_softmax()
-    tesT_logistic()
+    test_logistic()
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()

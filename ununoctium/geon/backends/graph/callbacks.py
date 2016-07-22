@@ -490,7 +490,8 @@ class Callback(NervanaObject):
                                     for time, or a list of times, or None (never fire)
         """
         t, f = time, freq
-        if ((isinstance(f, int) and (t + 1) % f == 0) or (isinstance(f, list) and t in f)):
+        if ((isinstance(f, int) and (t + 1) % f == 0)
+                or (isinstance(f, list) and t in f)):
             return True
         return False
 
