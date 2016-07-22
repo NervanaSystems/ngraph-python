@@ -22,6 +22,8 @@ from geon.backends.graph.transform import doall, RNG, NumPyTensor, Temporary, te
 from geon.backends.graph.transform import AllReduce
 from geon.backends.graph.nptransform import NumPyTransformer
 
+from geon.backends.graph.artransform import ArgonTransformer
+
 
 # TODO These are just here as placeholders
 def add_fc_bias(self, inputs, bias):

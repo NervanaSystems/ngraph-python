@@ -1,6 +1,7 @@
 import numpy as np
 
 from geon.backends.graph.transform import Transformer, AllocationOp, Visitor
+from geon.backends.graph.mpihandle import MPIHandle
 
 import argon.neon_backend.ar_backend
 from argon.neon_backend.ar_backend import ArBackend
@@ -8,15 +9,9 @@ from argon.neon_backend.ar_backend import ArBackend
 from neon import NervanaObject
 from neon.backends.backend import OpTreeNode 
 
-from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
 
 WITHNP = False
-
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
 
 class ArgonTransformer(Transformer):
         
@@ -155,10 +150,9 @@ class ArgonTransformer(Transformer):
 
     def allreduce(self, x, out):
         x_val = x.get()  # read data from Argon to CPU -- expensive!
-        recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
-        comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
-        recv_buffer = recv_buffer / comm.Get_size()  # Normalize the results to the number of MPI threads
+        recv_buffer = MPIHandle().allreduceAvg(x_val)
         out.set(recv_buffer)
+        
 
 
 class ArgonUniform(AllocationOp):
