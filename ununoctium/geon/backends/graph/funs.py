@@ -24,7 +24,10 @@ from geon.backends.graph.transform import doall, RNG, NumPyTensor, Temporary, te
 from geon.backends.graph.transform import AllReduce
 from geon.backends.graph.nptransform import NumPyTransformer
 
-from geon.backends.graph.artransform import ArgonTransformer
+try:
+    from geon.backends.graph.artransform import ArgonTransformer
+except ImportError:
+    print("Argon backend and tensor are defined in argon repo.")
 
 
 # TODO These are just here as placeholders
