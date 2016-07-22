@@ -1,18 +1,12 @@
 import numpy as np
-from argon.neon_backend.ar_backend import AMStatusCode
-from neon import NervanaObject
-# from neon.backends.backend import OpTreeNode
+
 from geon.backends.graph.transform import Transformer, AllocationOp, Visitor
+from geon.backends.graph.mpihandle import MPIHandle
 
-from mpi4py import MPI
+import argon.neon_backend.ar_backend
+from argon.neon_backend.ar_backend import ArBackend
 
-comm = MPI.COMM_WORLD
-
-WITHNP = False
-
-from mpi4py import MPI  # noqa
-
-comm = MPI.COMM_WORLD
+from neon import NervanaObject
 
 
 class ArgonTransformer(Transformer):
@@ -148,16 +142,11 @@ class ArgonTransformer(Transformer):
         raise NotImplementedError()
 
     def check_argon_error(self, err):
-        err_code = AMStatusCode(err.code)
-        if err_code != AMStatusCode.S_OK:
-            raise RuntimeError("Argon error: {}".format(err_code))
+        raise NotImplementedError()
 
     def allreduce(self, x, out):
         x_val = x.get()  # read data from Argon to CPU -- expensive!
-        recv_buffer = np.zeros(shape=x.shape, dtype=x.dtype)
-        comm.Allreduce(x_val, recv_buffer, op=MPI.SUM)
-        # Normalize the results to the number of MPI threads
-        recv_buffer = recv_buffer / comm.Get_size()
+        recv_buffer = MPIHandle().allreduceAvg(x_val)
         out.set(recv_buffer)
 
 
