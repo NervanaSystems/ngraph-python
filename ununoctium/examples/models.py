@@ -2,7 +2,6 @@ from __future__ import division, print_function
 from builtins import range, zip
 from geon.backends.graph.graphneon import *  # noqa
 
-import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
 
 # parse the command line arguments (generates the backend)

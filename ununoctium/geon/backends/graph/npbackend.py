@@ -4,7 +4,7 @@ import numpy as np
 
 from neon.backends.backend import Backend
 
-from geon.backends.graph.transform import RNG
+from geon.backends.graph.graphop import RNG
 
 
 class BackendNDArray(np.ndarray):
