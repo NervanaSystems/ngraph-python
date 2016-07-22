@@ -2,7 +2,8 @@ import numpy as np
 import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
-from geon.backends.graph.graph_test_utils import *
+from geon.backends.graph.graph_test_utils import\
+    in_bound_environment, raise_all_numpy_errors
 
 '''
 Test graphiti's implementation of the dot product.

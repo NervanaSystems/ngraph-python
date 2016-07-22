@@ -1,4 +1,6 @@
-from geon.backends.graph.graph_test_utils import *
+from geon.backends.graph.graph_test_utils import execute, be, Axes,\
+    in_bound_environment
+import numpy as np
 
 
 @in_bound_environment
