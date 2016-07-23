@@ -18,6 +18,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             environment=None,
             **kvargs):
         super(Transformer, self).__init__(**kvargs)
+        self.transform_hook = None
         if environment is None:
             environment = get_current_environment()
         self.environment = environment
@@ -95,8 +96,16 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         for op in ordered_ops:
             op.sync(self)
 
-        for op in ordered_ops:
+        def transform_op(op):
             op.transform_call_info(self, *op.call_info)
+
+        for op in ordered_ops:
+            if op.transform_hook is not None:
+                op.transform_hook(self, op, transform_op)
+            elif self.transform_hook is not None:
+                self.transform_hook(self, op, transform_op)
+            else:
+                transform_op(op)
 
     def transform_ops(self, transfrom_ops):
         ops = Op.ordered_ops(transfrom_ops)

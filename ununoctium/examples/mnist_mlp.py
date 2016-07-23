@@ -70,10 +70,10 @@ init_norm = Gaussian(loc=0.0, scale=0.01)
 
 # setup model layers
 layers = [Affine(nout=100, init=init_norm, activation=Rectlin()),
-          Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True))]
+          Affine(nout=10, init=init_norm, activation=Logistic(shortcut=True), axes=[ax.Y])]
 
 # setup cost function as CrossEntropy
-cost = GeneralizedCost(costfunc=CrossEntropyMulti())
+cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 
 # cost = GeneralizedCost(costfunc=CrossEntropyBinary())
 # setup optimizer

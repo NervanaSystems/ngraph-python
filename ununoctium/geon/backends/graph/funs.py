@@ -25,7 +25,7 @@ from geon.backends.graph.graphop import absolute, add, argmax, argmin, cos, divi
 from geon.backends.graph.graphop import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
 from geon.backends.graph.graphop import tanh, safelog, cross_entropy_binary, cross_entropy_multi
-from geon.backends.graph.graphop import doall, RNG, NumPyTensor, Temporary, tensor_size
+from geon.backends.graph.graphop import doall, RNG, NumPyTensor, Temporary, tensor_size, set_break
 
 from geon.backends.graph.graphop import AllReduce
 from geon.backends.graph.nptransform import NumPyTransformer
