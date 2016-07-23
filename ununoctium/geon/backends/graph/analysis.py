@@ -1,7 +1,21 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, \
+from geon.backends.graph.graphop import ComputationOp, AllocationOp, ElementWise, Function, \
     Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product
@@ -83,7 +97,7 @@ class DataFlowGraph(Digraph):
             x, AllocationOp) and x.tensor_axes_info.read_only}
         liveness[order[-1]] = set(self.outputs) | keeps
         # Update
-        for current, previous in reversed(zip(order[1:], order[:-1])):
+        for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             args = {x for x in current.args if not isinstance(x, Constant)}
             liveness[previous] = args | (liveness[current] - set(current.defs))
         return liveness
