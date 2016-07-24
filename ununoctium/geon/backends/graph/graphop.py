@@ -46,7 +46,7 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def visit_contaner(self, container):
+    def visit_container(self, container):
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -1191,7 +1191,7 @@ class Container(ComputationOp):
         return x.tensor_axes_info
 
     def visit(self, visitor):
-        return self.visit_container_op(self)
+        return visitor.visit_container(self)
 
 
 class RNG(AllocationOp):
@@ -2132,7 +2132,7 @@ class sig(Container, ElementWise):
 
     def __init__(self, x, **kargs):
         self.x = x
-        super(sig, self).__init__(args=(reciprocal(exp(-x)+1),), axes=x.axes, **kargs)
+        super(sig, self).__init__(args=(reciprocal(exp(-x) + 1),), axes=x.axes, **kargs)
 
     def visit(self, visitor):
         return visitor.visit_sig(self, *self.args)
@@ -2266,22 +2266,30 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None):
 
 class cross_entropy_binary_inner(Container, ElementWise):
 
-    def __init__(self, y, t, out_axes=None):
+    def __init__(self, y, t, **kargs):
         self.y = y
         self.t = t
-        cebi = -(safelog(y) * t + safelog(1 - y) * (1 - t))
+        if isinstance(self.y, sig):
+            cebi = (1 - t) * y.x - safelog(y)
+        else:
+            cebi = -(safelog(y) * t + safelog(1 - y) * (1 - t))
         super(cross_entropy_binary_inner, self).__init__(args=(cebi,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        self.args[0].generate_add_delta(adjoints, delta)
-
+        if isinstance(self.y, sig):
+            # Shortcut derivative
+            x = self.y.x
+            x.generate_add_delta(adjoints, (self.y - self.t) * delta)
+            self.t.generate_add_delta(adjoints, x * delta)
+        else:
+            self.args[0].generate_add_delta(adjoints, delta)
 
 
 def cross_entropy_binary(y, t, out_axes=None):
-    return -sum(safelog(y) * t + safelog(1 - y) * (1 - t), out_axes=out_axes)
+    return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
+
 
 def set_break(op, name=None):
-    import pdb
     def hook(transformer, op, transform_op):
         transform_op(op)
         # print(name)

@@ -266,6 +266,58 @@ def np_softmax(x, axis):
     return exps / np.sum(exps, axis).reshape(shape)
 
 
+def cross_entropy_binary_logistic(x, t):
+    y = 1.0 / (1.0 + np.exp(-x))
+    return -(np.log(y) * t + np.log(1 - y) * (1 - t))
+
+
+def cross_entropy_binary_logistic_shortcut(x, t):
+    y = 1.0 / (1.0 + np.exp(-x))
+    return (1.0 - t) * x - np.log(y)
+
+
+def test_cross_entropy_binary_logistic_shortcut():
+    with be.bound_environment():
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_u.value = u
+        p_v = be.placeholder(axes=axes)
+        v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes.value), 0)
+        p_v.value = v
+
+        cel = cross_entropy_binary_logistic(u, v)
+        cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
+        assert np.allclose(cel, cel_shortcut)
+
+        cel_graph, = execute([be.cross_entropy_binary_inner(be.sig(p_u), p_v)])
+        assert np.allclose(cel, cel_graph)
+
+
+def test_cross_entropy_binary():
+    with be.bound_environment():
+        delta = .001
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_u.value = u
+        p_v = be.placeholder(axes=axes)
+        v = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_v.value = v
+
+        y = be.sig(p_u)
+        t = be.softmax(p_v)
+        val_u = be.cross_entropy_binary_inner(y, t)
+
+        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
+        dval_u_graph = transform_derivative(val_u, p_u)
+        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+
+
 def adiff_softmax(x):
     """
     The version of the diff we use in autodiff, without batch axis.
@@ -393,34 +445,6 @@ def test_softmax():
         assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
 
 
-def np_sig(x):
-    return np.reciprocal(np.exp(-x) + 1)
-
-
-def test_logistic():
-    with be.bound_environment():
-        ax.W.length = 128
-        ax.N.length = 10
-        be.set_batch_axes([ax.N])
-        axes = [ax.W, ax.N]
-        delta = .001
-
-        # set up some distributions
-        u = rng.uniform(-10, 10, axes=axes)
-        p_u = be.placeholder(axes=axes)
-        p_u.value = u
-
-        sig_u = be.sig(p_u)
-
-        sig_np = np_sig(u)
-        sig_graph, = execute([sig_u])
-        assert np.allclose(sig_np, sig_graph)
-
-        dsigdu_graph = transform_derivative(sig_u, p_u)
-        dsigdu_num = transform_numeric_derivative(sig_u, p_u, delta)
-        assert np.allclose(dsigdu_graph, dsigdu_num, atol=1e-2, rtol=1e-2)
-
-
 def test_sigmoid():
     with be.bound_environment():
         delta = .001
@@ -431,7 +455,7 @@ def test_sigmoid():
         u = rng.uniform(-3.0, 3.0, p_u.axes.value)
         p_u.value = u
 
-        val_u_np = 1.0/(1+np.exp(-u))
+        val_u_np = 1.0 / (1 + np.exp(-u))
         val_u = be.sig(p_u)
         val_u_graph, = execute([val_u])
         assert np.allclose(val_u_np, val_u_graph)
