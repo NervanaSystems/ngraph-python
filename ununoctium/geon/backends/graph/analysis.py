@@ -65,7 +65,7 @@ class Digraph(object):
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        inputs = [u for u, vs in predecessors.iteritems() if len(vs) == 0]
+        inputs = [u for u, vs in iter(predecessors.items()) if len(vs) == 0]
         for x in sorted(inputs, key=lambda x: x.id):
             visit(x, fun)
 
