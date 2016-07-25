@@ -91,14 +91,16 @@ def test_2D_constant_dot():
 # be.Constant does not accept array initialization
 def test_constant_multiply():
     with be.bound_environment():
-        a = be.Constant([2, 4])
+        a = be.Constant(4)
         b = be.Constant(2)
         c = be.multiply(a, b)
         enp = be.NumPyTransformer(results=[c])
-        result = enp.evaluate()
-        print(result[c])
+        result = enp.evaluate()[c]
+        assert result == 8
 
 test_constant_init()
 test_constant_add()
 test_1D_constant_init()
 test_2D_constant_init()
+test_constant_multiply()
+
