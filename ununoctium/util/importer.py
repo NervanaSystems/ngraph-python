@@ -24,7 +24,7 @@ from builtins import str
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.transform import Tensor
+from geon.backends.graph.graphop import Tensor
 from geon.backends.graph.graph_test_utils import *
 
 from tensorflow.python.framework import tensor_util
@@ -251,7 +251,6 @@ def create_neon_graph(graph_def, env, end_node=None):
         op = be.mean(name_to_op[inputs[0]], name=node.name)
 
       elif op_type == 'Shape':
-        assert (isinstance(name_to_op[inputs[0]], Tensor))
         shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
         print(shape)
         if len(shape) == 0:
