@@ -2270,6 +2270,7 @@ class cross_entropy_binary_inner(Container, ElementWise):
         self.y = y
         self.t = t
         if isinstance(self.y, sig):
+            # Simpler equivalent
             cebi = (1 - t) * y.x - safelog(y)
         else:
             cebi = -(safelog(y) * t + safelog(1 - y) * (1 - t))
