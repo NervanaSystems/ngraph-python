@@ -46,6 +46,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_container(self, container):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def visit_RNG(self, rng):
         raise NotImplementedError()
 
@@ -268,6 +272,9 @@ class Visitor(nodes.Visitor):
     def visit_computation(self, computation):
         return self.visit_tensor(computation)
 
+    def visit_container(self, container):
+        return self.visit_computation(container)
+
     def visit_RNG(self, rng):
         return self.visit_allocation(rng)
 
@@ -407,7 +414,7 @@ class Visitor(nodes.Visitor):
         return self.visit_elementwise(sgn)
 
     def visit_sig(self, sig, x):
-        return self.visit_elementwise(sig)
+        return self.visit_container(sig)
 
     def visit_sin(self, sin, x):
         return self.visit_elementwise(sin)
@@ -479,8 +486,10 @@ class SimplePrune(Visitor):
             self.add_rep(sum, Constant(val))
 
     def visit_log(self, log, x):
-        if isinstance(x, softmax):
-            x, = x.args
+        if isinstance(x, Container):
+            args = x.args
+            if len(args) == 1:
+                x = args[0]
         if isinstance(x, divide):
             num, denom = x.args
             if isinstance(num, exp):
@@ -508,6 +517,7 @@ class Op(nodes.Node):
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
+        self.transform_hook = None
 
     def parameters(self):
         """Return all parameters used in computing this node"""
@@ -998,6 +1008,9 @@ class Tensor(Op):
     def __truediv__(self, val):
         return divide(self, val)
 
+    def __rtruediv__(self, val):
+        return divide(val, self)
+
     def __rdiv__(self, val):
         return divide(val, self)
 
@@ -1166,6 +1179,19 @@ class ComputationOp(Tensor):
 
     def visit(self, visitor):
         return visitor.visit_computation(self)
+
+
+class Container(ComputationOp):
+    """
+    Implemented in terms of a subgraph, but stays in the graph.
+    """
+
+    def compute_tensor_axes_info(self):
+        x, = self.args
+        return x.tensor_axes_info
+
+    def visit(self, visitor):
+        return visitor.visit_container(self)
 
 
 class RNG(AllocationOp):
@@ -1463,7 +1489,7 @@ class absolute(ElementWise):
         transformer.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sig(x) * delta)
+        x.generate_add_delta(adjoints, sgn(x) * delta)
 
 
 class add(ElementWise):
@@ -1706,7 +1732,7 @@ class less_equal(ElementWiseBoolean):
         return visitor.visit_less_equal(self, *self.args)
 
 
-class softmax(ComputationOp):
+class softmax(Container):
 
     def __init__(self, x, softmax_axes=None, **kargs):
         if softmax_axes is None:
@@ -1717,16 +1743,12 @@ class softmax(ComputationOp):
         self.z = sum(exps, reduction_axes=softmax_axes)
         super(softmax, self).__init__(args=(exps / self.z,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_softmax(self, self.x, *self.args)
-
-    def compute_tensor_axes_info(self):
-        smax, = self.args
-        return smax.tensor_axes_info
-
     @property
     def axes(self):
-        return self.x.axes
+        return self.args[0].axes
+
+    def visit(self, visitor):
+        return visitor.visit_softmax(self, self.x, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         z = delta * self
@@ -2105,24 +2127,18 @@ class sgn(ElementWise):
         transformer.sign(x, out)
 
 
-class sig(ElementWise):
+class sig(Container, ElementWise):
     """Sigmoid"""
 
     def __init__(self, x, **kargs):
-        super(sig, self).__init__(args=(x,), **kargs)
+        self.x = x
+        super(sig, self).__init__(args=(reciprocal(exp(-x) + 1),), axes=x.axes, **kargs)
 
     def visit(self, visitor):
         return visitor.visit_sig(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta * self * (1.0 - self))
-
-    # TODO replace this with nodes after autodiff
-    def transform(self, transformer, out, x):
-        transformer.negative(x, out)
-        transformer.exp(out, out)
-        transformer.add(out, 1.0, out)
-        transformer.reciprocal(out, out)
+        self.x.generate_add_delta(adjoints, delta * self * (1.0 - self))
 
 
 class sin(ElementWise):
@@ -2248,5 +2264,36 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None):
     return -sum(safelog(y) * t, out_axes=out_axes) * logscale
 
 
+class cross_entropy_binary_inner(Container, ElementWise):
+
+    def __init__(self, y, t, **kargs):
+        self.y = y
+        self.t = t
+        if isinstance(self.y, sig):
+            # Simpler equivalent
+            cebi = (1 - t) * y.x - safelog(y)
+        else:
+            cebi = -(safelog(y) * t + safelog(1 - y) * (1 - t))
+        super(cross_entropy_binary_inner, self).__init__(args=(cebi,), **kargs)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        if isinstance(self.y, sig):
+            # Shortcut derivative
+            x = self.y.x
+            x.generate_add_delta(adjoints, (self.y - self.t) * delta)
+            self.t.generate_add_delta(adjoints, x * delta)
+        else:
+            self.args[0].generate_add_delta(adjoints, delta)
+
+
 def cross_entropy_binary(y, t, out_axes=None):
-    return -sum(safelog(y) * t + safelog(1 - y) * (1 - t), out_axes=out_axes)
+    return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
+
+
+def set_break(op, name=None):
+    def hook(transformer, op, transform_op):
+        transform_op(op)
+        # print(name)
+        pass
+    op.transform_hook = hook
+    return op
