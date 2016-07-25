@@ -712,7 +712,8 @@ class TensorAxesInfo(object):
                                        idx=len(self.views),
                                        dummy_axis=dummy_axis))
 
-    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None, forward_axis_ids=None):
+    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None,
+                        forward_axis_ids=None):
         return self.get_or_default(red_axis_ids,
                                    lambda: DotRightViewInfo(
                                        tensor_axes_info=self,
@@ -773,7 +774,7 @@ class DotLeftViewInfo(TensorViewInfo):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            desc = self.tensor_axes_info.tensor_description
+            desc = self.tensor_axes_info.tensor_descriptionx
             if self.dummy_axis is not None:
                 desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
             self.__tensor_description = desc.dot_reaxe_left(self.red_axis_ids)
@@ -781,7 +782,6 @@ class DotLeftViewInfo(TensorViewInfo):
 
 
 class DotRightViewInfo(TensorViewInfo):
-
     def __init__(self, red_axis_ids, dummy_axis=None,
                  forward_axis_ids=None, **kargs):
         super(DotRightViewInfo, self).__init__(**kargs)
@@ -1704,7 +1704,6 @@ class dot(ComputationOp):
             b.tensor_description.axes
 
         o = self.reaxe(a_axes[:-1] + b_axes[1:])
-
         return [o, a, b]
 
     def transform(self, transformer, out, x, y):
