@@ -1739,9 +1739,10 @@ class softmax(Container):
             softmax_axes = tensor_sample_axes(x, **kargs)
         self.softmax_axes = softmax_axes
         self.x = x
-        exps = exp(x - max(x, reduction_axes=softmax_axes))
-        self.z = sum(exps, reduction_axes=softmax_axes)
-        super(softmax, self).__init__(args=(exps / self.z,), **kargs)
+        self.xM = x - max(x, reduction_axes=softmax_axes)
+        exps = exp(self.xM)
+        self.Z = sum(exps, reduction_axes=softmax_axes)
+        super(softmax, self).__init__(args=(exps / self.Z,), **kargs)
 
     @property
     def axes(self):
@@ -2259,17 +2260,52 @@ def deriv(dep, indep):
         return Broadcast(adjoint, axes=indep.axes)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None):
-    logscale = np.float(1. / np.log(2.0) if usebits else 1.)
-    return -sum(safelog(y) * t, out_axes=out_axes) * logscale
+class cross_entopy_multi_inner(Container):
+
+    def __init__(self, y, t, enable_softmax_opt=True, enable_diff_opt=True, out_axes=None, **kargs):
+        self.y = y
+        self.t = t
+        self.enable_softmax_opt = enable_softmax_opt
+        self.enable_diff_opt = enable_diff_opt
+
+
+        if enable_softmax_opt and isinstance(y, softmax):
+            x = y.xM
+            Z = y.Z
+            self.sum = -sum(x * t, out_axes=out_axes)
+            cemi =  self.sum + safelog(Z)
+        else:
+            cemi = -sum(safelog(y) * t, out_axes=out_axes)
+        super(cross_entopy_multi_inner, self).__init__(args=(cemi,), **kargs)
+
+    @property
+    def axes(self):
+        return self.args[0].axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        if self.enable_diff_opt and self.enable_softmax_opt and isinstance(self.y, softmax):
+            x = self.y.xM
+            self.sum.generate_add_delta(adjoints, delta)
+            x.generate_add_delta(adjoints, self.y * delta)
+        else:
+            self.args[0].generate_add_delta(adjoints, delta)
+
+
+def cross_entropy_multi(y, t, usebits=False, out_axes=None, **kargs):
+    result = cross_entopy_multi_inner(y, t, out_axes=out_axes, **kargs)
+    if usebits:
+        result = result * np.float(1. / np.log(2.0))
+    return result
 
 
 class cross_entropy_binary_inner(Container, ElementWise):
 
-    def __init__(self, y, t, **kargs):
+    def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kargs):
         self.y = y
         self.t = t
-        if isinstance(self.y, sig):
+        self.enable_sig_opt = enable_sig_opt
+        self.enable_diff_opt = enable_diff_opt
+        if self.enable_sig_opt and isinstance(self.y, sig):
             # Simpler equivalent
             cebi = (1 - t) * y.x - safelog(y)
         else:
@@ -2277,7 +2313,7 @@ class cross_entropy_binary_inner(Container, ElementWise):
         super(cross_entropy_binary_inner, self).__init__(args=(cebi,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        if isinstance(self.y, sig):
+        if self.enable_diff_opt and self.enable_diff_opt and isinstance(self.y, sig):
             # Shortcut derivative
             x = self.y.x
             x.generate_add_delta(adjoints, (self.y - self.t) * delta)
