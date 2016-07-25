@@ -462,7 +462,16 @@ class TensorDescription(object):
         old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
         return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
                                          old_poss=old_poss,
-                                         broadcast=False)
+                                         broadcast=True)
+
+    def reaxe_with_dummy_axis(self, dummy_axis):
+        new_axes = self.axes + Axes(dummy_axis,)
+        old_poss = [i for i, axis in enumerate(self.axes)]
+        old_poss.append(-1)
+
+        return self.reaxe_with_positions(new_axes=new_axes,
+                                         old_poss=old_poss,
+                                         broadcast=True)
 
     def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
         assert len(new_axes) == len(old_poss)

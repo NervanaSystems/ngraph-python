@@ -17,7 +17,9 @@ import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
 from geon.backends.graph.graph_test_utils import\
-    in_bound_environment, raise_all_numpy_errors
+    in_bound_environment, raise_all_numpy_errors,\
+    transform_numeric_derivative,\
+    transform_derivative
 
 '''
 Test graphiti's implementation of the dot product.
@@ -80,6 +82,8 @@ def test_l2_norm():
 @raise_all_numpy_errors
 @in_bound_environment
 def test_tensor_dot_tensor():
+    delta = rtol = atol = 1e-3
+
     tests = [
         {
             'tensor1': [[1, 2], [4, 5], [3, 4]],
@@ -105,26 +109,55 @@ def test_tensor_dot_tensor():
             'tensor2_axes': (ax.H,),
             'expected_output': [12, 33],
             'axes_lengths': {ax.H: 2}
-        }
+        },
+        {
+            'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
+            'tensor1_axes': (ax.N, ax.D, ax.C),
+            'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
+            'tensor2_axes': (ax.H, ax.D, ax.C),
+            'expected_output': [[51, 81], [188, 297]],
+            'axes_lengths': {ax.N: 2, ax.D: 2, ax.C: 2, ax.H: 2}
+        },
+        {
+            'tensor1': [1, 2],
+            'tensor1_axes': (ax.C,),
+            'tensor2': [7, 11, 13],
+            'tensor2_axes': (ax.D,),
+            'expected_output': [[7, 11, 13], [14, 22, 26]],
+            'axes_lengths': {ax.C: 2, ax.D: 3}
+        },
     ]
-    for test in tests:
+
+    print 'Testing the dot product implementation along with its autodiff.'
+    for i, test in enumerate(tests):
         for axis, length in test['axes_lengths'].items():
             axis.length = length
 
         tensor1_axes = test['tensor1_axes']
-        tensor1_np = be.NumPyTensor(
-            np.array(test['tensor1'], dtype=np.float32), axes=tensor1_axes)
-        tensor1 = be.Variable(axes=tensor1_axes, initial_value=tensor1_np)
+        tensor1 = be.placeholder(axes=tensor1_axes)
+        tensor1.value = np.array(
+            test['tensor1'], dtype=np.float32
+        )
+
         tensor2_axes = test['tensor2_axes']
-        tensor2_np = be.NumPyTensor(
-            np.array(test['tensor2'], dtype=np.float32), axes=tensor2_axes)
-        tensor2 = be.Variable(axes=tensor2_axes, initial_value=tensor2_np)
+        tensor2 = be.placeholder(axes=tensor2_axes)
+        tensor2.value = np.array(
+            test['tensor2'], dtype=np.float32
+        )
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
         dot = be.dot(tensor1, tensor2)
-
         assert np.array_equal(evaluate(dot), expected_output)
 
+        numeric_deriv_1 = transform_numeric_derivative(dot, tensor1, delta)
+        sym_deriv_1 = transform_derivative(dot, tensor1)
+        assert np.allclose(numeric_deriv_1, sym_deriv_1, rtol=rtol, atol=atol)
+
+        numeric_deriv_2 = transform_numeric_derivative(dot, tensor2, delta)
+        sym_deriv_2 = transform_derivative(dot, tensor2)
+        assert np.allclose(numeric_deriv_2, sym_deriv_2, rtol=rtol, atol=atol)
+
+        print 'Passed test %s.' % (i + 1)
 
 if __name__ == '__main__':
     test_l2_norm()
