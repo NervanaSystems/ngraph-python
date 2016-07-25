@@ -2270,6 +2270,7 @@ class cross_entopy_multi_inner(Container):
 
 
         if enable_softmax_opt and isinstance(y, softmax):
+            # This depends on sum(t) being 1
             x = y.xM
             Z = y.Z
             self.sum = -sum(x * t, out_axes=out_axes)
