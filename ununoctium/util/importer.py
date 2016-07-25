@@ -7,23 +7,23 @@ from builtins import str
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.transform import Tensor, Constant
+from geon.backends.graph.transform import Tensor
+from geon.backends.graph.graph_test_utils import *
 
 from tensorflow.python.framework import tensor_util
 import numpy as np
 
 # known operators that can be processed by Neon graph importer
 known_ops = [
-  'Add', 'Div', 'MatMul', 'Maximum', 'Mean', 'Mul', 'Mod',
+  'Add', 'Div', 'MatMul', 'Maximum', 'Mean', 'Mul', 'Mod', 'Prod',
   'Identity', 'Relu',
   'Const', 'Variable', 'Placeholder', 'Range',
   'Assign', 'Cast',
   'SparseSoftmaxCrossEntropyWithLogits',
-  'Shape', 'Rank', 'Size',
-  'Prod',
+  'Shape', 'Rank', 'Size', 'Reshape', # Shapes and Shaping
   'TruncatedNormal',
-  'Fill', 'Tile',
-  'DynamicStitch', 'Reshape',
+  'Fill',
+  'Tile', 'DynamicStitch', # Slicing and Joining
 ]
 
 two_inputs_ops = {
@@ -129,23 +129,24 @@ def create_neon_graph(graph_def, env, end_node=None):
       inputs.append(input_name)
       print('input[' + str(i) + "]:")
       print(name_to_op[inputs[i]])
+      assert isinstance(name_to_op[inputs[i]], Tensor)
 
     with be.bound_environment(env):
       if op_type in two_inputs_ops:
-        assert isinstance(name_to_op[inputs[0]], Tensor) and isinstance(name_to_op[inputs[1]], Tensor)
-        if isinstance(name_to_op[inputs[0]], Constant) \
-                and isinstance(name_to_op[inputs[1]], Constant) \
+        if isinstance(name_to_op[inputs[0]], be.Constant) \
+                and isinstance(name_to_op[inputs[1]], be.Constant) \
                 and op_type == 'Mul':
           result = np.multiply(name_to_op[inputs[0]].const, name_to_op[inputs[1]].const)
-          print(result.dtype)
-          op = be.Constant(result)
+          op = be.Constant(result, name=node.name)
         else:
           op = two_inputs_ops[op_type](name_to_op[inputs[0]], name_to_op[inputs[1]], name=node.name)
 
       elif op_type in one_inputs_ops:
         op = one_inputs_ops[op_type](name_to_op[inputs[0]])
+
       elif op_type == 'Identity':
         op = name_to_op[inputs[0]]
+
       elif op_type == 'Placeholder':
         dims = node.attr['shape'].shape
         shape = [d.size for d in dims.dim]
@@ -154,6 +155,7 @@ def create_neon_graph(graph_def, env, end_node=None):
           graph.x = op
         elif len(shape) == 1:
           graph.y = op
+
       elif op_type == 'Const':
         const_tensor = node.attr['value'].tensor
         shape = [d.size for d in const_tensor.tensor_shape.dim]
@@ -181,27 +183,40 @@ def create_neon_graph(graph_def, env, end_node=None):
         var = name_to_op[inputs[0]]
         init_value = name_to_op[inputs[1]]
         assert(isinstance(var, be.Variable))
-        assert (isinstance(init_value, Tensor))
-        var.initializers.append(init_value)
-        # op = be.assign(var, init_value)
+        op = be.assign(var, init_value)
+        var.initializers.append(op)
+
       elif op_type == 'Fill':
-        shape = name_to_op[inputs[0]]
+        # Creates a tensor filled with a scalar value.
+        shape_tensor = name_to_op[inputs[0]]
         init_val = name_to_op[inputs[1]]
-        assert isinstance(shape, Tensor)
-        assert isinstance(init_val, Constant)
-        array = np.array(shape.const)
-        if not array:
-          op = be.Constant(init_val.const)
+        assert isinstance(init_val, be.Constant)
+
+        if isinstance(shape, be.Constant):
+          op = be.Constant(init_val.const, name=node.name)
         else:
+          array = np.array(shape_tensor.value)
           array.fill(init_val.const)
-          op = be.Constant(array)
+          print(array)
+          shape = shape_tensor.tensor_axes_info.tensor_description.shape
+          if len(shape) == 1:
+            op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0])), name=node.name)
+
       elif op_type == 'TruncatedNormal':
         #TODO:
         shape = name_to_op[inputs[0]] # numpy ndarray
         assert isinstance(shape, Tensor)
         shape = tuple(shape.const)
         val = np.random.random_sample(shape).astype(np.float32)
-        op = be.Constant(val, name=node.name)
+
+        if len(shape) == 0:
+          op = be.Constant(val, name=node.name)
+        elif shape == 1:
+          op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]),), name=node.name)
+        elif shape == 2:
+          op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]),
+                                             be.NumericAxis(shape[1]),), name=node.name)
+
       elif op_type == 'Cast':
         dst_type = node.attr['DstT']
         src_type = node.attr['SrcT']
@@ -210,41 +225,54 @@ def create_neon_graph(graph_def, env, end_node=None):
 
       elif op_type == 'SparseSoftmaxCrossEntropyWithLogits':
         logscale = -np.float(1. / np.log(2.0))
-        op = be.sum(be.safelog(name_to_op[inputs[0]]) * name_to_op[inputs[1]], out_axes=(batch_axis,)) * logscale
+        op = be.sum(be.safelog(name_to_op[inputs[0]]) * name_to_op[inputs[1]],
+                    out_axes=(batch_axis,)) * logscale
 
       elif op_type == 'Mean':
         # TODO: use the attribute of kee_dims
         keep_dims = node.attr['keep_dims']
         op = be.mean(name_to_op[inputs[0]], name=node.name)
+
       elif op_type == 'Shape':
         assert (isinstance(name_to_op[inputs[0]], Tensor))
         shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
-        op = be.Constant(shape, name=node.name)
+        print(shape)
+        if len(shape) == 0:
+          op = be.Constant(0, name=node.name)
+        elif len(shape) == 1:
+          op = be.NumPyTensor(np.array(shape), axes=Axes(be.NumericAxis(len(shape)),), name=node.name)
+        else:
+          assert False
       elif op_type == 'Rank':
-        assert(isinstance(name_to_op[inputs[0]], Tensor))
+        # The rank of a tensor is the number of axis
         shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
-        rank = len(shape)
-        op = be.Constant(rank, name=node.name)
+        op = be.Constant(len(shape), name=node.name)
+
       elif op_type == 'Size':
-        assert(isinstance(name_to_op[inputs[0]], Tensor))
         shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
         op = be.Constant(np.prod(shape), name=node.name)
+
       elif op_type == 'Range':
         assert(len(inputs) == 3)
         start = name_to_op[inputs[0]]
         limit = name_to_op[inputs[1]]
         delta = name_to_op[inputs[2]]
         print(start + ", " + limit + " " + delta)
-        op = np.arange(start.const, limit.const, delta.const)
-        op = be.Constant(op, name=node.name)
+        nums = np.arange(start.const, limit.const, delta.const).astype(np.float32)
+        op = be.NumPyTensor(nums, axes=Axes(be.NumericAxis(len(nums)), ), name=node.name)
         # range = np.arange(start, limit, delta)
-        # op = be.NumPyTensor(range, axes=AxisVar(name=node.name, length=len(shape)), name=node.name)
 
       elif op_type == 'Prod':
-        #TODO: use be.reduce_prod
+        #TODO: implement tf.reduce_prod
         keep_dims = node.attr['keep_dims']
-        op = np.prod(name_to_op[inputs[0]])
-        op = be.Constant(op, name=node.name)
+        print(node.name)
+        # be.reduce_prod is not available, we use hard coded number instead
+        if node.name == "gradients/xentropy_mean_grad/Prod":
+          prod_val = 128
+        elif node.name == "gradients/xentropy_mean_grad/Prod_1":
+          prod_val = 0
+
+        op = be.Constant(prod_val, name=node.name)
 
       elif op_type == 'Mod':
         #TODO: implement tf.mod
@@ -255,6 +283,7 @@ def create_neon_graph(graph_def, env, end_node=None):
       elif op_type == 'DynamicStitch':
         #TODO: implemente tf.dynamic_stich
         op = be.Constant(1)
+
       elif op_type == 'Reshape':
         # TODO: implemente tf.reshape
         print('inputs[0]:' + inputs[0])
@@ -262,15 +291,18 @@ def create_neon_graph(graph_def, env, end_node=None):
         print('inputs[1]:' + inputs[1])
         print(name_to_op[inputs[1]])
         op = name_to_op[inputs[0]]
+
       elif op_type == 'Tile':
+        # Constructs a tensor by tiling a given tensor.
         # TODO: implement tf.tile
         # be.tile is not available, we use hard coded number instead
         val = np.tile(name_to_op[inputs[0]].const, 128)
-        op = be.Constant(val)
+        shape = val.shape
+        if len(shape) == 1:
+          op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
 
       print("output:")
       print(op)
-
       print("---------------------------------------------")
 
       name_to_op[node.name] = op
