@@ -52,11 +52,11 @@ dataflow, interference = build_graphs([1024, 256, 512, 10], 320)
 
 
 def test_coloring():
-    an.color(interference)
-    for u, vs in iter(list(interference.neighbors.items())):
+    interference.color()
+    for u, vs in iter(interference.neighbors.items()):
         # u must have a different color from all its neighbors
         for v in vs:
-            assert(u.tensor_axes_info.buffer.color != v.tensor_axes_info.buffer.color)
+            assert(u.buffer.color != v.buffer.color)
     print('pass coloring')
 
 

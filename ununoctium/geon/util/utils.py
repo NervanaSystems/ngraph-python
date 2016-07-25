@@ -129,7 +129,6 @@ def numeric_derivative(f, x, dx):
         dindex[len(fshape):] = idxiter.multi_index
         d[tuple(dindex)] = (dy / dx)
         xiter[...] = old_x
-
     return d
 
 

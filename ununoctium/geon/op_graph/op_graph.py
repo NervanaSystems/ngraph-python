@@ -582,24 +582,6 @@ class Op(nodes.Node):
             results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
-    @staticmethod
-    def analyze_liveness(results, ordered_ops):
-        liveness = [set() for _ in ordered_ops]
-        i = len(liveness) - 1
-        for result in results:
-            liveness[i].add(result)
-        while i > 0:
-            op = ordered_ops[i]
-            prealive = liveness[i - 1]
-            alive = set(liveness[i])
-            if isinstance(op, Tensor):
-                alive.discard(op)
-                for arg in op.args:
-                    alive.add(arg)
-                prealive |= alive
-            i = i - 1
-        return liveness
-
     def as_node(self, x):
         return Op.as_op(x)
 
@@ -657,7 +639,6 @@ class TensorAxesInfo(object):
         self.axes = axes
         self.views = weakref.WeakValueDictionary()
         self.alloc = alloc
-        self.buffer = None
         self.read_only = read_only
         self.dtype = np.dtype(dtype)
         self.tags = set(tags)
@@ -673,33 +654,28 @@ class TensorAxesInfo(object):
                 axes=self.axes, dtype=self.dtype)
         return self.__tensor_description
 
-    @property
-    def shapes(self):
-        return self.tensor_description.shape
-
-    @property
-    def value(self):
-        return self.tensor_description.value
-
     def set_tensor(self, transformer, tensor):
-        self.tensor_description.value = tensor
+        description = self.tensor_description
+        description.value = transformer.fill_tensor_in(description, tensor)
         self.update_views(transformer, True)
 
     def update_views(self, transformer, force):
         for view in list(self.views.values()):
             if view.tensor_description is self.tensor_description:
                 continue
+            view.tensor_description.buffer = self.tensor_description.buffer
             view.update_tensor(transformer, force)
 
     def allocate(self, transformer):
-        if self.tensor_description.value is None:
-            if self.alloc is not None:
-                tensor = self.alloc(transformer, self.tensor_description)
-            else:
-                tensor = transformer.empty(self.tensor_description)
-            self.set_tensor(transformer, tensor)
+        buffer = self.tensor_description.buffer
+        if buffer.data is None:
+            buffer.data = transformer.make_raw_buffer(buffer.size)
+        if self.alloc is not None:
+            tensor = self.alloc(transformer, self.tensor_description)
         else:
-            self.update_views(transformer, False)
+            tensor = transformer.tensor_view(self.tensor_description)
+        self.set_tensor(transformer, tensor)
+        self.update_views(transformer, False)
 
     def get_or_default(self, axes, default_function):
         if axes in self.views:
@@ -751,9 +727,8 @@ class TensorViewInfo(object):
         self.idx = idx
 
     def allocate(self, transformer):
-        if self.tensor_description.value is None:
-            tensor = transformer.empty(self.tensor_description)
-            self.tensor_description.value = tensor
+        tensor = transformer.tensor_view(self.tensor_description)
+        self.tensor_description.value = tensor
 
     @property
     def value(self):
@@ -762,8 +737,8 @@ class TensorViewInfo(object):
     def update_tensor(self, transformer, force):
         tensor_description = self.tensor_description
         if force or tensor_description.value is None:
-            tensor_description.value = transformer.tensor_view(
-                tensor_description)
+            tensor_description.value = transformer.tensor_view(tensor_description)
+
 
 
 class TensorReaxeViewInfo(TensorViewInfo):
@@ -1156,7 +1131,7 @@ class Tensor(Op):
         return [self.reaxe(self.axes.value)]
 
     def transform_call_info(self, transformer, *args):
-        call_args = [arg.value for arg in args]
+        call_args = [arg.tensor_description.value for arg in args]
         self.transform(transformer, *call_args)
 
     @property
@@ -1544,7 +1519,7 @@ class Constant(AllocationOp):
 
     @property
     def graph_label(self):
-        shapes = self.tensor_axes_info.shapes
+        shapes = self.tensor_axes_info.tensor_description.shape
         if not shapes or max(shapes) <= 2:
             return str(self.const)
         if self.name == self.id:
@@ -1566,11 +1541,10 @@ class NumPyTensor(AllocationOp):
     """
 
     def __init__(self, nptensor, **kargs):
-        self.nptensor = nptensor
+        self.nptensor = nptensor        
         super(NumPyTensor, self).__init__(dtype=nptensor.dtype, **kargs)
 
         def allocator(transformer, tensor_description):
-            out, = self.call_info
             return transformer.nparray(tensor_description, nptensor)
 
         self.tensor_axes_info.alloc = allocator
@@ -2388,6 +2362,7 @@ class Buffer(object):
         self.color = color
         self.size = size
         self.data = None
+        self.views = set()
 
 
 def mean(x, **kargs):

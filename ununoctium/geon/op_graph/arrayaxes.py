@@ -332,7 +332,7 @@ class TensorDescription(object):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(*axes)
         self.value = value
-        self.__buffer = buffer
+        self.buffer = buffer
         self.dtype = dtype
         self.axes = axes
         self.offset = offset
@@ -583,7 +583,6 @@ class TensorDescription(object):
                 base_index.append(s)
 
         offset = self[base_index]
-
         return TensorDescription(axes, dtype=self.dtype,
                                  shape=shape, strides=strides, offset=offset,
                                  buffer=self.buffer)
@@ -601,11 +600,6 @@ class TensorDescription(object):
     def sizes(self):
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
-
-    @property
-    def buffer(self):
-        return self.__buffer or self
-
 
 def get_batch_axes(default=()):
     environment = get_current_environment()

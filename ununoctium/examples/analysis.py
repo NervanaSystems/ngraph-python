@@ -46,16 +46,9 @@ class GraphitiMLP(Model):
         dW = [deriv(Error, w) for w in W]
 
         # Fusion analysis
-        dataflow = DataFlowGraph(dW if bprop else [Error])
-        fused = KernelFlowGraph(dataflow)
-        # Liveness analysis
-        liveness = fused.liveness()
-        # Memory planing
-        interference = InterferenceGraph(liveness)
-        self.memory = color(interference)
-        self.dataflow = dataflow
-        fused.view()
-        # interference.render('interference')
+        outputs = dW if bprop else [Error]
+        self.dataflow, self.memory = assign_buffers(outputs, fusible = gpu_fusible)    
+        self.dataflow.view()
 
 
 class MXNetMLP(Model):
@@ -92,8 +85,8 @@ class MXNetMLP(Model):
             self.memory += reduce(mul, x.shape, 1) * 4
 
 
-layers = [1024, 256, 512, 128, 200, 300, 500, 100]
-batch = 32000
+layers = [1024, 200, 10]
+batch = 320000
 bprop = True
 
 graphiti = GraphitiMLP(layers, batch, bprop)
