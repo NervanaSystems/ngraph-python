@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import range
 from geon.backends.graph.graph_test_utils import *  # noqa
@@ -112,13 +126,33 @@ def test_reduction_deriv():
                     red=red, axes=reduction_axes)
 
 
+def test_reciprocal():
+    with be.bound_environment():
+        delta = .001
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(.1, 5.0, p_u.axes.value)
+        p_u.value = u
+
+        rec_u_np = np.reciprocal(u)
+        rec_u = be.reciprocal(p_u)
+        rec_u_graph, = execute([rec_u])
+        assert np.allclose(rec_u_np, rec_u_graph)
+
+        drec_u_num = transform_numeric_derivative(rec_u, p_u, delta)
+        drec_u_graph = transform_derivative(rec_u, p_u)
+        assert np.allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
+
+
 def test_elementwise_ops_matched_args():
     with be.bound_environment():
-        # delta = .001
+        delta = .001
         ax.W.length = 20
         ax.H.length = 20
         ax.N.length = 128
-        axes = [ax.W, ax.H]
+        axes = Axes(ax.W, ax.H)
 
         for npop, beop, op in [(np.add, be.add, 'add'),
                                (np.subtract, be.subtract, 'sub'),
@@ -137,12 +171,12 @@ def test_elementwise_ops_matched_args():
             uv_t, = execute([top])
             assert np.allclose(uv_np, uv_t, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(top, p_u, .001)
+            duvdunum = transform_numeric_derivative(top, p_u, delta)
             dudvdut = transform_derivative(top, p_u)
             assert np.allclose(duvdunum, dudvdut, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
 
-            duvdvnum = transform_numeric_derivative(top, p_v, .001)
+            duvdvnum = transform_numeric_derivative(top, p_v, delta)
             dudvdvt = transform_derivative(top, p_v)
             assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
@@ -159,7 +193,7 @@ def test_elementwise_ops_matched_args():
             u_t, = execute([top])
             assert np.allclose(u_np, u_t, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            dudunum = transform_numeric_derivative(top, p_u, .001)
+            dudunum = transform_numeric_derivative(top, p_u, delta)
             dudut = transform_derivative(top, p_u)
             assert np.allclose(dudunum, dudut, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
@@ -230,6 +264,58 @@ def np_softmax(x, axis):
 
     exps = np.exp(x - np.max(x, axis).reshape(shape))
     return exps / np.sum(exps, axis).reshape(shape)
+
+
+def cross_entropy_binary_logistic(x, t):
+    y = 1.0 / (1.0 + np.exp(-x))
+    return -(np.log(y) * t + np.log(1 - y) * (1 - t))
+
+
+def cross_entropy_binary_logistic_shortcut(x, t):
+    y = 1.0 / (1.0 + np.exp(-x))
+    return (1.0 - t) * x - np.log(y)
+
+
+def test_cross_entropy_binary_logistic_shortcut():
+    with be.bound_environment():
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_u.value = u
+        p_v = be.placeholder(axes=axes)
+        v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes.value), 0)
+        p_v.value = v
+
+        cel = cross_entropy_binary_logistic(u, v)
+        cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
+        assert np.allclose(cel, cel_shortcut)
+
+        cel_graph, = execute([be.cross_entropy_binary_inner(be.sig(p_u), p_v)])
+        assert np.allclose(cel, cel_graph)
+
+
+def test_cross_entropy_binary():
+    with be.bound_environment():
+        delta = .001
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_u.value = u
+        p_v = be.placeholder(axes=axes)
+        v = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        p_v.value = v
+
+        y = be.sig(p_u)
+        t = be.softmax(p_v)
+        val_u = be.cross_entropy_binary_inner(y, t)
+
+        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
+        dval_u_graph = transform_derivative(val_u, p_u)
+        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
 
 def adiff_softmax(x):
@@ -359,33 +445,56 @@ def test_softmax():
         assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
 
 
-def np_sig(x):
-    return np.reciprocal(np.exp(-x) + 1)
-
-
-def test_logistic():
+def test_sigmoid():
     with be.bound_environment():
-        ax.W.length = 128
-        ax.N.length = 10
-        be.set_batch_axes([ax.N])
-        axes = [ax.W, ax.N]
         delta = .001
-
-        # set up some distributions
-        u = rng.uniform(-10, 10, axes=axes)
+        ax.W.length = 20
+        ax.N.length = 128
+        axes = Axes(ax.W, ax.N)
         p_u = be.placeholder(axes=axes)
+        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
         p_u.value = u
 
-        sig_u = be.sig(p_u)
+        val_u_np = 1.0 / (1 + np.exp(-u))
+        val_u = be.sig(p_u)
+        val_u_graph, = execute([val_u])
+        assert np.allclose(val_u_np, val_u_graph)
 
-        sig_np = np_sig(u)
-        sig_graph, = execute([sig_u])
-        assert np.allclose(sig_np, sig_graph)
+        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
+        dval_u_graph = transform_derivative(val_u, p_u)
+        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
-        dsigdu_graph = transform_derivative(sig_u, p_u)
-        dsigdu_num = transform_numeric_derivative(sig_u, p_u, delta)
-        assert np.allclose(dsigdu_graph, dsigdu_num, atol=1e-2, rtol=1e-2)
+        val_u = be.log(val_u)
+        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
+        dval_u_graph = transform_derivative(val_u, p_u)
+        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
+
+def one_hot_comparison(hot_axes, axes):
+    u = rng.random_integers(0, ax.C.length - 1, axes, dtype=np.int8)
+    u_p = be.placeholder(axes=axes, dtype=u.dtype)
+    u_p.value = u
+    v = np.zeros(hot_axes.lengths, dtype=np.float32)
+    udxiter = np.nditer(u, flags=['multi_index'])
+    for uiter in udxiter:
+        vindex = [int(uiter)]
+        vindex.extend(udxiter.multi_index)
+        v[tuple(vindex)] = 1
+
+    v_t, = execute([be.onehot(u_p, axis=ax.C)])
+    assert np.array_equal(v_t, v)
+
+
+def test_onehot():
+    with be.bound_environment():
+        ax.C.length = 4
+        ax.W.length = 32
+        ax.H.length = 32
+        ax.N.length = 128
+        be.set_batch_axes([ax.N])
+
+        one_hot_comparison(Axes(ax.C, ax.N), Axes(ax.N))
+        one_hot_comparison(Axes(ax.C, ax.W, ax.H, ax.N), Axes(ax.W, ax.H, ax.N))
 
 if __name__ == '__main__':
     test_constants()
@@ -395,3 +504,4 @@ if __name__ == '__main__':
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()
+    test_onehot()

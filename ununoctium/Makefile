@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 # set empty to prevent any implicit rules from firing.
 .SUFFIXES:
 
@@ -38,8 +52,8 @@ test:
 	@py.test $(TEST_OPTS) $(TEST_DIRS)
 
 style:
-	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) || true # ignore errors
-	pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv * || true # ignore errors
+	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
+	pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
 	pylint --output-format=colorized geon

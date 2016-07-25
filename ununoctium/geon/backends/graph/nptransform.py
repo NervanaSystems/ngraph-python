@@ -1,6 +1,21 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 import numpy as np
 
-from geon.backends.graph.transform import Transformer, AllocationOp
+from geon.backends.graph.transform import Transformer
+from geon.backends.graph.graphop import AllocationOp
 
 
 class NumPyTransformer(Transformer):
@@ -112,6 +127,11 @@ class NumPyTransformer(Transformer):
 
     def not_equal(self, x, y, out):
         np.not_equal(x, y, out=out)
+
+    def onehot(self, x, out):
+        out[:] = 0
+        for i in range(len(x)):
+            out[x[i], i] = 1
 
     def reciprocal(self, x, out):
         np.reciprocal(x, out=out)

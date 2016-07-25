@@ -1,6 +1,21 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.backends.graph.transform import ComputationOp, AllocationOp, ElementWise, Function, \
+from geon.backends.graph.graphop import ComputationOp, AllocationOp, ElementWise, Function, \
     Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product
@@ -50,7 +65,7 @@ class Digraph(object):
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        inputs = [u for u, vs in predecessors.iteritems() if len(vs) == 0]
+        inputs = [u for u, vs in iter(predecessors.items()) if len(vs) == 0]
         for x in sorted(inputs, key=lambda x: x.id):
             visit(x, fun)
 
@@ -82,38 +97,39 @@ class DataFlowGraph(Digraph):
             x, AllocationOp) and x.tensor_axes_info.read_only}
         liveness[order[-1]] = set(self.outputs) | keeps
         # Update
-        for current, previous in reversed(zip(order[1:], order[:-1])):
+        for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             args = {x for x in current.args if not isinstance(x, Constant)}
             liveness[previous] = args | (liveness[current] - set(current.defs))
         return liveness
 
 
-class KernelFlowGraph(DataFlowGraph):
+def never_fusible(op1, op2):
+    return False
 
-    @staticmethod
-    def _fusible(op1, op2):
-        if not isinstance(
-                op1,
-                ComputationOp) or not isinstance(
-                op2,
-                ComputationOp):
-            return False
 
-        shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
-        if isinstance(
-                op1,
-                ElementWise) and isinstance(
-                op2,
-                ElementWise) and shapes1 == shapes2:
-            return True
-        # reduction(elementwise)
-        if isinstance(op1, ElementWise) and isinstance(op2, ReductionOp):
-            return True
-        # elementwise(reduction)
-        if isinstance(op1, ReductionOp) and isinstance(op2, ElementWise):
-            return True
-
+def gpu_fusible(op1, op2):
+    # Only computations can be merged
+    if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
+
+    shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
+    # Elementwise functions can be merged together if they have the same shapes
+    if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
+        return True
+
+    # Reduction following elementwises can be merged
+    if isinstance(op1, ElementWise) and isinstance(op2, ReductionOp):
+        return True
+
+    # Elementwise following reductions can be merged
+    if isinstance(op1, ReductionOp) and isinstance(op2, ElementWise):
+        return True
+
+    # Everything else cannot be merged
+    return False
+
+
+class KernelFlowGraph(DataFlowGraph):
 
     def _graphviz(self, name=''):
         predecessors = Digraph._invert(self.successors)
@@ -132,20 +148,16 @@ class KernelFlowGraph(DataFlowGraph):
             dot.node(x.id, x.graph_label, x.style)
         # Edges
         edges = {(a, b) for a, _ in list(self.successors.items()) for b in _}
-#       sorts = {x: x.ops.topsort()
-#                for x in self.successors if isinstance(x, Function)}
-#       firsts = {x: sorts[x][0] if isinstance(
-#           x, Function) else x for x in self.successors}
-#       lasts = {
-# x: sorts[x][-1] if isinstance(x, Function) else x for x in
-# self.successors}
+        sorts = {x: x.ops.topsort() for x in self.successors if isinstance(x, Function)}
+        firsts = {x: sorts[x][0] if isinstance(x, Function) else x for x in self.successors}
+        lasts = {x: sorts[x][-1] if isinstance(x, Function) else x for x in self.successors}
         for a, b in edges:
             kw = {}
             if isinstance(a, Function):
                 kw['ltail'] = 'cluster_{}'.format(a.id)
             if isinstance(b, Function):
                 kw['lhead'] = 'cluster_{}'.format(b.id)
-#           edge = dot.edge(lasts[a].id, firsts[b].id, **kw)
+            dot.edge(lasts[a].id, firsts[b].id, **kw)
         return dot
 
     def _compute_paths(self):
@@ -156,8 +168,10 @@ class KernelFlowGraph(DataFlowGraph):
             bad_path_from[v] = set()
             for w in self.successors[v]:
                 path_from[v] |= path_from[w]
-                bad_path_from[v] |= path_from[w] if not KernelFlowGraph._fusible(
-                    v, w) else bad_path_from[w]
+                if self.fusible(v, w):
+                    bad_path_from[v] |= bad_path_from[w]
+                else:
+                    bad_path_from[v] |= path_from[w]
         return path_from, bad_path_from
 
     def between(self, v, w, path_from):
@@ -183,8 +197,9 @@ class KernelFlowGraph(DataFlowGraph):
                 if node != v:
                     connected.add(v)
 
-    def __init__(self, dataflow):
+    def __init__(self, dataflow, fusible=never_fusible):
         # Extracts clusters
+        self.fusible = fusible
         super(KernelFlowGraph, self).__init__(dataflow.outputs)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
