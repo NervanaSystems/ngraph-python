@@ -774,7 +774,7 @@ class DotLeftViewInfo(TensorViewInfo):
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
-            desc = self.tensor_axes_info.tensor_descriptionx
+            desc = self.tensor_axes_info.tensor_description
             if self.dummy_axis is not None:
                 desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
             self.__tensor_description = desc.dot_reaxe_left(self.red_axis_ids)
@@ -1702,7 +1702,6 @@ class dot(ComputationOp):
         )
         a_axes, b_axes = a.tensor_description.axes,\
             b.tensor_description.axes
-
         o = self.reaxe(a_axes[:-1] + b_axes[1:])
         return [o, a, b]
 
