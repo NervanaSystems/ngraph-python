@@ -2262,19 +2262,19 @@ def deriv(dep, indep):
 
 class cross_entopy_multi_inner(Container):
 
-    def __init__(self, y, t, enable_softmax_opt=True, enable_diff_opt=True, out_axes=None, **kargs):
+    def __init__(self, y, t, enable_softmax_opt=True, enable_diff_opt=True,
+                 out_axes=None, **kargs):
         self.y = y
         self.t = t
         self.enable_softmax_opt = enable_softmax_opt
         self.enable_diff_opt = enable_diff_opt
-
 
         if enable_softmax_opt and isinstance(y, softmax):
             # This depends on sum(t) being 1
             x = y.xM
             Z = y.Z
             self.sum = -sum(x * t, out_axes=out_axes)
-            cemi =  self.sum + safelog(Z)
+            cemi = self.sum + safelog(Z)
         else:
             cemi = -sum(safelog(y) * t, out_axes=out_axes)
         super(cross_entopy_multi_inner, self).__init__(args=(cemi,), **kargs)
