@@ -24,7 +24,7 @@ from builtins import str
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.graphop import Tensor
+from geon.backends.graph.graphop import Tensor, ComputationOp
 from geon.backends.graph.graph_test_utils import *
 
 from tensorflow.python.framework import tensor_util
@@ -37,7 +37,7 @@ known_ops = [
   'Const', 'Variable', 'Placeholder', 'Range',
   'Assign', 'Cast',
   'SparseSoftmaxCrossEntropyWithLogits',
-  'Shape', 'Rank', 'Size', 'Reshape', # Shapes and Shaping
+  'Shape', 'Rank', 'Size', 'Reshape', 'ExpandDims', # Shapes and Shaping
   'TruncatedNormal',
   'Fill',
   'Tile', 'DynamicStitch', # Slicing and Joining
@@ -52,7 +52,7 @@ two_inputs_ops = {
 }
 
 one_inputs_ops = {
-  'Relu': be.tanh, # temporarily use tanh as Relu is not implemented
+  'Tanh': be.tanh,
 }
 
 
@@ -70,6 +70,9 @@ def scan_variables(graph_def, env):
   name_to_axes = {}
   batch_axis = None
 
+  y_axis = None
+  y_name = ""
+
   for node in graph_def.node:
     inputs = []
     for i, input_name in enumerate([x for x in node.input]):
@@ -86,11 +89,12 @@ def scan_variables(graph_def, env):
           batch_axis = AxisVar(name='batch', length=shape[0])
 
         if len(shape) == 2:
-          in_axis = AxisVar(name=str(shape[1]), length=shape[1])
+          in_axis = AxisVar(name='x', length=shape[1])
           name_to_axes[node.name] = (in_axis, batch_axis)
+
         elif len(shape) == 1:
-          y_axis = AxisVar(name='y', length=10)
-          name_to_axes[node.name] = (y_axis, batch_axis)
+          name_to_axes[node.name] = (AxisVar(name='y', length=10), batch_axis)
+          y_name = node.name
 
       elif op_type == 'Variable':
         dims = node.attr['shape'].shape
@@ -100,33 +104,41 @@ def scan_variables(graph_def, env):
           if 'weights' in node.name:
             assert (in_axis is not None)
             assert (in_axis.length == shape[0])
-            out_axis = AxisVar(name=str(shape[1]), length=shape[1])
+            out_axis = AxisVar(name=node.name, length=shape[1])
             name_to_axes[node.name] = (in_axis, out_axis)
             in_axis = out_axis  # now the output axis becomes input axis for the next layer
+            y_axis = out_axis
 
         elif len(shape) == 1:
           if 'biases' in node.name:
             assert (in_axis is not None)
             assert (in_axis.length == shape[0])
             name_to_axes[node.name] = (in_axis,)
+            last_bias = node.name
 
         elif len(shape) == 0:
           name_to_axes[node.name] = (AxisVar(name=node.name, length=1),)
 
-  return name_to_axes, batch_axis
+  name_to_axes[y_name] = (y_axis, batch_axis)
 
-def create_neon_graph(graph_def, env, end_node=None):
+  return name_to_axes, batch_axis, in_axis, y_axis
+
+
+def create_nervana_graph(graph_def, env, end_node=None):
   '''
-  create Neon's transformer graph from a frozen GraphDef protobuf
+  convert TF graph_def to Neon's graph
 
-  :param graph_def: a frozen graph_def protobuf, in which variables are converted to constant
+  :param graph_def: a (frozen) graph_def protobuf
   :return: last operator of the ast graph, all variable names
   '''
   name_to_op = {}
-  var_names = []
+  variables = {}
   graph = be.Model()
 
-  name_to_axes, batch_axis = scan_variables(graph_def, env)
+  graph.x = None
+  graph.y = None
+
+  name_to_axes, batch_axis, in_axis, y_axis = scan_variables(graph_def, env)
 
   for node in graph_def.node:
     op_type = node.op
@@ -144,22 +156,33 @@ def create_neon_graph(graph_def, env, end_node=None):
     inputs = []
     for i, input_name in enumerate([x for x in node.input]):
       inputs.append(input_name)
-      print('input[' + str(i) + "]:")
+      print('inputs[' + str(i) + "]:")
+      if inputs[i] == 'xentropy:1':
+        inputs[i] = 'xentropy'
+
       print(name_to_op[inputs[i]])
-      assert isinstance(name_to_op[inputs[i]], Tensor)
+
+      if isinstance(name_to_op[inputs[i]], be.Constant):
+        print(name_to_op[inputs[i]].const)
+      # elif isinstance(name_to_op[inputs[i]], ComputationOp):
+      #   print(name_to_op[inputs[i]].tensor_axes_info.value)
+      # elif isinstance(name_to_op[inputs[i]], Tensor):
+      #   shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
+      #   print(name_to_op[inputs[i]].tensor_axes_info.value)
 
     with be.bound_environment(env):
       if op_type in two_inputs_ops:
-        if isinstance(name_to_op[inputs[0]], be.Constant) \
-                and isinstance(name_to_op[inputs[1]], be.Constant) \
-                and op_type == 'Mul':
-          result = np.multiply(name_to_op[inputs[0]].const, name_to_op[inputs[1]].const)
-          op = be.Constant(result, name=node.name)
+
+        if op_type == 'Mul' and node.name == 'gradients/xentropy_grad/mul':
+          op = two_inputs_ops[op_type](name_to_op["xentropy"], be.Constant(1. / batch_axis.length), name=node.name)
         else:
           op = two_inputs_ops[op_type](name_to_op[inputs[0]], name_to_op[inputs[1]], name=node.name)
 
       elif op_type in one_inputs_ops:
         op = one_inputs_ops[op_type](name_to_op[inputs[0]])
+
+      elif op_type == 'Relu':
+        op = be.maximum(name_to_op[inputs[0]], 0)
 
       elif op_type == 'Identity':
         op = name_to_op[inputs[0]]
@@ -178,23 +201,29 @@ def create_neon_graph(graph_def, env, end_node=None):
         shape = [d.size for d in const_tensor.tensor_shape.dim]
         np_val = tensor_util.MakeNdarray(const_tensor)
 
-        if 'weights' in node.name:
-          assert(len(shape) == 2)
-          assert(in_axis is not None)
-          assert(in_axis.length == shape[0])
-          out_axis = AxisVar(name=node.name, length=shape[1])
-          op = be.NumPyTensor(np_val, axes=[in_axis, out_axis], name=node.name)
-          in_axis = out_axis # now the output axis becomes input axis for the next layer
-        elif 'biases' in node.name:
-          assert(len(shape) == 1)
-          assert(in_axis is not None)
-          assert(in_axis.length == shape[0])
-          op = be.NumPyTensor(np_val, axes=[in_axis], name=node.name)
-        else:
+        if len(shape) == 0:
           op = be.Constant(np_val, name=node.name)
+        elif len(shape) == 1:
+          if 'biases' in node.name:
+            assert (in_axis is not None)
+            assert (in_axis.length == shape[0])
+            op = be.NumPyTensor(np_val, axes=[in_axis], name=node.name)
+          else:
+            op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
+        elif len(shape) == 2:
+          if 'weights' in node.name:
+            assert (in_axis is not None)
+            assert (in_axis.length == shape[0])
+            out_axis = AxisVar(name=node.name, length=shape[1])
+            op = be.NumPyTensor(np_val, axes=[in_axis, out_axis], name=node.name)
+            in_axis = out_axis  # now the output axis becomes input axis for the next layer
+          else:
+            op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]),
+                                             be.NumericAxis(shape[1]), ), name=node.name)
 
       elif op_type == 'Variable':
-        op = be.Variable(axes=name_to_axes[node.name], name=node.name)
+        variables[node.name] = be.Variable(axes=name_to_axes[node.name], name=node.name)
+        op = variables[node.name]
 
       elif op_type == 'Assign':
         var = name_to_op[inputs[0]]
@@ -221,16 +250,16 @@ def create_neon_graph(graph_def, env, end_node=None):
 
       elif op_type == 'TruncatedNormal':
         #TODO:
-        shape = name_to_op[inputs[0]] # numpy ndarray
-        assert isinstance(shape, Tensor)
-        shape = tuple(shape.const)
+        shape_tensor = name_to_op[inputs[0]] # numpy ndarray
+        assert isinstance(shape_tensor, Tensor)
+        shape = shape_tensor.nptensor
         val = np.random.random_sample(shape).astype(np.float32)
 
         if len(shape) == 0:
           op = be.Constant(val, name=node.name)
-        elif shape == 1:
+        elif len(shape) == 1:
           op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]),), name=node.name)
-        elif shape == 2:
+        elif len(shape) == 2:
           op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]),
                                              be.NumericAxis(shape[1]),), name=node.name)
 
@@ -241,9 +270,9 @@ def create_neon_graph(graph_def, env, end_node=None):
         op = name_to_op[inputs[0]]
 
       elif op_type == 'SparseSoftmaxCrossEntropyWithLogits':
-        logscale = -np.float(1. / np.log(2.0))
-        op = be.sum(be.safelog(name_to_op[inputs[0]]) * name_to_op[inputs[1]],
-                    out_axes=(batch_axis,)) * logscale
+        # print(name_to_op[inputs[0]].axes.value)
+        # print(name_to_op[inputs[1]].axes.value)
+        op = be.cross_entropy_multi(name_to_op[inputs[0]], name_to_op[inputs[1]], out_axes=(batch_axis, y_axis))
 
       elif op_type == 'Mean':
         # TODO: use the attribute of kee_dims
@@ -255,10 +284,9 @@ def create_neon_graph(graph_def, env, end_node=None):
         print(shape)
         if len(shape) == 0:
           op = be.Constant(0, name=node.name)
-        elif len(shape) == 1:
-          op = be.NumPyTensor(np.array(shape), axes=Axes(be.NumericAxis(len(shape)),), name=node.name)
         else:
-          assert False
+          op = be.NumPyTensor(np.array(shape), axes=Axes(be.NumericAxis(len(shape)),), name=node.name)
+
       elif op_type == 'Rank':
         # The rank of a tensor is the number of axis
         shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
@@ -276,7 +304,6 @@ def create_neon_graph(graph_def, env, end_node=None):
         print(start + ", " + limit + " " + delta)
         nums = np.arange(start.const, limit.const, delta.const).astype(np.float32)
         op = be.NumPyTensor(nums, axes=Axes(be.NumericAxis(len(nums)), ), name=node.name)
-        # range = np.arange(start, limit, delta)
 
       elif op_type == 'Prod':
         #TODO: implement tf.reduce_prod
@@ -292,8 +319,6 @@ def create_neon_graph(graph_def, env, end_node=None):
 
       elif op_type == 'Mod':
         #TODO: implement tf.mod
-        assert (isinstance(name_to_op[inputs[0]], Tensor))
-        assert (isinstance(name_to_op[inputs[1]], Tensor))
         op = name_to_op[inputs[0]]
 
       elif op_type == 'DynamicStitch':
@@ -317,6 +342,10 @@ def create_neon_graph(graph_def, env, end_node=None):
         if len(shape) == 1:
           op = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
 
+      elif op_type == 'ExpandDims':
+        print('No implementation')
+        op = name_to_op[inputs[0]]
+
       print("output:")
       print(op)
       print("---------------------------------------------")
@@ -328,7 +357,8 @@ def create_neon_graph(graph_def, env, end_node=None):
         print('last_op: ' + last_op_name)
         break
 
-  graph.var_names = var_names
+  graph.variables = variables
   graph.last_op = name_to_op[last_op_name]
+  graph.name_to_op = name_to_op
 
   return graph
