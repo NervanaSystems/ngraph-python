@@ -84,6 +84,11 @@ class NumPyTransformer(Transformer):
         np.divide(x, y, out=out)
 
     def dot(self, x, y, out):
+        if not out.flags.c_contiguous:
+            t = x
+            x = y.T
+            y = t.T
+            out = out.T
         np.dot(x, y, out)
 
     def equal(self, x, y, out):
