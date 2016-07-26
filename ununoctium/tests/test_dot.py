@@ -82,7 +82,8 @@ def test_l2_norm():
 @raise_all_numpy_errors
 @in_bound_environment
 def test_tensor_dot_tensor():
-    delta = rtol = atol = 1e-3
+    delta = 1e-3
+    rtol = atol = 1e-2
 
     tests = [
         {
@@ -126,6 +127,12 @@ def test_tensor_dot_tensor():
             'expected_output': [[7, 11, 13], [14, 22, 26]],
             'axes_lengths': {ax.C: 2, ax.D: 3}
         },
+        {
+            'tensor1': [[1, 4], [6, 2]],
+            'tensor1_axes': (ax.C, ax.D),
+            'expected_output': 57,
+            'axes_lengths': {ax.C: 2, ax.D: 2}
+        }
     ]
 
     print 'Testing the dot product implementation along with its autodiff.'
@@ -139,15 +146,20 @@ def test_tensor_dot_tensor():
             test['tensor1'], dtype=np.float32
         )
 
-        tensor2_axes = test['tensor2_axes']
-        tensor2 = be.placeholder(axes=tensor2_axes)
-        tensor2.value = np.array(
-            test['tensor2'], dtype=np.float32
-        )
+        if 'tensor2' in test:
+            tensor2_axes = test['tensor2_axes']
+            tensor2 = be.placeholder(axes=tensor2_axes)
+            tensor2.value = np.array(
+                test['tensor2'], dtype=np.float32
+            )
+        else:
+            tensor2 = tensor1
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
         dot = be.dot(tensor1, tensor2)
-        assert np.array_equal(evaluate(dot), expected_output)
+        evaluated = evaluate(dot)
+        assert np.array_equal(evaluated, expected_output),\
+            'Expected: %s, found: %s' % (expected_output, evaluated)
 
         numeric_deriv_1 = transform_numeric_derivative(dot, tensor1, delta)
         sym_deriv_1 = transform_derivative(dot, tensor1)

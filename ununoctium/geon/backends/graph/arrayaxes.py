@@ -102,7 +102,7 @@ class AxisID(object):
         return hash(self.axis) + hash(self.idx)
 
     def __repr__(self):
-        return '{axis}[{idx}])'.format(axis=self.axis, idx=self.idx)
+        return '{axis}[{idx}]'.format(axis=self.axis, idx=self.idx)
 
 TensorAxisInfo = collections.namedtuple('TensorAxisInfo', ['length', 'stride'])
 
@@ -432,8 +432,24 @@ class TensorDescription(object):
         div_point = len(old_axis_ids) - len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    def dot_reaxe_right(self, red_axis_ids):
+    # This function is symmetric to dot_reaxe_left unless forward_axis
+    # ids is specified. It then attempts to rename the reduction axis using
+    # the mapping from the forward axis ids to the current axis ids.
+    # In the case of backpropagation, this helps preserve the axis id numbering
+    # of the original output, which is necessary if the derivative is to be
+    # projected onto the input correctly.
+    def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         old_axis_ids = self.axes.as_axis_ids()
+        if forward_axis_ids:
+            trans = dict(zip(forward_axis_ids, old_axis_ids))
+
+            def trans_func(x):
+                if x in trans:
+                    return trans[x]
+                else:
+                    return x
+
+            red_axis_ids = AxisIDTuple(*map(trans_func, red_axis_ids))
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
         axis_ids = red_axis_ids + old_axis_ids[:idx]\
             + old_axis_ids[idx + len(red_axis_ids):]

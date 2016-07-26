@@ -712,13 +712,14 @@ class TensorAxesInfo(object):
                                        idx=len(self.views),
                                        dummy_axis=dummy_axis))
 
-    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None):
+    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None, forward_axis_ids=None):
         return self.get_or_default(red_axis_ids,
                                    lambda: DotRightViewInfo(
                                        tensor_axes_info=self,
                                        red_axis_ids=red_axis_ids,
                                        idx=len(self.views),
-                                       dummy_axis=dummy_axis))
+                                       dummy_axis=dummy_axis,
+                                       forward_axis_ids=forward_axis_ids))
 
 
 class TensorViewInfo(object):
@@ -773,7 +774,7 @@ class DotLeftViewInfo(TensorViewInfo):
     def tensor_description(self):
         if self.__tensor_description is None:
             desc = self.tensor_axes_info.tensor_description
-            if self.dummy_axis:
+            if self.dummy_axis is not None:
                 desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
             self.__tensor_description = desc.dot_reaxe_left(self.red_axis_ids)
         return self.__tensor_description
@@ -781,19 +782,24 @@ class DotLeftViewInfo(TensorViewInfo):
 
 class DotRightViewInfo(TensorViewInfo):
 
-    def __init__(self, red_axis_ids, dummy_axis=None, **kargs):
+    def __init__(self, red_axis_ids, dummy_axis=None,
+                 forward_axis_ids=None, **kargs):
         super(DotRightViewInfo, self).__init__(**kargs)
         self.red_axis_ids = red_axis_ids
         self.dummy_axis = dummy_axis
+        self.forward_axis_ids = forward_axis_ids
         self.__tensor_description = None
 
     @property
     def tensor_description(self):
         if self.__tensor_description is None:
             desc = self.tensor_axes_info.tensor_description
-            if self.dummy_axis:
+            if self.dummy_axis is not None:
                 desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
-            self.__tensor_description = desc.dot_reaxe_right(self.red_axis_ids)
+            self.__tensor_description = desc.dot_reaxe_right(
+                self.red_axis_ids,
+                forward_axis_ids=self.forward_axis_ids
+            )
         return self.__tensor_description
 
 
@@ -943,6 +949,16 @@ class AxesSliceComp(AxesComp):
             return x_axes[self.lower:self.upper]
         else:
             return Axes(x_axes[self.lower])
+
+
+# Wrapper around a function that dynamically generates axes
+class AxesFuncComp(AxesComp):
+    def __init__(self, func, **kargs):
+        super(AxesFuncComp, self).__init__(**kargs)
+        self.func = func
+
+    def resolve(self):
+        return self.func()
 
 
 class Tensor(Op):
@@ -1116,10 +1132,12 @@ class Tensor(Op):
             dummy_axis=dummy_axis
         )
 
-    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None):
+    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None,
+                        forward_axis_ids=None):
         return self.tensor_axes_info.dot_reaxe_right(
             red_axis_ids,
-            dummy_axis=dummy_axis
+            dummy_axis=dummy_axis,
+            forward_axis_ids=forward_axis_ids
         )
 
     # Required for parameter initializers
@@ -1605,35 +1623,61 @@ class divide(ElementWise):
 
 
 class dot(ComputationOp):
-    def __init__(self, x, y, reduction_axes=None, out_axes=None,
-                 numpy_matching=False, **kargs):
-        self.numpy_matching = numpy_matching
-
-        if numpy_matching:
-            self.out_axes = AxesAppendComp(
-                AxesAppendComp(
-                    AxesSliceComp(x.axes, 0, -1),
-                    AxesSliceComp(y.axes, 0, -2),
-                    allow_repeated=True
-                ),
-                AxesSliceComp(y.axes, -1),
-                allow_repeated=True
-            )
-            self.reduction_axes = AxesSliceComp(x.axes, -1, -1)
-            self.multiply = False
-        else:
-            self.out_axes = AxesComp.as_axes(out_axes)
-            if reduction_axes is None:
-                self.reduction_axes = AxesIntersectComp(x.axes, y.axes)
-            else:
-                self.reduction_axes = AxesComp.as_axes(reduction_axes)
-
-            if out_axes is not None:
-                self.reduction_axes = AxesSubComp(
-                    self.reduction_axes, self.out_axes)
-            self.multiply = False
-
+    def __init__(self, x, y,
+                 reduction_axes=None, out_axes=None,
+                 numpy_matching=False,
+                 forward_dot=None,
+                 **kargs):
+        self.__axis_id_info = None
+        self.use_numpy_matching = numpy_matching
+        self.reduction_axes = reduction_axes
+        self.out_axes = out_axes
+        self.forward_dot = forward_dot
         super(dot, self).__init__(args=(x, y), **kargs)
+
+    @property
+    def axis_id_info(self):
+        if self.__axis_id_info is None:
+            dummy = None
+            x, y = self.args
+            x_axes = x.axes.value
+            y_axes = y.axes.value
+
+            x_axis_ids = x_axes.as_axis_ids()
+            y_axis_ids = y_axes.as_axis_ids()
+
+            if self.forward_dot is not None:
+                y_axis_ids = self.forward_dot.axis_id_info[0]
+
+            if self.use_numpy_matching:
+                out_axis_ids = x_axis_ids[:-1]\
+                    + y_axis_ids[:-2]\
+                    + AxisIDTuple(y_axis_ids[-1],)
+                red_axis_ids = AxisIDTuple(y_axis_ids[-1],)
+            else:
+                if self.reduction_axes is None:
+                    red_axis_ids = AxisIDTuple.intersect(
+                        x_axis_ids,
+                        y_axis_ids
+                    )
+                else:
+                    red_axis_ids = self.reduction_axes.value.as_axis_ids()
+
+                if self.out_axes is not None:
+                    out_axis_ids = self.out_axes.value.as_axis_ids()
+                else:
+                    out_axis_ids = (
+                        (x_axis_ids - red_axis_ids) +
+                        (y_axis_ids - red_axis_ids)
+                    )
+                red_axis_ids -= out_axis_ids
+
+                if len(red_axis_ids) == 0:
+                    dummy = Axis(1)
+                    red_axis_ids = AxisIDTuple(dummy[0],)
+
+            self.__axis_id_info = (out_axis_ids, red_axis_ids, dummy)
+        return self.__axis_id_info
 
     def visit(self, visitor):
         return visitor.visit_dot(
@@ -1644,45 +1688,48 @@ class dot(ComputationOp):
 
     def compute_call_info(self):
         x, y = self.args
-        if self.numpy_matching:
-            o, a, b = self.reaxe(self.axes.value),\
-                x.reaxe(x.axes.value), y.reaxe(y.axes.value)
+        out_axis_ids, red_axis_ids, dummy = self.axis_id_info
+        if self.forward_dot is None:
+            forward_axis_ids = None
         else:
-            if len(self.reduction_axes.value) == 0:
-                dummy = Axis(1)
-                reduction_axes = Axes(dummy,)
-            else:
-                dummy = None
-                reduction_axes = self.reduction_axes.value
+            forward_axis_ids = self.forward_dot.axis_id_info[0]
 
-            red_axis_ids = reduction_axes.as_axis_ids()
-            a, b = x.dot_reaxe_left(red_axis_ids, dummy_axis=dummy),\
-                y.dot_reaxe_right(red_axis_ids, dummy_axis=dummy)
-            a_axes, b_axes = a.tensor_description.axes,\
-                b.tensor_description.axes
+        a = x.dot_reaxe_left(red_axis_ids, dummy_axis=dummy)
+        b = y.dot_reaxe_right(
+            red_axis_ids,
+            forward_axis_ids=forward_axis_ids,
+            dummy_axis=dummy
+        )
+        a_axes, b_axes = a.tensor_description.axes,\
+            b.tensor_description.axes
 
-            o_axes = a_axes[:-1] + b_axes[1:]
-            o = self.reaxe(o_axes)
+        o = self.reaxe(a_axes[:-1] + b_axes[1:])
+
         return [o, a, b]
 
     def transform(self, transformer, out, x, y):
-        if self.multiply:
-            transformer.multiply(x, y, out)
-        else:
-            transformer.dot(x, y, out)
+        transformer.dot(x, y, out)
 
     @property
     def axes(self):
         if self.out_axes:
             return self.out_axes
         else:
-            x, y = self.args
-            return AxesAppendComp(AxesSubComp(x.axes, self.reduction_axes),
-                                  AxesSubComp(y.axes, self.reduction_axes))
+            return AxesFuncComp(
+                lambda dot_obj=self: dot_obj.axis_id_info[0].as_axes()
+            )
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, dot(y, delta, out_axes=x.axes))
-        y.generate_add_delta(adjoints, dot(x, delta, out_axes=y.axes))
+        # The delta must be passed in as the second argument
+        # to preserve the forward axes mapping.
+        x.generate_add_delta(
+            adjoints,
+            dot(y, delta, out_axes=x.axes, forward_dot=self)
+        )
+        y.generate_add_delta(
+            adjoints,
+            dot(x, delta, out_axes=y.axes, forward_dot=self)
+        )
 
 
 class ElementWiseBoolean(ElementWise):
