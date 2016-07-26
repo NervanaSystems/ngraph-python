@@ -12,18 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
-# load TensorFlow's computation graph in protobuf and convert it to Neon's AST graph
-# ----------------------------------------------------------------------------
-'''
-Note that the TF package imported here is the local graphiti version.
+"""
+Load TensorFlow's computation graph in protobuf and convert it to Neon's AST graph
+
+python sample/create_sample_graph.py
 
 If the protobuf (.pb) file does not exist, you might need to first run the TensorFlow script to
 generate the protobuf file:
-
-python ../../tf_benchmark/create_sample_graph.py
-
-'''
+te
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -57,7 +54,6 @@ def test_create_neon_graph(pb_file, execute=False):
             result = enp.evaluate()
             print(result[ast_graph.last_op])
 
-# test_create_neon_graph("../../tf_benchmark/sample/constant_graph.pb", False)
-# test_create_neon_graph("../../tf_benchmark/sample/variable_graph.pb", False)
-test_create_neon_graph(
-    "../../tf_benchmark/sample/variable_graph_froze.pb", True)
+# test_create_neon_graph("sample/constant_graph.pb", False)
+# test_create_neon_graph("sample/variable_graph.pb", False)
+test_create_neon_graph("sample/variable_graph_froze.pb", True)

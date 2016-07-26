@@ -12,7 +12,6 @@ from __future__ import print_function
 
 import tensorflow as tf
 from tensorflow.python.training.saver import read_meta_graph_file
-from freeze_graph import freeze_graph
 
 def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
   '''
@@ -22,7 +21,7 @@ def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
 
   x = tf.Variable(tf.random_normal([1, 3], stddev=0.35), name="input")
   weight = tf.Variable(tf.random_normal([3, 5], stddev=0.35), name="weights")
-  biases = tf.Variable(tf.ones([1, 5]), name='biases')
+  biases = tf.Variable(tf.ones([1]), name='biases')
 
   result = tf.matmul(x, weight) + biases
 
