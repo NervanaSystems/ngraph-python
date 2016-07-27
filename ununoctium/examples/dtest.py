@@ -92,9 +92,7 @@ class MyTest(nm.Model):
             x_axes=g.x.axes,
             shape_spec=layers,
             axes=g.y.axes,
-            batch_axes=(
-                ax.N,
-            ),
+            batch_axes=(ax.N,),
             init=uni)
 
         g.error = cross_entropy(g.value, g.y)
