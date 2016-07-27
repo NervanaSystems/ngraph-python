@@ -485,7 +485,7 @@ class TensorDescription(object):
         if dim == -1:
             dim = len(self.axes)
         new_axes = self.axes[:dim] + Axes(dummy_axis,) + self.axes[dim:]
-        old_poss = range(dim) + [-1] + range(dim, len(self.axes))
+        old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
                                          old_poss=old_poss,
                                          broadcast=True)
