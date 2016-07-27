@@ -44,6 +44,9 @@ def test_expand_dims():
     x1 = be.ExpandDims(x, ax1, 0)
     x1_val, = execute([x1])
 
+    for i in range(ax1.length):
+        assert np.array_equal(x1_val[i], x_np)
+
 if __name__ == '__main__':
     test_dot_with_numerics()
     test_expand_dims()
