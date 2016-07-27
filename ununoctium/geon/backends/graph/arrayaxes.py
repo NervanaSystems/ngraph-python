@@ -481,11 +481,11 @@ class TensorDescription(object):
                                          old_poss=old_poss,
                                          broadcast=True)
 
-    def reaxe_with_dummy_axis(self, dummy_axis):
-        new_axes = self.axes + Axes(dummy_axis,)
-        old_poss = [i for i, axis in enumerate(self.axes)]
-        old_poss.append(-1)
-
+    def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
+        if dim == -1:
+            dim = len(self.axes)
+        new_axes = self.axes[:dim] + Axes(dummy_axis,) + self.axes[dim:]
+        old_poss = range(dim) + [-1] + range(dim, len(self.axes))
         return self.reaxe_with_positions(new_axes=new_axes,
                                          old_poss=old_poss,
                                          broadcast=True)
@@ -530,6 +530,7 @@ class TensorDescription(object):
             = self.maybe_collapse_numerics(
                 new_axes, full_shape, full_strides, full_sizes
             )
+
         return TensorDescription(new_axes, dtype=self.dtype,
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),

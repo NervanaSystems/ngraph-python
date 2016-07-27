@@ -134,7 +134,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         return r
 
     def value(self, op):
-        return op.tensor_axes_info.reaxe(op.axes.value).value
+        return op.output_view_info.value
 
     def set_value(self, op, tensor):
         op.tensor_axes_info.set_tensor(self, tensor)

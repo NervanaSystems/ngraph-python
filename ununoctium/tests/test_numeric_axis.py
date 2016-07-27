@@ -31,5 +31,19 @@ def test_dot_with_numerics():
 
     assert np.array_equal(d_val, np.dot(x_np, x_np))
 
+
+@in_bound_environment
+def test_expand_dims():
+    ax1 = be.NumericAxis(2)
+    ax2 = be.NumericAxis(2)
+    axes = Axes(ax1, ax2)
+
+    x_np = np.array([[1, 2], [1, 2]], dtype='float32')
+    x = be.NumPyTensor(x_np, axes=axes)
+
+    x1 = be.ExpandDims(x, ax1, 0)
+    x1_val, = execute([x1])
+
 if __name__ == '__main__':
     test_dot_with_numerics()
+    test_expand_dims()
