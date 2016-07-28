@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+from builtins import object, map, range, zip
 from future.utils import with_metaclass
 from functools import reduce
 
@@ -441,7 +442,7 @@ class TensorDescription(object):
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
-            trans = dict(zip(forward_axis_ids, old_axis_ids))
+            trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
                 if x in trans:
@@ -449,7 +450,7 @@ class TensorDescription(object):
                 else:
                     return x
 
-            red_axis_ids = AxisIDTuple(*map(trans_func, red_axis_ids))
+            red_axis_ids = AxisIDTuple(*list(map(trans_func, red_axis_ids)))
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
         axis_ids = red_axis_ids + old_axis_ids[:idx]\
             + old_axis_ids[idx + len(red_axis_ids):]
