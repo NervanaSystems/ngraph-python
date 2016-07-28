@@ -84,8 +84,9 @@ def scan_variables(graph_def, env):
       - y_axis: axis for labels
     """
     name_to_axes = {}
+    in_axis = None
     batch_axis = None
-
+    x_axis = None
     y_axis = None
     y_name = ""
 
@@ -105,8 +106,9 @@ def scan_variables(graph_def, env):
                     batch_axis = AxisVar(name='batch', length=shape[0])
 
                 if len(shape) == 2:
-                    in_axis = AxisVar(name='x', length=shape[1])
-                    name_to_axes[node.name] = (in_axis, batch_axis)
+                    x_axis = AxisVar(name='x', length=shape[1])
+                    name_to_axes[node.name] = (x_axis, batch_axis)
+                    in_axis = x_axis
 
                 elif len(shape) == 1:
                     name_to_axes[node.name] = (AxisVar(name='y', length=10), batch_axis)
@@ -136,7 +138,7 @@ def scan_variables(graph_def, env):
 
     name_to_axes[y_name] = (y_axis, batch_axis)
 
-    return name_to_axes, batch_axis, in_axis, y_axis
+    return name_to_axes, batch_axis, x_axis, y_axis
 
 
 def create_nervana_graph(graph_def, env, end_node=None):
@@ -160,6 +162,9 @@ def create_nervana_graph(graph_def, env, end_node=None):
     graph.y = None
 
     name_to_axes, batch_axis, in_axis, y_axis = scan_variables(graph_def, env)
+    print(y_axis)
+    print(in_axis)
+    assert(in_axis is not None)
 
     for node in graph_def.node:
         op_type = node.op
