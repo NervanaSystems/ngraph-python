@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 
-import geon.backends.graph.dataloaderbackend
+import geon.backends.dataloaderbackend
 import geon.backends.graph.npbackend
 import geon.backends.graph.graph as graph
 
