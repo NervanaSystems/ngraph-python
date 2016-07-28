@@ -100,6 +100,7 @@ def test_numpytensor_dot():
 
         assert np.array_equal(result[c], np_c)
 
+
 def test_numpytensor_multiply_constant():
     with be.bound_environment():
         np_a = np.array([[1, 2, 3]], dtype=np.float32)
