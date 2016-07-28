@@ -21,6 +21,7 @@ importing a TensorFlow GraphDef protobuf and convert it to Neon computation grap
 
 from __future__ import absolute_import, division, print_function
 from builtins import str
+from builtins import range
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
@@ -430,7 +431,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
                         x = np.pad(x, (0, len(y) - len(x)), 'constant', constant_values=1)
 
                 n = len(x)
-                for i in xrange(n):
+                for i in range(n):
                     if not x[i] == y[i]:
                         if x[i] == 1:
                             grad_x_reduce_.append(n - 1 - i)
