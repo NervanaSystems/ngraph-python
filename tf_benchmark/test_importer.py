@@ -54,5 +54,6 @@ def test_create_neon_graph(pb_file, execute=False):
             result = enp.evaluate()
             print(result[ast_graph.last_op])
 
+
 # test_create_neon_graph("sample/constant_graph.pb", False)
 test_create_neon_graph("sample/variable_graph_froze.pb", True)
