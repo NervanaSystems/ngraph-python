@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
+
 import geon.backends.graph.dataloaderbackend
 import geon.backends.graph.npbackend
 import geon.backends.graph.graph as graph
