@@ -1,3 +1,4 @@
+from builtins import range
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,7 +75,7 @@ def test_l2_norm():
         [1, 4, 5, 6],
         [[1, 3, 5], [4, 2, 5]]
     ]
-    tests = map(lambda _: np.array(_, dtype=np.float32), tests_)
+    tests = [np.array(_, dtype=np.float32) for _ in tests_]
     for i, test in enumerate(tests):
         assert np.array_equal(np.linalg.norm(test), graphiti_l2_norm(test))
 
@@ -136,7 +137,7 @@ def test_tensor_dot_tensor():
     ]
 
     for test in tests:
-        for axis, length in test['axes_lengths'].items():
+        for axis, length in list(test['axes_lengths'].items()):
             axis.length = length
 
         tensor1_axes = test['tensor1_axes']

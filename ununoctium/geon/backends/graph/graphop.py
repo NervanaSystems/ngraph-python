@@ -782,6 +782,7 @@ class DotLeftViewInfo(TensorViewInfo):
 
 
 class DotRightViewInfo(TensorViewInfo):
+
     def __init__(self, red_axis_ids, dummy_axis=None,
                  forward_axis_ids=None, **kargs):
         super(DotRightViewInfo, self).__init__(**kargs)
@@ -953,6 +954,7 @@ class AxesSliceComp(AxesComp):
 
 # Wrapper around a function that dynamically generates axes
 class AxesFuncComp(AxesComp):
+
     def __init__(self, func, **kargs):
         super(AxesFuncComp, self).__init__(**kargs)
         self.func = func
@@ -1623,6 +1625,7 @@ class divide(ElementWise):
 
 
 class dot(ComputationOp):
+
     def __init__(self, x, y,
                  reduction_axes=None, out_axes=None,
                  numpy_matching=False,

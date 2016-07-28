@@ -28,12 +28,12 @@ from __future__ import print_function
 
 import tensorflow as tf
 import geon.backends.graph.funs as be
-from util.importer import create_neon_graph
+from util.importer import create_nervana_graph
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 
-def test_create_neon_graph(pb_file, execute=False):
+def test_create_nervana_graph(pb_file, execute=False):
     print("loading graph")
     graph_def = tf.GraphDef()
 
@@ -42,7 +42,7 @@ def test_create_neon_graph(pb_file, execute=False):
     with open(pb_file, 'rb') as f:
         graph_def.ParseFromString(f.read())  # read serialized binary file only
 
-    ast_graph = create_neon_graph(graph_def, env)
+    ast_graph = create_nervana_graph(graph_def, env)
     print(ast_graph)
 
     dataflow = analysis.DataFlowGraph([ast_graph.last_op])
@@ -54,6 +54,6 @@ def test_create_neon_graph(pb_file, execute=False):
             result = enp.evaluate()
             print(result[ast_graph.last_op])
 
-# test_create_neon_graph("sample/constant_graph.pb", False)
-# test_create_neon_graph("sample/variable_graph.pb", False)
-test_create_neon_graph("sample/variable_graph_froze.pb", True)
+
+# test_create_nervana_graph("sample/constant_graph.pb", False)
+test_create_nervana_graph("sample/variable_graph_froze.pb", True)

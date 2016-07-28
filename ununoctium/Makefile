@@ -18,7 +18,7 @@
 # Extract virtualenv Python version
 PY := $(shell python --version 2>&1  | cut -c8)
 ifeq ($(PY), 2)
-	PYLINT3K_ARGS := --disable=no-absolute-import
+	PYLINT3K_ARGS := --disable=no-absolute-import,setslice-method,getslice-method,nonzero-method
 else
 	PYLINT3K_ARGS :=
 endif
