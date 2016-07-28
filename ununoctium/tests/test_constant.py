@@ -100,9 +100,48 @@ def test_numpytensor_dot():
 
         assert np.array_equal(result[c], np_c)
 
+def test_numpytensor_multiply_constant():
+    with be.bound_environment():
+        np_a = np.array([[1, 2, 3]], dtype=np.float32)
+        np_c = np.multiply(np_a, 2)
+
+        ax.M.length = 1
+        ax.N.length = 3
+        a = be.NumPyTensor(np_a, axes=[ax.M, ax.N])
+        b = be.Constant(2)
+        c = be.multiply(a, b)
+        enp = be.NumPyTransformer(results=[c])
+        result = enp.evaluate()
+        print(result[c])
+        assert np.array_equal(result[c], np_c)
+
+
+def test_numpytensor_mlp():
+    with be.bound_environment():
+        np_x = np.array([[1, 2, 3]], dtype=np.float32)
+        np_w = np.array([[1, 1], [1, 1], [1, 1]], dtype=np.float32)
+        np_b = np.array([1, 2], dtype=np.float32)
+        np_c = np.dot(np_x, np_w) + np_b
+
+        ax.N.length = 1
+        ax.D.length = 3
+        ax.H.length = 2
+        x = be.NumPyTensor(np_x, axes=[ax.N, ax.D])
+        w = be.NumPyTensor(np_w, axes=[ax.D, ax.H])
+        b = be.NumPyTensor(np_b, axes=[ax.H])
+        wx = be.dot(x, w)
+        c = wx + b
+        enp = be.NumPyTransformer(results=[c])
+        result = enp.evaluate()
+        print(result[c])
+        print(np_c)
+        assert np.array_equal(result[c], np_c)
+
 
 test_constant_init()
 test_constant_add()
 test_constant_multiply()
 test_numpytensor_add()
 test_numpytensor_dot()
+test_numpytensor_multiply_constant()
+test_numpytensor_mlp()
