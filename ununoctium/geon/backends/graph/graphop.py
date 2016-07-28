@@ -107,6 +107,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_expand_dims(self, expand_dims, axis, dim, x):
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def visit_absolute(self, absolute, x):
         raise NotImplementedError()
 
@@ -317,6 +321,9 @@ class Visitor(nodes.Visitor):
 
     def visit_broadcast(self, broadcast, x):
         return self.visit_tensor(broadcast)
+
+    def visit_expand_dims(self, expand_dims, axis, dim, x):
+        return self.visit_tensor(expand_dims)
 
     def visit_absolute(self, absolute, x):
         return self.visit_elementwise(absolute)
@@ -618,6 +625,10 @@ class Op(nodes.Node):
                 op.visit(pruner)
             has_work = pruner.do_replacements()
 
+    @property
+    def output_view_info(self):
+        raise NotImplementedError
+
     def transform(self, transformer, *args):
         """Process op"""
         pass
@@ -722,6 +733,14 @@ class TensorAxesInfo(object):
                                        dummy_axis=dummy_axis,
                                        forward_axis_ids=forward_axis_ids))
 
+    def reaxe_with_dummy_axis(self, axis, dim):
+        return self.get_or_default(
+            ('Dummy', dim, axis),
+            lambda: DummyReaxeViewInfo(
+                tensor_axes_info=self, axis=axis, dim=dim, idx=len(self.views)
+            )
+        )
+
 
 class TensorViewInfo(object):
     """The use of a view of a tensor with axes"""
@@ -760,6 +779,21 @@ class TensorReaxeViewInfo(TensorViewInfo):
         if self.__tensor_description is None:
             self.__tensor_description = self.tensor_axes_info.\
                 tensor_description.reaxe(self.reaxes)
+        return self.__tensor_description
+
+
+class DummyReaxeViewInfo(TensorViewInfo):
+    def __init__(self, axis, dim, **kargs):
+        super(DummyReaxeViewInfo, self).__init__(**kargs)
+        self.axis = axis
+        self.dim = dim
+        self.__tensor_description = None
+
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = self.tensor_axes_info.\
+                tensor_description.reaxe_with_dummy_axis(self.axis, self.dim)
         return self.__tensor_description
 
 
@@ -946,10 +980,10 @@ class AxesSliceComp(AxesComp):
 
     def resolve(self):
         x_axes = self.x.value
-        if self.upper:
-            return x_axes[self.lower:self.upper]
+        if self.upper is None:
+            return Axes(x_axes[self.lower:])
         else:
-            return Axes(x_axes[self.lower])
+            return x_axes[self.lower:self.upper]
 
 
 # Wrapper around a function that dynamically generates axes
@@ -1109,6 +1143,10 @@ class Tensor(Op):
         return TensorAxesInfo(self.axes.value, dtype=dtype, tags=self.tags)
 
     @property
+    def output_view_info(self):
+        return self.tensor_axes_info.reaxe(self.axes.value)
+
+    @property
     def call_info(self):
         if self.__call_info is None:
             self.__call_info = self.compute_call_info()
@@ -1142,6 +1180,12 @@ class Tensor(Op):
             forward_axis_ids=forward_axis_ids
         )
 
+    def reaxe_with_dummy_axis(self, axis, dim):
+        return self.tensor_axes_info.reaxe_with_dummy_axis(
+            axis=axis,
+            dim=dim
+        )
+
     # Required for parameter initializers
     @property
     def shape(self):
@@ -1167,6 +1211,40 @@ class Broadcast(Tensor):
     def visit(self, visitor):
         x, = self.args
         return visitor.visit_broadcast(self, x)
+
+
+class ExpandDims(Tensor):
+    def __init__(self, x, axis, dim, **kargs):
+        self.axis = axis
+        self.dim = dim
+        super(ExpandDims, self).__init__(args=(x,), **kargs)
+
+    def visit(self, visitor):
+        x, = self.args
+        return visitor.visit_expand_dims(self, self.axis, self.dim, x)
+
+    def compute_tensor_axes_info(self):
+        x, = self.args
+        return x.tensor_axes_info
+
+    def compute_call_info(self):
+        return [self.output_view_info]
+
+    @property
+    def output_view_info(self):
+        x, = self.args
+        return x.reaxe_with_dummy_axis(self.axis, self.dim)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta)
+
+    @property
+    def axes(self):
+        x_axes, dim, axis = self.args[0].axes, self.dim, self.axis
+
+        def func():
+            return x_axes.value[:dim] + Axes(axis,) + x_axes.value[dim:]
+        return AxesFuncComp(func)
 
 
 class AllocationOp(Tensor):
