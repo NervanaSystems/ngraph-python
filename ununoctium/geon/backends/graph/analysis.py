@@ -65,7 +65,7 @@ class Digraph(object):
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        inputs = [u for u, vs in iter(predecessors.items()) if len(vs) == 0]
+        inputs = [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
         for x in sorted(inputs, key=lambda x: x.id):
             visit(x, fun)
 
@@ -203,7 +203,7 @@ class KernelFlowGraph(DataFlowGraph):
         super(KernelFlowGraph, self).__init__(dataflow.outputs)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
-        edges = {(a, b) for a, _ in successors.iteritems() for b in _}
+        edges = {(a, b) for a, _ in successors.items() for b in _}
         edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
         clusters = dict((x, {x}) for e in edges for x in e)
         while edges:
@@ -219,7 +219,7 @@ class KernelFlowGraph(DataFlowGraph):
                 self.transfer_edges(v, x, successors)
                 self.transfer_edges(v, x, path_from)
                 self.transfer_edges(v, x, bad_path_from)
-            edges = {(a, b) for a, _ in successors.iteritems() for b in _}
+            edges = {(a, b) for a, _ in successors.items() for b in _}
             edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
         # Creates adjacency list for each cluster
         extract_subgraph = lambda R: dict(

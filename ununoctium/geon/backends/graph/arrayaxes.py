@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+from builtins import object, map, range, zip
 from future.utils import with_metaclass
 from functools import reduce
 
@@ -441,7 +442,7 @@ class TensorDescription(object):
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
-            trans = dict(zip(forward_axis_ids, old_axis_ids))
+            trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
                 if x in trans:
@@ -449,7 +450,7 @@ class TensorDescription(object):
                 else:
                     return x
 
-            red_axis_ids = AxisIDTuple(*map(trans_func, red_axis_ids))
+            red_axis_ids = AxisIDTuple(*list(map(trans_func, red_axis_ids)))
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
         axis_ids = red_axis_ids + old_axis_ids[:idx]\
             + old_axis_ids[idx + len(red_axis_ids):]
@@ -480,11 +481,11 @@ class TensorDescription(object):
                                          old_poss=old_poss,
                                          broadcast=True)
 
-    def reaxe_with_dummy_axis(self, dummy_axis):
-        new_axes = self.axes + Axes(dummy_axis,)
-        old_poss = [i for i, axis in enumerate(self.axes)]
-        old_poss.append(-1)
-
+    def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
+        if dim == -1:
+            dim = len(self.axes)
+        new_axes = self.axes[:dim] + Axes(dummy_axis,) + self.axes[dim:]
+        old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
                                          old_poss=old_poss,
                                          broadcast=True)
@@ -529,6 +530,7 @@ class TensorDescription(object):
             = self.maybe_collapse_numerics(
                 new_axes, full_shape, full_strides, full_sizes
             )
+
         return TensorDescription(new_axes, dtype=self.dtype,
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),

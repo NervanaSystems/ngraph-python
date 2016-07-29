@@ -31,8 +31,7 @@ args = parser.parse_args()
 def linear(ns, x, axes, init=None, bias=None):
     ns.weights = be.Variable(
         axes=be.linear_map_axes(
-            be.sample_axes(
-                x.axes),
+            be.sample_axes(x.axes),
             be.sample_axes(axes)),
         init=init)
     result = be.dot(ns.weights, x)
@@ -69,16 +68,10 @@ def grad_descent(cost):
     learning_rate = be.placeholder(axes=(), name='learning_rate')
     params = cost.parameters()
     derivs = [be.deriv(cost, param) for param in params]
-    updates = be.doall(
-        all=[
-            be.assign(
-                param,
-                param -
-                learning_rate *
-                deriv) for param,
-            deriv in zip(
-                params,
-                derivs)])
+    updates = be.doall(all=[
+        be.assign(param, param - learning_rate * deriv)
+        for param, deriv in zip(params, derivs)
+    ])
     return learning_rate, updates
 
 

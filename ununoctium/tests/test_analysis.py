@@ -17,6 +17,7 @@ Test the graph analysis functions
 
 '''
 from __future__ import print_function
+from builtins import range, zip
 
 import geon.backends.graph.analysis as an
 import geon.backends.graph.funs as be
@@ -51,7 +52,7 @@ dataflow, interference = build_graphs([1024, 256, 512, 10], 320)
 
 def test_coloring():
     an.color(interference)
-    for u, vs in iter(interference.neighbors.items()):
+    for u, vs in iter(list(interference.neighbors.items())):
         # u must have a different color from all its neighbors
         for v in vs:
             assert(u.tensor_axes_info.buffer.color != v.tensor_axes_info.buffer.color)
@@ -59,7 +60,7 @@ def test_coloring():
 
 
 def test_topsort():
-    edges = {(u, v) for u, vs in iter(dataflow.successors.items()) for v in vs}
+    edges = {(u, v) for u, vs in iter(list(dataflow.successors.items())) for v in vs}
     order = dataflow.topsort()
     for u, v in edges:
         assert(order.index(u) < order.index(v))

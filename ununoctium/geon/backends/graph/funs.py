@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import geon.backends.graph.dataloaderbackend
-import geon.backends.graph.npbackend
+from __future__ import print_function
+
+import geon.backends.dataloaderbackend
 import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope,  \
@@ -29,7 +30,7 @@ from geon.backends.graph.graphop import sample_axes, batch_axes, linear_map_axes
     equal, not_equal, greater, less, greater_equal, less_equal, softmax, max, min, sum, assign, \
     tensor_size, Variable, Temporary, exp, log, safelog, maximum, minimum, multiply, negative, \
     onehot, power, reciprocal, sig, sin, sqrt, square, subtract, tanh, deriv, cross_entropy_multi, \
-    cross_entropy_binary
+    cross_entropy_binary, ExpandDims
 from geon.backends.graph.arrayaxes import Axis, Axes, AxisVar, NumericAxis,\
     AxisID, AxisIDTuple, set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 

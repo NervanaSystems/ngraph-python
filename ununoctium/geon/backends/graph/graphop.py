@@ -107,6 +107,10 @@ class AbstractVisitor(nodes.AbstractVisitor):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def visit_expand_dims(self, expand_dims, axis, dim, x):
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def visit_absolute(self, absolute, x):
         raise NotImplementedError()
 
@@ -317,6 +321,9 @@ class Visitor(nodes.Visitor):
 
     def visit_broadcast(self, broadcast, x):
         return self.visit_tensor(broadcast)
+
+    def visit_expand_dims(self, expand_dims, axis, dim, x):
+        return self.visit_tensor(expand_dims)
 
     def visit_absolute(self, absolute, x):
         return self.visit_elementwise(absolute)
@@ -618,6 +625,10 @@ class Op(nodes.Node):
                 op.visit(pruner)
             has_work = pruner.do_replacements()
 
+    @property
+    def output_view_info(self):
+        raise NotImplementedError
+
     def transform(self, transformer, *args):
         """Process op"""
         pass
@@ -722,6 +733,14 @@ class TensorAxesInfo(object):
                                        dummy_axis=dummy_axis,
                                        forward_axis_ids=forward_axis_ids))
 
+    def reaxe_with_dummy_axis(self, axis, dim):
+        return self.get_or_default(
+            ('Dummy', dim, axis),
+            lambda: DummyReaxeViewInfo(
+                tensor_axes_info=self, axis=axis, dim=dim, idx=len(self.views)
+            )
+        )
+
 
 class TensorViewInfo(object):
     """The use of a view of a tensor with axes"""
@@ -760,6 +779,21 @@ class TensorReaxeViewInfo(TensorViewInfo):
         if self.__tensor_description is None:
             self.__tensor_description = self.tensor_axes_info.\
                 tensor_description.reaxe(self.reaxes)
+        return self.__tensor_description
+
+
+class DummyReaxeViewInfo(TensorViewInfo):
+    def __init__(self, axis, dim, **kargs):
+        super(DummyReaxeViewInfo, self).__init__(**kargs)
+        self.axis = axis
+        self.dim = dim
+        self.__tensor_description = None
+
+    @property
+    def tensor_description(self):
+        if self.__tensor_description is None:
+            self.__tensor_description = self.tensor_axes_info.\
+                tensor_description.reaxe_with_dummy_axis(self.axis, self.dim)
         return self.__tensor_description
 
 
@@ -946,10 +980,10 @@ class AxesSliceComp(AxesComp):
 
     def resolve(self):
         x_axes = self.x.value
-        if self.upper:
-            return x_axes[self.lower:self.upper]
+        if self.upper is None:
+            return Axes(x_axes[self.lower:])
         else:
-            return Axes(x_axes[self.lower])
+            return x_axes[self.lower:self.upper]
 
 
 # Wrapper around a function that dynamically generates axes
@@ -1109,6 +1143,10 @@ class Tensor(Op):
         return TensorAxesInfo(self.axes.value, dtype=dtype, tags=self.tags)
 
     @property
+    def output_view_info(self):
+        return self.tensor_axes_info.reaxe(self.axes.value)
+
+    @property
     def call_info(self):
         if self.__call_info is None:
             self.__call_info = self.compute_call_info()
@@ -1142,6 +1180,12 @@ class Tensor(Op):
             forward_axis_ids=forward_axis_ids
         )
 
+    def reaxe_with_dummy_axis(self, axis, dim):
+        return self.tensor_axes_info.reaxe_with_dummy_axis(
+            axis=axis,
+            dim=dim
+        )
+
     # Required for parameter initializers
     @property
     def shape(self):
@@ -1167,6 +1211,40 @@ class Broadcast(Tensor):
     def visit(self, visitor):
         x, = self.args
         return visitor.visit_broadcast(self, x)
+
+
+class ExpandDims(Tensor):
+    def __init__(self, x, axis, dim, **kargs):
+        self.axis = axis
+        self.dim = dim
+        super(ExpandDims, self).__init__(args=(x,), **kargs)
+
+    def visit(self, visitor):
+        x, = self.args
+        return visitor.visit_expand_dims(self, self.axis, self.dim, x)
+
+    def compute_tensor_axes_info(self):
+        x, = self.args
+        return x.tensor_axes_info
+
+    def compute_call_info(self):
+        return [self.output_view_info]
+
+    @property
+    def output_view_info(self):
+        x, = self.args
+        return x.reaxe_with_dummy_axis(self.axis, self.dim)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta)
+
+    @property
+    def axes(self):
+        x_axes, dim, axis = self.args[0].axes, self.dim, self.axis
+
+        def func():
+            return x_axes.value[:dim] + Axes(axis,) + x_axes.value[dim:]
+        return AxesFuncComp(func)
 
 
 class AllocationOp(Tensor):
@@ -1804,9 +1882,10 @@ class softmax(Container):
             softmax_axes = tensor_sample_axes(x, **kargs)
         self.softmax_axes = softmax_axes
         self.x = x
-        exps = exp(x - max(x, reduction_axes=softmax_axes))
-        self.z = sum(exps, reduction_axes=softmax_axes)
-        super(softmax, self).__init__(args=(exps / self.z,), **kargs)
+        self.xM = x - max(x, reduction_axes=softmax_axes)
+        exps = exp(self.xM)
+        self.Z = sum(exps, reduction_axes=softmax_axes)
+        super(softmax, self).__init__(args=(exps / self.Z,), **kargs)
 
     @property
     def axes(self):
@@ -2324,17 +2403,53 @@ def deriv(dep, indep):
         return Broadcast(adjoint, axes=indep.axes)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None):
-    logscale = np.float(1. / np.log(2.0) if usebits else 1.)
-    return -sum(safelog(y) * t, out_axes=out_axes) * logscale
+class cross_entopy_multi_inner(Container):
+
+    def __init__(self, y, t, enable_softmax_opt=True, enable_diff_opt=True,
+                 out_axes=None, **kargs):
+        self.y = y
+        self.t = t
+        self.enable_softmax_opt = enable_softmax_opt
+        self.enable_diff_opt = enable_diff_opt
+
+        if enable_softmax_opt and isinstance(y, softmax):
+            # This depends on sum(t) being 1
+            x = y.xM
+            Z = y.Z
+            self.sum = -sum(x * t, out_axes=out_axes)
+            cemi = self.sum + safelog(Z)
+        else:
+            cemi = -sum(safelog(y) * t, out_axes=out_axes)
+        super(cross_entopy_multi_inner, self).__init__(args=(cemi,), **kargs)
+
+    @property
+    def axes(self):
+        return self.args[0].axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        if self.enable_diff_opt and self.enable_softmax_opt and isinstance(self.y, softmax):
+            x = self.y.xM
+            self.sum.generate_add_delta(adjoints, delta)
+            x.generate_add_delta(adjoints, self.y * delta)
+        else:
+            self.args[0].generate_add_delta(adjoints, delta)
+
+
+def cross_entropy_multi(y, t, usebits=False, out_axes=None, **kargs):
+    result = cross_entopy_multi_inner(y, t, out_axes=out_axes, **kargs)
+    if usebits:
+        result = result * np.float(1. / np.log(2.0))
+    return result
 
 
 class cross_entropy_binary_inner(Container, ElementWise):
 
-    def __init__(self, y, t, **kargs):
+    def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kargs):
         self.y = y
         self.t = t
-        if isinstance(self.y, sig):
+        self.enable_sig_opt = enable_sig_opt
+        self.enable_diff_opt = enable_diff_opt
+        if self.enable_sig_opt and isinstance(self.y, sig):
             # Simpler equivalent
             cebi = (1 - t) * y.x - safelog(y)
         else:
@@ -2342,7 +2457,7 @@ class cross_entropy_binary_inner(Container, ElementWise):
         super(cross_entropy_binary_inner, self).__init__(args=(cebi,), **kargs)
 
     def generate_adjoints(self, adjoints, delta, x):
-        if isinstance(self.y, sig):
+        if self.enable_diff_opt and self.enable_diff_opt and isinstance(self.y, sig):
             # Shortcut derivative
             x = self.y.x
             x.generate_add_delta(adjoints, (self.y - self.t) * delta)
