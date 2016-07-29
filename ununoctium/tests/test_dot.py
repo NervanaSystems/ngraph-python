@@ -168,7 +168,3 @@ def test_tensor_dot_tensor():
         numeric_deriv_2 = transform_numeric_derivative(dot, tensor2, delta)
         sym_deriv_2 = transform_derivative(dot, tensor2)
         assert np.allclose(numeric_deriv_2, sym_deriv_2, rtol=rtol, atol=atol)
-
-if __name__ == '__main__':
-    test_l2_norm()
-    test_tensor_dot_tensor()
