@@ -502,12 +502,3 @@ def test_onehot():
 
         one_hot_comparison(Axes(ax.C, ax.N), Axes(ax.N))
         one_hot_comparison(Axes(ax.C, ax.W, ax.H, ax.N), Axes(ax.W, ax.H, ax.N))
-
-if __name__ == '__main__':
-    test_constants()
-    test_softmax()
-    test_np_softmax()
-    test_elementwise_ops_unmatched_args()
-    test_reduction()
-    test_reduction_deriv()
-    test_onehot()
