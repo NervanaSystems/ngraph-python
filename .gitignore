@@ -38,3 +38,6 @@ neon/backends/kernels/dump
 *.egg
 *.gv
 *.gv.pdf
+
+# apple
+*.AppleDouble
