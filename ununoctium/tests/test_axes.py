@@ -165,8 +165,3 @@ def test_simple_tensors():
     for i in range(ax.D.length):
         for j in range(ax.D.length):
             assert e3[i, j] == e3_1[j, i]
-
-if __name__ == '__main__':
-    test_canonicalize_axes()
-    test_axes_ops()
-    test_simple_tensors()
