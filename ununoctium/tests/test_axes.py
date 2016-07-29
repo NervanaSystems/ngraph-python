@@ -79,49 +79,49 @@ def tensorview(td, nparr):
                       buffer=nparr, offset=td.offset,
                       strides=td.strides)
 
-# A scalar
-td0 = arrax.TensorDescription(axes=())
-e0 = empty(td0)
-
-# A simple vector
-td1 = arrax.TensorDescription(axes=[ax.A])
-e1 = empty(td1)
-
-td2 = arrax.TensorDescription(axes=[ax.A, ax.B])
-e2 = empty(td2)
-
-td3 = arrax.TensorDescription(axes=(ax.D, ax.D))
-e3 = empty(td3)
-
-# Reaxes
-td0_1 = td0.reaxe([ax.A])
-e0_1 = tensorview(td0_1, e0)
-
-td0_2 = td0.reaxe([ax.A, ax.B])
-e0_2 = tensorview(td0_2, e0)
-
-td1_1 = td1.reaxe([ax.A, ax.B])
-td1_2 = td1.reaxe([ax.B, ax.A])
-td1_3 = td1.reaxe([(ax.B, ax.C), ax.A])
-e1_1 = tensorview(td1_1, e1)
-e1_2 = tensorview(td1_2, e1)
-e1_3 = tensorview(td1_3, e1)
-
-td2_1 = td2.reaxe(arrax.Axes(ax.B, ax.A))
-e2_1 = tensorview(td2_1, e2)
-td2_2 = td2.reaxe(arrax.Axes(ax.A, ax.B))
-e2_2 = tensorview(td2_2, e2)
-td2_3 = td2.reaxe(arrax.Axes(arrax.AxesAxis(td2.axes)))
-e2_3 = tensorview(td2_3, e2)
-
-td3_1 = td3.reaxe_with_axis_ids(arrax.AxisIDTuple(
-    arrax.AxisID(ax.D, 1),
-    arrax.AxisID(ax.D, 0)
-))
-e3_1 = tensorview(td3_1, e3)
-
 
 def test_simple_tensors():
+    # A scalar
+    td0 = arrax.TensorDescription(axes=())
+    e0 = empty(td0)
+
+    # A simple vector
+    td1 = arrax.TensorDescription(axes=[ax.A])
+    e1 = empty(td1)
+
+    td2 = arrax.TensorDescription(axes=[ax.A, ax.B])
+    e2 = empty(td2)
+
+    td3 = arrax.TensorDescription(axes=(ax.D, ax.D))
+    e3 = empty(td3)
+
+    # Reaxes
+    td0_1 = td0.reaxe([ax.A])
+    e0_1 = tensorview(td0_1, e0)
+
+    td0_2 = td0.reaxe([ax.A, ax.B])
+    e0_2 = tensorview(td0_2, e0)
+
+    td1_1 = td1.reaxe([ax.A, ax.B])
+    td1_2 = td1.reaxe([ax.B, ax.A])
+    td1_3 = td1.reaxe([(ax.B, ax.C), ax.A])
+    e1_1 = tensorview(td1_1, e1)
+    e1_2 = tensorview(td1_2, e1)
+    e1_3 = tensorview(td1_3, e1)
+
+    td2_1 = td2.reaxe(arrax.Axes(ax.B, ax.A))
+    e2_1 = tensorview(td2_1, e2)
+    td2_2 = td2.reaxe(arrax.Axes(ax.A, ax.B))
+    e2_2 = tensorview(td2_2, e2)
+    td2_3 = td2.reaxe(arrax.Axes(arrax.AxesAxis(td2.axes)))
+    e2_3 = tensorview(td2_3, e2)
+
+    td3_1 = td3.reaxe_with_axis_ids(arrax.AxisIDTuple(
+        arrax.AxisID(ax.D, 1),
+        arrax.AxisID(ax.D, 0)
+    ))
+    e3_1 = tensorview(td3_1, e3)
+
     val1 = 3
 
     e0[()] = val1
