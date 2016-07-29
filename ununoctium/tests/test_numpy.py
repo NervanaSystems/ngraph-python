@@ -161,47 +161,53 @@ def test_elementwise_ops_matched_args():
         ax.N.length = 128
         axes = Axes(ax.W, ax.H)
 
-        for npop, beop, op in [(np.add, be.add, 'add'),
-                               (np.subtract, be.subtract, 'sub'),
-                               (np.multiply, be.multiply, 'multiply'),
-                               (np.divide, be.divide, 'divide')]:
+        for np_op, be_op, op in [(np.add, be.add, 'add'),
+                                 (np.subtract, be.subtract, 'sub'),
+                                 (np.multiply, be.multiply, 'multiply'),
+                                 (np.divide, be.divide, 'divide')]:
             # Matched sizes
             p_u = be.placeholder(axes=axes)
             p_v = be.placeholder(axes=axes)
             u = rng.uniform(-1.0, 1.0, p_u.axes.value)
             v = rng.uniform(1.0, 2.0, p_v.axes.value)
-            uv_np = npop(u, v)
+            result_np = np_op(u, v)
+
             p_u.value = u
             p_v.value = v
-            top = beop(p_u, p_v)
+            result_op = be_op(p_u, p_v)
 
-            uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4,
+            # ensure numpy and neon backend perform the same cacluclation
+            result_be, = execute([result_op])
+            assert np.allclose(result_np, result_be, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(top, p_u, delta)
-            dudvdut = transform_derivative(top, p_u)
+
+            # ensure that a numeric approximation of the derivative and the
+            # analytic derivative are the same
+            duvdunum = transform_numeric_derivative(result_op, p_u, delta)
+            dudvdut = transform_derivative(result_op, p_u)
             assert np.allclose(duvdunum, dudvdut, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
 
-            duvdvnum = transform_numeric_derivative(top, p_v, delta)
-            dudvdvt = transform_derivative(top, p_v)
+            # same as above, but for v instead of u
+            duvdvnum = transform_numeric_derivative(result_op, p_v, delta)
+            dudvdvt = transform_derivative(result_op, p_v)
             assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
-        for npop, beop, op in [(np.exp, be.exp, 'exp'),
-                               (np.log, be.log, 'log'),
-                               (np.tanh, be.tanh, 'tanh')]:
+        for np_op, be_op, op in [(np.exp, be.exp, 'exp'),
+                                 (np.log, be.log, 'log'),
+                                 (np.tanh, be.tanh, 'tanh')]:
             p_u = be.placeholder(axes=axes)
             u = rng.uniform(1.0, 2.0, p_u.axes.value)
-            u_np = npop(u)
+            u_np = np_op(u)
             p_u.value = u
-            top = beop(p_u)
+            result_op = be_op(p_u)
 
-            u_t, = execute([top])
+            u_t, = execute([result_op])
             assert np.allclose(u_np, u_t, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            dudunum = transform_numeric_derivative(top, p_u, delta)
-            dudut = transform_derivative(top, p_u)
+            dudunum = transform_numeric_derivative(result_op, p_u, delta)
+            dudut = transform_derivative(result_op, p_u)
             assert np.allclose(dudunum, dudut, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
@@ -216,10 +222,10 @@ def test_elementwise_ops_unmatched_args():
         batch_axes = [ax.W, ax.H, ax.N]
         broadcast_dims = (ax.W.length, ax.H.length, 1)
 
-        for npop, beop, op in [(np.add, be.add, 'add'),
-                               (np.subtract, be.subtract, 'sub'),
-                               (np.multiply, be.multiply, 'multiply'),
-                               (np.divide, be.divide, 'divide')]:
+        for np_op, be_op, op in [(np.add, be.add, 'add'),
+                                 (np.subtract, be.subtract, 'sub'),
+                                 (np.multiply, be.multiply, 'multiply'),
+                                 (np.divide, be.divide, 'divide')]:
             # Matched sizes
             p_u = be.placeholder(axes=sample_axes)
             p_v = be.placeholder(axes=batch_axes)
@@ -230,36 +236,36 @@ def test_elementwise_ops_unmatched_args():
             p_v.value = v
 
             # u op v
-            uv_np = npop(u.reshape(broadcast_dims), v)
-            top = beop(p_u, p_v)
+            result_np = np_op(u.reshape(broadcast_dims), v)
+            result_op = be_op(p_u, p_v)
 
-            uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4,
+            result_be, = execute([result_op])
+            assert np.allclose(result_np, result_be, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(top, p_u, .001)
-            dudvdut = transform_derivative(top, p_u)
+            duvdunum = transform_numeric_derivative(result_op, p_u, .001)
+            dudvdut = transform_derivative(result_op, p_u)
             assert np.allclose(duvdunum, dudvdut, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
-            duvdvnum = transform_numeric_derivative(top, p_v, .001)
-            dudvdvt = transform_derivative(top, p_v)
+            duvdvnum = transform_numeric_derivative(result_op, p_v, .001)
+            dudvdvt = transform_derivative(result_op, p_v)
             assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
             # v op u
-            uv_np = npop(v, u.reshape(broadcast_dims))
-            top = beop(p_v, p_u)
+            result_np = np_op(v, u.reshape(broadcast_dims))
+            result_op = be_op(p_v, p_u)
 
-            uv_t, = execute([top])
-            assert np.allclose(uv_np, uv_t, atol=1e-4,
+            result_be, = execute([result_op])
+            assert np.allclose(result_np, result_be, atol=1e-4,
                                rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(top, p_u, .001)
-            dudvdut = transform_derivative(top, p_u)
+            duvdunum = transform_numeric_derivative(result_op, p_u, .001)
+            dudvdut = transform_derivative(result_op, p_u)
             assert np.allclose(duvdunum, dudvdut, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
-            duvdvnum = transform_numeric_derivative(top, p_v, .001)
-            dudvdvt = transform_derivative(top, p_v)
+            duvdvnum = transform_numeric_derivative(result_op, p_v, .001)
+            dudvdvt = transform_derivative(result_op, p_v)
             assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
                                rtol=1e-3), 'op:{op}'.format(op=op)
 
@@ -502,12 +508,3 @@ def test_onehot():
 
         one_hot_comparison(Axes(ax.C, ax.N), Axes(ax.N))
         one_hot_comparison(Axes(ax.C, ax.W, ax.H, ax.N), Axes(ax.W, ax.H, ax.N))
-
-if __name__ == '__main__':
-    test_constants()
-    test_softmax()
-    test_np_softmax()
-    test_elementwise_ops_unmatched_args()
-    test_reduction()
-    test_reduction_deriv()
-    test_onehot()
