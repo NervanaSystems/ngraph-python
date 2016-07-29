@@ -29,6 +29,7 @@ from __future__ import print_function
 import tensorflow as tf
 import geon.backends.graph.funs as be
 from util.importer import create_nervana_graph
+from geon.backends.graph.graphneon import *  # noqa
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
@@ -55,5 +56,6 @@ def test_create_nervana_graph(pb_file, execute=False):
             print(result[ast_graph.last_op])
 
 
-# test_create_nervana_graph("sample/constant_graph.pb", False)
-test_create_nervana_graph("sample/variable_graph_froze.pb", True)
+# test_create_nervana_graph("sample/constant_graph.pb", True)
+# test_create_nervana_graph("sample/variable_graph_froze.pb", False)
+test_create_nervana_graph("sample/variable_graph.pb", False)
