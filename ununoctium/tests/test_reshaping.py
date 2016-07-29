@@ -87,6 +87,3 @@ def test_expand_dims():
                 assert np.allclose(
                     numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                 )
-
-if __name__ == '__main__':
-    test_expand_dims()
