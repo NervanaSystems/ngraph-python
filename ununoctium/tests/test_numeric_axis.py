@@ -48,7 +48,3 @@ def test_expand_dims():
 
     for i in range(ax1.length):
         assert np.array_equal(x1_val[i], x_np)
-
-if __name__ == '__main__':
-    test_dot_with_numerics()
-    test_expand_dims()
