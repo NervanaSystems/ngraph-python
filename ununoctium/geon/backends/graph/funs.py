@@ -15,7 +15,6 @@
 from __future__ import print_function
 
 import geon.backends.dataloaderbackend
-import geon.backends.graph.npbackend
 import geon.backends.graph.graph as graph
 
 from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope,  \
