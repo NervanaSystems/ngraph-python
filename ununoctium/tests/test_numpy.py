@@ -14,7 +14,14 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import range
-from geon.backends.graph.graph_test_utils import *  # noqa
+
+import numpy as np
+
+import geon.backends.graph.funs as be
+import geon.backends.graph.axis as ax
+from geon.backends.graph.arrayaxes import Axes
+from geon.util.utils import RandomTensorGenerator, execute, transform_numeric_derivative
+from geon.util.utils import transform_derivative, numeric_derivative
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -500,7 +507,6 @@ if __name__ == '__main__':
     test_constants()
     test_softmax()
     test_np_softmax()
-    test_logistic()
     test_elementwise_ops_unmatched_args()
     test_reduction()
     test_reduction_deriv()
