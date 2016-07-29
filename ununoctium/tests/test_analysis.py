@@ -66,7 +66,3 @@ def test_topsort():
     for u, v in edges:
         assert(order.index(u) < order.index(v))
     print('pass topsort')
-
-
-test_topsort()
-test_coloring()
