@@ -65,6 +65,11 @@ class OneHot(object):
 
 
 class DataloaderBackend(Backend):
+    """
+    DataloaderBackend is a temporary hack used to preprocess data coming from
+    the DataLoader in the graph.
+    """
+
     backend_name = 'dataloader'
 
     def __init__(self,
