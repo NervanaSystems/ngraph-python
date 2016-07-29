@@ -38,17 +38,10 @@ opt_gdm = GradientDescentMomentum(learning_rate=0.0001, momentum_coef=0.9)
 
 # set up the model layers
 layers = [
-    Affine(
-        nout=200,
-        init=init_uni0,
-        activation=Rectlin()),
-    Affine(
-        nout=train.nclasses,
-        axes=Axes(
-            ax.Y,
-        ),
-        init=init_uni1,
-        activation=Softmax())]
+    Affine(nout=200, init=init_uni0, activation=Rectlin()),
+    Affine(nout=train.nclasses, axes=Axes(ax.Y,), init=init_uni1,
+           activation=Softmax()),
+]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
@@ -60,13 +53,8 @@ callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 np.seterr(divide='raise', over='raise', invalid='raise')
 mlp.fit(
     train,
-    input_axes=Axes(
-        ax.C,
-        ax.H,
-        ax.W),
-    target_axes=Axes(
-        ax.Y,
-    ),
+    input_axes=Axes(ax.C, ax.H, ax.W),
+    target_axes=Axes(ax.Y,),
     optimizer=opt_gdm,
     num_epochs=args.epochs,
     cost=cost,
