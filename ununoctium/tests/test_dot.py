@@ -17,10 +17,10 @@ import numpy as np
 import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
-from geon.backends.graph.graph_test_utils import\
-    in_bound_environment, raise_all_numpy_errors,\
-    transform_numeric_derivative,\
-    transform_derivative
+from geon.util.utils import in_bound_environment
+from geon.util.utils import raise_all_numpy_errors
+from geon.util.utils import transform_numeric_derivative
+from geon.util.utils import transform_derivative
 
 '''
 Test graphiti's implementation of the dot product.

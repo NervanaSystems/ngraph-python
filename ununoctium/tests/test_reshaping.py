@@ -1,7 +1,27 @@
-from geon.backends.graph.graph_test_utils import execute, be, Axes,\
-    in_bound_environment, transform_numeric_derivative, transform_derivative
-import geon.backends.graph.axis as ax
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+
 import numpy as np
+
+from geon.util.utils import execute
+from geon.util.utils import in_bound_environment
+from geon.util.utils import transform_numeric_derivative
+from geon.util.utils import transform_derivative
+import geon.backends.graph.funs as be
+import geon.backends.graph.axis as ax
+from geon.backends.graph.arrayaxes import Axes
 
 
 @in_bound_environment
