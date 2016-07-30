@@ -1,4 +1,4 @@
-# Use TF's Graph with Neon
+# Run TF's Graph with Neon
 
 ## Setup
 
@@ -9,14 +9,14 @@ cd ununoctium
 make install
 ```
 
-## Run TF's Inference Graph
+## Things to be done with TF
 
-### 1. Save TF's graph and weights
+### 1. Save TF's dataflow and weights
 
 TensorFlow provides an [example](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/examples/tutorials/mnist) of training a simple MLP on the MNIST dataset. We made a new copy and modified the training script, adding code for graph/variable exportation.
 
 
-#### 1.1 Save the computation graph
+#### 1.1 Computation graph
 
 To save the GradDef as protobuf, add the following code at the end of the training.
 
@@ -30,7 +30,7 @@ tf.train.write_graph(sess.graph_def, "./", graph_pb, False) # binary protobuf
 
 The compuation graph is saved in .pb.txt file and its binary version is saved in the .pb file.
 
-#### 1.2 Save the variables  
+#### 1.2 Variables  
 
 To save the variable values, add following code at the beggining of the training
 
@@ -49,7 +49,11 @@ The variable values are saved in the **checkpoint** (.ckpt) file.
 
 Note that TensorFlow also saves a [MetaGraph](https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html) (.meta) file, which contans MetaInfoDef, GraphDef, SaverDef and CollectionDef.
 
-#### 1.3 Start training
+#### 1.3 MetaGraph
+
+You might also save the meta info. [Here](http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#) is an explanition about MetaGraph.
+
+### 2 Training
 
 To run the training script, first activate the virtual environment, for example:
 
@@ -63,7 +67,7 @@ Then execute the stript `tf_benchmark/mnist/fully_connected_feed.py`
 (tensorflow)$ cd tf_benchmark/mnist/
 (tensorflow)$ python fully_connected_feed.py
 ```
-### 2. Visualize the graph and find the last node
+### 3. Visualize the graph and find the last node
 
 Now we can visualize the graph with TensorBord.
 
@@ -73,7 +77,9 @@ $ tensorboard --logdir=. & firefox http://0.0.0.0:6006
 We can identify the last operation used for inference is `softmax_linear/add`. 
 The inference graph includes all operators that leads to this op.
 
-### 3. Combine the graph and checkpoint
+## Run TF's Inference Graph with Neon
+
+### 1. Combine the graph and checkpoint
 
 For inference only application, we need to load two files: the model's computation graph (.pb.txt) and its weights (.ckpt). 
 However, for some applications, loading one file is more convenient.
@@ -92,25 +98,34 @@ We provide bash script inside each example folder for convenience. So simply cal
 
 Note that the `--output_node_names` option is the name of the last operation for inference, which is currently manually identified in the `mnist_mlp_graph.pb.txt` file. 
 
+### 2. Execute the frozen graph with Neon's graph backend
 
-### 4. Execute the frozen graph with Neon's graph backend
-
-Activate the virtual environment, for example:
+Switch to the virtual environment to Neon:
 
 ```
 $ source ~/code/private-neon/.venv/bin/activate
 ```
 
-Execute the following script will convert the frozen graph into Neon's graph and execute it.
+Executing the following command will convert the frozen graph into Neon's graph and execute it.
 
 ```
-(.venv)$ python test_mnist_mlp.py --pb_file='mnist/mnist_mlp_graph_froze.pb'
+(.venv)$ python inference_mnist_mlp.py --pb_file='mnist/mnist_mlp_graph_froze.pb'
 ``` 
 
-## Run TF's Training Graph
+The computation graph is as follows:
+
+![](figure/mnist_mlp_inference.png)
+
+
+## Training a TF Model with Neon
+
+We can also train the model from scratch with Neon's graph backend.
 
 ```
-(.venv)$ python test_mnist_mlp.py \
-	--pb_file='mnist/mnist_mlp_graph.pb' \
-	--end_node='gradients/xentropy_mean_grad/truediv'
+(.venv)$ python train_mnist_mlp.py --pb_file='mnist/mnist_mlp_graph.pb'
 ```
+
+The protobuf file `mnist_mlp_graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
+
+The assembled frop/bprop graph can be visualized as follows:
+![](figure/mnist_mlp_train.png)
