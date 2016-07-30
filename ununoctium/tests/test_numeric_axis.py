@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.backends.graph.graph_test_utils import execute, be, Axes,\
-    in_bound_environment
 import numpy as np
+
+import geon.backends.graph.funs as be
+from geon.backends.graph.arrayaxes import Axes
+from geon.util.utils import execute, in_bound_environment
 
 
 @in_bound_environment
@@ -46,7 +48,3 @@ def test_expand_dims():
 
     for i in range(ax1.length):
         assert np.array_equal(x1_val[i], x_np)
-
-if __name__ == '__main__':
-    test_dot_with_numerics()
-    test_expand_dims()

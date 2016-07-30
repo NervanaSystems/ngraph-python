@@ -137,12 +137,3 @@ def test_numpytensor_mlp():
         print(result[c])
         print(np_c)
         assert np.array_equal(result[c], np_c)
-
-
-test_constant_init()
-test_constant_add()
-test_constant_multiply()
-test_numpytensor_add()
-test_numpytensor_dot()
-test_numpytensor_multiply_constant()
-test_numpytensor_mlp()

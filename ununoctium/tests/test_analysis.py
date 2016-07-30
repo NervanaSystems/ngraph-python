@@ -17,11 +17,12 @@ Test the graph analysis functions
 
 '''
 from __future__ import print_function
+
 from builtins import range, zip
 
 import geon.backends.graph.analysis as an
-import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
+import geon.backends.graph.funs as be
 
 
 def build_graphs(L, BS):
@@ -65,7 +66,3 @@ def test_topsort():
     for u, v in edges:
         assert(order.index(u) < order.index(v))
     print('pass topsort')
-
-
-test_topsort()
-test_coloring()

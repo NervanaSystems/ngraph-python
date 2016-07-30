@@ -17,10 +17,10 @@ import numpy as np
 import random
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
-from geon.backends.graph.graph_test_utils import\
-    in_bound_environment, raise_all_numpy_errors,\
-    transform_numeric_derivative,\
-    transform_derivative
+from geon.util.utils import in_bound_environment
+from geon.util.utils import raise_all_numpy_errors
+from geon.util.utils import transform_numeric_derivative
+from geon.util.utils import transform_derivative
 
 '''
 Test graphiti's implementation of the dot product.
@@ -168,7 +168,3 @@ def test_tensor_dot_tensor():
         numeric_deriv_2 = transform_numeric_derivative(dot, tensor2, delta)
         sym_deriv_2 = transform_derivative(dot, tensor2)
         assert np.allclose(numeric_deriv_2, sym_deriv_2, rtol=rtol, atol=atol)
-
-if __name__ == '__main__':
-    test_l2_norm()
-    test_tensor_dot_tensor()

@@ -111,11 +111,3 @@ def test_assign_2D_variable_with_numpy_tensor():
         print(result)
 
         print("pass 2D numpy tensor assignment")
-
-test_init_variable()
-test_init_1D_variable()
-test_init_2D_variable()
-test_init_1D_variable_from_numpy_array()
-
-test_assign_1D_variable_with_numpy_tensor()
-test_assign_2D_variable_with_numpy_tensor()
