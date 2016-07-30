@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
+"""
+This script illustrates how to import a model that was defined by a TF script and
+train the model from scratch with Neon following the original script's specification.
+
+"""
+
 from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
 from geon.backends.graph.graphneon import *  # noqa
@@ -25,12 +32,16 @@ parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph.pb",
                     help='GraphDef protobuf')
-parser.add_argument('--end_node', type=str, default=None,
+parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute')
 
 args = parser.parse_args()
 
 env = Environment()
+
+# TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
+
+epochs = 1
 
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
@@ -39,27 +50,47 @@ graph_def = tf.GraphDef()
 with open(args.pb_file, 'rb') as f:
     graph_def.ParseFromString(f.read())
 
-ast_graph = create_nervana_graph(graph_def, env, args.end_node)
+nervana_graph = create_nervana_graph(graph_def, env, args.end_node)
+assert (nervana_graph.x is not None)
+assert (nervana_graph.y is not None)
 
-dataflow = analysis.DataFlowGraph([ast_graph.last_op])
+if args.end_node == "":
+    dataflow = analysis.DataFlowGraph([nervana_graph.update])
+else:
+    dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
+
 dataflow.view()
 
-print(ast_graph.last_op)
-
 with be.bound_environment(env):
-    for mb_idx, (xraw, yraw) in enumerate(test_data):
-        ast_graph.x.value = xraw
+    # initialize all variables with the init op
+    enp = be.NumPyTransformer(results=[nervana_graph.init])
 
-        if ast_graph.y is not None:
-            ast_graph.y.value = yraw
+    for epoch in range(epochs):
+        print("===============================")
+        print("epoch: " + str(epoch))
+        print("===============================")
 
-        enp = be.NumPyTransformer(results=[ast_graph.last_op])
-        result = enp.evaluate()[ast_graph.last_op]
-        print("result: ")
-        print(result)
-        print("result shape: ")
-        print(result.shape)
+        for mb_idx, (xraw, yraw) in enumerate(test_data):
+            nervana_graph.x.value = xraw
+            nervana_graph.y.value = yraw
 
-        # execute one minibatch for test only
-        if mb_idx == 0:
-            break
+            if args.end_node == "":
+                enp = be.NumPyTransformer(results=[nervana_graph.update])
+                result = enp.evaluate()[nervana_graph.update]
+            else:
+                enp = be.NumPyTransformer(results=[nervana_graph.last_op])
+                result = enp.evaluate()[nervana_graph.last_op]
+
+            print("-------------------------------")
+            print("minibatch: " + str(mb_idx))
+            print("-------------------------------")
+            print("result of the last op: ")
+            print(result)
+            print("shape of the result: ")
+            print(result.shape)
+            print("softmax_linear/biases:")
+            print(nervana_graph.name_to_op["softmax_linear/biases"].value)
+
+            # execute one minibatch for test only
+            if mb_idx == 10:
+                break
