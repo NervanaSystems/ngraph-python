@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 
 """
-importing a TensorFlow GraphDef protobuf and convert it to Neon computation graph.
+import a TensorFlow GraphDef from a protobuf file and convert it to Neon's computation graph.
 
 """
 
@@ -25,7 +25,7 @@ from builtins import range
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.graphop import Tensor, ComputationOp
+from geon.backends.graph.graphop import Tensor
 from geon.backends.graph.graph_test_utils import *
 
 from tensorflow.python.framework import tensor_util
@@ -35,7 +35,6 @@ import numpy as np
 known_ops = [
     'Add', 'Div', 'MatMul', 'Maximum', 'Mul', 'Mod',
     'Mean', 'Prod', 'Sum',  # Reduction
-    'Identity',
     'Relu', 'Tanh',  # Activation
     'Const', 'Variable', 'Placeholder', 'Range',
     'Assign', 'AssignAdd',
@@ -46,7 +45,7 @@ known_ops = [
     'Fill',  # Constant Value Tensors
     'Tile', 'DynamicStitch',  # Slicing and Joining
     'BroadcastGradientArgs', 'ApplyGradientDescent', 'ReluGrad',
-    'NoOp',
+    'Identity', 'NoOp',  # Control Flow
 ]
 
 two_inputs_ops = {
@@ -69,7 +68,7 @@ one_inputs_ops = {
 }
 
 ignore_ops = {
-    'ScalarSummary', 'ZerosLike', 'NoOp', 'InTopK', 'MergeSummary',
+    'ScalarSummary', 'ZerosLike', 'InTopK', 'MergeSummary',
 }
 
 
@@ -162,7 +161,7 @@ def scan_variables(graph_def, env):
 
 def create_nervana_graph(graph_def, env, end_node=None):
     """
-    convert TF graph_def to Neon's graph
+    convert TF's GraphDef object to Neon's graph
 
     :param
       - graph_def: a (frozen) GraphDef object
@@ -204,7 +203,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
         skip_this_node = False
         for i, input_name in enumerate([x for x in node.input]):
             if input_name in ignored_nodes:
-                print("inputs contain igorned node: " + input_name)
+                print("inputs contain igorned node: " + input_name + ", skipped")
                 skip_this_node = True
                 break
 
@@ -478,6 +477,18 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 grad = name_to_op[inputs[2]]
                 updated_var = var - lr * grad
                 op = be.assign(var, updated_var)
+
+            elif op_type == 'NoOp':
+                # NoOp adds '^' before each original input name
+                if node.name == "GradientDescent/update":
+                    # gradient descent ops
+                    graph.update = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    op = graph.update
+
+                elif node.name == "init":
+                    # variable initialization graph, used only once
+                    graph.init = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    op = graph.init
 
             print(op)
             print("---------------------------------------------")
