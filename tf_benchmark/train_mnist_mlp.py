@@ -44,6 +44,7 @@ env = Environment()
 epochs = 1
 
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
+train_data = ArrayIterator(X_train, y_train, nclass=nclass, lshape=(1, 28, 28))
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
 graph_def = tf.GraphDef()
@@ -70,7 +71,7 @@ with be.bound_environment(env):
         print("epoch: " + str(epoch))
         print("===============================")
 
-        for mb_idx, (xraw, yraw) in enumerate(test_data):
+        for mb_idx, (xraw, yraw) in enumerate(train_data):
             nervana_graph.x.value = xraw
             nervana_graph.y.value = yraw
 
