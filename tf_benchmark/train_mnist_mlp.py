@@ -21,7 +21,8 @@ train the model from scratch with Neon following the original script's specifica
 
 from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
-from geon.backends.graph.graphneon import *  # noqa
+from neon.util.argparser import NeonArgparser
+import geon.backends.graph.funs as be
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 

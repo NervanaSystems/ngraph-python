@@ -29,7 +29,6 @@ from __future__ import print_function
 import tensorflow as tf
 import geon.backends.graph.funs as be
 from util.importer import create_nervana_graph
-from geon.backends.graph.graphneon import *  # noqa
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
