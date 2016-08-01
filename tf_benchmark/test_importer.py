@@ -55,5 +55,6 @@ def test_create_nervana_graph(pb_file, execute=False):
             print(result[ast_graph.last_op])
 
 
-# test_create_nervana_graph("sample/constant_graph.pb", False)
-test_create_nervana_graph("sample/variable_graph_froze.pb", True)
+# test_create_nervana_graph("sample/constant_graph.pb", True)
+# test_create_nervana_graph("sample/variable_graph_froze.pb", False)
+test_create_nervana_graph("sample/variable_graph.pb", False)

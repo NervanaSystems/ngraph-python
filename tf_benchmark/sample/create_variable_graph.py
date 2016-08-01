@@ -12,6 +12,11 @@ from __future__ import print_function
 
 import tensorflow as tf
 from tensorflow.python.training.saver import read_meta_graph_file
+import numpy as np
+
+batch_size = 128
+input_dim = 10
+hidden_dim = 5
 
 def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
   '''
@@ -19,10 +24,10 @@ def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
     Save the graph in metagraph, checkpoint and
   '''
 
-  x = tf.placeholder(tf.float32, shape=(1, 3))
+  x = tf.placeholder(tf.float32, shape=(batch_size, input_dim))
 
-  weight = tf.Variable(tf.random_normal([3, 5], stddev=0.35), name="weights")
-  biases = tf.Variable(tf.ones([1]), name='biases')
+  weight = tf.Variable(tf.random_normal([input_dim, hidden_dim], stddev=0.35), name="weights")
+  biases = tf.Variable(tf.ones([hidden_dim]), name='biases')
 
   result = tf.matmul(x, weight) + biases
 
@@ -32,7 +37,7 @@ def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
 
   with tf.Session() as sess:
     sess.run(init_op)
-    sess.run(result, feed_dict={x: [[1.0, 2.0, 3.0]]})
+    sess.run(result, feed_dict={x: np.random.rand(batch_size, input_dim)})
 
     # Saver saves variables into a checkpoint file.
     # In addition, the save function implicitly calls tf.export_meta_graph(), which generates ckpt.meta file.
@@ -50,8 +55,8 @@ def restore_graph_pb(graph_pb):
     This needs the original graph construction steps.
   '''
 
-  biases = tf.Variable(tf.zeros([200]), name='biases')
-  weight = tf.Variable(tf.random_normal([784, 200], stddev=0.35), name="weights")
+  biases = tf.Variable(tf.zeros([hidden_dim]), name='biases')
+  weight = tf.Variable(tf.random_normal([input_dim, hidden_dim], stddev=0.35), name="weights")
   saver = tf.train.Saver([biases, weight])
 
   with tf.Session() as sess:

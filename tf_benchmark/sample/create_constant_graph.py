@@ -15,7 +15,7 @@ def create_tf_graph():
   d = c * a
 
   sess = tf.Session()
-  print(sess.run(c))
+  print(sess.run(d))
 
   graph_name = "constant_graph"
 
