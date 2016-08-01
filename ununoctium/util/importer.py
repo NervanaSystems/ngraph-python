@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 
 """
-importing a TensorFlow GraphDef protobuf and convert it to Neon computation graph.
+import a TensorFlow GraphDef from a protobuf file and convert it to Neon's computation graph.
 
 """
 
@@ -25,7 +25,7 @@ from builtins import range
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.graphop import Tensor, ComputationOp
+from geon.backends.graph.graphop import Tensor
 from geon.backends.graph.graph_test_utils import *
 
 from tensorflow.python.framework import tensor_util
@@ -35,16 +35,17 @@ import numpy as np
 known_ops = [
     'Add', 'Div', 'MatMul', 'Maximum', 'Mul', 'Mod',
     'Mean', 'Prod', 'Sum',  # Reduction
-    'Identity',
     'Relu', 'Tanh',  # Activation
     'Const', 'Variable', 'Placeholder', 'Range',
-    'Assign', 'Cast',
+    'Assign', 'AssignAdd',
+    'Cast',  # Casting
     'SparseSoftmaxCrossEntropyWithLogits',
     'Shape', 'Rank', 'Size', 'Reshape', 'ExpandDims',  # Shapes and Shaping
-    'TruncatedNormal',
+    'TruncatedNormal', 'RandomStandardNormal', 
     'Fill',  # Constant Value Tensors
     'Tile', 'DynamicStitch',  # Slicing and Joining
     'BroadcastGradientArgs', 'ApplyGradientDescent', 'ReluGrad',
+    'Identity', 'NoOp',  # Control Flow
 ]
 
 two_inputs_ops = {
@@ -67,7 +68,7 @@ one_inputs_ops = {
 }
 
 ignore_ops = {
-    'ScalarSummary', 'ZerosLike', 'NoOp',
+    'ScalarSummary', 'ZerosLike', 'InTopK', 'MergeSummary',
 }
 
 
@@ -82,7 +83,7 @@ def scan_variables(graph_def, env):
       - names_to_axes: a map from variable name to its axes
       - batch_axis: the batch axis
       - in_axis: axis for input data
-      - y_axis: axis for labels
+      - y_axis: axis for labels, not used for inference graph
     """
     name_to_axes = {}
     in_axis = None
@@ -137,6 +138,22 @@ def scan_variables(graph_def, env):
                 elif len(shape) == 0:
                     name_to_axes[node.name] = (AxisVar(name=node.name, length=1),)
 
+            elif op_type == 'Const':
+                # in the frozen graph, all variables are converted to constant
+                const_tensor = node.attr['value'].tensor
+                shape = [d.size for d in const_tensor.tensor_shape.dim]
+
+                if len(shape) == 1 and 'biases' in node.name:
+                    assert (in_axis is not None)
+                    assert (in_axis.length == shape[0])
+                    name_to_axes[node.name] = [in_axis]
+                elif len(shape) == 2 and 'weights' in node.name:
+                    assert (in_axis is not None)
+                    assert (in_axis.length == shape[0])
+                    out_axis = AxisVar(name=node.name, length=shape[1])
+                    name_to_axes[node.name] = [in_axis, out_axis]
+                    in_axis = out_axis  # now the output axis becomes input axis for the next layer
+
     name_to_axes[y_name] = (y_axis, batch_axis)
 
     return name_to_axes, batch_axis, x_axis, y_axis
@@ -144,7 +161,7 @@ def scan_variables(graph_def, env):
 
 def create_nervana_graph(graph_def, env, end_node=None):
     """
-    convert TF graph_def to Neon's graph
+    convert TF's GraphDef object to Neon's graph
 
     :param
       - graph_def: a (frozen) GraphDef object
@@ -157,37 +174,47 @@ def create_nervana_graph(graph_def, env, end_node=None):
 
     name_to_op = {}
     variables = {}
-    graph = be.Model()
+    ignored_nodes = {}
 
+    graph = be.Model()
     graph.x = None
     graph.y = None
 
     name_to_axes, batch_axis, in_axis, y_axis = scan_variables(graph_def, env)
-    print(y_axis)
     print(in_axis)
-    assert(in_axis is not None)
+    print(name_to_axes)
 
     for node in graph_def.node:
         op_type = node.op
 
-        if op_type in ignore_ops:
+        # skip ignored ops and ops related with serialization.
+        if op_type in ignore_ops or 'save' in node.name:
+            ignored_nodes[node.name] = None
             continue
+
+        print(node)
 
         if op_type not in known_ops:
             # TODO: raise unrecognized operator error
             print("unrecognized operator: " + op_type)
             break
 
-        print(node)
-
         inputs = []
+        skip_this_node = False
         for i, input_name in enumerate([x for x in node.input]):
+            if input_name in ignored_nodes:
+                print("inputs contain igorned node: " + input_name + ", skipped")
+                skip_this_node = True
+                break
+
             inputs.append(input_name)
-
             print('inputs[' + str(i) + "]: " + inputs[i])
-
             if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], Tensor):
                 print(name_to_op[inputs[i]])
+
+        if skip_this_node:
+            ignored_nodes[node.name] = None
+            continue
 
         with be.bound_environment(env):
             if op_type in two_inputs_ops:
@@ -223,25 +250,15 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 shape = [d.size for d in const_tensor.tensor_shape.dim]
                 np_val = tensor_util.MakeNdarray(const_tensor)
 
-                if len(shape) == 0:
+                if node.name in name_to_axes:
+                    op = be.NumPyTensor(np_val, axes=name_to_axes[node.name], name=node.name)
+                elif len(shape) == 0:
                     op = be.Constant(np_val, name=node.name)
                 elif len(shape) == 1:
-                    if 'biases' in node.name:
-                        assert (in_axis is not None)
-                        assert (in_axis.length == shape[0])
-                        op = be.NumPyTensor(np_val, axes=[in_axis], name=node.name)
-                    else:
-                        op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
+                    op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
                 elif len(shape) == 2:
-                    if 'weights' in node.name:
-                        assert (in_axis is not None)
-                        assert (in_axis.length == shape[0])
-                        out_axis = AxisVar(name=node.name, length=shape[1])
-                        op = be.NumPyTensor(np_val, axes=[in_axis, out_axis], name=node.name)
-                        in_axis = out_axis  # now the output axis becomes input axis for the next layer
-                    else:
-                        op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]),
-                                                              be.NumericAxis(shape[1]), ), name=node.name)
+                    op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]),
+                                                          be.NumericAxis(shape[1]), ), name=node.name)
 
             elif op_type == 'Variable':
                 variables[node.name] = be.Variable(axes=name_to_axes[node.name], name=node.name)
@@ -253,6 +270,12 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 assert (isinstance(var, be.Variable))
                 op = be.assign(var, init_value)
                 var.initializers.append(op)
+
+            elif op_type == 'AssignAdd':
+                var = name_to_op[inputs[0]]
+                assert (isinstance(var, be.Variable))
+                tensor_to_add = name_to_op[inputs[1]]
+                op = be.assign(var, var + tensor_to_add)
 
             elif op_type == 'Fill':
                 # Creates a tensor filled with a scalar value.
@@ -270,8 +293,8 @@ def create_nervana_graph(graph_def, env, end_node=None):
                     if len(shape) == 1:
                         op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0])), name=node.name)
 
-            elif op_type == 'TruncatedNormal':
-                # TODO: implement tf.truncated_normal
+            elif op_type == 'TruncatedNormal' or op_type == 'RandomStandardNormal':
+                # TODO: implement tf.truncated_normal and tf.random_normal
                 shape_tensor = name_to_op[inputs[0]]  # numpy ndarray
                 assert isinstance(shape_tensor, Tensor)
                 shape = shape_tensor.nptensor
@@ -454,6 +477,18 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 grad = name_to_op[inputs[2]]
                 updated_var = var - lr * grad
                 op = be.assign(var, updated_var)
+
+            elif op_type == 'NoOp':
+                # NoOp adds '^' before each original input name
+                if node.name == "GradientDescent/update":
+                    # gradient descent ops
+                    graph.update = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    op = graph.update
+
+                elif node.name == "init":
+                    # variable initialization graph, used only once
+                    graph.init = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    op = graph.init
 
             print(op)
             print("---------------------------------------------")

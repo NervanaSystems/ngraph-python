@@ -12,9 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
+"""
+This script illustrates how to convert a pre-trained TF model to Neon and perform
+inference with the model on new data.
+
+"""
+
 from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
-from geon.backends.graph.graphneon import *  # noqa
+from neon.util.argparser import NeonArgparser
+import geon.backends.graph.funs as be
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
@@ -23,14 +31,16 @@ from util.importer import create_nervana_graph
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
-parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph.pb",
+parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph_froze.pb",
                     help='GraphDef protobuf')
-parser.add_argument('--end_node', type=str, default=None,
+parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute')
 
 args = parser.parse_args()
 
 env = Environment()
+
+# TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
@@ -39,27 +49,25 @@ graph_def = tf.GraphDef()
 with open(args.pb_file, 'rb') as f:
     graph_def.ParseFromString(f.read())
 
-ast_graph = create_nervana_graph(graph_def, env, args.end_node)
+nervana_graph = create_nervana_graph(graph_def, env, args.end_node)
 
-dataflow = analysis.DataFlowGraph([ast_graph.last_op])
+dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
 dataflow.view()
-
-print(ast_graph.last_op)
 
 with be.bound_environment(env):
     for mb_idx, (xraw, yraw) in enumerate(test_data):
-        ast_graph.x.value = xraw
+        nervana_graph.x.value = xraw
 
-        if ast_graph.y is not None:
-            ast_graph.y.value = yraw
+        enp = be.NumPyTransformer(results=[nervana_graph.last_op])
+        result = enp.evaluate()[nervana_graph.last_op]
 
-        enp = be.NumPyTransformer(results=[ast_graph.last_op])
-        result = enp.evaluate()[ast_graph.last_op]
-        print("result: ")
+        print("-------------------------------")
+        print("minibatch: " + str(mb_idx))
+        print("-------------------------------")
+        print("prediction result: ")
         print(result)
-        print("result shape: ")
+        print("shape of the prediction: ")
         print(result.shape)
 
         # execute one minibatch for test only
-        if mb_idx == 0:
-            break
+        if mb_idx == 1: break
