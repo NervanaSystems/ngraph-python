@@ -47,8 +47,15 @@ from geon.backends.graph.nptransform import NumPyTransformer
 
 try:
     from geon.backends.graph.artransform import ArgonTransformer
-except ImportError:
-    print("Argon backend and tensor are defined in argon repo.")
+except ImportError as e:
+    if 'argon' in str(e):
+        print("Argon backend and tensor are defined in argon repo.")
+    elif 'mpi4py' in str(e):
+        print(
+            "Argon backend currently depends on the package mpi4py, which is not installed."
+        )
+    else:
+        raise
 
 
 # TODO These are just here as placeholders
