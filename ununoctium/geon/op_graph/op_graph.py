@@ -13,19 +13,19 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import object, str
-import abc
 
-import weakref
+import abc
 import numbers
+import weakref
 
 import numpy as np
+from builtins import object, str
 
-import geon.backends.graph.nodes as nodes
 from geon.backends.graph.environment import get_current_environment,\
     get_current_ops, captured_ops
-from geon.backends.graph.arrayaxes import get_batch_axes, TensorDescription, \
+from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, AxesAxis, Axis
+from geon.op_graph import nodes
 
 
 class AbstractVisitor(nodes.AbstractVisitor):
@@ -2365,7 +2365,7 @@ class Function(nodes.Node):
 
     def __init__(self, ops):
         super(Function, self).__init__()
-        from geon.backends.graph.analysis import Digraph
+        from geon.util.analysis import Digraph
         self.ops = Digraph(ops)
         args, defs = set(), set()
         for op in self.ops.topsort():

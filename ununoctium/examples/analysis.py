@@ -15,8 +15,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 from builtins import range, zip
-from geon.backends.graph.funs import *  # noqa
-from geon.backends.graph.analysis import *  # noqa
+from geon.op_graph import *  # noqa
+from geon.util.analysis import *  # noqa
 
 import mxnet as mx
 import mxnet.symbol as sym

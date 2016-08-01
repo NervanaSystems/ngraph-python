@@ -20,16 +20,14 @@ import a TensorFlow GraphDef from a protobuf file and convert it to Neon's compu
 """
 
 from __future__ import absolute_import, division, print_function
-from builtins import str
-from builtins import range
 
-import geon.backends.graph.funs as be
-from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.graphop import Tensor
-from geon.backends.graph.graph_test_utils import *
-
-from tensorflow.python.framework import tensor_util
 import numpy as np
+from builtins import range
+from builtins import str
+from geon.backends.graph.graph_test_utils import *
+from tensorflow.python.framework import tensor_util
+
+import geon.op_graph as be
 
 # known operators that can be processed by Neon graph importer
 known_ops = [
@@ -105,7 +103,7 @@ def scan_variables(graph_def, env):
                 shape = [d.size for d in dims.dim]
 
                 if batch_axis is None:
-                    batch_axis = AxisVar(name='batch', length=shape[0])
+                    batch_axis = be.AxisVar(name='batch', length=shape[0])
 
                 if len(shape) == 2:
                     x_axis = AxisVar(name='x', length=shape[1])
@@ -209,7 +207,8 @@ def create_nervana_graph(graph_def, env, end_node=None):
 
             inputs.append(input_name)
             print('inputs[' + str(i) + "]: " + inputs[i])
-            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], Tensor):
+
+            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], be.Tensor):
                 print(name_to_op[inputs[i]])
 
         if skip_this_node:
@@ -296,7 +295,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
             elif op_type == 'TruncatedNormal' or op_type == 'RandomStandardNormal':
                 # TODO: implement tf.truncated_normal and tf.random_normal
                 shape_tensor = name_to_op[inputs[0]]  # numpy ndarray
-                assert isinstance(shape_tensor, Tensor)
+                assert isinstance(shape_tensor, be.Tensor)
                 shape = shape_tensor.nptensor
                 val = np.random.random_sample(shape).astype(np.float32)
 

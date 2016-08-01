@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.backends.graph.names import name_scope_list, with_name_scope
-from geon.backends.graph.graph import Model, with_graph_scope, with_environment, \
+from geon.op_graph.names import name_scope_list, with_name_scope
+from geon.frontends.base.graph import Model, with_graph_scope, with_environment, \
     get_current_environment
 from geon.backends.graph.environment import bound_environment
 
-from geon.backends.graph.defmodimp import Axis, deriv, input, Variable, ArrayWithAxes
-from geon.backends.graph.defmodimp import absolute, add, cos, divide, dot, exp, log, \
+from geon.frontends.declarative_graph.declarative_graph import Axis, deriv, input, Variable, ArrayWithAxes
+from geon.frontends.declarative_graph.declarative_graph import absolute, add, cos, divide, dot, exp, log, \
     maximum, minimum, multiply
-from geon.backends.graph.defmodimp import negative, reciprocal, sig, sin, softmax, sqrt, \
+from geon.frontends.declarative_graph.declarative_graph import negative, reciprocal, sig, sin, softmax, sqrt, \
     square, subtract, sum
-from geon.backends.graph.defmodimp import tanh
-from geon.backends.graph.defmodimp import doall, decrement
+from geon.frontends.declarative_graph.declarative_graph import tanh
+from geon.frontends.declarative_graph.declarative_graph import doall, decrement
 
-from geon.backends.graph.defmodimp import Axis, Tensor, Variable, RecursiveTensor, Var
-from geon.backends.graph.defmodimp import get_all_defs, find_all
+from geon.frontends.declarative_graph.declarative_graph import Axis, Tensor, Variable, RecursiveTensor, Var
+from geon.frontends.declarative_graph.declarative_graph import get_all_defs, find_all

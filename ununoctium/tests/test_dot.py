@@ -15,8 +15,8 @@ from builtins import range
 # ----------------------------------------------------------------------------
 import numpy as np
 import random
-import geon.backends.graph.funs as be
-import geon.backends.graph.axis as ax
+import geon.op_graph as be
+import geon.frontends.base.axis as ax
 from geon.util.utils import in_bound_environment
 from geon.util.utils import raise_all_numpy_errors
 from geon.util.utils import transform_numeric_derivative

@@ -19,7 +19,7 @@ from builtins import object
 from future.utils import with_metaclass
 
 from geon.backends.graph.environment import get_current_environment
-from geon.backends.graph.graphop import Op
+from geon.op_graph.op_graph import Op
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):

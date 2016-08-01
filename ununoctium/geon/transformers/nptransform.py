@@ -1,4 +1,3 @@
-from builtins import range
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,12 @@ from builtins import range
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import numpy as np
 
-from geon.backends.graph.transform import Transformer
-from geon.backends.graph.graphop import AllocationOp
+import numpy as np
+from builtins import range
+
+from geon.op_graph.op_graph import AllocationOp
+from geon.transformers.base import Transformer
 
 
 class NumPyTransformer(Transformer):

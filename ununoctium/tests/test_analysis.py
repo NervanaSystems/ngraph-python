@@ -20,9 +20,9 @@ from __future__ import print_function
 
 from builtins import range, zip
 
-import geon.backends.graph.analysis as an
-import geon.backends.graph.axis as ax
-import geon.backends.graph.funs as be
+import geon.util.analysis as an
+import geon.frontends.base.axis as ax
+import geon.op_graph as be
 
 
 def build_graphs(L, BS):

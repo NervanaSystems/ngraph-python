@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function
 from builtins import range, zip
-from geon.backends.graph.graphneon import *  # noqa
+from geon.frontends.neon import *  # noqa
 
 import numpy as np
 
@@ -99,9 +99,9 @@ class MyTest(be.Model):
         g.errors = be.cross_entropy_multi(g.value, g.y)
         g.error = be.sum(g.errors, out_axes=())
 
-        # L2 regularizer of parameters
+        # L2 regularizer of variables
         reg = None
-        for param in g.value.parameters():
+        for param in g.value.variables():
             l2 = L2(param)
             if reg is None:
                 reg = l2

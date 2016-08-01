@@ -21,8 +21,8 @@ from neon.initializers import Constant, Array
 Test the usage of be.Variable
 
 '''
-import geon.backends.graph.funs as be
-import geon.backends.graph.axis as ax
+import geon.op_graph as be
+import geon.frontends.base.axis as ax
 
 
 def test_init_variable():

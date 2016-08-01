@@ -17,7 +17,7 @@ import numpy as np
 
 from neon.backends.backend import Backend
 
-from geon.backends.graph.graphop import RNG
+from geon.op_graph.op_graph import RNG
 
 
 class BackendNDArray(np.ndarray):
