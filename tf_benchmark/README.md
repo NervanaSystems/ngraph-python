@@ -32,7 +32,7 @@ The compuation graph is saved in .pb.txt file and its binary version is saved in
 
 #### 1.2 Variables  
 
-To save the variable values, add following code at the beggining of the training
+To save the variable values, add following code at the beginning of the training
 
 ```
 saver = tf.train.Saver() 
@@ -47,11 +47,10 @@ saver.save(sess, checkpoint)
 
 The variable values are saved in the **checkpoint** (.ckpt) file.
 
-Note that TensorFlow also saves a [MetaGraph](https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html) (.meta) file, which contans MetaInfoDef, GraphDef, SaverDef and CollectionDef.
-
 #### 1.3 MetaGraph
 
-You might also save the meta info. [Here](http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#) is an explanition about MetaGraph.
+Note that TensorFlow also saves a [MetaGraph](https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html) (.meta) file, which contans MetaInfoDef, GraphDef, SaverDef and CollectionDef. 
+[Here](http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#) is an explanition about MetaGraph.
 
 ### 2 Training
 
@@ -69,7 +68,7 @@ Then execute the stript `tf_benchmark/mnist/fully_connected_feed.py`
 ```
 ### 3. Visualize the graph and find the last node
 
-Now we can visualize the graph with TensorBord.
+Now we can visualize the graph with TensorBoard.
 
 ```
 $ tensorboard --logdir=. & firefox http://0.0.0.0:6006
