@@ -19,9 +19,8 @@ from geon.util.utils import execute
 from geon.util.utils import in_bound_environment
 from geon.util.utils import transform_numeric_derivative
 from geon.util.utils import transform_derivative
-import geon.backends.graph.funs as be
-import geon.backends.graph.axis as ax
-from geon.backends.graph.arrayaxes import Axes
+import geon.op_graph as be
+import geon.frontends.base.axis as ax
 
 
 @in_bound_environment
@@ -60,7 +59,7 @@ def test_expand_dims():
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = be.placeholder(axes=Axes(*tensor_axes))
+                tensor = be.placeholder(axes=be.Axes(*tensor_axes))
                 tensor.value = tensor_np
 
                 expanded = be.ExpandDims(tensor, new_axis, dim)

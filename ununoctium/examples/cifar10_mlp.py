@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from geon.backends.graph.graphneon import *  # noqa
+from geon.frontends.neon import *  # noqa
 
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)

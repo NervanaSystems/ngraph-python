@@ -15,7 +15,7 @@
 from functools import wraps
 from future.utils import with_metaclass
 from geon.backends.graph.environment import get_current_environment, bound_environment, Environment
-from geon.backends.graph.names import NameScope, get_current_name_scope, name_scope
+from geon.op_graph.names import NameScope, get_current_name_scope, name_scope
 
 
 class GraphMetaclass(type):

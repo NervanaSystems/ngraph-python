@@ -12,38 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import range
 import numpy as np
+from builtins import range
 
-import geon.backends.graph.arrayaxes as arrax
-import geon.backends.graph.names as names
+import geon.op_graph.names as names
+from geon.op_graph import arrayaxes
 
 # Make some axes
 ax = names.NameScope()
 
-ax.A = arrax.Axis(10)
-ax.B = arrax.Axis(15)
-ax.C = arrax.Axis(20)
-ax.D = arrax.Axis(25)
+ax.A = arrayaxes.Axis(10)
+ax.B = arrayaxes.Axis(15)
+ax.C = arrayaxes.Axis(20)
+ax.D = arrayaxes.Axis(25)
 
 
 def test_axes_equal():
-    a1 = arrax.Axes(ax.A, ax.B, ax.C)
-    a2 = arrax.Axes(ax.A, ax.B, ax.C)
+    a1 = arrayaxes.Axes(ax.A, ax.B, ax.C)
+    a2 = arrayaxes.Axes(ax.A, ax.B, ax.C)
     assert a1 == a2
 
 
 def to_nested_tup(axes):
     return tuple(to_nested_tup(axis.axes) if
-                 isinstance(axis, arrax.AxesAxis) else axis for axis in axes)
+                 isinstance(axis, arrayaxes.AxesAxis) else axis for axis in axes)
 
 
 def test_canonicalize_axes():
     def test(l, r):
-        assert to_nested_tup(arrax.Axes(*l)) == r,\
+        assert to_nested_tup(arrayaxes.Axes(*l)) == r,\
             ('Failed. Original collection: %s, axes: %s,' +
              ' generated tuple: %s, target: %s') %\
-            (l, arrax.Axes(*l), to_nested_tup(arrax.Axes(*l)), r)
+            (l, arrayaxes.Axes(*l), to_nested_tup(arrayaxes.Axes(*l)), r)
 
     test((), ())
     test([], ())
@@ -55,18 +55,18 @@ def test_canonicalize_axes():
 def test_axes_ops():
     # Subtraction
     def test_sub(axes1, axes2, target):
-        assert arrax.AxisIDTuple.sub(
+        assert arrayaxes.AxisIDTuple.sub(
             axes1.as_axis_ids(),
             axes2.as_axis_ids()).as_axes() == target
-    test_sub(arrax.Axes(ax.A, ax.B), arrax.Axes(ax.A,), arrax.Axes(ax.B,))
-    test_sub(arrax.Axes(ax.A, ax.B), arrax.Axes(ax.B,), arrax.Axes(ax.A,))
+    test_sub(arrayaxes.Axes(ax.A, ax.B), arrayaxes.Axes(ax.A,), arrayaxes.Axes(ax.B,))
+    test_sub(arrayaxes.Axes(ax.A, ax.B), arrayaxes.Axes(ax.B,), arrayaxes.Axes(ax.A,))
 
     # Combined axes length
-    assert arrax.AxesAxis(arrax.Axes(ax.A, ax.B,)).length \
+    assert arrayaxes.AxesAxis(arrayaxes.Axes(ax.A, ax.B,)).length \
         == ax.A.length * ax.B.length
-    assert arrax.Axes(ax.A, (ax.B, ax.C)).lengths \
+    assert arrayaxes.Axes(ax.A, (ax.B, ax.C)).lengths \
         == (ax.A.length, ax.B.length * ax.C.length)
-    assert arrax.AxesAxis(arrax.Axes(ax.A, (ax.B, ax.C))).length \
+    assert arrayaxes.AxesAxis(arrayaxes.Axes(ax.A, (ax.B, ax.C))).length \
         == ax.A.length * ax.B.length * ax.C.length
 
 
@@ -82,17 +82,17 @@ def tensorview(td, nparr):
 
 def test_simple_tensors():
     # A scalar
-    td0 = arrax.TensorDescription(axes=())
+    td0 = arrayaxes.TensorDescription(axes=())
     e0 = empty(td0)
 
     # A simple vector
-    td1 = arrax.TensorDescription(axes=[ax.A])
+    td1 = arrayaxes.TensorDescription(axes=[ax.A])
     e1 = empty(td1)
 
-    td2 = arrax.TensorDescription(axes=[ax.A, ax.B])
+    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
     e2 = empty(td2)
 
-    td3 = arrax.TensorDescription(axes=(ax.D, ax.D))
+    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D))
     e3 = empty(td3)
 
     # Reaxes
@@ -109,16 +109,16 @@ def test_simple_tensors():
     e1_2 = tensorview(td1_2, e1)
     e1_3 = tensorview(td1_3, e1)
 
-    td2_1 = td2.reaxe(arrax.Axes(ax.B, ax.A))
+    td2_1 = td2.reaxe(arrayaxes.Axes(ax.B, ax.A))
     e2_1 = tensorview(td2_1, e2)
-    td2_2 = td2.reaxe(arrax.Axes(ax.A, ax.B))
+    td2_2 = td2.reaxe(arrayaxes.Axes(ax.A, ax.B))
     e2_2 = tensorview(td2_2, e2)
-    td2_3 = td2.reaxe(arrax.Axes(arrax.AxesAxis(td2.axes)))
+    td2_3 = td2.reaxe(arrayaxes.Axes(arrayaxes.AxesAxis(td2.axes)))
     e2_3 = tensorview(td2_3, e2)
 
-    td3_1 = td3.reaxe_with_axis_ids(arrax.AxisIDTuple(
-        arrax.AxisID(ax.D, 1),
-        arrax.AxisID(ax.D, 0)
+    td3_1 = td3.reaxe_with_axis_ids(arrayaxes.AxisIDTuple(
+        arrayaxes.AxisID(ax.D, 1),
+        arrayaxes.AxisID(ax.D, 0)
     ))
     e3_1 = tensorview(td3_1, e3)
 

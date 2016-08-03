@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object
-import geon.backends.graph.funs as be
+import geon.op_graph as be
 
 
 class Transform(object):

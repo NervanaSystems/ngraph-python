@@ -20,7 +20,7 @@ scaling with the fp16 data format.
 from __future__ import division
 
 import numpy as np
-from geon.backends.graph.graphneon import *  # noqa
+from geon.frontends.neon import *  # noqa
 from neon import logger as neon_logger
 
 

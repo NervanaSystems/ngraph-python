@@ -15,9 +15,9 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 from builtins import next, zip
-import geon.backends.graph.defmod as nm
-import geon.backends.graph.axis as ax
-# import geon.backends.graph.analysis as analysis
+import geon.frontends.declarative_graph as nm
+import geon.frontends.base.axis as ax
+# from geon.util import analysis
 from neon.initializers import Uniform
 
 

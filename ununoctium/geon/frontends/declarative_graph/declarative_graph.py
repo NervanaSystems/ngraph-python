@@ -20,7 +20,7 @@ import collections
 
 # from geon.backends.graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
-from geon.backends.graph.nodes import Node
+from geon.op_graph.nodes import Node
 
 
 # TODO This implementation only read the model description.  These model descriptions use

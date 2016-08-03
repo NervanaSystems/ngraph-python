@@ -25,7 +25,7 @@ import weakref
 
 import numpy as np
 
-from geon.backends.graph.names import NameableValue
+from geon.op_graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 
 

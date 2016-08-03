@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object, zip
-import geon.backends.graph.funs as be
+import geon.op_graph as be
 from neon.optimizers.optimizer import ExpSchedule
 from neon.initializers import Constant
 

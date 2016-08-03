@@ -14,15 +14,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function
-from builtins import zip
-from neon.util.argparser import NeonArgparser
-from neon.data import ImageLoader
-# import geon.backends.graph.dataloaderbackend
 
-import geon.backends.graph.defmod as be
-# import geon.backends.graph.graph as graph
-# import geon.backends.graph.pycudatransform as evaluation
 import numpy as np
+from builtins import zip
+from neon.data import ImageLoader
+from neon.util.argparser import NeonArgparser
+
+import geon.frontends.declarative_graph as be
 
 
 # parse the command line arguments (generates the backend)
@@ -39,6 +37,9 @@ def L2(x):
 
 
 class MyRnn(be.Model):
+    """
+    An example of how the future might look like.  Should parse but doesn't run.
+    """
 
     def __init__(self, **kargs):
         super(MyRnn, self).__init__(**kargs)
@@ -126,7 +127,7 @@ class MyRnn(be.Model):
                                 for param, deriv in zip(params, derivs)])
 
         enp = be.NumPyTransformer(
-            results=[self.graph.value, g.error, updates] + derivs)
+            results=[self.graph.y, g.error, updates] + derivs)
 
         # Some future data loader
         for epoch_no, batches in train:

@@ -16,9 +16,7 @@ from __future__ import division
 from builtins import object, range, zip
 import math
 import numpy as np
-# from geon.backends.graph.names import NameableValue, NameScope
-import geon.backends.graph.funs as be
-import geon.backends.graph.arrayaxes as arrayaxes
+import geon.op_graph as be
 from functools import reduce
 
 
@@ -243,11 +241,11 @@ class ConvLayer(object):
         self.cafe_compatibility = cafe_compatibility
 
         # Compute the output spatial dimensions
-        M = arrayaxes.output_dim(
+        M = be.output_dim(
             D, T, pad_d, str_d, cafe_compatibility=cafe_compatibility)
-        P = arrayaxes.output_dim(
+        P = be.output_dim(
             H, R, pad_h, str_h, cafe_compatibility=cafe_compatibility)
-        Q = arrayaxes.output_dim(
+        Q = be.output_dim(
             W, S, pad_w, str_w, cafe_compatibility=cafe_compatibility)
 
         self.C = C
