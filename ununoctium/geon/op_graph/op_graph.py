@@ -654,6 +654,10 @@ class TensorAxesInfo(object):
                 axes=self.axes, dtype=self.dtype)
         return self.__tensor_description
 
+    @property
+    def value(self):
+        return self.tensor_description.value
+        
     def set_tensor(self, transformer, tensor):
         description = self.tensor_description
         description.value = transformer.fill_tensor_in(description, tensor)

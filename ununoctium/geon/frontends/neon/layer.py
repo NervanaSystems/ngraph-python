@@ -16,7 +16,7 @@ from __future__ import division
 from builtins import object, range, zip
 import math
 import numpy as np
-import geon.op_graph as be
+import geon as be
 from functools import reduce
 
 

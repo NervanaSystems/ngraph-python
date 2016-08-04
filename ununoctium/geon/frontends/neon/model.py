@@ -19,7 +19,7 @@ from builtins import zip
 from neon.data import ArrayIterator, DataLoader
 
 import geon.frontends.base.axis as ax
-import geon.op_graph as be
+import geon as be
 import geon.transformers.nptransform as nptransform
 from geon.backends.graph.environment import bound_environment
 from geon.frontends.base.graph import GraphComponent

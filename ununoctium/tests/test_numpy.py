@@ -18,7 +18,7 @@ import numpy as np
 from builtins import range
 
 import geon.frontends.base.axis as ax
-import geon.op_graph as be
+import geon as be
 from geon.util.utils import RandomTensorGenerator, execute, transform_numeric_derivative
 from geon.util.utils import transform_derivative, numeric_derivative
 

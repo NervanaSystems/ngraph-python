@@ -22,7 +22,7 @@ from builtins import range, zip
 
 import geon.util.analysis as an
 import geon.frontends.base.axis as ax
-import geon.op_graph as be
+import geon as be
 
 
 def build_graphs(L, BS):

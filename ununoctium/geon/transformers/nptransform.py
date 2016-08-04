@@ -34,6 +34,12 @@ class NumPyTransformer(Transformer):
         if view.shape:
             view[:] = tensor
         else:
+            buf = np.ndarray(
+                    shape=(1,),
+                    dtype=tensor_description.dtype,
+                    buffer=tensor_description.buffer.data,
+                    offset=tensor_description.offset)
+            buf[0] = tensor
             view = tensor
         return view
         
