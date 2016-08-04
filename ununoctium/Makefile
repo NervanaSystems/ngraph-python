@@ -31,11 +31,15 @@ STYLE_CHECK_DIRS := geon tests examples
 TEST_OPTS :=
 TEST_DIRS := tests/
 
+# this variable controls where we publish Sphinx docs to
+DOC_DIR := doc
+DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
+
 ifndef VIRTUAL_ENV
    $(error You must activate private-neon virtual environment before continuing)
 endif
 
-.PHONY: env default install uninstall clean test style lint lint3k check
+.PHONY: env default install uninstall clean test style lint lint3k check doc
 
 default: install
 
@@ -75,6 +79,13 @@ check:
 	@echo
 
 fixstyle: autopep8
+
+doc:
+	$(MAKE) -C $(DOC_DIR) clean
+	$(MAKE) -C $(DOC_DIR) html
+	@echo "Documentation built in $(DOC_DIR)/build/html"
+	@echo
+
 
 autopep8:
 	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
