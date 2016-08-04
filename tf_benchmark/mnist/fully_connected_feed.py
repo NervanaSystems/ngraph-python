@@ -35,8 +35,8 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_float('learning_rate', 0.01, 'Initial learning rate.')
 flags.DEFINE_integer('max_steps', 2000, 'Number of steps to run trainer.')
-flags.DEFINE_integer('hidden1', 5, 'Number of units in hidden layer 1.')
-flags.DEFINE_integer('hidden2', 2, 'Number of units in hidden layer 2.')
+flags.DEFINE_integer('hidden1', 200, 'Number of units in hidden layer 1.')
+flags.DEFINE_integer('hidden2', 32, 'Number of units in hidden layer 2.')
 flags.DEFINE_integer('batch_size', 128, 'Batch size. Must divide evenly into the dataset sizes.')
 flags.DEFINE_string('train_dir', 'data', 'Directory to put the training data.')
 flags.DEFINE_boolean('fake_data', False, 'If true, uses fake data for unit testing.')
@@ -131,8 +131,12 @@ def run_training():
       feed_dict = fill_feed_dict(data_sets.train, images_placeholder, labels_placeholder)
 
       # Run one step of the model.  The return values are the activations
-      # from the `train_op` (which is discarded) and the `loss` Op.
-      _, loss_value = sess.run([train_op, loss], feed_dict=feed_dict)
+      # from the `train_op` (which is discarded) and the `loss` Op.  To
+      # inspect the values of your Ops or variables, you may include them
+      # in the list passed to sess.run() and the value tensors will be
+      # returned in the tuple from the call.
+      _, loss_value = sess.run([train_op, loss],
+                               feed_dict=feed_dict)
 
       duration = time.time() - start_time
 
@@ -150,8 +154,9 @@ def run_training():
         train_accuracy = do_eval(sess, eval_op, images_placeholder, labels_placeholder, data_sets.train)
         val_accuracy = do_eval(sess, eval_op, images_placeholder, labels_placeholder, data_sets.validation)
         test_accuracy = do_eval(sess, eval_op, images_placeholder, labels_placeholder, data_sets.test)
-        print("Step: {:d} time: {:.2f} train_loss: {:.2f} test_accuracy: {:.2f}".format(
-            step, duration, train_accuracy, val_accuracy, test_accuracy))
+        print("Step: {:d} time: {:.2f} train_loss: {:.2f} train_accuracy: {:.2f} val_accuracy: {:.2f} "
+              "test_accuracy: {:.2f}".format(
+            step, duration, loss_value, train_accuracy, val_accuracy, test_accuracy))
 
     print("saving graph")
     graph_pbtxt = "mnist_mlp_graph.pb.txt"
