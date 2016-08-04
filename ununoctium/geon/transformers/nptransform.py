@@ -127,15 +127,7 @@ class NumPyTransformer(Transformer):
         np.log(x, out=out)
 
     def max(self, x, axis, out):
-        # print '=========== MAX ==============='
-        # print id(x.data), id(out.data)
-        # print id(out.data)
-        # print id(x.data)
         np.max(x, axis, out=out)
-        # print '=========== AFTER ==============='
-        # print out
-        # print id(out.data)
-        # print '=========== DONE MAX ==============='
 
     def maximum(self, x, y, out):
         np.maximum(x, y, out=out)
