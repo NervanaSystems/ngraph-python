@@ -116,6 +116,7 @@ def test_numpytensor_multiply_constant():
         print(result[c])
         assert np.array_equal(result[c], np_c)
 
+
 def test_numpytensor_add_constant():
     with be.bound_environment():
         np_a = np.array([[1, 2, 3]], dtype=np.float32)
@@ -130,6 +131,7 @@ def test_numpytensor_add_constant():
         result = enp.evaluate()
         print(result[c])
         assert np.array_equal(result[c], np_c)
+
 
 def test_numpytensor_mlp():
     with be.bound_environment():
