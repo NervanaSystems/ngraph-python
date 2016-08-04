@@ -18,7 +18,7 @@ from neon import NervanaObject
 
 from geon.backends.graph.mpihandle import MPIHandle
 from geon.transformers.base import Transformer
-from geon.op_graph.op_graph import AllocationOp, Visitor
+from geon.op_graph.op_graph import AllocationOp
 
 
 class ArgonTransformer(Transformer):
@@ -174,9 +174,3 @@ class ArgonUniform(AllocationOp):
         tensor_axes_info = super(ArgonUniform, self).compute_tensor_axes_info()
         tensor_axes_info.alloc = lambda evaluator, tensor_description: \
             evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
-
-
-class ArgonTransformVisitor(Visitor):
-
-    def visit_uniform(self, uniform, low, high, rng):
-        pass

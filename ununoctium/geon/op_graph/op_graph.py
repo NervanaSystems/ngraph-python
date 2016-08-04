@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import abc
 import numbers
 import weakref
 
@@ -25,497 +24,10 @@ from geon.backends.graph.environment import get_current_environment,\
     get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, AxesAxis, Axis
-from geon.op_graph import nodes
+from geon.op_graph.nodes import Node, generic_method
 
 
-class AbstractVisitor(nodes.AbstractVisitor):
-
-    @abc.abstractmethod
-    def visit_op(self, op):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_tensor(self, tensor):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_allocation(self, allocation):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_computation(self, computation):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_container(self, container):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_RNG(self, rng):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_rngop(self, rngop, rng):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_normal(self, normal, loc, scale, rng):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_uniform(self, uniform, low, high, rng):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_void(self, void):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_set_item(self, set_item, tensor, item, val):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_doall(self, doall, *args):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_elementwise(self, elementwise):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_all_reduce(self, all_reduce, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_placheolder(self, placeholder):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_fill(self, fill, const):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_constant(self, constant, const):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_numpy_tensor(self, numpy_tensor, nptensor):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_broadcast(self, broadcast, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_expand_dims(self, expand_dims, axis, dim, x):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def visit_absolute(self, absolute, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_add(self, add, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_argmax(self, argmax, max_axes, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_argmin(self, argmin, min_axes, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_cos(self, cos, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_divide(self, divide, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_dot(self, dot, reduction_axes, out_axes, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_elementwise_boolean(self, elementwise_boolean):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_equal(self, equal, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_not_equal(self, not_equal, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_greater(self, greater, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_less(self, less, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_greater_equal(self, greater_equal, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_less_equal(self, less_equal, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_onehot(self, onehot, x, axis):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_softmax(self, softmax, x, sx):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_sum(self, sum, reduction_axes, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_variable(self, variable):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_temporary(self, temporary):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_exp(self, exp, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_log(self, log, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_safelog(self, safelog, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_max(self, max, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_maximum(self, maximum, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_min(self, min, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_minimum(self, minimum, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_multiply(self, multiply, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_negative(self, negative, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_power(self, power, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_reciprocal(self, reciprocal, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_reduction(self, reduction, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_sgn(self, sgn, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_sig(self, sig, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_sin(self, sin, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_sqrt(self, sqrt, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_square(self, square, x):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_subtract(self, subtract, x, y):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def visit_tanh(self, tanh, x):
-        raise NotImplementedError()
-
-
-class Visitor(nodes.Visitor):
-
-    def visit_op(self, op):
-        return self.visit_node(op)
-
-    def visit_tensor(self, tensor):
-        return self.visit_op(tensor)
-
-    def visit_allocation(self, allocation):
-        return self.visit_tensor(allocation)
-
-    def visit_computation(self, computation):
-        return self.visit_tensor(computation)
-
-    def visit_container(self, container):
-        return self.visit_computation(container)
-
-    def visit_RNG(self, rng):
-        return self.visit_allocation(rng)
-
-    def visit_rngop(self, rngop, rng):
-        return self.visit_computation(rngop)
-
-    def visit_normal(self, normal, loc, scale, rng):
-        return self.visit_rngop(normal, rng)
-
-    def visit_uniform(self, uniform, low, high, rng):
-        return self.visit_rngop(uniform, rng)
-
-    def visit_void(self, void):
-        return self.visit_computation(void)
-
-    def visit_set_item(self, set_item, tensor, item, val):
-        return self.visit_void(set_item)
-
-    def visit_doall(self, doall, *args):
-        return self.visit_void(doall)
-
-    def visit_elementwise(self, elementwise):
-        return self.visit_computation(elementwise)
-
-    def visit_all_reduce(self, all_reduce, x):
-        return self.visit_elemenwise(all_reduce)
-
-    def visit_placeholder(self, placeholder):
-        return self.visit_allocation(placeholder)
-
-    def visit_fill(self, fill, const):
-        return self.visit_void(fill)
-
-    def visit_constant(self, constant, const):
-        return self.visit_allocation(constant)
-
-    def visit_numpy_tensor(self, numpy_tensor, nptensor):
-        return self.visit_allocation(numpy_tensor)
-
-    def visit_broadcast(self, broadcast, x):
-        return self.visit_tensor(broadcast)
-
-    def visit_expand_dims(self, expand_dims, axis, dim, x):
-        return self.visit_tensor(expand_dims)
-
-    def visit_absolute(self, absolute, x):
-        return self.visit_elementwise(absolute)
-
-    def visit_add(self, add, x, y):
-        return self.visit_elementwise(add)
-
-    def visit_argmax(self, argmax, max_axes, x):
-        return self.visit_elementwise(argmax)
-
-    def visit_argmin(self, argmin, min_axes, x):
-        return self.visit_elementwise(argmin)
-
-    def visit_cos(self, cos, x):
-        return self.visit_elementwise(cos)
-
-    def visit_divide(self, divide, x, y):
-        return self.visit_elementwise(divide)
-
-    def visit_dot(self, dot, reduction_axes, out_axes, x, y):
-        return self.visit_elementwise(dot)
-
-    def visit_elementwise_boolean(self, elementwise_boolean):
-        return self.visit_elementwise(elementwise_boolean)
-
-    def visit_equal(self, equal, x, y):
-        return self.visit_elementwise_boolean(equal)
-
-    def visit_not_equal(self, not_equal, x, y):
-        return self.visit_elementwise_boolean(not_equal)
-
-    def visit_greater(self, greater, x, y):
-        return self.visit_elementwise_boolean(greater)
-
-    def visit_less(self, less, x, y):
-        return self.visit_elementwise_boolean(less)
-
-    def visit_greater_equal(self, greater_equal, x, y):
-        return self.visit_elementwise_boolean(greater_equal)
-
-    def visit_less_equal(self, less_equal, x, y):
-        return self.visit_elementwise_boolean(less_equal)
-
-    def visit_onehot(self, onehot, x, index):
-        return self.visit_computation(onehot)
-
-    def visit_reduction(self, reduction, x):
-        return self.visit_computation(reduction)
-
-    def visit_softmax(self, softmax, x, sx):
-        return self.visit_computation(softmax)
-
-    def visit_sum(self, sum, reduction_axes, x):
-        return self.visit_reduction(sum)
-
-    def visit_variable(self, variable):
-        return self.visit_allocation(variable)
-
-    def visit_temporary(self, temporary):
-        return self.visit_allocation(temporary)
-
-    def visit_exp(self, exp, x):
-        return self.visit_elementwise(exp)
-
-    def visit_log(self, log, x):
-        return self.visit_elementwise(log)
-
-    def visit_safelog(self, safelog, x):
-        return self.visit_log(safelog, x)
-
-    def visit_max(self, max, x, y):
-        return self.visit_reduction(max)
-
-    def visit_maximum(self, maximum, x, y):
-        return self.visit_elementwise(maximum)
-
-    def visit_min(self, min, x, y):
-        return self.visit_reduction(min)
-
-    def visit_minimum(self, minimum, x, y):
-        return self.visit_elementwise(minimum)
-
-    def visit_multiply(self, multiply, x, y):
-        return self.visit_elementwise(multiply)
-
-    def visit_negative(self, negative, x):
-        return self.visit_elementwise(negative)
-
-    def visit_power(self, power, x, y):
-        return self.visit_elementwise(power)
-
-    def visit_reciprocal(self, reciprocal, x):
-        return self.visit_elementwise(reciprocal)
-
-    def visit_sgn(self, sgn, x):
-        return self.visit_elementwise(sgn)
-
-    def visit_sig(self, sig, x):
-        return self.visit_container(sig)
-
-    def visit_sin(self, sin, x):
-        return self.visit_elementwise(sin)
-
-    def visit_sqrt(self, sqrt, x):
-        return self.visit_elementwise(sqrt)
-
-    def visit_square(self, square, x):
-        return self.visit_elementwise(square)
-
-    def visit_subtract(self, subtract, x, y):
-        return self.visit_elementwise(subtract)
-
-    def visit_tanh(self, tanh, x):
-        return self.visit_elementwise(tanh)
-
-
-class SimplePrune(Visitor):
-
-    def __init__(self, results):
-        self.results = results
-        self.reps = []
-
-    def init(self):
-        self.reps = []
-
-    def add_rep(self, op, replacement):
-        # Can't replace op if its being returned
-        if op not in self.results:
-            self.reps.append((op, replacement))
-
-    def visit_negative(self, negative, x):
-        if isinstance(x, Constant):
-            self.add_rep(negative, Constant(-x.const))
-
-    def visit_multiply(self, multiply, x, y):
-        rep = None
-        if isinstance(x, Constant):
-            if x.const == 0:
-                rep = x
-            elif x.const == 1:
-                rep = y
-            elif x.const == -1:
-                rep = negative(y)
-        elif isinstance(y, Constant):
-            if y.const == 0:
-                rep = y
-            elif y.const == 1:
-                rep = x
-            elif y.const == -1:
-                rep = negative(x)
-        if rep is not None:
-            self.add_rep(multiply, rep)
-
-    def visit_add(self, add, x, y):
-        rep = None
-        if isinstance(x, Constant):
-            if x.const == 0:
-                rep = y
-        elif isinstance(y, Constant):
-            if y.const == 0:
-                rep = x
-        if rep is not None:
-            self.add_rep(add, rep)
-
-    def visit_sum(self, sum, reduction_axes, x):
-        if isinstance(x, Constant):
-            val = x.const * reduction_axes.size
-            self.add_rep(sum, Constant(val))
-
-    def visit_log(self, log, x):
-        if isinstance(x, Container):
-            args = x.args
-            if len(args) == 1:
-                x = args[0]
-        if isinstance(x, divide):
-            num, denom = x.args
-            if isinstance(num, exp):
-                exp_x, = num.args
-                self.add_rep(log, exp_x - type(log)(denom))
-        elif isinstance(x, exp):
-            exp_x, = x.args
-            self.add_rep(log, exp_x)
-
-    def do_replacements(self):
-        for old, rep in self.reps:
-            old_users = set(old.users)
-            for user in old_users:
-                user.replace_arg(old, rep)
-        return len(self.reps) > 0
-
-
-class Op(nodes.Node):
+class Op(Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, initializers=None, **kwds):
@@ -526,6 +38,10 @@ class Op(nodes.Node):
         if ops is not None:
             ops.append(self)
         self.transform_hook = None
+
+    @property
+    def defs(self):
+        return {}
 
     def parameters(self):
         """Return all parameters used in computing this node"""
@@ -542,15 +58,12 @@ class Op(nodes.Node):
 
         return set(params)
 
-    def visit(self, visitor, **kargs):
-        return visitor.visit_op(self, **kargs)
-
     @staticmethod
     def get_ordered_ops(op, ordered_ops):
         """
         Get dependent ops ordered for autodiff.
         """
-        nodes.Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
+        Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
     def adjoints(self):
         if self._adjoints is not None:
@@ -578,7 +91,7 @@ class Op(nodes.Node):
     @staticmethod
     def ordered_ops(results):
         ordered_ops = []
-        nodes.Node.visit_input_closure(
+        Node.visit_input_closure(
             results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
@@ -598,14 +111,7 @@ class Op(nodes.Node):
 
     @staticmethod
     def simple_prune(results):
-        pruner = SimplePrune(results)
-
-        has_work = True
-        while has_work:
-            pruner.init()
-            for op in Op.ordered_ops(results):
-                op.visit(pruner)
-            has_work = pruner.do_replacements()
+        SimplePrune(results)
 
     @property
     def output_view_info(self):
@@ -994,9 +500,6 @@ class Tensor(Op):
         # Derivative will be scaled by this
         self.scale = scale
 
-    def visit(self, visitor, **kargs):
-        return visitor.visit_tensor(self, **kargs)
-
     @property
     def output(self):
         return self
@@ -1187,10 +690,6 @@ class Broadcast(Tensor):
         x, = self.args
         return x.tensor_axes_info
 
-    def visit(self, visitor):
-        x, = self.args
-        return visitor.visit_broadcast(self, x)
-
 
 class ExpandDims(Tensor):
 
@@ -1198,10 +697,6 @@ class ExpandDims(Tensor):
         self.axis = axis
         self.dim = dim
         super(ExpandDims, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        x, = self.args
-        return visitor.visit_expand_dims(self, self.axis, self.dim, x)
 
     def compute_tensor_axes_info(self):
         x, = self.args
@@ -1244,9 +739,6 @@ class AllocationOp(Tensor):
         elif initial_value is not None:
             self.initializers.append(assign(self, initial_value))
 
-    def visit(self, visitor):
-        return visitor.visit_allocation(self)
-
 
 class ComputationOp(Tensor):
     """
@@ -1256,7 +748,6 @@ class ComputationOp(Tensor):
     def __init__(self, out=None, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
-        self.defs = {self}
 
         for arg in self.args:
             arg.users.add(self)
@@ -1267,11 +758,12 @@ class ComputationOp(Tensor):
         self.batch_axes = AxesComp.as_axes(batch_axes)
 
     @property
+    def defs(self):
+        return {self}
+
+    @property
     def graph_label(self):
         return self.__class__.__name__ + '[' + self.name + ']'
-
-    def visit(self, visitor):
-        return visitor.visit_computation(self)
 
 
 class Container(ComputationOp):
@@ -1283,18 +775,12 @@ class Container(ComputationOp):
         x, = self.args
         return x.tensor_axes_info
 
-    def visit(self, visitor):
-        return visitor.visit_container(self)
-
 
 class RNG(AllocationOp):
 
     def __init__(self, seed=None, **kargs):
         super(RNG, self).__init__(args=(), **kargs)
         self.seed = seed
-
-    def visit(self, visitor):
-        return visitor.visit_RNG(self)
 
     def compute_tensor_axes_info(self):
         tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
@@ -1323,9 +809,6 @@ class RNGOp(AllocationOp):
     def axes(self):
         return self.__axes
 
-    def visit(self, visitor):
-        return visitor.visit_rngop(self, *self.args)
-
     def compute_call_info(self):
         rng, = self.args
         return [rng.reaxe(rng.axes.value)]
@@ -1345,9 +828,6 @@ class Normal(RNGOp):
 
         self.tensor_axes_info.alloc = allocator
 
-    def visit(self, visitor):
-        return visitor.visit_uniform(self, self.loc, self.scale, *self.args)
-
 
 class Uniform(RNGOp):
 
@@ -1363,18 +843,12 @@ class Uniform(RNGOp):
 
         self.tensor_axes_info.alloc = allocator
 
-    def visit(self, visitor):
-        return visitor.visit_uniform(self, self.low, self.high, *self.args)
-
 
 class VoidOp(ComputationOp):
 
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(**kargs)
         self.__axes = AxesComp.as_axes(())
-
-    def visit(self, visitor):
-        return visitor.visit_void(self)
 
     @property
     def axes(self):
@@ -1390,10 +864,6 @@ class SetItem(VoidOp):
     def __init__(self, tensor, item, val, **kargs):
         super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
         self.item = item
-
-    def visit(self, visitor):
-        tensor, val = self.args
-        return visitor.visit_set_item(self, tensor, self.item, val)
 
     def compute_call_info(self):
         tensor, val = self.args
@@ -1411,17 +881,11 @@ class doall(VoidOp):
     def __init__(self, all, **kargs):
         super(doall, self).__init__(args=all, out=all[-1], **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_doall(self, *self.args)
-
 
 class ElementWise(ComputationOp):
 
     def __init__(self, **kargs):
         super(ElementWise, self).__init__(**kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_elementwise(self)
 
     @property
     def axes(self):
@@ -1443,9 +907,6 @@ class AllReduce(ElementWise):
     def __init__(self, x, **kargs):
         super(AllReduce, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_all_reduce(self, *self.args)
-
     def transform(self, transformer, out, x):
         return transformer.allreduce(x, out)
 
@@ -1462,9 +923,6 @@ class placeholder(AllocationOp):
 
     def __axes__(self):
         return self.__axes
-
-    def visit(self, visitor):
-        return visitor.visit_placeholder(self)
 
     def generate_adjoints(self, tape, delta):
         pass
@@ -1492,9 +950,6 @@ class Fill(VoidOp):
         super(Fill, self).__init__(args=(tensor,), **kargs)
         self.const = const
 
-    def visit(self, visitor):
-        return visitor.visit_fill(self, self.const)
-
     def compute_call_info(self):
         tensor, = self.args
         call_info = super(Fill, self).compute_call_info()
@@ -1515,9 +970,6 @@ class Constant(AllocationOp):
         super(Constant, self).__init__(
             axes=(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
-
-    def visit(self, visitor):
-        return visitor.visit_constant(self, self.const)
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1558,9 +1010,6 @@ class NumPyTensor(AllocationOp):
     def graph_label(self):
         return str(self.nptensor.shape)
 
-    def visit(self, visitor):
-        return visitor.visit_numpy_tensor(self, self.nptensor)
-
     def generate_adjoints(self, adjoints, delta):
         pass
 
@@ -1574,9 +1023,6 @@ class absolute(ElementWise):
     def __init__(self, x, **kargs):
         super(absolute, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_absolute(self, *self.args)
-
     def transform(self, transformer, out, x):
         transformer.absolute(x, out)
 
@@ -1588,9 +1034,6 @@ class add(ElementWise):
 
     def __init__(self, x, y, **kargs):
         super(add, self).__init__(args=(x, y), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_add(self, *self.args)
 
     def transform(self, transformer, out, x, y):
         transformer.add(x, y, out)
@@ -1607,9 +1050,6 @@ class argmax(ComputationOp):
             max_axes = tensor_sample_axes(x)
         self.max_axes = AxesComp.as_axes(max_axes)
         super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_argmax(self, self.max_axes, *self.args)
 
     def compute_call_info(self):
         x, = self.args
@@ -1633,9 +1073,6 @@ class argmin(ComputationOp):
         self.min_axes = AxesComp.as_axes(min_axes)
         super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_argmin(self, self.min_axes, *self.args)
-
     def compute_call_info(self):
         x, = self.args
         return [self.reaxe([self.axes.value]), x.reaxe(
@@ -1655,9 +1092,6 @@ class cos(ElementWise):
     def __init__(self, x, **kargs):
         super(cos, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_cos(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * sin(x))
 
@@ -1669,9 +1103,6 @@ class divide(ElementWise):
 
     def __init__(self, x, y, **kargs):
         super(divide, self).__init__(args=(x, y), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_divide(self, *self.args)
 
     def transform(self, transformer, out, x, y):
         transformer.divide(x, y, out)
@@ -1739,13 +1170,6 @@ class dot(ComputationOp):
             self.__axis_id_info = (out_axis_ids, red_axis_ids, dummy)
         return self.__axis_id_info
 
-    def visit(self, visitor):
-        return visitor.visit_dot(
-            self,
-            self.reduction_axes,
-            self.out_axes,
-            *self.args)
-
     def compute_call_info(self):
         x, y = self.args
         out_axis_ids, red_axis_ids, dummy = self.axis_id_info
@@ -1796,14 +1220,8 @@ class ElementWiseBoolean(ElementWise):
         super(ElementWiseBoolean, self).__init__(
             args=(x, y), dtype=dtype, **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_elementwise_boolean(self)
-
 
 class equal(ElementWiseBoolean):
-
-    def visit(self, visitor):
-        return visitor.visit_equal(self, *self.args)
 
     def transform(self, transformer, out, x, y):
         transformer.equal(x, y, out)
@@ -1814,17 +1232,11 @@ class not_equal(ElementWiseBoolean):
     def transform(self, transformer, out, x, y):
         transformer.not_equal(x, y, out)
 
-    def visit(self, visitor):
-        return visitor.visit_not_equal(self, *self.args)
-
 
 class greater(ElementWiseBoolean):
 
     def transform(self, transformer, out, x, y):
         transformer.greater(x, y, out)
-
-    def visit(self, visitor):
-        return visitor.visit_greater(self, *self.args)
 
 
 class less(ElementWiseBoolean):
@@ -1832,26 +1244,17 @@ class less(ElementWiseBoolean):
     def transform(self, transformer, out, x, y):
         transformer.less(x, y, out)
 
-    def visit(self, visitor):
-        return visitor.visit_less(self, *self.args)
-
 
 class greater_equal(ElementWiseBoolean):
 
     def transform(self, transformer, out, x, y):
         transformer.greater_equal(x, y, out)
 
-    def visit(self, visitor):
-        return visitor.visit_greater_equal(self, *self.args)
-
 
 class less_equal(ElementWiseBoolean):
 
     def transform(self, transformer, out, x, y):
         transformer.less_equal(x, y, out)
-
-    def visit(self, visitor):
-        return visitor.visit_less_equal(self, *self.args)
 
 
 class softmax(Container):
@@ -1869,9 +1272,6 @@ class softmax(Container):
     @property
     def axes(self):
         return self.args[0].axes
-
-    def visit(self, visitor):
-        return visitor.visit_softmax(self, self.x, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         z = delta * self
@@ -1922,9 +1322,6 @@ class max(ReductionOp):
     def __init__(self, x, **kargs):
         super(max, self).__init__(x, **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
-
     def transform(self, transformer, out, x):
         if self.mode is 'copy':
             # TODO Change this to a node replace
@@ -1941,9 +1338,6 @@ class min(ReductionOp):
     def __init__(self, x, **kargs):
         super(min, self).__init__(x, **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
-
     def transform(self, transformer, out, x):
         if self.mode is 'copy':
             # TODO Change this to a node replace
@@ -1959,9 +1353,6 @@ class sum(ReductionOp):
 
     def __init__(self, x, **kargs):
         super(sum, self).__init__(x, **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_sum(self, self.reduction_axes.value, *self.args)
 
     def transform(self, transformer, out, x):
         if self.mode is 'copy':
@@ -2035,9 +1426,6 @@ class Variable(AllocationOp):
         super(Variable, self).__init__(**kargs)
         self.tensor_axes_info.read_only = True
 
-    def visit(self, visitor):
-        return visitor.visit_variable(self)
-
     def generate_adjoints(self, adjoints, delta):
         pass
 
@@ -2047,9 +1435,6 @@ class Temporary(AllocationOp):
     def __init__(self, **kargs):
         super(Temporary, self).__init__(tags=['temp'], **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_temporary(self)
-
     def generate_adjoints(self, adjoints, delta):
         pass
 
@@ -2058,9 +1443,6 @@ class exp(ElementWise):
 
     def __init__(self, x, **kargs):
         super(exp, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_exp(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * self)
@@ -2073,9 +1455,6 @@ class log(ElementWise):
 
     def __init__(self, x, **kargs):
         super(log, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_log(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         def do_adjoints(delta, x):
@@ -2103,9 +1482,6 @@ class log(ElementWise):
 class safelog(log):
     expm50 = np.exp(-50.)
 
-    def visit(self, visitor):
-        return visitor.visit_safelog(self, *self.args)
-
     def transform(self, transformer, out, x):
         transformer.maximum(x, safelog.expm50, out)
         transformer.log(out, out)
@@ -2115,9 +1491,6 @@ class maximum(ElementWise):
 
     def __init__(self, x, y, **kargs):
         super(maximum, self).__init__(args=(x, y), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_maximum(self, *self.args)
 
     def transform(self, transformer, out, x, y):
         transformer.maximum(x, y, out=out)
@@ -2132,9 +1505,6 @@ class minimum(ElementWise):
     def __init__(self, x, y, **kargs):
         super(minimum, self).__init__(args=(x, y), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_minimum(self, *self.args)
-
     def transform(self, transformer, out, x, y):
         transformer.minimum(x, y, out=out)
 
@@ -2148,9 +1518,6 @@ class multiply(ElementWise):
     def __init__(self, x, y, **kargs):
         super(multiply, self).__init__(args=(x, y), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_multiply(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta * y)
         y.generate_add_delta(adjoints, x * delta)
@@ -2163,9 +1530,6 @@ class negative(ElementWise):
 
     def __init__(self, x, **kargs):
         super(negative, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_negative(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
@@ -2189,9 +1553,6 @@ class onehot(ComputationOp):
         super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
         self.axis = axis
 
-    def visit(self, visitor):
-        return visitor.visit_onehot(self, self.args[0], self.axis)
-
     def compute_call_info(self):
         x, = self.args
         ci = [self.reaxe(Axes(Axes(self.axis),
@@ -2208,9 +1569,6 @@ class power(ElementWise):
     def __init__(self, x, y, **kargs):
         super(power, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_power(self, *self.args)
-
     def transform(self, transformer, out, x, y):
         transformer.pow(x, y, out)
 
@@ -2224,9 +1582,6 @@ class reciprocal(ElementWise):
     def __init__(self, x, **kargs):
         super(reciprocal, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_reciprocal(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self * self * delta)
 
@@ -2238,9 +1593,6 @@ class sgn(ElementWise):
 
     def __init__(self, x, **kargs):
         super(sgn, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_sgn(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         # Zero
@@ -2257,9 +1609,6 @@ class sig(Container, ElementWise):
         self.x = x
         super(sig, self).__init__(args=(reciprocal(exp(-x) + 1),), axes=x.axes, **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_sig(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         self.x.generate_add_delta(adjoints, delta * self * (1.0 - self))
 
@@ -2268,9 +1617,6 @@ class sin(ElementWise):
 
     def __init__(self, x, **kargs):
         super(sin, self).__init__(args=(x,), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_sin(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * cos(x))
@@ -2284,9 +1630,6 @@ class sqrt(ElementWise):
     def __init__(self, x, **kargs):
         super(sqrt, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_sqrt(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, .5 * delta * self)
 
@@ -2299,9 +1642,6 @@ class square(ElementWise):
     def __init__(self, x, **kargs):
         super(square, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_square(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0 * delta * x)
 
@@ -2313,9 +1653,6 @@ class subtract(ElementWise):
 
     def __init__(self, x, y, **kargs):
         super(subtract, self).__init__(args=(x, y), **kargs)
-
-    def visit(self, visitor):
-        return visitor.visit_subtract(self, *self.args)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         x.generate_add_delta(adjoints, delta)
@@ -2330,9 +1667,6 @@ class tanh(ElementWise):
     def __init__(self, x, **kargs):
         super(tanh, self).__init__(args=(x,), **kargs)
 
-    def visit(self, visitor):
-        return visitor.visit_tanh(self, *self.args)
-
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
@@ -2340,7 +1674,7 @@ class tanh(ElementWise):
         transformer.tanh(x, out)
 
 
-class Function(nodes.Node):
+class Function(Node):
 
     def __init__(self, ops):
         super(Function, self).__init__()
@@ -2457,3 +1791,99 @@ def set_break(op, name=None):
         pass
     op.transform_hook = hook
     return op
+
+
+class SimplePrune(object):
+
+    def __init__(self, results):
+        self.results = results
+        self.reps = []
+
+        has_work = True
+        while has_work:
+            self.init()
+            for op in Op.ordered_ops(self.results):
+                self.visit(op)
+            has_work = self.do_replacements()
+
+    def init(self):
+        self.reps = []
+
+    def add_rep(self, op, replacement):
+        # Can't replace op if its being returned
+        if op not in self.results:
+            self.reps.append((op, replacement))
+
+    def do_replacements(self):
+        for old, rep in self.reps:
+            old_users = set(old.users)
+            for user in old_users:
+                user.replace_arg(old, rep)
+        return len(self.reps) > 0
+
+    @generic_method
+    def visit(self, op):
+        pass
+
+    @visit.on_type(negative)
+    def visit(self, op):
+        x, = op.args
+        if isinstance(x, Constant):
+            self.add_rep(op, Constant(-x.const))
+
+    @visit.on_type(multiply)
+    def visit(self, op):
+        x, y = op.args
+        rep = None
+        if isinstance(x, Constant):
+            if x.const == 0:
+                rep = x
+            elif x.const == 1:
+                rep = y
+            elif x.const == -1:
+                rep = negative(y)
+        elif isinstance(y, Constant):
+            if y.const == 0:
+                rep = y
+            elif y.const == 1:
+                rep = x
+            elif y.const == -1:
+                rep = negative(x)
+        if rep is not None:
+            self.add_rep(op, rep)
+
+    @visit.on_type(add)
+    def visit(self, op):
+        x, y = op.args
+        rep = None
+        if isinstance(x, Constant):
+            if x.const == 0:
+                rep = y
+        elif isinstance(y, Constant):
+            if y.const == 0:
+                rep = x
+        if rep is not None:
+            self.add_rep(op, rep)
+
+    @visit.on_type(sum)
+    def visit(self, op):
+        x, = op.args
+        if isinstance(x, Constant):
+            val = x.const * op.reduction_axes.size
+            self.add_rep(op, Constant(val))
+
+    @visit.on_type(log)
+    def visit(self, op):
+        x, = op.args
+        if isinstance(x, Container):
+            args = x.args
+            if len(args) == 1:
+                x = args[0]
+        if isinstance(x, divide):
+            num, denom = x.args
+            if isinstance(num, exp):
+                exp_x, = num.args
+                self.add_rep(op, exp_x - type(op)(denom))
+        elif isinstance(x, exp):
+            exp_x, = x.args
+            self.add_rep(op, exp_x)
