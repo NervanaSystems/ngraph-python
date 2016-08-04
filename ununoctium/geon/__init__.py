@@ -12,3 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
+from __future__ import print_function
+
+# Flattens backend
+import geon.backends.dataloaderbackend
+from geon.backends.graph.environment import bound_environment, Environment
+
+# Flattens frontends
+from geon.frontends.base import graph
+from geon.frontends.base.graph import Model, with_graph_scope, with_environment, \
+    get_current_environment
+
+# Flattens op_graph
+from geon.op_graph.arrayaxes import *
+from geon.op_graph.names import *
+from geon.op_graph.op_graph import *
+
+# Flattens transformers
+from geon.transformers.nptransform import NumPyTransformer
+try:
+    from geon.backends.graph.artransform import ArgonTransformer
+except ImportError as e:
+    if 'argon' in str(e):
+        print("Argon backend and tensor are defined in argon package, which is not installed.")
+    elif 'mpi4py' in str(e):
+        print(
+            "Argon backend currently depends on the package mpi4py, which is not installed."
+        )
+    else:
+        raise

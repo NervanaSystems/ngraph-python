@@ -22,7 +22,7 @@ from subprocess import Popen, PIPE
 Test the usage of transformer.allreduce
 
 '''
-import geon.op_graph as be
+import geon as be
 from geon.backends.graph.mpihandle import MPIHandle
 
 

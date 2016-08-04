@@ -15,7 +15,7 @@
 from __future__ import division
 from builtins import object, str
 import numpy as np
-import geon.op_graph as be
+import geon as be
 
 
 class Cost(object):

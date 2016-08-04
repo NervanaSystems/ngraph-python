@@ -26,38 +26,50 @@ class NumPyTransformer(Transformer):
         super(NumPyTransformer, self).__init__(**kargs)
 
     # allocators
-    def empty(self, tensor_description):
-        return np.empty(tensor_description.sizes, tensor_description.dtype)
+    def make_raw_buffer(self, size):
+        return bytearray(size)
+
+    def fill_tensor_in(self, tensor_description, tensor):
+        view = self.tensor_view(tensor_description)
+        if view.shape:
+            view[:] = tensor
+        else:
+            buf = np.ndarray(
+                shape=(1,),
+                dtype=tensor_description.dtype,
+                buffer=tensor_description.buffer.data,
+                offset=tensor_description.offset)
+            buf[0] = tensor
+            view = tensor
+        return view
+
+    def tensor_view(self, tensor_description):
+        return np.ndarray(
+            shape=tensor_description.shape,
+            dtype=tensor_description.dtype,
+            buffer=tensor_description.buffer.data,
+            offset=tensor_description.offset,
+            strides=tensor_description.strides)
 
     def nparray(self, tensor_description, array):
-        tensor = self.empty(tensor_description)
+        tensor = self.tensor_view(tensor_description)
         tensor[:] = array
         return tensor
 
     def rng(self, seed=None):
         return np.random.RandomState(seed=seed)
 
-    def tensor_view(self, tensor_description):
-        if isinstance(tensor_description.buffer.value, np.ndarray):
-            return np.ndarray(
-                shape=tensor_description.shape,
-                dtype=tensor_description.dtype,
-                buffer=tensor_description.buffer.value,
-                offset=tensor_description.offset,
-                strides=tensor_description.strides)
-        else:
-            # Non-tensor value
-            return tensor_description.buffer.value
-
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        return rng.normal(
+        tensor = rng.normal(
             loc, scale, tensor_description.sizes).astype(
             tensor_description.dtype)
+        return self.fill_tensor_in(tensor_description, tensor)
 
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        return rng.uniform(
+        tensor = rng.uniform(
             low, high, tensor_description.sizes).astype(
             tensor_description.dtype)
+        return self.fill_tensor_in(tensor_description, tensor)
 
     # Side-effects
     def fill(self, out, value):

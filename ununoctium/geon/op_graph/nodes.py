@@ -12,25 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import abc
 import collections
+from functools import wraps
 import inspect
 import weakref
-
-from future.utils import with_metaclass
 
 from geon.op_graph.names import NameableValue
 
 
 class Node(NameableValue):
+    """
+    Basic implementation of DAGs.
+    """
 
     def __init__(self, args=(), tags=None, **kargs):
+        """
+
+        :param args: Values used by this node
+        :param tags: String or a set of strings used for filtering in searches
+        :param kargs:
+        """
         super(Node, self).__init__(**kargs)
         self.users = weakref.WeakSet()
         self.__args = ()
         self.tags = set()
         self.args = args
-        self.defs = set()
 
         if tags is not None:
             if isinstance(
@@ -88,22 +94,42 @@ class Node(NameableValue):
             arg.users.add(self)
 
     def replace_arg(self, old, new):
+        """
+        Replace all occurrences of an argument node with another node.
+
+        :param old: Node to be replaced
+        :param new: Replacement
+        :return:
+        """
         self.args = [new if arg is old else arg for arg in self.args]
 
     def as_nodes(self, args):
+        """
+        Convert a sequence of values to a tuple of nodes using as_node.
+
+        :param args: Sequence of values that can be converted to nodes
+        :return: Tuple of nodes
+        """
         return tuple(self.as_node(arg) for arg in args)
 
     def as_node(self, arg):
-        """Override to convert an object to a node"""
-        return arg
+        """
+        Convert a value to a node.
 
-    def visit(self, visitor):
-        visitor.visit_node(self)
+        Subclasses should override as appropriate.  Used with as_nodes.
+
+        :param arg: The value to convert to a node.
+        :return: A node.
+        """
+        if isinstance(arg, Node):
+            return arg
+        raise ValueError()
 
     @staticmethod
     def visit_input_closure(root, fun):
         """
         Bottom-up traversal of root and their inputs
+
         :param root: root set of nodes to visit
         :param fun: Function to call on each visited node
         """
@@ -123,6 +149,7 @@ class Node(NameableValue):
     def visit_output_closure(root, fun):
         """
         Top-down traversal of root and closure of nodes using root as input.
+
         :param root:  root set of nodes to visit
         :param fun: Function to call on each visited node
         :return:
@@ -141,6 +168,11 @@ class Node(NameableValue):
 
     @property
     def file_info(self):
+        """
+        Return file location that created the node.
+
+        :return: String with file location that created the node.
+        """
         return 'File "{filename}", line {lineno}'.format(
             filename=self.filename, lineno=self.lineno)
 
@@ -187,19 +219,68 @@ class Node(NameableValue):
                 result = s
         return result
 
-    def __repr__(self):
+    def __str__(self):
         return self.graph_label
+
+    def __repr__(self):
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
 
 
-class AbstractVisitor(with_metaclass(abc.ABCMeta, object)):
+def generic_method(base_method):
+    """
+    Makes a method generic on its first argument.
 
-    @abc.abstractmethod
-    def visit_node(self, node):
-        raise NotImplementedError()
+    A generic method is like a generic function, except that dispatch is on the first
+    non-self argument.  The first argument should be marked with @generic_method.
+    Specialized arguments should be marked with @method.on_type(type)
 
+    Example:
+    class Visitor(object):
+        def __init__(self, values):
+            self.xs = []
+            self.ys = []
+            self.others = []
 
-class Visitor(AbstractVisitor):
+            for value in values:
+                self.visit(value)
 
-    def visit_node(self, node):
-        pass
+        @generic_method
+        def visit(self, arg)
+            self.others.append(arg)
+
+        @visit.on_type(X):
+        def visit(self, arg):
+            self.xs.append(arg)
+
+        @visit.on_type(Y):
+        def visit(self, arg):
+            self.ys.append(arg)
+
+    :param base_method: Default implementation of the method.
+    :return: The generic method
+    """
+    methods = {}
+
+    @wraps(base_method)
+    def method_dispatch(s, dispatch_arg, *args, **kargs):
+        for t in type(dispatch_arg).__mro__:
+            handler = methods.get(t, None)
+            if handler is not None:
+                return handler(s, dispatch_arg, *args, **kargs)
+        return base_method(s, dispatch_arg, *args, **kargs)
+
+    def on_type(dispatch_type):
+        """
+        Marks the handler sub-method for when the first argument has type dispatch_type.
+        :param dispatch_type:
+        :return: The generic method.
+        """
+        def make_handler(f):
+            methods[dispatch_type] = f
+            return method_dispatch
+
+        return make_handler
+
+    method_dispatch.on_type = on_type
+
+    return method_dispatch

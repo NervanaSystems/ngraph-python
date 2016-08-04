@@ -19,7 +19,7 @@ from builtins import zip
 from neon.data import ArrayIterator, DataLoader
 
 import geon.frontends.base.axis as ax
-import geon.op_graph as be
+import geon as be
 import geon.transformers.nptransform as nptransform
 from geon.backends.graph.environment import bound_environment
 from geon.frontends.base.graph import GraphComponent
@@ -200,9 +200,9 @@ class Model(GraphComponent):
             for x, t in dataset:
                 self.input.value = x
                 self.target.value = t
-                bsz = min(dataset.ndata - nprocessed, dataset.bsz)
-                nsteps = x.shape[1] // dataset.bsz if not isinstance(x, list) else \
-                    x[0].shape[1] // dataset.bsz
+                bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
+                nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(
+                    x, list) else x[0].shape[1] // dataset_batchsize(dataset)
                 vals = enp.evaluate()
                 batch_cost = vals[self.cost.mean_cost]
                 nprocessed += bsz
@@ -235,7 +235,7 @@ class Model(GraphComponent):
                 bsz = min(dataset.ndata - nprocessed,
                           dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(
-                    x, list) else x[0].shape[1] // dataset.bsz
+                    x, list) else x[0].shape[1] // dataset_batchsize(dataset)
                 # calcrange = slice(0, nsteps * bsz)
                 vals = enp.evaluate()
                 error_val = vals[error]

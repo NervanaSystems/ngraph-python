@@ -28,13 +28,12 @@ from geon.backends.graph.environment import Environment
 
 import tensorflow as tf
 from util.importer import create_nervana_graph
+import numpy as np
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph_froze.pb",
                     help='GraphDef protobuf')
-parser.add_argument('--end_node', type=str, default="",
-                    help='the last node to execute')
 
 args = parser.parse_args()
 
@@ -54,20 +53,33 @@ nervana_graph = create_nervana_graph(graph_def, env, args.end_node)
 dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
 dataflow.view()
 
-with be.bound_environment(env):
-    for mb_idx, (xraw, yraw) in enumerate(test_data):
-        nervana_graph.x.value = xraw
+def eval_test(test_data, graph):
+    with be.bound_environment(env):
+        test_error = 0
+        n_bs = 0
+        enp = be.NumPyTransformer(results=[graph.last_op])
+        for mb_idx, (xraw, yraw) in enumerate(test_data):
+            graph.x.value = xraw
+            result = enp.evaluate()[graph.last_op]
 
-        enp = be.NumPyTransformer(results=[nervana_graph.last_op])
-        result = enp.evaluate()[nervana_graph.last_op]
+            print("-------------------------------")
+            print("minibatch: " + str(mb_idx))
+            print("-------------------------------")
+            print("prediction result: ")
+            print(result)
+            print("shape of the prediction: ")
+            print(result.shape)
 
-        print("-------------------------------")
-        print("minibatch: " + str(mb_idx))
-        print("-------------------------------")
-        print("prediction result: ")
-        print(result)
-        print("shape of the prediction: ")
-        print(result.shape)
+            pred = np.argmax(result, axis=1)
+            gt = np.argmax(yraw, axis=0)
+            print(pred)
+            print(gt)
+            test_error += np.sum(np.not_equal(pred, gt))
+            n_bs += 1
 
-        # execute one minibatch for test only
-        if mb_idx == 1: break
+        bsz = result.shape[0]
+        return test_error / float(bsz) / n_bs * 100
+
+test_error = eval_test(test_data, nervana_graph)
+print("-------------------------------")
+print("test error: %2.2f %%" % test_error)

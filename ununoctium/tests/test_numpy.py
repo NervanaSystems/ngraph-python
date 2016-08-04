@@ -18,7 +18,7 @@ import numpy as np
 from builtins import range
 
 import geon.frontends.base.axis as ax
-import geon.op_graph as be
+import geon as be
 from geon.util.utils import RandomTensorGenerator, execute, transform_numeric_derivative
 from geon.util.utils import transform_derivative, numeric_derivative
 
@@ -504,6 +504,5 @@ def test_onehot():
         ax.H.length = 32
         ax.N.length = 128
         be.set_batch_axes([ax.N])
-
         one_hot_comparison(be.Axes(ax.C, ax.N), be.Axes(ax.N))
         one_hot_comparison(be.Axes(ax.C, ax.W, ax.H, ax.N), be.Axes(ax.W, ax.H, ax.N))

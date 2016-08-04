@@ -20,6 +20,7 @@ from future.utils import with_metaclass
 
 from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op
+from geon.util.analysis import assign_buffers
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
@@ -40,11 +41,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.opids = dict()
 
         Op.simple_prune(results)
-
-        # print('The memory footprint is {} MB'.format(memory*10**-6))
-        # dataflow.render('cifar_mlp.gv', True)
-
-        self.ops = Op.ordered_ops(self.results)
+        self.dataflow, self.memory = assign_buffers(self.results)
+        self.ops = self.dataflow.instructions
         self.initializers = self.ordered_initializers(self.ops)
         self.initialize_call_info(self.initializers)
         self.initialize_call_info(self.ops)
@@ -69,10 +67,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             these_ops = todo
             todo = set()
             for op in these_ops:
-                if not op.tensor_axes_info.initialized:
-                    initializers.update(op.initializers)
-                    todo.update(op.initializers)
-                    op.tensor_axes_info.initialized = True
+                # Always initialize because the buffer might have been corrupted
+                # if shared with another tensor
+                initializers.update(op.initializers)
+                todo.update(op.initializers)
 
         ordered_initializer_ops = []
         visited = set()
@@ -127,6 +125,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.transform_ordered_ops(ops)
 
     def evaluate(self):
+        self.transform_ordered_ops(self.initializers)
         self.transform_ordered_ops(self.ops)
         r = {}
         for op in self.results:
@@ -139,17 +138,23 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def set_value(self, op, tensor):
         op.tensor_axes_info.set_tensor(self, tensor)
 
-    # Allocators
-    # TODO Should this be combined with tensor_view?
     @abc.abstractmethod
-    def empty(self, tensor_description):
+    def fill_tensor_in(self, tensor_description, tensor):
         """
-        Allocate unitialized tensor.
+        Fills tensor in tensor_description
 
-        :param tensor_description: Description of the tensor's type, shape, size, and strides.
-        :return: Reference to the tensor.
+        :param tensor_description:
+        :param tensor: target tensor
+        :return a tensor with the specified value in the specified memory location
         """
-        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def make_raw_buffer(self, size):
+        """
+        Allocate raw buffer
+
+        :param size: Size in bytes of the buffer to allocate
+        """
 
     @abc.abstractmethod
     def nparray(self, tensor_description, array):

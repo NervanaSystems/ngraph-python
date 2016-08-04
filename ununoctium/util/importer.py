@@ -22,12 +22,16 @@ import a TensorFlow GraphDef from a protobuf file and convert it to Neon's compu
 from __future__ import absolute_import, division, print_function
 
 import numpy as np
+import scipy.stats as stats
 from builtins import range
 from builtins import str
 from geon.backends.graph.graph_test_utils import *
 from tensorflow.python.framework import tensor_util
 
-import geon.op_graph as be
+import geon.backends.graph.funs as be
+from geon.backends.graph.arrayaxes import AxisVar
+from geon.backends.graph.graphop import Tensor, softmax
+
 
 # known operators that can be processed by Neon graph importer
 known_ops = [
@@ -37,9 +41,9 @@ known_ops = [
     'Const', 'Variable', 'Placeholder', 'Range',
     'Assign', 'AssignAdd',
     'Cast',  # Casting
-    'SparseSoftmaxCrossEntropyWithLogits',
+    'SparseSoftmaxCrossEntropyWithLogits',  # Classification
     'Shape', 'Rank', 'Size', 'Reshape', 'ExpandDims',  # Shapes and Shaping
-    'TruncatedNormal', 'RandomStandardNormal', 
+    'TruncatedNormal', 'RandomStandardNormal',  # Random Tensors
     'Fill',  # Constant Value Tensors
     'Tile', 'DynamicStitch',  # Slicing and Joining
     'BroadcastGradientArgs', 'ApplyGradientDescent', 'ReluGrad',
@@ -70,9 +74,9 @@ ignore_ops = {
 }
 
 
-def scan_variables(graph_def, env):
+def scan_nameable_axes(graph_def, env):
     """
-    Scan the graph to get the axes for each variable.
+    [Deprecated] Scan the graph to get the nameable axes for each variable/placehoder/const.
     Variables are defined and initialized in the next round of graph traversal.
 
     :param
@@ -86,7 +90,6 @@ def scan_variables(graph_def, env):
     name_to_axes = {}
     in_axis = None
     batch_axis = None
-    x_axis = None
     y_axis = None
     y_name = ""
 
@@ -154,7 +157,83 @@ def scan_variables(graph_def, env):
 
     name_to_axes[y_name] = (y_axis, batch_axis)
 
-    return name_to_axes, batch_axis, x_axis, y_axis
+    return name_to_axes, batch_axis, y_axis
+
+
+def scan_numerical_axes(graph_def, env):
+    """
+    Scan the graph to get the numerical axes for each variable.
+    Variables are defined and initialized in the next round of graph traversal.
+
+    :param
+      - graph_def: a GraphDef object
+    :return:
+      - names_to_axes: a map from variable name to its axes
+      - batch_axis: the batch axis
+      - in_axis: axis for input data
+      - y_axis: axis for labels, not used for inference graph
+    """
+    name_to_axes = {}
+    batch_axis = None
+    y_axis = None
+    y_name = ""
+
+    for node in graph_def.node:
+        inputs = []
+        for i, input_name in enumerate([x for x in node.input]):
+            inputs.append(input_name)
+
+        op_type = node.op
+
+        with be.bound_environment(env):
+            if op_type == 'Placeholder':
+                dims = node.attr['shape'].shape
+                shape = [d.size for d in dims.dim]
+
+                if batch_axis is None:
+                    batch_axis = be.NumericAxis(shape[0])
+
+                if len(shape) == 2:
+                    x_axis = be.NumericAxis(shape[1])
+                    name_to_axes[node.name] = Axes(x_axis, batch_axis)
+
+                elif len(shape) == 1:
+                    name_to_axes[node.name] = (be.NumericAxis(10), batch_axis)
+                    y_name = node.name
+
+            elif op_type == 'Variable':
+                dims = node.attr['shape'].shape
+                shape = [d.size for d in dims.dim]
+
+                if len(shape) == 2:
+                    name_to_axes[
+                        node.name] = Axes(
+                        be.NumericAxis(
+                            shape[0]), be.NumericAxis(
+                            shape[1]))
+                    y_axis = be.NumericAxis(shape[1])
+                elif len(shape) == 1:
+                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]),)
+                elif len(shape) == 0:
+                    name_to_axes[node.name] = Axes()
+
+            elif op_type == 'Const':
+                # in the frozen graph, all variables are converted to constant
+                const_tensor = node.attr['value'].tensor
+                shape = [d.size for d in const_tensor.tensor_shape.dim]
+
+                if len(shape) == 1 and 'biases' in node.name:
+                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]),)
+                elif len(shape) == 2 and 'weights' in node.name:
+                    name_to_axes[
+                        node.name] = Axes(
+                        be.NumericAxis(
+                            shape[0]), be.NumericAxis(
+                            shape[1]))
+
+    name_to_axes[y_name] = (y_axis, batch_axis)
+
+    return name_to_axes, batch_axis, y_axis
 
 
 def create_nervana_graph(graph_def, env, end_node=None):
@@ -178,8 +257,9 @@ def create_nervana_graph(graph_def, env, end_node=None):
     graph.x = None
     graph.y = None
 
-    name_to_axes, batch_axis, in_axis, y_axis = scan_variables(graph_def, env)
-    print(in_axis)
+    # switched to numerical axes instead of nameable axes
+    name_to_axes, batch_axis, y_axis = scan_numerical_axes(graph_def, env)
+
     print(name_to_axes)
 
     for node in graph_def.node:
@@ -208,7 +288,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
             inputs.append(input_name)
             print('inputs[' + str(i) + "]: " + inputs[i])
 
-            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], be.Tensor):
+            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], Tensor):
                 print(name_to_op[inputs[i]])
 
         if skip_this_node:
@@ -218,12 +298,17 @@ def create_nervana_graph(graph_def, env, end_node=None):
         with be.bound_environment(env):
             if op_type in two_inputs_ops:
 
-                if op_type == 'Mul' and node.name == 'gradients/xentropy_grad/mul':
-                    # TODO: remove after ExpandDims is implemented
-                    op = two_inputs_ops[op_type](name_to_op["xentropy"], be.Constant(1. / batch_axis.length),
-                                                 name=node.name)
+                if node.name == 'gradients/xentropy_grad/mul':
+                    # TODO: remove this branch after the ExpandDims op is implemented
+                    # use be.Constant(1. / batch_axis.length) as temporal result to replace
+                    # the output of ExpandDims (name_to_op[inputs[0]])
+                    op = two_inputs_ops[op_type](be.Constant(1. / batch_axis.length),
+                                                 name_to_op[inputs[1]], name=node.name)
                 else:
-                    op = two_inputs_ops[op_type](name_to_op[inputs[0]], name_to_op[inputs[1]], name=node.name)
+                    op = two_inputs_ops[op_type](
+                        name_to_op[
+                            inputs[0]], name_to_op[
+                            inputs[1]], name=node.name)
 
             elif op_type in one_inputs_ops:
                 op = one_inputs_ops[op_type](name_to_op[inputs[0]])
@@ -254,10 +339,16 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 elif len(shape) == 0:
                     op = be.Constant(np_val, name=node.name)
                 elif len(shape) == 1:
-                    op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
+                    op = be.NumPyTensor(
+                        np_val, axes=Axes(
+                            be.NumericAxis(
+                                shape[0]), ), name=node.name)
                 elif len(shape) == 2:
-                    op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]),
-                                                          be.NumericAxis(shape[1]), ), name=node.name)
+                    op = be.NumPyTensor(
+                        np_val, axes=Axes(
+                            be.NumericAxis(
+                                shape[0]), be.NumericAxis(
+                                shape[1]), ), name=node.name)
 
             elif op_type == 'Variable':
                 variables[node.name] = be.Variable(axes=name_to_axes[node.name], name=node.name)
@@ -271,6 +362,12 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 var.initializers.append(op)
 
             elif op_type == 'AssignAdd':
+                # TODO: check operations for scala variable
+                # Things may broken for other graph in which the scala variable is not
+                # named 'global_step'
+                if inputs[0] == 'global_step':
+                    continue
+
                 var = name_to_op[inputs[0]]
                 assert (isinstance(var, be.Variable))
                 tensor_to_add = name_to_op[inputs[1]]
@@ -290,14 +387,29 @@ def create_nervana_graph(graph_def, env, end_node=None):
                     print(array)
                     shape = shape_tensor.tensor_axes_info.tensor_description.shape
                     if len(shape) == 1:
-                        op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0])), name=node.name)
+                        op = be.NumPyTensor(
+                            array, axes=Axes(
+                                be.NumericAxis(
+                                    shape[0])), name=node.name)
 
             elif op_type == 'TruncatedNormal' or op_type == 'RandomStandardNormal':
                 # TODO: implement tf.truncated_normal and tf.random_normal
                 shape_tensor = name_to_op[inputs[0]]  # numpy ndarray
-                assert isinstance(shape_tensor, be.Tensor)
+                assert isinstance(shape_tensor, Tensor)
                 shape = shape_tensor.nptensor
-                val = np.random.random_sample(shape).astype(np.float32)
+                print(shape)
+                if op_type == 'TruncatedNormal':
+                    lower, upper = -2.0, 2.0
+                    mu, sigma = 0, 1
+                    X = stats.truncnorm(
+                        (lower - mu) / sigma,
+                        (upper - mu) / sigma,
+                        loc=mu,
+                        scale=sigma)
+                    val = X.rvs(shape)
+
+                elif op_type == "RandomStandardNormal":
+                    val = -0.5 + np.random.random_sample(shape).astype(np.float32)
 
                 if len(shape) == 0:
                     op = be.Constant(val, name=node.name)
@@ -317,11 +429,21 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 op = name_to_op[inputs[0]]
 
             elif op_type == 'SparseSoftmaxCrossEntropyWithLogits':
-                op = be.cross_entropy_multi(name_to_op[inputs[0]], name_to_op[inputs[1]],
-                                            out_axes=(batch_axis,))
-                name_to_op[node.name + ":1"] = be.cross_entropy_multi(name_to_op[inputs[0]],
-                                                                      name_to_op[inputs[1]],
-                                                                      out_axes=(batch_axis, y_axis))
+                # implementation of tf.nn.sparse_softmax_cross_entropy_with_logits
+                # check its doc via https://goo.gl/7ytJNB and its C++ implementation via
+                # https://goo.gl/z5T2my
+
+                pred = softmax(name_to_op[inputs[0]], Axes(y_axis, ))
+                label = name_to_op[inputs[1]]
+
+                op = be.cross_entropy_multi(pred, label, out_axes=(batch_axis,))
+                # equivalent: op = -be.sum(safelog(pred) * label * np.float(1. / np.log(2.0)),
+                #                             out_axes=(batch_axis,))
+
+                # this op also calculates gradients and saved in the second output
+                sum_exp_logits = be.sum(pred, out_axes=(batch_axis,))
+                grad = be.divide(pred, sum_exp_logits) - label
+                name_to_op[node.name + ":1"] = grad
 
             elif op_type in reduction_ops:
                 keep_dims = node.attr['keep_dims']
@@ -342,16 +464,26 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 elif node.name == 'gradients/softmax_linear/add_grad/Sum_1':
                     out_axes = (y_axis,)
                 elif node.name == 'gradients/hidden2/add_grad/Sum' or \
-                                node.name == 'gradients/hidden1/add_grad/Sum':
+                        node.name == 'gradients/hidden1/add_grad/Sum':
                     out_axes = name_to_op[inputs[0]].tensor_axes_info.axes
                 elif node.name == 'gradients/hidden2/add_grad/Sum_1' or \
-                                node.name == 'gradients/hidden1/add_grad/Sum_1':
+                        node.name == 'gradients/hidden1/add_grad/Sum_1':
                     print(name_to_op[inputs[0]].tensor_axes_info.axes)
                     out_axes = (name_to_op[inputs[0]].tensor_axes_info.axes[1],)
 
                 print("out_axes:")
                 print(out_axes)
-                op = reduction_ops[op_type](name_to_op[inputs[0]], out_axes=out_axes, name=node.name)
+
+                if node.name == "xentropy_mean":
+                    graph.loss = reduction_ops[op_type](
+                        name_to_op[inputs[0]], out_axes=out_axes, name=node.name)
+                    op = graph.loss
+                else:
+                    op = reduction_ops[op_type](
+                        name_to_op[
+                            inputs[0]],
+                        out_axes=out_axes,
+                        name=node.name)
 
             elif op_type == 'Prod':
                 # TODO: implement tf.reduce_prod and merge with reduction_ops
@@ -373,7 +505,10 @@ def create_nervana_graph(graph_def, env, end_node=None):
                 if len(shape) == 0:
                     op = be.Constant(0, name=node.name)
                 else:
-                    op = be.NumPyTensor(np.array(shape), axes=Axes(be.NumericAxis(len(shape)), ), name=node.name)
+                    op = be.NumPyTensor(
+                        np.array(shape), axes=Axes(
+                            be.NumericAxis(
+                                len(shape)), ), name=node.name)
 
             elif op_type == 'Rank':
                 # The rank of a tensor is the number of axis
@@ -434,6 +569,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
 
             elif op_type == 'ExpandDims':
                 # TODO: implement tf.expand_dims
+                dim = name_to_op[inputs[1]]
                 op = name_to_op[inputs[0]]
 
             elif op_type == 'BroadcastGradientArgs':
@@ -486,7 +622,7 @@ def create_nervana_graph(graph_def, env, end_node=None):
 
                 elif node.name == "init":
                     # variable initialization graph, used only once
-                    graph.init = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    graph.init = be.doall(all=[name_to_op[input[1:]] for input in inputs[:-1]])
                     op = graph.init
 
             print(op)
