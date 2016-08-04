@@ -15,35 +15,37 @@
 from __future__ import print_function
 
 import geon.backends.dataloaderbackend
-import geon.backends.graph.graph as graph
+from geon.frontends.base import graph
 
-from geon.backends.graph.names import name_scope_list, with_name_scope, name_scope,  \
-    next_name_scope
-from geon.backends.graph.graph import Model, with_graph_scope, with_environment, \
+from geon.frontends.base.graph import Model, with_graph_scope, with_environment, \
     get_current_environment
 from geon.backends.graph.environment import bound_environment, Environment
 
-from geon.backends.graph.graphop import deriv, placeholder, Variable, Constant, linear_map_axes, \
+from geon.op_graph.arrayaxes import Axis, Axes, AxisVar, NumericAxis,\
+    AxisID, AxisIDTuple, set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
+from geon.op_graph.names import name_scope_list, with_name_scope, name_scope,  \
+    next_name_scope
+from geon.op_graph.op_graph import deriv, placeholder, Variable, Constant, linear_map_axes, \
     batch_axes, assign
-from geon.backends.graph.graphop import sample_axes, batch_axes, linear_map_axes, RNG, doall, \
+from geon.op_graph.op_graph import sample_axes, batch_axes, linear_map_axes, RNG, doall, \
     AllReduce, placeholder, Constant, NumPyTensor, absolute, add, argmax, argmin, cos, divide, dot, \
     equal, not_equal, greater, less, greater_equal, less_equal, softmax, max, min, sum, assign, \
     tensor_size, Variable, Temporary, exp, log, safelog, maximum, minimum, multiply, negative, \
     onehot, power, reciprocal, sig, sin, sqrt, square, subtract, tanh, deriv, cross_entropy_multi, \
     cross_entropy_binary, ExpandDims
-from geon.backends.graph.arrayaxes import Axis, Axes, AxisVar, NumericAxis,\
-    AxisID, AxisIDTuple, set_batch_axes, get_batch_axes, set_phase_axes, get_phase_axes
 
-from geon.backends.graph.graphop import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
+from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, log, max, \
     maximum, \
     mean, min, minimum, multiply, onehot, greater, greater_equal, less, less_equal, power
-from geon.backends.graph.graphop import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
+from geon.op_graph.op_graph import negative, not_equal, NumPyTensor, reciprocal, sig, sin, softmax, sqrt, square, subtract, \
     sum
-from geon.backends.graph.graphop import tanh, safelog, cross_entropy_binary, cross_entropy_binary_inner, cross_entropy_multi
-from geon.backends.graph.graphop import doall, RNG, NumPyTensor, Temporary, tensor_size, set_break
+from geon.op_graph.op_graph import tanh, safelog, cross_entropy_binary, cross_entropy_binary_inner, cross_entropy_multi
+from geon.op_graph.op_graph import doall, RNG, NumPyTensor, Temporary, tensor_size, set_break
 
-from geon.backends.graph.graphop import AllReduce
-from geon.backends.graph.nptransform import NumPyTransformer
+from geon.op_graph.op_graph import AllReduce
+
+# import all available transformers
+from geon.transformers.nptransform import NumPyTransformer
 
 try:
     from geon.backends.graph.artransform import ArgonTransformer

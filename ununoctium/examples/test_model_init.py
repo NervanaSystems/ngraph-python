@@ -33,7 +33,7 @@
 
 from __future__ import division, print_function
 from builtins import range, zip
-from geon.backends.graph.graphneon import *  # noqa
+from geon.frontends.neon import *  # noqa
 
 import numpy as np
 from timeit import default_timer

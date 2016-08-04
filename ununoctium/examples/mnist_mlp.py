@@ -41,13 +41,13 @@ Examples:
         the values stored in the checkpoint file named checkpoint.pkl.
 
 """
-from geon.backends.graph.graphneon import *  # noqa
+from geon.frontends.neon import *  # noqa
 from neon.data import ArrayIterator, load_mnist
 from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
-# from geon.backends.graph.analysis import DataFlowGraph
+# from geon.util.analysis import DataFlowGraph
 
 
 # parse the command line arguments

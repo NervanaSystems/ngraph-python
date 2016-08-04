@@ -23,7 +23,6 @@ Test the usage of be.Variable
 '''
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
-from geon.backends.graph.graph_test_utils import *
 
 
 def test_init_variable():

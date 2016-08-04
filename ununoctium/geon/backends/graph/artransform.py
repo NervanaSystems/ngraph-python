@@ -14,14 +14,11 @@
 # ----------------------------------------------------------------------------
 # import numpy as np
 
-from geon.backends.graph.transform import Transformer
-from geon.backends.graph.graphop import AllocationOp, Visitor
-from geon.backends.graph.mpihandle import MPIHandle
-
-# import argon.neon_backend.ar_backend
-# from argon.neon_backend.ar_backend import ArBackend
-
 from neon import NervanaObject
+
+from geon.backends.graph.mpihandle import MPIHandle
+from geon.transformers.base import Transformer
+from geon.op_graph.op_graph import AllocationOp, Visitor
 
 
 class ArgonTransformer(Transformer):

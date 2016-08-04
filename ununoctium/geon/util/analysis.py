@@ -15,7 +15,7 @@
 from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.backends.graph.graphop import ComputationOp, AllocationOp, ElementWise, Function, \
+from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
     Constant, Buffer, ReductionOp
 from operator import mul
 from itertools import product

@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import weakref
+import abc
 import collections
 import inspect
-import abc
+import weakref
+
 from future.utils import with_metaclass
 
-from geon.backends.graph.names import NameableValue
+from geon.op_graph.names import NameableValue
 
 
 class Node(NameableValue):

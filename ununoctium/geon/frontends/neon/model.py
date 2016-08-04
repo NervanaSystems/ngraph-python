@@ -13,22 +13,18 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import zip
+
 import numpy as np
-
-from geon.backends.graph.names import name_scope
-from geon.backends.graph.environment import bound_environment
-from geon.backends.graph.graph import GraphComponent
-# from neon.backends.backend import Block
-import geon.backends.graph.axis as ax
-from geon.backends.graph.container import Sequential, Tree, SingleOutputTree
-import geon.backends.graph.funs as be
-# import geon.backends.graph.transform as transform
-import geon.backends.graph.nptransform as nptransform
-# import geon.backends.graph.analysis as analysis
-import geon.backends.graph.arrayaxes as arrayaxes
-
+from builtins import zip
 from neon.data import ArrayIterator, DataLoader
+
+import geon.frontends.base.axis as ax
+import geon.op_graph as be
+import geon.transformers.nptransform as nptransform
+from geon.backends.graph.environment import bound_environment
+from geon.frontends.base.graph import GraphComponent
+from geon.frontends.neon.container import Sequential, Tree, SingleOutputTree
+from geon.op_graph.names import name_scope
 
 
 def dataset_nclasses(dataset):
@@ -117,10 +113,10 @@ class Model(GraphComponent):
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
                 # TODO Move this axis initialization into a util
-                batch_input_axes = input_axes + arrayaxes.Axes(ax.N, )
-                batch_target_axes = target_axes + arrayaxes.Axes(ax.N, )
-                be.set_batch_axes(arrayaxes.Axes(ax.N, ))
-                be.set_phase_axes(arrayaxes.Axes(ax.Phi, ))
+                batch_input_axes = input_axes + be.Axes(ax.N, )
+                batch_target_axes = target_axes + be.Axes(ax.N, )
+                be.set_batch_axes(be.Axes(ax.N, ))
+                be.set_phase_axes(be.Axes(ax.Phi, ))
                 self.input = be.placeholder(axes=batch_input_axes)
                 self.target = be.placeholder(axes=batch_target_axes)
                 for axis, length in zip(input_axes, dataset.shape):

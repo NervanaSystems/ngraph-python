@@ -14,10 +14,7 @@
 # ----------------------------------------------------------------------------
 import collections
 
-# from neon.layers.container import flatten # interferes with local flatten()
-
-# from geon.backends.graph.names import NameScope
-from geon.backends.graph.layer import Layer, BranchNode
+from geon.frontends.neon.layer import Layer, BranchNode
 
 
 def flatten(item):
