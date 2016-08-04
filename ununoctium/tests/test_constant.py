@@ -18,7 +18,7 @@ Test the usage of be.Constant
 '''
 from __future__ import print_function
 
-import geon.op_graph as be
+import geon as be
 import geon.frontends.base.axis as ax
 import numpy as np
 

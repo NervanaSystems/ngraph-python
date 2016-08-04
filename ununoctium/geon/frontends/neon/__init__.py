@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-import geon.op_graph as be
+import geon as be
 import geon.frontends.base.axis as ax
 
 # neon frontend modules
@@ -30,7 +30,7 @@ from geon.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer
 # include Axes here because old 2.0 code needs to be updated to include Axes
 # annotations in the call to model.fit.
 # TODO: depricate this Axes, you should just use be.Axes instead
-from geon.op_graph import Axes
+from geon import Axes
 
 # old neon code which hasn't changed but should be available in this namespace
 # TODO: there are a lot of classes which are similar to the ones listed here,
