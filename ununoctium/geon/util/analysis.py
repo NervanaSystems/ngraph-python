@@ -16,9 +16,9 @@ from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
 from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
-    Constant, Buffer, ReductionOp, NumPyTensor, Container
+    Buffer, ReductionOp, NumPyTensor, Container
 from operator import mul
-from itertools import product, combinations
+from itertools import combinations
 from functools import reduce
 
 
@@ -92,7 +92,6 @@ class DataFlowGraph(Digraph):
     def liveness(self):
         can_do_inplace = lambda x: False
         order = self.instructions
-        discard_const = lambda S: {x for x in S if not isinstance(x, Constant)}
         # Initialize
         liveness = dict((op, set()) for op in order)
         keeps = {x.tensor_axes_info.tensor_description for x in self.successors if isinstance(
@@ -105,15 +104,18 @@ class DataFlowGraph(Digraph):
             liveness[previous] = use | (liveness[current] - defs)
         # Inplace not possible
         for op in order:
-            liveness[op] |= {x.tensor_axes_info.tensor_description for x in op.args}
-        
-        #print max([sum(map(lambda x: reduce(mul, x.shapes, 1)*x.dtype.itemsize, l)) for l in liveness.itervalues()])*1024**-2
+            if not can_do_inplace(op):
+                liveness[op] |= {x.tensor_axes_info.tensor_description for x in op.args}
+
+        # print max([sum(map(lambda x: reduce(mul, x.shapes, 1)*x.dtype.itemsize,
+        # l)) for l in liveness.itervalues()])*1024**-2
         return liveness
-    
+
     @property
     def instructions(self):
         return self.topsort()
-        
+
+
 def never_fusible(op1, op2):
     return isinstance(op1, Container) or isinstance(op2, Container)
 
@@ -248,8 +250,6 @@ class KernelFlowGraph(DataFlowGraph):
         self.dataflow = dataflow
 
 
-
-
 class UndirectedGraph(object):
 
     def __init__(self, neighbors):
@@ -278,13 +278,13 @@ class UndirectedGraph(object):
 class InterferenceGraph(UndirectedGraph):
 
     def __init__(self, lives):
-        neighbors = {x:set() for l in list(lives.values()) for x in l }
+        neighbors = {x: set() for l in list(lives.values()) for x in l}
         edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]
         for u, v in edges:
             neighbors[u].add(v)
             neighbors[v].add(u)
         super(InterferenceGraph, self).__init__(neighbors)
-        self.weights = {x: max(1,reduce(mul, x.shape, 1)) *
+        self.weights = {x: max(1, reduce(mul, x.shape, 1)) *
                         x.dtype.itemsize for x in neighbors}
 
     def color(self):
@@ -312,6 +312,7 @@ class InterferenceGraph(UndirectedGraph):
         total_mem = sum([x.size for x in buffers])
         return total_mem, buffers
 
+
 def _random_colors(N, alpha=.5):
     from colorsys import hsv_to_rgb
     HSV = [[x * 1.0 / N, 0.5, 0.5] for x in range(N)]
@@ -321,13 +322,14 @@ def _random_colors(N, alpha=.5):
         r, g, b, a) for r, g, b, a in RGBA]
     return HEX
 
-def assign_buffers(outputs, fusible = None):
+
+def assign_buffers(outputs, fusible=None):
     dfg = DataFlowGraph(outputs)
     if fusible:
         dfg = KernelFlowGraph(dfg, fusible)
     ifg = InterferenceGraph(dfg.liveness())
     memory, buffers = ifg.color()
-    #Binds initializers
+    # Binds initializers
     for op in dfg.successors:
         buffer = op.tensor_axes_info.tensor_description.buffer
         for i in op.initializers:
@@ -336,10 +338,10 @@ def assign_buffers(outputs, fusible = None):
                 if isinstance(a, NumPyTensor):
                     a.tensor_axes_info.tensor_description.buffer = Buffer(-1, a.nptensor.size)
                     a.tensor_axes_info.tensor_description.buffer.data = a.nptensor
-    #set style
+    # set style
     cmap = _random_colors(len(buffers), .5)
     for op in dfg.successors:
         op.style = {'style': 'filled', 'fillcolor': cmap[
             op.tensor_axes_info.tensor_description.buffer.color]}
-    #dfg.view()
+    # dfg.view()
     return dfg, memory

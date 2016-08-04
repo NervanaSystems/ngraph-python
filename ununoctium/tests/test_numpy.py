@@ -415,7 +415,7 @@ def test_softmax():
         # Test with softmax_axis default
         s, = execute([be.softmax(p_x)])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
-        
+
         # Now try the derivative
         axes = be.Axes(ax.W, ax.N)
         ax.W.length = 3
@@ -506,5 +506,3 @@ def test_onehot():
         be.set_batch_axes([ax.N])
         one_hot_comparison(be.Axes(ax.C, ax.N), be.Axes(ax.N))
         one_hot_comparison(be.Axes(ax.C, ax.W, ax.H, ax.N), be.Axes(ax.W, ax.H, ax.N))
-
-

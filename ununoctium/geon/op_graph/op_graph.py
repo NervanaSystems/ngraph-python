@@ -657,7 +657,7 @@ class TensorAxesInfo(object):
     @property
     def value(self):
         return self.tensor_description.value
-        
+
     def set_tensor(self, transformer, tensor):
         description = self.tensor_description
         description.value = transformer.fill_tensor_in(description, tensor)
@@ -744,7 +744,6 @@ class TensorViewInfo(object):
             tensor_description.value = transformer.tensor_view(tensor_description)
 
 
-
 class TensorReaxeViewInfo(TensorViewInfo):
     """The use of a reaxe view of a tensor with axes"""
 
@@ -762,6 +761,7 @@ class TensorReaxeViewInfo(TensorViewInfo):
 
 
 class DummyReaxeViewInfo(TensorViewInfo):
+
     def __init__(self, axis, dim, **kargs):
         super(DummyReaxeViewInfo, self).__init__(**kargs)
         self.axis = axis
@@ -1193,6 +1193,7 @@ class Broadcast(Tensor):
 
 
 class ExpandDims(Tensor):
+
     def __init__(self, x, axis, dim, **kargs):
         self.axis = axis
         self.dim = dim
@@ -1545,7 +1546,7 @@ class NumPyTensor(AllocationOp):
     """
 
     def __init__(self, nptensor, **kargs):
-        self.nptensor = nptensor        
+        self.nptensor = nptensor
         super(NumPyTensor, self).__init__(dtype=nptensor.dtype, **kargs)
 
         def allocator(transformer, tensor_description):

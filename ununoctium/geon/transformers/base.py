@@ -22,6 +22,7 @@ from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op
 from geon.util.analysis import assign_buffers
 
+
 class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def __init__(
@@ -66,10 +67,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             these_ops = todo
             todo = set()
             for op in these_ops:
-                 #Always initialize because the buffer might have been corrupted
-                 #if shared with another tensor
-                 initializers.update(op.initializers)
-                 todo.update(op.initializers)
+                # Always initialize because the buffer might have been corrupted
+                # if shared with another tensor
+                initializers.update(op.initializers)
+                todo.update(op.initializers)
 
         ordered_initializer_ops = []
         visited = set()
@@ -102,10 +103,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # Allocate
         for op in ordered_ops:
             op.tensor_axes_info.allocate(self)
+
     def transform_ordered_ops(self, ordered_ops):
         for op in ordered_ops:
             op.sync(self)
-        
+
         def transform_op(op):
             op.transform_call_info(self, *op.call_info)
 
@@ -140,21 +142,20 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def fill_tensor_in(self, tensor_description, tensor):
         """
         Fills tensor in tensor_description
-        
+
         :param tensor_description:
         :param tensor: target tensor
         :return a tensor with the specified value in the specified memory location
         """
-        
-        
+
     @abc.abstractmethod
     def make_raw_buffer(self, size):
         """
         Allocate raw buffer
-        
+
         :param size: Size in bytes of the buffer to allocate
         """
- 
+
     @abc.abstractmethod
     def nparray(self, tensor_description, array):
         """

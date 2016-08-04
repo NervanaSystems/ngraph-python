@@ -28,28 +28,28 @@ class NumPyTransformer(Transformer):
     # allocators
     def make_raw_buffer(self, size):
         return bytearray(size)
-    
+
     def fill_tensor_in(self, tensor_description, tensor):
         view = self.tensor_view(tensor_description)
         if view.shape:
             view[:] = tensor
         else:
             buf = np.ndarray(
-                    shape=(1,),
-                    dtype=tensor_description.dtype,
-                    buffer=tensor_description.buffer.data,
-                    offset=tensor_description.offset)
+                shape=(1,),
+                dtype=tensor_description.dtype,
+                buffer=tensor_description.buffer.data,
+                offset=tensor_description.offset)
             buf[0] = tensor
             view = tensor
         return view
-        
+
     def tensor_view(self, tensor_description):
         return np.ndarray(
-                shape=tensor_description.shape,
-                dtype=tensor_description.dtype,
-                buffer=tensor_description.buffer.data,
-                offset=tensor_description.offset,
-                strides=tensor_description.strides)
+            shape=tensor_description.shape,
+            dtype=tensor_description.dtype,
+            buffer=tensor_description.buffer.data,
+            offset=tensor_description.offset,
+            strides=tensor_description.strides)
 
     def nparray(self, tensor_description, array):
         tensor = self.tensor_view(tensor_description)
@@ -59,15 +59,14 @@ class NumPyTransformer(Transformer):
     def rng(self, seed=None):
         return np.random.RandomState(seed=seed)
 
-
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
         tensor = rng.normal(
-                    loc, scale, tensor_description.sizes).astype(
-                    tensor_description.dtype)
+            loc, scale, tensor_description.sizes).astype(
+            tensor_description.dtype)
         return self.fill_tensor_in(tensor_description, tensor)
 
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        tensor =  rng.uniform(
+        tensor = rng.uniform(
             low, high, tensor_description.sizes).astype(
             tensor_description.dtype)
         return self.fill_tensor_in(tensor_description, tensor)
@@ -128,15 +127,15 @@ class NumPyTransformer(Transformer):
         np.log(x, out=out)
 
     def max(self, x, axis, out):
-        #print '=========== MAX ==============='
-        #print id(x.data), id(out.data) 
-        #print id(out.data)
-        #print id(x.data)
+        # print '=========== MAX ==============='
+        # print id(x.data), id(out.data)
+        # print id(out.data)
+        # print id(x.data)
         np.max(x, axis, out=out)
-        #print '=========== AFTER ==============='
-        #print out
-        #print id(out.data)
-        #print '=========== DONE MAX ==============='
+        # print '=========== AFTER ==============='
+        # print out
+        # print id(out.data)
+        # print '=========== DONE MAX ==============='
 
     def maximum(self, x, y, out):
         np.maximum(x, y, out=out)

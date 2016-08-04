@@ -601,6 +601,7 @@ class TensorDescription(object):
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
 
+
 def get_batch_axes(default=()):
     environment = get_current_environment()
     if environment is None:

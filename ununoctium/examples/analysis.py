@@ -47,7 +47,7 @@ class GraphitiMLP(Model):
 
         # Fusion analysis
         outputs = dW if bprop else [Error]
-        self.dataflow, self.memory = assign_buffers(outputs, fusible = gpu_fusible)    
+        self.dataflow, self.memory = assign_buffers(outputs, fusible=gpu_fusible)
         self.dataflow.view()
 
 

@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 
 # TODO These are just here as placeholders
+
+
 def add_fc_bias(self, inputs, bias):
     pass
 
