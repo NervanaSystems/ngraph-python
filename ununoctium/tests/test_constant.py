@@ -117,6 +117,22 @@ def test_numpytensor_multiply_constant():
         assert np.array_equal(result[c], np_c)
 
 
+def test_numpytensor_add_constant():
+    with be.bound_environment():
+        np_a = np.array([[1, 2, 3]], dtype=np.float32)
+        np_c = np.add(np_a, 2)
+
+        ax.M.length = 1
+        ax.N.length = 3
+        a = be.NumPyTensor(np_a, axes=[ax.M, ax.N])
+        b = be.Constant(2)
+        c = be.add(a, b)
+        enp = be.NumPyTransformer(results=[c])
+        result = enp.evaluate()
+        print(result[c])
+        assert np.array_equal(result[c], np_c)
+
+
 def test_numpytensor_mlp():
     with be.bound_environment():
         np_x = np.array([[1, 2, 3]], dtype=np.float32)

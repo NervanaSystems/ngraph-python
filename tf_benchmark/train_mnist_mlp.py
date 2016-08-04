@@ -28,13 +28,15 @@ from geon.backends.graph.environment import Environment
 
 import tensorflow as tf
 from util.importer import create_nervana_graph
+import numpy as np
+import sys
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",
-                    help='the last node to execute')
+                    help='the last node to execute, mainly used for debugging')
 
 args = parser.parse_args()
 
@@ -42,7 +44,7 @@ env = Environment()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-epochs = 1
+epochs = 5
 
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
 train_data = ArrayIterator(X_train, y_train, nclass=nclass, lshape=(1, 28, 28))
@@ -58,41 +60,69 @@ assert (nervana_graph.y is not None)
 
 if args.end_node == "":
     dataflow = analysis.DataFlowGraph([nervana_graph.update])
+    dataflow.view()
 else:
     dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
+    dataflow.view()
 
-dataflow.view()
+
+def eval_test(test_data, graph, last_op_name):
+    # TODO: pass the inference graph instead of manually specify the last node for inference.
+    """
+    :param test_data: test input
+    :param graph: the whole computation graph
+    :param last_op_name: the last op for inference
+    :return: error rate (1 - accuracy) on test_data
+    """
+    with be.bound_environment(env):
+        test_error = 0
+        n_bs = 0
+        enp = be.NumPyTransformer(results=[graph.name_to_op[last_op_name]])
+        for mb_idx, (xraw, yraw) in enumerate(test_data):
+            graph.x.value = xraw
+            result = enp.evaluate()[graph.name_to_op[last_op_name]]
+            pred = np.argmax(result, axis=1)
+            gt = np.argmax(yraw, axis=0)
+            test_error += np.sum(np.not_equal(pred, gt))
+            n_bs += 1
+
+        bsz = result.shape[0]
+        return test_error / float(bsz) / n_bs * 100
 
 with be.bound_environment(env):
     # initialize all variables with the init op
-    enp = be.NumPyTransformer(results=[nervana_graph.init])
+    if args.end_node == "":
+        enp = be.NumPyTransformer(results=[nervana_graph.init])
+        enp.evaluate()
 
     for epoch in range(epochs):
         print("===============================")
         print("epoch: " + str(epoch))
-        print("===============================")
 
+        avg_loss = 0
         for mb_idx, (xraw, yraw) in enumerate(train_data):
             nervana_graph.x.value = xraw
             nervana_graph.y.value = yraw
 
             if args.end_node == "":
-                enp = be.NumPyTransformer(results=[nervana_graph.update])
-                result = enp.evaluate()[nervana_graph.update]
+                enp = be.NumPyTransformer(results=[nervana_graph.loss, nervana_graph.update])
+                result = enp.evaluate()
+                avg_loss += result[nervana_graph.loss]
             else:
-                enp = be.NumPyTransformer(results=[nervana_graph.last_op])
-                result = enp.evaluate()[nervana_graph.last_op]
+                enp = be.NumPyTransformer(results=[nervana_graph.name_to_op[args.end_node]])
+                result = enp.evaluate()[nervana_graph.name_to_op[args.end_node]]
 
-            print("-------------------------------")
-            print("minibatch: " + str(mb_idx))
-            print("-------------------------------")
-            print("result of the last op: ")
-            print(result)
-            print("shape of the result: ")
-            print(result.shape)
-            print("softmax_linear/biases:")
-            print(nervana_graph.name_to_op["softmax_linear/biases"].value)
+                print("-------------------------------")
+                print("minibatch: " + str(mb_idx))
+                print("-------------------------------")
+                print("the last op: ")
+                print(nervana_graph.last_op)
+                print("result of the last op: ")
+                print(result)
+                print("shape of the result: ")
+                print(result.shape)
+                sys.exit()
 
-            # execute one minibatch for test only
-            if mb_idx == 10:
-                break
+        avg_loss /= mb_idx
+        test_error = eval_test(test_data, nervana_graph, "softmax_linear/add")
+        print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))
