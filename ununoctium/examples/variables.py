@@ -23,6 +23,7 @@ Test the usage of be.Variable
 '''
 import geon.backends.graph.funs as be
 import geon.backends.graph.axis as ax
+from geon.backends.graph.graph_test_utils import *
 
 
 def test_init_variable():
@@ -103,11 +104,11 @@ def test_assign_2D_variable_with_numpy_tensor():
 
         var = be.Variable(axes=[ax.M, ax.N])
         npvar = be.NumPyTensor(
-            np.array([[1, 1], [2, 2], [3, 3]]), axes=[ax.M, ax.N])
+            np.array([[1, 2], [3, 4], [5, 6]]), axes=[ax.M, ax.N])
 
-        var = npvar
-        enp = be.NumPyTransformer(results=[var])
-        result = enp.evaluate()[var]
+        op = be.assign(var, npvar)
+
+        enp = be.NumPyTransformer(results=[op])
+        result = enp.evaluate()[op]
         print(result)
-
-        print("pass 2D numpy tensor assignment")
+        print(var.value)
