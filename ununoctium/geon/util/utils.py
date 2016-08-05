@@ -83,6 +83,13 @@ def raise_all_numpy_errors(f):
 
 
 def execute(nodes):
+    """
+    Evaluates nodes and returns their values.
+
+    All necessary placeholders should already have values.
+    :param nodes: list of nodes to evaluate.
+    :return: list of values of the nodes after evaluation.
+    """
     trans = be.NumPyTransformer(results=nodes)
     result = trans.evaluate()
     return (result[node] for node in nodes)
@@ -103,6 +110,8 @@ def shape(x):
 def numeric_derivative(f, x, dx):
     """
     Computer df/dx at x numerically.
+    Do not use for non-continuous derivatives such as min/max.  If there is a tie at the
+    extremum, only one value will change and the computed derivative will be very wrong.
 
     Would be useful to have a batch axis some time.
 
@@ -129,7 +138,6 @@ def numeric_derivative(f, x, dx):
         dindex[len(fshape):] = idxiter.multi_index
         d[tuple(dindex)] = (dy / dx)
         xiter[...] = old_x
-
     return d
 
 

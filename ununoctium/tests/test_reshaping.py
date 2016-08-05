@@ -19,7 +19,7 @@ from geon.util.utils import execute
 from geon.util.utils import in_bound_environment
 from geon.util.utils import transform_numeric_derivative
 from geon.util.utils import transform_derivative
-import geon.op_graph as be
+import geon as be
 import geon.frontends.base.axis as ax
 
 

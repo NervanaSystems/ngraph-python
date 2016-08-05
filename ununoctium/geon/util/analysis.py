@@ -16,9 +16,9 @@ from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
 from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
-    Constant, Buffer, ReductionOp
+    Buffer, ReductionOp, NumPyTensor, Container
 from operator import mul
-from itertools import product
+from itertools import combinations
 from functools import reduce
 
 
@@ -90,21 +90,34 @@ class DataFlowGraph(Digraph):
         self.outputs = outputs
 
     def liveness(self):
-        order = self.topsort()
+        can_do_inplace = lambda x: False
+        order = self.instructions
         # Initialize
         liveness = dict((op, set()) for op in order)
-        keeps = {x for x in self.successors if isinstance(
+        keeps = {x.tensor_axes_info.tensor_description for x in self.successors if isinstance(
             x, AllocationOp) and x.tensor_axes_info.read_only}
-        liveness[order[-1]] = set(self.outputs) | keeps
+        liveness[order[-1]] = {x.tensor_axes_info.tensor_description for x in self.outputs} | keeps
         # Update
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
-            args = {x for x in current.args if not isinstance(x, Constant)}
-            liveness[previous] = args | (liveness[current] - set(current.defs))
+            use = {x.tensor_axes_info.tensor_description for x in current.args}
+            defs = {x.tensor_axes_info.tensor_description for x in current.defs}
+            liveness[previous] = use | (liveness[current] - defs)
+        # Inplace not possible
+        for op in order:
+            if not can_do_inplace(op):
+                liveness[op] |= {x.tensor_axes_info.tensor_description for x in op.args}
+
+        # print max([sum(map(lambda x: reduce(mul, x.shapes, 1)*x.dtype.itemsize,
+        # l)) for l in liveness.itervalues()])*1024**-2
         return liveness
+
+    @property
+    def instructions(self):
+        return self.topsort()
 
 
 def never_fusible(op1, op2):
-    return False
+    return isinstance(op1, Container) or isinstance(op2, Container)
 
 
 def gpu_fusible(op1, op2):
@@ -236,19 +249,6 @@ class KernelFlowGraph(DataFlowGraph):
         # Saves dataflow for visualization
         self.dataflow = dataflow
 
-    def liveness(self):
-        order = self.topsort()
-        # Initialize
-        liveness = dict((op, set()) for op in order)
-        keeps = {x for x in self.successors if isinstance(
-            x, AllocationOp) and x.tensor_axes_info.read_only}
-        liveness[order[-1]] = set(self.outputs) | keeps
-        # Update
-        for current, previous in reversed(list(zip(order[1:], order[:-1]))):
-            args = {x for x in current.args if not isinstance(x, Constant)}
-            liveness[previous] = args | (liveness[current] - set(current.defs))
-        return liveness
-
 
 class UndirectedGraph(object):
 
@@ -278,14 +278,39 @@ class UndirectedGraph(object):
 class InterferenceGraph(UndirectedGraph):
 
     def __init__(self, lives):
-        neighbors = defaultdict(set)
-        edges = [(u, v) for l in list(lives.values())
-                 for u, v in product(l, l) if u != v]
+        neighbors = {x: set() for l in list(lives.values()) for x in l}
+        edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]
         for u, v in edges:
             neighbors[u].add(v)
+            neighbors[v].add(u)
         super(InterferenceGraph, self).__init__(neighbors)
-        self.weights = {x: reduce(mul, x.tensor_axes_info.shapes, 1) *
-                        x.tensor_axes_info.dtype.itemsize for x in neighbors}
+        self.weights = {x: max(1, reduce(mul, x.shape, 1)) *
+                        x.dtype.itemsize for x in neighbors}
+
+    def color(self):
+        neighbors = self.neighbors
+        weights = self.weights
+        partitions = []
+        buffers = []
+        queue = sorted(weights, key=lambda x: (weights[x], ), reverse=True)
+        while queue:
+            u = queue.pop(0)
+            # Creates a new set and grows it as much as possible
+            S = {u}
+            N = neighbors[u]
+            for x in queue:
+                if x not in N:
+                    S |= {x}
+                    N |= neighbors[x]
+            partitions.append(S)
+            color = len(partitions) - 1
+            buffers.append(Buffer(color, weights[u]))
+            # Update remaining nodes
+            queue = [x for x in queue if x not in S]
+            for s in S:
+                s.buffer = buffers[color]
+        total_mem = sum([x.size for x in buffers])
+        return total_mem, buffers
 
 
 def _random_colors(N, alpha=.5):
@@ -298,31 +323,25 @@ def _random_colors(N, alpha=.5):
     return HEX
 
 
-def color(interference):
-    neighbors = interference.neighbors
-    weights = interference.weights
-    partitions = []
-    buffers = []
-    queue = sorted(weights, key=lambda x: (weights[x], x.id), reverse=True)
-    while queue:
-        u = queue.pop(0)
-        # Creates a new set and grows it as much as possible
-        S = {u}
-        N = neighbors[u]
-        for x in queue:
-            if x not in N:
-                S |= {x}
-                N |= neighbors[x]
-        partitions.append(S)
-        color = len(partitions) - 1
-        buffers.append(Buffer(color, weights[u]))
-        # Update remaining nodes
-        queue = [x for x in queue if x not in S]
-        for s in S:
-            s.tensor_axes_info.buffer = buffers[color]
-    cmap = _random_colors(len(partitions), .5)
-    for na in weights:
-        na.style = {'style': 'filled', 'fillcolor': cmap[
-            na.tensor_axes_info.buffer.color]}
-    total_mem = sum([x.size for x in buffers])
-    return total_mem
+def assign_buffers(outputs, fusible=None):
+    dfg = DataFlowGraph(outputs)
+    if fusible:
+        dfg = KernelFlowGraph(dfg, fusible)
+    ifg = InterferenceGraph(dfg.liveness())
+    memory, buffers = ifg.color()
+    # Binds initializers
+    for op in dfg.successors:
+        buffer = op.tensor_axes_info.tensor_description.buffer
+        for i in op.initializers:
+            i.tensor_axes_info.tensor_description.buffer = buffer
+            for a in i.args:
+                if isinstance(a, NumPyTensor):
+                    a.tensor_axes_info.tensor_description.buffer = Buffer(-1, a.nptensor.size)
+                    a.tensor_axes_info.tensor_description.buffer.data = a.nptensor
+    # set style
+    cmap = _random_colors(len(buffers), .5)
+    for op in dfg.successors:
+        op.style = {'style': 'filled', 'fillcolor': cmap[
+            op.tensor_axes_info.tensor_description.buffer.color]}
+    # dfg.view()
+    return dfg, memory

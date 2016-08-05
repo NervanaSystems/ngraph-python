@@ -36,6 +36,11 @@ To fix style errors
 make fixstyle
 ```
 
+To generate the documentation as html files
+```
+make doc
+```
+
 ## Examples
 
 ununoctium/examples/models.py is a cifar_mlp example that runs.

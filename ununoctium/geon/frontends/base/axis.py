@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.op_graph import AxisVar
+from geon import AxisVar
 
 # Define the standard Neon axes
 N = AxisVar(name='N')
