@@ -21,7 +21,6 @@ import geon.util.analysis as an
 import numpy as np
 import mxnet as mx
 import mxnet.symbol as sym
-from functools import reduce
 
 
 class GraphitiMLP(be.Model):
@@ -49,7 +48,7 @@ class GraphitiMLP(be.Model):
         # Fusion analysis
         results = dW if bprop else [Error]
         self.dataflow, self.memory = an.assign_buffers(results, an.gpu_fusible)
-        #self.dataflow.view()
+        # self.dataflow.view()
 
 
 class MXNetMLP:

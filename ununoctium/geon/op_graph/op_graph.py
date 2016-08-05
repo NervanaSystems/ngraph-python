@@ -1442,7 +1442,7 @@ class Variable(AllocationOp):
         if persistent:
             tags.add('persistent')
         super(Variable, self).__init__(tags=tags, **kargs)
-        
+
     def generate_adjoints(self, adjoints, delta):
         pass
 
@@ -1741,6 +1741,7 @@ def deriv(dep, indep):
 
 
 class CrossEntropyMultiInner(object):
+
     def __init__(self, x, y, s):
         self.x = x
         self.y = y

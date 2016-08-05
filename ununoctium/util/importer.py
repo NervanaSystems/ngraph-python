@@ -394,10 +394,16 @@ def create_nervana_graph(graph_def, env, end_node=None):
                     print(array)
                     shape = shape_tensor.tensor_axes_info.tensor_description.shape
                     if len(shape) == 1:
-                        op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0])), name=node.name)
+                        op = be.NumPyTensor(
+                            array, axes=Axes(
+                                be.NumericAxis(
+                                    shape[0])), name=node.name)
                     elif len(shape) == 2:
-                        op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0]),
-                                                             be.NumericAxis(shape[1])), name=node.name)
+                        op = be.NumPyTensor(
+                            array, axes=Axes(
+                                be.NumericAxis(
+                                    shape[0]), be.NumericAxis(
+                                    shape[1])), name=node.name)
                     else:
                         assert False
 
@@ -465,8 +471,8 @@ def create_nervana_graph(graph_def, env, end_node=None):
                     for i in reduction_indices.nptensor:
                         reduction_axes += Axes(input_tensor_axes[int(i)],)
 
-                op = reduction_ops[op_type](input_tensor, reduction_axes=reduction_axes, name=node.name)
-
+                op = reduction_ops[op_type](
+                    input_tensor, reduction_axes=reduction_axes, name=node.name)
 
             elif op_type == 'Prod':
                 # TODO: implement tf.reduce_prod and merge with reduction_ops
@@ -581,15 +587,27 @@ def create_nervana_graph(graph_def, env, end_node=None):
                     op = None
                 else:
                     val_x = np.array(grad_x_reduce_)
-                    op = be.NumPyTensor(val_x, axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ), name=node.name)
+                    op = be.NumPyTensor(
+                        val_x,
+                        axes=Axes(
+                            be.NumericAxis(
+                                len(grad_x_reduce_)),
+                        ),
+                        name=node.name)
 
                 if not grad_y_reduce_:
                     name_to_op[node.name + ":1"] = None
                 else:
                     val_y = np.array(grad_y_reduce_)
-                    name_to_op[node.name + ":1"] = be.NumPyTensor(val_y,
-                                                                  axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
-                                                                  name=node.name)
+                    name_to_op[
+                        node.name +
+                        ":1"] = be.NumPyTensor(
+                        val_y,
+                        axes=Axes(
+                            be.NumericAxis(
+                                len(grad_x_reduce_)),
+                        ),
+                        name=node.name)
 
             elif op_type == 'ReluGrad':
                 gradient = name_to_op[inputs[0]]
