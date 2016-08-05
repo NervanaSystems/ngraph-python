@@ -20,7 +20,41 @@ import weakref
 from geon.op_graph.names import NameableValue
 
 
-class Node(NameableValue):
+class DebugInfo(object):
+    def __init__(self, **kargs):
+        # TODO This is a good first cut for debugging info, but it would be nice to
+        # TODO be able to reliably walk the stack back to user code rather than just
+        # TODO back past this constructor
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            while frame.f_locals.get('self', None) is self:
+                frame = frame.f_back
+            while frame:
+                filename, lineno, function, code_context, index = inspect.getframeinfo(
+                    frame)
+                if -1 == filename.find('geon/op_graph'):
+                    break
+                frame = frame.f_back
+
+            self.filename = filename
+            self.lineno = lineno
+            self.code_context = code_context
+        finally:
+            del frame
+
+    @property
+    def file_info(self):
+        """
+        Return file location that created the node.
+
+        :return: String with file location that created the node.
+        """
+        return 'File "{filename}", line {lineno}'.format(
+            filename=self.filename, lineno=self.lineno)
+
+
+class Node(NameableValue, DebugInfo):
     """
     Basic implementation of DAGs.
     """
@@ -47,27 +81,6 @@ class Node(NameableValue):
                 self.tags.update(tags)
             else:
                 self.tags.add(tags)
-
-        # TODO This is a good first cut for debugging info, but it would be nice to
-        # TODO be able to reliably walk the stack back to user code rather than just
-        # TODO back past this constructor
-        frame = None
-        try:
-            frame = inspect.currentframe()
-            while frame.f_locals.get('self', None) is self:
-                frame = frame.f_back
-            while frame:
-                filename, lineno, function, code_context, index = inspect.getframeinfo(
-                    frame)
-                if -1 == filename.find('geon/backends/graph'):
-                    break
-                frame = frame.f_back
-
-            self.filename = filename
-            self.lineno = lineno
-            self.code_context = code_context
-        finally:
-            del frame
 
     @property
     def graph_label(self):
@@ -165,16 +178,6 @@ class Node(NameableValue):
 
         for node in root:
             visit(node)
-
-    @property
-    def file_info(self):
-        """
-        Return file location that created the node.
-
-        :return: String with file location that created the node.
-        """
-        return 'File "{filename}", line {lineno}'.format(
-            filename=self.filename, lineno=self.lineno)
 
     def _repr_body(self):
         return self._abbrev_args(self._repr_attrs())

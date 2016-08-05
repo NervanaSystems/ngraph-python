@@ -41,6 +41,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.opids = dict()
 
         Op.simple_prune(results)
+        for result in results:
+            result.tags.add('persistent')
         self.dataflow, self.memory = assign_buffers(self.results)
         self.ops = self.dataflow.instructions
         self.initializers = self.ordered_initializers(self.ops)

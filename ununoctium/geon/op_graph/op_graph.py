@@ -32,18 +32,54 @@ class Op(Node):
 
     def __init__(self, initializers=None, **kwds):
         super(Op, self).__init__(**kwds)
+        self.schemas = []
         self._adjoints = None
         self.initializers = initializers or []
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
+
         self.transform_hook = None
+
+    def add_schema(self, schema, set_generate_adjoints=True):
+        """
+        Adds a description of some op substructure.
+
+        When a function generates a groups of nodes, it can add a schema
+        describing the roles of these nodes.  The schema may include its
+        own generate_adjoints.
+        :param schema:
+        :param set_generate_adjoints: Whether to override the node's generate_adjoints
+         with the version from the schema.
+        :return:
+        """
+        self.schemas.insert(0, schema)
+        if set_generate_adjoints:
+            # generate_adjoints is normally called with *args, but for a
+            # schema we call it with the associated node.
+            def generate_adjoints(adjoints, adjoint, *ignore):
+                schema.generate_adjoints(adjoints, adjoint, self)
+            # Replace generate_adjoints for self
+            self.generate_adjoints = generate_adjoints
+
+    def find_schema(self, t):
+        """
+        Find a schema of particular type.
+
+        Searches added schema for one of type t.
+        :param t: The type of schema desired.
+        :return: A schema of type t, or None.
+        """
+        for schema in self.schemas:
+            if isinstance(schema, t):
+                return schema
+        return None
 
     @property
     def defs(self):
         return {}
 
-    def parameters(self):
+    def variables(self):
         """Return all parameters used in computing this node"""
         params = []
         visited = set()
@@ -728,7 +764,6 @@ class AllocationOp(Tensor):
             self,
             init=None,
             initial_value=None,
-            initializers=[],
             **kargs):
         super(AllocationOp, self).__init__(**kargs)
         if init is not None:
@@ -766,52 +801,24 @@ class ComputationOp(Tensor):
         return self.__class__.__name__ + '[' + self.name + ']'
 
 
-class Container(ComputationOp):
-    """
-    Implemented in terms of a subgraph, but stays in the graph.
-    """
+class RNG(object):
 
-    def compute_tensor_axes_info(self):
-        x, = self.args
-        return x.tensor_axes_info
-
-
-class RNG(AllocationOp):
-
-    def __init__(self, seed=None, **kargs):
-        super(RNG, self).__init__(args=(), **kargs)
+    def __init__(self, seed=None):
         self.seed = seed
-
-    def compute_tensor_axes_info(self):
-        tensor_axes_info = super(RNG, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda transformer, tensor_description: transformer.rng(
-            seed=self.seed)
-        return tensor_axes_info
-
-    @property
-    def axes(self):
-        return AxesComp.as_axes(())
+        self.rng = np.random.RandomState(seed=seed)
 
     def uniform(self, low=0.0, high=1.0, size=None, **kargs):
-        return Uniform(rng=self, low=low, high=high, size=size, **kargs)
+        return Uniform(rng=self.rng, low=low, high=high, size=size, **kargs)
 
     def normal(self, loc, scale, size, **kargs):
-        return Normal(rng=self, loc=loc, scale=scale, size=size, **kargs)
+        return Normal(rng=self.rng, loc=loc, scale=scale, size=size, **kargs)
 
 
 class RNGOp(AllocationOp):
 
-    def __init__(self, rng, axes, **kargs):
-        self.__axes = axes
-        super(RNGOp, self).__init__(args=(rng,), **kargs)
-
-    @property
-    def axes(self):
-        return self.__axes
-
-    def compute_call_info(self):
-        rng, = self.args
-        return [rng.reaxe(rng.axes.value)]
+    def __init__(self, rng, **kargs):
+        super(RNGOp, self).__init__(**kargs)
+        self.rng = rng
 
 
 class Normal(RNGOp):
@@ -822,9 +829,8 @@ class Normal(RNGOp):
         self.scale = scale
 
         def allocator(transformer, tensor_description):
-            rng, = self.call_info
             return transformer.rng_normal_tensor(
-                rng.value, tensor_description, loc, scale)
+                self.rng, tensor_description, loc, scale)
 
         self.tensor_axes_info.alloc = allocator
 
@@ -837,9 +843,8 @@ class Uniform(RNGOp):
         self.high = high
 
         def allocator(transformer, tensor_description):
-            rng, = self.call_info
             return transformer.rng_uniform_tensor(
-                rng.value, tensor_description, low, high)
+                self.rng, tensor_description, low, high)
 
         self.tensor_axes_info.alloc = allocator
 
@@ -916,7 +921,10 @@ class placeholder(AllocationOp):
     Can be set externally.
     """
 
-    def __init__(self, **kargs):
+    def __init__(self, tags=None, **kargs):
+        if tags is None:
+            tags = set()
+        tags.add('persistent')
         super(placeholder, self).__init__(**kargs)
         self.__axes = ValueAxesComp(self)
         self.tensor_axes_info.read_only = True
@@ -1257,26 +1265,28 @@ class less_equal(ElementWiseBoolean):
         transformer.less_equal(x, y, out)
 
 
-class softmax(Container):
+class Softmax(object):
 
-    def __init__(self, x, softmax_axes=None, **kargs):
-        if softmax_axes is None:
-            softmax_axes = tensor_sample_axes(x, **kargs)
-        self.softmax_axes = softmax_axes
+    def __init__(self, x, exps, Z):
         self.x = x
-        self.xM = x - max(x, reduction_axes=softmax_axes)
-        exps = exp(self.xM)
-        self.Z = sum(exps, reduction_axes=softmax_axes)
-        super(softmax, self).__init__(args=(exps / self.Z,), **kargs)
+        self.exps = exps
+        self.Z = Z
 
-    @property
-    def axes(self):
-        return self.args[0].axes
+    def generate_adjoints(self, adjoints, delta, op):
+        z = delta * op
+        zs = sum(z, reduction_axes=AxesSubComp(self.x.axes, op.batch_axes))
+        self.x.generate_add_delta(adjoints, (z - zs * op))
 
-    def generate_adjoints(self, adjoints, delta, x):
-        z = delta * self
-        zs = sum(z, reduction_axes=AxesSubComp(self.x.axes, self.batch_axes))
-        self.x.generate_add_delta(adjoints, (z - zs * self))
+
+def softmax(x, softmax_axes=None, **kargs):
+    if softmax_axes is None:
+        softmax_axes = tensor_sample_axes(x, **kargs)
+    x = x - max(x, reduction_axes=softmax_axes)
+    exps = exp(x)
+    Z = sum(exps, reduction_axes=softmax_axes)
+    result = exps / Z
+    result.add_schema(Softmax(x=x, exps=exps, Z=Z))
+    return result
 
 
 class ReductionOp(ComputationOp):
@@ -1422,8 +1432,17 @@ class Pad(ComputationOp):
 
 class Variable(AllocationOp):
 
-    def __init__(self, **kargs):
-        super(Variable, self).__init__(**kargs)
+    def __init__(self, tags=None, trainable=True, persistent=True, **kargs):
+        if tags is None:
+            tags = set()
+        else:
+            tags = set(tags)
+        if trainable:
+            tags.add('trainable')
+        if persistent:
+            tags.add('persistent')
+
+        super(Variable, self).__init__(tags=tags, **kargs)
         self.tensor_axes_info.read_only = True
 
     def generate_adjoints(self, adjoints, delta):
@@ -1602,15 +1621,20 @@ class sgn(ElementWise):
         transformer.sign(x, out)
 
 
-class sig(Container, ElementWise):
+class Sig(object):
     """Sigmoid"""
 
-    def __init__(self, x, **kargs):
+    def __init__(self, x):
         self.x = x
-        super(sig, self).__init__(args=(reciprocal(exp(-x) + 1),), axes=x.axes, **kargs)
 
-    def generate_adjoints(self, adjoints, delta, x):
-        self.x.generate_add_delta(adjoints, delta * self * (1.0 - self))
+    def generate_adjoints(self, adjoints, delta, op):
+        self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
+
+
+def sig(x, **kargs):
+    result = reciprocal(exp(-x) + 1)
+    result.add_schema(Sig(x=x))
+    return result
 
 
 class sin(ElementWise):
@@ -1717,67 +1741,59 @@ def deriv(dep, indep):
         return Broadcast(adjoint, axes=indep.axes)
 
 
-class cross_entopy_multi_inner(Container):
-
-    def __init__(self, y, t, enable_softmax_opt=True, enable_diff_opt=True,
-                 out_axes=None, **kargs):
+class CrossEntropyMultiInner(object):
+    def __init__(self, x, y, s):
+        self.x = x
         self.y = y
-        self.t = t
-        self.enable_softmax_opt = enable_softmax_opt
-        self.enable_diff_opt = enable_diff_opt
+        self.s = s
 
-        if enable_softmax_opt and isinstance(y, softmax):
-            # This depends on sum(t) being 1
-            x = y.xM
-            Z = y.Z
-            self.sum = -sum(x * t, out_axes=out_axes)
-            cemi = self.sum + safelog(Z)
-        else:
-            cemi = -sum(safelog(y) * t, out_axes=out_axes)
-        super(cross_entopy_multi_inner, self).__init__(args=(cemi,), **kargs)
-
-    @property
-    def axes(self):
-        return self.args[0].axes
-
-    def generate_adjoints(self, adjoints, delta, x):
-        if self.enable_diff_opt and self.enable_softmax_opt and isinstance(self.y, softmax):
-            x = self.y.xM
-            self.sum.generate_add_delta(adjoints, delta)
-            x.generate_add_delta(adjoints, self.y * delta)
-        else:
-            self.args[0].generate_add_delta(adjoints, delta)
+    def generate_adjoints(self, adjoints, delta, op):
+        self.s.generate_add_delta(adjoints, delta)
+        self.x.generate_add_delta(adjoints, self.y * delta)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None, **kargs):
-    result = cross_entopy_multi_inner(y, t, out_axes=out_axes, **kargs)
+def cross_entropy_multi(y, t, usebits=False, out_axes=None, enable_softmax_opt=True,
+                        enable_diff_opt=True, **kargs):
+    smy = y.find_schema(Softmax)
+    if enable_softmax_opt and smy is not None:
+        # This depends on sum(t) being 1
+        x = smy.x
+        Z = smy.Z
+        s = -sum(x * t, out_axes=out_axes)
+        result = s + safelog(Z)
+        if enable_diff_opt:
+            result.add_schema(CrossEntropyMultiInner(x=x, y=y, s=s))
+    else:
+        result = -sum(safelog(y) * t, out_axes=out_axes)
     if usebits:
         result = result * np.float(1. / np.log(2.0))
     return result
 
 
-class cross_entropy_binary_inner(Container, ElementWise):
+class CrossEntropyBinaryInner(object):
 
-    def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kargs):
+    def __init__(self, x, y, t):
+        self.x = x
         self.y = y
         self.t = t
-        self.enable_sig_opt = enable_sig_opt
-        self.enable_diff_opt = enable_diff_opt
-        if self.enable_sig_opt and isinstance(self.y, sig):
-            # Simpler equivalent
-            cebi = (1 - t) * y.x - safelog(y)
-        else:
-            cebi = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-        super(cross_entropy_binary_inner, self).__init__(args=(cebi,), **kargs)
 
-    def generate_adjoints(self, adjoints, delta, x):
-        if self.enable_diff_opt and self.enable_diff_opt and isinstance(self.y, sig):
-            # Shortcut derivative
-            x = self.y.x
-            x.generate_add_delta(adjoints, (self.y - self.t) * delta)
-            self.t.generate_add_delta(adjoints, x * delta)
-        else:
-            self.args[0].generate_add_delta(adjoints, delta)
+    def generate_adjoints(self, adjoints, delta, op):
+        self.x.generate_add_delta(adjoints, (self.y - self.t) * delta)
+        self.t.generate_add_delta(adjoints, self.x * delta)
+
+
+def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True, **kargs):
+    sigy = y.find_schema(Sig)
+    if enable_sig_opt and sigy is not None:
+        # Simpler equivalent
+        x = sigy.x
+        result = (1 - t) * x - safelog(y)
+        if enable_diff_opt:
+            result.add_schema(CrossEntropyBinaryInner(x=x, y=y, t=t))
+    else:
+        result = -(safelog(y) * t + safelog(1 - y) * (1 - t))
+
+    return result
 
 
 def cross_entropy_binary(y, t, out_axes=None):
@@ -1875,10 +1891,6 @@ class SimplePrune(object):
     @visit.on_type(log)
     def visit(self, op):
         x, = op.args
-        if isinstance(x, Container):
-            args = x.args
-            if len(args) == 1:
-                x = args[0]
         if isinstance(x, divide):
             num, denom = x.args
             if isinstance(num, exp):

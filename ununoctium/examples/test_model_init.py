@@ -98,8 +98,8 @@ class MyTest(be.Model):
 
             # TODO: learning_rate might be a variable rather than placeholder.
             learning_rate = be.placeholder(axes=())
-            graph.params = graph.loss.parameters()
-            derivs = [be.deriv(graph.loss, param) for param in graph.params]
+            graph.variables = graph.loss.variables()
+            derivs = [be.deriv(graph.loss, param) for param in graph.variables]
             # check for the mpi_flag
             # if the flag is set, we add an AllReduce node after each derivs
             # node to synch up
@@ -117,7 +117,7 @@ class MyTest(be.Model):
                         learning_rate *
                         deriv) for param,
                     deriv in zip(
-                        graph.params,
+                        graph.variables,
                         synced_derivs)])
 
             enp = be.NumPyTransformer(
@@ -126,7 +126,7 @@ class MyTest(be.Model):
                     graph.loss,
                     updates] +
                 synced_derivs +
-                graph.params)
+                graph.variables)
 
             for epoch in range(args.epochs):
                 # TODO: need to fix that the processed data does not equal to

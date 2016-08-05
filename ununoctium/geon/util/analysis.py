@@ -16,7 +16,7 @@ from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
 from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
-    Buffer, ReductionOp, NumPyTensor, Container
+    Buffer, ReductionOp, NumPyTensor
 from operator import mul
 from itertools import combinations
 from functools import reduce
@@ -117,7 +117,7 @@ class DataFlowGraph(Digraph):
 
 
 def never_fusible(op1, op2):
-    return isinstance(op1, Container) or isinstance(op2, Container)
+    return False
 
 
 def gpu_fusible(op1, op2):
