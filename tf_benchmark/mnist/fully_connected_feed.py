@@ -117,6 +117,7 @@ def run_training():
     summary_op = tf.merge_all_summaries()
 
     saver = tf.train.Saver() # Create a saver for writing training checkpoints.
+
     sess = tf.Session() # Create a session for running Ops on the Graph.
 
     # Instantiate a SummaryWriter to output summaries and the Graph.
@@ -158,15 +159,12 @@ def run_training():
               "test_accuracy: {:.2f}".format(
             step, duration, loss_value, train_accuracy, val_accuracy, test_accuracy))
 
-    print("saving graph")
-    graph_pbtxt = "mnist_mlp_graph.pb.txt"
-    graph_pb = "mnist_mlp_graph.pb"
-    checkpoint = "mnist_mlp_model.ckpt"
+    # saving the computation graph explicitly
+    tf.train.write_graph(sess.graph_def, "./", "graph.pb.txt", True)  # The graph is written as a text proto
+    tf.train.write_graph(sess.graph_def, "./", "graph.pb", False)  # The graph is written as a binary proto
 
-    tf.train.write_graph(sess.graph_def, "./", graph_pbtxt, True)  # The graph is written as a text proto
-    tf.train.write_graph(sess.graph_def, "./", graph_pb, False)  # The graph is written as a binary proto
-
-    saver.save(sess, checkpoint)
+    # save the checkpoint
+    saver.save(sess, "./model.ckpt")
 
 def main(_):
   run_training()

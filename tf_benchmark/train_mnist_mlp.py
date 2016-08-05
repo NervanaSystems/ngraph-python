@@ -33,7 +33,7 @@ import sys
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
-parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph.pb",
+parser.add_argument('--pb_file', type=str, default="mnist/graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute, mainly used for debugging')
