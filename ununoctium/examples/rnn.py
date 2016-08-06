@@ -120,11 +120,11 @@ class MyRnn(be.Model):
 
         learning_rate = be.input(axes=())
 
-        params = g.loss.parameters()
-        derivs = [be.deriv(g.loss, param) for param in params]
+        variables = g.loss.variables()
+        derivs = [be.deriv(g.loss, param) for param in variables]
 
         updates = be.doall(all=[be.decrement(param, learning_rate * deriv)
-                                for param, deriv in zip(params, derivs)])
+                                for param, deriv in zip(variables, derivs)])
 
         enp = be.NumPyTransformer(
             results=[self.graph.y, g.error, updates] + derivs)

@@ -66,11 +66,11 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
 
 def grad_descent(cost):
     learning_rate = be.placeholder(axes=(), name='learning_rate')
-    params = cost.parameters()
-    derivs = [be.deriv(cost, param) for param in params]
+    variables = cost.variables()
+    derivs = [be.deriv(cost, variable) for variable in variables]
     updates = be.doall(all=[
-        be.assign(param, param - learning_rate * deriv)
-        for param, deriv in zip(params, derivs)
+        be.assign(variable, variable - learning_rate * deriv)
+        for variable, deriv in zip(variables, derivs)
     ])
     return learning_rate, updates
 
@@ -101,8 +101,8 @@ class MyTest(be.Model):
 
         # L2 regularizer of variables
         reg = None
-        for param in g.value.variables():
-            l2 = L2(param)
+        for variable in g.value.variables():
+            l2 = L2(variable)
             if reg is None:
                 reg = l2
             else:
@@ -117,7 +117,7 @@ class MyTest(be.Model):
         g.x.value = np.empty((3, 32, 32, 128))
         g.y.value = np.empty((1000, 128))
 
-        params = g.error.parameters()
+        params = g.error.variables()
         derivs = [be.deriv(g.error, param) for param in params]
 
         gnp = evaluation.GenNumPy(results=derivs)

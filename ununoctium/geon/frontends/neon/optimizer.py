@@ -81,7 +81,7 @@ class GradientDescentMomentum(Optimizer):
     def configure(self, cost):
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
-        variables = list(cost.parameters())
+        variables = list(cost.variables())
         # TODO Get bsz from placeholder
         grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
         velocities = [be.Temporary(
