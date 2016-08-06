@@ -32,7 +32,7 @@ import numpy as np
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
-parser.add_argument('--pb_file', type=str, default="mnist/mnist_mlp_graph_froze.pb",
+parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
                     help='GraphDef protobuf')
 
 args = parser.parse_args()
