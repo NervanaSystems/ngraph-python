@@ -136,17 +136,6 @@ class Model(GraphComponent):
                 self.enp = be.NumPyTransformer(
                     results=[self.cost.mean_cost, updates])
 
-                # dataflow = analysis.DataFlowGraph(self.enp.results)
-                # dataflow = analysis.DataFlowGraph([self.cost.mean_cost])
-                # kernelflow = analysis.KernelFlowGraph(dataflow)
-                # interference = analysis.InterferenceGraph(kernelflow.liveness())
-                # memory = analysis.color(interference)
-
-                # dataflow.view()
-
-                # print 'The memory footprint is {} MB'.format(memory*10**-6)
-                # dataflow.render('cifar_mlp.gv', True)
-
                 callbacks.on_train_begin(num_epochs)
                 while self.epoch_index < num_epochs and not self.finished:
                     self.nbatches = dataset.nbatches
@@ -198,8 +187,8 @@ class Model(GraphComponent):
             dataset.reset()
             enp = nptransform.NumPyTransformer(results=[self.cost.mean_cost])
             for x, t in dataset:
-                self.input.value = x
-                self.target.value = t
+                self.input.value = x.reshape(self.batch_input_shape)
+                self.target.value = t.reshape(self.batch_target_shape)
                 bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(
                     x, list) else x[0].shape[1] // dataset_batchsize(dataset)
@@ -230,8 +219,8 @@ class Model(GraphComponent):
             error = metric(self.output, self.target)
             enp = nptransform.NumPyTransformer(results=[error])
             for x, t in dataset:
-                self.input.value = x
-                self.target.value = t
+                self.input.value = x.reshape(self.batch_input_shape)
+                self.target.value = t.reshape(self.batch_target_shape)
                 bsz = min(dataset.ndata - nprocessed,
                           dataset_batchsize(dataset))
                 nsteps = x.shape[1] // dataset_batchsize(dataset) if not isinstance(

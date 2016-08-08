@@ -15,6 +15,7 @@
 from geon import AxisVar
 
 # Define the standard Neon axes
+#: The batch axis
 N = AxisVar(name='N')
 C = AxisVar(name='C')
 D = AxisVar(name='D')
