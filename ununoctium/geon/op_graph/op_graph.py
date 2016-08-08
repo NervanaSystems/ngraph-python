@@ -84,7 +84,7 @@ class Op(Node):
         params = set()
 
         if filter is None:
-            filter = lambda node : ('trainable' in node.tags) is trainable
+            filter = lambda node: ('trainable' in node.tags) is trainable
 
         def visitor(node):
             if isinstance(node, Variable) and filter(node):
