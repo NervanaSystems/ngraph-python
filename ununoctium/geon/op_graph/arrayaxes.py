@@ -28,12 +28,15 @@ import numpy as np
 from geon.op_graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 
+AllAxes = set()
+
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def __init__(self, length, **kargs):
         super(Axis, self).__init__(**kargs)
         self.__length = length
+        AllAxes.add(self)
 
     def __getitem__(self, key):
         return AxisID(self, key)
@@ -105,8 +108,6 @@ class AxisID(object):
     def __repr__(self):
         return '{axis}[{idx}]'.format(axis=self.axis, idx=self.idx)
 
-TensorAxisInfo = collections.namedtuple('TensorAxisInfo', ['length', 'stride'])
-
 
 def canonicalize(seq):
     elems = []
@@ -166,7 +167,17 @@ class Axes(tuple):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes(*(tuple(self) + tuple(other)))
+        if isinstance(other, Axes):
+            other = other.as_axis_ids()
+        return (self.as_axis_ids() + other).as_axes()
+
+    def __sub__(self, other):
+        if isinstance(other, Axes):
+            other = other.as_axis_ids()
+        return (self.as_axis_ids() - other).as_axes()
+
+    def concat(self, other):
+        return Axes(*tuple(self) + tuple(other))
 
     # TODO: delete this method, the size should come from the tensor
     @property
@@ -211,7 +222,7 @@ def with_axes_as_axis_ids(f):
         new_args = []
         for a in args:
             if isinstance(a, Axes):
-                a = a.as_axis_ids()
+                a = Axes(*a).as_axis_ids()
             new_args.append(a)
         return f(*new_args)
     return wrapper
@@ -324,20 +335,23 @@ def reduce_strides(strides):
 class TensorDescription(object):
     """Axes information about an allocated tensor"""
 
-    def __init__(self, axes, dtype=np.dtype(np.float32), full_shape=None,
-                 buffer=None, value=None, full_strides=None, full_sizes=None,
-                 offset=0, **kargs):
+    def __init__(self, axes, transformer,
+                 dtype=np.dtype(np.float32), full_shape=None,
+                 buffer=None, full_strides=None, full_sizes=None, offset=0,
+                 **kargs):
         super(TensorDescription, self).__init__(**kargs)
         # TODO: get the default type from the backend. May not always be numpy.
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(*axes)
-        self.value = value
-        self.buffer = buffer
-        self.dtype = dtype
         self.axes = axes
+        self.transformer = transformer
+        self.__value = None
+        self.__buffer = buffer
+        self.dtype = dtype
         self.offset = offset
         self.ndim = len(self.axes)
         self.views = weakref.WeakSet()
+        self.__read_only = False
         self.full_shape = full_shape if full_shape is not None \
             else self.axes.full_lengths
         self.full_sizes = full_sizes if full_sizes is not None \
@@ -365,17 +379,6 @@ class TensorDescription(object):
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
-
-    def __getitem__(self, item):
-        assert isinstance(item, collections.Iterable)
-        assert len(item) == self.ndim
-
-        offset = self.offset
-        for idx, axis, length, stride in \
-                zip(item, self.axes, self.shape, self.strides):
-            assert 0 <= idx and idx < length
-            offset = offset + idx * stride
-        return offset
 
     def try_guess_positions(self, new_axes):
         # Supports broadcast and combining one level of axes
@@ -484,7 +487,8 @@ class TensorDescription(object):
     def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
         if dim == -1:
             dim = len(self.axes)
-        new_axes = self.axes[:dim] + Axes(dummy_axis,) + self.axes[dim:]
+        new_axes = self.axes[:dim]\
+            .concat(Axes(dummy_axis,)).concat(self.axes[dim:])
         old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
                                          old_poss=old_poss,
@@ -531,7 +535,9 @@ class TensorDescription(object):
                 new_axes, full_shape, full_strides, full_sizes
             )
 
-        return TensorDescription(new_axes, dtype=self.dtype,
+        return TensorDescription(new_axes,
+                                 self.transformer,
+                                 dtype=self.dtype,
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
@@ -565,27 +571,37 @@ class TensorDescription(object):
             tuple(new_strides), tuple(new_sizes)
 
     def slice(self, slices):
-        assert len(slices) == self.ndim
-        base_index = []
-        strides = []
+        slices = list(slices)
+        while len(slices) < self.ndim:
+            slices.append(slice(None))
+        offset = self.offset
+        full_strides = []
+        full_sizes = []
         axes = []
-        shape = []
 
-        for s, stride, length, axis in \
-                zip(slices, self.strides, self.shape, self.axes):
+        for s, axis, full_stride, full_size in \
+                zip(slices, self.axes, self.full_strides, self.full_sizes):
             if isinstance(s, slice):
-                start, stop, step = slice.indices(length)
-                base_index.append(start)
-                strides.append(stride * step)
-                axes.append(axis)
-                shape.append((stop - start) // step)
-            else:
-                base_index.append(s)
+                start, stop, step = s.indices(axis.length)
+                assert step == 1
 
-        offset = self[base_index]
-        return TensorDescription(axes, dtype=self.dtype,
-                                 shape=shape, strides=strides, offset=offset,
-                                 buffer=self.buffer)
+                axes.append(axis.sub(stop - start))
+                full_strides.append(full_stride)
+                full_sizes.append(full_size)
+
+                idx = start
+            else:
+                idx = s
+
+            offset += idx * reduce_nested(full_stride, 1, operator.mul)
+
+        return TensorDescription(Axes(*axes),
+                                 self.transformer,
+                                 dtype=self.dtype,
+                                 full_strides=tuple(full_strides),
+                                 full_sizes=full_sizes,
+                                 buffer=self.buffer,
+                                 offset=offset)
 
     @property
     def strides(self):
@@ -601,24 +617,95 @@ class TensorDescription(object):
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
 
+    @property
+    def buffer(self):
+        return self.__buffer or self
 
-def get_batch_axes(default=()):
+    @property
+    def cache_key(self):
+        return (self, 'td_values')
+
+    @property
+    def value(self):
+        return self.__value
+
+    @value.setter
+    def value(self, tensor):
+        assert self.buffer is self
+        self.__value = tensor
+        self.transformer.values[self] = tensor
+        self.update_views(True)
+
+    def update_views(self, force=False):
+        for view in self.views:
+            if force or view.value is None:
+                view.__value = self.transformer.tensor_view(view)
+
+    @property
+    def read_only(self):
+        return self.buffer.__read_only or self.__read_only
+
+    @read_only.setter
+    def read_only(self, value):
+        self.__read_only = value
+
+
+def with_args_as_axes(f):
+
+    def cast(arg):
+        if isinstance(arg, Axes):
+            return arg
+        elif isinstance(arg, AxisID):
+            return arg.as_axes()
+        else:
+            return Axes(*arg)
+
+    def wrapper(*args):
+        return f(*(cast(arg) for arg in args))
+    return wrapper
+
+
+def get_batch_axes(default=Axes()):
     environment = get_current_environment()
     if environment is None:
         return default
     return environment.get_value('batch_axes', default)
 
 
+@with_args_as_axes
 def set_batch_axes(axes):
     get_current_environment()['batch_axes'] = axes
 
 
-def get_phase_axes(default=()):
+def get_phase_axes(default=Axes()):
     environment = get_current_environment()
     if environment is None:
         return default
     return environment.get_value('phase_axes', default)
 
 
+@with_args_as_axes
 def set_phase_axes(axes):
     get_current_environment()['phase_axes'] = axes
+
+
+@with_args_as_axes
+def sample_axes(axes):
+    return axes - get_batch_axes()
+
+
+@with_args_as_axes
+def batch_axes(axes):
+    return AxisIDTuple.intersect(
+        axes.as_axis_ids(),
+        get_batch_axes().as_axis_ids()
+    ).as_axes()
+
+
+@with_args_as_axes
+def linear_map_axes(in_axes, out_axes):
+    in_axis_ids, out_axis_ids = in_axes.as_axis_ids(), out_axes.as_axis_ids()
+    return (
+        (out_axis_ids + in_axis_ids) -
+        AxisIDTuple.intersect(in_axis_ids, out_axis_ids)
+    ).as_axes()

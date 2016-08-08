@@ -22,7 +22,7 @@ from builtins import object, str
 from geon.backends.graph.environment import get_current_environment,\
     get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
-    AxisIDTuple, Axes, AxesAxis, Axis
+    AxisIDTuple, Axes, AxesAxis, Axis, sample_axes, batch_axes
 from geon.op_graph.nodes import Node, generic_method
 
 
@@ -560,9 +560,6 @@ class placeholder(AllocationOp):
         tags.add('persistent')
         super(placeholder, self).__init__(tags=tags, **kargs)
 
-    def __axes__(self):
-        return self.__axes
-
     def generate_adjoints(self, tape, delta):
         pass
 
@@ -589,12 +586,6 @@ class Fill(VoidOp):
         super(Fill, self).__init__(args=(tensor,), **kargs)
         self.const = const
 
-    def compute_call_info(self):
-        tensor, = self.args
-        call_info = super(Fill, self).compute_call_info()
-        call_info.append(tensor.reaxe(tensor.axes.value))
-        return call_info
-
     def transform(self, transformer, tensor):
         transformer.fill(tensor, self.const)
 
@@ -607,7 +598,7 @@ class Constant(AllocationOp):
     def __init__(self, const, **kargs):
         self.const = const
         super(Constant, self).__init__(
-            axes=(), dtype=np.dtype(np.float32), **kargs)
+            axes=Axes(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
         self.tags.add('persistent')
 
@@ -623,10 +614,6 @@ class Constant(AllocationOp):
             return 'Constant'
         return self.name
 
-    @property
-    def axes(self):
-        return AxesComp.as_axes((()))
-
     def __str__(self):
         return '<{cl} ({const})>'.format(
             cl=self.__class__.__name__, const=self.const)
@@ -637,21 +624,21 @@ class NumPyTensor(AllocationOp):
     A NumPy tensor with attached axes information
     """
 
-    def __init__(self, nptensor, **kargs):
+    def __init__(self, nptensor, axes, **kargs):
+        axes = Axes(*axes)
         self.nptensor = nptensor
-        super(NumPyTensor, self).__init__(dtype=nptensor.dtype, **kargs)
+        super(NumPyTensor, self).__init__(
+            dtype=nptensor.dtype, axes=axes, **kargs
+        )
 
-        def allocator(transformer, tensor_description):
-            return transformer.nparray(tensor_description, nptensor)
-
-        self.tensor_axes_info.alloc = allocator
+    def allocator(self, transformer):
+        return transformer.nparray(
+            self.tensor_description(transformer), self.nptensor
+        )
 
     @property
     def graph_label(self):
         return str(self.nptensor.shape)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
 
     def __str__(self):
         return '<{cl} ({const})>'.format(
@@ -687,44 +674,50 @@ class argmax(ComputationOp):
 
     def __init__(self, x, max_axes=None, **kargs):
         if max_axes is None:
-            max_axes = tensor_sample_axes(x)
-        self.max_axes = AxesComp.as_axes(max_axes)
-        super(argmax, self).__init__(args=(x,), dtype=np.int64, **kargs)
+            max_axes = sample_axes(x.axes)
+            axes = batch_axes(x.axes)
+        else:
+            axes = x.axes - max_axes
+        self.max_axes = max_axes
+        super(argmax, self).__init__(
+            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kargs
+        )
 
-    def compute_call_info(self):
-        x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe(
-            [self.max_axes.value, self.axes.value])]
+    @from_transformer_cache
+    def call_info(self, transformer):
+        x, = tds(self.args, transformer)
+        return [
+            self.tensor_description(transformer),
+            x.reaxe(self.max_axes + self.axes)
+        ]
 
     def transform(self, transformer, out, x):
         transformer.argmax(x, out)
-
-    @property
-    def axes(self):
-        x, = self.args
-        return AxesSubComp(x.axes, self.max_axes)
 
 
 class argmin(ComputationOp):
 
     def __init__(self, x, min_axes=None, **kargs):
         if min_axes is None:
-            min_axes = tensor_sample_axes
-        self.min_axes = AxesComp.as_axes(min_axes)
-        super(argmin, self).__init__(args=(x,), dtype=np.int64, **kargs)
+            min_axes = sample_axes(x.axes)
+            axes = batch_axes(x.axes)
+        else:
+            axes = x.axes - min_axes
+        self.min_axes = min_axes
+        super(argmax, self).__init__(
+            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kargs
+        )
 
-    def compute_call_info(self):
-        x, = self.args
-        return [self.reaxe([self.axes.value]), x.reaxe(
-            [self.min_axes.value, self.axes.value])]
+    @from_transformer_cache
+    def call_info(self, transformer):
+        x, = tds(self.args)
+        return [
+            self.tensor_description(transformer),
+            x.reaxe(self.min_axes + self.axes)
+        ]
 
     def transform(self, transformer, out, x):
-        transformer.argmin(x, out)
-
-    @property
-    def axes(self):
-        x, = self.args
-        return AxesSubComp(x.axes, self.min_axes)
+        transformer.argmax(x, out)
 
 
 class cos(ElementWise):
@@ -759,87 +752,85 @@ class dot(ComputationOp):
                  numpy_matching=False,
                  forward_dot=None,
                  **kargs):
-        self.__axis_id_info = None
-        self.use_numpy_matching = numpy_matching
-        self.reduction_axes = reduction_axes
-        self.out_axes = out_axes
-        self.forward_dot = forward_dot
-        super(dot, self).__init__(args=(x, y), **kargs)
-
-    @property
-    def axis_id_info(self):
-        if self.__axis_id_info is None:
-            dummy = None
-            x, y = self.args
-            x_axes = x.axes.value
-            y_axes = y.axes.value
-
-            x_axis_ids = x_axes.as_axis_ids()
-            y_axis_ids = y_axes.as_axis_ids()
-
-            if self.forward_dot is not None:
-                y_axis_ids = self.forward_dot.axis_id_info[0]
-
-            if self.use_numpy_matching:
-                out_axis_ids = x_axis_ids[:-1]\
-                    + y_axis_ids[:-2]\
-                    + AxisIDTuple(y_axis_ids[-1],)
-                red_axis_ids = AxisIDTuple(y_axis_ids[-1],)
-            else:
-                if self.reduction_axes is None:
-                    red_axis_ids = AxisIDTuple.intersect(
-                        x_axis_ids,
-                        y_axis_ids
-                    )
-                else:
-                    red_axis_ids = self.reduction_axes.value.as_axis_ids()
-
-                if self.out_axes is not None:
-                    out_axis_ids = self.out_axes.value.as_axis_ids()
-                else:
-                    out_axis_ids = (
-                        (x_axis_ids - red_axis_ids) +
-                        (y_axis_ids - red_axis_ids)
-                    )
-                red_axis_ids -= out_axis_ids
-
-                if len(red_axis_ids) == 0:
-                    dummy = Axis(1)
-                    red_axis_ids = AxisIDTuple(dummy[0],)
-
-            self.__axis_id_info = (out_axis_ids, red_axis_ids, dummy)
-        return self.__axis_id_info
-
-    def compute_call_info(self):
-        x, y = self.args
-        out_axis_ids, red_axis_ids, dummy = self.axis_id_info
-        if self.forward_dot is None:
-            forward_axis_ids = None
-        else:
-            forward_axis_ids = self.forward_dot.axis_id_info[0]
-
-        a = x.dot_reaxe_left(red_axis_ids, dummy_axis=dummy)
-        b = y.dot_reaxe_right(
-            red_axis_ids,
-            forward_axis_ids=forward_axis_ids,
-            dummy_axis=dummy
+        self.axis_id_info = self.compute_axis_id_info(
+            x, y, reduction_axes, out_axes,
+            forward_dot, numpy_matching
         )
-        a_axes, b_axes = a.tensor_description.axes,\
-            b.tensor_description.axes
-        o = self.reaxe(a_axes[:-1] + b_axes[1:])
+        self.out_axes = out_axes
+        self.reduction_axes = reduction_axes
+        axes = self.axis_id_info[0].as_axes()
+        super(dot, self).__init__(
+            args=(x, y), axes=axes, **kargs
+        )
+
+    def compute_axis_id_info(self, x, y,
+                             reduction_axes, out_axes,
+                             forward_dot, use_numpy_matching):
+        x_axis_ids = x.axes.as_axis_ids()
+        y_axis_ids = y.axes.as_axis_ids()
+
+        if forward_dot is not None:
+            y_axis_ids = forward_dot.axis_id_info[0]
+            forward_axis_ids = forward_dot.axis_id_info[0]
+        else:
+            forward_axis_ids = None
+
+        if use_numpy_matching:
+            out_axis_ids = x_axis_ids[:-1]\
+                + y_axis_ids[:-2]\
+                + AxisIDTuple(y_axis_ids[-1],)
+            x_red_axis_ids = AxisIDTuple(x_axis_ids[-1])
+            y_red_axis_ids = AxisIDTuple(y_axis_ids[-2])
+            return (out_axis_ids, x_red_axis_ids, y_red_axis_ids,
+                    None, forward_axis_ids)
+        else:
+            dummy = None
+            if reduction_axes is None:
+                red_axis_ids = AxisIDTuple.intersect(
+                    x_axis_ids,
+                    y_axis_ids
+                )
+            else:
+                red_axis_ids = reduction_axes.as_axis_ids()
+
+            if out_axes is not None:
+                out_axis_ids = out_axes.as_axis_ids()
+            else:
+                out_axis_ids = (
+                    (x_axis_ids - red_axis_ids) +
+                    (y_axis_ids - red_axis_ids)
+                )
+            red_axis_ids -= out_axis_ids
+
+            if len(red_axis_ids) == 0:
+                dummy = Axis(1)
+                red_axis_ids = AxisIDTuple(dummy[0],)
+            return (out_axis_ids, red_axis_ids, red_axis_ids,
+                    dummy, forward_axis_ids)
+
+    @from_transformer_cache
+    def call_info(self, transformer):
+        x, y = tds(self.args, transformer)
+        out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
+            = self.axis_id_info
+
+        if dummy is not None:
+            x = x.reaxe_with_dummy_axis(dummy)
+            y = y.reaxe_with_dummy_axis(dummy)
+
+        a = x.dot_reaxe_left(x_red_axis_ids)
+        b = y.dot_reaxe_right(
+            y_red_axis_ids,
+            forward_axis_ids=forward_axis_ids
+        )
+        a_axes, b_axes = a.axes, b.axes
+        o = self.tensor_description(transformer)\
+            .reaxe(a_axes[:-1].concat(b_axes[1:]))
+
         return [o, a, b]
 
     def transform(self, transformer, out, x, y):
         transformer.dot(x, y, out)
-
-    @property
-    def axes(self):
-        if self.out_axes:
-            return self.out_axes
-        else:
-            return AxesFuncComp(
-                lambda dot_obj=self: dot_obj.axis_id_info[0].as_axes()
-            )
 
     def generate_adjoints(self, adjoints, delta, x, y):
         # The delta must be passed in as the second argument
@@ -906,13 +897,13 @@ class Softmax(object):
 
     def generate_adjoints(self, adjoints, delta, op):
         z = delta * op
-        zs = sum(z, reduction_axes=AxesSubComp(self.x.axes, op.batch_axes))
+        zs = sum(z, reduction_axes=sample_axes(self.x.axes))
         self.x.generate_add_delta(adjoints, (z - zs * op))
 
 
 def softmax(x, softmax_axes=None, **kargs):
     if softmax_axes is None:
-        softmax_axes = tensor_sample_axes(x, **kargs)
+        softmax_axes = sample_axes(x.axes)
     x = x - max(x, reduction_axes=softmax_axes)
     exps = exp(x)
     Z = sum(exps, reduction_axes=softmax_axes)
@@ -924,39 +915,43 @@ def softmax(x, softmax_axes=None, **kargs):
 class ReductionOp(ComputationOp):
 
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
-        self.out_axes = AxesComp.as_axes(out_axes)
+        self.out_axes, self.reduction_axes\
+            = self.compute_axes(x, reduction_axes, out_axes)
+        self.mode = None
+        super(ReductionOp, self).__init__(
+            args=(x,), axes=self.out_axes, **kargs
+        )
+
+    def compute_axes(self, x, reduction_axes, out_axes):
         if reduction_axes is None:
             if out_axes is None:
-                self.reduction_axes = sample_axes(x.axes)
+                reduction_axes = sample_axes(x.axes)
             else:
-                self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
+                reduction_axes = x.axes - Axes(*out_axes)
         else:
-            self.reduction_axes = AxesComp.as_axes(reduction_axes)
-        super(ReductionOp, self).__init__(args=(x,), **kargs)
-        self.mode = None
+            reduction_axes = Axes(*reduction_axes)
+        if out_axes is None:
+            out_axes = x.axes - reduction_axes
+        else:
+            out_axes = Axes(*out_axes)
+        return out_axes, reduction_axes
 
-    def compute_call_info(self):
-        x, = self.args
-        reduction_axes = self.reduction_axes.value
+    @from_transformer_cache
+    def call_info(self, transformer):
+        x, = tds(self.args, transformer)
+        out = self.tensor_description(transformer)
 
-        if len(reduction_axes) == 0:
+        if len(self.reduction_axes) == 0:
             # TODO do this as a reaxe to 1d or something
-            xr = x.reaxe(self.axes.value)
+            xr = x.reaxe(self.axes)
             self.mode = 'copy'
-            return [self.reaxe(self.axes.value), xr]
+            return [out, xr]
         else:
-            np_out_axes = self.axes.value
-            red_axes = [AxesAxis(reduction_axes)]
-            red_axes.extend(np_out_axes)
+            red_axes = [AxesAxis(self.reduction_axes)]
+            red_axes.extend(self.axes)
             red_axes = Axes(*red_axes)
             self.mode = 0
-            return [self.reaxe(np_out_axes), x.reaxe(red_axes)]
-
-    @property
-    def axes(self):
-        if self.out_axes is not None:
-            return self.out_axes
-        return AxesSubComp(self.args[0].axes, self.reduction_axes)
+            return [out, x.reaxe(red_axes)]
 
 
 class max(ReductionOp):
@@ -1008,33 +1003,23 @@ class sum(ReductionOp):
 
 
 def assign(lvalue, rvalue):
-    return SetItem(lvalue, slice(None, None, None), rvalue)
+    return SetItem(lvalue, (), rvalue)
 
 
 class tensor_size(ComputationOp):
-
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
-        self.out_axes = AxesComp.as_axes(out_axes)
         if reduction_axes is None:
             if out_axes is None:
-                self.reduction_axes = sample_axes(x.axes)
+                reduction_axes = sample_axes(x.axes)
             else:
-                self.reduction_axes = AxesSubComp(x.axes, self.out_axes)
+                reduction_axes = x.axes - Axes(*out_axes)
         else:
-            self.reduction_axes = AxesComp.as_axes(reduction_axes)
-        super(tensor_size, self).__init__(args=(x,), **kargs)
+            reduction_axes = Axes(*reduction_axes)
+        self.reduction_axes = reduction_axes
+        super(tensor_size, self).__init__(axes=Axes())
 
     def transform(self, transformer, out):
-        resolved_reduction_axes = self.reduction_axes.value
-        size = resolved_reduction_axes.size
-        transformer.fill(out, size)
-
-    @property
-    def axes(self):
-        return AxesComp.as_axes(())
-
-    def generate_adjoints(self, adjoints, delta, x):
-        pass
+        transformer.fill(out, self.reduction_axes.size)
 
 
 class Slice(ComputationOp):
@@ -1047,19 +1032,11 @@ class Slice(ComputationOp):
 class Pad(ComputationOp):
 
     def __init__(self, axes, slice, x, **kargs):
-        super(Pad, self).__init__(args=(x,), **kargs)
-        self._axes = axes
+        super(Pad, self).__init__(args=(x,), axes=axes, **kargs)
         self.slice = slice
-
-    @property
-    def axes(self):
-        return self._axes
 
     def transform(self, transformer, out, x):
         transformer.pad(x, self.slice, out)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        pass
 
 
 class Variable(AllocationOp):
@@ -1074,9 +1051,6 @@ class Variable(AllocationOp):
         if persistent:
             tags.add('persistent')
         super(Variable, self).__init__(tags=tags, **kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
 
 
 def temporary(**kargs):
@@ -1188,21 +1162,24 @@ class onehot(ComputationOp):
         if axis is None:
             if axes is None:
                 raise ValueError('Cannot determine one-hot axis.')
-            axis = AxesSubComp(axes, x.axes)
+            axis = (axes - x.axes)[0]
         else:
             if axes is None:
                 x_sample = sample_axes(x.axes)
                 x_batch = batch_axes(x.axes)
-                axes = AxesAppendComp(Axes(axis), AxesAppendComp(x_sample, x_batch))
-        super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
+                axes = Axes(axis) + x_sample + x_batch
         self.axis = axis
+        super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
 
-    def compute_call_info(self):
-        x, = self.args
-        ci = [self.reaxe(Axes(Axes(self.axis),
-                              AxesSubComp(self.axes, Axes(self.axis)).value)),
-              x.reaxe(Axes(x.axes.value))]
-        return ci
+    @from_transformer_cache
+    def call_info(self, transformer):
+        x, = tds(self.args, transformer)
+        axis, axes = self.axis, self.axes
+        reaxes = Axes(axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes())
+        return [
+            self.tensor_description(transformer).reaxe(reaxes),
+            x.reaxe(Axes(AxesAxis(x.axes)))
+        ]
 
     def transform(self, transformer, out, x):
         transformer.onehot(x, out)
@@ -1237,10 +1214,6 @@ class sgn(ElementWise):
 
     def __init__(self, x, **kargs):
         super(sgn, self).__init__(args=(x,), **kargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        # Zero
-        pass
 
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
@@ -1361,7 +1334,7 @@ def mean(x, **kargs):
 def deriv(dep, indep):
     Op.simple_prune([dep, indep])
     adjoint = dep.adjoints()[indep]
-    if adjoint.axes.value == indep.axes.value:
+    if adjoint.axes == indep.axes:
         return adjoint
     else:
         return Broadcast(adjoint, axes=indep.axes)
@@ -1379,7 +1352,8 @@ class CrossEntropyMultiInner(object):
         self.x.generate_add_delta(adjoints, self.y * delta)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None, enable_softmax_opt=True,
+def cross_entropy_multi(y, t, usebits=False, out_axes=None,
+                        enable_softmax_opt=True,
                         enable_diff_opt=True, **kargs):
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:
@@ -1409,7 +1383,8 @@ class CrossEntropyBinaryInner(object):
         self.t.generate_add_delta(adjoints, self.x * delta)
 
 
-def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True, **kargs):
+def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
+                               enable_diff_opt=True, **kargs):
     sigy = y.find_schema(Sig)
     if enable_sig_opt and sigy is not None:
         # Simpler equivalent
