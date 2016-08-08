@@ -17,6 +17,10 @@
 This script illustrates how to import a model that was defined by a TF script and
 train the model from scratch with Neon following the original script's specification.
 
+To Run:
+
+    python train_mnist_mlp.py --loss_node="xentropy_mean"
+
 """
 
 from __future__ import print_function
@@ -36,6 +40,8 @@ parser.add_argument('--pb_file', type=str, default="mnist/graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute, mainly used for debugging')
+parser.add_argument('--loss_node', type=str, default="",
+                    help='the node name to calculate the loss values during training')
 
 args = parser.parse_args()
 
@@ -49,7 +55,7 @@ epochs = 5
 train_data = ArrayIterator(X_train, y_train, nclass=nclass, lshape=(1, 28, 28))
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
-nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node)
+nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
 if args.end_node == "":
     dataflow = analysis.DataFlowGraph([nervana_graph.update])

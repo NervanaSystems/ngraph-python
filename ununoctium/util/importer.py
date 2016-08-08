@@ -215,11 +215,7 @@ def scan_numerical_axes(graph_def, env):
                 shape = [d.size for d in dims.dim]
 
                 if len(shape) == 2:
-                    name_to_axes[
-                        node.name] = Axes(
-                        be.NumericAxis(
-                            shape[0]), be.NumericAxis(
-                            shape[1]))
+                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
                     y_axis = be.NumericAxis(shape[1])
                 elif len(shape) == 1:
                     name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]),)
@@ -234,18 +230,14 @@ def scan_numerical_axes(graph_def, env):
                 if len(shape) == 1 and 'biases' in node.name:
                     name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]),)
                 elif len(shape) == 2 and 'weights' in node.name:
-                    name_to_axes[
-                        node.name] = Axes(
-                        be.NumericAxis(
-                            shape[0]), be.NumericAxis(
-                            shape[1]))
+                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
 
     name_to_axes[y_name] = (y_axis, batch_axis)
 
     return name_to_axes, batch_axis, y_axis
 
 
-def _create_nervana_graph(graph_def, env, end_node=None):
+def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
     """
     convert the GraphDef object to Neon's graph
 
@@ -315,10 +307,8 @@ def _create_nervana_graph(graph_def, env, end_node=None):
                     op = two_inputs_ops[op_type](be.Constant(1. / batch_axis.length),
                                                  name_to_op[inputs[1]], name=node.name)
                 else:
-                    op = two_inputs_ops[op_type](
-                        name_to_op[
-                            inputs[0]], name_to_op[
-                            inputs[1]], name=node.name)
+                    op = two_inputs_ops[op_type](name_to_op[inputs[0]],
+                                                 name_to_op[inputs[1]], name=node.name)
 
             elif op_type in one_inputs_ops:
                 op = one_inputs_ops[op_type](name_to_op[inputs[0]])
@@ -348,16 +338,11 @@ def _create_nervana_graph(graph_def, env, end_node=None):
                 elif len(shape) == 0:
                     op = be.Constant(np_val, name=node.name)
                 elif len(shape) == 1:
-                    op = be.NumPyTensor(
-                        np_val, axes=Axes(
-                            be.NumericAxis(
-                                shape[0]), ), name=node.name)
+                    op = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
                 elif len(shape) == 2:
-                    op = be.NumPyTensor(
-                        np_val, axes=Axes(
-                            be.NumericAxis(
-                                shape[0]), be.NumericAxis(
-                                shape[1]), ), name=node.name)
+                    op = be.NumPyTensor(np_val,
+                                        axes=Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1])),
+                                        name=node.name)
 
             elif op_type == 'Variable':
                 variables[node.name] = be.Variable(axes=name_to_axes[node.name], name=node.name)
@@ -583,15 +568,18 @@ def _create_nervana_graph(graph_def, env, end_node=None):
                     op = None
                 else:
                     val_x = np.array(grad_x_reduce_)
-                    op = be.NumPyTensor(val_x, axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ), name=node.name)
+                    op = be.NumPyTensor(val_x,
+                                        axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
+                                        name=node.name)
 
                 if not grad_y_reduce_:
                     name_to_op[node.name + ":1"] = None
                 else:
                     val_y = np.array(grad_y_reduce_)
-                    name_to_op[node.name + ":1"] = be.NumPyTensor(val_y,
-                                                                  axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
-                                                                  name=node.name)
+                    name_to_op[node.name + ":1"] = \
+                        be.NumPyTensor(val_y,
+                                       axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
+                                       name=node.name)
 
             elif op_type == 'ReluGrad':
                 gradient = name_to_op[inputs[0]]
@@ -630,16 +618,16 @@ def _create_nervana_graph(graph_def, env, end_node=None):
     graph.variables = variables
     graph.last_op = name_to_op[last_op_name]
     graph.name_to_op = name_to_op
-    graph.loss = name_to_op["xentropy_mean"]
+    if loss_node in name_to_op:
+        graph.loss = name_to_op[loss_node]
 
     assert (graph.x is not None)
-    assert (graph.y is not None)
 
     return graph
 
-def create_nervana_graph(pb_file, env, end_node=None):
+def create_nervana_graph(pb_file, env, end_node="", loss_node=""):
     graph_def = tf.GraphDef()
     with open(pb_file, 'rb') as f:
         graph_def.ParseFromString(f.read())
 
-    return _create_nervana_graph(graph_def, env, end_node)
+    return _create_nervana_graph(graph_def, env, end_node, loss_node)
