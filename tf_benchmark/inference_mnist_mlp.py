@@ -26,7 +26,6 @@ import geon.backends.graph.funs as be
 import geon.backends.graph.analysis as analysis
 from geon.backends.graph.environment import Environment
 
-import tensorflow as tf
 from util.importer import create_nervana_graph
 import numpy as np
 
@@ -44,11 +43,7 @@ env = Environment()
 (X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
 test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
 
-graph_def = tf.GraphDef()
-with open(args.pb_file, 'rb') as f:
-    graph_def.ParseFromString(f.read())
-
-nervana_graph = create_nervana_graph(graph_def, env, args.end_node)
+nervana_graph = create_nervana_graph(args.pb_file, env)
 
 dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
 dataflow.view()

@@ -26,12 +26,13 @@ import scipy.stats as stats
 from builtins import range
 from builtins import str
 from geon.backends.graph.graph_test_utils import *
-from tensorflow.python.framework import tensor_util
 
 import geon.backends.graph.funs as be
 from geon.backends.graph.arrayaxes import AxisVar
 from geon.backends.graph.graphop import Tensor, softmax
 
+import tensorflow as tf
+from tensorflow.python.framework import tensor_util
 
 # known TF operators that can be processed by Neon graph importer
 known_ops = [
@@ -244,7 +245,7 @@ def scan_numerical_axes(graph_def, env):
     return name_to_axes, batch_axis, y_axis
 
 
-def create_nervana_graph(graph_def, env, end_node=None):
+def _create_nervana_graph(graph_def, env, end_node=None):
     """
     convert the GraphDef object to Neon's graph
 
@@ -254,7 +255,8 @@ def create_nervana_graph(graph_def, env, end_node=None):
       - graph: converted graph, including:
        - variables: a map from variable names to variables
        - last_op: the last operator of the graph
-       - name_to_op: the operations map.
+       - name_to_op: the map from operation name to its corresponding operator.
+                     This structure is similar with TF graph's collection.
     """
 
     name_to_op = {}
@@ -630,4 +632,14 @@ def create_nervana_graph(graph_def, env, end_node=None):
     graph.name_to_op = name_to_op
     graph.loss = name_to_op["xentropy_mean"]
 
+    assert (graph.x is not None)
+    assert (graph.y is not None)
+
     return graph
+
+def create_nervana_graph(pb_file, env, end_node=None):
+    graph_def = tf.GraphDef()
+    with open(pb_file, 'rb') as f:
+        graph_def.ParseFromString(f.read())
+
+    return _create_nervana_graph(graph_def, env, end_node)

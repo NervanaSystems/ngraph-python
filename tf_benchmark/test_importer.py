@@ -34,15 +34,8 @@ from geon.backends.graph.environment import Environment
 
 
 def test_create_nervana_graph(pb_file, execute=False):
-    print("loading graph")
-    graph_def = tf.GraphDef()
-
     env = Environment()
-
-    with open(pb_file, 'rb') as f:
-        graph_def.ParseFromString(f.read())  # read serialized binary file only
-
-    ast_graph = create_nervana_graph(graph_def, env)
+    ast_graph = create_nervana_graph(pb_file, env)
     print(ast_graph)
 
     dataflow = analysis.DataFlowGraph([ast_graph.last_op])
