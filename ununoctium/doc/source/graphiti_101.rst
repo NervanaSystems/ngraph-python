@@ -23,7 +23,7 @@ and the MOP (Machine-learning OPerations).  Models are described using higher-le
 as neon or TensorFlow\ |trade|.  Front-ends specific to the API use the operational graph API
 to convert the model description into an operational graph.  Back-ends correspond to compute
 platforms, such as GPUs or CPUs.  A combination of generic and
-back-end specific transformers optimize and the operational graph and convert it to a form
+back-end specific transformers optimize the operational graph and convert it to a form
 that can be run on the back-end.  The operational graph API is shared by all front-ends and
 back-ends.
 
