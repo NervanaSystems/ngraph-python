@@ -79,18 +79,18 @@ class Op(Node):
     def defs(self):
         return {}
 
-    def variables(self):
+    def variables(self, trainable=True, filter=None):
         """Return all parameters used in computing this node"""
-        params = []
-        visited = set()
-        unvisited = [self]
+        params = set()
 
-        while unvisited:
-            node = unvisited.pop()
-            visited.add(node)
-            if isinstance(node, Variable):
-                params.append(node)
-            unvisited.extend(node.args)
+        if filter is None:
+            filter = lambda node : ('trainable' in node.tags) is trainable
+
+        def visitor(node):
+            if isinstance(node, Variable) and filter(node):
+                params.add(node)
+
+        Node.visit_input_closure([self], visitor)
 
         return set(params)
 
@@ -1449,13 +1449,8 @@ class Variable(AllocationOp):
         pass
 
 
-class Temporary(AllocationOp):
-
-    def __init__(self, **kargs):
-        super(Temporary, self).__init__(tags=['temp'], **kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
+def temporary(**kargs):
+    return Variable(trainable=False, persistent=True, **kargs)
 
 
 class exp(ElementWise):

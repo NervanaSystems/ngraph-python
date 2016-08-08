@@ -84,7 +84,7 @@ class GradientDescentMomentum(Optimizer):
         variables = list(cost.variables())
         # TODO Get bsz from placeholder
         grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
-        velocities = [be.Temporary(
+        velocities = [be.temporary(
             axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1
