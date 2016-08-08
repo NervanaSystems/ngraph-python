@@ -53,7 +53,7 @@ class NumPyTransformer(Transformer):
 
     def nparray(self, tensor_description, array):
         tensor = self.tensor_view(tensor_description)
-        tensor[:] = array
+        tensor[()] = array
         return tensor
 
     def rng(self, seed=None):

@@ -348,19 +348,7 @@ class Tensor(Op):
             raise NotImplementedError
 
     def allocate(self, transformer):
-        if self.__out is None:
-            td = self.tensor_description(transformer)
-            buffer = td.buffer
-            if buffer.data is None:
-                buffer.data = transformer.make_raw_buffer(buffer.size)
-            if self.has_alloc:
-                tensor = self.allocator(transformer)
-            else:
-                tensor = transformer.tensor_view(td)
-            td.value = tensor
-
-    def allocator(self, transformer):
-        return transformer.empty(self.tensor_description(transformer))
+        pass
 
     def generate_adjoints(self, *args, **kargs):
         pass
@@ -415,8 +403,10 @@ class AllocationOp(Tensor):
             self,
             init=None,
             initial_value=None,
+            has_alloc=False,
             **kargs):
-        super(AllocationOp, self).__init__(has_alloc=True, **kargs)
+        super(AllocationOp, self).__init__(**kargs)
+        self.has_alloc = has_alloc
         if init is not None:
             with captured_ops(self.initializers):
                 init.fill(self)
@@ -424,6 +414,16 @@ class AllocationOp(Tensor):
             self.initializers.append(assign(self, initial_value()))
         elif initial_value is not None:
             self.initializers.append(assign(self, initial_value))
+
+    def allocate(self, transformer):
+        td = self.tensor_description(transformer)
+        buffer = td.buffer
+        if buffer.data is None:
+            buffer.data = transformer.make_raw_buffer(buffer.size)
+        if self.has_alloc:
+            self.allocator(transformer)
+        else:
+            td.value
 
 
 class ComputationOp(Tensor):
@@ -474,13 +474,13 @@ class RNGOp(AllocationOp):
 class Normal(RNGOp):
 
     def __init__(self, loc=0.0, scale=1.0, size=None, **kargs):
-        super(Normal, self).__init__(axes=size, **kargs)
+        super(Normal, self).__init__(axes=size, has_alloc=True, **kargs)
         self.loc = loc
         self.scale = scale
 
     def allocator(self, transformer):
         td, rng = self.call_info(transformer)
-        return transformer.rng_normal_tensor(
+        td.value = transformer.rng_normal_tensor(
             rng.value, td,
             self.loc, self.scale
         )
@@ -489,13 +489,13 @@ class Normal(RNGOp):
 class Uniform(RNGOp):
 
     def __init__(self, low=0.0, high=1.0, size=None, **kargs):
-        super(Uniform, self).__init__(axes=size, **kargs)
+        super(Uniform, self).__init__(axes=size, has_alloc=True, **kargs)
         self.low = low
         self.high = high
 
     def allocator(self, transformer):
         td, rng, = self.call_info(transformer)
-        return transformer.rng_uniform_tensor(
+        td.value = transformer.rng_uniform_tensor(
             rng.value, td,
             self.low, self.high
         )
@@ -596,6 +596,10 @@ class Fill(VoidOp):
     def transform(self, transformer, tensor):
         transformer.fill(tensor, self.const)
 
+    @from_transformer_cache
+    def call_info(self, transformer):
+        return list(tds(self.args, transformer))
+
 
 class Constant(AllocationOp):
     """
@@ -635,9 +639,8 @@ class NumPyTensor(AllocationOp):
         )
 
     def allocator(self, transformer):
-        return transformer.nparray(
-            self.tensor_description(transformer), self.nptensor
-        )
+        td = self.tensor_description(transformer)
+        transformer.nparray(td.value, self.nptensor)
 
     @property
     def graph_label(self):

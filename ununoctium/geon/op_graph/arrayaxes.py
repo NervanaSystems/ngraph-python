@@ -335,7 +335,7 @@ def reduce_strides(strides):
 class TensorDescription(object):
     """Axes information about an allocated tensor"""
 
-    def __init__(self, axes, transformer,
+    def __init__(self, axes, transformer, base=None,
                  dtype=np.dtype(np.float32), full_shape=None,
                  full_strides=None, full_sizes=None, offset=0,
                  **kargs):
@@ -346,7 +346,8 @@ class TensorDescription(object):
         self.axes = axes
         self.transformer = transformer
         self.__value = None
-        self.buffer = None
+        self.__buffer = None
+        self.__base = base
         self.dtype = dtype
         self.offset = offset
         self.ndim = len(self.axes)
@@ -356,6 +357,9 @@ class TensorDescription(object):
             else self.axes.full_lengths
         self.full_sizes = full_sizes if full_sizes is not None \
             else self.axes.full_lengths
+
+        if base is not None:
+            base.views.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -534,6 +538,7 @@ class TensorDescription(object):
 
         return TensorDescription(new_axes,
                                  self.transformer,
+                                 base=self.base,
                                  dtype=self.dtype,
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),
@@ -593,6 +598,7 @@ class TensorDescription(object):
 
         return TensorDescription(Axes(*axes),
                                  self.transformer,
+                                 base=self.base,
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
                                  full_sizes=full_sizes,
@@ -617,14 +623,29 @@ class TensorDescription(object):
         return (self, 'td_values')
 
     @property
+    def base(self):
+        return self.__base or self
+
+    @property
+    def buffer(self):
+        return self.base.__buffer
+
+    @buffer.setter
+    def buffer(self, value):
+        assert self.__base is None
+        self.__buffer = value
+
+    @property
     def value(self):
+        if self.__value is None:
+            self.__value = self.transformer.tensor_view(self)
+            self.update_views(force=True)
         return self.__value
 
     @value.setter
     def value(self, tensor):
-        self.__value = tensor
-        self.transformer.values[self] = tensor
-        self.update_views(True)
+        self.transformer.set_item(self.value, (), tensor)
+        self.update_views(False)
 
     def update_views(self, force=False):
         for view in self.views:
