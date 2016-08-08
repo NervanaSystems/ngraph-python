@@ -21,6 +21,7 @@ from geon.op_graph.names import NameableValue
 
 
 class DebugInfo(object):
+
     def __init__(self, **kargs):
         # TODO This is a good first cut for debugging info, but it would be nice to
         # TODO be able to reliably walk the stack back to user code rather than just
