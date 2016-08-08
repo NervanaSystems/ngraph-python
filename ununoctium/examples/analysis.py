@@ -15,43 +15,44 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 from builtins import range, zip
-from geon.op_graph import *  # noqa
-from geon.util.analysis import *  # noqa
+import geon as be
+import geon.util.analysis as an
 
+import numpy as np
 import mxnet as mx
 import mxnet.symbol as sym
 from functools import reduce
 
 
-class GraphitiMLP(Model):
+class GraphitiMLP(be.Model):
 
     def __init__(self, L, BS, bprop=True, **kargs):
-
         super(GraphitiMLP, self).__init__(**kargs)
+
         # Axes
-        L = [AxisVar(length=N, name='L%d' % i) for i, N in enumerate(L)]
-        BS = AxisVar(length=BS, name='BS')
+        L = [be.AxisVar(length=N, name='L%d' % i) for i, N in enumerate(L)]
+        BS = be.AxisVar(length=BS, name='BS')
 
         # Builds Network
-        activations = [tanh for i in range(len(L) - 2)] + [softmax]
-        X = placeholder(axes=(L[0], BS), name='X')
-        Y = placeholder(axes=(L[-1],), name='Y')
-        W = [Variable(axes=(L_np1, L_n), name='W%d' % i)
+        activations = [be.tanh for i in range(len(L) - 2)] + [be.softmax]
+        X = be.placeholder(axes=(L[0], BS), name='X')
+        Y = be.placeholder(axes=(L[-1],), name='Y')
+        W = [be.Variable(axes=(L_np1, L_n), name='W%d' % i)
              for i, (L_np1, L_n) in enumerate(zip(L[1:], L[:-1]))]
         A = []
         for i, f in enumerate(activations):
             Aim1 = A[i - 1] if i > 0 else X
-            A.append(f(dot(W[i], Aim1)))
-        Error = cross_entropy_multi(A[-1], Y)
-        dW = [deriv(Error, w) for w in W]
+            A.append(f(be.dot(W[i], Aim1)))
+        Error = be.cross_entropy_multi(A[-1], Y)
+        dW = [be.deriv(Error, w) for w in W]
 
         # Fusion analysis
-        outputs = dW if bprop else [Error]
-        self.dataflow, self.memory = assign_buffers(outputs, fusible=gpu_fusible)
-        self.dataflow.view()
+        results = dW if bprop else [Error]
+        self.dataflow, self.memory = an.assign_buffers(results, an.gpu_fusible)
+        #self.dataflow.view()
 
 
-class MXNetMLP(Model):
+class MXNetMLP:
 
     def __init__(self, L, BS, bprop=True, **kwargs):
         # Builds Network
@@ -82,7 +83,7 @@ class MXNetMLP(Model):
         if plan.grad_arrays:
             args += plan.grad_arrays
         for x in args:
-            self.memory += reduce(mul, x.shape, 1) * 4
+            self.memory += np.prod(x.shape) * 4
 
 
 layers = [1024, 200, 10]

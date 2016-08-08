@@ -69,8 +69,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             these_ops = todo
             todo = set()
             for op in these_ops:
-                # Always initialize because the buffer might have been corrupted
-                # if shared with another tensor
                 initializers.update(op.initializers)
                 todo.update(op.initializers)
 
@@ -127,7 +125,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.transform_ordered_ops(ops)
 
     def evaluate(self):
-        self.transform_ordered_ops(self.initializers)
         self.transform_ordered_ops(self.ops)
         r = {}
         for op in self.results:

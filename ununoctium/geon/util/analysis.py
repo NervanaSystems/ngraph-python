@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
 from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
-    Buffer, ReductionOp, NumPyTensor
 from operator import mul
-from itertools import combinations
 from functools import reduce
-
+from itertools import combinations
+from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
+    Buffer, ReductionOp, NumPyTensor, Variable, Constant, placeholder
 
 class Digraph(object):
 
@@ -52,7 +52,6 @@ class Digraph(object):
         self._graphviz().view()
 
     def dfs(self, fun):
-        predecessors = Digraph._invert(self.successors)
         visited = set()
         # Visit single node
 
@@ -65,9 +64,13 @@ class Digraph(object):
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        inputs = [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
-        for x in sorted(inputs, key=lambda x: x.id):
+        for x in sorted(self.inputs, key=lambda x: x.id):
             visit(x, fun)
+
+    @property
+    def inputs(self):
+        predecessors = Digraph._invert(self.successors)
+        return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
 
     def topsort(self):
         result = []
@@ -94,9 +97,8 @@ class DataFlowGraph(Digraph):
         order = self.instructions
         # Initialize
         liveness = dict((op, set()) for op in order)
-        keeps = {x.tensor_axes_info.tensor_description for x in self.successors if isinstance(
-            x, AllocationOp) and x.tensor_axes_info.read_only}
-        liveness[order[-1]] = {x.tensor_axes_info.tensor_description for x in self.outputs} | keeps
+        persistent = {x.tensor_axes_info.tensor_description for x in self.successors if 'persistent' in x.tags}
+        liveness[order[-1]] = {x.tensor_axes_info.tensor_description for x in self.outputs} | persistent
         # Update
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             use = {x.tensor_axes_info.tensor_description for x in current.args}
@@ -125,7 +127,7 @@ def gpu_fusible(op1, op2):
     if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
 
-    shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
+    shapes1, shapes2 = op1.tensor_axes_info.tensor_description.shape, op2.tensor_axes_info.tensor_description.shape
     # Elementwise functions can be merged together if they have the same shapes
     if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
         return True
@@ -322,15 +324,8 @@ def _random_colors(N, alpha=.5):
         r, g, b, a) for r, g, b, a in RGBA]
     return HEX
 
-
-def assign_buffers(outputs, fusible=None):
-    dfg = DataFlowGraph(outputs)
-    if fusible:
-        dfg = KernelFlowGraph(dfg, fusible)
-    ifg = InterferenceGraph(dfg.liveness())
-    memory, buffers = ifg.color()
-    # Binds initializers
-    for op in dfg.successors:
+def bind_initializers(ops):
+    for op in ops:
         buffer = op.tensor_axes_info.tensor_description.buffer
         for i in op.initializers:
             i.tensor_axes_info.tensor_description.buffer = buffer
@@ -338,10 +333,21 @@ def assign_buffers(outputs, fusible=None):
                 if isinstance(a, NumPyTensor):
                     a.tensor_axes_info.tensor_description.buffer = Buffer(-1, a.nptensor.size)
                     a.tensor_axes_info.tensor_description.buffer.data = a.nptensor
+
+def assign_buffers(outputs, fusible=None):
+    dfg = DataFlowGraph(outputs)
+    all_ops = dfg.successors.keys()
+    if fusible:
+        dfg = KernelFlowGraph(dfg, fusible)
+    ifg = InterferenceGraph(dfg.liveness())
+    memory, buffers = ifg.color()
+    # Binds initializers
+    bind_initializers(dfg.inputs)
     # set style
     cmap = _random_colors(len(buffers), .5)
-    for op in dfg.successors:
-        op.style = {'style': 'filled', 'fillcolor': cmap[
-            op.tensor_axes_info.tensor_description.buffer.color]}
+    for op in all_ops:
+        tensor = op.tensor_axes_info.tensor_description
+        if tensor.buffer:
+            op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
     # dfg.view()
     return dfg, memory
