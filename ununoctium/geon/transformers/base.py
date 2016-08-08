@@ -23,13 +23,20 @@ from geon.op_graph.op_graph import Op
 from geon.util.analysis import assign_buffers
 
 
+class Computation(with_metaclass(abc.ABCMeta, object)):
+    def __init__(self, transformer, results):
+        self.transformer = transformer
+        self.results = results
+
+    def evaluate(self):
+        return self.transformer.evaluate(self.results)
+
+
 class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def __init__(
             self,
-            results,
-            error=None,
-            initialize=False,
+            results=None,
             environment=None,
             **kvargs):
         super(Transformer, self).__init__(**kvargs)
@@ -37,13 +44,19 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if environment is None:
             environment = get_current_environment()
         self.environment = environment
-        self.results = results
+        self.all_results = set()
+        self.values = dict()
+        self.cache = dict()
+        self.finalized = False
         self.opids = dict()
 
-        Op.simple_prune(results)
-        for result in results:
-            result.tags.add('persistent')
-        self.dataflow, self.memory = assign_buffers(self.results)
+        if results is not None:
+            self.all_results.update(results)
+            self.finalize()
+
+    def finalize(self):
+        Op.simple_prune(self.all_results)
+        self.dataflow, self.memory = assign_buffers(self, self.all_results)
         self.ops = self.dataflow.instructions
         self.initializers = self.ordered_initializers(self.ops)
         self.initialize_call_info(self.initializers)
@@ -51,6 +64,15 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.allocate_ordered_ops(self.initializers)
         self.allocate_ordered_ops(self.ops)
         self.transform_ordered_ops(self.initializers)
+        self.finalized = True
+
+    def computation(self, results):
+        if self.finalized:
+            raise ValueError(
+                'Cannot create computations from a finalized transformer'
+            )
+        self.all_results.update(results)
+        return Computation(self, results)
 
     def initialize_call_info(self, ordered_ops):
         # Give ids
@@ -60,7 +82,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Determine required views
         for op in ordered_ops:
-            op.call_info
+            op.create_views(self)
 
     def ordered_initializers(self, ordered_ops):
         todo = set(ordered_ops)
@@ -102,14 +124,14 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def allocate_ordered_ops(self, ordered_ops):
         # Allocate
         for op in ordered_ops:
-            op.tensor_axes_info.allocate(self)
+            op.allocate(self)
 
     def transform_ordered_ops(self, ordered_ops):
         for op in ordered_ops:
             op.sync(self)
 
         def transform_op(op):
-            op.transform_call_info(self, *op.call_info)
+            op.transform_call_info(self)
 
         for op in ordered_ops:
             if op.transform_hook is not None:
@@ -119,23 +141,21 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             else:
                 transform_op(op)
 
-    def transform_ops(self, transfrom_ops):
-        ops = Op.ordered_ops(transfrom_ops)
-        self.allocate_ordered_ops(ops)
+    def evaluate(self, results=None):
+        if results is None:
+            results = self.all_results
+        ops = Op.ordered_ops(results)
         self.transform_ordered_ops(ops)
-
-    def evaluate(self):
-        self.transform_ordered_ops(self.ops)
         r = {}
-        for op in self.results:
+        for op in results:
             r[op] = self.value(op)
         return r
 
     def value(self, op):
-        return op.output_view_info.value
+        return op.output_value(self)
 
     def set_value(self, op, tensor):
-        op.tensor_axes_info.set_tensor(self, tensor)
+        op.tensor_description(self).value = tensor
 
     @abc.abstractmethod
     def fill_tensor_in(self, tensor_description, tensor):

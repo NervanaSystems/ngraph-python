@@ -122,7 +122,7 @@ class Op(Node):
         if self._adjoints is not None:
             return self._adjoints
 
-        if len(self.axes.value) == 0:
+        if len(self.axes) == 0:
             initial_adjoint = Constant(1)
         else:
             initial_adjoint = placeholder(axes=self.axes)
@@ -157,6 +157,10 @@ class Op(Node):
             return x
 
         return Constant(x)
+
+    @staticmethod
+    def as_ops(xs):
+        return tuple(Op.as_op(x) for x in xs)
 
     @property
     def ops(self):
@@ -199,7 +203,9 @@ class Op(Node):
 
 class Tensor(Op):
 
-    def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
+    def __init__(
+            self, dtype=None, axes=None, scale=None,
+            out=None, has_alloc=False, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
@@ -208,6 +214,7 @@ class Tensor(Op):
             axes = Axes(*axes)
         self.__axes = axes
         self.__out = out
+        self.has_alloc = has_alloc
 
         # Derivative will be scaled by this
         self.scale = scale
@@ -325,7 +332,6 @@ class Tensor(Op):
                 td = td.reaxe(self.__axes)
         else:
             td = TensorDescription(self.axes, transformer, dtype=self.dtype)
-        td.read_only = self.read_only
         return td
 
     def create_views(self, transformer):
@@ -344,10 +350,14 @@ class Tensor(Op):
     def allocate(self, transformer):
         if self.__out is None:
             td = self.tensor_description(transformer)
-            if td.value is None:
-                td.value = self.allocator(transformer)
+            buffer = td.buffer
+            if buffer.data is None:
+                buffer.data = transformer.make_raw_buffer(buffer.size)
+            if self.has_alloc:
+                tensor = self.allocator(transformer)
             else:
-                td.update_views(force=False)
+                tensor = transformer.tensor_view(td)
+            td.value = tensor
 
     def allocator(self, transformer):
         return transformer.empty(self.tensor_description(transformer))
@@ -406,7 +416,7 @@ class AllocationOp(Tensor):
             init=None,
             initial_value=None,
             **kargs):
-        super(AllocationOp, self).__init__(**kargs)
+        super(AllocationOp, self).__init__(has_alloc=True, **kargs)
         if init is not None:
             with captured_ops(self.initializers):
                 init.fill(self)
@@ -421,7 +431,7 @@ class ComputationOp(Tensor):
     An TensorOp is the result of some sort of operation.
     """
 
-    def __init__(self, dtype=np.float32, batch_axes=None, **kargs):
+    def __init__(self, dtype=np.dtype(np.float32), batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
 
@@ -558,10 +568,7 @@ class placeholder(AllocationOp):
         if tags is None:
             tags = set()
         tags.add('persistent')
-        super(placeholder, self).__init__(tags=tags, **kargs)
-
-    def generate_adjoints(self, tape, delta):
-        pass
+        super(placeholder, self).__init__(**kargs)
 
     @property
     def value(self):
@@ -598,12 +605,9 @@ class Constant(AllocationOp):
     def __init__(self, const, **kargs):
         self.const = const
         super(Constant, self).__init__(
-            axes=Axes(), dtype=np.dtype(np.float32), **kargs)
+            axes=(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
         self.tags.add('persistent')
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
 
     @property
     def graph_label(self):
@@ -624,11 +628,10 @@ class NumPyTensor(AllocationOp):
     A NumPy tensor with attached axes information
     """
 
-    def __init__(self, nptensor, axes, **kargs):
-        axes = Axes(*axes)
+    def __init__(self, nptensor, **kargs):
         self.nptensor = nptensor
         super(NumPyTensor, self).__init__(
-            dtype=nptensor.dtype, axes=axes, **kargs
+            dtype=nptensor.dtype, **kargs
         )
 
     def allocator(self, transformer):
@@ -671,7 +674,6 @@ class add(ElementWise):
 
 
 class argmax(ComputationOp):
-
     def __init__(self, x, max_axes=None, **kargs):
         if max_axes is None:
             max_axes = sample_axes(x.axes)
@@ -717,7 +719,7 @@ class argmin(ComputationOp):
         ]
 
     def transform(self, transformer, out, x):
-        transformer.argmax(x, out)
+        transformer.argmin(x, out)
 
 
 class cos(ElementWise):
@@ -1003,10 +1005,11 @@ class sum(ReductionOp):
 
 
 def assign(lvalue, rvalue):
-    return SetItem(lvalue, (), rvalue)
+    return SetItem(lvalue, slice(None, None, None), rvalue)
 
 
 class tensor_size(ComputationOp):
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         if reduction_axes is None:
             if out_axes is None:
@@ -1215,6 +1218,10 @@ class sgn(ElementWise):
     def __init__(self, x, **kargs):
         super(sgn, self).__init__(args=(x,), **kargs)
 
+    def generate_adjoints(self, adjoints, delta, x):
+        # Zero
+        pass
+
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
 
@@ -1352,8 +1359,8 @@ class CrossEntropyMultiInner(object):
         self.x.generate_add_delta(adjoints, self.y * delta)
 
 
-def cross_entropy_multi(y, t, usebits=False, out_axes=None,
-                        enable_softmax_opt=True,
+def cross_entropy_multi(y, t, usebits=False,
+                        out_axes=None, enable_softmax_opt=True,
                         enable_diff_opt=True, **kargs):
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:

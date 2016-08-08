@@ -337,7 +337,7 @@ class TensorDescription(object):
 
     def __init__(self, axes, transformer,
                  dtype=np.dtype(np.float32), full_shape=None,
-                 buffer=None, full_strides=None, full_sizes=None, offset=0,
+                 full_strides=None, full_sizes=None, offset=0,
                  **kargs):
         super(TensorDescription, self).__init__(**kargs)
         # TODO: get the default type from the backend. May not always be numpy.
@@ -346,7 +346,7 @@ class TensorDescription(object):
         self.axes = axes
         self.transformer = transformer
         self.__value = None
-        self.__buffer = buffer
+        self.buffer = None
         self.dtype = dtype
         self.offset = offset
         self.ndim = len(self.axes)
@@ -356,9 +356,6 @@ class TensorDescription(object):
             else self.axes.full_lengths
         self.full_sizes = full_sizes if full_sizes is not None \
             else self.axes.full_lengths
-
-        if buffer is not None:
-            buffer.views.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -541,8 +538,7 @@ class TensorDescription(object):
                                  full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
-                                 offset=self.offset,
-                                 buffer=self.buffer)
+                                 offset=self.offset)
 
     def maybe_collapse_numerics(self, axes, full_shape,
                                 full_strides, full_sizes):
@@ -600,7 +596,6 @@ class TensorDescription(object):
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
                                  full_sizes=full_sizes,
-                                 buffer=self.buffer,
                                  offset=offset)
 
     @property
@@ -618,10 +613,6 @@ class TensorDescription(object):
                      for _ in self.full_sizes)
 
     @property
-    def buffer(self):
-        return self.__buffer or self
-
-    @property
     def cache_key(self):
         return (self, 'td_values')
 
@@ -631,7 +622,6 @@ class TensorDescription(object):
 
     @value.setter
     def value(self, tensor):
-        assert self.buffer is self
         self.__value = tensor
         self.transformer.values[self] = tensor
         self.update_views(True)
@@ -640,14 +630,6 @@ class TensorDescription(object):
         for view in self.views:
             if force or view.value is None:
                 view.__value = self.transformer.tensor_view(view)
-
-    @property
-    def read_only(self):
-        return self.buffer.__read_only or self.__read_only
-
-    @read_only.setter
-    def read_only(self, value):
-        self.__read_only = value
 
 
 def with_args_as_axes(f):

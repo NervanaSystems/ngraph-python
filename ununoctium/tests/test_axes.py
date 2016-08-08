@@ -82,17 +82,17 @@ def tensorview(td, nparr):
 
 def test_simple_tensors():
     # A scalar
-    td0 = arrayaxes.TensorDescription(axes=())
+    td0 = arrayaxes.TensorDescription(axes=(), transformer=None)
     e0 = empty(td0)
 
     # A simple vector
-    td1 = arrayaxes.TensorDescription(axes=[ax.A])
+    td1 = arrayaxes.TensorDescription(axes=[ax.A], transformer=None)
     e1 = empty(td1)
 
-    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
+    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B], transformer=None)
     e2 = empty(td2)
 
-    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D))
+    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D), transformer=None)
     e3 = empty(td3)
 
     # Reaxes
