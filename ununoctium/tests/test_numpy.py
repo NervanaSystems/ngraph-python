@@ -139,7 +139,7 @@ def test_reciprocal():
         ax.N.length = 128
         axes = be.Axes(ax.W, ax.N)
         p_u = be.placeholder(axes=axes)
-        u = rng.uniform(.1, 5.0, p_u.axes.value)
+        u = rng.uniform(.1, 5.0, p_u.axes)
         p_u.value = u
 
         rec_u_np = np.reciprocal(u)
@@ -167,8 +167,8 @@ def test_elementwise_ops_matched_args():
             # Matched sizes
             p_u = be.placeholder(axes=axes)
             p_v = be.placeholder(axes=axes)
-            u = rng.uniform(-1.0, 1.0, p_u.axes.value)
-            v = rng.uniform(1.0, 2.0, p_v.axes.value)
+            u = rng.uniform(-1.0, 1.0, p_u.axes)
+            v = rng.uniform(1.0, 2.0, p_v.axes)
             result_np = np_op(u, v)
 
             p_u.value = u
@@ -197,7 +197,7 @@ def test_elementwise_ops_matched_args():
                                  (np.log, be.log, 'log'),
                                  (np.tanh, be.tanh, 'tanh')]:
             p_u = be.placeholder(axes=axes)
-            u = rng.uniform(1.0, 2.0, p_u.axes.value)
+            u = rng.uniform(1.0, 2.0, p_u.axes)
             u_np = np_op(u)
             p_u.value = u
             result_op = be_op(p_u)
@@ -228,8 +228,8 @@ def test_elementwise_ops_unmatched_args():
             # Matched sizes
             p_u = be.placeholder(axes=sample_axes)
             p_v = be.placeholder(axes=batch_axes)
-            u = rng.uniform(1.0, 2.0, p_u.axes.value)
-            v = rng.uniform(1.0, 2.0, p_v.axes.value)
+            u = rng.uniform(1.0, 2.0, p_u.axes)
+            v = rng.uniform(1.0, 2.0, p_v.axes)
 
             p_u.value = u
             p_v.value = v
@@ -294,10 +294,10 @@ def test_cross_entropy_binary_logistic_shortcut():
         ax.N.length = 128
         axes = be.Axes(ax.W, ax.N)
         p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
         p_v = be.placeholder(axes=axes)
-        v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes.value), 0)
+        v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes), 0)
         p_v.value = v
 
         cel = cross_entropy_binary_logistic(u, v)
@@ -315,10 +315,10 @@ def test_cross_entropy_binary():
         ax.N.length = 128
         axes = be.Axes(ax.W, ax.N)
         p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
         p_v = be.placeholder(axes=axes)
-        v = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        v = rng.uniform(-3.0, 3.0, p_u.axes)
         p_v.value = v
 
         y = be.sig(p_u)
@@ -464,7 +464,7 @@ def test_sigmoid():
         ax.N.length = 128
         axes = be.Axes(ax.W, ax.N)
         p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes.value)
+        u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
 
         val_u_np = 1.0 / (1 + np.exp(-u))

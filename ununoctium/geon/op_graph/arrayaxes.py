@@ -360,6 +360,7 @@ class TensorDescription(object):
 
         if base is not None:
             base.views.add(self)
+        transformer.tds.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -632,25 +633,25 @@ class TensorDescription(object):
 
     @buffer.setter
     def buffer(self, value):
-        assert self.__base is None
-        self.__buffer = value
+        self.base.__buffer = value
 
     @property
     def value(self):
-        if self.__value is None:
-            self.__value = self.transformer.tensor_view(self)
-            self.update_views(force=True)
         return self.__value
 
     @value.setter
     def value(self, tensor):
         self.transformer.set_item(self.value, (), tensor)
-        self.update_views(False)
 
-    def update_views(self, force=False):
-        for view in self.views:
-            if force or view.value is None:
-                view.__value = self.transformer.tensor_view(view)
+    def is_base(self):
+        return self.__base is None
+
+    def initialize(self):
+        if self.buffer.data is None:
+            self.buffer.data = self.transformer.make_raw_buffer(
+                self.buffer.size
+            )
+        self.__value = self.transformer.tensor_view(self)
 
 
 def with_args_as_axes(f):

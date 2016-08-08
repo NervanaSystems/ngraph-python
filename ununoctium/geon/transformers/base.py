@@ -47,6 +47,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.all_results = set()
         self.values = dict()
         self.cache = dict()
+        self.tds = set()
         self.finalized = False
         self.opids = dict()
 
@@ -59,8 +60,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.dataflow, self.memory = assign_buffers(self, self.all_results)
         self.ops = self.dataflow.instructions
         self.initializers = self.ordered_initializers(self.ops)
-        self.initialize_call_info(self.initializers)
-        self.initialize_call_info(self.ops)
+        self.initialize_views(self.initializers)
+        self.initialize_views(self.ops)
+        self.initialize_tds()
         self.allocate_ordered_ops(self.initializers)
         self.allocate_ordered_ops(self.ops)
         self.transform_ordered_ops(self.initializers)
@@ -74,15 +76,19 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.all_results.update(results)
         return Computation(self, results)
 
-    def initialize_call_info(self, ordered_ops):
+    def initialize_views(self, ordered_ops):
         # Give ids
         for op in ordered_ops:
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
-        # Determine required views
+        # Create tensor descriptions
         for op in ordered_ops:
-            op.create_views(self)
+            op.create_tds(self)
+
+    def initialize_tds(self):
+        for td in self.tds:
+            td.initialize()
 
     def ordered_initializers(self, ordered_ops):
         todo = set(ordered_ops)

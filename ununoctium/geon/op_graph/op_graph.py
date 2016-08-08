@@ -185,7 +185,7 @@ class Op(Node):
     def call_info(self, transformer):
         return list(tds(self.args, transformer))
 
-    def create_views(self, transformer):
+    def create_tds(self, transformer):
         self.call_info(transformer)
 
     def transform_call_info(self, transformer):
@@ -197,15 +197,16 @@ class Op(Node):
         call_args = [value(arg) for arg in self.call_info(transformer)]
         self.transform(transformer, *call_args)
 
+    def output_value(self, transformer):
+        return None
+
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
 class Tensor(Op):
 
-    def __init__(
-            self, dtype=None, axes=None, scale=None,
-            out=None, has_alloc=False, **kwds):
+    def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
@@ -214,7 +215,6 @@ class Tensor(Op):
             axes = Axes(*axes)
         self.__axes = axes
         self.__out = out
-        self.has_alloc = has_alloc
 
         # Derivative will be scaled by this
         self.scale = scale
@@ -334,7 +334,7 @@ class Tensor(Op):
             td = TensorDescription(self.axes, transformer, dtype=self.dtype)
         return td
 
-    def create_views(self, transformer):
+    def create_tds(self, transformer):
         self.tensor_description(transformer)
         self.call_info(transformer)
 
@@ -346,9 +346,6 @@ class Tensor(Op):
             return self.__out.axes
         else:
             raise NotImplementedError
-
-    def allocate(self, transformer):
-        pass
 
     def generate_adjoints(self, *args, **kargs):
         pass
@@ -403,10 +400,8 @@ class AllocationOp(Tensor):
             self,
             init=None,
             initial_value=None,
-            has_alloc=False,
             **kargs):
         super(AllocationOp, self).__init__(**kargs)
-        self.has_alloc = has_alloc
         if init is not None:
             with captured_ops(self.initializers):
                 init.fill(self)
@@ -414,16 +409,6 @@ class AllocationOp(Tensor):
             self.initializers.append(assign(self, initial_value()))
         elif initial_value is not None:
             self.initializers.append(assign(self, initial_value))
-
-    def allocate(self, transformer):
-        td = self.tensor_description(transformer)
-        buffer = td.buffer
-        if buffer.data is None:
-            buffer.data = transformer.make_raw_buffer(buffer.size)
-        if self.has_alloc:
-            self.allocator(transformer)
-        else:
-            td.value
 
 
 class ComputationOp(Tensor):
@@ -474,11 +459,11 @@ class RNGOp(AllocationOp):
 class Normal(RNGOp):
 
     def __init__(self, loc=0.0, scale=1.0, size=None, **kargs):
-        super(Normal, self).__init__(axes=size, has_alloc=True, **kargs)
+        super(Normal, self).__init__(axes=size, **kargs)
         self.loc = loc
         self.scale = scale
 
-    def allocator(self, transformer):
+    def allocate(self, transformer):
         td, rng = self.call_info(transformer)
         td.value = transformer.rng_normal_tensor(
             rng.value, td,
@@ -489,11 +474,11 @@ class Normal(RNGOp):
 class Uniform(RNGOp):
 
     def __init__(self, low=0.0, high=1.0, size=None, **kargs):
-        super(Uniform, self).__init__(axes=size, has_alloc=True, **kargs)
+        super(Uniform, self).__init__(axes=size, **kargs)
         self.low = low
         self.high = high
 
-    def allocator(self, transformer):
+    def allocate(self, transformer):
         td, rng, = self.call_info(transformer)
         td.value = transformer.rng_uniform_tensor(
             rng.value, td,
@@ -506,17 +491,21 @@ class VoidOp(ComputationOp):
     def __init__(self, **kargs):
         super(VoidOp, self).__init__(axes=Axes(), **kargs)
 
+    @from_transformer_cache
+    def call_info(self, transformer):
+        return list(tds(self.args, transformer))
+
 
 class SetItem(VoidOp):
 
     def __init__(self, tensor, item, val, **kargs):
-        super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
+        super(SetItem, self).__init__(args=(tensor, val), **kargs)
         self.item = item
 
     @from_transformer_cache
     def call_info(self, transformer):
         tensor, val = tds(self.args, transformer)
-        return [tensor, val.reaxe(self.axes)]
+        return [tensor, val.reaxe(tensor.axes)]
 
     def transform(self, transformer, tensor, val):
         transformer.set_item(tensor, self.item, val)
@@ -525,7 +514,7 @@ class SetItem(VoidOp):
 class doall(VoidOp):
 
     def __init__(self, all, **kargs):
-        super(doall, self).__init__(args=all, out=all[-1], **kargs)
+        super(doall, self).__init__(args=all, **kargs)
 
 
 class ElementWise(ComputationOp):
@@ -568,7 +557,10 @@ class placeholder(AllocationOp):
         if tags is None:
             tags = set()
         tags.add('persistent')
-        super(placeholder, self).__init__(**kargs)
+        super(placeholder, self).__init__(tags=tags, **kargs)
+
+    def generate_adjoints(self, tape, delta):
+        pass
 
     @property
     def value(self):
@@ -596,10 +588,6 @@ class Fill(VoidOp):
     def transform(self, transformer, tensor):
         transformer.fill(tensor, self.const)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
-        return list(tds(self.args, transformer))
-
 
 class Constant(AllocationOp):
     """
@@ -609,9 +597,12 @@ class Constant(AllocationOp):
     def __init__(self, const, **kargs):
         self.const = const
         super(Constant, self).__init__(
-            axes=(), dtype=np.dtype(np.float32), **kargs)
+            axes=Axes(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
         self.tags.add('persistent')
+
+    def generate_adjoints(self, adjoints, delta):
+        pass
 
     @property
     def graph_label(self):
@@ -632,15 +623,16 @@ class NumPyTensor(AllocationOp):
     A NumPy tensor with attached axes information
     """
 
-    def __init__(self, nptensor, **kargs):
+    def __init__(self, nptensor, axes, **kargs):
+        axes = Axes(*axes)
         self.nptensor = nptensor
         super(NumPyTensor, self).__init__(
-            dtype=nptensor.dtype, **kargs
+            dtype=nptensor.dtype, axes=axes, **kargs
         )
 
-    def allocator(self, transformer):
+    def allocate(self, transformer):
         td = self.tensor_description(transformer)
-        transformer.nparray(td.value, self.nptensor)
+        td.value = transformer.nparray(self.nptensor)
 
     @property
     def graph_label(self):
@@ -677,6 +669,7 @@ class add(ElementWise):
 
 
 class argmax(ComputationOp):
+
     def __init__(self, x, max_axes=None, **kargs):
         if max_axes is None:
             max_axes = sample_axes(x.axes)
@@ -722,7 +715,7 @@ class argmin(ComputationOp):
         ]
 
     def transform(self, transformer, out, x):
-        transformer.argmin(x, out)
+        transformer.argmax(x, out)
 
 
 class cos(ElementWise):
@@ -810,6 +803,7 @@ class dot(ComputationOp):
             if len(red_axis_ids) == 0:
                 dummy = Axis(1)
                 red_axis_ids = AxisIDTuple(dummy[0],)
+
             return (out_axis_ids, red_axis_ids, red_axis_ids,
                     dummy, forward_axis_ids)
 
@@ -1008,11 +1002,10 @@ class sum(ReductionOp):
 
 
 def assign(lvalue, rvalue):
-    return SetItem(lvalue, slice(None, None, None), rvalue)
+    return SetItem(lvalue, (), rvalue)
 
 
 class tensor_size(ComputationOp):
-
     def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
         if reduction_axes is None:
             if out_axes is None:
@@ -1221,10 +1214,6 @@ class sgn(ElementWise):
     def __init__(self, x, **kargs):
         super(sgn, self).__init__(args=(x,), **kargs)
 
-    def generate_adjoints(self, adjoints, delta, x):
-        # Zero
-        pass
-
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
 
@@ -1362,8 +1351,8 @@ class CrossEntropyMultiInner(object):
         self.x.generate_add_delta(adjoints, self.y * delta)
 
 
-def cross_entropy_multi(y, t, usebits=False,
-                        out_axes=None, enable_softmax_opt=True,
+def cross_entropy_multi(y, t, usebits=False, out_axes=None,
+                        enable_softmax_opt=True,
                         enable_diff_opt=True, **kargs):
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:

@@ -51,10 +51,8 @@ class NumPyTransformer(Transformer):
             offset=tensor_description.offset,
             strides=tensor_description.strides)
 
-    def nparray(self, tensor_description, array):
-        tensor = self.tensor_view(tensor_description)
-        tensor[()] = array
-        return tensor
+    def nparray(self, array):
+        return array
 
     def rng(self, seed=None):
         return np.random.RandomState(seed=seed)
