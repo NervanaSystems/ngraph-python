@@ -922,10 +922,7 @@ class placeholder(AllocationOp):
     """
 
     def __init__(self, tags=None, **kargs):
-        if tags is None:
-            tags = set()
-        tags.add('persistent')
-        super(placeholder, self).__init__(**kargs)
+        super(placeholder, self).__init__(tags=['persistent'], **kargs)
         self.__axes = ValueAxesComp(self)
 
     def __axes__(self):
@@ -1450,7 +1447,7 @@ class Variable(AllocationOp):
 class Temporary(AllocationOp):
 
     def __init__(self, **kargs):
-        super(Temporary, self).__init__(tags=['temp'], **kargs)
+        super(Temporary, self).__init__(tags=['temp', 'persistent'], **kargs)
 
     def generate_adjoints(self, adjoints, delta):
         pass
