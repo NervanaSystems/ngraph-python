@@ -29,20 +29,6 @@ class NumPyTransformer(Transformer):
     def make_raw_buffer(self, size):
         return bytearray(size)
 
-    def fill_tensor_in(self, tensor_description, tensor):
-        view = self.tensor_view(tensor_description)
-        if view.shape:
-            view[:] = tensor
-        else:
-            buf = np.ndarray(
-                shape=(1,),
-                dtype=tensor_description.dtype,
-                buffer=tensor_description.buffer.data,
-                offset=tensor_description.offset)
-            buf[0] = tensor
-            view = tensor
-        return view
-
     def tensor_view(self, tensor_description):
         return np.ndarray(
             shape=tensor_description.shape,
@@ -58,16 +44,14 @@ class NumPyTransformer(Transformer):
         return np.random.RandomState(seed=seed)
 
     def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        tensor = rng.normal(
+        return rng.normal(
             loc, scale, tensor_description.sizes).astype(
             tensor_description.dtype)
-        return self.fill_tensor_in(tensor_description, tensor)
 
     def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        tensor = rng.uniform(
+        return rng.uniform(
             low, high, tensor_description.sizes).astype(
             tensor_description.dtype)
-        return self.fill_tensor_in(tensor_description, tensor)
 
     # Side-effects
     def fill(self, out, value):

@@ -164,16 +164,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         op.tensor_description(self).value = tensor
 
     @abc.abstractmethod
-    def fill_tensor_in(self, tensor_description, tensor):
-        """
-        Fills tensor in tensor_description
-
-        :param tensor_description:
-        :param tensor: target tensor
-        :return a tensor with the specified value in the specified memory location
-        """
-
-    @abc.abstractmethod
     def make_raw_buffer(self, size):
         """
         Allocate raw buffer

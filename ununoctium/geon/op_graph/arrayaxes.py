@@ -641,12 +641,14 @@ class TensorDescription(object):
 
     @value.setter
     def value(self, tensor):
+        assert self.value.shape == tensor.shape
         self.transformer.set_item(self.value, (), tensor)
 
     def is_base(self):
         return self.__base is None
 
     def initialize(self):
+        assert self.__value is None
         if self.buffer.data is None:
             self.buffer.data = self.transformer.make_raw_buffer(
                 self.buffer.size

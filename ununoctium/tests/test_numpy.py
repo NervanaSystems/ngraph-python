@@ -445,7 +445,7 @@ def test_softmax():
         npsm = np_softmax(x, 0)
         nce = np_cross_entropy_multi(npsm, t, axis=0)
         tce, tsm = execute([ce, sx])
-        assert np.allclose(nce, tce)
+        assert np.allclose(nce, tce), sum(t)
 
         def np_all(x):
             return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
