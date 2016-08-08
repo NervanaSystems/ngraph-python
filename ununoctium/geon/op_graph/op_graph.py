@@ -15,7 +15,6 @@
 from __future__ import division
 
 import numbers
-import weakref
 
 import numpy as np
 from builtins import object, str
@@ -25,6 +24,24 @@ from geon.backends.graph.environment import get_current_environment,\
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, AxesAxis, Axis
 from geon.op_graph.nodes import Node, generic_method
+
+
+def tds(args, transformer):
+    def td(arg):
+        if isinstance(arg, Tensor):
+            return arg.tensor_description(transformer)
+        else:
+            return None
+    return (td(arg) for arg in args)
+
+
+def from_transformer_cache(f):
+    def wrapper(self, transformer, *args, **kargs):
+        key = (f.__name__, self)
+        if key not in transformer.cache:
+            transformer.cache[key] = f(self, transformer, *args, **kargs)
+        return transformer.cache[key]
+    return wrapper
 
 
 class Op(Node):
@@ -149,10 +166,6 @@ class Op(Node):
     def simple_prune(results):
         SimplePrune(results)
 
-    @property
-    def output_view_info(self):
-        raise NotImplementedError
-
     def transform(self, transformer, *args):
         """Process op"""
         pass
@@ -161,396 +174,53 @@ class Op(Node):
         """Make sure transformer has local changes"""
         pass
 
+    def allocate(self, transformer):
+        pass
+
+    @from_transformer_cache
+    def call_info(self, transformer):
+        return list(tds(self.args, transformer))
+
+    def create_views(self, transformer):
+        self.call_info(transformer)
+
+    def transform_call_info(self, transformer):
+        def value(arg):
+            if arg is None:
+                return None
+            else:
+                return arg.value
+        call_args = [value(arg) for arg in self.call_info(transformer)]
+        self.transform(transformer, *call_args)
+
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
-class TensorAxesInfo(object):
-    """Information about a use of a tensor with axes"""
-
-    def __init__(
-            self,
-            axes,
-            alloc=None,
-            read_only=False,
-            tags=(),
-            dtype=np.float32,
-            **kargs):
-        super(TensorAxesInfo, self).__init__(**kargs)
-        axes = Axes(*axes)
-        self.axes = axes
-        self.views = weakref.WeakValueDictionary()
-        self.alloc = alloc
-        self.read_only = read_only
-        self.dtype = np.dtype(dtype)
-        self.tags = set(tags)
-        self.__tensor_description = None
-        self.initializer = None
-        self.initialized = False
-        self.views[self.axes] = self
-
-    @property
-    def tensor_description(self):
-        if self.__tensor_description is None:
-            self.__tensor_description = TensorDescription(
-                axes=self.axes, dtype=self.dtype)
-        return self.__tensor_description
-
-    @property
-    def value(self):
-        return self.tensor_description.value
-
-    def set_tensor(self, transformer, tensor):
-        description = self.tensor_description
-        description.value = transformer.fill_tensor_in(description, tensor)
-        self.update_views(transformer, True)
-
-    def update_views(self, transformer, force):
-        for view in list(self.views.values()):
-            if view.tensor_description is self.tensor_description:
-                continue
-            view.tensor_description.buffer = self.tensor_description.buffer
-            view.update_tensor(transformer, force)
-
-    def allocate(self, transformer):
-        buffer = self.tensor_description.buffer
-        if buffer.data is None:
-            buffer.data = transformer.make_raw_buffer(buffer.size)
-        if self.alloc is not None:
-            tensor = self.alloc(transformer, self.tensor_description)
-        else:
-            tensor = transformer.tensor_view(self.tensor_description)
-        self.set_tensor(transformer, tensor)
-        self.update_views(transformer, False)
-
-    def get_or_default(self, axes, default_function):
-        if axes in self.views:
-            return self.views[axes]
-        result = default_function()
-        self.views[axes] = result
-        return result
-
-    def reaxe(self, reaxe):
-        return self.get_or_default(Axes(*reaxe),
-                                   lambda: TensorReaxeViewInfo(
-                                       tensor_axes_info=self,
-                                       reaxes=reaxe,
-                                       idx=len(self.views)))
-
-    def dot_reaxe_left(self, red_axis_ids, dummy_axis=None):
-        return self.get_or_default(red_axis_ids,
-                                   lambda: DotLeftViewInfo(
-                                       tensor_axes_info=self,
-                                       red_axis_ids=red_axis_ids,
-                                       idx=len(self.views),
-                                       dummy_axis=dummy_axis))
-
-    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None,
-                        forward_axis_ids=None):
-        return self.get_or_default(red_axis_ids,
-                                   lambda: DotRightViewInfo(
-                                       tensor_axes_info=self,
-                                       red_axis_ids=red_axis_ids,
-                                       idx=len(self.views),
-                                       dummy_axis=dummy_axis,
-                                       forward_axis_ids=forward_axis_ids))
-
-    def reaxe_with_dummy_axis(self, axis, dim):
-        return self.get_or_default(
-            ('Dummy', dim, axis),
-            lambda: DummyReaxeViewInfo(
-                tensor_axes_info=self, axis=axis, dim=dim, idx=len(self.views)
-            )
-        )
-
-
-class TensorViewInfo(object):
-    """The use of a view of a tensor with axes"""
-
-    def __init__(self, tensor_axes_info, idx, **kargs):
-        super(TensorViewInfo, self).__init__(**kargs)
-        self.tensor_axes_info = tensor_axes_info
-        self.idx = idx
-
-    def allocate(self, transformer):
-        tensor = transformer.tensor_view(self.tensor_description)
-        self.tensor_description.value = tensor
-
-    @property
-    def value(self):
-        return self.tensor_description.value
-
-    def update_tensor(self, transformer, force):
-        tensor_description = self.tensor_description
-        if force or tensor_description.value is None:
-            tensor_description.value = transformer.tensor_view(tensor_description)
-
-
-class TensorReaxeViewInfo(TensorViewInfo):
-    """The use of a reaxe view of a tensor with axes"""
-
-    def __init__(self, reaxes, **kargs):
-        super(TensorReaxeViewInfo, self).__init__(**kargs)
-        self.reaxes = Axes(*reaxes)
-        self.__tensor_description = None
-
-    @property
-    def tensor_description(self):
-        if self.__tensor_description is None:
-            self.__tensor_description = self.tensor_axes_info.\
-                tensor_description.reaxe(self.reaxes)
-        return self.__tensor_description
-
-
-class DummyReaxeViewInfo(TensorViewInfo):
-
-    def __init__(self, axis, dim, **kargs):
-        super(DummyReaxeViewInfo, self).__init__(**kargs)
-        self.axis = axis
-        self.dim = dim
-        self.__tensor_description = None
-
-    @property
-    def tensor_description(self):
-        if self.__tensor_description is None:
-            self.__tensor_description = self.tensor_axes_info.\
-                tensor_description.reaxe_with_dummy_axis(self.axis, self.dim)
-        return self.__tensor_description
-
-
-class DotLeftViewInfo(TensorViewInfo):
-
-    def __init__(self, red_axis_ids, dummy_axis=None, **kargs):
-        super(DotLeftViewInfo, self).__init__(**kargs)
-        self.red_axis_ids = red_axis_ids
-        self.dummy_axis = dummy_axis
-        self.__tensor_description = None
-
-    @property
-    def tensor_description(self):
-        if self.__tensor_description is None:
-            desc = self.tensor_axes_info.tensor_description
-            if self.dummy_axis is not None:
-                desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
-            self.__tensor_description = desc.dot_reaxe_left(self.red_axis_ids)
-        return self.__tensor_description
-
-
-class DotRightViewInfo(TensorViewInfo):
-
-    def __init__(self, red_axis_ids, dummy_axis=None,
-                 forward_axis_ids=None, **kargs):
-        super(DotRightViewInfo, self).__init__(**kargs)
-        self.red_axis_ids = red_axis_ids
-        self.dummy_axis = dummy_axis
-        self.forward_axis_ids = forward_axis_ids
-        self.__tensor_description = None
-
-    @property
-    def tensor_description(self):
-        if self.__tensor_description is None:
-            desc = self.tensor_axes_info.tensor_description
-            if self.dummy_axis is not None:
-                desc = desc.reaxe_with_dummy_axis(self.dummy_axis)
-            self.__tensor_description = desc.dot_reaxe_right(
-                self.red_axis_ids,
-                forward_axis_ids=self.forward_axis_ids
-            )
-        return self.__tensor_description
-
-
-class AxesComp(object):
-    """A Computation for computing axes"""
-
-    def __init__(self, axes=None, **kargs):
-        super(AxesComp, self).__init__(**kargs)
-        self.__axes__ = axes
-
-    @staticmethod
-    def as_axes(axes, **kargs):
-        if isinstance(axes, AxesComp):
-            return axes
-        elif axes is None:
-            return None
-        else:
-            return LiteralAxesComp(axes=Axes(*axes), **kargs)
-
-    @property
-    def value(self):
-        if self.__axes__ is None:
-            self.__axes__ = self.resolve()
-        return self.__axes__
-
-    def resolve(self):
-        raise NotImplementedError()
-
-    def __add__(self, x):
-        return AxesAppendComp(self, AxesComp.as_axes(x))
-
-    def __radd__(self, x):
-        return AxesAppendComp(AxesComp.as_axes(x), self)
-
-    def __sub__(self, x):
-        return AxesSubComp(self, AxesComp.as_axes(x))
-
-    def __rsub__(self, x):
-        return AxesSubComp(AxesComp.as_axes(x), self)
-
-    def __mul__(self, x):
-        return AxesIntersectComp(self, AxesComp.as_axes(x))
-
-    def __rmul__(self, x):
-        return AxesIntersectComp(AxesComp.as_axes(x), self)
-
-
-def sample_axes(x, **kargs):
-    return AxesSubComp(AxesComp.as_axes(x, **kargs), get_batch_axes())
-
-
-def tensor_sample_axes(x, **kargs):
-    return sample_axes(x.axes, **kargs)
-
-
-def tensor_batch_axes(x, **kargs):
-    return batch_axes(x.axes, **kargs)
-
-
-def batch_axes(x, **kargs):
-    return AxesIntersectComp(AxesComp.as_axes(x, **kargs), get_batch_axes())
-
-
-def linear_map_axesa(in_axes, out_axes):
-    return AxesSubComp(AxesAppendComp(in_axes, out_axes),
-                       AxesIntersectComp(in_axes, out_axes))
-
-
-def linear_map_axes(in_axes, out_axes):
-    return AxesSubComp(AxesAppendComp(out_axes, in_axes),
-                       AxesIntersectComp(in_axes, out_axes))
-
-
-class LiteralAxesComp(AxesComp):
-    """Actual axes are provided"""
-
-    def __init__(self, **kargs):
-        super(LiteralAxesComp, self).__init__(**kargs)
-
-
-class ValueAxesComp(AxesComp):
-    """Determine axes from value computed by x"""
-
-    def __init__(self, x, **kargs):
-        super(ValueAxesComp, self).__init__(**kargs)
-        self.x = x
-
-    def resolve(self):
-        return self.x.axes.value
-
-
-class AxesSubComp(AxesComp):
-    """Result will be removal of axes in y from those in x"""
-
-    def __init__(self, x, y, **kargs):
-        super(AxesSubComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-
-    def resolve(self):
-        x_axes = self.x.value
-        y_axes = self.y.value
-        return AxisIDTuple.sub(x_axes, y_axes).as_axes()
-
-
-class AxesIntersectComp(AxesComp):
-
-    def __init__(self, x, y, **kargs):
-        super(AxesIntersectComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-
-    def resolve(self):
-        x_axes = self.x.value
-        y_axes = self.y.value
-        return AxisIDTuple.intersect(x_axes, y_axes).as_axes()
-
-
-class AxesAppendComp(AxesComp):
-
-    def __init__(self, x, y, allow_repeated=False, **kargs):
-        super(AxesAppendComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.y = AxesComp.as_axes(y)
-        self.allow_repeated = allow_repeated
-
-    def resolve(self):
-        x_axes = self.x.value
-        y_axes = self.y.value
-        if self.allow_repeated:
-            return x_axes + y_axes
-        else:
-            return AxisIDTuple.append(x_axes, y_axes).as_axes()
-
-
-class AxesSliceComp(AxesComp):
-
-    def __init__(self, x, lower=0, upper=None, **kargs):
-        super(AxesSliceComp, self).__init__(**kargs)
-        self.x = AxesComp.as_axes(x)
-        self.lower = lower
-        self.upper = upper
-
-    def resolve(self):
-        x_axes = self.x.value
-        if self.upper is None:
-            return Axes(x_axes[self.lower:])
-        else:
-            return x_axes[self.lower:self.upper]
-
-
-# Wrapper around a function that dynamically generates axes
-class AxesFuncComp(AxesComp):
-
-    def __init__(self, func, **kargs):
-        super(AxesFuncComp, self).__init__(**kargs)
-        self.func = func
-
-    def resolve(self):
-        return self.func()
-
-
 class Tensor(Op):
 
-    def __init__(self, dtype=None, axes=None, scale=None, **kwds):
+    def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
         self.dtype = dtype
-        if axes is None:
-            axes = ValueAxesComp(self)
-        else:
-            axes = AxesComp.as_axes(axes)
+        if axes is not None:
+            axes = Axes(*axes)
         self.__axes = axes
-        self.__tensor_axes_info = None
-        self.__call_info = None
+        self.__out = out
 
         # Derivative will be scaled by this
         self.scale = scale
 
     @property
     def output(self):
-        return self
-
-    @property
-    def axes(self):
-        return self.__axes
+        if self.__out is not None:
+            return self.__out
+        else:
+            return self
 
     def generate_add_delta(self, adjoints, delta):
-        delta_axes = delta.axes.value
-        self_axes = self.axes.value
-        reduction_axes = AxisIDTuple.sub(delta_axes, self_axes).as_axes()
-        if reduction_axes:
-            delta = sum(delta, reduction_axes=reduction_axes)
-
+        delta = sum(delta, reduction_axes=delta.axes - self.axes)
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -644,70 +314,56 @@ class Tensor(Op):
     def __axes__(self):
         return self.axes
 
-    @property
-    def value(self):
-        return self.tensor_axes_info.tensor_description.value
+    def output_value(self, transformer):
+        return self.tensor_description(transformer).value
+
+    @from_transformer_cache
+    def tensor_description(self, transformer):
+        if self.__out is not None:
+            td = self.__out.tensor_description(transformer)
+            if self.__axes is not None:
+                td = td.reaxe(self.__axes)
+        else:
+            td = TensorDescription(self.axes, transformer, dtype=self.dtype)
+        td.read_only = self.read_only
+        return td
+
+    def create_views(self, transformer):
+        self.tensor_description(transformer)
+        self.call_info(transformer)
 
     @property
-    def tensor_axes_info(self):
-        if self.__tensor_axes_info is None:
-            self.__tensor_axes_info = self.compute_tensor_axes_info()
-        return self.__tensor_axes_info
+    def axes(self):
+        if self.__axes is not None:
+            return self.__axes
+        elif self.__out is not None:
+            return self.__out.axes
+        else:
+            raise NotImplementedError
 
-    def compute_tensor_axes_info(self):
-        dtype = np.float32
-        if self.dtype is not None:
-            dtype = self.dtype
-        return TensorAxesInfo(self.axes.value, dtype=dtype, tags=self.tags)
+    def allocate(self, transformer):
+        if self.__out is None:
+            td = self.tensor_description(transformer)
+            if td.value is None:
+                td.value = self.allocator(transformer)
+            else:
+                td.update_views(force=False)
 
-    @property
-    def output_view_info(self):
-        return self.tensor_axes_info.reaxe(self.axes.value)
+    def allocator(self, transformer):
+        return transformer.empty(self.tensor_description(transformer))
 
-    @property
-    def call_info(self):
-        if self.__call_info is None:
-            self.__call_info = self.compute_call_info()
-        return self.__call_info
+    def generate_adjoints(self, *args, **kargs):
+        pass
 
-    def compute_call_info(self):
-        return [self.reaxe(self.axes.value)]
-
-    def transform_call_info(self, transformer, *args):
-        call_args = [arg.tensor_description.value for arg in args]
-        self.transform(transformer, *call_args)
-
-    @property
-    def resolved_axes(self):
-        return self.tensor_axes_info.axes
-
-    def reaxe(self, reaxe):
-        return self.tensor_axes_info.reaxe(reaxe)
-
-    def dot_reaxe_left(self, red_axis_ids, dummy_axis=None):
-        return self.tensor_axes_info.dot_reaxe_left(
-            red_axis_ids,
-            dummy_axis=dummy_axis
-        )
-
-    def dot_reaxe_right(self, red_axis_ids, dummy_axis=None,
-                        forward_axis_ids=None):
-        return self.tensor_axes_info.dot_reaxe_right(
-            red_axis_ids,
-            dummy_axis=dummy_axis,
-            forward_axis_ids=forward_axis_ids
-        )
-
-    def reaxe_with_dummy_axis(self, axis, dim):
-        return self.tensor_axes_info.reaxe_with_dummy_axis(
-            axis=axis,
-            dim=dim
-        )
+    @from_transformer_cache
+    def call_info(self, transformer):
+        return [self.tensor_description(transformer)]\
+            + super(Tensor, self).call_info(transformer)
 
     # Required for parameter initializers
     @property
     def shape(self):
-        return self.__axes__()
+        return self.axes
 
     def mean(self, out_axes=(), **kargs):
         return mean(self, out_axes=out_axes, **kargs)
@@ -720,42 +376,27 @@ class Broadcast(Tensor):
     """
 
     def __init__(self, x, **kargs):
-        super(Broadcast, self).__init__(args=(x,), **kargs)
-
-    def compute_tensor_axes_info(self):
-        x, = self.args
-        return x.tensor_axes_info
+        super(Broadcast, self).__init__(args=(x,), out=x, **kargs)
 
 
 class ExpandDims(Tensor):
 
     def __init__(self, x, axis, dim, **kargs):
+        axes = x.axes[:dim].concat(Axes(axis,)).concat(x.axes[dim:])
+        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kargs)
         self.axis = axis
         self.dim = dim
-        super(ExpandDims, self).__init__(args=(x,), **kargs)
 
-    def compute_tensor_axes_info(self):
-        x, = self.args
-        return x.tensor_axes_info
-
-    def compute_call_info(self):
-        return [self.output_view_info]
-
-    @property
-    def output_view_info(self):
-        x, = self.args
+    @from_transformer_cache
+    def tensor_description(self, transformer):
+        x, = tds(self.args, transformer)
         return x.reaxe_with_dummy_axis(self.axis, self.dim)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, delta)
-
-    @property
-    def axes(self):
-        x_axes, dim, axis = self.args[0].axes, self.dim, self.axis
-
-        def func():
-            return x_axes.value[:dim] + Axes(axis,) + x_axes.value[dim:]
-        return AxesFuncComp(func)
+        x.generate_add_delta(
+            adjoints,
+            sum(delta, reduction_axes=Axes(self.axis,))
+        )
 
 
 class AllocationOp(Tensor):
@@ -780,7 +421,7 @@ class ComputationOp(Tensor):
     An TensorOp is the result of some sort of operation.
     """
 
-    def __init__(self, out=None, dtype=np.float32, batch_axes=None, **kargs):
+    def __init__(self, dtype=np.float32, batch_axes=None, **kargs):
         super(ComputationOp, self).__init__(**kargs)
         self.dtype = dtype
 
@@ -789,8 +430,7 @@ class ComputationOp(Tensor):
 
         if batch_axes is None:
             batch_axes = get_batch_axes()
-
-        self.batch_axes = AxesComp.as_axes(batch_axes)
+        self.batch_axes = batch_axes
 
     @property
     def defs(self):
@@ -828,11 +468,12 @@ class Normal(RNGOp):
         self.loc = loc
         self.scale = scale
 
-        def allocator(transformer, tensor_description):
-            return transformer.rng_normal_tensor(
-                self.rng, tensor_description, loc, scale)
-
-        self.tensor_axes_info.alloc = allocator
+    def allocator(self, transformer):
+        td, rng = self.call_info(transformer)
+        return transformer.rng_normal_tensor(
+            rng.value, td,
+            self.loc, self.scale
+        )
 
 
 class Uniform(RNGOp):
@@ -842,26 +483,18 @@ class Uniform(RNGOp):
         self.low = low
         self.high = high
 
-        def allocator(transformer, tensor_description):
-            return transformer.rng_uniform_tensor(
-                self.rng, tensor_description, low, high)
-
-        self.tensor_axes_info.alloc = allocator
+    def allocator(self, transformer):
+        td, rng, = self.call_info(transformer)
+        return transformer.rng_uniform_tensor(
+            rng.value, td,
+            self.low, self.high
+        )
 
 
 class VoidOp(ComputationOp):
 
     def __init__(self, **kargs):
-        super(VoidOp, self).__init__(**kargs)
-        self.__axes = AxesComp.as_axes(())
-
-    @property
-    def axes(self):
-        return self.__axes
-
-    def compute_call_info(self):
-        # No out
-        return []
+        super(VoidOp, self).__init__(axes=Axes(), **kargs)
 
 
 class SetItem(VoidOp):
@@ -870,12 +503,10 @@ class SetItem(VoidOp):
         super(SetItem, self).__init__(args=(tensor, val), out=tensor, **kargs)
         self.item = item
 
-    def compute_call_info(self):
-        tensor, val = self.args
-        call_info = super(SetItem, self).compute_call_info()
-        call_info.append(tensor.reaxe(tensor.axes.value))
-        call_info.append(val.reaxe(tensor.axes.value))
-        return call_info
+    @from_transformer_cache
+    def call_info(self, transformer):
+        tensor, val = tds(self.args, transformer)
+        return [tensor, val.reaxe(self.axes)]
 
     def transform(self, transformer, tensor, val):
         transformer.set_item(tensor, self.item, val)
@@ -889,21 +520,23 @@ class doall(VoidOp):
 
 class ElementWise(ComputationOp):
 
-    def __init__(self, **kargs):
-        super(ElementWise, self).__init__(**kargs)
+    def __init__(self, args, **kargs):
+        args = Op.as_ops(args)
+        axis_ids = AxisIDTuple()
+        for arg in args:
+            axis_ids += arg.axes.as_axis_ids()
+        axes = axis_ids.as_axes()
+        super(ElementWise, self).__init__(
+            args=args,
+            axes=axes,
+            **kargs
+        )
 
-    @property
-    def axes(self):
-        inputs = self.args
-        result = self.args[0].axes
-        for input in inputs[1:]:
-            result = AxesAppendComp(result, input.axes)
-        return result
-
-    def compute_call_info(self):
-        ci = super(ElementWise, self).compute_call_info()
-        for arg in self.args:
-            ci.append(arg.reaxe(self.axes.value))
+    @from_transformer_cache
+    def call_info(self, transformer):
+        ci = [self.tensor_description(transformer)]
+        for arg in tds(self.args, transformer):
+            ci.append(arg.reaxe(self.axes))
         return ci
 
 
@@ -922,8 +555,10 @@ class placeholder(AllocationOp):
     """
 
     def __init__(self, tags=None, **kargs):
-        super(placeholder, self).__init__(tags=['persistent'], **kargs)
-        self.__axes = ValueAxesComp(self)
+        if tags is None:
+            tags = set()
+        tags.add('persistent')
+        super(placeholder, self).__init__(tags=tags, **kargs)
 
     def __axes__(self):
         return self.__axes
@@ -941,11 +576,11 @@ class placeholder(AllocationOp):
 
     def sync(self, transformer):
         value = self.value
+        td = self.tensor_description(transformer)
         if isinstance(value, numbers.Real):
-            transformer.fill(
-                self.tensor_axes_info.tensor_description.value, value)
+            transformer.fill(td.value, value)
         else:
-            transformer.set_value(self, value)
+            td.value = value
 
 
 class Fill(VoidOp):
