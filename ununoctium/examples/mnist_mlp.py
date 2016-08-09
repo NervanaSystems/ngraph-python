@@ -82,23 +82,17 @@ optimizer = GradientDescentMomentum(
 
 # initialize model object
 mlp = Model(layers=layers)
-
-# configure callbacks
 callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
+mlp.initialize(
+    dataset=train_set,
+    input_axes=Axes(ax.C, ax.H, ax.W),
+    target_axes=Axes(ax.Y),
+    optimizer=optimizer,
+    cost=cost,
+    metric=Misclassification()
+)
 
 np.seterr(divide='raise', over='raise', invalid='raise')
-# run fit
-mlp.fit(
-    train_set,
-    input_axes=Axes(
-        ax.C,
-        ax.H,
-        ax.W),
-    target_axes=Axes(
-        ax.Y),
-    optimizer=optimizer,
-    num_epochs=args.epochs,
-    cost=cost,
-    callbacks=callbacks)
-error_rate = mlp.eval(valid_set, metric=Misclassification())
+mlp.fit(train_set, num_epochs=args.epochs, callbacks=callbacks)
+error_rate = mlp.eval(valid_set)
 neon_logger.display('Misclassification error = %.1f%%' % (error_rate * 100))

@@ -31,7 +31,7 @@ def tds(args, transformer):
         if isinstance(arg, Tensor):
             return arg.tensor_description(transformer)
         else:
-            return None
+            return arg
     return (td(arg) for arg in args)
 
 
@@ -190,10 +190,10 @@ class Op(Node):
 
     def transform_call_info(self, transformer):
         def value(arg):
-            if arg is None:
-                return None
-            else:
+            if isinstance(arg, TensorDescription):
                 return arg.value
+            else:
+                return None
         call_args = [value(arg) for arg in self.call_info(transformer)]
         self.transform(transformer, *call_args)
 
@@ -464,9 +464,9 @@ class Normal(RNGOp):
         self.scale = scale
 
     def allocate(self, transformer):
-        td, rng = self.call_info(transformer)
+        td = self.tensor_description(transformer)
         td.value = transformer.rng_normal_tensor(
-            rng.value, td,
+            self.rng, td,
             self.loc, self.scale
         )
 
@@ -479,9 +479,9 @@ class Uniform(RNGOp):
         self.high = high
 
     def allocate(self, transformer):
-        td, rng, = self.call_info(transformer)
+        td = self.tensor_description(transformer)
         td.value = transformer.rng_uniform_tensor(
-            rng.value, td,
+            self.rng, td,
             self.low, self.high
         )
 

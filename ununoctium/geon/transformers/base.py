@@ -59,6 +59,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Op.simple_prune(self.all_results)
         self.dataflow, self.memory = assign_buffers(self, self.all_results)
         self.ops = self.dataflow.instructions
+        self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
         self.initialize_views(self.initializers)
         self.initialize_views(self.ops)
@@ -150,7 +151,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def evaluate(self, results=None):
         if results is None:
             results = self.all_results
-        self.transform_ordered_ops(self.ops)
+        ordered_ops = sorted(Op.ordered_ops(results), key=self.order.get)
+        self.transform_ordered_ops(ordered_ops)
         r = {}
         for op in results:
             r[op] = self.value(op)
