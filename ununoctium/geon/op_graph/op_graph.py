@@ -79,18 +79,18 @@ class Op(Node):
     def defs(self):
         return {}
 
-    def variables(self):
+    def variables(self, trainable=True, filter=None):
         """Return all parameters used in computing this node"""
-        params = []
-        visited = set()
-        unvisited = [self]
+        params = set()
 
-        while unvisited:
-            node = unvisited.pop()
-            visited.add(node)
-            if isinstance(node, Variable):
-                params.append(node)
-            unvisited.extend(node.args)
+        if filter is None:
+            filter = lambda node: ('trainable' in node.tags) is trainable
+
+        def visitor(node):
+            if isinstance(node, Variable) and filter(node):
+                params.add(node)
+
+        Node.visit_input_closure([self], visitor)
 
         return set(params)
 
@@ -922,12 +922,8 @@ class placeholder(AllocationOp):
     """
 
     def __init__(self, tags=None, **kargs):
-        if tags is None:
-            tags = set()
-        tags.add('persistent')
-        super(placeholder, self).__init__(**kargs)
+        super(placeholder, self).__init__(tags=['persistent'], **kargs)
         self.__axes = ValueAxesComp(self)
-        self.tensor_axes_info.read_only = True
 
     def __axes__(self):
         return self.__axes
@@ -978,6 +974,7 @@ class Constant(AllocationOp):
         super(Constant, self).__init__(
             axes=(), dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
+        self.tags.add('persistent')
 
     def generate_adjoints(self, adjoints, delta):
         pass
@@ -1441,21 +1438,14 @@ class Variable(AllocationOp):
             tags.add('trainable')
         if persistent:
             tags.add('persistent')
-
         super(Variable, self).__init__(tags=tags, **kargs)
-        self.tensor_axes_info.read_only = True
 
     def generate_adjoints(self, adjoints, delta):
         pass
 
 
-class Temporary(AllocationOp):
-
-    def __init__(self, **kargs):
-        super(Temporary, self).__init__(tags=['temp'], **kargs)
-
-    def generate_adjoints(self, adjoints, delta):
-        pass
+def temporary(**kargs):
+    return Variable(trainable=False, persistent=True, **kargs)
 
 
 class exp(ElementWise):
@@ -1704,8 +1694,9 @@ class Function(Node):
         super(Function, self).__init__()
         from geon.util.analysis import Digraph
         self.ops = Digraph(ops)
+        self.instructions = self.ops.topsort()
         args, defs = set(), set()
-        for op in self.ops.topsort():
+        for op in self.instructions:
             # Kernel defines the def of each operation
             defs |= set([op])
             # Kernel uses the args of each operation
@@ -1742,6 +1733,7 @@ def deriv(dep, indep):
 
 
 class CrossEntropyMultiInner(object):
+
     def __init__(self, x, y, s):
         self.x = x
         self.y = y

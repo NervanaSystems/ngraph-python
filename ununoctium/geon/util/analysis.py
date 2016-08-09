@@ -12,19 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
 from __future__ import division
 from builtins import object, range, zip
 from collections import defaultdict
-from geon.op_graph.op_graph import ComputationOp, AllocationOp, ElementWise, Function, \
-    Buffer, ReductionOp, NumPyTensor
 from operator import mul
-from itertools import combinations
 from functools import reduce
+from itertools import combinations
+from geon.op_graph.op_graph import ComputationOp, ElementWise, Function, \
+    Buffer, ReductionOp, NumPyTensor
 
 
 class Digraph(object):
+    """
+    Base class for Directed graph.
+    Includes Graphviz visualization, DFS, topsort
+    """
 
     def _graphviz(self, name=''):
+        """
+        Export the current Digraph to Graphviz
+
+        Args:
+            name (str): Name of the resulting graph
+
+        Returns:
+            pygraphviz object
+        """
+
         from graphviz import Digraph
         dot = Digraph(name)
         for node, nexts in list(self.successors.items()):
@@ -36,6 +51,9 @@ class Digraph(object):
 
     @staticmethod
     def _invert(adjacency):
+        """
+        Returns the invert of the given adjacency dict (e.g., successors to predecessors)
+        """
         result = {x: set() for x in list(adjacency.keys())}
         for x, others in list(adjacency.items()):
             for y in others:
@@ -43,19 +61,37 @@ class Digraph(object):
         return result
 
     def __init__(self, successors):
+        """
+        Initialize directed graph from successors dict
+
+        Args:
+            successors (dict: op => set(op)): dict that map each op to all its users
+        """
         self.successors = successors
 
     def render(self, fpath, view=True):
+        """
+        Renders to a graphviz file
+
+        Args:
+            fpath (str): file to write too
+        """
         self._graphviz().render(fpath, view=view)
 
     def view(self):
+        """ View the graph. Requires pygraphviz """
         self._graphviz().view()
 
     def dfs(self, fun):
-        predecessors = Digraph._invert(self.successors)
-        visited = set()
-        # Visit single node
+        """
+        Performs DFS, applying the provided function to each node
 
+        Args:
+            fun (Function): Function to apply to each visited node
+        """
+        visited = set()
+
+        # Visit single node
         def visit(u, fun):
             if u not in visited:
                 vs = self.successors[u]
@@ -65,38 +101,75 @@ class Digraph(object):
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        inputs = [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
-        for x in sorted(inputs, key=lambda x: x.id):
+        for x in sorted(self.inputs, key=lambda x: x.id):
             visit(x, fun)
 
+    @property
+    def inputs(self):
+        predecessors = Digraph._invert(self.successors)
+        return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
+
     def topsort(self):
+        """
+        Topological sort of the nodes
+
+        Returns:
+            Sorted list of nodes
+        """
         result = []
         self.dfs(lambda x: result.insert(0, x))
         return result
 
 
 class DataFlowGraph(Digraph):
+    """
+    Class explicitly representing the dataflow graph
+    """
 
-    def _fill_successors(self, outputs):
-        for w in outputs:
+    def _fill_successors(self, results):
+        """ Walk through provided results to build the successors map"""
+        for w in results:
             self.successors[w] |= set()
             for v in w.args:
                 self.successors[v].add(w)
                 self._fill_successors({v})
 
-    def __init__(self, outputs):
+    def __init__(self, results):
+        """
+        Initialize the dataflow graph
+
+        Args:
+            results (dict): Results of the desired computation
+        """
+
         super(DataFlowGraph, self).__init__(defaultdict(set))
-        self._fill_successors(outputs)
-        self.outputs = outputs
+        self._fill_successors(results)
+        self.results = results
+
+    @property
+    def instructions(self):
+        """ Returns the ordered instructions to execute the dataflow graph """
+
+        return self.topsort()
 
     def liveness(self):
+        """
+        Liveness analysis. The goal is to find, at each program point
+        (i.e., instruction line number), which tensors need to be in
+        memory (because they will be required later on).
+
+        Returns:
+            dict (op => set(tensor_description)): Live tensors at each point
+        """
+
         can_do_inplace = lambda x: False
         order = self.instructions
         # Initialize
         liveness = dict((op, set()) for op in order)
-        keeps = {x.tensor_axes_info.tensor_description for x in self.successors if isinstance(
-            x, AllocationOp) and x.tensor_axes_info.read_only}
-        liveness[order[-1]] = {x.tensor_axes_info.tensor_description for x in self.outputs} | keeps
+        persistent = {x.tensor_axes_info.tensor_description
+                      for x in self.successors if 'persistent' in x.tags}
+        results = {x.tensor_axes_info.tensor_description for x in self.results}
+        liveness[order[-1]] = results | persistent
         # Update
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             use = {x.tensor_axes_info.tensor_description for x in current.args}
@@ -111,21 +184,27 @@ class DataFlowGraph(Digraph):
         # l)) for l in liveness.itervalues()])*1024**-2
         return liveness
 
-    @property
-    def instructions(self):
-        return self.topsort()
 
-
+# Fusion Policies
 def never_fusible(op1, op2):
+    """
+    Default fusion policies: things are not fusible
+    """
+
     return False
 
 
 def gpu_fusible(op1, op2):
+    """
+    Fusion policies for the GPU
+    """
+
     # Only computations can be merged
     if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
 
-    shapes1, shapes2 = op1.tensor_axes_info.shapes, op2.tensor_axes_info.shapes
+    shapes1 = op1.tensor_axes_info.tensor_description.shape
+    shapes2 = op2.tensor_axes_info.tensor_description.shape
     # Elementwise functions can be merged together if they have the same shapes
     if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
         return True
@@ -143,8 +222,22 @@ def gpu_fusible(op1, op2):
 
 
 class KernelFlowGraph(DataFlowGraph):
+    """
+    Class representing a fused dataflow graph
+    """
 
     def _graphviz(self, name=''):
+        """
+        Export fused dataflow to graphviz.
+        Involves some hackery to get graphviz to draw edge between subgraphs
+
+        Args:
+            name (str): name of the resulting graph
+
+        Returns:
+            pygraphgiz object
+        """
+
         predecessors = Digraph._invert(self.successors)
         from graphviz import Digraph as gvDigraph
         dot = gvDigraph(name, graph_attr={
@@ -174,6 +267,13 @@ class KernelFlowGraph(DataFlowGraph):
         return dot
 
     def _compute_paths(self):
+        """
+        Computes useful datastructures for fusion analysis
+
+        path_from: maps node v to nodes that have a path from w
+        bad_path_from: map node v to nodes that have a bad path from w
+        """
+
         path_from, bad_path_from = dict(), dict()
         order = self.topsort()
         for v in reversed(order):
@@ -188,8 +288,16 @@ class KernelFlowGraph(DataFlowGraph):
         return path_from, bad_path_from
 
     def between(self, v, w, path_from):
+        """
+        Finds all the nodes on any path between v and w
+
+        Args:
+            v (operation): start node
+            w (operation): end_node
+            path_from (dict): maps node v to nodes that have a path from w
+        """
+
         vertices = set()
-        # Initialize worklists to all successors of v who can reach w
         worklist = {w}
         worklist |= {x for x in self.successors[v] if w in path_from[x]}
         while worklist:
@@ -203,6 +311,14 @@ class KernelFlowGraph(DataFlowGraph):
         return vertices
 
     def transfer_edges(self, v, w, dct):
+        """
+        Transfers edges from a node into another
+
+        Args:
+            v (operation): node that receives edges
+            w (operation): node that loses edges
+        """
+
         dct[v] |= dct.pop(w, set()) - {v}
         for node, connected in list(dct.items()):
             if w in connected:
@@ -211,9 +327,18 @@ class KernelFlowGraph(DataFlowGraph):
                     connected.add(v)
 
     def __init__(self, dataflow, fusible=never_fusible):
+        """
+        Performs fusion on the provided dataflow graph
+
+        Implementation of: *Fast Greedy Weighted Fusion*, Ken Kennedy,
+        Internal journal of Parallel Programming (2002):
+        Download: http://citeseerx.ist.psu.edu/viewdoc
+                        /download?doi=10.1.1.95.2695&rep=rep1&type=pdf
+        """
+
         # Extracts clusters
         self.fusible = fusible
-        super(KernelFlowGraph, self).__init__(dataflow.outputs)
+        super(KernelFlowGraph, self).__init__(dataflow.results)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
         edges = {(a, b) for a, _ in successors.items() for b in _}
@@ -251,6 +376,10 @@ class KernelFlowGraph(DataFlowGraph):
 
 
 class UndirectedGraph(object):
+    """
+    Base class for Undirected graph.
+    Includes Graphviz visualization
+    """
 
     def __init__(self, neighbors):
         self.neighbors = neighbors
@@ -276,8 +405,26 @@ class UndirectedGraph(object):
 
 
 class InterferenceGraph(UndirectedGraph):
+    """
+    Interference graph. Undirected graph containing a node for each
+    tensor, and an edge between tensors that are live at the same time
+    """
 
     def __init__(self, lives):
+        """
+        Creates the interference graph from the provided liveness information.
+        There is an edge in the interference graph whenever two variables are
+        live at the same time. Each node is weighted by the memory requirement
+        of the underlying tensor.
+
+        This seems to be the performance bottleneck for very large graphs.
+        Construction could be optimized, or coloring could be done direclty
+        from the liveness information.
+
+        Args:
+            lives (op => set(tensor_description)): Live tensors at each point
+                                Typically the output of dataflow.liveness()
+        """
         neighbors = {x: set() for l in list(lives.values()) for x in l}
         edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]
         for u, v in edges:
@@ -288,6 +435,16 @@ class InterferenceGraph(UndirectedGraph):
                         x.dtype.itemsize for x in neighbors}
 
     def color(self):
+        """
+        Performs weighted graph coloring on this interference graph.
+        Basically implements:
+        *Buffer allocation in regular dataflow networks:
+        an approach based on coloring circular-arc graphs*, R. Govindarajan
+
+        The PDF link I used seems dead now, and can't find a link without
+        an academic account
+        """
+
         neighbors = self.neighbors
         weights = self.weights
         partitions = []
@@ -323,14 +480,8 @@ def _random_colors(N, alpha=.5):
     return HEX
 
 
-def assign_buffers(outputs, fusible=None):
-    dfg = DataFlowGraph(outputs)
-    if fusible:
-        dfg = KernelFlowGraph(dfg, fusible)
-    ifg = InterferenceGraph(dfg.liveness())
-    memory, buffers = ifg.color()
-    # Binds initializers
-    for op in dfg.successors:
+def bind_initializers(ops):
+    for op in ops:
         buffer = op.tensor_axes_info.tensor_description.buffer
         for i in op.initializers:
             i.tensor_axes_info.tensor_description.buffer = buffer
@@ -338,10 +489,34 @@ def assign_buffers(outputs, fusible=None):
                 if isinstance(a, NumPyTensor):
                     a.tensor_axes_info.tensor_description.buffer = Buffer(-1, a.nptensor.size)
                     a.tensor_axes_info.tensor_description.buffer.data = a.nptensor
+
+
+def assign_buffers(results, fusible=None):
+    """
+    Performs dataflow analysis ou the graph defined by the provide results.
+    Assigns buffer to each node.
+
+    Args:
+        results: results to build the graph from
+
+    Returns:
+        dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
+        memory (int): Memory usage of the computations
+    """
+
+    dfg = DataFlowGraph(results)
+    all_ops = dfg.successors.keys()
+    if fusible:
+        dfg = KernelFlowGraph(dfg, fusible)
+    ifg = InterferenceGraph(dfg.liveness())
+    memory, buffers = ifg.color()
+    # Binds initializers
+    bind_initializers(dfg.inputs)
     # set style
     cmap = _random_colors(len(buffers), .5)
-    for op in dfg.successors:
-        op.style = {'style': 'filled', 'fillcolor': cmap[
-            op.tensor_axes_info.tensor_description.buffer.color]}
+    for op in all_ops:
+        tensor = op.tensor_axes_info.tensor_description
+        if tensor.buffer:
+            op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
     # dfg.view()
     return dfg, memory

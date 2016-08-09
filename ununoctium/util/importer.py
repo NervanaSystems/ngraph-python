@@ -382,10 +382,16 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                     print(array)
                     shape = shape_tensor.tensor_axes_info.tensor_description.shape
                     if len(shape) == 1:
-                        op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0])), name=node.name)
+                        op = be.NumPyTensor(
+                            array, axes=Axes(
+                                be.NumericAxis(
+                                    shape[0])), name=node.name)
                     elif len(shape) == 2:
-                        op = be.NumPyTensor(array, axes=Axes(be.NumericAxis(shape[0]),
-                                                             be.NumericAxis(shape[1])), name=node.name)
+                        op = be.NumPyTensor(
+                            array, axes=Axes(
+                                be.NumericAxis(
+                                    shape[0]), be.NumericAxis(
+                                    shape[1])), name=node.name)
                     else:
                         assert False
 
