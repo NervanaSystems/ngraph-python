@@ -111,7 +111,7 @@ The computation graph is displayed via graphviz library:
 We can also train the model from scratch with Neon's graph backend.
 
 ```
-(.venv)$ python train_mnist_mlp.py --pb_file='mnist/graph.pb'
+(.venv)$ python train_mnist_mlp.py --pb_file='mnist/graph.pb' --loss_node='xentropy_mean'
 ```
 
 The protobuf file `mnist_mlp_graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.

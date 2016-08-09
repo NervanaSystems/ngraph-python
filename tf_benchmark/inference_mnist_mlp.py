@@ -20,13 +20,13 @@ inference with the model on new data.
 """
 
 from __future__ import print_function
-from neon.data import ArrayIterator, load_mnist
+from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
-import geon.backends.graph.funs as be
-import geon.backends.graph.analysis as analysis
+
+import geon as be
+import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
-import tensorflow as tf
 from util.importer import create_nervana_graph
 import numpy as np
 
@@ -41,14 +41,10 @@ env = Environment()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
-test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
+mnist_data = MNIST(path=args.data_dir).gen_iterators()
+test_data = mnist_data['valid']
 
-graph_def = tf.GraphDef()
-with open(args.pb_file, 'rb') as f:
-    graph_def.ParseFromString(f.read())
-
-nervana_graph = create_nervana_graph(graph_def, env, args.end_node)
+nervana_graph = create_nervana_graph(args.pb_file, env)
 
 dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
 dataflow.view()
