@@ -17,6 +17,7 @@ from builtins import range
 
 import geon.op_graph.names as names
 from geon.op_graph import arrayaxes
+from geon.transformers.nptransform import NumPyTransformer
 
 # Make some axes
 ax = names.NameScope()
@@ -81,18 +82,27 @@ def tensorview(td, nparr):
 
 
 def test_simple_tensors():
+    transformer = NumPyTransformer()
     # A scalar
-    td0 = arrayaxes.TensorDescription(axes=())
+    td0 = arrayaxes.TensorDescription(
+        axes=(), transformer=transformer
+    )
     e0 = empty(td0)
 
     # A simple vector
-    td1 = arrayaxes.TensorDescription(axes=[ax.A])
+    td1 = arrayaxes.TensorDescription(
+        axes=[ax.A], transformer=transformer
+    )
     e1 = empty(td1)
 
-    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
+    td2 = arrayaxes.TensorDescription(
+        axes=[ax.A, ax.B], transformer=transformer
+    )
     e2 = empty(td2)
 
-    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D))
+    td3 = arrayaxes.TensorDescription(
+        axes=(ax.D, ax.D), transformer=transformer
+    )
     e3 = empty(td3)
 
     # Reaxes

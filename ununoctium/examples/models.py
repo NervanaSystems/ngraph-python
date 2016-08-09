@@ -161,8 +161,8 @@ class MyTest(be.Model):
                 training_n = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (x, y) in enumerate(train):
-                    graph.x.value = x
-                    graph.y.value = y
+                    graph.x.value = x.reshape(graph.x.shape.lengths)
+                    graph.y.value = y.reshape(graph.y.shape.lengths)
                     vals = enp.evaluate()
                     training_error += vals[graph.error] / train.bsz
                     training_n += 1
@@ -184,8 +184,8 @@ class MyTest(be.Model):
             total_error = 0
             n = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
-                graph.x.value = xraw
-                graph.y.value = yraw
+                graph.x.value = xraw.reshape(graph.x.shape.lengths)
+                graph.y.value = yraw.reshape(graph.y.shape.lengths)
                 vals = enp.evaluate()
                 total_error += vals[graph.error] / test.bsz
                 n += 1

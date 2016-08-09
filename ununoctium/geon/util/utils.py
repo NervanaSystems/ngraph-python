@@ -36,8 +36,7 @@ class RandomTensorGenerator(object):
             self.rng.uniform(
                 low,
                 high,
-                Axes(
-                    *axes).lengths),
+                Axes(*axes).lengths),
             dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
@@ -160,8 +159,8 @@ def transform_derivative(f, px):
     :return:
     """
     x = px.value
-    fshape = f.axes.value.lengths
-    xshape = px.axes.value.lengths
+    fshape = f.axes.lengths
+    xshape = px.axes.lengths
 
     dfdx = be.deriv(f, px)
 

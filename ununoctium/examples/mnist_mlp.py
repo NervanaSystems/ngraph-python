@@ -42,7 +42,7 @@ Examples:
 
 """
 from geon.frontends.neon import *  # noqa
-from neon.data import ArrayIterator, load_mnist
+from neon.data import MNIST
 from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
@@ -57,13 +57,9 @@ parser.set_defaults(backend='dataloader')
 args = parser.parse_args()
 
 # load up the mnist data set
-# split into train and tests sets
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
-
-# setup a training set iterator
-train_set = ArrayIterator(X_train, y_train, nclass=nclass, lshape=(1, 28, 28))
-# setup a validation data set iterator
-valid_set = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
+dataset = MNIST(path=args.data_dir)
+train_set = dataset.train_iter
+valid_set = dataset.valid_iter
 
 # setup weight initialization function
 init_norm = Gaussian(loc=0.0, scale=0.01)
@@ -82,23 +78,17 @@ optimizer = GradientDescentMomentum(
 
 # initialize model object
 mlp = Model(layers=layers)
-
-# configure callbacks
 callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
+mlp.initialize(
+    dataset=train_set,
+    input_axes=Axes(ax.C, ax.H, ax.W),
+    target_axes=Axes(ax.Y),
+    optimizer=optimizer,
+    cost=cost,
+    metric=Misclassification()
+)
 
 np.seterr(divide='raise', over='raise', invalid='raise')
-# run fit
-mlp.fit(
-    train_set,
-    input_axes=Axes(
-        ax.C,
-        ax.H,
-        ax.W),
-    target_axes=Axes(
-        ax.Y),
-    optimizer=optimizer,
-    num_epochs=args.epochs,
-    cost=cost,
-    callbacks=callbacks)
-error_rate = mlp.eval(valid_set, metric=Misclassification())
+mlp.fit(train_set, num_epochs=args.epochs, callbacks=callbacks)
+error_rate = mlp.eval(valid_set)
 neon_logger.display('Misclassification error = %.1f%%' % (error_rate * 100))

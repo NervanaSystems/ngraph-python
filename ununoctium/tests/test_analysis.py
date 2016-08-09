@@ -43,7 +43,8 @@ def build_graphs(L, BS):
             A.append(f(be.dot(W[i], Aim1)))
         Error = be.cross_entropy_multi(A[-1], Y)
         dW = [be.deriv(Error, w) for w in W]
-        dfg = an.DataFlowGraph(dW)
+        transformer = be.NumPyTransformer()
+        dfg = an.DataFlowGraph(transformer, dW)
         ifg = an.InterferenceGraph(dfg.liveness())
         return dfg, ifg
 

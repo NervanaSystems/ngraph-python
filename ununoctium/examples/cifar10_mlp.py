@@ -46,19 +46,22 @@ layers = [
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
 mlp = Model(layers=layers)
-
-# configure callbacks
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
+mlp.initialize(
+    dataset=train,
+    input_axes=Axes(ax.C, ax.H, ax.W),
+    target_axes=Axes(ax.Y,),
+    optimizer=opt_gdm,
+    cost=cost,
+    metric=Misclassification()
+)
 
 np.seterr(divide='raise', over='raise', invalid='raise')
 mlp.fit(
     train,
-    input_axes=Axes(ax.C, ax.H, ax.W),
-    target_axes=Axes(ax.Y,),
-    optimizer=opt_gdm,
     num_epochs=args.epochs,
-    cost=cost,
-    callbacks=callbacks)
+    callbacks=callbacks
+)
 
 print('Misclassification error = %.1f%%' %
-      (mlp.eval(test, metric=Misclassification()) * 100))
+      (mlp.eval(test) * 100))
