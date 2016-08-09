@@ -195,7 +195,7 @@ def never_fusible(op1, op2):
     return False
 
 
-def gpu_fusible(op1, op2):
+def gpu_fusible(transformer, op1, op2):
     """
     Fusion policies for the GPU
     """
@@ -204,8 +204,8 @@ def gpu_fusible(op1, op2):
     if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
 
-    shapes1 = op1.tensor_description(self.transformer).shape
-    shapes2 = op2.tensor_description(self.transformer).shape
+    shapes1 = op1.tensor_description(transformer).shape
+    shapes2 = op2.tensor_description(transformer).shape
     # Elementwise functions can be merged together if they have the same shapes
     if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
         return True
