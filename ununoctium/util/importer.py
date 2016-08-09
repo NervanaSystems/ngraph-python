@@ -298,6 +298,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             ignored_nodes[node.name] = None
             continue
 
+        name_to_op[node.name] = None
         with be.bound_environment(env):
             if op_type in two_inputs_ops:
 
@@ -376,7 +377,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 assert isinstance(init_val, be.Constant)
 
                 if isinstance(shape_tensor, be.Constant):
-                    op = be.Constant(init_val.const, name=node.name)
+                    name_to_op[node.name] = be.Constant(init_val.const, name=node.name)
                 else:
                     array = np.array(shape_tensor.value)
                     array.fill(init_val.const)
@@ -567,6 +568,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                                         axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
                                         name=node.name)
 
+                name_to_op[node.name + ":1"] = None
                 if grad_y_reduce_:
                     val_y = np.array(grad_y_reduce_)
                     name_to_op[node.name + ":1"] = \

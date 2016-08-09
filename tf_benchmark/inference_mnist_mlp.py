@@ -20,7 +20,7 @@ inference with the model on new data.
 """
 
 from __future__ import print_function
-from neon.data import ArrayIterator, load_mnist
+from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import geon as be
@@ -41,8 +41,8 @@ env = Environment()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
-test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
+mnist_data = MNIST(path=args.data_dir).gen_iterators()
+test_data = mnist_data['valid']
 
 nervana_graph = create_nervana_graph(args.pb_file, env)
 

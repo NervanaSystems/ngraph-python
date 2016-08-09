@@ -24,7 +24,7 @@ To Run:
 """
 
 from __future__ import print_function
-from neon.data import ArrayIterator, load_mnist
+from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import geon as be
@@ -52,9 +52,10 @@ env = Environment()
 
 epochs = 5
 
-(X_train, y_train), (X_test, y_test), nclass = load_mnist(path=args.data_dir)
-train_data = ArrayIterator(X_train, y_train, nclass=nclass, lshape=(1, 28, 28))
-test_data = ArrayIterator(X_test, y_test, nclass=nclass, lshape=(1, 28, 28))
+mnist_data = MNIST(path=args.data_dir).gen_iterators()
+train_data = mnist_data['train']
+test_data = mnist_data['valid']
+
 
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
