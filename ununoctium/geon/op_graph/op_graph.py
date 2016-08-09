@@ -40,13 +40,13 @@ def from_transformer_cache(f):
     Decorator which caches the return value of method `f` inside the `cache`
     attribute of the transformer.
 
-    The transformer should be passed in as the first argument to the wrapped
-    method.
+    The transformer should be passed in as the first and only argument to the
+    wrapped method.
     """
-    def wrapper(self, transformer, *args, **kargs):
+    def wrapper(self, transformer):
         key = (f.__name__, self)
         if key not in transformer.cache:
-            transformer.cache[key] = f(self, transformer, *args, **kargs)
+            transformer.cache[key] = f(self, transformer)
         return transformer.cache[key]
     return wrapper
 
