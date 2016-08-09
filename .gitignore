@@ -41,3 +41,10 @@ neon/backends/kernels/dump
 
 # apple
 *.AppleDouble
+
+# tensorflow
+*.pb
+*.ckpt
+*.ckpt.meta
+tf_benchmark/mnist/data
+tf_benchmark/mnist/checkpoint
