@@ -36,6 +36,13 @@ def tds(args, transformer):
 
 
 def from_transformer_cache(f):
+    """
+    Decorator which caches the return value of method `f` inside the `cache`
+    attribute of the transformer.
+
+    The transformer should be passed in as the first argument to the wrapped
+    method.
+    """
     def wrapper(self, transformer, *args, **kargs):
         key = (f.__name__, self)
         if key not in transformer.cache:
@@ -48,14 +55,21 @@ class Op(Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, initializers=None, **kwds):
+        """
+        :param initializers: should be a list of Ops which are called to initialize
+        this op.
+        """
         super(Op, self).__init__(**kwds)
         self.schemas = []
         self._adjoints = None
         self.initializers = initializers or []
+
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
 
+        # if transform_hook is not None, it should be a function which will
+        # be called when this Op is transformed by a Transformer
         self.transform_hook = None
 
     def add_schema(self, schema, set_generate_adjoints=True):
@@ -171,7 +185,14 @@ class Op(Node):
         SimplePrune(results)
 
     def transform(self, transformer, *args):
-        """Process op"""
+        """
+        Should call transformer.op_name(...) to execute low level ops.
+
+        Called by self.transform_call_info which is called by
+        Transformer.transform_ordered_ops.
+
+        WILL BE DEPRICATED SOON
+        """
         pass
 
     def sync(self, transformer):
@@ -205,6 +226,9 @@ class Op(Node):
 
 
 class Tensor(Op):
+    """
+    Super class for all Ops whose output value is a Tensor.
+    """
 
     def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
         super(Tensor, self).__init__(**kwds)
@@ -435,6 +459,20 @@ class ComputationOp(Tensor):
     def graph_label(self):
         return self.__class__.__name__ + '[' + self.name + ']'
 
+    def transform(self, transformer, *args):
+        """
+        Should call transformer.op_name(...) to execute low level ops.
+
+        Called by self.transform_call_info which is called by
+        Transformer.transform_ordered_ops.
+
+        WILL BE DEPRICATED SOON
+        """
+        raise NotImplementedError(
+            "transform operation not implemented on type inheriting from "
+            "ComputationOp" + str(type(self))
+        )
+
 
 class RNG(object):
 
@@ -592,6 +630,9 @@ class Fill(VoidOp):
 class Constant(AllocationOp):
     """
     A scalar constant that appears in a graph.
+
+    if you want a constant tensor and a numpy array to initialize it, use
+    NumPyTensor for now.
     """
 
     def __init__(self, const, **kargs):
@@ -620,7 +661,9 @@ class Constant(AllocationOp):
 
 class NumPyTensor(AllocationOp):
     """
-    A NumPy tensor with attached axes information
+    A NumPy tensor with attached axes information.
+
+    This is how you define tensor valued constants for now.
     """
 
     def __init__(self, nptensor, axes, **kargs):

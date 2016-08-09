@@ -134,10 +134,23 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             op.allocate(self)
 
     def transform_ordered_ops(self, ordered_ops):
+        """
+        call op.transform_call_info on every op in ordered_ops.
+
+        if transform_hooks are present on the op or on this transformer, call
+        those as well.well
+        """
+        # ???
         for op in ordered_ops:
             op.sync(self)
 
         def transform_op(op):
+            """
+            this is the call we would make directly if there were no hooks.
+            wrap it up into a function so we can pass it to a hook which has
+            the responsibility of making the call to the hook.  This allows the
+            hook to execute both before and after the transform.
+            """
             op.transform_call_info(self)
 
         for op in ordered_ops:
@@ -146,20 +159,25 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             elif self.transform_hook is not None:
                 self.transform_hook(self, op, transform_op)
             else:
+                # run the transform without any hooks
                 transform_op(op)
 
     def evaluate(self, results=None):
+        """
+        evaluate the compiled graph (stored in self) and return a dictionary of
+        results.
+
+        The dictionary will be of the form: {
+            Op: value,
+            ...
+        }
+        """
         if results is None:
             results = self.all_results
         ordered_ops = sorted(Op.ordered_ops(results), key=self.order.get)
         self.transform_ordered_ops(ordered_ops)
-        r = {}
-        for op in results:
-            r[op] = self.value(op)
-        return r
 
-    def value(self, op):
-        return op.output_value(self)
+        return {op: op.output_value(self) for op in results}
 
     def set_value(self, op, tensor):
         op.tensor_description(self).value = tensor
@@ -601,10 +619,24 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         raise NotImplementedError()
 
+    # @abc.abstractmethod
     def allreduce(self, x, out):
         """
         MPI allreduce
+
         :param x:
+        :param out:
+        :return:
+        """
+        raise NotImplementedError()
+
+    # @abc.abstractmethod
+    def conv2d(self, x, y, out):
+        """
+        2 dimensional convolution
+
+        :param x:
+        :param y:
         :param out:
         :return:
         """
