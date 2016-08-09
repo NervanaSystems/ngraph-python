@@ -25,11 +25,12 @@ import numpy as np
 import scipy.stats as stats
 from builtins import range
 from builtins import str
-from geon.backends.graph.graph_test_utils import *
 
-import geon.backends.graph.funs as be
-from geon.backends.graph.arrayaxes import AxisVar
-from geon.backends.graph.graphop import Tensor, softmax
+from geon.frontends.neon import *
+
+import geon as be
+from geon.op_graph.arrayaxes import AxisVar
+from geon.op_graph.op_graph import Tensor, softmax
 
 import tensorflow as tf
 from tensorflow.python.framework import tensor_util
@@ -397,11 +398,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 if op_type == 'TruncatedNormal':
                     lower, upper = -2.0, 2.0
                     mu, sigma = 0, 1
-                    X = stats.truncnorm(
-                        (lower - mu) / sigma,
-                        (upper - mu) / sigma,
-                        loc=mu,
-                        scale=sigma)
+                    X = stats.truncnorm((lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)
                     val = X.rvs(shape)
                 elif op_type == "RandomStandardNormal":
                     val = -0.5 + np.random.random_sample(shape).astype(np.float32)
@@ -452,8 +449,9 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                     for i in reduction_indices.nptensor:
                         reduction_axes += Axes(input_tensor_axes[int(i)],)
 
-                op = reduction_ops[op_type](input_tensor, reduction_axes=reduction_axes, name=node.name)
-
+                name_to_op[node.name] = reduction_ops[op_type](input_tensor,
+                                                               reduction_axes=reduction_axes, name=node.name)
+                op = name_to_op[node.name]
 
             elif op_type == 'Prod':
                 # TODO: implement tf.reduce_prod and merge with reduction_ops
@@ -470,14 +468,11 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
 
             elif op_type == 'Shape':
                 shape = name_to_op[inputs[0]].tensor_axes_info.tensor_description.shape
-                print(shape)
                 if len(shape) == 0:
                     op = be.Constant(0, name=node.name)
                 else:
-                    op = be.NumPyTensor(
-                        np.array(shape), axes=Axes(
-                            be.NumericAxis(
-                                len(shape)), ), name=node.name)
+                    op = be.NumPyTensor(np.array(shape), axes=Axes(be.NumericAxis(len(shape)), ),
+                                        name=node.name)
 
             elif op_type == 'Rank':
                 # The rank of a tensor is the number of axis

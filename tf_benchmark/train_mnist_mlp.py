@@ -26,8 +26,9 @@ To Run:
 from __future__ import print_function
 from neon.data import ArrayIterator, load_mnist
 from neon.util.argparser import NeonArgparser
-import geon.backends.graph.funs as be
-import geon.backends.graph.analysis as analysis
+
+import geon as be
+import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 from util.importer import create_nervana_graph

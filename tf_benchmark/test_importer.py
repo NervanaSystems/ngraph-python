@@ -26,26 +26,25 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-import geon.backends.graph.funs as be
+import geon as be
 from util.importer import create_nervana_graph
-import geon.backends.graph.analysis as analysis
+import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 
 def test_create_nervana_graph(pb_file, execute=False):
     env = Environment()
-    ast_graph = create_nervana_graph(pb_file, env)
-    print(ast_graph)
+    graph = create_nervana_graph(pb_file, env)
+    print(graph)
 
-    dataflow = analysis.DataFlowGraph([ast_graph.last_op])
+    dataflow = analysis.DataFlowGraph([graph.last_op])
     dataflow.view()
 
     if execute:
         with be.bound_environment(env):
-            enp = be.NumPyTransformer(results=[ast_graph.last_op])
+            enp = be.NumPyTransformer(results=[graph.last_op])
             result = enp.evaluate()
-            print(result[ast_graph.last_op])
+            print(result[graph.last_op])
 
 
 # test_create_nervana_graph("sample/constant_graph.pb", True)
