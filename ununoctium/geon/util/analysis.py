@@ -134,7 +134,7 @@ class DataFlowGraph(Digraph):
                 self.successors[v].add(w)
                 self._fill_successors({v})
 
-    def __init__(self, results):
+    def __init__(self, transformer, results):
         """
         Initialize the dataflow graph
 
@@ -143,6 +143,7 @@ class DataFlowGraph(Digraph):
         """
 
         super(DataFlowGraph, self).__init__(defaultdict(set))
+        self.transformer = transformer
         self._fill_successors(results)
         self.results = results
 
@@ -166,19 +167,19 @@ class DataFlowGraph(Digraph):
         order = self.instructions
         # Initialize
         liveness = dict((op, set()) for op in order)
-        persistent = {x.tensor_axes_info.tensor_description
+        persistent = {x.tensor_description(self.transformer)
                       for x in self.successors if 'persistent' in x.tags}
-        results = {x.tensor_axes_info.tensor_description for x in self.results}
+        results = {x.tensor_description(self.transformer) for x in self.results}
         liveness[order[-1]] = results | persistent
         # Update
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
-            use = {x.tensor_axes_info.tensor_description for x in current.args}
-            defs = {x.tensor_axes_info.tensor_description for x in current.defs}
+            use = {x.tensor_description(self.transformer) for x in current.args}
+            defs = {x.tensor_description(self.transformer) for x in current.defs}
             liveness[previous] = use | (liveness[current] - defs)
         # Inplace not possible
         for op in order:
             if not can_do_inplace(op):
-                liveness[op] |= {x.tensor_axes_info.tensor_description for x in op.args}
+                liveness[op] |= {x.tensor_description(self.transformer) for x in op.args}
 
         # print max([sum(map(lambda x: reduce(mul, x.shapes, 1)*x.dtype.itemsize,
         # l)) for l in liveness.itervalues()])*1024**-2
@@ -194,7 +195,7 @@ def never_fusible(op1, op2):
     return False
 
 
-def gpu_fusible(op1, op2):
+def gpu_fusible(transformer, op1, op2):
     """
     Fusion policies for the GPU
     """
@@ -203,8 +204,8 @@ def gpu_fusible(op1, op2):
     if not isinstance(op1, ComputationOp) or not isinstance(op2, ComputationOp):
         return False
 
-    shapes1 = op1.tensor_axes_info.tensor_description.shape
-    shapes2 = op2.tensor_axes_info.tensor_description.shape
+    shapes1 = op1.tensor_description(transformer).shape
+    shapes2 = op2.tensor_description(transformer).shape
     # Elementwise functions can be merged together if they have the same shapes
     if isinstance(op1, ElementWise) and isinstance(op2, ElementWise) and shapes1 == shapes2:
         return True
@@ -480,18 +481,18 @@ def _random_colors(N, alpha=.5):
     return HEX
 
 
-def bind_initializers(ops):
+def bind_initializers(transformer, ops):
     for op in ops:
-        buffer = op.tensor_axes_info.tensor_description.buffer
+        buffer = op.tensor_description(transformer).buffer
         for i in op.initializers:
-            i.tensor_axes_info.tensor_description.buffer = buffer
+            i.tensor_description(transformer).buffer = buffer
             for a in i.args:
                 if isinstance(a, NumPyTensor):
-                    a.tensor_axes_info.tensor_description.buffer = Buffer(-1, a.nptensor.size)
-                    a.tensor_axes_info.tensor_description.buffer.data = a.nptensor
+                    a.tensor_description(transformer).buffer = Buffer(-1, a.nptensor.size)
+                    a.tensor_description(transformer).buffer.data = a.nptensor
 
 
-def assign_buffers(results, fusible=None):
+def assign_buffers(transformer, results, fusible=None):
     """
     Performs dataflow analysis ou the graph defined by the provide results.
     Assigns buffer to each node.
@@ -504,18 +505,18 @@ def assign_buffers(results, fusible=None):
         memory (int): Memory usage of the computations
     """
 
-    dfg = DataFlowGraph(results)
+    dfg = DataFlowGraph(transformer, results)
     all_ops = dfg.successors.keys()
     if fusible:
         dfg = KernelFlowGraph(dfg, fusible)
     ifg = InterferenceGraph(dfg.liveness())
     memory, buffers = ifg.color()
     # Binds initializers
-    bind_initializers(dfg.inputs)
+    bind_initializers(transformer, dfg.inputs)
     # set style
     cmap = _random_colors(len(buffers), .5)
     for op in all_ops:
-        tensor = op.tensor_axes_info.tensor_description
+        tensor = op.tensor_description(transformer)
         if tensor.buffer:
             op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
     # dfg.view()
