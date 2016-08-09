@@ -350,6 +350,10 @@ class Tensor(Op):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
+        """
+        Returns a TensorDescription describing the output of this TensorOp
+        """
+
         if self.__out is not None:
             td = self.__out.tensor_description(transformer)
             if self.__axes is not None:
