@@ -28,4 +28,5 @@ that can be run on the back-end.  The operational graph API is shared by all fro
 back-ends.
 
 The operational graph API can be used directly, both as an alternative to a front-end and as
-an extension mechanism for front-ends.
+an extension mechanism for front-ends.  For example, the neon front end
+is implemented by expanding neon layers and costs into graphs.
