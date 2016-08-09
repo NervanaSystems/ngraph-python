@@ -606,7 +606,7 @@ class Constant(AllocationOp):
 
     @property
     def graph_label(self):
-        shapes = self.tensor_axes_info.tensor_description.shape
+        shapes = self.axes.lengths
         if not shapes or max(shapes) <= 2:
             return str(self.const)
         if self.name == self.id:

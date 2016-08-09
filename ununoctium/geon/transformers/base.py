@@ -150,8 +150,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def evaluate(self, results=None):
         if results is None:
             results = self.all_results
-        ops = Op.ordered_ops(results)
-        self.transform_ordered_ops(ops)
+        self.transform_ordered_ops(self.ops)
         r = {}
         for op in results:
             r[op] = self.value(op)

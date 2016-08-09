@@ -519,5 +519,5 @@ def assign_buffers(transformer, results, fusible=None):
         tensor = op.tensor_description(transformer)
         if tensor.buffer:
             op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
-    # dfg.view()
+    dfg.view()
     return dfg, memory
