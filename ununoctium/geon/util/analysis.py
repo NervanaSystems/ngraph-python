@@ -273,6 +273,8 @@ class KernelFlowGraph(DataFlowGraph):
 
         path_from: maps node v to nodes that have a path from w
         bad_path_from: map node v to nodes that have a bad path from w
+
+        'bad_paths' are paths that can not be merged.
         """
 
         path_from, bad_path_from = dict(), dict()
@@ -408,7 +410,14 @@ class UndirectedGraph(object):
 class InterferenceGraph(UndirectedGraph):
     """
     Interference graph. Undirected graph containing a node for each
-    tensor, and an edge between tensors that are live at the same time
+    tensor, and an edge between tensors that are live at the same time.
+
+    This class implements an graph coloring algorithm.
+
+    In a standard graph coloring problem you want to minimize the number of
+    buffers allocated.  in this variant of the graph coloring problem we want
+    to minimize the total buffer space allocated.  In academic literature this
+    variant is refered to as ____.
     """
 
     def __init__(self, lives):
@@ -484,6 +493,7 @@ def _random_colors(N, alpha=.5):
 def bind_initializers(transformer, ops):
     for op in ops:
         buffer = op.tensor_description(transformer).buffer
+        # assign the same buffer to all of the op's initializers
         for i in op.initializers:
             i.tensor_description(transformer).buffer = buffer
             for a in i.args:

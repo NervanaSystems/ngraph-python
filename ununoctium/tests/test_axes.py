@@ -34,17 +34,24 @@ def test_axes_equal():
     assert a1 == a2
 
 
-def to_nested_tup(axes):
-    return tuple(to_nested_tup(axis.axes) if
-                 isinstance(axis, arrayaxes.AxesAxis) else axis for axis in axes)
+def to_nested_tuple(axes):
+    """ recursively replace instances of AxesAxis with instances of type tuple. """
+    return tuple(
+        to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.AxesAxis) else axis
+        for axis in axes
+    )
 
 
 def test_canonicalize_axes():
+    """
+
+    """
     def test(l, r):
-        assert to_nested_tup(arrayaxes.Axes(*l)) == r,\
-            ('Failed. Original collection: %s, axes: %s,' +
-             ' generated tuple: %s, target: %s') %\
-            (l, arrayaxes.Axes(*l), to_nested_tup(arrayaxes.Axes(*l)), r)
+        a = arrayaxes.Axes(*l)
+        assert to_nested_tuple(a) == r, (
+            'Failed. Original collection: {l}, axes: {a},'
+            ' generated tuple: {t}, target: {r}'
+        ).format(l=l, a=a, t=to_nested_tuple(a), r=r)
 
     test((), ())
     test([], ())
