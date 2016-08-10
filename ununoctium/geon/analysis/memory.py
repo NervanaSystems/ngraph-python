@@ -65,9 +65,7 @@ class InterferenceGraph(UndirectedGraph):
         Basically implements:
         *Buffer allocation in regular dataflow networks:
         an approach based on coloring circular-arc graphs*, R. Govindarajan
-
-        The PDF link I used seems dead now, and can't find a link without
-        an academic account
+        https://drive.google.com/open?id=0B8aziUAQFjRTa2Mzb2VUWEFaRXM
         """
 
         neighbors = self.neighbors

@@ -65,8 +65,7 @@ class KernelFlowGraph(DataFlowGraph):
 
         Implementation of: *Fast Greedy Weighted Fusion*, Ken Kennedy,
         Internal journal of Parallel Programming (2002):
-        Download: http://citeseerx.ist.psu.edu/viewdoc
-                        /download?doi=10.1.1.95.2695&rep=rep1&type=pdf
+        Download: https://drive.google.com/open?id=0B8aziUAQFjRTbDNjeGM5elpFeEk
         """
 
         # Extracts clusters
