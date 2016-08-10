@@ -218,4 +218,4 @@ class Logistic(Transform):
         Returns:
             Tensor or optree: Output activation
         """
-        return be.sig(x)
+        return be.sigmoid(x)

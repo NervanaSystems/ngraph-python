@@ -33,12 +33,20 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
+    """
+    given a list of ops you want to compute the results of, this transformer
+    will compile the graph required to compute those results and exposes an
+    evaluate method to execute the compiled graph.
+    """
 
-    def __init__(
-            self,
-            results=None,
-            environment=None,
-            **kvargs):
+    def __init__(self, results=None, environment=None, **kvargs):
+        """
+        :param results: a list of Ops whose results the Transformer should
+            return on `.evaluate()`.  There aren't any good reasons to initialize a
+            transformer with None except for in tests.
+        :param environment: the environment to use to grab things like axis.
+            WARNING: `environment` will be depricated soon.
+        """
         super(Transformer, self).__init__(**kvargs)
         self.transform_hook = None
         if environment is None:

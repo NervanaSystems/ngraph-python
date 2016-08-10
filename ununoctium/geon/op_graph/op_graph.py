@@ -42,6 +42,8 @@ def from_transformer_cache(f):
 
     The transformer should be passed in as the first and only argument to the
     wrapped method.
+
+    TODO: why cache in the transformer instead of self?
     """
     def wrapper(self, transformer):
         key = (f.__name__, self)
@@ -395,7 +397,6 @@ class Tensor(Op):
 class Broadcast(Tensor):
     """
     Used to add additional axes for a returned derivative.
-
     """
 
     def __init__(self, x, **kargs):
@@ -685,7 +686,7 @@ class absolute(ElementWise):
         transformer.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sgn(x) * delta)
+        x.generate_add_delta(adjoints, sign(x) * delta)
 
 
 class add(ElementWise):
@@ -1242,16 +1243,16 @@ class reciprocal(ElementWise):
         transformer.reciprocal(x, out)
 
 
-class sgn(ElementWise):
+class sign(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sgn, self).__init__(args=(x,), **kargs)
+        super(sign, self).__init__(args=(x,), **kargs)
 
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
 
 
-class Sig(object):
+class Sigmoid(object):
     """Sigmoid"""
 
     def __init__(self, x):
@@ -1261,9 +1262,9 @@ class Sig(object):
         self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
 
 
-def sig(x, **kargs):
+def sigmoid(x, **kargs):
     result = reciprocal(exp(-x) + 1)
-    result.add_schema(Sig(x=x))
+    result.add_schema(Sigmoid(x=x))
     return result
 
 
@@ -1417,7 +1418,7 @@ class CrossEntropyBinaryInner(object):
 
 def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
                                enable_diff_opt=True, **kargs):
-    sigy = y.find_schema(Sig)
+    sigy = y.find_schema(Sigmoid)
     if enable_sig_opt and sigy is not None:
         # Simpler equivalent
         x = sigy.x

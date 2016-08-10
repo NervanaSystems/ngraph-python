@@ -60,6 +60,9 @@ class DataFlowGraph(Digraph):
 
         can_do_inplace = lambda x: False
         order = self.instructions
+        if len(order) == 0:
+            return {}
+
         # Initialize
         liveness = dict((op, set()) for op in order)
         persistent = {x.tensor_description(self.transformer)
