@@ -70,7 +70,7 @@ reduction_ops = {
 
 one_inputs_ops = {
     'Tanh': be.tanh,
-    'Sigmod': be.sig,
+    'Sigmod': be.sigmoid,
     # TODO: 'Relu': be.relu,
 }
 
@@ -259,10 +259,13 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
        - last_op: the last operator of the graph
        - name_to_op: the map from operation name to its corresponding operator.
                      This structure is similar with TF graph's collection.
+       - init: initialization graph
     """
 
     name_to_op = {}  # a map from TF node name to Neon op
     variables = {} # trainable variables
+    init_graph = None
+    update_graph = None
 
     ignored_nodes = {}
 
@@ -616,13 +619,13 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 # NoOp adds '^' before each original input name
                 if node.name == "GradientDescent/update":
                     # gradient descent ops
-                    graph.update = be.doall(all=[name_to_op[input[1:]] for input in inputs])
-                    name_to_op[node.name] = graph.update
+                    name_to_op[node.name] = be.doall(all=[name_to_op[input[1:]] for input in inputs])
+                    update_graph = name_to_op[node.name]
 
                 elif node.name == "init":
                     # variable initialization graph, used only once
-                    graph.init = be.doall(all=[name_to_op[input[1:]] for input in inputs[:-1]])
-                    name_to_op[node.name] = graph.init
+                    name_to_op[node.name] = be.doall(all=[name_to_op[input[1:]] for input in inputs[:-1]])
+                    init_graph = name_to_op[node.name]
 
             print(name_to_op[node.name])
             print("---------------------------------------------")
@@ -635,6 +638,9 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
     graph.variables = variables
     graph.last_op = name_to_op[last_op_name]
     graph.name_to_op = name_to_op
+    graph.update = update_graph
+    graph.init = init_graph
+
     if loss_node in name_to_op:
         graph.loss = name_to_op[loss_node]
 

@@ -58,13 +58,13 @@ test_data = mnist_data['valid']
 
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
-if args.end_node == "":
-    transformer = be.NumPyTransformer(results=[nervana_graph.update])
-    transformer.dataflow.view()
+transformer = be.NumPyTransformer()
+init_comp = transformer.computation([nervana_graph.init])
+update_comp = transformer.computation([nervana_graph.loss, nervana_graph.update])
+transformer.finalize()
 
-else:
-    transformer = be.NumPyTransformer(results=[nervana_graph.last_op])
-    transformer.dataflow.view()
+transformer.dataflow.view()
+
 
 def eval_test(test_data, graph, last_op_name):
     # TODO: pass the inference graph instead of manually specify the last node for inference.
@@ -92,8 +92,7 @@ def eval_test(test_data, graph, last_op_name):
 with be.bound_environment(env):
     # initialize all variables with the init op
     if args.end_node == "":
-        enp = be.NumPyTransformer(results=[nervana_graph.init])
-        enp.evaluate()
+        init_comp.evaluate()
 
     for epoch in range(epochs):
         print("===============================")
@@ -105,12 +104,12 @@ with be.bound_environment(env):
             nervana_graph.y.value = yraw
 
             if args.end_node == "":
-                enp = be.NumPyTransformer(results=[nervana_graph.loss, nervana_graph.update])
-                result = enp.evaluate()
+                result = update_comp.evaluate()
                 avg_loss += result[nervana_graph.loss]
             else:
-                enp = be.NumPyTransformer(results=[nervana_graph.name_to_op[args.end_node]])
-                result = enp.evaluate()[nervana_graph.name_to_op[args.end_node]]
+                # end_op = nervana_graph.name_to_op[args.end_node]
+                # enp = be.NumPyTransformer(results=[end_op])
+                # result = enp.evaluate()[end_op]
 
                 print("-------------------------------")
                 print("minibatch: " + str(mb_idx))

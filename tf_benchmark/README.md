@@ -117,7 +117,7 @@ Now we can convert the frozen graph into Neon's graph and execute it.
 
 The computation graph is displayed via graphviz library:
 
-<img src="figure/mnist_mlp_inference.png" width="700">
+<img src="figure/mnist_mlp_inference.png" width="600">
 
 ## Training a TF Model with Neon
 
@@ -130,9 +130,16 @@ We can also train the model from scratch with Neon's graph backend.
 The protobuf file `mnist/graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
 The `loss_node` is the node to calculate the loss value, which is currently mannualy identified.
 
-The assembled frop/bprop graph can be visualized as follows:
+
+### 1. Initilization Graph
+
+To get the same result as TF, it is important to have the same variable initilization.
+The initialization graph is executed only once before starts training, which corresponds to  ```python sess.run(tf.initialize_all_variables())```.
+
+<img src="figure/init_graph.png" width="800">
+
+### 2. Training Graph
+
+The assembled training (frop/bprop) graph is executed for each minibatch.
 
 <img src="figure/mnist_mlp_train.png" width="800">
-
-To get similar result as TF, the most important part is the variable initilization.
-
