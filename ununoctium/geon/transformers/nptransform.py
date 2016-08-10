@@ -21,9 +21,13 @@ from geon.transformers.base import Transformer
 
 
 class NumPyTransformer(Transformer):
+    """
+    Transformer for executing graphs on a CPU, backed by numpy
 
-    def __init__(self, **kargs):
-        super(NumPyTransformer, self).__init__(**kargs)
+    given a list of ops you want to compute the results of, this transformer
+    will compile the graph required to compute those results and exposes an
+    evaluate method to execute the compiled graph.
+    """
 
     # allocators
     def make_raw_buffer(self, size):
@@ -88,7 +92,7 @@ class NumPyTransformer(Transformer):
         np.dot(x, y, out)
 
     def equal(self, x, y, out):
-        return np.equal(x, y, out=out)
+        np.equal(x, y, out=out)
 
     def exp(self, x, out):
         np.exp(x, out=out)

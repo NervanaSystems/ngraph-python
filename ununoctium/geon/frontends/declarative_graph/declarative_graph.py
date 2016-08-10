@@ -458,17 +458,16 @@ class reciprocal(ElementWise):
         super(reciprocal, self).__init__(args=(x,), **kargs)
 
 
-class sgn(ElementWise):
+class sign(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sgn, self).__init__(args=(x,), **kargs)
+        super(sign, self).__init__(args=(x,), **kargs)
 
 
-class sig(ElementWise):
-    """Sigmoid"""
+class sigmoid(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sig, self).__init__(args=(x,), **kargs)
+        super(sigmoid, self).__init__(args=(x,), **kargs)
 
 
 class softmax(ComputedTensor):

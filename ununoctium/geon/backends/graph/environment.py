@@ -104,11 +104,15 @@ class Environment(object):
         self.parent = parent
         self.values = dict()
 
-    def _chained_search(self, attr, key, default=None, use_default=False):
+    def _chained_search(self, key, default=None, use_default=False):
+        """
+        If key doesnt exist in attr, try looking in the parent's attr, then
+        the grandparent's, etc.
+        """
         env = self
         while True:
             try:
-                return env.__getattribute__(attr)[key]
+                return env.values[key]
             except KeyError:
                 env = env.parent
                 if env is None:
@@ -117,14 +121,13 @@ class Environment(object):
                     raise
 
     def __getitem__(self, key):
-        return self._chained_search('values', key)
+        return self._chained_search(key)
 
     def __setitem__(self, key, value):
         self.values[key] = value
 
     def get_value(self, key, default):
-        return self._chained_search(
-            'values', key, default=default, use_default=True)
+        return self._chained_search(key, default=default, use_default=True)
 
     def set_value(self, key, value):
         self.values[key] = value

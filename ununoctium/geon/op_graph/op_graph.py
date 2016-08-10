@@ -36,10 +36,19 @@ def tds(args, transformer):
 
 
 def from_transformer_cache(f):
-    def wrapper(self, transformer, *args, **kargs):
+    """
+    Decorator which caches the return value of method `f` inside the `cache`
+    attribute of the transformer.
+
+    The transformer should be passed in as the first and only argument to the
+    wrapped method.
+
+    TODO: why cache in the transformer instead of self?
+    """
+    def wrapper(self, transformer):
         key = (f.__name__, self)
         if key not in transformer.cache:
-            transformer.cache[key] = f(self, transformer, *args, **kargs)
+            transformer.cache[key] = f(self, transformer)
         return transformer.cache[key]
     return wrapper
 
@@ -48,14 +57,21 @@ class Op(Node):
     """Any operation that can be in an AST"""
 
     def __init__(self, initializers=None, **kwds):
+        """
+        :param initializers: should be a list of Ops which are called to initialize
+        this op.
+        """
         super(Op, self).__init__(**kwds)
         self.schemas = []
         self._adjoints = None
         self.initializers = initializers or []
+
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
 
+        # if transform_hook is not None, it should be a function which will
+        # be called when this Op is transformed by a Transformer
         self.transform_hook = None
 
     def add_schema(self, schema, set_generate_adjoints=True):
@@ -171,7 +187,14 @@ class Op(Node):
         SimplePrune(results)
 
     def transform(self, transformer, *args):
-        """Process op"""
+        """
+        Should call transformer.op_name(...) to execute low level ops.
+
+        Called by self.transform_call_info which is called by
+        Transformer.transform_ordered_ops.
+
+        WILL BE DEPRICATED SOON
+        """
         pass
 
     def sync(self, transformer):
@@ -205,6 +228,9 @@ class Op(Node):
 
 
 class Tensor(Op):
+    """
+    Super class for all Ops whose output value is a Tensor.
+    """
 
     def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
         super(Tensor, self).__init__(**kwds)
@@ -326,6 +352,10 @@ class Tensor(Op):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
+        """
+        Returns a TensorDescription describing the output of this TensorOp
+        """
+
         if self.__out is not None:
             td = self.__out.tensor_description(transformer)
             if self.__axes is not None:
@@ -367,7 +397,6 @@ class Tensor(Op):
 class Broadcast(Tensor):
     """
     Used to add additional axes for a returned derivative.
-
     """
 
     def __init__(self, x, **kargs):
@@ -592,6 +621,9 @@ class Fill(VoidOp):
 class Constant(AllocationOp):
     """
     A scalar constant that appears in a graph.
+
+    if you want a constant tensor and a numpy array to initialize it, use
+    NumPyTensor for now.
     """
 
     def __init__(self, const, **kargs):
@@ -620,7 +652,9 @@ class Constant(AllocationOp):
 
 class NumPyTensor(AllocationOp):
     """
-    A NumPy tensor with attached axes information
+    A NumPy tensor with attached axes information.
+
+    This is how you define tensor valued constants for now.
     """
 
     def __init__(self, nptensor, axes, **kargs):
@@ -652,7 +686,7 @@ class absolute(ElementWise):
         transformer.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sgn(x) * delta)
+        x.generate_add_delta(adjoints, sign(x) * delta)
 
 
 class add(ElementWise):
@@ -1209,16 +1243,16 @@ class reciprocal(ElementWise):
         transformer.reciprocal(x, out)
 
 
-class sgn(ElementWise):
+class sign(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sgn, self).__init__(args=(x,), **kargs)
+        super(sign, self).__init__(args=(x,), **kargs)
 
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
 
 
-class Sig(object):
+class Sigmoid(object):
     """Sigmoid"""
 
     def __init__(self, x):
@@ -1228,9 +1262,9 @@ class Sig(object):
         self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
 
 
-def sig(x, **kargs):
+def sigmoid(x, **kargs):
     result = reciprocal(exp(-x) + 1)
-    result.add_schema(Sig(x=x))
+    result.add_schema(Sigmoid(x=x))
     return result
 
 
@@ -1384,7 +1418,7 @@ class CrossEntropyBinaryInner(object):
 
 def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
                                enable_diff_opt=True, **kargs):
-    sigy = y.find_schema(Sig)
+    sigy = y.find_schema(Sigmoid)
     if enable_sig_opt and sigy is not None:
         # Simpler equivalent
         x = sigy.x
