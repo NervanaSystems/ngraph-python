@@ -24,7 +24,6 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import geon as be
-import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 from util.importer import create_nervana_graph
