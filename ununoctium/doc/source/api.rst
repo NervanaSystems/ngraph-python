@@ -27,6 +27,9 @@ geon.backends
    :nosignatures:
 
    geon.backends.dataloaderbackend
+   geon.backends.graph.artransform
+   geon.backends.graph.environment
+   geon.backends.graph.mpihandle
 
 geon.frontends
 --------------
@@ -70,7 +73,7 @@ geon.op_graph
    geon.op_graph.op_graph
 
 geon.transformers
----------------
+-----------------
 .. py:module: geon.transformers
 
 .. autosummary::
@@ -81,16 +84,25 @@ geon.transformers
    geon.transformers.nptransform
 
 geon.util
----------------
+---------
 .. py:module: geon.util
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.util.analysis
+   geon.util.graph
    geon.util.utils
 
-geon.util
----------
+geon.analysis
+-------------
+.. py:module: geon.analysis
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.analysis.dataflow
+   geon.analysis.fusion
+   geon.analysis.memory
 
