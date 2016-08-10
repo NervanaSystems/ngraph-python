@@ -506,3 +506,9 @@ def test_onehot():
         be.set_batch_axes([ax.N])
         one_hot_comparison(be.Axes(ax.C, ax.N), be.Axes(ax.N))
         one_hot_comparison(be.Axes(ax.C, ax.W, ax.H, ax.N), be.Axes(ax.W, ax.H, ax.N))
+
+
+def test_empty_finalize():
+    """ evaluating an empty NumPyTransformer shouldn't raise any exceptions """
+    with be.bound_environment():
+        be.NumPyTransformer(results=[]).evaluate()
