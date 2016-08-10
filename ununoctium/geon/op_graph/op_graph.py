@@ -836,7 +836,7 @@ class dot(ComputationOp):
 
             if len(red_axis_ids) == 0:
                 dummy = Axis(1)
-                red_axis_ids = AxisIDTuple(dummy[0],)
+                red_axis_ids = AxisIDTuple(dummy.axis_id(0),)
 
             return (out_axis_ids, red_axis_ids, red_axis_ids,
                     dummy, forward_axis_ids)

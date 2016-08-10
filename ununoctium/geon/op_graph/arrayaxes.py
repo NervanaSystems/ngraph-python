@@ -38,7 +38,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.__length = length
         AllAxes.add(self)
 
-    def __getitem__(self, key):
+    def axis_id(self, key):
         return AxisID(self, key)
 
     @property
@@ -144,8 +144,11 @@ class Axes(tuple):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
             assert len(seq) == 1
             seq = tuple(seq[0])
+
         seq = canonicalize(seq)
+
         assert all([isinstance(x, Axis) for x in seq])
+
         return tuple.__new__(cls, seq)
 
     @property

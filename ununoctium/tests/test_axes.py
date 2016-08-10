@@ -28,6 +28,12 @@ ax.C = arrayaxes.Axis(20)
 ax.D = arrayaxes.Axis(25)
 
 
+def test_axes_constructor_canonicalization():
+    a1 = arrayaxes.Axes(ax.A)
+    a2 = arrayaxes.Axes([[ax.A]])
+    assert a1 == a2
+
+
 def test_axes_equal():
     a1 = arrayaxes.Axes(ax.A, ax.B, ax.C)
     a2 = arrayaxes.Axes(ax.A, ax.B, ax.C)
