@@ -171,7 +171,7 @@ class SmoothL1Loss(Cost):
         """
         Returns the gradient of the Smooth-L1 cost.
         """
-        return (x * (self.be.absolute(x) < 1) + self.be.sgn(x) *
+        return (x * (self.be.absolute(x) < 1) + self.be.sign(x) *
                 (self.be.absolute(x) >= 1))
 
     def __init__(self):

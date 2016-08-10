@@ -686,7 +686,7 @@ class absolute(ElementWise):
         transformer.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sgn(x) * delta)
+        x.generate_add_delta(adjoints, sign(x) * delta)
 
 
 class add(ElementWise):
@@ -1243,10 +1243,10 @@ class reciprocal(ElementWise):
         transformer.reciprocal(x, out)
 
 
-class sgn(ElementWise):
+class sign(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sgn, self).__init__(args=(x,), **kargs)
+        super(sign, self).__init__(args=(x,), **kargs)
 
     def transform(self, transformer, out, x):
         transformer.sign(x, out)
