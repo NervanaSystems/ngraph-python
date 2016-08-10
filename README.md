@@ -41,6 +41,10 @@ To generate the documentation as html files
 make doc
 ```
 
+The latest html documentation is also built by Jenkins and can be viewed
+[here](http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/ununoctium/doc/build/html/index.html)
+
+
 ## Examples
 
 ununoctium/examples/models.py is a cifar_mlp example that runs.
