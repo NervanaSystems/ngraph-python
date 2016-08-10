@@ -1,0 +1,146 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+
+from __future__ import division
+from operator import mul
+from functools import reduce
+from itertools import combinations
+from geon.util.graph import UndirectedGraph
+from geon.analysis.dataflow import DataFlowGraph
+from geon.analysis.fusion import KernelFlowGraph
+from geon.op_graph.op_graph import Buffer, NumPyTensor
+
+
+class InterferenceGraph(UndirectedGraph):
+    """
+    Interference graph. Undirected graph containing a node for each
+    tensor, and an edge between tensors that are live at the same time.
+
+    This class implements an graph coloring algorithm.
+
+    In a standard graph coloring problem you want to minimize the number of
+    buffers allocated.  in this variant of the graph coloring problem we want
+    to minimize the total buffer space allocated.  In academic literature this
+    variant is refered to as ____.
+    """
+
+    def __init__(self, lives):
+        """
+        Creates the interference graph from the provided liveness information.
+        There is an edge in the interference graph whenever two variables are
+        live at the same time. Each node is weighted by the memory requirement
+        of the underlying tensor.
+
+        This seems to be the performance bottleneck for very large graphs.
+        Construction could be optimized, or coloring could be done direclty
+        from the liveness information.
+
+        :param lives (op => set(tensor_description)): Live tensors at each point
+                                Typically the output of dataflow.liveness()
+        """
+        neighbors = {x: set() for l in list(lives.values()) for x in l}
+        edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]
+        for u, v in edges:
+            neighbors[u].add(v)
+            neighbors[v].add(u)
+        super(InterferenceGraph, self).__init__(neighbors)
+        self.weights = {x: max(1, reduce(mul, x.shape, 1)) *
+                        x.dtype.itemsize for x in neighbors}
+
+    def color(self):
+        """
+        Performs weighted graph coloring on this interference graph.
+        Basically implements:
+        *Buffer allocation in regular dataflow networks:
+        an approach based on coloring circular-arc graphs*, R. Govindarajan
+
+        The PDF link I used seems dead now, and can't find a link without
+        an academic account
+        """
+
+        neighbors = self.neighbors
+        weights = self.weights
+        partitions = []
+        buffers = []
+        queue = sorted(weights, key=lambda x: (weights[x], ), reverse=True)
+        while queue:
+            u = queue.pop(0)
+            # Creates a new set and grows it as much as possible
+            S = {u}
+            N = neighbors[u]
+            for x in queue:
+                if x not in N:
+                    S |= {x}
+                    N |= neighbors[x]
+            partitions.append(S)
+            color = len(partitions) - 1
+            buffers.append(Buffer(color, weights[u]))
+            # Update remaining nodes
+            queue = [x for x in queue if x not in S]
+            for s in S:
+                s.buffer = buffers[color]
+        total_mem = sum([x.size for x in buffers])
+        return total_mem, buffers
+
+
+def _random_colors(N, alpha=.5):
+    from colorsys import hsv_to_rgb
+    HSV = [[x * 1.0 / N, 0.5, 0.5] for x in range(N)]
+    RGBA = [x + (alpha,) for x in [hsv_to_rgb(*x) for x in HSV]]
+    RGBA = [[int(y * 255) for y in x] for x in RGBA]
+    HEX = ["#{:02x}{:02x}{:02x}{:02x}".format(
+        r, g, b, a) for r, g, b, a in RGBA]
+    return HEX
+
+
+def bind_initializers(transformer, ops):
+    for op in ops:
+        buffer = op.tensor_description(transformer).buffer
+        # assign the same buffer to all of the op's initializers
+        for i in op.initializers:
+            i.tensor_description(transformer).buffer = buffer
+            for a in i.args:
+                if isinstance(a, NumPyTensor):
+                    a.tensor_description(transformer).buffer = Buffer(-1, a.nptensor.size)
+                    a.tensor_description(transformer).buffer.data = a.nptensor
+
+
+def assign_buffers(transformer, results, fusible=None):
+    """
+    Performs dataflow analysis ou the graph defined by the provide results.
+    Assigns buffer to each node.
+
+    :param results: results to build the graph from
+
+    :return: dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
+        memory (int): Memory usage of the computations
+    """
+
+    dfg = DataFlowGraph(transformer, results)
+    all_ops = dfg.successors.keys()
+    if fusible:
+        dfg = KernelFlowGraph(dfg, fusible)
+    ifg = InterferenceGraph(dfg.liveness())
+    memory, buffers = ifg.color()
+    # Binds initializers
+    bind_initializers(transformer, dfg.inputs)
+    # set style
+    cmap = _random_colors(len(buffers), .5)
+    for op in all_ops:
+        tensor = op.tensor_description(transformer)
+        if tensor.buffer:
+            op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
+    # dfg.view()
+    return dfg, memory
