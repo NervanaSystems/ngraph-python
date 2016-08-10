@@ -47,8 +47,7 @@ class InterferenceGraph(UndirectedGraph):
         Construction could be optimized, or coloring could be done direclty
         from the liveness information.
 
-        Args:
-            lives (op => set(tensor_description)): Live tensors at each point
+        :param lives (op => set(tensor_description)): Live tensors at each point
                                 Typically the output of dataflow.liveness()
         """
         neighbors = {x: set() for l in list(lives.values()) for x in l}
@@ -123,11 +122,9 @@ def assign_buffers(transformer, results, fusible=None):
     Performs dataflow analysis ou the graph defined by the provide results.
     Assigns buffer to each node.
 
-    Args:
-        results: results to build the graph from
+    :param results: results to build the graph from
 
-    Returns:
-        dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
+    :return: dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
         memory (int): Memory usage of the computations
     """
 

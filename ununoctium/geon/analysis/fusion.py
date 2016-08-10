@@ -59,16 +59,62 @@ class KernelFlowGraph(DataFlowGraph):
     Class representing a fused dataflow graph
     """
 
+    def __init__(self, dataflow, fusible=never_fusible):
+        """
+        Performs fusion on the provided dataflow graph
+
+        Implementation of: *Fast Greedy Weighted Fusion*, Ken Kennedy,
+        Internal journal of Parallel Programming (2002):
+        Download: http://citeseerx.ist.psu.edu/viewdoc
+                        /download?doi=10.1.1.95.2695&rep=rep1&type=pdf
+        """
+
+        # Extracts clusters
+        self.fusible = fusible
+        super(KernelFlowGraph, self).__init__(dataflow.results)
+        successors = self.successors
+        path_from, bad_path_from = self._compute_paths()
+        edges = {(a, b) for a, _ in successors.items() for b in _}
+        edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
+        clusters = dict((x, {x}) for e in edges for x in e)
+        while edges:
+            # Pop edges and adjusts order if necessary
+            v, w = edges.pop()
+            # Cannot be fused
+            if w in bad_path_from[v]:
+                continue
+            # Merge vertices between v and w
+            to_merge = self.between(v, w, path_from)
+            for x in to_merge:
+                clusters[v] |= clusters.pop(x)
+                self.transfer_edges(v, x, successors)
+                self.transfer_edges(v, x, path_from)
+                self.transfer_edges(v, x, bad_path_from)
+            edges = {(a, b) for a, _ in successors.items() for b in _}
+            edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
+        # Creates adjacency list for each cluster
+        extract_subgraph = lambda R: dict(
+            (a, b & R) for a, b in list(dataflow.successors.items()) if a in R)
+        clusters = {x: extract_subgraph(y) for x, y in list(clusters.items())}
+        # Creates final adjacency list
+        clusters = {x: be.Function(y) if isinstance(
+            x, be.ComputationOp) else x for x, y in list(clusters.items())}
+        self.successors = {
+            clusters[a]: {
+                clusters[b] for b in lst} for a,
+            lst in list(
+                successors.items())}
+        # Saves dataflow for visualization
+        self.dataflow = dataflow
+
     def _graphviz(self, name=''):
         """
         Export fused dataflow to graphviz.
         Involves some hackery to get graphviz to draw edge between subgraphs
 
-        Args:
-            name (str): name of the resulting graph
+        :param: name (str): name of the resulting graph
 
-        Returns:
-            pygraphgiz object
+        :return: pygraphgiz object
         """
 
         predecessors = Digraph._invert(self.successors)
@@ -126,10 +172,9 @@ class KernelFlowGraph(DataFlowGraph):
         """
         Finds all the nodes on any path between v and w
 
-        Args:
-            v (operation): start node
-            w (operation): end_node
-            path_from (dict): maps node v to nodes that have a path from w
+        :param v (operation): start node
+        :param w (operation): end_node
+        :param path_from (dict): maps node v to nodes that have a path from w
         """
 
         vertices = set()
@@ -149,9 +194,8 @@ class KernelFlowGraph(DataFlowGraph):
         """
         Transfers edges from a node into another
 
-        Args:
-            v (operation): node that receives edges
-            w (operation): node that loses edges
+        :param v (operation): node that receives edges
+        :param w (operation): node that loses edges
         """
 
         dct[v] |= dct.pop(w, set()) - {v}
@@ -160,51 +204,3 @@ class KernelFlowGraph(DataFlowGraph):
                 connected.remove(w)
                 if node != v:
                     connected.add(v)
-
-    def __init__(self, dataflow, fusible=never_fusible):
-        """
-        Performs fusion on the provided dataflow graph
-
-        Implementation of: *Fast Greedy Weighted Fusion*, Ken Kennedy,
-        Internal journal of Parallel Programming (2002):
-        Download: http://citeseerx.ist.psu.edu/viewdoc
-                        /download?doi=10.1.1.95.2695&rep=rep1&type=pdf
-        """
-
-        # Extracts clusters
-        self.fusible = fusible
-        super(KernelFlowGraph, self).__init__(dataflow.results)
-        successors = self.successors
-        path_from, bad_path_from = self._compute_paths()
-        edges = {(a, b) for a, _ in successors.items() for b in _}
-        edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
-        clusters = dict((x, {x}) for e in edges for x in e)
-        while edges:
-            # Pop edges and adjusts order if necessary
-            v, w = edges.pop()
-            # Cannot be fused
-            if w in bad_path_from[v]:
-                continue
-            # Merge vertices between v and w
-            to_merge = self.between(v, w, path_from)
-            for x in to_merge:
-                clusters[v] |= clusters.pop(x)
-                self.transfer_edges(v, x, successors)
-                self.transfer_edges(v, x, path_from)
-                self.transfer_edges(v, x, bad_path_from)
-            edges = {(a, b) for a, _ in successors.items() for b in _}
-            edges = sorted(edges, key=lambda x: (x[0].id, x[1].id))
-        # Creates adjacency list for each cluster
-        extract_subgraph = lambda R: dict(
-            (a, b & R) for a, b in list(dataflow.successors.items()) if a in R)
-        clusters = {x: extract_subgraph(y) for x, y in list(clusters.items())}
-        # Creates final adjacency list
-        clusters = {x: be.Function(y) if isinstance(
-            x, be.ComputationOp) else x for x, y in list(clusters.items())}
-        self.successors = {
-            clusters[a]: {
-                clusters[b] for b in lst} for a,
-            lst in list(
-                successors.items())}
-        # Saves dataflow for visualization
-        self.dataflow = dataflow

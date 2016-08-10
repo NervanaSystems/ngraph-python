@@ -21,15 +21,21 @@ class Digraph(object):
     Includes Graphviz visualization, DFS, topsort
     """
 
+    def __init__(self, successors):
+        """
+        Initialize directed graph from successors dict
+
+        :param successors (dict: op => set(op)): dict that map each op to all its users
+        """
+        self.successors = successors
+
     def _graphviz(self, name=''):
         """
         Export the current Digraph to Graphviz
 
-        Args:
-            name (str): Name of the resulting graph
+        :param name (str): Name of the resulting graph
 
-        Returns:
-            pygraphviz object
+        :return: pygraphviz object
         """
 
         from graphviz import Digraph
@@ -52,21 +58,11 @@ class Digraph(object):
                 result[y].add(x)
         return result
 
-    def __init__(self, successors):
-        """
-        Initialize directed graph from successors dict
-
-        Args:
-            successors (dict: op => set(op)): dict that map each op to all its users
-        """
-        self.successors = successors
-
     def render(self, fpath, view=True):
         """
         Renders to a graphviz file
 
-        Args:
-            fpath (str): file to write too
+        :param fpath (str): file to write too
         """
         self._graphviz().render(fpath, view=view)
 
@@ -78,8 +74,7 @@ class Digraph(object):
         """
         Performs DFS, applying the provided function to each node
 
-        Args:
-            fun (Function): Function to apply to each visited node
+        :param fun (Function): Function to apply to each visited node
         """
         visited = set()
 
@@ -105,8 +100,7 @@ class Digraph(object):
         """
         Topological sort of the nodes
 
-        Returns:
-            Sorted list of nodes
+        :return: Sorted list of nodes
         """
         result = []
         self.dfs(lambda x: result.insert(0, x))

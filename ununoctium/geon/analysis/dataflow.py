@@ -23,6 +23,18 @@ class DataFlowGraph(Digraph):
     Class explicitly representing the dataflow graph
     """
 
+    def __init__(self, transformer, results):
+        """
+        Initialize the dataflow graph
+
+        :param results (dict): Results of the desired computation
+        """
+
+        super(DataFlowGraph, self).__init__(defaultdict(set))
+        self.transformer = transformer
+        self._fill_successors(results)
+        self.results = results
+
     def _fill_successors(self, results):
         """ Walk through provided results to build the successors map"""
         for w in results:
@@ -30,19 +42,6 @@ class DataFlowGraph(Digraph):
             for v in w.args:
                 self.successors[v].add(w)
                 self._fill_successors({v})
-
-    def __init__(self, transformer, results):
-        """
-        Initialize the dataflow graph
-
-        Args:
-            results (dict): Results of the desired computation
-        """
-
-        super(DataFlowGraph, self).__init__(defaultdict(set))
-        self.transformer = transformer
-        self._fill_successors(results)
-        self.results = results
 
     @property
     def instructions(self):
@@ -56,8 +55,7 @@ class DataFlowGraph(Digraph):
         (i.e., instruction line number), which tensors need to be in
         memory (because they will be required later on).
 
-        Returns:
-            dict (op => set(tensor_description)): Live tensors at each point
+        :return: dict (op => set(tensor_description)): Live tensors at each point
         """
 
         can_do_inplace = lambda x: False
