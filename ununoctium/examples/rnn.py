@@ -77,7 +77,7 @@ class MyRnn(be.Model):
         Hb = be.Variable(axes=(g.H,))
 
         g.t = be.Var(g.T)
-        h[:, g.t + 1] = be.sig(be.dot(h[:, g.t], HWh) +
+        h[:, g.t + 1] = be.sigmoid(be.dot(h[:, g.t], HWh) +
                                be.dot(g.x[g.T], HWx) + Hb)
 
         YW = be.Variable(axes=(g.H, g.Y))

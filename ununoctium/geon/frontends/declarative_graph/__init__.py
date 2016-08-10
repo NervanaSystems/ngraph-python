@@ -20,7 +20,7 @@ from geon.backends.graph.environment import bound_environment
 from geon.frontends.declarative_graph.declarative_graph import Axis, deriv, input, Variable, ArrayWithAxes
 from geon.frontends.declarative_graph.declarative_graph import absolute, add, cos, divide, dot, exp, log, \
     maximum, minimum, multiply
-from geon.frontends.declarative_graph.declarative_graph import negative, reciprocal, sig, sin, softmax, sqrt, \
+from geon.frontends.declarative_graph.declarative_graph import negative, reciprocal, sigmoid, sin, softmax, sqrt, \
     square, subtract, sum
 from geon.frontends.declarative_graph.declarative_graph import tanh
 from geon.frontends.declarative_graph.declarative_graph import doall, decrement

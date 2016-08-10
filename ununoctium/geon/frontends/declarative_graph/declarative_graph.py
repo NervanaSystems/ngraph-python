@@ -464,11 +464,10 @@ class sign(ElementWise):
         super(sign, self).__init__(args=(x,), **kargs)
 
 
-class sig(ElementWise):
-    """Sigmoid"""
+class sigmoid(ElementWise):
 
     def __init__(self, x, **kargs):
-        super(sig, self).__init__(args=(x,), **kargs)
+        super(sigmoid, self).__init__(args=(x,), **kargs)
 
 
 class softmax(ComputedTensor):
