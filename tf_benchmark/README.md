@@ -64,7 +64,7 @@ $ tensorboard --logdir=. & firefox http://0.0.0.0:6006
 
 ![](figure/tensorboard.png)
 
-The GraphDef actually contains several sub-graphs for different purpose: variable initilization, model inference (fprop), gradient calculatio/ndescent (bprop) and serilization. 
+The GraphDef actually contains several sub-graphs for different purpose: variable initilization, model inference (fprop), gradient calculation/descent (bprop) and serilization. 
 The initilization graph is executated only once before training, while the sub-graphs of inference, gradient calculation/descent are executed for each minibatch optimization. 
 
 
@@ -103,8 +103,7 @@ Now we can convert the frozen graph into Neon's graph and execute it.
 
 The computation graph is displayed via graphviz library:
 
-![](figure/mnist_mlp_inference.png)
-
+<img src="figure/mnist_mlp_inference.png" width="600">
 
 ## Training a TF Model with Neon
 
@@ -114,7 +113,8 @@ We can also train the model from scratch with Neon's graph backend.
 (.venv)$ python train_mnist_mlp.py --pb_file='mnist/graph.pb' --loss_node='xentropy_mean'
 ```
 
-The protobuf file `mnist_mlp_graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
+The protobuf file `mnist/graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
+The `loss_node` is the node to calculate the loss value, which is currently mannualy identified.
 
 The assembled frop/bprop graph can be visualized as follows:
 ![](figure/mnist_mlp_train.png)

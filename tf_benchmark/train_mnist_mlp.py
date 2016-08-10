@@ -60,12 +60,12 @@ test_data = mnist_data['valid']
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
 if args.end_node == "":
-    dataflow = analysis.DataFlowGraph([nervana_graph.update])
-    dataflow.view()
-else:
-    dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
-    dataflow.view()
+    transformer = be.NumPyTransformer(results=[nervana_graph.update])
+    transformer.dataflow.view()
 
+else:
+    transformer = be.NumPyTransformer(results=[nervana_graph.last_op])
+    transformer.dataflow.view()
 
 def eval_test(test_data, graph, last_op_name):
     # TODO: pass the inference graph instead of manually specify the last node for inference.

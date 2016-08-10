@@ -46,8 +46,8 @@ test_data = mnist_data['valid']
 
 nervana_graph = create_nervana_graph(args.pb_file, env)
 
-dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
-dataflow.view()
+transformer = be.NumPyTransformer(results=[nervana_graph.last_op])
+transformer.dataflow.view()
 
 def eval_test(test_data, graph):
     with be.bound_environment(env):

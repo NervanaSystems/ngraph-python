@@ -37,8 +37,9 @@ def test_create_nervana_graph(pb_file, execute=False):
     graph = create_nervana_graph(pb_file, env)
     print(graph)
 
-    dataflow = analysis.DataFlowGraph([graph.last_op])
-    dataflow.view()
+    transformer = be.NumPyTransformer(results=[graph.last_op])
+    transformer.dataflow.view()
+
 
     if execute:
         with be.bound_environment(env):
