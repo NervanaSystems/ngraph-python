@@ -304,7 +304,7 @@ def test_cross_entropy_binary_logistic_shortcut():
         cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
         assert np.allclose(cel, cel_shortcut)
 
-        cel_graph, = execute([be.cross_entropy_binary_inner(be.sig(p_u), p_v)])
+        cel_graph, = execute([be.cross_entropy_binary_inner(be.sigmoid(p_u), p_v)])
         assert np.allclose(cel, cel_graph)
 
 
@@ -321,7 +321,7 @@ def test_cross_entropy_binary():
         v = rng.uniform(-3.0, 3.0, p_u.axes)
         p_v.value = v
 
-        y = be.sig(p_u)
+        y = be.sigmoid(p_u)
         t = be.softmax(p_v)
         val_u = be.cross_entropy_binary_inner(y, t)
 
@@ -468,7 +468,7 @@ def test_sigmoid():
         p_u.value = u
 
         val_u_np = 1.0 / (1 + np.exp(-u))
-        val_u = be.sig(p_u)
+        val_u = be.sigmoid(p_u)
         val_u_graph, = execute([val_u])
         assert np.allclose(val_u_np, val_u_graph)
 

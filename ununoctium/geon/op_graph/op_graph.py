@@ -1262,7 +1262,7 @@ class Sig(object):
         self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
 
 
-def sig(x, **kargs):
+def sigmoid(x, **kargs):
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sig(x=x))
     return result
