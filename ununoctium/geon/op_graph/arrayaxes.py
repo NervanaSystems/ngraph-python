@@ -649,7 +649,7 @@ class TensorDescription(object):
 
     def initialize(self):
         assert self.__value is None
-        # If the TD requires heap storage
+        # If the TensorDescription requires heap storage
         if self.buffer is not None:
             if self.buffer.data is None:
                 self.buffer.data = self.transformer.make_raw_buffer(
