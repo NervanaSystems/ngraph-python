@@ -420,6 +420,29 @@ class ExpandDims(Tensor):
         )
 
 
+class Slice(Tensor):
+
+    def __init__(self, x, slices, axes=None, **kargs):
+        assert axes is not None, 'The axes of a sliced tensor must be named.'
+        super(Slice, self).__init__(
+            args=(x,),
+            axes=axes,
+            **kargs
+        )
+        self.slices = slices
+
+    @from_transformer_cache
+    def tensor_description(self, transformer):
+        x, = tds(self.args, transformer)
+        return x.slice(self.slices, self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(
+            adjoints,
+            Unslice(delta, self.slices, axes=x.axes)
+        )
+
+
 class AllocationOp(Tensor):
 
     def __init__(
@@ -460,29 +483,6 @@ class ComputationOp(Tensor):
     @property
     def graph_label(self):
         return self.__class__.__name__ + '[' + self.name + ']'
-
-
-class Slice(ComputationOp):
-
-    def __init__(self, x, slices, axes=None, **kargs):
-        assert axes is not None, 'The axes of a sliced tensor must be named.'
-        super(Slice, self).__init__(
-            args=(x,),
-            axes=axes,
-            **kargs
-        )
-        self.slices = slices
-
-    @from_transformer_cache
-    def tensor_description(self, transformer):
-        x, = tds(self.args, transformer)
-        return x.slice(self.slices, self.axes)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            Unslice(delta, self.slices, axes=x.axes)
-        )
 
 
 class Unslice(ComputationOp):
