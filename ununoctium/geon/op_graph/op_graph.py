@@ -1252,7 +1252,7 @@ class sgn(ElementWise):
         transformer.sign(x, out)
 
 
-class Sig(object):
+class Sigmoid(object):
     """Sigmoid"""
 
     def __init__(self, x):
@@ -1264,7 +1264,7 @@ class Sig(object):
 
 def sigmoid(x, **kargs):
     result = reciprocal(exp(-x) + 1)
-    result.add_schema(Sig(x=x))
+    result.add_schema(Sigmoid(x=x))
     return result
 
 
@@ -1418,7 +1418,7 @@ class CrossEntropyBinaryInner(object):
 
 def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
                                enable_diff_opt=True, **kargs):
-    sigy = y.find_schema(Sig)
+    sigy = y.find_schema(Sigmoid)
     if enable_sig_opt and sigy is not None:
         # Simpler equivalent
         x = sigy.x
