@@ -192,7 +192,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         ordered_ops = self.dataflow.can_reach(results, order=self.ops)
         self.transform_ordered_ops(ordered_ops)
 
-        return {op: op.output_value(self) for op in results}
+        return {op: op.tensor_description(self).value for op in results}
 
     def set_value(self, op, tensor):
         op.tensor_description(self).value = tensor
