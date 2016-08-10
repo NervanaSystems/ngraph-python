@@ -463,20 +463,6 @@ class ComputationOp(Tensor):
     def graph_label(self):
         return self.__class__.__name__ + '[' + self.name + ']'
 
-    def transform(self, transformer, *args):
-        """
-        Should call transformer.op_name(...) to execute low level ops.
-
-        Called by self.transform_call_info which is called by
-        Transformer.transform_ordered_ops.
-
-        WILL BE DEPRICATED SOON
-        """
-        raise NotImplementedError(
-            "transform operation not implemented on type inheriting from "
-            "ComputationOp" + str(type(self))
-        )
-
 
 class RNG(object):
 
