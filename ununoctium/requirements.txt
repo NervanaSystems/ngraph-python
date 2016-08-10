@@ -9,3 +9,5 @@ https://storage.googleapis.com/tensorflow/mac/tensorflow-0.9.0-py3-none-any.whl;
 scipy
 # autopep8 (temporary add)
 autopep8==1.2.4
+# other requirements
+graphviz
