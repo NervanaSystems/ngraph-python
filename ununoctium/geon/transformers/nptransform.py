@@ -84,7 +84,7 @@ class NumPyTransformer(Transformer):
         np.dot(x, y, out)
 
     def equal(self, x, y, out):
-        return np.equal(x, y, out=out)
+        np.equal(x, y, out=out)
 
     def exp(self, x, out):
         np.exp(x, out=out)
