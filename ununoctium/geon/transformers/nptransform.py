@@ -21,6 +21,14 @@ from geon.transformers.base import Transformer
 
 
 class NumPyTransformer(Transformer):
+    """
+    Transformer for executing graphs on a CPU, backed by numpy
+
+    given a list of ops you want to compute the results of, this transformer
+    will compile the graph required to compute those results and exposes an
+    evaluate method to execute the compiled graph.
+    """
+
     # allocators
     def make_raw_buffer(self, size):
         return bytearray(size)
