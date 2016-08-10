@@ -42,6 +42,8 @@ def from_transformer_cache(f):
 
     The transformer should be passed in as the first and only argument to the
     wrapped method.
+
+    TODO: why cache in the transformer instead of self?
     """
     def wrapper(self, transformer):
         key = (f.__name__, self)
@@ -395,7 +397,6 @@ class Tensor(Op):
 class Broadcast(Tensor):
     """
     Used to add additional axes for a returned derivative.
-
     """
 
     def __init__(self, x, **kargs):
