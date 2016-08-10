@@ -20,7 +20,7 @@ from __future__ import print_function
 
 from builtins import range, zip
 
-import geon.util.analysis as an
+import geon.analysis as an
 import geon.frontends.base.axis as ax
 import geon as be
 

@@ -20,7 +20,7 @@ from future.utils import with_metaclass
 
 from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op
-from geon.util.analysis import assign_buffers
+from geon.analysis.memory import assign_buffers
 
 
 class Computation(with_metaclass(abc.ABCMeta, object)):

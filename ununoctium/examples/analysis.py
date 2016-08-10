@@ -14,9 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from builtins import range, zip
 import geon as be
-import geon.util.analysis as an
 
 import numpy as np
 import mxnet as mx
@@ -46,8 +44,8 @@ class GraphitiMLP(be.Model):
         dW = [be.deriv(Error, w) for w in W]
 
         # Fusion analysis
-        results = dW if bprop else [Error]
-        self.dataflow, self.memory = an.assign_buffers(results, an.gpu_fusible)
+        transformer = be.NumPyTransformer(results=dW if bprop else [Error])
+        self.memory = transformer.memory
         # self.dataflow.view()
 
 
