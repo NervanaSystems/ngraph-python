@@ -94,7 +94,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Create tensor descriptions
         for op in ordered_ops:
-            op.create_tds(self)
+            op.create_tensor_descriptions(self)
 
     def initialize_tds(self):
         for td in self.tds:

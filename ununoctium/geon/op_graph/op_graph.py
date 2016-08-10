@@ -208,7 +208,7 @@ class Op(Node):
     def call_info(self, transformer):
         return list(tds(self.args, transformer))
 
-    def create_tds(self, transformer):
+    def create_tensor_descriptions(self, transformer):
         self.call_info(transformer)
 
     def transform_call_info(self, transformer):
@@ -364,7 +364,7 @@ class Tensor(Op):
             td = TensorDescription(self.axes, transformer, dtype=self.dtype)
         return td
 
-    def create_tds(self, transformer):
+    def create_tensor_descriptions(self, transformer):
         self.tensor_description(transformer)
         self.call_info(transformer)
 
@@ -1348,9 +1348,9 @@ class Function(Node):
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
 
-    def create_tds(self, transformer):
+    def create_tensor_descriptions(self, transformer):
         for op in self.instructions:
-            op.create_tds(transformer)
+            op.create_tensor_descriptions(transformer)
 
     @property
     def inputs(self):
