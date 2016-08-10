@@ -1333,7 +1333,7 @@ class Function(Node):
 
     def __init__(self, ops):
         super(Function, self).__init__()
-        from geon.util.analysis import Digraph
+        from geon.analysis import Digraph
         self.ops = Digraph(ops)
         self.instructions = self.ops.topsort()
         args, defs = set(), set()
@@ -1345,10 +1345,20 @@ class Function(Node):
             args |= set(op.args) - defs
         self.args = args
         self.defs = defs
+        self.initializers = [x for x in op.initializers
+                             for op in self.instructions]
+
+    def create_tds(self, transformer):
+        for op in self.instructions:
+            op.create_tds(transformer)
 
     @property
     def inputs(self):
         return self.use
+
+    def allocate(self, transformer):
+        for op in self.instructions:
+            op.allocate(transformer)
 
 
 class Buffer(object):

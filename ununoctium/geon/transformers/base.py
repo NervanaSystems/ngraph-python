@@ -39,7 +39,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     evaluate method to execute the compiled graph.
     """
 
-    def __init__(self, results=None, environment=None, **kvargs):
+    def __init__(self, results=None, environment=None, fusion=None, **kvargs):
         """
         :param results: a list of Ops whose results the Transformer should
             return on `.evaluate()`.  There aren't any good reasons to initialize a
@@ -58,6 +58,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.tds = set()
         self.finalized = False
         self.opids = dict()
+        self.fusion = fusion
 
         if results is not None:
             self.all_results.update(results)
@@ -65,7 +66,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def finalize(self):
         Op.simple_prune(self.all_results)
-        self.dataflow, self.memory = assign_buffers(self, self.all_results)
+        self.dataflow, self.memory = assign_buffers(self, self.all_results, self.fusion)
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)

@@ -649,11 +649,13 @@ class TensorDescription(object):
 
     def initialize(self):
         assert self.__value is None
-        if self.buffer.data is None:
-            self.buffer.data = self.transformer.make_raw_buffer(
-                self.buffer.size
-            )
-        self.__value = self.transformer.tensor_view(self)
+        # If the TD requires heap storage
+        if self.buffer is not None:
+            if self.buffer.data is None:
+                self.buffer.data = self.transformer.make_raw_buffer(
+                    self.buffer.size
+                )
+            self.__value = self.transformer.tensor_view(self)
 
 
 def with_args_as_axes(f):
