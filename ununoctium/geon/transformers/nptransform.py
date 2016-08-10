@@ -21,10 +21,6 @@ from geon.transformers.base import Transformer
 
 
 class NumPyTransformer(Transformer):
-
-    def __init__(self, **kargs):
-        super(NumPyTransformer, self).__init__(**kargs)
-
     # allocators
     def make_raw_buffer(self, size):
         return bytearray(size)
