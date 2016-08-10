@@ -232,7 +232,7 @@ class Tensor(Op):
     Super class for all Ops whose output value is a Tensor.
     """
 
-    def __init__(self, dtype=None, axes=None, scale=None, out=None, **kwds):
+    def __init__(self, dtype=None, axes=None, scale=None, **kwds):
         super(Tensor, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
@@ -240,7 +240,6 @@ class Tensor(Op):
         if axes is not None:
             axes = Axes(*axes)
         self.__axes = axes
-        self.__out = out
 
         # Derivative will be scaled by this
         self.scale = scale
@@ -355,14 +354,7 @@ class Tensor(Op):
         """
         Returns a TensorDescription describing the output of this TensorOp
         """
-
-        if self.__out is not None:
-            td = self.__out.tensor_description(transformer)
-            if self.__axes is not None:
-                td = td.reaxe(self.__axes)
-        else:
-            td = TensorDescription(self.axes, transformer, dtype=self.dtype)
-        return td
+        return TensorDescription(self.axes, transformer, dtype=self.dtype)
 
     def create_tensor_descriptions(self, transformer):
         self.tensor_description(transformer)
@@ -400,7 +392,12 @@ class Broadcast(Tensor):
     """
 
     def __init__(self, x, **kargs):
-        super(Broadcast, self).__init__(args=(x,), out=x, **kargs)
+        super(Broadcast, self).__init__(args=(x,), **kargs)
+
+    @from_transformer_cache
+    def tensor_description(self, transformer):
+        td, = tds(self.args, transformer)
+        return td.reaxe(self.axes)
 
 
 class ExpandDims(Tensor):
@@ -463,6 +460,48 @@ class ComputationOp(Tensor):
     @property
     def graph_label(self):
         return self.__class__.__name__ + '[' + self.name + ']'
+
+
+class Slice(ComputationOp):
+
+    def __init__(self, x, slices, axes=None, **kargs):
+        assert axes is not None, 'The axes of a sliced tensor must be named.'
+        super(Slice, self).__init__(
+            args=(x,),
+            axes=axes,
+            **kargs
+        )
+        self.slices = slices
+
+    @from_transformer_cache
+    def tensor_description(self, transformer):
+        x, = tds(self.args, transformer)
+        return x.slice(self.slices, self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(
+            adjoints,
+            Unslice(delta, self.slices, axes=x.axes)
+        )
+
+
+class Unslice(ComputationOp):
+    def __init__(self, x, slices, **kargs):
+        super(Unslice, self).__init__(args=(x,), **kargs)
+        self.slices = slices
+        self.input_axes = x.axes
+
+    @from_transformer_cache
+    def call_info(self, transformer):
+        td, x = super(Unslice, self).call_info(transformer)
+        return [td, td.slice(self.slices, self.input_axes), x]
+
+    def transform(self, transformer, out, out_sliced, x):
+        transformer.fill(out, 0)
+        transformer.set_item(out_sliced, (), x)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, Slice(delta, self.slices))
 
 
 class RNG(object):
@@ -1055,13 +1094,6 @@ class tensor_size(ComputationOp):
         transformer.fill(out, self.reduction_axes.size)
 
 
-class Slice(ComputationOp):
-
-    def __init__(self, slices, x, **kargs):
-        super(Slice, self).__init__(args=(x,), **kargs)
-        self.slices = slices
-
-
 class Pad(ComputationOp):
 
     def __init__(self, axes, slice, x, **kargs):
@@ -1377,10 +1409,7 @@ def mean(x, **kargs):
 def deriv(dep, indep):
     Op.simple_prune([dep, indep])
     adjoint = dep.adjoints()[indep]
-    if adjoint.axes == indep.axes:
-        return adjoint
-    else:
-        return Broadcast(adjoint, axes=indep.axes)
+    return Broadcast(adjoint, axes=indep.axes)
 
 
 class CrossEntropyMultiInner(object):
