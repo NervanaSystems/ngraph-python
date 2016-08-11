@@ -102,6 +102,15 @@ class Digraph(object):
         return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
 
     def can_reach(self, outs, order=None):
+        """
+        Computes the vertices that can reach the nodes specified in outs
+        ordered as specified
+
+        :param outs (list): nodes to reach
+        :param order (list): list specifying the order of the result nodes
+
+        :return: ordered dependencies of outs
+        """
         result = set()
         self.dfs(outs, lambda x: result.add(x), reverse=True)
         if order is not None:
