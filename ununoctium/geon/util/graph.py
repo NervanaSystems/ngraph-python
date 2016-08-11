@@ -70,31 +70,43 @@ class Digraph(object):
         """ View the graph. Requires pygraphviz """
         self._graphviz().view()
 
-    def dfs(self, fun):
+    def dfs(self, starts, fun, reverse=False):
         """
         Performs DFS, applying the provided function to each node
 
+        :param starts: nodes to start from
         :param fun (Function): Function to apply to each visited node
+        :param reverse (bool): whetehr to do DFS on the reversed graph
         """
         visited = set()
+        nexts = self.successors
+        if reverse:
+            nexts = Digraph._invert(nexts)
 
         # Visit single node
         def visit(u, fun):
             if u not in visited:
-                vs = self.successors[u]
+                vs = nexts[u]
                 for v in sorted(vs, key=lambda x: x.id):
                     if v not in visited:
                         visit(v, fun)
                 fun(u)
                 visited.add(u)
         # Get output nodes
-        for x in sorted(self.inputs, key=lambda x: x.id):
+        for x in sorted(starts, key=lambda x: x.id):
             visit(x, fun)
 
     @property
     def inputs(self):
         predecessors = Digraph._invert(self.successors)
         return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
+
+    def can_reach(self, outs, order=None):
+        result = set()
+        self.dfs(outs, lambda x: result.add(x), reverse=True)
+        if order is not None:
+            result = [x for x in order if x in result]
+        return result
 
     def topsort(self):
         """
@@ -103,7 +115,7 @@ class Digraph(object):
         :return: Sorted list of nodes
         """
         result = []
-        self.dfs(lambda x: result.insert(0, x))
+        self.dfs(self.inputs, lambda x: result.insert(0, x))
         return result
 
 
