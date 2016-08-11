@@ -427,7 +427,7 @@ class Broadcast(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        td, = tds(self.args, transformer)
+        td, = tensor_descriptions(self.args, transformer)
         return td.reaxe(self.axes)
 
 
@@ -464,7 +464,7 @@ class Slice(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return x.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
