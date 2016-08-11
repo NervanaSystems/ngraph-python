@@ -182,7 +182,7 @@ class Op(Node):
     @staticmethod
     def as_op(x):
         """
-        Used to cast python numbers that are captured in the op
+        Used to cast python values that are captured in the op
         tree so that they can be properly evaluated.
         """
         if isinstance(x, Tensor):
@@ -209,7 +209,7 @@ class Op(Node):
         Called by self.transform_call_info which is called by
         Transformer.transform_ordered_ops.
 
-        WILL BE DEPRICATED SOON
+        WILL BE DEPRECATED SOON
         """
         pass
 
@@ -219,6 +219,7 @@ class Op(Node):
         Used to copy the value assigned to the op externally into our
         internally allocated memory.
         See placeholder.
+        WILL BE DEPRECATED SOON
         """
         pass
 

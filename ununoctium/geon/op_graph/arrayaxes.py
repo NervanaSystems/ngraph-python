@@ -336,9 +336,12 @@ def reduce_strides(strides):
 
 
 class TensorDescription(object):
-    """Our wrapper around a hardware tensor. Names the tensor's dimensions
-    with axes and holds pointers to the buffer allocated by the analysis
-    and the backend tensor value (e.g. a numpy or gpu tensor). """
+    """
+    Description of a tensor that will be allocated in hardware.
+    Names the tensor's dimensions with axes and holds pointers to the
+    buffer allocated by the analysis and the backend tensor value
+    (e.g. a numpy or gpu tensor).
+    """
 
     def __init__(self, axes, transformer, base=None,
                  dtype=np.dtype(np.float32),
