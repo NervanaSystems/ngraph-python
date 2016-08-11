@@ -183,7 +183,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         if results is None:
             results = self.all_results
-        ordered_ops = sorted(Op.ordered_ops(results), key=self.order.get)
+        ordered_ops = self.dataflow.can_reach(results, order=self.ops)
         self.transform_ordered_ops(ordered_ops)
 
         return {op: op.output_value(self) for op in results}
