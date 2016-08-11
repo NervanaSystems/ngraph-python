@@ -55,32 +55,40 @@ mnist_data = MNIST(path=args.data_dir).gen_iterators()
 train_data = mnist_data['train']
 test_data = mnist_data['valid']
 
-
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
-transformer = be.NumPyTransformer()
-init_comp = transformer.computation([nervana_graph.init])
-update_comp = transformer.computation([nervana_graph.loss, nervana_graph.update])
-transformer.finalize()
+trans = be.NumPyTransformer()
+if args.end_node == "":
+    init_comp = trans.computation([nervana_graph.init])
+    update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
 
-transformer.dataflow.view()
+    # TODO: should determine automatically or receive as arg parameter
+    pred_op = nervana_graph.name_to_op["softmax_linear/add"]
+    inference_comp = trans.computation([pred_op])
+else:
+    end_op = nervana_graph.name_to_op[args.end_node]
+    print(end_op)
+    debug_comp = trans.computation([end_op])
+
+trans.finalize()
+trans.dataflow.view()
 
 
-def eval_test(test_data, graph, last_op_name):
-    # TODO: pass the inference graph instead of manually specify the last node for inference.
+def eval_test(test_data, graph, infernce_comp, pred_op):
+    # TODO: pass the inference computation graph only without provide the last node for inference.
     """
     :param test_data: test input
-    :param graph: the whole computation graph
-    :param last_op_name: the last op for inference
+    :param inference_comp: the computation graph for inference
+    :param pred_op: the last op for inference
+    :param inference_comp: the transformer.computation
     :return: error rate (1 - accuracy) on test_data
     """
     with be.bound_environment(env):
         test_error = 0
         n_bs = 0
-        enp = be.NumPyTransformer(results=[graph.name_to_op[last_op_name]])
         for mb_idx, (xraw, yraw) in enumerate(test_data):
             graph.x.value = xraw
-            result = enp.evaluate()[graph.name_to_op[last_op_name]]
+            result = infernce_comp.evaluate()[pred_op]
             pred = np.argmax(result, axis=1)
             gt = np.argmax(yraw, axis=0)
             test_error += np.sum(np.not_equal(pred, gt))
@@ -107,9 +115,7 @@ with be.bound_environment(env):
                 result = update_comp.evaluate()
                 avg_loss += result[nervana_graph.loss]
             else:
-                # end_op = nervana_graph.name_to_op[args.end_node]
-                # enp = be.NumPyTransformer(results=[end_op])
-                # result = enp.evaluate()[end_op]
+                result = debug_comp.evaluate()[end_op]
 
                 print("-------------------------------")
                 print("minibatch: " + str(mb_idx))
@@ -123,5 +129,5 @@ with be.bound_environment(env):
                 sys.exit()
 
         avg_loss /= mb_idx
-        test_error = eval_test(test_data, nervana_graph, "softmax_linear/add")
+        test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
         print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))

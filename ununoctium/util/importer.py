@@ -644,8 +644,6 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
     if loss_node in name_to_op:
         graph.loss = name_to_op[loss_node]
 
-    assert (graph.x is not None)
-
     return graph
 
 

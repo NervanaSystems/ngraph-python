@@ -45,17 +45,18 @@ test_data = mnist_data['valid']
 
 nervana_graph = create_nervana_graph(args.pb_file, env)
 
-transformer = be.NumPyTransformer(results=[nervana_graph.last_op])
-transformer.dataflow.view()
+trans = be.NumPyTransformer()
+infer_comp = trans.computation([nervana_graph.last_op])
+trans.finalize()
+trans.dataflow.view()
 
 def eval_test(test_data, graph):
     with be.bound_environment(env):
         test_error = 0
         n_bs = 0
-        enp = be.NumPyTransformer(results=[graph.last_op])
         for mb_idx, (xraw, yraw) in enumerate(test_data):
             graph.x.value = xraw
-            result = enp.evaluate()[graph.last_op]
+            result = infer_comp.evaluate()[graph.last_op]
 
             print("-------------------------------")
             print("minibatch: " + str(mb_idx))
