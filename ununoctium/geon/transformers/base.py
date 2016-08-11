@@ -66,13 +66,19 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def finalize(self):
         Op.simple_prune(self.all_results)
-        self.dataflow, self.memory = assign_buffers(self, self.all_results, self.fusion)
+
+        # Crate tensor descriptions
+        ops = Op.ordered_ops(self.all_results)
+        inits = self.ordered_initializers(ops)
+        self.initialize_views(ops + inits)
+
+        self.dataflow, self.memory = assign_buffers(
+            self, self.all_results, self.fusion
+        )
+        self.initialize_tds()
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
-        self.initialize_views(self.initializers)
-        self.initialize_views(self.ops)
-        self.initialize_tds()
         self.allocate_ordered_ops(self.initializers)
         self.allocate_ordered_ops(self.ops)
         self.transform_ordered_ops(self.initializers)
