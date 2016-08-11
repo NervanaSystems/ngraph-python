@@ -112,7 +112,7 @@ class AxisID(object):
 def canonicalize(seq):
     elems = []
     for x in seq:
-        if isinstance(x, AxesAxis):
+        if isinstance(x, FlattenedAxis):
             if x.empty:
                 continue
             elif x.single:
@@ -124,7 +124,7 @@ def canonicalize(seq):
             elif len(x) == 1:
                 x = x[0]
             else:
-                x = AxesAxis(Axes(*x))
+                x = FlattenedAxis(Axes(*x))
         elems.append(x)
     return elems
 
@@ -153,7 +153,7 @@ class Axes(tuple):
 
     @property
     def full_lengths(self):
-        return tuple(x.axes.full_lengths if isinstance(x, AxesAxis)
+        return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
                      else x.length for x in self)
 
     @property
@@ -301,12 +301,15 @@ class AxisIDTuple(tuple):
         return s
 
 
-class AxesAxis(Axis):
+class FlattenedAxis(Axis):
+    """ A FlattenedAxis has length which is the product of the lengths of all
+    Axis in the axes.  The original Axes object is stored so that we can later
+    unflatten this Axis back to its original component Axis. """
 
     def __init__(self, axes, **kargs):
         assert isinstance(axes, Axes)
         length = reduce(operator.mul, axes.lengths, 1)
-        super(AxesAxis, self).__init__(length=length, **kargs)
+        super(FlattenedAxis, self).__init__(length=length, **kargs)
         self.__axes = axes
 
     @property
@@ -322,7 +325,7 @@ class AxesAxis(Axis):
         return self.__axes
 
     def __repr__(self):
-        s = 'AxesAxis('
+        s = 'FlattenedAxis('
         for i, x in enumerate(self.axes):
             s += repr(x)
             s += ', '
@@ -371,7 +374,7 @@ class TensorDescription(object):
             stride = self.dtype.itemsize
             for axis, full_size in reversed(
                     list(zip(self.axes, self.full_sizes))):
-                assert not isinstance(axis, AxesAxis)
+                assert not isinstance(axis, FlattenedAxis)
                 full_strides.append(stride)
                 stride *= full_size
             self.full_strides = tuple(reversed(full_strides))
@@ -402,10 +405,10 @@ class TensorDescription(object):
 
         for axis in new_axes:
             old_pos = get_old_axis(axis)
-            if old_pos == -1 and isinstance(axis, AxesAxis):
+            if old_pos == -1 and isinstance(axis, FlattenedAxis):
                 poss = []
                 for sub in axis.axes:
-                    assert not isinstance(sub, AxesAxis)
+                    assert not isinstance(sub, FlattenedAxis)
                     poss.append(get_old_axis(sub))
                 old_poss.append(tuple(poss))
             else:
@@ -419,12 +422,12 @@ class TensorDescription(object):
             else:
                 return tuple(range(lower, upper))
         if div_point == 0 or div_point == self.ndim:
-            new_axes = Axes(AxesAxis(self.axes))
+            new_axes = Axes(FlattenedAxis(self.axes))
             old_poss = (pos_tup(0, self.ndim),)
         else:
             new_axes = Axes(
-                AxesAxis(self.axes[:div_point]),
-                AxesAxis(self.axes[div_point:])
+                FlattenedAxis(self.axes[:div_point]),
+                FlattenedAxis(self.axes[div_point:])
             )
             old_poss = (
                 pos_tup(0, div_point),
@@ -509,19 +512,19 @@ class TensorDescription(object):
         def old_info(axis, old_pos):
             if old_pos == -1:
                 full_length = axis.axes.full_lengths\
-                    if isinstance(axis, AxesAxis) else axis.length
+                    if isinstance(axis, FlattenedAxis) else axis.length
                 return full_length, full_length, 0
             else:
                 return self.full_shape[old_pos],\
                     self.full_sizes[old_pos], self.full_strides[old_pos]
 
         for axis, old_pos in zip(new_axes, old_poss):
-            if isinstance(axis, AxesAxis):
+            if isinstance(axis, FlattenedAxis):
                 sub_shape = []
                 sub_sizes = []
                 sub_strides = []
                 for sub, sub_pos in zip(axis.axes, old_pos):
-                    assert not isinstance(sub, AxesAxis)
+                    assert not isinstance(sub, FlattenedAxis)
                     fsh, fsi, fst = old_info(sub, sub_pos)
                     sub_shape.append(fsh)
                     sub_sizes.append(fsi)
@@ -560,7 +563,7 @@ class TensorDescription(object):
         new_sizes = []
         for axis, sh, st, si in\
                 zip(axes, full_shape, full_strides, full_sizes):
-            if isinstance(axis, AxesAxis) and all_numeric(axis.axes):
+            if isinstance(axis, FlattenedAxis) and all_numeric(axis.axes):
                 new_axes.append(NumericAxis(reduce_nested(
                     axis.axes.lengths, 1, operator.mul
                 )))
