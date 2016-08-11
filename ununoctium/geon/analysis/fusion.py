@@ -69,8 +69,8 @@ class KernelFlowGraph(DataFlowGraph):
         """
 
         # Extracts clusters
-        self.fusible = fusible
-        super(KernelFlowGraph, self).__init__(dataflow.results)
+        super(KernelFlowGraph, self).__init__(dataflow.transformer, dataflow.results)
+        self.fusible = lambda x, y: fusible(self.transformer, x, y)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
         edges = {(a, b) for a, _ in successors.items() for b in _}

@@ -15,6 +15,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 import geon as be
+from geon.analysis.fusion import gpu_fusible
 
 import numpy as np
 import mxnet as mx
@@ -44,9 +45,9 @@ class GraphitiMLP(be.Model):
         dW = [be.deriv(Error, w) for w in W]
 
         # Fusion analysis
-        transformer = be.NumPyTransformer(results=dW if bprop else [Error])
+        transformer = be.NumPyTransformer(results=dW if bprop else [Error], fusion=gpu_fusible)
         self.memory = transformer.memory
-        # self.dataflow.view()
+        transformer.dataflow.view()
 
 
 class MXNetMLP:
