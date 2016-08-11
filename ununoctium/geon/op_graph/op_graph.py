@@ -27,7 +27,6 @@ from geon.op_graph.nodes import Node, generic_method
 
 
 def tensor_descriptions(args, transformer):
-    # Replace tds with tensor_descriptions
     def td(arg):
         if isinstance(arg, Tensor):
             return arg.tensor_description(transformer)
@@ -230,7 +229,7 @@ class Op(Node):
         pass
 
     @from_transformer_cache
-    def create_tensor_descriptions(self, transformer):
+    def call_info(self, transformer):
         """
         Creates the tensor descriptions (of this op or its arguments)
         required to evaluate it.
@@ -238,7 +237,10 @@ class Op(Node):
         and supply values to the transform method
         (in the transform_call_info) method.
         """
-        return list(tds(self.args, transformer))
+        return list(tensor_descriptions(self.args, transformer))
+
+    def create_tensor_descriptions(self, transformer):
+        self.call_info(transformer)
 
     def transform_call_info(self, transformer):
         """
@@ -437,7 +439,7 @@ class ExpandDims(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return x.reaxe_with_dummy_axis(self.axis, self.dim)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -588,7 +590,7 @@ class VoidOp(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        return list(tds(self.args, transformer))
+        return list(tensor_descriptions(self.args, transformer))
 
 
 class SetItem(VoidOp):
@@ -599,7 +601,7 @@ class SetItem(VoidOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        tensor, val = tds(self.args, transformer)
+        tensor, val = tensor_descriptions(self.args, transformer)
         return [tensor, val.reaxe(tensor.axes)]
 
     def transform(self, transformer, tensor, val):
@@ -629,7 +631,7 @@ class ElementWise(ComputationOp):
     @from_transformer_cache
     def call_info(self, transformer):
         ci = [self.tensor_description(transformer)]
-        for arg in tds(self.args, transformer):
+        for arg in tensor_descriptions(self.args, transformer):
             ci.append(arg.reaxe(self.axes))
         return ci
 
@@ -783,7 +785,7 @@ class argmax(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return [
             self.tensor_description(transformer),
             x.reaxe(self.max_axes + self.axes)
@@ -808,7 +810,7 @@ class argmin(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args)
+        x, = tensor_descriptions(self.args)
         return [
             self.tensor_description(transformer),
             x.reaxe(self.min_axes + self.axes)
@@ -909,7 +911,7 @@ class dot(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, y = tds(self.args, transformer)
+        x, y = tensor_descriptions(self.args, transformer)
         out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
             = self.axis_id_info
 
@@ -1037,7 +1039,7 @@ class ReductionOp(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         out = self.tensor_description(transformer)
 
         if len(self.reduction_axes) == 0:
@@ -1265,7 +1267,7 @@ class onehot(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         axis, axes = self.axis, self.axes
         reaxes = Axes(axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes())
         return [
