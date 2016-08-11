@@ -226,6 +226,7 @@ class Op(Node):
     def allocate(self, transformer):
         """
         Fills the memory of this op with its initial value.
+        TODO: rename or change this function to acutally allocate memory
         """
         pass
 
