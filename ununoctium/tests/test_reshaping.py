@@ -23,11 +23,13 @@ import geon as be
 import geon.frontends.base.axis as ax
 
 
+delta = 1e-3
+rtol = atol = 1e-2
+
+
 @in_bound_environment
 def test_expand_dims():
     max_new_axis_length = 4
-    delta = 1e-3
-    rtol = atol = 1e-2
 
     tests = [
         {
@@ -86,3 +88,74 @@ def test_expand_dims():
                 assert np.allclose(
                     numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                 )
+
+
+@in_bound_environment
+def test_slice():
+    tests = [
+        {
+            'tensor': [[1, 3], [2, 5]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [0, 1],
+            'sliced_axes': (),
+            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'expected': 3
+        },
+        {
+            'tensor': [[1, 3], [2, 5]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [slice(None), 0],
+            'sliced_axes': (ax.C,),
+            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'expected': [1, 2]
+        },
+        {
+            'tensor': [[1, 3], [2, 5]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [1, slice(None)],
+            'sliced_axes': (ax.D,),
+            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'expected': [2, 5]
+        },
+        {
+            'tensor': [[1, 4, 5], [2, 5, 6]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [1, slice(1, 3)],
+            'sliced_axes': (ax.N,),
+            'axes_lengths': {ax.C: 2, ax.D: 3, ax.N: 2},
+            'expected': [5, 6]
+        }
+    ]
+
+    for test in tests:
+        for axis, length in test['axes_lengths'].items():
+            axis.length = length
+        tensor_axes = test['tensor_axes']
+
+        tensor_np = np.array(
+            test['tensor'], dtype='float32'
+        )
+        tensor = be.placeholder(axes=be.Axes(*tensor_axes))
+        tensor.value = tensor_np
+        expected = np.array(test['expected'], dtype='float32')
+
+        s = test['slice']
+        s_axes = test['sliced_axes']
+
+        sliced = be.Slice(tensor, s, s_axes)
+        sliced_val, = execute([sliced])
+
+        assert np.array_equal(sliced_val, expected)
+
+        # Test backpropagation
+        numeric_deriv = transform_numeric_derivative(
+            sliced, tensor, delta
+        )
+        sym_deriv = transform_derivative(sliced, tensor)
+
+        assert np.allclose(
+            numeric_deriv, sym_deriv, rtol=rtol, atol=atol
+        )
+
+if __name__ == '__main__':
+    test_slice()
