@@ -665,10 +665,10 @@ class Constant(AllocationOp):
     NumPyTensor for now.
     """
 
-    def __init__(self, const, **kargs):
+    def __init__(self, const, axes=Axes(), **kargs):
         self.const = const
         super(Constant, self).__init__(
-            axes=Axes(), dtype=np.dtype(np.float32), **kargs)
+            axes=axes, dtype=np.dtype(np.float32), **kargs)
         self.initializers.append(Fill(self, const))
         self.tags.add('persistent')
 
