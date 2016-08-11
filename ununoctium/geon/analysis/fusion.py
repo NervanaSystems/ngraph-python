@@ -65,13 +65,12 @@ class KernelFlowGraph(DataFlowGraph):
 
         Implementation of: *Fast Greedy Weighted Fusion*, Ken Kennedy,
         Internal journal of Parallel Programming (2002):
-        Download: http://citeseerx.ist.psu.edu/viewdoc
-                        /download?doi=10.1.1.95.2695&rep=rep1&type=pdf
+        Download: https://drive.google.com/open?id=0B8aziUAQFjRTbDNjeGM5elpFeEk
         """
 
         # Extracts clusters
-        self.fusible = fusible
-        super(KernelFlowGraph, self).__init__(dataflow.results)
+        super(KernelFlowGraph, self).__init__(dataflow.transformer, dataflow.results)
+        self.fusible = lambda x, y: fusible(self.transformer, x, y)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
         edges = {(a, b) for a, _ in successors.items() for b in _}
