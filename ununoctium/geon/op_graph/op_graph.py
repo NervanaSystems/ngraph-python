@@ -22,7 +22,7 @@ from builtins import object, str
 from geon.backends.graph.environment import get_current_environment,\
     get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
-    AxisIDTuple, Axes, AxesAxis, Axis, sample_axes, batch_axes
+    AxisIDTuple, Axes, FlattenedAxis, Axis, sample_axes, batch_axes
 from geon.op_graph.nodes import Node, generic_method
 
 
@@ -980,7 +980,7 @@ class ReductionOp(ComputationOp):
             self.mode = 'copy'
             return [out, xr]
         else:
-            red_axes = [AxesAxis(self.reduction_axes)]
+            red_axes = [FlattenedAxis(self.reduction_axes)]
             red_axes.extend(self.axes)
             red_axes = Axes(*red_axes)
             self.mode = 0
@@ -1211,7 +1211,7 @@ class onehot(ComputationOp):
         reaxes = Axes(axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes())
         return [
             self.tensor_description(transformer).reaxe(reaxes),
-            x.reaxe(Axes(AxesAxis(x.axes)))
+            x.reaxe(Axes(FlattenedAxis(x.axes)))
         ]
 
     def transform(self, transformer, out, x):

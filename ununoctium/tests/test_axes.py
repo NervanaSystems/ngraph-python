@@ -41,9 +41,9 @@ def test_axes_equal():
 
 
 def to_nested_tuple(axes):
-    """ recursively replace instances of AxesAxis with instances of type tuple. """
+    """ recursively replace instances of FlattenedAxis with instances of type tuple. """
     return tuple(
-        to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.AxesAxis) else axis
+        to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.FlattenedAxis) else axis
         for axis in axes
     )
 
@@ -76,11 +76,11 @@ def test_axes_ops():
     test_sub(arrayaxes.Axes(ax.A, ax.B), arrayaxes.Axes(ax.B,), arrayaxes.Axes(ax.A,))
 
     # Combined axes length
-    assert arrayaxes.AxesAxis(arrayaxes.Axes(ax.A, ax.B,)).length \
+    assert arrayaxes.FlattenedAxis(arrayaxes.Axes(ax.A, ax.B, )).length \
         == ax.A.length * ax.B.length
     assert arrayaxes.Axes(ax.A, (ax.B, ax.C)).lengths \
         == (ax.A.length, ax.B.length * ax.C.length)
-    assert arrayaxes.AxesAxis(arrayaxes.Axes(ax.A, (ax.B, ax.C))).length \
+    assert arrayaxes.FlattenedAxis(arrayaxes.Axes(ax.A, (ax.B, ax.C))).length \
         == ax.A.length * ax.B.length * ax.C.length
 
 
@@ -136,7 +136,7 @@ def test_simple_tensors():
     e2_1 = tensorview(td2_1, e2)
     td2_2 = td2.reaxe(arrayaxes.Axes(ax.A, ax.B))
     e2_2 = tensorview(td2_2, e2)
-    td2_3 = td2.reaxe(arrayaxes.Axes(arrayaxes.AxesAxis(td2.axes)))
+    td2_3 = td2.reaxe(arrayaxes.Axes(arrayaxes.FlattenedAxis(td2.axes)))
     e2_3 = tensorview(td2_3, e2)
 
     td3_1 = td3.reaxe_with_axis_ids(arrayaxes.AxisIDTuple(
