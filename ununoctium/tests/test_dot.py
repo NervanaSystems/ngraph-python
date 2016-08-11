@@ -29,6 +29,7 @@ Test graphiti's implementation of the dot product.
 
 
 def evaluate(result):
+    """ given an op `result` evaluate it and return the result """
     return be.NumPyTransformer(results=[result]).evaluate()[result]
 
 
@@ -50,9 +51,8 @@ def get_random_np_array(
         mean=0,
         sigma=1,
         dtype=np.float32):
-    arr = sigma * \
-        np.random.randn(
-            *get_random_shape(max_num_axes, max_axis_length)) + mean
+    shape = get_random_shape(max_num_axes, max_axis_length)
+    arr = sigma * np.random.randn(*shape) + mean
     arr.dtype = dtype
     return arr
 
@@ -76,7 +76,7 @@ def test_l2_norm():
         [[1, 3, 5], [4, 2, 5]]
     ]
     tests = [np.array(_, dtype=np.float32) for _ in tests_]
-    for i, test in enumerate(tests):
+    for test in tests:
         assert np.array_equal(np.linalg.norm(test), graphiti_l2_norm(test))
 
 
@@ -137,34 +137,36 @@ def test_tensor_dot_tensor():
     ]
 
     for test in tests:
-        for axis, length in list(test['axes_lengths'].items()):
+        # set up axis
+        for axis, length in test['axes_lengths'].items():
             axis.length = length
 
-        tensor1_axes = test['tensor1_axes']
-        tensor1 = be.placeholder(axes=tensor1_axes)
+        # set up tensors
+        tensor1 = be.placeholder(axes=test['tensor1_axes'])
         tensor1.value = np.array(
             test['tensor1'], dtype=np.float32
         )
 
         if 'tensor2' in test:
-            tensor2_axes = test['tensor2_axes']
-            tensor2 = be.placeholder(axes=tensor2_axes)
+            tensor2 = be.placeholder(axes=test['tensor2_axes'])
             tensor2.value = np.array(
                 test['tensor2'], dtype=np.float32
             )
         else:
             tensor2 = tensor1
+
+        # compute outputs
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
         dot = be.dot(tensor1, tensor2)
         evaluated = evaluate(dot)
-        assert np.array_equal(evaluated, expected_output),\
-            'Expected: %s, found: %s' % (expected_output, evaluated)
 
-        numeric_deriv_1 = transform_numeric_derivative(dot, tensor1, delta)
-        sym_deriv_1 = transform_derivative(dot, tensor1)
-        assert np.allclose(numeric_deriv_1, sym_deriv_1, rtol=rtol, atol=atol)
+        # assert outputs are equal
+        np.testing.assert_equal(evaluated, expected_output)
 
-        numeric_deriv_2 = transform_numeric_derivative(dot, tensor2, delta)
-        sym_deriv_2 = transform_derivative(dot, tensor2)
-        assert np.allclose(numeric_deriv_2, sym_deriv_2, rtol=rtol, atol=atol)
+        # assert derivative wrt to both tensors is the same when computed
+        # symbolicly by graphiti and numerically
+        for tensor in (tensor1, tensor2):
+            numeric_deriv = transform_numeric_derivative(dot, tensor, delta)
+            sym_deriv = transform_derivative(dot, tensor)
+            np.testing.assert_allclose(numeric_deriv, sym_deriv, rtol=rtol, atol=atol)
