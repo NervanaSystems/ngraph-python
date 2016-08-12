@@ -36,19 +36,19 @@ class RandomTensorGenerator(object):
             self.rng.uniform(
                 low,
                 high,
-                Axes(*axes).lengths),
+                Axes(axes).lengths),
             dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
         n = math.floor((high - low) / quantum)
         result = np.array(self.rng.random_integers(
-            0, n, Axes(*axes).lengths), dtype=self.dtype)
+            0, n, Axes(axes).lengths), dtype=self.dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result
 
     def random_integers(self, low, high, axes, dtype=np.int8):
-        return self.rng.random_integers(low, high, Axes(*axes).lengths).astype(dtype)
+        return self.rng.random_integers(low, high, Axes(axes).lengths).astype(dtype)
 
 
 def in_bound_environment(f):
