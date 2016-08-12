@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from builtins import str
 import collections
 from functools import wraps
 import inspect
@@ -74,11 +75,8 @@ class Node(NameableValue, DebugInfo):
         self.args = args
 
         if tags is not None:
-            if isinstance(
-                    tags,
-                    collections.Iterable) and not isinstance(
-                    tags,
-                    str):
+            if isinstance(tags, collections.Iterable) and \
+                    not isinstance(tags, (bytes, str)):
                 self.tags.update(tags)
             else:
                 self.tags.add(tags)
