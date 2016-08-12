@@ -20,16 +20,89 @@ This API documentation covers each module within graphiti.
 
 geon.backends
 -------------
+.. py:module: geon.backends
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.backends.dataloaderbackend
+   geon.backends.graph.artransform
+   geon.backends.graph.environment
+   geon.backends.graph.mpihandle
 
 geon.frontends
 --------------
+.. py:module: geon.frontends
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.frontends.base.axis
+   geon.frontends.base.graph
+   geon.frontends.declarative_graph.declarative_graph
+
+geon.frontends.neon
+-------------------
+.. py:module: geon.frontends.neon
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.frontends.neon.activation
+   geon.frontends.neon.callbacks
+   geon.frontends.neon.container
+   geon.frontends.neon.cost
+   geon.frontends.neon.layer
+   geon.frontends.neon.model
+   geon.frontends.neon.optimizer
 
 geon.op_graph
 -------------
+.. py:module: geon.op_graph
 
-geon.transforms
----------------
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.op_graph.arrayaxes
+   geon.op_graph.names
+   geon.op_graph.nodes
+   geon.op_graph.op_graph
+
+geon.transformers
+-----------------
+.. py:module: geon.transformers
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.transformers.base
+   geon.transformers.nptransform
 
 geon.util
 ---------
+.. py:module: geon.util
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.util.graph
+   geon.util.utils
+
+geon.analysis
+-------------
+.. py:module: geon.analysis
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.analysis.dataflow
+   geon.analysis.fusion
+   geon.analysis.memory
 

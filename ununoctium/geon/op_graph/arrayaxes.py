@@ -28,17 +28,14 @@ import numpy as np
 from geon.op_graph.names import NameableValue
 from geon.backends.graph.environment import get_current_environment
 
-AllAxes = set()
-
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def __init__(self, length, **kargs):
         super(Axis, self).__init__(**kargs)
         self.__length = length
-        AllAxes.add(self)
 
-    def __getitem__(self, key):
+    def axis_id(self, key):
         return AxisID(self, key)
 
     @property
@@ -112,7 +109,7 @@ class AxisID(object):
 def canonicalize(seq):
     elems = []
     for x in seq:
-        if isinstance(x, AxesAxis):
+        if isinstance(x, FlattenedAxis):
             if x.empty:
                 continue
             elif x.single:
@@ -124,7 +121,7 @@ def canonicalize(seq):
             elif len(x) == 1:
                 x = x[0]
             else:
-                x = AxesAxis(Axes(*x))
+                x = FlattenedAxis(Axes(*x))
         elems.append(x)
     return elems
 
@@ -144,13 +141,16 @@ class Axes(tuple):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
             assert len(seq) == 1
             seq = tuple(seq[0])
+
         seq = canonicalize(seq)
+
         assert all([isinstance(x, Axis) for x in seq])
+
         return tuple.__new__(cls, seq)
 
     @property
     def full_lengths(self):
-        return tuple(x.axes.full_lengths if isinstance(x, AxesAxis)
+        return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
                      else x.length for x in self)
 
     @property
@@ -298,12 +298,15 @@ class AxisIDTuple(tuple):
         return s
 
 
-class AxesAxis(Axis):
+class FlattenedAxis(Axis):
+    """ A FlattenedAxis has length which is the product of the lengths of all
+    Axis in the axes.  The original Axes object is stored so that we can later
+    unflatten this Axis back to its original component Axis. """
 
     def __init__(self, axes, **kargs):
         assert isinstance(axes, Axes)
         length = reduce(operator.mul, axes.lengths, 1)
-        super(AxesAxis, self).__init__(length=length, **kargs)
+        super(FlattenedAxis, self).__init__(length=length, **kargs)
         self.__axes = axes
 
     @property
@@ -319,7 +322,7 @@ class AxesAxis(Axis):
         return self.__axes
 
     def __repr__(self):
-        s = 'AxesAxis('
+        s = 'FlattenedAxis('
         for i, x in enumerate(self.axes):
             s += repr(x)
             s += ', '
@@ -333,10 +336,15 @@ def reduce_strides(strides):
 
 
 class TensorDescription(object):
-    """Axes information about an allocated tensor"""
+    """
+    Description of a tensor that will be allocated in hardware.
+    Names the tensor's dimensions with axes and holds pointers to the
+    buffer allocated by the analysis and the backend tensor value
+    (e.g. a numpy or gpu tensor).
+    """
 
     def __init__(self, axes, transformer, base=None,
-                 dtype=np.dtype(np.float32), full_shape=None,
+                 dtype=np.dtype(np.float32),
                  full_strides=None, full_sizes=None, offset=0,
                  **kargs):
         super(TensorDescription, self).__init__(**kargs)
@@ -353,8 +361,6 @@ class TensorDescription(object):
         self.ndim = len(self.axes)
         self.views = weakref.WeakSet()
         self.__read_only = False
-        self.full_shape = full_shape if full_shape is not None \
-            else self.axes.full_lengths
         self.full_sizes = full_sizes if full_sizes is not None \
             else self.axes.full_lengths
 
@@ -368,15 +374,13 @@ class TensorDescription(object):
             stride = self.dtype.itemsize
             for axis, full_size in reversed(
                     list(zip(self.axes, self.full_sizes))):
-                assert not isinstance(axis, AxesAxis)
+                assert not isinstance(axis, FlattenedAxis)
                 full_strides.append(stride)
                 stride *= full_size
             self.full_strides = tuple(reversed(full_strides))
         else:
             self.full_strides = full_strides
 
-        assert len(self.full_shape) == self.ndim, \
-            "Shape must have same number of dimensions as axes"
         assert len(self.full_sizes) == self.ndim, \
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
@@ -399,10 +403,10 @@ class TensorDescription(object):
 
         for axis in new_axes:
             old_pos = get_old_axis(axis)
-            if old_pos == -1 and isinstance(axis, AxesAxis):
+            if old_pos == -1 and isinstance(axis, FlattenedAxis):
                 poss = []
                 for sub in axis.axes:
-                    assert not isinstance(sub, AxesAxis)
+                    assert not isinstance(sub, FlattenedAxis)
                     poss.append(get_old_axis(sub))
                 old_poss.append(tuple(poss))
             else:
@@ -416,12 +420,12 @@ class TensorDescription(object):
             else:
                 return tuple(range(lower, upper))
         if div_point == 0 or div_point == self.ndim:
-            new_axes = Axes(AxesAxis(self.axes))
+            new_axes = Axes(FlattenedAxis(self.axes))
             old_poss = (pos_tup(0, self.ndim),)
         else:
             new_axes = Axes(
-                AxesAxis(self.axes[:div_point]),
-                AxesAxis(self.axes[div_point:])
+                FlattenedAxis(self.axes[:div_point]),
+                FlattenedAxis(self.axes[div_point:])
             )
             old_poss = (
                 pos_tup(0, div_point),
@@ -499,120 +503,111 @@ class TensorDescription(object):
     def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
         assert len(new_axes) == len(old_poss)
 
-        full_shape = []
         full_sizes = []
         full_strides = []
 
         def old_info(axis, old_pos):
             if old_pos == -1:
                 full_length = axis.axes.full_lengths\
-                    if isinstance(axis, AxesAxis) else axis.length
-                return full_length, full_length, 0
+                    if isinstance(axis, FlattenedAxis) else axis.length
+                return full_length, 0
             else:
-                return self.full_shape[old_pos],\
-                    self.full_sizes[old_pos], self.full_strides[old_pos]
+                return self.full_sizes[old_pos], self.full_strides[old_pos]
 
         for axis, old_pos in zip(new_axes, old_poss):
-            if isinstance(axis, AxesAxis):
-                sub_shape = []
+            if isinstance(axis, FlattenedAxis):
                 sub_sizes = []
                 sub_strides = []
                 for sub, sub_pos in zip(axis.axes, old_pos):
-                    assert not isinstance(sub, AxesAxis)
-                    fsh, fsi, fst = old_info(sub, sub_pos)
-                    sub_shape.append(fsh)
+                    assert not isinstance(sub, FlattenedAxis)
+                    fsi, fst = old_info(sub, sub_pos)
                     sub_sizes.append(fsi)
                     sub_strides.append(fst)
-                full_shape.append(tuple(sub_shape))
                 full_sizes.append(tuple(sub_sizes))
                 full_strides.append(tuple(sub_strides))
             else:
-                fsh, fsi, fst = old_info(axis, old_pos)
-                full_shape.append(fsh)
+                fsi, fst = old_info(axis, old_pos)
                 full_sizes.append(fsi)
                 full_strides.append(fst)
 
-        new_axes, full_shape, full_strides, full_sizes\
+        new_axes, full_strides, full_sizes\
             = self.maybe_collapse_numerics(
-                new_axes, full_shape, full_strides, full_sizes
+                new_axes, full_strides, full_sizes
             )
 
         return TensorDescription(new_axes,
                                  self.transformer,
                                  base=self.base,
                                  dtype=self.dtype,
-                                 full_shape=tuple(full_shape),
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=self.offset)
 
-    def maybe_collapse_numerics(self, axes, full_shape,
-                                full_strides, full_sizes):
+    def maybe_collapse_numerics(self, axes, full_strides, full_sizes):
         def all_numeric(axes):
             return all([isinstance(axis, NumericAxis) for axis in axes])
 
         new_axes = []
-        new_shape = []
         new_strides = []
         new_sizes = []
-        for axis, sh, st, si in\
-                zip(axes, full_shape, full_strides, full_sizes):
-            if isinstance(axis, AxesAxis) and all_numeric(axis.axes):
+        for axis, st, si in\
+                zip(axes, full_strides, full_sizes):
+            if isinstance(axis, FlattenedAxis) and all_numeric(axis.axes):
                 new_axes.append(NumericAxis(reduce_nested(
                     axis.axes.lengths, 1, operator.mul
                 )))
-                new_shape.append(reduce_nested(sh, 1, operator.mul))
                 new_strides.append(int(reduce_nested(st, float('inf'), min)))
                 new_sizes.append(reduce_nested(si, 1, operator.mul))
             else:
                 new_axes.append(axis)
-                new_shape.append(sh)
                 new_strides.append(st)
                 new_sizes.append(si)
-        return Axes(*new_axes), tuple(new_shape),\
-            tuple(new_strides), tuple(new_sizes)
+        return Axes(*new_axes), tuple(new_strides), tuple(new_sizes)
 
-    def slice(self, slices):
+    def slice(self, slices, new_axes):
         slices = list(slices)
         while len(slices) < self.ndim:
             slices.append(slice(None))
         offset = self.offset
         full_strides = []
         full_sizes = []
-        axes = []
+        new_index = 0
 
-        for s, axis, full_stride, full_size in \
-                zip(slices, self.axes, self.full_strides, self.full_sizes):
+        for s, axis, stride, size in\
+                zip(slices, self.axes, self.strides, self.sizes):
             if isinstance(s, slice):
+                new_axis = new_axes[new_index]
+                new_index += 1
+
                 start, stop, step = s.indices(axis.length)
                 assert step == 1
+                assert stop - start == new_axis.length,\
+                    'Axis %s has a length of %s but the acutal length is %s.'\
+                    % (new_axis, new_axis.length, stop - start)
 
-                axes.append(axis.sub(stop - start))
-                full_strides.append(full_stride)
-                full_sizes.append(full_size)
+                full_strides.append(stride)
+                full_sizes.append(size)
 
                 idx = start
             else:
                 idx = s
 
-            offset += idx * reduce_nested(full_stride, 1, operator.mul)
-
-        return TensorDescription(Axes(*axes),
+            offset += idx * stride
+        return TensorDescription(new_axes,
                                  self.transformer,
                                  base=self.base,
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
-                                 full_sizes=full_sizes,
+                                 full_sizes=tuple(full_sizes),
                                  offset=offset)
+
+    @property
+    def shape(self):
+        return self.axes.lengths
 
     @property
     def strides(self):
         return reduce_strides(self.full_strides)
-
-    @property
-    def shape(self):
-        return tuple(reduce_nested(_, 1, operator.mul)
-                     for _ in self.full_shape)
 
     @property
     def sizes(self):

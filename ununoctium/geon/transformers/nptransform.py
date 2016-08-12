@@ -39,7 +39,8 @@ class NumPyTransformer(Transformer):
             dtype=tensor_description.dtype,
             buffer=tensor_description.buffer.data,
             offset=tensor_description.offset,
-            strides=tensor_description.strides)
+            strides=tensor_description.strides
+        )
 
     def nparray(self, array):
         return array
