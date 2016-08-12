@@ -22,7 +22,7 @@ from geon.util.utils import execute, in_bound_environment
 def test_dot_with_numerics():
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
-    axes = be.Axes(ax1, ax2)
+    axes = be.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
     x = be.NumPyTensor(x_np, axes=axes)
@@ -37,7 +37,7 @@ def test_dot_with_numerics():
 def test_expand_dims():
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
-    axes = be.Axes(ax1, ax2)
+    axes = be.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
     x = be.NumPyTensor(x_np, axes=axes)

@@ -35,8 +35,8 @@ def test_axes_constructor_canonicalization():
 
 
 def test_axes_equal():
-    a1 = arrayaxes.Axes(ax.A, ax.B, ax.C)
-    a2 = arrayaxes.Axes(ax.A, ax.B, ax.C)
+    a1 = arrayaxes.Axes([ax.A, ax.B, ax.C])
+    a2 = arrayaxes.Axes([ax.A, ax.B, ax.C])
     assert a1 == a2
 
 
@@ -53,7 +53,7 @@ def test_canonicalize_axes():
 
     """
     def test(l, r):
-        a = arrayaxes.Axes(*l)
+        a = arrayaxes.Axes(l)
         assert to_nested_tuple(a) == r, (
             'Failed. Original collection: {l}, axes: {a},'
             ' generated tuple: {t}, target: {r}'
@@ -72,15 +72,15 @@ def test_axes_ops():
         assert arrayaxes.AxisIDTuple.sub(
             axes1.as_axis_ids(),
             axes2.as_axis_ids()).as_axes() == target
-    test_sub(arrayaxes.Axes(ax.A, ax.B), arrayaxes.Axes(ax.A,), arrayaxes.Axes(ax.B,))
-    test_sub(arrayaxes.Axes(ax.A, ax.B), arrayaxes.Axes(ax.B,), arrayaxes.Axes(ax.A,))
+    test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.A]), arrayaxes.Axes([ax.B]))
+    test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.B]), arrayaxes.Axes([ax.A]))
 
     # Combined axes length
-    assert arrayaxes.FlattenedAxis(arrayaxes.Axes(ax.A, ax.B, )).length \
+    assert arrayaxes.FlattenedAxis(arrayaxes.Axes([ax.A, ax.B])).length \
         == ax.A.length * ax.B.length
-    assert arrayaxes.Axes(ax.A, (ax.B, ax.C)).lengths \
+    assert arrayaxes.Axes([ax.A, (ax.B, ax.C)]).lengths \
         == (ax.A.length, ax.B.length * ax.C.length)
-    assert arrayaxes.FlattenedAxis(arrayaxes.Axes(ax.A, (ax.B, ax.C))).length \
+    assert arrayaxes.FlattenedAxis(arrayaxes.Axes([ax.A, (ax.B, ax.C)])).length \
         == ax.A.length * ax.B.length * ax.C.length
 
 
@@ -132,11 +132,11 @@ def test_simple_tensors():
     e1_2 = tensorview(td1_2, e1)
     e1_3 = tensorview(td1_3, e1)
 
-    td2_1 = td2.reaxe(arrayaxes.Axes(ax.B, ax.A))
+    td2_1 = td2.reaxe(arrayaxes.Axes([ax.B, ax.A]))
     e2_1 = tensorview(td2_1, e2)
-    td2_2 = td2.reaxe(arrayaxes.Axes(ax.A, ax.B))
+    td2_2 = td2.reaxe(arrayaxes.Axes([ax.A, ax.B]))
     e2_2 = tensorview(td2_2, e2)
-    td2_3 = td2.reaxe(arrayaxes.Axes(arrayaxes.FlattenedAxis(td2.axes)))
+    td2_3 = td2.reaxe(arrayaxes.Axes([arrayaxes.FlattenedAxis(td2.axes)]))
     e2_3 = tensorview(td2_3, e2)
 
     td3_1 = td3.reaxe_with_axis_ids(arrayaxes.AxisIDTuple(
