@@ -25,6 +25,19 @@ from geon.util.utils import transform_derivative, numeric_derivative
 rng = RandomTensorGenerator(0, np.float32)
 
 
+def test_tensor_sum_single_reduction_axes():
+    with be.bound_environment():
+        ax.N.length = 2
+        ax.Y.length = 2
+
+        a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.N, ax.Y])
+
+        b = be.sum(a, reduction_axes=ax.Y)
+
+        result = be.NumPyTransformer(results=[b]).evaluate()[b]
+        assert np.allclose(result, [[2.0], [2.0]])
+
+
 def test_constants():
     with be.bound_environment():
         # Simple evaluation of a scalar
