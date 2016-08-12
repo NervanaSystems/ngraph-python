@@ -135,23 +135,31 @@ def no_duplicates(arr):
     return True
 
 
-class Axes(tuple):
+class Axes(object):
 
-    def __new__(cls, seq=None):
-        if seq is None:
-            seq = []
-        elif isinstance(seq, Axis):
-            seq = [seq]
-        elif isinstance(seq, types.GeneratorType):
-            seq = tuple(seq)
-        elif isinstance(seq, (list, tuple)) and not isinstance(seq, Axes):
-            seq = tuple(seq)
+    def __init__(self, axes=None):
+        if axes is None:
+            axes = []
+        elif isinstance(axes, Axis):
+            axes = [axes]
+        elif isinstance(axes, types.GeneratorType):
+            axes = tuple(axes)
+        elif isinstance(axes, (list, tuple)) and not isinstance(axes, Axes):
+            axes = tuple(axes)
 
-        seq = canonicalize(seq)
+        axes = canonicalize(axes)
 
-        assert all([isinstance(x, Axis) for x in seq])
+        for x in axes:
+            if not isinstance(x, Axis):
+                raise ValueError((
+                    'tried to initialize an Axes with object type '
+                    '{found_type}.  all values should be an instance '
+                    'of a type which inherits from Axis.'
+                ).format(
+                    found_type=type(x),
+                ))
 
-        return tuple.__new__(cls, seq)
+        self._axes = axes
 
     @property
     def full_lengths(self):
@@ -162,11 +170,17 @@ class Axes(tuple):
     def lengths(self):
         return tuple(x.length for x in self)
 
+    def __iter__(self):
+        return self._axes.__iter__()
+
+    def __len__(self):
+        return len(self._axes)
+
     def __getitem__(self, item):
         if isinstance(item, slice):
-            return Axes(super(Axes, self).__getitem__(item))
+            return Axes(self._axes.__getitem__(item))
         else:
-            return super(Axes, self).__getitem__(item)
+            return self._axes.__getitem__(item)
 
     def __getslice__(self, i, j):
         return self.__getitem__(slice(i, j))
@@ -181,8 +195,22 @@ class Axes(tuple):
             other = other.as_axis_ids()
         return (self.as_axis_ids() - other).as_axes()
 
+    def __eq__(self, other):
+        if not isinstance(other, Axes):
+            raise ValueError((
+                'other must be of type Axes, found type {}'
+            ).format(type(other)))
+
+        return self._axes.__eq__(other._axes)
+
+    def __ne__(self, other):
+        return not self == other
+
     def concat(self, other):
         return Axes(tuple(self) + tuple(other))
+
+    def index(self, axis):
+        return self._axes.index(axis)
 
     # TODO: delete this method, the size should come from the tensor
     @property
@@ -205,9 +233,8 @@ class Axes(tuple):
 
     def __repr__(self):
         s = 'Axes('
-        for i, x in enumerate(self):
-            s += repr(x)
-            s += ', '
+        for x in self:
+            s += repr(x) + ','
         s += ')'
         return s
 
