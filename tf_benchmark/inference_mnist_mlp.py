@@ -61,7 +61,7 @@ with be.bound_environment(env):
 
         result = infer_comp.evaluate()[nervana_graph.last_op]
 
-        print("minibatch: " + str(mb_idx))
+        print("minibatch: %d" % mb_idx)
         print("prediction result: ")
         print(result)
         print("shape of the prediction: ")

@@ -262,7 +262,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
     """
 
     name_to_op = {}  # a map from TF node name to Neon op
-    variables = {} # trainable variables
+    variables = {}  # trainable variables
     init_graph = None
     update_graph = None
 
@@ -285,7 +285,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             ignored_nodes[node.name] = True
             continue
 
-        # print(node)
+        print(node)
 
         if op_type not in known_ops:
             # TODO: raise unrecognized operator error
@@ -313,7 +313,6 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
         name_to_op[node.name] = None
         with be.bound_environment(env):
             if op_type in two_inputs_ops:
-
                 if node.name == 'gradients/xentropy_grad/mul':
                     # TODO: remove this hardcoded branch after the ExpandDims op is implemented
                     # use be.Constant(1. / batch_axis.length) as temporal result to replace
@@ -348,16 +347,18 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 np_val = tensor_util.MakeNdarray(const_tensor)
 
                 if node.name in name_to_axes:
-                    name_to_op[node.name] = be.NumPyTensor(np_val, axes=name_to_axes[node.name], name=node.name)
+                    name_to_op[node.name] = be.NumPyTensor(np_val, axes=name_to_axes[node.name],
+                                                           name=node.name)
                 elif len(shape) == 0:
                     name_to_op[node.name] = be.Constant(np_val, name=node.name)
                 elif len(shape) == 1:
-                    name_to_op[node.name] = be.NumPyTensor(np_val, axes=be.Axes(be.NumericAxis(shape[0]), ),
+                    name_to_op[node.name] = be.NumPyTensor(np_val,
+                                                           axes=be.Axes(be.NumericAxis(shape[0]), ),
                                                            name=node.name)
                 elif len(shape) == 2:
                     name_to_op[node.name] = be.NumPyTensor(np_val,
                                                            axes=be.Axes(be.NumericAxis(shape[0]),
-                                                                     be.NumericAxis(shape[1])),
+                                                                        be.NumericAxis(shape[1])),
                                                            name=node.name)
 
             elif op_type == 'Variable':

@@ -52,7 +52,7 @@ env = Environment()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-epochs = 5
+epochs = 1
 
 mnist_data = MNIST(path=args.data_dir).gen_iterators()
 train_data = mnist_data['train']
@@ -65,10 +65,6 @@ trans = be.NumPyTransformer()
 if nervana_graph.init is not None:
     init_comp = trans.computation([nervana_graph.init])
 
-update_comp = None
-if nervana_graph.loss is not None and nervana_graph.update is not None:
-    update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
-
 inference_comp = None
 if args.infer_node in nervana_graph.name_to_op:
     # TODO: should determine automatically or receive as arg parameter
@@ -76,9 +72,17 @@ if args.infer_node in nervana_graph.name_to_op:
     inference_comp = trans.computation([pred_op])
 
 debug_comp = None
+debug_op = None
 if args.end_node in nervana_graph.name_to_op:
-    end_op = nervana_graph.name_to_op[args.end_node]
-    debug_comp = trans.computation([end_op])
+    debug_op = nervana_graph.name_to_op[args.end_node]
+    debug_comp = trans.computation([debug_op])
+
+update_comp = None
+if nervana_graph.loss is not None and nervana_graph.update is not None:
+    if debug_op is not None:
+        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update, debug_op])
+    else:
+        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
 
 trans.finalize()
 trans.dataflow.view()
@@ -122,23 +126,27 @@ with be.bound_environment(env):
             nervana_graph.x.value = xraw
             nervana_graph.y.value = yraw
 
-            if debug_comp is not None:
-                result = debug_comp.evaluate()[end_op]
+            result = update_comp.evaluate()
+            avg_loss += result[nervana_graph.loss]
 
-                print("-------------------------------")
-                print("minibatch: " + str(mb_idx))
-                print("-------------------------------")
+            if mb_idx % 1 == 0:
+                print("epoch: %d minibatch: %d" % (epoch, mb_idx))
+
                 print("the last op: ")
-                print(nervana_graph.last_op)
+                print(debug_op)
                 print("result of the last op: ")
-                print(result)
+                print(result[debug_op])
                 print("shape of the result: ")
-                print(result.shape)
-                sys.exit()
-            else:
-                result = update_comp.evaluate()
-                avg_loss += result[nervana_graph.loss]
+                print(result[debug_op].shape)
 
+                # print out variables
+                for v in nervana_graph.variables:
+                    print(v)
+                    val = nervana_graph.variables[v].tensor_description(trans).value
+                    print(val)
+                    if val is not None and np.isnan(val).any(): sys.exit()
+
+                print("-------------------------------")
 
         avg_loss /= mb_idx
         test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
