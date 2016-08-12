@@ -26,7 +26,7 @@ from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
 from geon.op_graph.nodes import Node, generic_method
 
 
-def tds(args, transformer):
+def tensor_descriptions(args, transformer):
     def td(arg):
         if isinstance(arg, Tensor):
             return arg.tensor_description(transformer)
@@ -66,6 +66,8 @@ class Op(Node):
         self._adjoints = None
         self.initializers = initializers or []
 
+        # TODO: used to capture assignment operations, required for compatibility with
+        # existing neon initializers.
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
@@ -135,6 +137,15 @@ class Op(Node):
         Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
 
     def adjoints(self):
+        """ Returns a map containing the adjoints of this op with respect
+        to other ops. Creates the map if it does not already exist.
+        Most models only require the adjoints map for their scalar loss
+        functions, in which case the adjoint is initialized to a scalar 1.
+        Some autodiff tests calculate the derivative of a tensor by initializing
+        all but one elements of a tensor to zero and the remaining element to one.
+        To allow this, we create a placeholder for the initial adjoint and allow it
+        to be accessed by the initial_adjoint field.
+        """
         if self._adjoints is not None:
             return self._adjoints
 
@@ -165,10 +176,15 @@ class Op(Node):
         return ordered_ops
 
     def as_node(self, x):
+        """ Overrides a method of the Node superclass."""
         return Op.as_op(x)
 
     @staticmethod
     def as_op(x):
+        """
+        Used to cast python values that are captured in the op
+        tree so that they can be properly evaluated.
+        """
         if isinstance(x, Tensor):
             return x
 
@@ -193,25 +209,46 @@ class Op(Node):
         Called by self.transform_call_info which is called by
         Transformer.transform_ordered_ops.
 
-        WILL BE DEPRICATED SOON
+        WILL BE DEPRECATED SOON
         """
         pass
 
     def sync(self, transformer):
-        """Make sure transformer has local changes"""
+        """
+        Make sure transformer has local changes.
+        Used to copy the value assigned to the op externally into our
+        internally allocated memory.
+        See placeholder.
+        WILL BE DEPRECATED SOON
+        """
         pass
 
     def allocate(self, transformer):
+        """
+        Fills the memory of this op with its initial value.
+        TODO: rename or change this function to acutally allocate memory
+        """
         pass
 
     @from_transformer_cache
     def call_info(self, transformer):
-        return list(tds(self.args, transformer))
+        """
+        Creates the tensor descriptions (of this op or its arguments)
+        required to evaluate it.
+        The list is used to allocate buffers (in the transformers)
+        and supply values to the transform method
+        (in the transform_call_info) method.
+        """
+        return list(tensor_descriptions(self.args, transformer))
 
     def create_tensor_descriptions(self, transformer):
         self.call_info(transformer)
 
     def transform_call_info(self, transformer):
+        """
+        Takes the value of the evaluated call info and passes it into
+        the transform method to compute the result of this op.
+        """
         def value(arg):
             if isinstance(arg, TensorDescription):
                 return arg.value
@@ -219,9 +256,6 @@ class Op(Node):
                 return None
         call_args = [value(arg) for arg in self.call_info(transformer)]
         self.transform(transformer, *call_args)
-
-    def output_value(self, transformer):
-        return None
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
@@ -346,9 +380,6 @@ class Tensor(Op):
     def __axes__(self):
         return self.axes
 
-    def output_value(self, transformer):
-        return self.tensor_description(transformer).value
-
     @from_transformer_cache
     def tensor_description(self, transformer):
         """
@@ -396,7 +427,7 @@ class Broadcast(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        td, = tds(self.args, transformer)
+        td, = tensor_descriptions(self.args, transformer)
         return td.reaxe(self.axes)
 
 
@@ -410,7 +441,7 @@ class ExpandDims(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return x.reaxe_with_dummy_axis(self.axis, self.dim)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -433,7 +464,7 @@ class Slice(Tensor):
 
     @from_transformer_cache
     def tensor_description(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return x.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -561,7 +592,7 @@ class VoidOp(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        return list(tds(self.args, transformer))
+        return list(tensor_descriptions(self.args, transformer))
 
 
 class SetItem(VoidOp):
@@ -572,7 +603,7 @@ class SetItem(VoidOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        tensor, val = tds(self.args, transformer)
+        tensor, val = tensor_descriptions(self.args, transformer)
         return [tensor, val.reaxe(tensor.axes)]
 
     def transform(self, transformer, tensor, val):
@@ -602,7 +633,7 @@ class ElementWise(ComputationOp):
     @from_transformer_cache
     def call_info(self, transformer):
         ci = [self.tensor_description(transformer)]
-        for arg in tds(self.args, transformer):
+        for arg in tensor_descriptions(self.args, transformer):
             ci.append(arg.reaxe(self.axes))
         return ci
 
@@ -756,7 +787,7 @@ class argmax(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         return [
             self.tensor_description(transformer),
             x.reaxe(self.max_axes + self.axes)
@@ -781,7 +812,7 @@ class argmin(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args)
+        x, = tensor_descriptions(self.args)
         return [
             self.tensor_description(transformer),
             x.reaxe(self.min_axes + self.axes)
@@ -882,7 +913,7 @@ class dot(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, y = tds(self.args, transformer)
+        x, y = tensor_descriptions(self.args, transformer)
         out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
             = self.axis_id_info
 
@@ -1010,7 +1041,7 @@ class ReductionOp(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         out = self.tensor_description(transformer)
 
         if len(self.reduction_axes) == 0:
@@ -1238,7 +1269,7 @@ class onehot(ComputationOp):
 
     @from_transformer_cache
     def call_info(self, transformer):
-        x, = tds(self.args, transformer)
+        x, = tensor_descriptions(self.args, transformer)
         axis, axes = self.axis, self.axes
         reaxes = Axes(axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes())
         return [
