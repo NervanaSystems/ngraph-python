@@ -29,7 +29,6 @@ from builtins import str
 from geon.frontends.neon import *
 
 import geon as be
-from geon.op_graph.arrayaxes import AxisVar
 from geon.op_graph.op_graph import Tensor, softmax
 
 import tensorflow as tf
@@ -129,12 +128,12 @@ def scan_nameable_axes(graph_def, env):
                     batch_axis = be.AxisVar(name='batch', length=shape[0])
 
                 if len(shape) == 2:
-                    x_axis = AxisVar(name='x', length=shape[1])
+                    x_axis = be.AxisVar(name='x', length=shape[1])
                     name_to_axes[node.name] = (x_axis, batch_axis)
                     in_axis = x_axis
 
                 elif len(shape) == 1:
-                    name_to_axes[node.name] = (AxisVar(name='y', length=10), batch_axis)
+                    name_to_axes[node.name] = (be.AxisVar(name='y', length=10), batch_axis)
                     y_name = node.name
 
             elif op_type == 'Variable':
@@ -145,7 +144,7 @@ def scan_nameable_axes(graph_def, env):
                     if 'weights' in node.name:
                         assert (in_axis is not None)
                         assert (in_axis.length == shape[0])
-                        out_axis = AxisVar(name=node.name, length=shape[1])
+                        out_axis = be.AxisVar(name=node.name, length=shape[1])
                         name_to_axes[node.name] = (in_axis, out_axis)
                         in_axis = out_axis  # now the output axis becomes input axis for the next layer
                         y_axis = out_axis
@@ -157,7 +156,7 @@ def scan_nameable_axes(graph_def, env):
                         name_to_axes[node.name] = (in_axis,)
 
                 elif len(shape) == 0:
-                    name_to_axes[node.name] = (AxisVar(name=node.name, length=1),)
+                    name_to_axes[node.name] = (be.AxisVar(name=node.name, length=1),)
 
             elif op_type == 'Const':
                 # in the frozen graph, all variables are converted to constant
@@ -171,7 +170,7 @@ def scan_nameable_axes(graph_def, env):
                 elif len(shape) == 2 and 'weights' in node.name:
                     assert (in_axis is not None)
                     assert (in_axis.length == shape[0])
-                    out_axis = AxisVar(name=node.name, length=shape[1])
+                    out_axis = be.AxisVar(name=node.name, length=shape[1])
                     name_to_axes[node.name] = [in_axis, out_axis]
                     in_axis = out_axis  # now the output axis becomes input axis for the next layer
 
@@ -225,12 +224,12 @@ def scan_numerical_axes(graph_def, env):
                 shape = [d.size for d in dims.dim]
 
                 if len(shape) == 2:
-                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
+                    name_to_axes[node.name] = be.Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
                     y_axis = be.NumericAxis(shape[1])
                 elif len(shape) == 1:
-                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), )
+                    name_to_axes[node.name] = be.Axes(be.NumericAxis(shape[0]), )
                 elif len(shape) == 0:
-                    name_to_axes[node.name] = Axes()
+                    name_to_axes[node.name] = be.Axes()
 
             elif op_type == 'Const':
                 # in the frozen graph, all variables are converted to constant
@@ -238,9 +237,9 @@ def scan_numerical_axes(graph_def, env):
                 shape = [d.size for d in const_tensor.tensor_shape.dim]
 
                 if len(shape) == 1 and 'biases' in node.name:
-                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), )
+                    name_to_axes[node.name] = be.Axes(be.NumericAxis(shape[0]), )
                 elif len(shape) == 2 and 'weights' in node.name:
-                    name_to_axes[node.name] = Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
+                    name_to_axes[node.name] = be.Axes(be.NumericAxis(shape[0]), be.NumericAxis(shape[1]))
 
     name_to_axes[y_name] = (y_axis, batch_axis)
 
@@ -286,7 +285,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             ignored_nodes[node.name] = True
             continue
 
-        print(node)
+        # print(node)
 
         if op_type not in known_ops:
             # TODO: raise unrecognized operator error
@@ -353,11 +352,11 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 elif len(shape) == 0:
                     name_to_op[node.name] = be.Constant(np_val, name=node.name)
                 elif len(shape) == 1:
-                    name_to_op[node.name] = be.NumPyTensor(np_val, axes=Axes(be.NumericAxis(shape[0]), ),
+                    name_to_op[node.name] = be.NumPyTensor(np_val, axes=be.Axes(be.NumericAxis(shape[0]), ),
                                                            name=node.name)
                 elif len(shape) == 2:
                     name_to_op[node.name] = be.NumPyTensor(np_val,
-                                                           axes=Axes(be.NumericAxis(shape[0]),
+                                                           axes=be.Axes(be.NumericAxis(shape[0]),
                                                                      be.NumericAxis(shape[1])),
                                                            name=node.name)
 
@@ -401,11 +400,11 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
 
                     if len(shape) == 1:
                         name_to_op[node.name] = be.NumPyTensor(array,
-                                                               axes=Axes(be.NumericAxis(shape[0])),
+                                                               axes=be.Axes(be.NumericAxis(shape[0])),
                                                                name=node.name)
                     elif len(shape) == 2:
                         name_to_op[node.name] = be.NumPyTensor(array,
-                                                               axes=Axes(be.NumericAxis(shape[0]),
+                                                               axes=be.Axes(be.NumericAxis(shape[0]),
                                                                          be.NumericAxis(shape[1])),
                                                                name=node.name)
                     else:
@@ -428,9 +427,9 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 if len(shape) == 0:
                     name_to_op[node.name] = be.Constant(val, name=node.name)
                 elif len(shape) == 1:
-                    name_to_op[node.name] = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]), ), name=node.name)
+                    name_to_op[node.name] = be.NumPyTensor(val, axes=be.Axes(be.NumericAxis(shape[0]), ), name=node.name)
                 elif len(shape) == 2:
-                    name_to_op[node.name] = be.NumPyTensor(val, axes=Axes(be.NumericAxis(shape[0]),
+                    name_to_op[node.name] = be.NumPyTensor(val, axes=be.Axes(be.NumericAxis(shape[0]),
                                                                           be.NumericAxis(shape[1]), ), name=node.name)
                 else:
                     print("Not supported")
@@ -447,7 +446,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 # check its doc via https://goo.gl/7ytJNB and its C++ implementation via
                 # https://goo.gl/z5T2my
 
-                pred = softmax(name_to_op[inputs[0]], Axes(y_axis, ))
+                pred = softmax(name_to_op[inputs[0]], be.Axes(y_axis, ))
                 label = name_to_op[inputs[1]]
 
                 name_to_op[node.name] = be.cross_entropy_multi(pred, label, out_axes=(batch_axis,))

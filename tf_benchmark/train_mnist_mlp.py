@@ -34,29 +34,6 @@ from util.importer import create_nervana_graph
 import numpy as np
 import sys
 
-def eval_test(test_data, graph, infernce_comp, pred_op):
-    # TODO: pass the inference computation graph only without provide the last node for inference.
-    """
-    :param test_data: test input
-    :param inference_comp: the computation graph for inference
-    :param pred_op: the last op for inference
-    :param inference_comp: the transformer.computation
-    :return: error rate (1 - accuracy) on test_data
-    """
-    with be.bound_environment(env):
-        test_error = 0
-        n_bs = 0
-        for mb_idx, (xraw, yraw) in enumerate(test_data):
-            graph.x.value = xraw
-            result = infernce_comp.evaluate()[pred_op]
-            pred = np.argmax(result, axis=1)
-            gt = np.argmax(yraw, axis=0)
-            test_error += np.sum(np.not_equal(pred, gt))
-            n_bs += 1
-
-        bsz = result.shape[0]
-        return test_error / float(bsz) / n_bs * 100
-
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -83,24 +60,50 @@ test_data = mnist_data['valid']
 
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
+init_comp = None
 trans = be.NumPyTransformer()
 if nervana_graph.init is not None:
     init_comp = trans.computation([nervana_graph.init])
 
+update_comp = None
 if nervana_graph.loss is not None and nervana_graph.update is not None:
     update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
 
+inference_comp = None
 if args.infer_node in nervana_graph.name_to_op:
     # TODO: should determine automatically or receive as arg parameter
     pred_op = nervana_graph.name_to_op[args.infer_node]
     inference_comp = trans.computation([pred_op])
 
+debug_comp = None
 if args.end_node in nervana_graph.name_to_op:
     end_op = nervana_graph.name_to_op[args.end_node]
     debug_comp = trans.computation([end_op])
 
 trans.finalize()
 trans.dataflow.view()
+
+def eval_test(test_data, graph, infernce_comp, pred_op):
+    # TODO: pass the inference computation graph only without provide the last node for inference.
+    """
+    :param test_data: test input
+    :param inference_comp: the computation graph for inference
+    :param pred_op: the last op for inference
+    :param inference_comp: the transformer.computation
+    :return: error rate (1 - accuracy) on test_data
+    """
+    with be.bound_environment(env):
+        test_error = 0
+        n_sample = 0
+        for mb_idx, (xraw, yraw) in enumerate(test_data):
+            graph.x.value = xraw
+            result = infernce_comp.evaluate()[pred_op]
+            pred = np.argmax(result, axis=1)
+            gt = np.argmax(yraw, axis=0)
+            test_error += np.sum(np.not_equal(pred, gt))
+            n_sample += pred.shape[0]
+
+        return test_error / float(n_sample) * 100
 
 with be.bound_environment(env):
     # initialize all variables with the init op

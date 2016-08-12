@@ -43,39 +43,39 @@ env = Environment()
 mnist_data = MNIST(path=args.data_dir).gen_iterators()
 test_data = mnist_data['valid']
 
-nervana_graph = create_nervana_graph(args.pb_file, env)
+nervana_graph = create_nervana_graph(args.pb_file, env)  # trans = be.NumPyTransformer()
 
-trans = be.NumPyTransformer()
-infer_comp = trans.computation([nervana_graph.last_op])
-trans.finalize()
-trans.dataflow.view()
+with be.bound_environment(env):
+    trans = be.NumPyTransformer()
+    infer_comp = trans.computation([nervana_graph.last_op])
+    trans.finalize()
+    trans.dataflow.view()
 
-def eval_test(test_data, graph):
-    with be.bound_environment(env):
-        test_error = 0
-        n_bs = 0
-        for mb_idx, (xraw, yraw) in enumerate(test_data):
-            graph.x.value = xraw
-            result = infer_comp.evaluate()[graph.last_op]
+    test_error = 0
+    n_sample = 0
 
-            print("-------------------------------")
-            print("minibatch: " + str(mb_idx))
-            print("-------------------------------")
-            print("prediction result: ")
-            print(result)
-            print("shape of the prediction: ")
-            print(result.shape)
+    y_raw_1 = None
+    for mb_idx, (xraw, yraw) in enumerate(test_data):
+        nervana_graph.x.value = xraw
+        yraw1 = yraw
 
-            pred = np.argmax(result, axis=1)
-            gt = np.argmax(yraw, axis=0)
-            print(pred)
-            print(gt)
-            test_error += np.sum(np.not_equal(pred, gt))
-            n_bs += 1
+        result = infer_comp.evaluate()[nervana_graph.last_op]
 
-        bsz = result.shape[0]
-        return test_error / float(bsz) / n_bs * 100
+        print("minibatch: " + str(mb_idx))
+        print("prediction result: ")
+        print(result)
+        print("shape of the prediction: ")
+        print(result.shape)
 
-test_error = eval_test(test_data, nervana_graph)
-print("-------------------------------")
-print("test error: %2.2f %%" % test_error)
+        pred = np.argmax(result, axis=1)
+        gt = np.argmax(yraw1, axis=0)
+        mb_test_error = np.sum(np.not_equal(pred, gt))
+
+        print("test error: %2.2f %%" % (mb_test_error / float(xraw.shape[1]) * 100))
+        test_error += mb_test_error
+        n_sample += xraw.shape[1]
+
+        print("-------------------------------")
+
+    test_error = test_error / float(n_sample) * 100
+    print("test error: %2.2f %%" % test_error)
