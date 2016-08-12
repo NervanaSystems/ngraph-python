@@ -37,7 +37,7 @@ def test_constants():
 
         ax.W.length = 10
         ax.H.length = 20
-        aaxes = be.Axes(ax.W, ax.H)
+        aaxes = be.Axes([ax.W, ax.H])
         ashape = aaxes.lengths
         asize = aaxes.size
         aval = np.arange(asize, dtype=np.float32).reshape(ashape)
@@ -78,7 +78,7 @@ def test_reduction():
         ax.C.length = 4
         ax.W.length = 4
         ax.H.length = 4
-        axes = be.Axes(ax.C, ax.W, ax.H)
+        axes = be.Axes([ax.C, ax.W, ax.H])
 
         u = rng.uniform(-1.0, 1.0, axes)
         p_u = be.placeholder(axes=axes)
@@ -107,7 +107,7 @@ def test_reduction_deriv():
         ax.C.length = 4
         ax.W.length = 10
         ax.H.length = 10
-        axes = be.Axes(ax.C, ax.W, ax.H)
+        axes = be.Axes([ax.C, ax.W, ax.H])
 
         u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
@@ -137,7 +137,7 @@ def test_reciprocal():
         delta = .001
         ax.W.length = 20
         ax.N.length = 128
-        axes = be.Axes(ax.W, ax.N)
+        axes = be.Axes([ax.W, ax.N])
         p_u = be.placeholder(axes=axes)
         u = rng.uniform(.1, 5.0, p_u.axes)
         p_u.value = u
@@ -158,7 +158,7 @@ def test_elementwise_ops_matched_args():
         ax.W.length = 20
         ax.H.length = 20
         ax.N.length = 128
-        axes = be.Axes(ax.W, ax.H)
+        axes = be.Axes([ax.W, ax.H])
 
         for np_op, be_op, op in [(np.add, be.add, 'add'),
                                  (np.subtract, be.subtract, 'sub'),
@@ -292,7 +292,7 @@ def test_cross_entropy_binary_logistic_shortcut():
     with be.bound_environment():
         ax.W.length = 20
         ax.N.length = 128
-        axes = be.Axes(ax.W, ax.N)
+        axes = be.Axes([ax.W, ax.N])
         p_u = be.placeholder(axes=axes)
         u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
@@ -313,7 +313,7 @@ def test_cross_entropy_binary():
         delta = .001
         ax.W.length = 20
         ax.N.length = 128
-        axes = be.Axes(ax.W, ax.N)
+        axes = be.Axes([ax.W, ax.N])
         p_u = be.placeholder(axes=axes)
         u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
@@ -361,12 +361,12 @@ def test_np_softmax():
 
         # set up some distributions
         u = np.empty((ax.C.length, ax.N.length))
-        u = rng.uniform(0, 1, be.Axes(ax.C, ax.N))
+        u = rng.uniform(0, 1, be.Axes([ax.C, ax.N]))
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
         x = np.log(u) + rng.uniform(-5000, 5000,
-                                    be.Axes(ax.N)).reshape(1, ax.N.length)
+                                    be.Axes([ax.N])).reshape(1, ax.N.length)
 
         s = np_softmax(x, 0)
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
@@ -394,22 +394,22 @@ def test_softmax():
         axes = [ax.W, ax.N]
 
         # set up some distributions
-        u = rng.uniform(0, 1, be.Axes(ax.W, ax.N))
+        u = rng.uniform(0, 1, be.Axes([ax.W, ax.N]))
         u = u / sum(u, 0).reshape(1, ax.N.length)
 
         # Put them in pre-softmax form
         x = np.log(u) + rng.uniform(-5000, 5000,
-                                    be.Axes(ax.N)).reshape(1, ax.N.length)
+                                    be.Axes([ax.N])).reshape(1, ax.N.length)
         p_x = be.placeholder(axes=axes)
         p_x.value = x
 
-        s, = execute([be.softmax(p_x, softmax_axes=be.Axes(ax.W))])
+        s, = execute([be.softmax(p_x, softmax_axes=be.Axes([ax.W]))])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        x = rng.uniform(-5000, 5000, be.Axes(ax.W, ax.N))
+        x = rng.uniform(-5000, 5000, be.Axes([ax.W, ax.N]))
         p_x.value = x
         u = np_softmax(x, 0)
-        s, = execute([be.softmax(p_x, softmax_axes=be.Axes(ax.W))])
+        s, = execute([be.softmax(p_x, softmax_axes=be.Axes([ax.W]))])
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Test with softmax_axis default
@@ -417,7 +417,7 @@ def test_softmax():
         assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Now try the derivative
-        axes = be.Axes(ax.W, ax.N)
+        axes = be.Axes([ax.W, ax.N])
         ax.W.length = 3
         ax.N.length = 10
 
@@ -462,7 +462,7 @@ def test_sigmoid():
         delta = .001
         ax.W.length = 20
         ax.N.length = 128
-        axes = be.Axes(ax.W, ax.N)
+        axes = be.Axes([ax.W, ax.N])
         p_u = be.placeholder(axes=axes)
         u = rng.uniform(-3.0, 3.0, p_u.axes)
         p_u.value = u
@@ -504,8 +504,8 @@ def test_onehot():
         ax.H.length = 32
         ax.N.length = 128
         be.set_batch_axes([ax.N])
-        one_hot_comparison(be.Axes(ax.C, ax.N), be.Axes(ax.N))
-        one_hot_comparison(be.Axes(ax.C, ax.W, ax.H, ax.N), be.Axes(ax.W, ax.H, ax.N))
+        one_hot_comparison(be.Axes([ax.C, ax.N]), be.Axes([ax.N]))
+        one_hot_comparison(be.Axes([ax.C, ax.W, ax.H, ax.N]), be.Axes([ax.W, ax.H, ax.N]))
 
 
 def test_empty_finalize():
