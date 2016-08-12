@@ -733,6 +733,7 @@ class NumPyTensor(AllocationOp):
         super(NumPyTensor, self).__init__(
             dtype=nptensor.dtype, axes=axes, **kargs
         )
+        self.tags.add('persistent')
 
     def allocate(self, transformer):
         td = self.tensor_description(transformer)
