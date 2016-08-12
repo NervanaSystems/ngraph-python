@@ -61,7 +61,7 @@ def test_expand_dims():
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = be.placeholder(axes=be.Axes(*tensor_axes))
+                tensor = be.placeholder(axes=be.Axes(tensor_axes))
                 tensor.value = tensor_np
 
                 expanded = be.ExpandDims(tensor, new_axis, dim)
@@ -135,7 +135,7 @@ def test_slice():
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = be.placeholder(axes=be.Axes(*tensor_axes))
+        tensor = be.placeholder(axes=be.Axes(tensor_axes))
         tensor.value = tensor_np
         expected = np.array(test['expected'], dtype='float32')
 

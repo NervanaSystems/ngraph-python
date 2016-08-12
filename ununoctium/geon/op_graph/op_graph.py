@@ -286,7 +286,7 @@ class Tensor(Op):
             dtype = np.dtype(np.float32)
         self.dtype = dtype
         if axes is not None:
-            axes = Axes(*axes)
+            axes = Axes(axes)
         self.__axes = axes
 
         # Derivative will be scaled by this
@@ -742,11 +742,12 @@ class NumPyTensor(AllocationOp):
     """
 
     def __init__(self, nptensor, axes, **kargs):
-        axes = Axes(*axes)
+        axes = Axes(axes)
         self.nptensor = nptensor
         super(NumPyTensor, self).__init__(
             dtype=nptensor.dtype, axes=axes, **kargs
         )
+        self.tags.add('persistent')
 
     def allocate(self, transformer):
         td = self.tensor_description(transformer)
@@ -1044,13 +1045,15 @@ class ReductionOp(ComputationOp):
             if out_axes is None:
                 reduction_axes = sample_axes(x.axes)
             else:
-                reduction_axes = x.axes - Axes(*out_axes)
+                reduction_axes = x.axes - Axes(out_axes)
         else:
-            reduction_axes = Axes(*reduction_axes)
+            reduction_axes = Axes(reduction_axes)
+
         if out_axes is None:
             out_axes = x.axes - reduction_axes
         else:
-            out_axes = Axes(*out_axes)
+            out_axes = Axes(out_axes)
+
         return out_axes, reduction_axes
 
     @from_transformer_cache
@@ -1066,7 +1069,7 @@ class ReductionOp(ComputationOp):
         else:
             red_axes = [FlattenedAxis(self.reduction_axes)]
             red_axes.extend(self.axes)
-            red_axes = Axes(*red_axes)
+            red_axes = Axes(red_axes)
             self.mode = 0
             return [out, x.reaxe(red_axes)]
 
@@ -1129,9 +1132,9 @@ class tensor_size(ComputationOp):
             if out_axes is None:
                 reduction_axes = sample_axes(x.axes)
             else:
-                reduction_axes = x.axes - Axes(*out_axes)
+                reduction_axes = x.axes - Axes(out_axes)
         else:
-            reduction_axes = Axes(*reduction_axes)
+            reduction_axes = Axes(reduction_axes)
         self.reduction_axes = reduction_axes
         super(tensor_size, self).__init__(axes=Axes())
 
@@ -1285,7 +1288,7 @@ class onehot(ComputationOp):
     def call_info(self, transformer):
         x, = tensor_descriptions(self.args, transformer)
         axis, axes = self.axis, self.axes
-        reaxes = Axes(axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes())
+        reaxes = Axes([axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes()])
         return [
             self.tensor_description(transformer).reaxe(reaxes),
             x.reaxe(Axes(FlattenedAxis(x.axes)))

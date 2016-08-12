@@ -121,7 +121,7 @@ def canonicalize(seq):
             elif len(x) == 1:
                 x = x[0]
             else:
-                x = FlattenedAxis(Axes(*x))
+                x = FlattenedAxis(Axes(x))
         elems.append(x)
     return elems
 
@@ -135,18 +135,31 @@ def no_duplicates(arr):
     return True
 
 
-class Axes(tuple):
+class Axes(object):
 
-    def __new__(cls, *seq):
-        if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
-            assert len(seq) == 1
-            seq = tuple(seq[0])
+    def __init__(self, axes=None):
+        if axes is None:
+            axes = []
+        elif isinstance(axes, Axis):
+            axes = [axes]
+        elif isinstance(axes, types.GeneratorType):
+            axes = tuple(axes)
+        elif isinstance(axes, (list, tuple)) and not isinstance(axes, Axes):
+            axes = tuple(axes)
 
-        seq = canonicalize(seq)
+        axes = canonicalize(axes)
 
-        assert all([isinstance(x, Axis) for x in seq])
+        for x in axes:
+            if not isinstance(x, Axis):
+                raise ValueError((
+                    'tried to initialize an Axes with object type '
+                    '{found_type}.  all values should be an instance '
+                    'of a type which inherits from Axis.'
+                ).format(
+                    found_type=type(x),
+                ))
 
-        return tuple.__new__(cls, seq)
+        self._axes = axes
 
     @property
     def full_lengths(self):
@@ -157,11 +170,17 @@ class Axes(tuple):
     def lengths(self):
         return tuple(x.length for x in self)
 
+    def __iter__(self):
+        return self._axes.__iter__()
+
+    def __len__(self):
+        return len(self._axes)
+
     def __getitem__(self, item):
         if isinstance(item, slice):
-            return Axes(*super(Axes, self).__getitem__(item))
+            return Axes(self._axes.__getitem__(item))
         else:
-            return super(Axes, self).__getitem__(item)
+            return self._axes.__getitem__(item)
 
     def __getslice__(self, i, j):
         return self.__getitem__(slice(i, j))
@@ -176,8 +195,22 @@ class Axes(tuple):
             other = other.as_axis_ids()
         return (self.as_axis_ids() - other).as_axes()
 
+    def __eq__(self, other):
+        if not isinstance(other, Axes):
+            raise ValueError((
+                'other must be of type Axes, found type {}'
+            ).format(type(other)))
+
+        return self._axes.__eq__(other._axes)
+
+    def __ne__(self, other):
+        return not self == other
+
     def concat(self, other):
-        return Axes(*tuple(self) + tuple(other))
+        return Axes(tuple(self) + tuple(other))
+
+    def index(self, axis):
+        return self._axes.index(axis)
 
     # TODO: delete this method, the size should come from the tensor
     @property
@@ -200,9 +233,8 @@ class Axes(tuple):
 
     def __repr__(self):
         s = 'Axes('
-        for i, x in enumerate(self):
-            s += repr(x)
-            s += ', '
+        for x in self:
+            s += repr(x) + ','
         s += ')'
         return s
 
@@ -222,7 +254,7 @@ def with_axes_as_axis_ids(f):
         new_args = []
         for a in args:
             if isinstance(a, Axes):
-                a = Axes(*a).as_axis_ids()
+                a = Axes(a).as_axis_ids()
             new_args.append(a)
         return f(*new_args)
     return wrapper
@@ -350,7 +382,7 @@ class TensorDescription(object):
         super(TensorDescription, self).__init__(**kargs)
         # TODO: get the default type from the backend. May not always be numpy.
         # TODO: support flattening, unflattening, other complex reshapes
-        axes = Axes(*axes)
+        axes = Axes(axes)
         self.axes = axes
         self.transformer = transformer
         self.__value = None
@@ -420,13 +452,13 @@ class TensorDescription(object):
             else:
                 return tuple(range(lower, upper))
         if div_point == 0 or div_point == self.ndim:
-            new_axes = Axes(FlattenedAxis(self.axes))
+            new_axes = Axes([FlattenedAxis(self.axes)])
             old_poss = (pos_tup(0, self.ndim),)
         else:
-            new_axes = Axes(
+            new_axes = Axes([
                 FlattenedAxis(self.axes[:div_point]),
                 FlattenedAxis(self.axes[div_point:])
-            )
+            ])
             old_poss = (
                 pos_tup(0, div_point),
                 pos_tup(div_point, self.ndim)
@@ -467,7 +499,7 @@ class TensorDescription(object):
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
     def reaxe(self, new_axes, broadcast=True):
-        new_axes = Axes(*new_axes)
+        new_axes = Axes(new_axes)
         old_poss = self.try_guess_positions(new_axes)
         return self.reaxe_with_positions(new_axes, old_poss, broadcast)
 
@@ -562,7 +594,7 @@ class TensorDescription(object):
                 new_axes.append(axis)
                 new_strides.append(st)
                 new_sizes.append(si)
-        return Axes(*new_axes), tuple(new_strides), tuple(new_sizes)
+        return Axes(new_axes), tuple(new_strides), tuple(new_sizes)
 
     def slice(self, slices, new_axes):
         slices = list(slices)
