@@ -633,7 +633,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             last_op_name = node.name
             if node.name == end_node:
                 print('last_op: ' + last_op_name)
-                break
+                # break
 
     graph.variables = variables
     graph.last_op = name_to_op[last_op_name]
