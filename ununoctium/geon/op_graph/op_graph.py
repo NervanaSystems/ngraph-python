@@ -253,9 +253,23 @@ class Op(Node):
             if isinstance(arg, TensorDescription):
                 return arg.value
             else:
-                return None
-        call_args = [value(arg) for arg in self.call_info(transformer)]
-        self.transform(transformer, *call_args)
+                raise TypeError((
+                    'call_info is expected to return an iterable of '
+                    'TensorDescriptions.  Found a {arg_type} inside the '
+                    'iterable returned by an Op of type {op_type}.  If '
+                    'you are trying to pass parameters from your Op to the '
+                    'Transformer, override the transform method and add '
+                    'those parameters to the argument list passed to the '
+                    'transformer.op_name method there.'
+                ).format(
+                    arg_type=type(arg),
+                    op_type=type(self)
+                ))
+
+        self.transform(
+            transformer,
+            *list(map(value, self.call_info(transformer)))
+        )
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
