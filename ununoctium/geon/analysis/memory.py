@@ -23,6 +23,19 @@ from geon.analysis.fusion import KernelFlowGraph
 from geon.op_graph.op_graph import Buffer, NumPyTensor
 
 
+def _random_colors(N, alpha=.5):
+    """
+    Creates a map of N color of transparency alpha
+    """
+    from colorsys import hsv_to_rgb
+    HSV = [[x * 1.0 / N, 0.5, 0.5] for x in range(N)]
+    RGBA = [x + (alpha,) for x in [hsv_to_rgb(*x) for x in HSV]]
+    RGBA = [[int(y * 255) for y in x] for x in RGBA]
+    HEX = ["#{:02x}{:02x}{:02x}{:02x}".format(
+        r, g, b, a) for r, g, b, a in RGBA]
+    return HEX
+
+
 class InterferenceGraph(UndirectedGraph):
     """
     Interference graph. Undirected graph containing a node for each
@@ -90,17 +103,10 @@ class InterferenceGraph(UndirectedGraph):
             for s in S:
                 s.buffer = buffers[color]
         total_mem = sum([x.size for x in buffers])
+        cmap = _random_colors(len(buffers), .5)
+        for tensor in neighbors:
+            tensor.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
         return total_mem, buffers
-
-
-def _random_colors(N, alpha=.5):
-    from colorsys import hsv_to_rgb
-    HSV = [[x * 1.0 / N, 0.5, 0.5] for x in range(N)]
-    RGBA = [x + (alpha,) for x in [hsv_to_rgb(*x) for x in HSV]]
-    RGBA = [[int(y * 255) for y in x] for x in RGBA]
-    HEX = ["#{:02x}{:02x}{:02x}{:02x}".format(
-        r, g, b, a) for r, g, b, a in RGBA]
-    return HEX
 
 
 def bind_initializers(transformer, ops):
@@ -135,10 +141,8 @@ def assign_buffers(transformer, results, fusible=None):
     # Binds initializers
     bind_initializers(transformer, dfg.inputs)
     # set style
-    cmap = _random_colors(len(buffers), .5)
     for op in all_ops:
         tensor = op.tensor_description(transformer)
-        if tensor.buffer:
-            op.style = {'style': 'filled', 'fillcolor': cmap[tensor.buffer.color]}
+        op.style = tensor.style
     # dfg.view()
     return dfg, memory
