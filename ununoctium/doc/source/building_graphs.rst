@@ -15,7 +15,7 @@
 
 Building graphs
 ***************
-Although the name "operational graph API" contains the word "graph," the API for defining, analyzing
+Although the name "operational graph API" contains the word "graph," the API is for defining, analyzing
 and manipulating machine learning computations.  Although the API is supported by a few graphs behind the scenes,
 the important thing for the user is the definition of models and frameworks for defining models.
 
