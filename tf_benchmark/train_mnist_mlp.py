@@ -129,7 +129,7 @@ with be.bound_environment(env):
             result = update_comp.evaluate()
             avg_loss += result[nervana_graph.loss]
 
-            if mb_idx % 1 == 0:
+            if mb_idx % 1000 == 0:
                 print("epoch: %d minibatch: %d" % (epoch, mb_idx))
 
                 print("the last op: ")
