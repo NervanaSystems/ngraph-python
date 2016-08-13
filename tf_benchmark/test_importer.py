@@ -28,25 +28,23 @@ from __future__ import print_function
 
 import geon as be
 from util.importer import create_nervana_graph
-import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 
 def test_create_nervana_graph(pb_file, execute=False):
     env = Environment()
     graph = create_nervana_graph(pb_file, env)
-    print(graph)
 
-    dataflow = analysis.DataFlowGraph([graph.last_op])
-    dataflow.view()
+    trans = be.NumPyTransformer()
+    comp = trans.computation([graph.last_op])
+    trans.finalize()
+    trans.dataflow.view()
 
     if execute:
         with be.bound_environment(env):
-            enp = be.NumPyTransformer(results=[graph.last_op])
-            result = enp.evaluate()
+            result = comp.evaluate()
             print(result[graph.last_op])
 
-
-# test_create_nervana_graph("sample/constant_graph.pb", True)
-# test_create_nervana_graph("sample/variable_graph_froze.pb", False)
-test_create_nervana_graph("sample/variable_graph.pb", False)
+test_create_nervana_graph("sample/constant_graph.pb", True)
+test_create_nervana_graph("sample/variable_graph_froze.pb", False)
+test_create_nervana_graph("sample/variable_graph.pb", True)
