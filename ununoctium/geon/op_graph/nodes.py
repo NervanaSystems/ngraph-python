@@ -82,12 +82,6 @@ class Node(NameableValue, DebugInfo):
                 self.tags.add(tags)
 
     @property
-    def graph_label(self):
-        if self.name != self.id:
-            return self.name.split('.')[-1]
-        return self.__class__.__name__ + '[' + self.name + ']'
-
-    @property
     def args(self):
         """All the inputs to this node"""
         return self.__args

@@ -367,7 +367,7 @@ def reduce_strides(strides):
                  for elem in strides)
 
 
-class TensorDescription(object):
+class TensorDescription(NameableValue):
     """
     Description of a tensor that will be allocated in hardware.
     Names the tensor's dimensions with axes and holds pointers to the
