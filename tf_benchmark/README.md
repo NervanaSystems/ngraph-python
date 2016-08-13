@@ -37,14 +37,28 @@ saver = tf.train.Saver()
 and save it periodically or at the end of training.
 
 ```python
-saver.save(sess, "model.ckpt)
+saver.save(sess, "model.ckpt")
 ```
 
 The trainable variables are saved in the **checkpoint** (.ckpt) file.
 
 #### 1.3 MetaGraph
-The save() API also automatically exports a [MetaGraph](https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html) (.meta) file, which contans MetaInfoDef, GraphDef, SaverDef and CollectionDef. 
-[Here](http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#) is an explanition about MetaGraph.
+The `save()` API also automatically exports a [MetaGraphDef](https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html) (.meta) file, which contans MetaInfoDef, GraphDef, SaverDef and CollectionDef. 
+As explained [here](http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#), the `MetaGraphDef` is designed as a serialization format that includes all of the information required to restore a training or inference process (including the GraphDef that describes the dataflow, and additional annotations that describe the variables, input pipelines, and other relevant information).
+
+<!--#### 1.4 Event Summary
+To visualize the dataflow or monitor the change of status, one needs to use the summary operations. For example, to visualize the change of `cost` value Create a summary op before training
+
+```python
+tf.scalar_summary('cost', cost)
+summary_op = tf.merge_all_summaries()
+```
+and ocasionally save the info to disk
+
+```python
+
+```-->
+
 
 ### 2 Training
 
@@ -64,13 +78,13 @@ $ tensorboard --logdir=. & firefox http://0.0.0.0:6006
 
 ![](figure/tensorboard.png)
 
-The GraphDef actually contains several sub-graphs for different purpose: variable initilization, model inference (fprop), gradient calculatio/ndescent (bprop) and serilization. 
+The GraphDef actually contains several sub-graphs for different purpose: variable initilization, model inference (fprop), gradient calculation/descent (bprop) and serilization. 
 The initilization graph is executated only once before training, while the sub-graphs of inference, gradient calculation/descent are executed for each minibatch optimization. 
 
 
 ## Evaluate a TF Model with Neon
 
-For inference only application, we need to identify the last op used in inference, which is `softmax_linear/add` for this example, to extract the inference graph. 
+For inference only application, we need to mannually identify the last op used in inference, which is `softmax_linear/add` for this example, to extract the inference graph. 
 The inference graph includes all operators that leads to this op.
 
 ### 1. Combine protobuf and checkpoint
@@ -103,18 +117,30 @@ Now we can convert the frozen graph into Neon's graph and execute it.
 
 The computation graph is displayed via graphviz library:
 
-![](figure/mnist_mlp_inference.png)
-
+<img src="figure/mnist_mlp_inference.png" width="600">
 
 ## Training a TF Model with Neon
 
 We can also train the model from scratch with Neon's graph backend.
 
 ```
-(.venv)$ python train_mnist_mlp.py --pb_file='mnist/graph.pb' --loss_node='xentropy_mean'
+(.venv)$ python train_mnist_mlp.py --pb_file='mnist/graph.pb' --loss_node='xentropy_mean' --infer_node='softmax_linear/add'
 ```
 
-The protobuf file `mnist_mlp_graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
+The protobuf file `mnist/graph.pb` contains separate graphs for variable initialization, variable update (fprop/bprop) and serilization.
+The `loss_node` is the node to calculate the loss value and the `infer_node` is the op to calculate the prediction probbality.
+Both nodes are currently mannualy identified.
 
-The assembled frop/bprop graph can be visualized as follows:
-![](figure/mnist_mlp_train.png)
+
+### 1. Initilization Graph
+
+To get the same result as TF, it is important to have the same variable initilization.
+The initialization graph is executed only once before starts training, which corresponds to  ```python sess.run(tf.initialize_all_variables())```.
+
+<img src="figure/init_graph.png" width="800">
+
+### 2. Training Graph
+
+The assembled training (frop/bprop) graph is executed for each minibatch.
+
+<img src="figure/mnist_mlp_train.png" width="800">

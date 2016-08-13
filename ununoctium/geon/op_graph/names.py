@@ -102,6 +102,12 @@ class NameableValue(object):
         self.style = {}
 
     @property
+    def graph_label(self):
+        if self.name != self.id:
+            return self.name.split('.')[-1]
+        return self.__class__.__name__ + '[' + self.name + ']'
+
+    @property
     def name(self):
         return self.__name
 

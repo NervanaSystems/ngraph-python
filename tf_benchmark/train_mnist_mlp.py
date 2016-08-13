@@ -28,12 +28,12 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import geon as be
-import geon.util.analysis as analysis
 from geon.backends.graph.environment import Environment
 
 from util.importer import create_nervana_graph
 import numpy as np
 import sys
+
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -41,8 +41,10 @@ parser.add_argument('--pb_file', type=str, default="mnist/graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute, mainly used for debugging')
-parser.add_argument('--loss_node', type=str, default="",
+parser.add_argument('--loss_node', type=str, default="xentropy_mean",
                     help='the node name to calculate the loss values during training')
+parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
+                    help='the node name to produce the prediction probability')
 
 args = parser.parse_args()
 
@@ -50,51 +52,70 @@ env = Environment()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-epochs = 5
+epochs = 1
 
 mnist_data = MNIST(path=args.data_dir).gen_iterators()
 train_data = mnist_data['train']
 test_data = mnist_data['valid']
 
-
 nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
 
-if args.end_node == "":
-    dataflow = analysis.DataFlowGraph([nervana_graph.update])
-    dataflow.view()
-else:
-    dataflow = analysis.DataFlowGraph([nervana_graph.last_op])
-    dataflow.view()
+init_comp = None
+trans = be.NumPyTransformer()
+if nervana_graph.init is not None:
+    init_comp = trans.computation([nervana_graph.init])
 
+inference_comp = None
+if args.infer_node in nervana_graph.name_to_op:
+    # TODO: should determine automatically or receive as arg parameter
+    pred_op = nervana_graph.name_to_op[args.infer_node]
+    inference_comp = trans.computation([pred_op])
 
-def eval_test(test_data, graph, last_op_name):
-    # TODO: pass the inference graph instead of manually specify the last node for inference.
+debug_comp = None
+debug_op = None
+if args.end_node in nervana_graph.name_to_op:
+    debug_op = nervana_graph.name_to_op[args.end_node]
+    debug_comp = trans.computation([debug_op])
+
+update_comp = None
+if nervana_graph.loss is not None and nervana_graph.update is not None:
+    if debug_op is not None:
+        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update, debug_op])
+    else:
+        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
+
+trans.finalize()
+trans.dataflow.view()
+
+def eval_test(test_data, graph, infernce_comp, pred_op):
+    # TODO: pass the inference computation graph only without provide the last node for inference.
     """
     :param test_data: test input
-    :param graph: the whole computation graph
-    :param last_op_name: the last op for inference
+    :param inference_comp: the computation graph for inference
+    :param pred_op: the last op for inference
+    :param inference_comp: the transformer.computation
     :return: error rate (1 - accuracy) on test_data
     """
     with be.bound_environment(env):
         test_error = 0
-        n_bs = 0
-        enp = be.NumPyTransformer(results=[graph.name_to_op[last_op_name]])
+        n_sample = 0
         for mb_idx, (xraw, yraw) in enumerate(test_data):
             graph.x.value = xraw
-            result = enp.evaluate()[graph.name_to_op[last_op_name]]
+            result = infernce_comp.evaluate()[pred_op]
             pred = np.argmax(result, axis=1)
             gt = np.argmax(yraw, axis=0)
             test_error += np.sum(np.not_equal(pred, gt))
-            n_bs += 1
+            n_sample += pred.shape[0]
 
-        bsz = result.shape[0]
-        return test_error / float(bsz) / n_bs * 100
+        return test_error / float(n_sample) * 100
 
 with be.bound_environment(env):
     # initialize all variables with the init op
-    if args.end_node == "":
-        enp = be.NumPyTransformer(results=[nervana_graph.init])
-        enp.evaluate()
+    if init_comp is None:
+        print("Initialization is not completed.")
+        sys.exit()
+
+    init_comp.evaluate()
 
     for epoch in range(epochs):
         print("===============================")
@@ -105,25 +126,28 @@ with be.bound_environment(env):
             nervana_graph.x.value = xraw
             nervana_graph.y.value = yraw
 
-            if args.end_node == "":
-                enp = be.NumPyTransformer(results=[nervana_graph.loss, nervana_graph.update])
-                result = enp.evaluate()
-                avg_loss += result[nervana_graph.loss]
-            else:
-                enp = be.NumPyTransformer(results=[nervana_graph.name_to_op[args.end_node]])
-                result = enp.evaluate()[nervana_graph.name_to_op[args.end_node]]
+            result = update_comp.evaluate()
+            avg_loss += result[nervana_graph.loss]
+
+            if mb_idx % 1000 == 0:
+                print("epoch: %d minibatch: %d" % (epoch, mb_idx))
+
+                print("the last op: ")
+                print(debug_op)
+                print("result of the last op: ")
+                print(result[debug_op])
+                print("shape of the result: ")
+                print(result[debug_op].shape)
+
+                # print out variables
+                for v in nervana_graph.variables:
+                    print(v)
+                    val = nervana_graph.variables[v].tensor_description(trans).value
+                    print(val)
+                    if val is not None and np.isnan(val).any(): sys.exit()
 
                 print("-------------------------------")
-                print("minibatch: " + str(mb_idx))
-                print("-------------------------------")
-                print("the last op: ")
-                print(nervana_graph.last_op)
-                print("result of the last op: ")
-                print(result)
-                print("shape of the result: ")
-                print(result.shape)
-                sys.exit()
 
         avg_loss /= mb_idx
-        test_error = eval_test(test_data, nervana_graph, "softmax_linear/add")
+        test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
         print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))
