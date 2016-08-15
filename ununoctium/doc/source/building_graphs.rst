@@ -16,8 +16,12 @@
 Building graphs
 ***************
 Although the name "operational graph API" contains the word "graph," the API is for defining, analyzing
-and manipulating machine learning computations.  Although the API is supported by a few graphs behind the scenes,
-the important thing for the user is the definition of models and frameworks for defining models.
+and manipulating machine learning computations.  The API is supported by a few graphs behind the scenes,
+but the important thing for the user is the definition of models and frameworks for defining models.
+
+An operational graph is a device-independent program for performing one or more computations.  In order
+to run the computations, the graph must be tranformed into a format that can be run on the desired
+backend.
 
 Expression basics
 =================
@@ -105,7 +109,7 @@ to copy data to/from the device.  A tensor marked as ``in`` can be written to be
 
 A ``placeholder`` is a tensor marked as ``in``, so it can be written to before a computation.
 To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols
-and then make the ``placeholder``::code
+and then make the ``placeholder``::
 
     import geon as be
     import geon.frontends.base.axis as ax
@@ -119,7 +123,7 @@ for the tensor stored in the device.
 
 It is important to remember that ``x`` is a Python variable that holds an op.  There are no magic methods for
 Python variable assignment or use, so assigning a new value to ``x`` has no effect on the the tensor
-previously represented by ``x``.  In other words::code
+previously represented by ``x``.  In other words::
 
     x = x + x
 
@@ -130,7 +134,7 @@ you would need to say::code
     be.SetItem(x, x + x)
 
 Perhaps surprisingly, because we are manipulating expressions, you rarely need to use ``SetItem``, other than
-when updating variables after training.  Consider::code
+when updating variables after training.  Consider::
 
     x1 = x + x
     y = x1 * x1 - x
@@ -139,7 +143,7 @@ The Python variable ``y`` holds an op for a computation that adds the ``placehol
 that value by itself, and then subtracts the original value of the ``placeholder``.  The intermediate
 value ::code``x + x`` is only computed once, since the same op is used for both arguments of the multiplication.
 Furthermore, in this computation, all the computations will automatically be performed in place.  In NumPy
-it would be like::code
+it would be like::
 
     y = x + x
     np.multiply(y, y, out=y)
@@ -150,6 +154,102 @@ automatically adjust the computation's implementation so that the intermediate r
 wherever it was needed.  You can get this flexibility with NumPy or PyCUDA with the original expression, but they
 will be allocating tensors for the intermediate values and letting Python's garbage collector clean them up; the
 peak memory usage will be higher and there will be more overhead.
+
+Derivatives
+===========
+
+Because the ops describe computations, we have enough information to compute derivatives, using the ``deriv``
+function::
+
+    import geon as be
+    import geon.frontends.base.axis as ax
+
+    x = be.placeholder(axes=be.Axes((ax.C, ax.W, ax.H, ax.N)))
+    y0 = be.placeholder(axes=be.Axes((ax.Y, ax.N))
+    w = be.Variable(axes=(be.Axes((ax.C, ax.W, ax.H, ax.Y))))
+    b = be.Variable(axes=(be.Axes((ax.Y,)))
+    y = be.tanh(dot(w, x) + b)
+    c = dot((y - y0), (y - y0))
+    d = deriv(c, w)
+
+The op `d` will be the op for the derivative of the value of `dc/dw`.
+
+In this example, we knew which ops contain the variables to be trained.  If we were writing a general
+optimizer that takes a loss op as an input, we could search through all the subexpressions looking for variables
+that it depended on.  This is handled by the ``variables`` method, so ``c.variables()`` would be the list
+``[w, b]``.
+
+Graph execution
+===============
+
+A *computation* is a subset of ops whose values are desired and corresponds to a callable procedure on a backend.
+The client defines one or more computations by specifying sets of ops to be computed.  In addition, the transformer
+will define four additional procedures:
+
+`allocate`
+    Allocate required storage required for all computations.  This includes all allocations for all ops
+    marked as `in`.
+
+`inititialize`
+    Run all initializations.  These are all the `initializers` for the ops needed for the computations.  These
+    are analogous to C++ static initializers.
+
+`save`
+    Save all persistent state.  These are states with the `persistent` property set.
+
+`restore`
+    Restore saved state.
+
+
+General properties of ops
+=========================
+
+All operational graph ops are instances of the class :py:class:`geon.op_graph.op_graph.Op` which is a subclass of
+the class :py:class:`geon.op_graph.nodes.Node`, which is itself a subclass of the classes
+:py:class:`geon.op_graph.names.NameableValue` and :py:class:`geon.op_graph.nodes.DebugInfo'.
+
+The constructor's required arguments are the subexpressions.  All ops also have key initializers for:
+
+`axes`
+    The axes of the result of the computation.  This only needs to be specified if the result is not correct.
+    The `axes` are available as a gettable property.
+
+`name`
+    A string that can help identify the node during debugging, or when search for a node in a set of nodes.
+    Some front ends may also make use of the `name`.  The `name` is a settable property.
+
+`tags`
+    A set of values that can be used to filter ops when manipulating them.  For example, tags may be used to
+    indicate groups of trainable variables in conjunction with drop-out.
+
+`initializers`
+    A set of ops that must be executed during the `initialize` operation.
+
+`follows`
+    A set of ops, in addition to the `args`, that should be executed before the op using them is run.
+
+Some useful properties of ops are:
+
+`args`
+    The subexpressions of the op.  These will be computed before the op is computed, since the operation needs their
+    values to compute its value.
+
+`users`
+    The set of all nodes that use this node as an argument.
+
+`filename`
+    The file that created the op.
+
+`lineno`
+    The line number in the file where the op was created.
+
+`file_info`
+    The file and line number formatted for debuggers that support clicking on a file location to edit that location.
+
+
+
+
+
 
 
 
