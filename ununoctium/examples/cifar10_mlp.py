@@ -49,8 +49,8 @@ mlp = Model(layers=layers)
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 mlp.initialize(
     dataset=train,
-    input_axes=Axes(ax.C, ax.H, ax.W),
-    target_axes=Axes(ax.Y,),
+    input_axes=Axes((ax.C, ax.H, ax.W)),
+    target_axes=Axes((ax.Y,)),
     optimizer=opt_gdm,
     cost=cost,
     metric=Misclassification()
