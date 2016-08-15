@@ -1147,9 +1147,9 @@ def pad(x, axes, paddings, **kargs):
             if isinstance(pad, int):
                 pad = (pad, pad)
             s = (pad[0], -pad[1])
-            s = map(lambda x: None if x == 0 else x, s)
+            s = tuple(None if p == 0 else p for p in s)
             return slice(s[0], s[1], 1)
-    slices = map(to_slice, paddings)
+    slices = tuple(to_slice(p) for p in paddings)
     return Unslice(x, axes=axes, slices=slices)
 
 

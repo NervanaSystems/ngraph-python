@@ -190,7 +190,7 @@ def test_padding():
         padding = test['padding']
         np_padding = map(
             lambda p: (p, p) if isinstance(p, int) else p,
-            test['padding']
+            padding
         )
         padded_axes = test['padded_axes']
         padded = be.pad(tensor, padded_axes, padding)
