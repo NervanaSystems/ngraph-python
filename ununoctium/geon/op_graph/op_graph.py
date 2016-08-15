@@ -546,7 +546,7 @@ class Unslice(ComputationOp):
         transformer.set_item(out_sliced, (), x)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, Slice(delta, self.slices))
+        x.generate_add_delta(adjoints, Slice(delta, self.slices, axes=x.axes))
 
 
 class RNG(object):
@@ -1142,14 +1142,15 @@ class tensor_size(ComputationOp):
         transformer.fill(out, self.reduction_axes.size)
 
 
-class Pad(ComputationOp):
-
-    def __init__(self, axes, slice, x, **kargs):
-        super(Pad, self).__init__(args=(x,), axes=axes, **kargs)
-        self.slice = slice
-
-    def transform(self, transformer, out, x):
-        transformer.pad(x, self.slice, out)
+def pad(x, axes, paddings, **kargs):
+    def to_slice(pad):
+            if isinstance(pad, int):
+                pad = (pad, pad)
+            s = (pad[0], -pad[1])
+            s = tuple(None if p == 0 else p for p in s)
+            return slice(s[0], s[1], 1)
+    slices = tuple(to_slice(p) for p in paddings)
+    return Unslice(x, axes=axes, slices=slices)
 
 
 class Variable(AllocationOp):
