@@ -188,15 +188,14 @@ def test_padding():
         tensor.value = tensor_np
 
         padding = test['padding']
-        np_padding = map(
-            lambda p: (p, p) if isinstance(p, int) else p,
-            padding
-        )
         padded_axes = test['padded_axes']
         padded = be.pad(tensor, padded_axes, padding)
-
-        expected_val = np.pad(tensor_np, np_padding, mode='constant')
         computed_val, = execute([padded])
+
+        def to_tuple(p):
+            return (p, p) if isinstance(p, int) else p
+        np_padding = tuple(to_tuple(p) for p in padding)
+        expected_val = np.pad(tensor_np, np_padding, mode='constant')
 
         assert np.array_equal(expected_val, computed_val)
 
