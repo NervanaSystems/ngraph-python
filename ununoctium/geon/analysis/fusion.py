@@ -16,7 +16,7 @@
 from geon.analysis.dataflow import DataFlowGraph
 from geon.util.graph import Digraph
 import geon as be
-
+import graphviz
 
 # Fusion Policies
 def never_fusible(op1, op2):
@@ -117,9 +117,9 @@ class KernelFlowGraph(DataFlowGraph):
         """
 
         predecessors = Digraph._invert(self.successors)
-        from graphviz import Digraph as gvDigraph
-        dot = gvDigraph(name, graph_attr={
-                        'compound': 'true', 'nodesep': '.5', 'ranksep': '.5'})
+        dot = graphviz.Digraph(name, graph_attr={'compound': 'true',
+                                                 'nodesep': '.5',
+                                                 'ranksep': '.5'})
         leaves = {x for x, y in list(predecessors.items()) if len(y) == 0}
         subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id))
                  for x in self.successors if isinstance(x, be.Function)}
