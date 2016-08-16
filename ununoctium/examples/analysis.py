@@ -29,11 +29,11 @@ T4 = T2 * T3
 transf = be.NumPyTransformer()
 # Dataflow
 dataflow = an.DataFlowGraph(transf, [T4])
-dataflow.render('dataflow.pdf')
+dataflow.render('dataflow.gv')
 # Fused
 fused = an.KernelFlowGraph(dataflow, fusible=an.gpu_fusible)
-fused.render('fused-dataflow.pdf')
+fused.render('fused-dataflow.gv')
 # Interference
 interference = an.InterferenceGraph(fused.liveness())
 interference.color()
-interference.render('interference.pdf')
+interference.render('interference.gv')

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import object
+import graphviz
 
 
 class Digraph(object):
@@ -37,9 +37,7 @@ class Digraph(object):
 
         :return: pygraphviz object
         """
-
-        from graphviz import Digraph
-        dot = Digraph(name)
+        dot = graphviz.Digraph(name)
         for node, nexts in list(self.successors.items()):
             dot.node(node.id, node.graph_label, node.style)
             for next in nexts:
@@ -92,6 +90,7 @@ class Digraph(object):
                         visit(v, fun)
                 fun(u)
                 visited.add(u)
+
         # Get output nodes
         for x in sorted(starts, key=lambda x: x.id):
             visit(x, fun)

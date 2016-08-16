@@ -16,6 +16,7 @@
 from geon.analysis.dataflow import DataFlowGraph
 from geon.util.graph import Digraph
 import geon as be
+import graphviz
 
 
 # Fusion Policies
@@ -69,7 +70,8 @@ class KernelFlowGraph(DataFlowGraph):
         """
 
         # Extracts clusters
-        super(KernelFlowGraph, self).__init__(dataflow.transformer, dataflow.results)
+        super(KernelFlowGraph, self).__init__(dataflow.transformer,
+                                              dataflow.results)
         self.fusible = lambda x, y: fusible(self.transformer, x, y)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
@@ -99,9 +101,7 @@ class KernelFlowGraph(DataFlowGraph):
         clusters = {x: be.Function(y) if isinstance(
             x, be.ComputationOp) else x for x, y in list(clusters.items())}
         self.successors = {
-            clusters[a]: {
-                clusters[b] for b in lst} for a,
-            lst in list(
+            clusters[a]: {clusters[b] for b in lst} for a, lst in list(
                 successors.items())}
         # Saves dataflow for visualization
         self.dataflow = dataflow
@@ -117,9 +117,9 @@ class KernelFlowGraph(DataFlowGraph):
         """
 
         predecessors = Digraph._invert(self.successors)
-        from graphviz import Digraph as gvDigraph
-        dot = gvDigraph(name, graph_attr={
-                        'compound': 'true', 'nodesep': '.5', 'ranksep': '.5'})
+        dot = graphviz.Digraph(name, graph_attr={'compound': 'true',
+                                                 'nodesep': '.5',
+                                                 'ranksep': '.5'})
         leaves = {x for x, y in list(predecessors.items()) if len(y) == 0}
         subgs = {x: x.ops._graphviz('cluster_{}'.format(x.id))
                  for x in self.successors if isinstance(x, be.Function)}
@@ -132,9 +132,12 @@ class KernelFlowGraph(DataFlowGraph):
             dot.node(x.id, x.graph_label, x.style)
         # Edges
         edges = {(a, b) for a, _ in list(self.successors.items()) for b in _}
-        sorts = {x: x.ops.topsort() for x in self.successors if isinstance(x, be.Function)}
-        firsts = {x: sorts[x][0] if isinstance(x, be.Function) else x for x in self.successors}
-        lasts = {x: sorts[x][-1] if isinstance(x, be.Function) else x for x in self.successors}
+        sorts = {x: x.ops.topsort() for x in self.successors if
+                 isinstance(x, be.Function)}
+        firsts = {x: sorts[x][0] if isinstance(x, be.Function) else x for x in
+                  self.successors}
+        lasts = {x: sorts[x][-1] if isinstance(x, be.Function) else x for x in
+                 self.successors}
         for a, b in edges:
             kw = {}
             if isinstance(a, be.Function):

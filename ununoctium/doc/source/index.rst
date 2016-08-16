@@ -45,6 +45,7 @@ Nervana graphiti
    :caption: Basic Concepts
 
    graphiti_101.rst
+   analysis.rst
    axes.rst
    environments.rst
    frontends.rst
