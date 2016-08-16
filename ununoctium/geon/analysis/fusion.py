@@ -18,6 +18,7 @@ from geon.util.graph import Digraph
 import geon as be
 import graphviz
 
+
 # Fusion Policies
 def never_fusible(op1, op2):
     """
@@ -33,13 +34,15 @@ def gpu_fusible(transformer, op1, op2):
     """
 
     # Only computations can be merged
-    if not isinstance(op1, be.ComputationOp) or not isinstance(op2, be.ComputationOp):
+    if not isinstance(op1, be.ComputationOp) or not isinstance(op2,
+                                                               be.ComputationOp):
         return False
 
     shapes1 = op1.tensor_description(transformer).shape
     shapes2 = op2.tensor_description(transformer).shape
     # Elementwise functions can be merged together if they have the same shapes
-    if isinstance(op1, be.ElementWise) and isinstance(op2, be.ElementWise) and shapes1 == shapes2:
+    if isinstance(op1, be.ElementWise) and isinstance(op2,
+                                                      be.ElementWise) and shapes1 == shapes2:
         return True
 
     # Reduction following elementwises can be merged
@@ -69,7 +72,8 @@ class KernelFlowGraph(DataFlowGraph):
         """
 
         # Extracts clusters
-        super(KernelFlowGraph, self).__init__(dataflow.transformer, dataflow.results)
+        super(KernelFlowGraph, self).__init__(dataflow.transformer,
+                                              dataflow.results)
         self.fusible = lambda x, y: fusible(self.transformer, x, y)
         successors = self.successors
         path_from, bad_path_from = self._compute_paths()
@@ -99,9 +103,7 @@ class KernelFlowGraph(DataFlowGraph):
         clusters = {x: be.Function(y) if isinstance(
             x, be.ComputationOp) else x for x, y in list(clusters.items())}
         self.successors = {
-            clusters[a]: {
-                clusters[b] for b in lst} for a,
-            lst in list(
+            clusters[a]: {clusters[b] for b in lst} for a, lst in list(
                 successors.items())}
         # Saves dataflow for visualization
         self.dataflow = dataflow
@@ -132,9 +134,12 @@ class KernelFlowGraph(DataFlowGraph):
             dot.node(x.id, x.graph_label, x.style)
         # Edges
         edges = {(a, b) for a, _ in list(self.successors.items()) for b in _}
-        sorts = {x: x.ops.topsort() for x in self.successors if isinstance(x, be.Function)}
-        firsts = {x: sorts[x][0] if isinstance(x, be.Function) else x for x in self.successors}
-        lasts = {x: sorts[x][-1] if isinstance(x, be.Function) else x for x in self.successors}
+        sorts = {x: x.ops.topsort() for x in self.successors if
+                 isinstance(x, be.Function)}
+        firsts = {x: sorts[x][0] if isinstance(x, be.Function) else x for x in
+                  self.successors}
+        lasts = {x: sorts[x][-1] if isinstance(x, be.Function) else x for x in
+                 self.successors}
         for a, b in edges:
             kw = {}
             if isinstance(a, be.Function):

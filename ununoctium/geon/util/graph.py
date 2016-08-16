@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import graphviz
-import os
 
 
 class Digraph(object):
