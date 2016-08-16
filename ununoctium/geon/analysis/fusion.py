@@ -34,15 +34,13 @@ def gpu_fusible(transformer, op1, op2):
     """
 
     # Only computations can be merged
-    if not isinstance(op1, be.ComputationOp) or not isinstance(op2,
-                                                               be.ComputationOp):
+    if not isinstance(op1, be.ComputationOp) or not isinstance(op2, be.ComputationOp):
         return False
 
     shapes1 = op1.tensor_description(transformer).shape
     shapes2 = op2.tensor_description(transformer).shape
     # Elementwise functions can be merged together if they have the same shapes
-    if isinstance(op1, be.ElementWise) and isinstance(op2,
-                                                      be.ElementWise) and shapes1 == shapes2:
+    if isinstance(op1, be.ElementWise) and isinstance(op2, be.ElementWise) and shapes1 == shapes2:
         return True
 
     # Reduction following elementwises can be merged
