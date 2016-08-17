@@ -30,6 +30,7 @@ neon/backends/kernels/pre
 neon/backends/kernels/dump
 .idea
 *~
+.ipynb_checkpoints
 
 # mxnet
 *.bin
@@ -48,3 +49,4 @@ neon/backends/kernels/dump
 *.ckpt.meta
 tf_benchmark/mnist/data
 tf_benchmark/mnist/checkpoint
+
