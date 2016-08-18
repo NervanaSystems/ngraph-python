@@ -96,8 +96,8 @@ def mlp(ns, x, y):
 class MyTest(be.Model):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(MyTest, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(MyTest, self).__init__(**kwargs)
         g = self.graph
 
         be.set_batch_axes([ax.N])

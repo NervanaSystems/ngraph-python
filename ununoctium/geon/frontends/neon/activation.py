@@ -30,7 +30,7 @@ class Rectlin(Transform):
     Can optionally set a slope which will make this a Leaky ReLu.
     """
 
-    def __init__(self, slope=0, **kargs):
+    def __init__(self, slope=0, **kwargs):
         """
         Class constructor.
 
@@ -38,7 +38,7 @@ class Rectlin(Transform):
             slope (float, optional): Slope for negative domain. Defaults to 0.
             name (string, optional): Name to assign this class instance.
         """
-        super(Rectlin, self).__init__(**kargs)
+        super(Rectlin, self).__init__(**kwargs)
         self.slope = slope
 
     def __call__(self, x):
@@ -57,11 +57,11 @@ class Rectlin(Transform):
 class Identity(Transform):
     """Identity activation function, :math:`f(x) = x`"""
 
-    def __init__(self, **kargs):
+    def __init__(self, **kwargs):
         """
         Class constructor.
         """
-        super(Identity, self).__init__(**kargs)
+        super(Identity, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -82,7 +82,7 @@ class Explin(Transform):
     From: Clevert, Unterthiner and Hochreiter, ICLR 2016.
     """
 
-    def __init__(self, alpha=1.0, **kargs):
+    def __init__(self, alpha=1.0, **kwargs):
         """
         Class constructor.
 
@@ -90,7 +90,7 @@ class Explin(Transform):
             alpha (float): weight of exponential factor for negative values (default: 1.0).
             name (string, optional): Name (default: None)
         """
-        super(Explin, self).__init__(**kargs)
+        super(Explin, self).__init__(**kwargs)
         self.alpha = alpha
 
     def __call__(self, x):
@@ -109,7 +109,7 @@ class Explin(Transform):
 class Normalizer(Transform):
     """Normalize inputs by a fixed divisor."""
 
-    def __init__(self, divisor=128., **kargs):
+    def __init__(self, divisor=128., **kwargs):
         """
         Class constructor.
 
@@ -117,7 +117,7 @@ class Normalizer(Transform):
             divisor (float, optional): Normalization factor (default: 128)
             name (string, optional): Name (default: None)
         """
-        super(Normalizer, self).__init__(**kargs)
+        super(Normalizer, self).__init__(**kwargs)
         self.divisor = divisor
 
     def __call__(self, x):
@@ -136,7 +136,7 @@ class Normalizer(Transform):
 class Softmax(Transform):
     """SoftMax activation function. Ensures that the activation output sums to 1."""
 
-    def __init__(self, epsilon=2 ** -23, **kargs):
+    def __init__(self, epsilon=2 ** -23, **kwargs):
         """
         Class constructor.
 
@@ -144,7 +144,7 @@ class Softmax(Transform):
             name (string, optional): Name (default: none)
             epsilon (float, optional): Not used.
         """
-        super(Softmax, self).__init__(**kargs)
+        super(Softmax, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -162,11 +162,11 @@ class Softmax(Transform):
 class Tanh(Transform):
     """Hyperbolic tangent activation function, :math:`f(x) = \\tanh(x)`."""
 
-    def __init__(self, **kargs):
+    def __init__(self, **kwargs):
         """
         Class constructor.
         """
-        super(Tanh, self).__init__(**kargs)
+        super(Tanh, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -188,7 +188,7 @@ class Logistic(Transform):
     Squashes the input from range :math:`[-\infty,+\infty]` to :math:`[0, 1]`
     """
 
-    def __init__(self, shortcut=False, **kargs):
+    def __init__(self, shortcut=False, **kwargs):
         """
         Initialize Logistic based on whether shortcut is True or False. Shortcut
         should be set to true when Logistic is used in conjunction with a CrossEntropy cost.
@@ -196,9 +196,9 @@ class Logistic(Transform):
 
         Arguments:
             shortcut (bool): If True, shortcut calculation will be used during backpropagation.
-            **kargs: TODO
+            **kwargs: TODO
         """
-        super(Logistic, self).__init__(**kargs)
+        super(Logistic, self).__init__(**kwargs)
 
     def __call__(self, x):
         """

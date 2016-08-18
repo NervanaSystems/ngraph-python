@@ -116,13 +116,13 @@ def with_error_settings(**new_settings):
         Returns:
 
         """
-        def wrapper(*args, **kargs):
+        def wrapper(*args, **kwargs):
             """
             TODO.
 
             Arguments:
               *args: TODO
-              **kargs: TODO
+              **kwargs: TODO
 
             Returns:
 
@@ -130,7 +130,7 @@ def with_error_settings(**new_settings):
             old_settings = np.geterr()
 
             np.seterr(**new_settings)
-            ret = f(*args, **kargs)
+            ret = f(*args, **kwargs)
 
             np.seterr(**old_settings)
 

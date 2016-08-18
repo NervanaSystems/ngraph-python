@@ -513,8 +513,8 @@ class NumPyTransformer(Transformer):
 class NPNormal(AllocationOp):
     """TODO."""
 
-    def __init__(self, rng, loc, scale, **kargs):
-        super(NPNormal, self).__init__(args=(rng,), **kargs)
+    def __init__(self, rng, loc, scale, **kwargs):
+        super(NPNormal, self).__init__(args=(rng,), **kwargs)
         self.loc = loc
         self.scale = scale
 
@@ -529,8 +529,8 @@ class NPNormal(AllocationOp):
 class NPUniform(AllocationOp):
     """TODO."""
 
-    def __init__(self, rng, low, high, **kargs):
-        super(NPUniform, self).__init__(args=(rng,), **kargs)
+    def __init__(self, rng, low, high, **kwargs):
+        super(NPUniform, self).__init__(args=(rng,), **kwargs)
         self.low = low
         self.high = high
 

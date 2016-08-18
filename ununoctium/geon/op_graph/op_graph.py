@@ -580,13 +580,13 @@ class Tensor(Op):
         else:
             raise NotImplementedError
 
-    def generate_adjoints(self, *args, **kargs):
+    def generate_adjoints(self, *args, **kwargs):
         """
         TODO.
 
         Arguments:
           *args: TODO
-          **kargs: TODO
+          **kwargs: TODO
         """
         pass
 
@@ -610,7 +610,7 @@ class Tensor(Op):
         """TODO."""
         return self.axes
 
-    def mean(self, out_axes=(), **kargs):
+    def mean(self, out_axes=(), **kwargs):
         """
         TODO.
 
@@ -620,14 +620,14 @@ class Tensor(Op):
         Returns:
           TODO
         """
-        return mean(self, out_axes=out_axes, **kargs)
+        return mean(self, out_axes=out_axes, **kwargs)
 
 
 class Broadcast(Tensor):
     """Used to add additional axes for a returned derivative."""
 
-    def __init__(self, x, **kargs):
-        super(Broadcast, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(Broadcast, self).__init__(args=(x,), **kwargs)
 
     @from_transformer_cache
     def tensor_description(self, transformer):
@@ -647,9 +647,9 @@ class Broadcast(Tensor):
 class ExpandDims(Tensor):
     """TODO."""
 
-    def __init__(self, x, axis, dim, **kargs):
+    def __init__(self, x, axis, dim, **kwargs):
         axes = x.axes[:dim].concat(Axes(axis,)).concat(x.axes[dim:])
-        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kargs)
+        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
         self.axis = axis
         self.dim = dim
 
@@ -688,12 +688,12 @@ class ExpandDims(Tensor):
 class Slice(Tensor):
     """TODO."""
 
-    def __init__(self, x, slices, axes=None, **kargs):
+    def __init__(self, x, slices, axes=None, **kwargs):
         assert axes is not None, 'The axes of a sliced tensor must be named.'
         super(Slice, self).__init__(
             args=(x,),
             axes=axes,
-            **kargs
+            **kwargs
         )
         self.slices = slices
 
@@ -736,8 +736,8 @@ class AllocationOp(Tensor):
             self,
             init=None,
             initial_value=None,
-            **kargs):
-        super(AllocationOp, self).__init__(**kargs)
+            **kwargs):
+        super(AllocationOp, self).__init__(**kwargs)
         if init is not None:
             with captured_ops(self.initializers):
                 init.fill(self)
@@ -750,8 +750,8 @@ class AllocationOp(Tensor):
 class ComputationOp(Tensor):
     """An TensorOp is the result of some sort of operation."""
 
-    def __init__(self, dtype=np.dtype(np.float32), batch_axes=None, **kargs):
-        super(ComputationOp, self).__init__(**kargs)
+    def __init__(self, dtype=np.dtype(np.float32), batch_axes=None, **kwargs):
+        super(ComputationOp, self).__init__(**kwargs)
         self.dtype = dtype
 
         for arg in self.args:
@@ -774,8 +774,8 @@ class ComputationOp(Tensor):
 
 class Unslice(ComputationOp):
     """TODO."""
-    def __init__(self, x, slices, **kargs):
-        super(Unslice, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, slices, **kwargs):
+        super(Unslice, self).__init__(args=(x,), **kwargs)
         self.slices = slices
         self.input_axes = x.axes
 
@@ -825,7 +825,7 @@ class RNG(object):
         self.seed = seed
         self.rng = np.random.RandomState(seed=seed)
 
-    def uniform(self, low=0.0, high=1.0, size=None, **kargs):
+    def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
         """
         TODO.
 
@@ -833,14 +833,14 @@ class RNG(object):
           low: TODO
           high: TODO
           size: TODO
-          **kargs: TODO
+          **kwargs: TODO
 
         Returns:
           TODO
         """
-        return Uniform(rng=self.rng, low=low, high=high, size=size, **kargs)
+        return Uniform(rng=self.rng, low=low, high=high, size=size, **kwargs)
 
-    def normal(self, loc, scale, size, **kargs):
+    def normal(self, loc, scale, size, **kwargs):
         """
         TODO.
 
@@ -848,27 +848,27 @@ class RNG(object):
           loc: TODO
           scale: TODO
           size: TODO
-          **kargs: TODO
+          **kwargs: TODO
 
         Returns:
           TODO
         """
-        return Normal(rng=self.rng, loc=loc, scale=scale, size=size, **kargs)
+        return Normal(rng=self.rng, loc=loc, scale=scale, size=size, **kwargs)
 
 
 class RNGOp(AllocationOp):
     """TODO."""
 
-    def __init__(self, rng, **kargs):
-        super(RNGOp, self).__init__(**kargs)
+    def __init__(self, rng, **kwargs):
+        super(RNGOp, self).__init__(**kwargs)
         self.rng = rng
 
 
 class Normal(RNGOp):
     """TODO."""
 
-    def __init__(self, loc=0.0, scale=1.0, size=None, **kargs):
-        super(Normal, self).__init__(axes=size, **kargs)
+    def __init__(self, loc=0.0, scale=1.0, size=None, **kwargs):
+        super(Normal, self).__init__(axes=size, **kwargs)
         self.loc = loc
         self.scale = scale
 
@@ -889,8 +889,8 @@ class Normal(RNGOp):
 class Uniform(RNGOp):
     """TODO."""
 
-    def __init__(self, low=0.0, high=1.0, size=None, **kargs):
-        super(Uniform, self).__init__(axes=size, **kargs)
+    def __init__(self, low=0.0, high=1.0, size=None, **kwargs):
+        super(Uniform, self).__init__(axes=size, **kwargs)
         self.low = low
         self.high = high
 
@@ -911,8 +911,8 @@ class Uniform(RNGOp):
 class VoidOp(ComputationOp):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(VoidOp, self).__init__(axes=Axes(), **kargs)
+    def __init__(self, **kwargs):
+        super(VoidOp, self).__init__(axes=Axes(), **kwargs)
 
     @from_transformer_cache
     def call_info(self, transformer):
@@ -931,8 +931,8 @@ class VoidOp(ComputationOp):
 class SetItem(VoidOp):
     """TODO."""
 
-    def __init__(self, tensor, item, val, **kargs):
-        super(SetItem, self).__init__(args=(tensor, val), **kargs)
+    def __init__(self, tensor, item, val, **kwargs):
+        super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
 
     @from_transformer_cache
@@ -967,14 +967,14 @@ class SetItem(VoidOp):
 class doall(VoidOp):
     """TODO."""
 
-    def __init__(self, all, **kargs):
-        super(doall, self).__init__(args=all, **kargs)
+    def __init__(self, all, **kwargs):
+        super(doall, self).__init__(args=all, **kwargs)
 
 
 class ElementWise(ComputationOp):
     """TODO."""
 
-    def __init__(self, args, **kargs):
+    def __init__(self, args, **kwargs):
         args = Op.as_ops(args)
         axis_ids = AxisIDTuple()
         for arg in args:
@@ -983,7 +983,7 @@ class ElementWise(ComputationOp):
         super(ElementWise, self).__init__(
             args=args,
             axes=axes,
-            **kargs
+            **kwargs
         )
 
     @from_transformer_cache
@@ -1006,8 +1006,8 @@ class ElementWise(ComputationOp):
 class AllReduce(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(AllReduce, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(AllReduce, self).__init__(args=(x,), **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -1027,11 +1027,11 @@ class AllReduce(ElementWise):
 class placeholder(AllocationOp):
     """Can be set externally."""
 
-    def __init__(self, tags=None, **kargs):
+    def __init__(self, tags=None, **kwargs):
         if tags is None:
             tags = set()
         tags.add('persistent')
-        super(placeholder, self).__init__(tags=tags, **kargs)
+        super(placeholder, self).__init__(tags=tags, **kwargs)
 
     def generate_adjoints(self, tape, delta):
         """
@@ -1047,8 +1047,8 @@ class placeholder(AllocationOp):
 class Fill(VoidOp):
     """TODO."""
 
-    def __init__(self, tensor, const, **kargs):
-        super(Fill, self).__init__(args=(tensor,), **kargs)
+    def __init__(self, tensor, const, **kwargs):
+        super(Fill, self).__init__(args=(tensor,), **kwargs)
         self.const = const
 
     def transform(self, transformer, tensor):
@@ -1078,10 +1078,10 @@ class Constant(AllocationOp):
       TODO
     """
 
-    def __init__(self, const, axes=Axes(), **kargs):
+    def __init__(self, const, axes=Axes(), **kwargs):
         self.const = const
         super(Constant, self).__init__(
-            axes=axes, dtype=np.dtype(np.float32), **kargs)
+            axes=axes, dtype=np.dtype(np.float32), **kwargs)
         self.initializers.append(Fill(self, const))
         self.tags.add('persistent')
 
@@ -1120,11 +1120,11 @@ class NumPyTensor(AllocationOp):
     This is how you define tensor valued constants for now.
     """
 
-    def __init__(self, nptensor, axes, **kargs):
+    def __init__(self, nptensor, axes, **kwargs):
         axes = Axes(axes)
         self.nptensor = nptensor
         super(NumPyTensor, self).__init__(
-            dtype=nptensor.dtype, axes=axes, **kargs
+            dtype=nptensor.dtype, axes=axes, **kwargs
         )
         self.tags.add('persistent')
 
@@ -1154,8 +1154,8 @@ class NumPyTensor(AllocationOp):
 class absolute(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(absolute, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(absolute, self).__init__(args=(x,), **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -1189,8 +1189,8 @@ class absolute(ElementWise):
 class add(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(add, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(add, self).__init__(args=(x, y), **kwargs)
 
     def transform(self, transformer, out, x, y):
         """
@@ -1227,7 +1227,7 @@ class add(ElementWise):
 class argmax(ComputationOp):
     """TODO."""
 
-    def __init__(self, x, max_axes=None, **kargs):
+    def __init__(self, x, max_axes=None, **kwargs):
         if max_axes is None:
             max_axes = sample_axes(x.axes)
             axes = batch_axes(x.axes)
@@ -1235,7 +1235,7 @@ class argmax(ComputationOp):
             axes = x.axes - max_axes
         self.max_axes = max_axes
         super(argmax, self).__init__(
-            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kargs
+            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
     @from_transformer_cache
@@ -1273,7 +1273,7 @@ class argmax(ComputationOp):
 class argmin(ComputationOp):
     """TODO."""
 
-    def __init__(self, x, min_axes=None, **kargs):
+    def __init__(self, x, min_axes=None, **kwargs):
         if min_axes is None:
             min_axes = sample_axes(x.axes)
             axes = batch_axes(x.axes)
@@ -1281,7 +1281,7 @@ class argmin(ComputationOp):
             axes = x.axes - min_axes
         self.min_axes = min_axes
         super(argmax, self).__init__(
-            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kargs
+            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
     @from_transformer_cache
@@ -1319,8 +1319,8 @@ class argmin(ComputationOp):
 class cos(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(cos, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(cos, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1354,8 +1354,8 @@ class cos(ElementWise):
 class divide(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(divide, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(divide, self).__init__(args=(x, y), **kwargs)
 
     def transform(self, transformer, out, x, y):
         """
@@ -1396,7 +1396,7 @@ class dot(ComputationOp):
                  reduction_axes=None, out_axes=None,
                  numpy_matching=False,
                  forward_dot=None,
-                 **kargs):
+                 **kwargs):
         self.axis_id_info = self.compute_axis_id_info(
             x, y, reduction_axes, out_axes,
             forward_dot, numpy_matching
@@ -1405,7 +1405,7 @@ class dot(ComputationOp):
         self.reduction_axes = reduction_axes
         axes = self.axis_id_info[0].as_axes()
         super(dot, self).__init__(
-            args=(x, y), axes=axes, **kargs
+            args=(x, y), axes=axes, **kwargs
         )
 
     def compute_axis_id_info(self, x, y,
@@ -1541,9 +1541,9 @@ class dot(ComputationOp):
 class ElementWiseBoolean(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, dtype=np.dtype(bool), **kargs):
+    def __init__(self, x, y, dtype=np.dtype(bool), **kwargs):
         super(ElementWiseBoolean, self).__init__(
-            args=(x, y), dtype=dtype, **kargs)
+            args=(x, y), dtype=dtype, **kwargs)
 
 
 class equal(ElementWiseBoolean):
@@ -1685,14 +1685,14 @@ class Softmax(object):
         self.x.generate_add_delta(adjoints, (z - zs * op))
 
 
-def softmax(x, softmax_axes=None, **kargs):
+def softmax(x, softmax_axes=None, **kwargs):
     """
     TODO.
 
     Arguments:
       x: TODO
       softmax_axes: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -1710,12 +1710,12 @@ def softmax(x, softmax_axes=None, **kargs):
 class ReductionOp(ComputationOp):
     """TODO."""
 
-    def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         self.out_axes, self.reduction_axes\
             = self.compute_axes(x, reduction_axes, out_axes)
         self.mode = None
         super(ReductionOp, self).__init__(
-            args=(x,), axes=self.out_axes, **kargs
+            args=(x,), axes=self.out_axes, **kwargs
         )
 
     def compute_axes(self, x, reduction_axes, out_axes):
@@ -1775,8 +1775,8 @@ class ReductionOp(ComputationOp):
 class max(ReductionOp):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(max, self).__init__(x, **kargs)
+    def __init__(self, x, **kwargs):
+        super(max, self).__init__(x, **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -1814,8 +1814,8 @@ class max(ReductionOp):
 class min(ReductionOp):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(min, self).__init__(x, **kargs)
+    def __init__(self, x, **kwargs):
+        super(min, self).__init__(x, **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -1853,8 +1853,8 @@ class min(ReductionOp):
 class sum(ReductionOp):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(sum, self).__init__(x, **kargs)
+    def __init__(self, x, **kwargs):
+        super(sum, self).__init__(x, **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -1905,7 +1905,7 @@ def assign(lvalue, rvalue):
 
 class tensor_size(ComputationOp):
     """TODO."""
-    def __init__(self, x, reduction_axes=None, out_axes=None, **kargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         if reduction_axes is None:
             if out_axes is None:
                 reduction_axes = sample_axes(x.axes)
@@ -1930,7 +1930,7 @@ class tensor_size(ComputationOp):
         transformer.fill(out, self.reduction_axes.size)
 
 
-def pad(x, axes, paddings, **kargs):
+def pad(x, axes, paddings, **kwargs):
     """
     TODO.
 
@@ -1938,7 +1938,7 @@ def pad(x, axes, paddings, **kargs):
       x: TODO
       axes: TODO
       paddings: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -1965,7 +1965,7 @@ def pad(x, axes, paddings, **kargs):
 class Variable(AllocationOp):
     """TODO."""
 
-    def __init__(self, tags=None, trainable=True, persistent=True, **kargs):
+    def __init__(self, tags=None, trainable=True, persistent=True, **kwargs):
         if tags is None:
             tags = set()
         else:
@@ -1974,27 +1974,27 @@ class Variable(AllocationOp):
             tags.add('trainable')
         if persistent:
             tags.add('persistent')
-        super(Variable, self).__init__(tags=tags, **kargs)
+        super(Variable, self).__init__(tags=tags, **kwargs)
 
 
-def temporary(**kargs):
+def temporary(**kwargs):
     """
     TODO.
 
     Arguments:
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
     """
-    return Variable(trainable=False, persistent=True, **kargs)
+    return Variable(trainable=False, persistent=True, **kwargs)
 
 
 class exp(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(exp, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(exp, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2028,8 +2028,8 @@ class exp(ElementWise):
 class log(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(log, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(log, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2109,8 +2109,8 @@ class safelog(log):
 class maximum(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(maximum, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(maximum, self).__init__(args=(x, y), **kwargs)
 
     def transform(self, transformer, out, x, y):
         """
@@ -2147,8 +2147,8 @@ class maximum(ElementWise):
 class minimum(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(minimum, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(minimum, self).__init__(args=(x, y), **kwargs)
 
     def transform(self, transformer, out, x, y):
         """
@@ -2185,8 +2185,8 @@ class minimum(ElementWise):
 class multiply(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(multiply, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(multiply, self).__init__(args=(x, y), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2223,8 +2223,8 @@ class multiply(ElementWise):
 class negative(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(negative, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(negative, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2258,7 +2258,7 @@ class negative(ElementWise):
 class onehot(ComputationOp):
     """TODO."""
 
-    def __init__(self, x, axis=None, axes=None, **kargs):
+    def __init__(self, x, axis=None, axes=None, **kwargs):
         if axis is None:
             if axes is None:
                 raise ValueError('Cannot determine one-hot axis.')
@@ -2269,7 +2269,7 @@ class onehot(ComputationOp):
                 x_batch = batch_axes(x.axes)
                 axes = Axes(axis) + x_sample + x_batch
         self.axis = axis
-        super(onehot, self).__init__(args=(x,), axes=axes, **kargs)
+        super(onehot, self).__init__(args=(x,), axes=axes, **kwargs)
 
     @from_transformer_cache
     def call_info(self, transformer):
@@ -2308,8 +2308,8 @@ class onehot(ComputationOp):
 class power(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(power, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(power, self).__init__(args=(x,), **kwargs)
 
     def transform(self, transformer, out, x, y):
         """
@@ -2346,8 +2346,8 @@ class power(ElementWise):
 class reciprocal(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(reciprocal, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(reciprocal, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2381,8 +2381,8 @@ class reciprocal(ElementWise):
 class sign(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(sign, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(sign, self).__init__(args=(x,), **kwargs)
 
     def transform(self, transformer, out, x):
         """
@@ -2420,13 +2420,13 @@ class Sigmoid(object):
         self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
 
 
-def sigmoid(x, **kargs):
+def sigmoid(x, **kwargs):
     """
     TODO.
 
     Arguments:
       x: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -2439,8 +2439,8 @@ def sigmoid(x, **kargs):
 class sin(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(sin, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(sin, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2474,8 +2474,8 @@ class sin(ElementWise):
 class sqrt(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(sqrt, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(sqrt, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2509,8 +2509,8 @@ class sqrt(ElementWise):
 class square(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(square, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(square, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2544,8 +2544,8 @@ class square(ElementWise):
 class subtract(ElementWise):
     """TODO."""
 
-    def __init__(self, x, y, **kargs):
-        super(subtract, self).__init__(args=(x, y), **kargs)
+    def __init__(self, x, y, **kwargs):
+        super(subtract, self).__init__(args=(x, y), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2582,8 +2582,8 @@ class subtract(ElementWise):
 class tanh(ElementWise):
     """TODO."""
 
-    def __init__(self, x, **kargs):
-        super(tanh, self).__init__(args=(x,), **kargs)
+    def __init__(self, x, **kwargs):
+        super(tanh, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2676,18 +2676,18 @@ class Buffer(object):
         self.views = set()
 
 
-def mean(x, **kargs):
+def mean(x, **kwargs):
     """
     TODO.
 
     Arguments:
       x: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
     """
-    return sum(x, **kargs) / tensor_size(x, **kargs)
+    return sum(x, **kwargs) / tensor_size(x, **kwargs)
 
 
 def deriv(dep, indep):
@@ -2732,7 +2732,7 @@ class CrossEntropyMultiInner(object):
 
 def cross_entropy_multi(y, t, usebits=False, out_axes=None,
                         enable_softmax_opt=True,
-                        enable_diff_opt=True, **kargs):
+                        enable_diff_opt=True, **kwargs):
     """
     TODO.
 
@@ -2743,7 +2743,7 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None,
       out_axes: TODO
       enable_softmax_opt: TODO
       enable_diff_opt: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -2789,7 +2789,7 @@ class CrossEntropyBinaryInner(object):
 
 
 def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
-                               enable_diff_opt=True, **kargs):
+                               enable_diff_opt=True, **kwargs):
     """
     TODO.
 
@@ -2798,7 +2798,7 @@ def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
       t: TODO
       enable_sig_opt: TODO
       enable_diff_opt: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO

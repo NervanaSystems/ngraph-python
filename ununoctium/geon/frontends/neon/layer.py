@@ -31,8 +31,8 @@ class Layer(object):
             graph=None,
             axes=None,
             parallelism="Unknown",
-            **kargs):
-        super(Layer, self).__init__(**kargs)
+            **kwargs):
+        super(Layer, self).__init__(**kwargs)
         self.name = name
         self.axes = axes
 
@@ -53,29 +53,29 @@ class Layer(object):
 class BranchNode(Layer):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(BranchNode, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(BranchNode, self).__init__(**kwargs)
 
 
 class SkipNode(Layer):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(SkipNode, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(SkipNode, self).__init__(**kwargs)
 
 
 class Pooling(Layer):
     """TODO."""
 
-    def __init__(self, fshape, op="max", strides={}, padding={}, **kargs):
-        super(Pooling, self).__init__(**kargs)
+    def __init__(self, fshape, op="max", strides={}, padding={}, **kwargs):
+        super(Pooling, self).__init__(**kwargs)
 
 
 class ParameterLayer(Layer):
     """TODO."""
 
-    def __init__(self, init=None, **kargs):
-        super(ParameterLayer, self).__init__(**kargs)
+    def __init__(self, init=None, **kwargs):
+        super(ParameterLayer, self).__init__(**kwargs)
         self.has_params = True
         self.init = init
         self.W = None
@@ -752,15 +752,15 @@ class PoolLayer(object):
 class Deconvolution(ParameterLayer):
     """TODO."""
 
-    def __init__(self, fshape, strides={}, padding={}, bsum=False, **kargs):
-        super(Deconvolution, self).__init__(**kargs)
+    def __init__(self, fshape, strides={}, padding={}, bsum=False, **kwargs):
+        super(Deconvolution, self).__init__(**kwargs)
 
 
 class Linear(ParameterLayer):
     """TODO."""
 
-    def __init__(self, nout, bsum=False, **kargs):
-        super(Linear, self).__init__(**kargs)
+    def __init__(self, nout, bsum=False, **kwargs):
+        super(Linear, self).__init__(**kwargs)
         self.nout = nout
         self.inputs = None
         self.bsum = bsum
@@ -803,8 +803,8 @@ class Bias(ParameterLayer):
 
     """
 
-    def __init__(self, init, **kargs):
-        super(Bias, self).__init__(**kargs)
+    def __init__(self, init, **kwargs):
+        super(Bias, self).__init__(**kwargs)
         self.y = None
         self.owns_output = False
         self.owns_delta = False
@@ -839,8 +839,8 @@ class Activation(Layer):
        name (str, optional): Layer name. Defaults to "ActivationLayer"
     """
 
-    def __init__(self, transform, **kargs):
-        super(Activation, self).__init__(**kargs)
+    def __init__(self, transform, **kwargs):
+        super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
     def configure(self, in_obj):
@@ -862,8 +862,8 @@ class Activation(Layer):
 class DataTransform(Layer):
     """TODO."""
 
-    def __init__(self, transform, **kargs):
-        super(DataTransform, self).__init__(**kargs)
+    def __init__(self, transform, **kwargs):
+        super(DataTransform, self).__init__(**kwargs)
 
 
 class ColorNoise(Layer):
@@ -875,8 +875,8 @@ class ColorNoise(Layer):
             colorstd=None,
             noise_coeff=0.1,
             name="ColorNoiseLayer",
-            **kargs):
-        super(ColorNoise, self).__init__(name=name, **kargs)
+            **kwargs):
+        super(ColorNoise, self).__init__(name=name, **kwargs)
 
 
 class CompoundLayer(list):
@@ -926,9 +926,9 @@ class Affine(CompoundLayer):
     """
 
     def __init__(self, nout, init, bias=None,
-                 batch_norm=False, activation=None, name=None, **kargs):
+                 batch_norm=False, activation=None, name=None, **kwargs):
         super(Affine, self).__init__(bias=bias, batch_norm=batch_norm,
-                                     activation=activation, name=name, **kargs)
+                                     activation=activation, name=name, **kwargs)
         self.append(Linear(nout, init=init, bsum=batch_norm,
                            name=name, axes=self.axes))
         self.add_postfilter_layers()
@@ -1014,23 +1014,23 @@ class LRN(Layer):
             beta=0.,
             ascale=1.,
             bpower=1.,
-            **kargs):
-        super(LRN, self).__init__(**kargs)
+            **kwargs):
+        super(LRN, self).__init__(**kwargs)
 
 
 class Dropout(Layer):
     """TODO."""
 
-    def __init__(self, keep=0.5, **kargs):
-        super(Dropout, self).__init__(**kargs)
+    def __init__(self, keep=0.5, **kwargs):
+        super(Dropout, self).__init__(**kwargs)
 
 
 class LookupTable(ParameterLayer):
     """TODO."""
 
     def __init__(self, vocab_size, embedding_dim, init, update=True,
-                 pad_idx=None, **kargs):
-        super(LookupTable, self).__init__(**kargs)
+                 pad_idx=None, **kwargs):
+        super(LookupTable, self).__init__(**kwargs)
 
 
 class GeneralizedCost(object):
@@ -1045,8 +1045,8 @@ class GeneralizedCost(object):
 
     """
 
-    def __init__(self, costfunc, name=None, **kargs):
-        super(GeneralizedCost, self).__init__(**kargs)
+    def __init__(self, costfunc, name=None, **kwargs):
+        super(GeneralizedCost, self).__init__(**kwargs)
         self.costfunc = costfunc
         self.name = name
 
@@ -1072,12 +1072,12 @@ class GeneralizedCost(object):
 class BatchNorm(Layer):
     """TODO."""
 
-    def __init__(self, rho=0.9, eps=1e-3, **kargs):
-        super(BatchNorm, self).__init__(**kargs)
+    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
+        super(BatchNorm, self).__init__(**kwargs)
 
 
 class BatchNormAutodiff(BatchNorm):
     """TODO."""
 
-    def __init__(self, rho=0.99, eps=1e-6, **kargs):
-        super(BatchNormAutodiff, self).__init__(**kargs)
+    def __init__(self, rho=0.99, eps=1e-6, **kwargs):
+        super(BatchNormAutodiff, self).__init__(**kwargs)

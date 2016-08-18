@@ -48,8 +48,8 @@ def L2(x):
 class MyRnn(be.Model):
     """An example of how the future might look like.  Should parse but doesn't run."""
 
-    def __init__(self, **kargs):
-        super(MyRnn, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(MyRnn, self).__init__(**kwargs)
         # g: graph node root namespace
         g = self.graph
 
