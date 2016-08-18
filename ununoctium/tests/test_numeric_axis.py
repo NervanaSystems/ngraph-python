@@ -15,10 +15,10 @@
 import numpy as np
 
 import geon as be
-from geon.util.utils import execute, in_bound_environment
+from geon.util.utils import executor
 
 
-@in_bound_environment
+@be.with_bound_environment
 def test_dot_with_numerics():
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
@@ -28,12 +28,12 @@ def test_dot_with_numerics():
     x = be.NumPyTensor(x_np, axes=axes)
 
     d = be.dot(x, x, numpy_matching=True)
-    d_val, = execute([d])
+    d_val = executor(d)()
 
     assert np.array_equal(d_val, np.dot(x_np, x_np))
 
 
-@in_bound_environment
+@be.with_bound_environment
 def test_expand_dims():
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
@@ -43,6 +43,6 @@ def test_expand_dims():
     x = be.NumPyTensor(x_np, axes=axes)
 
     x1 = be.ExpandDims(x, ax1, 0)
-    x1_val, = execute([x1])
+    x1_val = executor(x1)()
     for i in range(ax1.length):
         assert np.array_equal(x1_val[i], x_np)

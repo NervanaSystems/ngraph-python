@@ -15,6 +15,7 @@
 from builtins import object
 from contextlib import contextmanager
 import threading
+from functools import wraps
 
 # TODO:
 # Store default values directly with the keys, i.e. a default axis length is stored in the axis.
@@ -95,6 +96,15 @@ def bound_environment(environment=None, create=True):
         yield (environment)
     finally:
         get_thread_environment().pop()
+
+
+def with_bound_environment(fun, environment=None, create=True):
+    @wraps(fun)
+    def wrapper(*args, **kargs):
+        with bound_environment(environment, create):
+            return fun(*args, **kargs)
+
+    return wrapper
 
 
 class Environment(object):

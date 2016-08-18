@@ -101,8 +101,6 @@ class MyRnn(be.Model):
                 reg = reg + l2
         g.loss = g.error + .01 * reg
 
-    @be.with_graph_scope
-    @be.with_environment
     def train(self, epochs):
         g = self.graph
 
@@ -126,9 +124,7 @@ class MyRnn(be.Model):
 
         updates = be.doall(all=[be.decrement(param, learning_rate * deriv)
                                 for param, deriv in zip(variables, derivs)])
-
-        enp = be.NumPyTransformer(
-            results=[self.graph.y, g.error, updates] + derivs)
+        print(updates)
 
         # Some future data loader
         for epoch_no, batches in train:
@@ -140,14 +136,14 @@ class MyRnn(be.Model):
 
                 learning_rate[:] = be.ArrayWithAxes(.001, shape=(), axes=())
 
-                vals = enp.evaluate()
-                print(vals[g.error])
-
     @be.with_graph_scope
     @be.with_environment
     def dump(self):
-        for _ in be.get_all_defs():
-            print('{s} # {file_info}'.format(s=_, file_info=_.file_info))
+        def visitor(_):
+            print('{s} # {info}'.format(
+                s=_, info=_.file_info))
+
+        be.Node.visit_input_closure([self.graph.loss], visitor)
 
 
 MyRnn().dump()

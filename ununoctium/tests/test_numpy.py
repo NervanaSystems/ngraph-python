@@ -19,267 +19,313 @@ from builtins import range
 
 import geon.frontends.base.axis as ax
 import geon as be
-from geon.util.utils import RandomTensorGenerator, execute, transform_numeric_derivative
-from geon.util.utils import transform_derivative, numeric_derivative
+from geon.util.utils import RandomTensorGenerator, ExecutorFactory
+from geon.util.utils import numeric_derivative, executor
 
 rng = RandomTensorGenerator(0, np.float32)
 
 
+@be.with_bound_environment
 def test_tensor_sum_single_reduction_axes():
-    with be.bound_environment():
-        ax.N.length = 2
-        ax.Y.length = 2
+    ax.N.length = 2
+    ax.Y.length = 2
 
-        a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.N, ax.Y])
+    a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.N, ax.Y])
 
-        b = be.sum(a, reduction_axes=ax.Y)
+    b = be.sum(a, reduction_axes=ax.Y)
 
-        result = be.NumPyTransformer(results=[b]).evaluate()[b]
-        assert np.allclose(result, [[2.0], [2.0]])
-
-
-def test_constants():
-    with be.bound_environment():
-        # Simple evaluation of a scalar
-        val = 5
-        x = be.Constant(5)
-
-        cval, = execute([x])
-        assert cval.shape == ()
-        assert cval[()] == val
-
-        ax.W.length = 10
-        ax.H.length = 20
-        aaxes = be.Axes([ax.W, ax.H])
-        ashape = aaxes.lengths
-        asize = aaxes.size
-        aval = np.arange(asize, dtype=np.float32).reshape(ashape)
-
-        # Pass a NumPy array through as a constant
-        x = be.NumPyTensor(aval, axes=aaxes)
-        cval, = execute([x])
-        assert np.array_equal(cval, aval)
-
-        # Pass array through a placeholder
-        x = be.placeholder(axes=[ax.W, ax.H])
-        x.value = aval
-        cval, = execute([x])
-        assert np.array_equal(cval, aval)
-
-        # Pass a different array though
-        u = rng.uniform(-1.0, 1.0, aaxes)
-        x.value = u
-        cval, = execute([x])
-        assert np.array_equal(cval, u)
-
-        d = 2 * x
-        d2 = be.dot(x, x)
-        x.value = aval
-        cval, s = execute([d, d2])
-        assert np.array_equal(cval, aval * 2)
-        assert s[()] == np.dot(aval.flatten(), aval.flatten())
-
-        x.value = u
-        cval, s = execute([d, d2])
-        u2 = u * 2
-        assert np.array_equal(cval, u2)
-        assert s[()] == np.dot(u.flatten(), u.flatten())
+    result = executor(b)()
+    assert np.allclose(result, [[2.0], [2.0]])
 
 
+@be.with_bound_environment
+def test_scalar():
+    # Simple evaluation of a scalar
+    val = 5
+    x = be.Constant(val)
+
+    cval = executor(x)()
+    assert cval.shape == ()
+    assert cval[()] == val
+
+
+@be.with_bound_environment
+def test_tensor_constant():
+    # Pass a NumPy array through as a constant
+    ax.W.length = 10
+    ax.H.length = 20
+    aaxes = be.Axes([ax.W, ax.H])
+    ashape = aaxes.lengths
+    asize = aaxes.size
+    aval = np.arange(asize, dtype=np.float32).reshape(ashape)
+
+    x = be.NumPyTensor(aval, axes=aaxes)
+    cval = executor(x)()
+    assert np.array_equal(cval, aval)
+
+
+@be.with_bound_environment
+def test_placeholder():
+    # Pass array through a placeholder
+    ax.W.length = 10
+    ax.H.length = 20
+    aaxes = be.Axes([ax.W, ax.H])
+    ashape = aaxes.lengths
+    asize = aaxes.size
+    aval = np.arange(asize, dtype=np.float32).reshape(ashape)
+
+    x = be.placeholder(axes=[ax.W, ax.H])
+    d = 2 * x
+    d2 = be.dot(x, x)
+
+    ex = ExecutorFactory()
+    # Return placeholder, param is placeholder
+    placeholder_fun = ex.executor(x, x)
+    prod_fun = ex.executor([d, d2], x)
+
+    cval = placeholder_fun(aval)
+    assert np.array_equal(cval, aval)
+
+    # Pass a different array though
+    u = rng.uniform(-1.0, 1.0, aaxes)
+    cval = placeholder_fun(u)
+    assert np.array_equal(cval, u)
+
+    cval, s = prod_fun(aval)
+    assert np.array_equal(cval, aval * 2)
+    assert s[()] == np.dot(aval.flatten(), aval.flatten())
+
+    cval, s = prod_fun(u)
+    u2 = u * 2
+    assert np.array_equal(cval, u2)
+    assert s[()] == np.dot(u.flatten(), u.flatten())
+
+
+@be.with_bound_environment
 def test_reduction():
-    with be.bound_environment():
-        ax.C.length = 4
-        ax.W.length = 4
-        ax.H.length = 4
-        axes = be.Axes([ax.C, ax.W, ax.H])
+    ax.C.length = 4
+    ax.W.length = 4
+    ax.H.length = 4
+    axes = be.Axes([ax.C, ax.W, ax.H])
 
-        u = rng.uniform(-1.0, 1.0, axes)
-        p_u = be.placeholder(axes=axes)
-        p_u.value = u
+    u = rng.uniform(-1.0, 1.0, axes)
+    p_u = be.placeholder(axes=axes)
 
-        for npred, bered, red in [(np.sum, be.sum, 'sum'),
-                                  (np.max, be.max, 'max'),
-                                  (np.min, be.min, 'min')]:
-            for reduction_axes in [[ax.C],
-                                   [ax.W],
-                                   [ax.H],
-                                   [ax.C, ax.W],
-                                   [ax.W, ax.H]]:
-                dims = tuple(axes.index(axis) for axis in reduction_axes)
-                npval = npred(u, dims)
-                graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-                graph_val, = execute([graph_reduce])
-                assert np.array_equal(
-                    npval, graph_val), 'red:{red}, axes:{axes}'.format(
-                    red=red, axes=reduction_axes)
+    for npred, bered, red in [(np.sum, be.sum, 'sum'),
+                              (np.max, be.max, 'max'),
+                              (np.min, be.min, 'min')]:
+        for reduction_axes in [[ax.C],
+                               [ax.W],
+                               [ax.H],
+                               [ax.C, ax.W],
+                               [ax.W, ax.H]]:
+            dims = tuple(axes.index(axis) for axis in reduction_axes)
+            npval = npred(u, dims)
+            graph_reduce = bered(p_u, reduction_axes=reduction_axes)
+            graph_val = executor(graph_reduce, p_u)(u)
+            assert np.array_equal(
+                npval, graph_val), 'red:{red}, axes:{axes}'.format(
+                red=red, axes=reduction_axes)
 
 
+@be.with_bound_environment
 def test_reduction_deriv():
-    with be.bound_environment():
-        delta = .001
-        ax.C.length = 4
-        ax.W.length = 10
-        ax.H.length = 10
-        axes = be.Axes([ax.C, ax.W, ax.H])
+    delta = .001
+    ax.C.length = 4
+    ax.W.length = 10
+    ax.H.length = 10
+    axes = be.Axes([ax.C, ax.W, ax.H])
 
-        u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
+    u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
-        p_u = be.placeholder(axes=axes)
-        p_u.value = u
+    p_u = be.placeholder(axes=axes)
 
-        # Need to test max/min differently since if two elements are extremums
-        # and we modify one, the derivative will change.
-        for npred, bered, red in [(np.sum, be.sum, 'sum')]:
-            for reduction_axes in [[ax.C],
-                                   [ax.W],
-                                   [ax.H],
-                                   [ax.C, ax.W],
-                                   [ax.W, ax.H]]:
-                # dims = tuple(axes.index(axis) for axis in reduction_axes)
-                graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-                dgraph_val_num = transform_numeric_derivative(
-                    graph_reduce, p_u, delta)
-                dgraph_val = transform_derivative(graph_reduce, p_u)
-                assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1,
-                                   rtol=1e-1), 'red:{red}, axes:{axes}'.format(
-                    red=red, axes=reduction_axes)
+    # Need to test max/min differently since if two elements are extremums
+    # and we modify one, the derivative will change.
+    for npred, bered, red in [(np.sum, be.sum, 'sum')]:
+        for reduction_axes in [[ax.C],
+                               [ax.W],
+                               [ax.H],
+                               [ax.C, ax.W],
+                               [ax.W, ax.H]]:
+            # dims = tuple(axes.index(axis) for axis in reduction_axes)
+            graph_reduce = bered(p_u, reduction_axes=reduction_axes)
+            ex = ExecutorFactory()
+            num_fun = ex.numeric_derivative(graph_reduce, p_u, delta)
+            sym_fun = ex.derivative(graph_reduce, p_u)
+            dgraph_val_num = num_fun(u)
+            dgraph_val = sym_fun(u)
+            assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1,
+                               rtol=1e-1), 'red:{red}, axes:{axes}'.format(
+                red=red, axes=reduction_axes)
 
 
+@be.with_bound_environment
 def test_reciprocal():
-    with be.bound_environment():
-        delta = .001
-        ax.W.length = 20
-        ax.N.length = 128
-        axes = be.Axes([ax.W, ax.N])
-        p_u = be.placeholder(axes=axes)
-        u = rng.uniform(.1, 5.0, p_u.axes)
-        p_u.value = u
+    delta = .001
+    ax.W.length = 20
+    ax.N.length = 128
+    axes = be.Axes([ax.W, ax.N])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(.1, 5.0, p_u.axes)
 
-        rec_u_np = np.reciprocal(u)
-        rec_u = be.reciprocal(p_u)
-        rec_u_graph, = execute([rec_u])
-        assert np.allclose(rec_u_np, rec_u_graph)
+    rec_u_np = np.reciprocal(u)
+    rec_u = be.reciprocal(p_u)
 
-        drec_u_num = transform_numeric_derivative(rec_u, p_u, delta)
-        drec_u_graph = transform_derivative(rec_u, p_u)
-        assert np.allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
+    ex = ExecutorFactory()
+    fun = ex.executor(rec_u, p_u)
+
+    drec_u_num_fun = ex.numeric_derivative(rec_u, p_u, delta)
+    drec_u_graph_fun = ex.derivative(rec_u, p_u)
+
+    rec_u_graph = fun(u)
+    assert np.allclose(rec_u_np, rec_u_graph)
+
+    drec_u_num = drec_u_num_fun(u)
+    drec_u_graph = drec_u_graph_fun(u)
+    assert np.allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
 
 
+@be.with_bound_environment
 def test_elementwise_ops_matched_args():
-    with be.bound_environment():
-        delta = .001
-        ax.W.length = 20
-        ax.H.length = 20
-        ax.N.length = 128
-        axes = be.Axes([ax.W, ax.H])
+    delta = .001
+    ax.W.length = 20
+    ax.H.length = 20
+    ax.N.length = 128
+    axes = be.Axes([ax.W, ax.H])
 
-        for np_op, be_op, op in [(np.add, be.add, 'add'),
-                                 (np.subtract, be.subtract, 'sub'),
-                                 (np.multiply, be.multiply, 'multiply'),
-                                 (np.divide, be.divide, 'divide')]:
-            # Matched sizes
-            p_u = be.placeholder(axes=axes)
-            p_v = be.placeholder(axes=axes)
-            u = rng.uniform(-1.0, 1.0, p_u.axes)
-            v = rng.uniform(1.0, 2.0, p_v.axes)
-            result_np = np_op(u, v)
+    for np_op, be_op, op in [(np.add, be.add, 'add'),
+                             (np.subtract, be.subtract, 'sub'),
+                             (np.multiply, be.multiply, 'multiply'),
+                             (np.divide, be.divide, 'divide')]:
+        # Matched sizes
+        p_u = be.placeholder(axes=axes)
+        p_v = be.placeholder(axes=axes)
+        u = rng.uniform(-1.0, 1.0, p_u.axes)
+        v = rng.uniform(1.0, 2.0, p_v.axes)
+        result_np = np_op(u, v)
 
-            p_u.value = u
-            p_v.value = v
-            result_op = be_op(p_u, p_v)
+        result_op = be_op(p_u, p_v)
 
-            # ensure numpy and neon backend perform the same cacluclation
-            result_be, = execute([result_op])
-            assert np.allclose(result_np, result_be, atol=1e-4,
-                               rtol=1e-4), 'op:{op}'.format(op=op)
+        ex = ExecutorFactory()
+        fun = ex.executor(result_op, p_u, p_v)
 
-            # ensure that a numeric approximation of the derivative and the
-            # analytic derivative are the same
-            duvdunum = transform_numeric_derivative(result_op, p_u, delta)
-            dudvdut = transform_derivative(result_op, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-4,
-                               rtol=1e-4), 'op:{op}'.format(op=op)
+        duvdunum_fun = ex.numeric_derivative(result_op, p_u, delta, p_v)
 
-            # same as above, but for v instead of u
-            duvdvnum = transform_numeric_derivative(result_op, p_v, delta)
-            dudvdvt = transform_derivative(result_op, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        duvdut_fun = ex.derivative(result_op, p_u, p_v)
 
-        for np_op, be_op, op in [(np.exp, be.exp, 'exp'),
-                                 (np.log, be.log, 'log'),
-                                 (np.tanh, be.tanh, 'tanh')]:
-            p_u = be.placeholder(axes=axes)
-            u = rng.uniform(1.0, 2.0, p_u.axes)
-            u_np = np_op(u)
-            p_u.value = u
-            result_op = be_op(p_u)
+        # same as above, but for v instead of u
+        duvdvnum_fun = ex.numeric_derivative(result_op, p_v, delta, p_u)
+        duvdvt_fun = ex.derivative(result_op, p_v, p_u)
 
-            u_t, = execute([result_op])
-            assert np.allclose(u_np, u_t, atol=1e-4,
-                               rtol=1e-4), 'op:{op}'.format(op=op)
-            dudunum = transform_numeric_derivative(result_op, p_u, delta)
-            dudut = transform_derivative(result_op, p_u)
-            assert np.allclose(dudunum, dudut, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        # ensure numpy and neon backend perform the same cacluclation
+        result_be = fun(u, v)
+        assert np.allclose(result_np, result_be, atol=1e-4,
+                           rtol=1e-4), 'op:{op}'.format(op=op)
+
+        duvdunum = duvdunum_fun(u, v)
+        duvdut = duvdut_fun(u, v)
+        assert np.allclose(duvdunum, duvdut, atol=1e-4,
+                           rtol=1e-4), 'op:{op}'.format(op=op)
+
+        # same as above, but for v instead of u
+        duvdvnum = duvdvnum_fun(v, u)
+        duvdvt = duvdvt_fun(v, u)
+        assert np.allclose(duvdvnum, duvdvt, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
+
+    for np_op, be_op, op in [(np.exp, be.exp, 'exp'),
+                             (np.log, be.log, 'log'),
+                             (np.tanh, be.tanh, 'tanh')]:
+        p_u = be.placeholder(axes=axes)
+        u = rng.uniform(1.0, 2.0, p_u.axes)
+        u_np = np_op(u)
+        result_op = be_op(p_u)
+
+        ex = ExecutorFactory()
+        fun = ex.executor(result_op, p_u)
+        dudunum_fun = ex.numeric_derivative(result_op, p_u, delta)
+        dudut_fun = ex.derivative(result_op, p_u)
+
+        u_t = fun(u)
+        assert np.allclose(u_np, u_t, atol=1e-4,
+                           rtol=1e-4), 'op:{op}'.format(op=op)
+        dudunum = dudunum_fun(u)
+        dudut = dudut_fun(u)
+        assert np.allclose(dudunum, dudut, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
 
 
+@be.with_bound_environment
 def test_elementwise_ops_unmatched_args():
-    with be.bound_environment():
-        # delta = .001
-        ax.W.length = 5
-        ax.H.length = 5
-        ax.N.length = 32
-        sample_axes = [ax.W, ax.H]
-        batch_axes = [ax.W, ax.H, ax.N]
-        broadcast_dims = (ax.W.length, ax.H.length, 1)
+    # delta = .001
+    ax.W.length = 5
+    ax.H.length = 5
+    ax.N.length = 32
+    sample_axes = [ax.W, ax.H]
+    batch_axes = [ax.W, ax.H, ax.N]
+    broadcast_dims = (ax.W.length, ax.H.length, 1)
 
-        for np_op, be_op, op in [(np.add, be.add, 'add'),
-                                 (np.subtract, be.subtract, 'sub'),
-                                 (np.multiply, be.multiply, 'multiply'),
-                                 (np.divide, be.divide, 'divide')]:
-            # Matched sizes
-            p_u = be.placeholder(axes=sample_axes)
-            p_v = be.placeholder(axes=batch_axes)
-            u = rng.uniform(1.0, 2.0, p_u.axes)
-            v = rng.uniform(1.0, 2.0, p_v.axes)
+    for np_op, be_op, op in [(np.add, be.add, 'add'),
+                             (np.subtract, be.subtract, 'sub'),
+                             (np.multiply, be.multiply, 'multiply'),
+                             (np.divide, be.divide, 'divide')]:
+        # Matched sizes
+        p_u = be.placeholder(axes=sample_axes)
+        p_v = be.placeholder(axes=batch_axes)
+        u = rng.uniform(1.0, 2.0, p_u.axes)
+        v = rng.uniform(1.0, 2.0, p_v.axes)
 
-            p_u.value = u
-            p_v.value = v
+        # u op v
+        uv_np = np_op(u.reshape(broadcast_dims), v)
+        uv_op = be_op(p_u, p_v)
 
-            # u op v
-            result_np = np_op(u.reshape(broadcast_dims), v)
-            result_op = be_op(p_u, p_v)
+        ex = ExecutorFactory()
 
-            result_be, = execute([result_op])
-            assert np.allclose(result_np, result_be, atol=1e-4,
-                               rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(result_op, p_u, .001)
-            dudvdut = transform_derivative(result_op, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        # fun(u, v)
+        uv_fun = ex.executor(uv_op, p_u, p_v)
+        duvdunum_fun = ex.numeric_derivative(uv_op, p_u, .001, p_v)
+        duvdut_fun = ex.derivative(uv_op, p_u, p_v)
+        duvdvnum_fun = ex.numeric_derivative(uv_op, p_v, .001, p_u)
+        duvdvt_fun = ex.derivative(uv_op, p_v, p_u)
 
-            duvdvnum = transform_numeric_derivative(result_op, p_v, .001)
-            dudvdvt = transform_derivative(result_op, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        # fun(v, u)
+        vu_np = np_op(v, u.reshape(broadcast_dims))
+        vu_op = be_op(p_v, p_u)
 
-            # v op u
-            result_np = np_op(v, u.reshape(broadcast_dims))
-            result_op = be_op(p_v, p_u)
+        vu_fun = ex.executor(vu_op, p_u, p_v)
+        dvudunum_fun = ex.numeric_derivative(vu_op, p_u, .001, p_v)
+        dvudut_fun = ex.derivative(vu_op, p_u, p_v)
+        dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, .001, p_u)
+        dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
-            result_be, = execute([result_op])
-            assert np.allclose(result_np, result_be, atol=1e-4,
-                               rtol=1e-4), 'op:{op}'.format(op=op)
-            duvdunum = transform_numeric_derivative(result_op, p_u, .001)
-            dudvdut = transform_derivative(result_op, p_u)
-            assert np.allclose(duvdunum, dudvdut, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        result_be = uv_fun(u, v)
+        assert np.allclose(uv_np, result_be, atol=1e-4,
+                           rtol=1e-4), 'op:{op}'.format(op=op)
+        duvdunum = duvdunum_fun(u, v)
+        duvdut = duvdut_fun(u, v)
+        assert np.allclose(duvdunum, duvdut, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
 
-            duvdvnum = transform_numeric_derivative(result_op, p_v, .001)
-            dudvdvt = transform_derivative(result_op, p_v)
-            assert np.allclose(duvdvnum, dudvdvt, atol=1e-3,
-                               rtol=1e-3), 'op:{op}'.format(op=op)
+        duvdvnum = duvdvnum_fun(v, u)
+        duvdvt = duvdvt_fun(v, u)
+        assert np.allclose(duvdvnum, duvdvt, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
+
+        # v op u
+
+        result_be = vu_fun(u, v)
+        assert np.allclose(vu_np, result_be, atol=1e-4,
+                           rtol=1e-4), 'op:{op}'.format(op=op)
+        dvudunum = dvudunum_fun(u, v)
+        dvudut = dvudut_fun(u, v)
+        assert np.allclose(dvudunum, dvudut, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
+
+        dvudvnum = dvudvnum_fun(v, u)
+        dvudvt = dvudvt_fun(v, u)
+        assert np.allclose(dvudvnum, dvudvt, atol=1e-3,
+                           rtol=1e-3), 'op:{op}'.format(op=op)
 
 
 def np_softmax(x, axis):
@@ -301,46 +347,46 @@ def cross_entropy_binary_logistic_shortcut(x, t):
     return (1.0 - t) * x - np.log(y)
 
 
+@be.with_bound_environment
 def test_cross_entropy_binary_logistic_shortcut():
-    with be.bound_environment():
-        ax.W.length = 20
-        ax.N.length = 128
-        axes = be.Axes([ax.W, ax.N])
-        p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes)
-        p_u.value = u
-        p_v = be.placeholder(axes=axes)
-        v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes), 0)
-        p_v.value = v
+    ax.W.length = 20
+    ax.N.length = 128
+    axes = be.Axes([ax.W, ax.N])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(-3.0, 3.0, p_u.axes)
+    p_v = be.placeholder(axes=axes)
+    v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes), 0)
 
-        cel = cross_entropy_binary_logistic(u, v)
-        cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
-        assert np.allclose(cel, cel_shortcut)
+    cel = cross_entropy_binary_logistic(u, v)
+    cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
+    assert np.allclose(cel, cel_shortcut)
 
-        cel_graph, = execute([be.cross_entropy_binary_inner(be.sigmoid(p_u), p_v)])
-        assert np.allclose(cel, cel_graph)
+    cel_graph = executor(be.cross_entropy_binary_inner(be.sigmoid(p_u), p_v), p_u, p_v)(u, v)
+    assert np.allclose(cel, cel_graph)
 
 
+@be.with_bound_environment
 def test_cross_entropy_binary():
-    with be.bound_environment():
-        delta = .001
-        ax.W.length = 20
-        ax.N.length = 128
-        axes = be.Axes([ax.W, ax.N])
-        p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes)
-        p_u.value = u
-        p_v = be.placeholder(axes=axes)
-        v = rng.uniform(-3.0, 3.0, p_u.axes)
-        p_v.value = v
+    delta = .001
+    ax.W.length = 20
+    ax.N.length = 128
+    axes = be.Axes([ax.W, ax.N])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(-3.0, 3.0, p_u.axes)
+    p_v = be.placeholder(axes=axes)
+    v = rng.uniform(-3.0, 3.0, p_u.axes)
 
-        y = be.sigmoid(p_u)
-        t = be.softmax(p_v)
-        val_u = be.cross_entropy_binary_inner(y, t)
+    y = be.sigmoid(p_u)
+    t = be.softmax(p_v)
+    val_u = be.cross_entropy_binary_inner(y, t)
 
-        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
-        dval_u_graph = transform_derivative(val_u, p_u)
-        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    ex = ExecutorFactory()
+    dval_u_num_fun = ex.numeric_derivative(val_u, p_u, delta, p_v)
+    dval_u_graph_fun = ex.derivative(val_u, p_u, p_v)
+
+    dval_u_num = dval_u_num_fun(u, v)
+    dval_u_graph = dval_u_graph_fun(u, v)
+    assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
 
 def adiff_softmax(x):
@@ -367,138 +413,145 @@ def adiff_softmax(x):
     return result
 
 
+@be.with_bound_environment
 def test_np_softmax():
-    with be.bound_environment():
-        ax.N.length = 128
-        ax.C.length = 20
+    ax.N.length = 128
+    ax.C.length = 20
 
-        # set up some distributions
-        u = np.empty((ax.C.length, ax.N.length))
-        u = rng.uniform(0, 1, be.Axes([ax.C, ax.N]))
-        u = u / sum(u, 0).reshape(1, ax.N.length)
+    # set up some distributions
+    u = np.empty((ax.C.length, ax.N.length))
+    u = rng.uniform(0, 1, be.Axes([ax.C, ax.N]))
+    u = u / sum(u, 0).reshape(1, ax.N.length)
 
-        # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000,
-                                    be.Axes([ax.N])).reshape(1, ax.N.length)
+    # Put them in pre-softmax form
+    x = np.log(u) + rng.uniform(-5000, 5000,
+                                be.Axes([ax.N])).reshape(1, ax.N.length)
 
-        s = np_softmax(x, 0)
-        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    s = np_softmax(x, 0)
+    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        # Drop batch axis and test the derivative
-        x0 = x[:, 0]
+    # Drop batch axis and test the derivative
+    x0 = x[:, 0]
 
-        def np_softmax_0(x):
-            return np_softmax(x, 0)
+    def np_softmax_0(x):
+        return np_softmax(x, 0)
 
-        a = numeric_derivative(np_softmax_0, x0, .001)
-        s = adiff_softmax(x0)
-        assert np.allclose(s, a, atol=1e-2, rtol=1e-2)
+    a = numeric_derivative(np_softmax_0, x0, .001)
+    s = adiff_softmax(x0)
+    assert np.allclose(s, a, atol=1e-2, rtol=1e-2)
 
 
 def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
+@be.with_bound_environment
 def test_softmax():
-    with be.bound_environment():
-        ax.W.length = 128
-        ax.N.length = 10
-        be.set_batch_axes([ax.N])
-        axes = [ax.W, ax.N]
+    ax.W.length = 128
+    ax.N.length = 10
+    be.set_batch_axes([ax.N])
+    axes = be.Axes([ax.W, ax.N])
 
-        # set up some distributions
-        u = rng.uniform(0, 1, be.Axes([ax.W, ax.N]))
-        u = u / sum(u, 0).reshape(1, ax.N.length)
+    # set up some distributions
+    u = rng.uniform(0, 1, be.Axes([ax.W, ax.N]))
+    u = u / sum(u, 0).reshape(1, ax.N.length)
 
-        # Put them in pre-softmax form
-        x = np.log(u) + rng.uniform(-5000, 5000,
-                                    be.Axes([ax.N])).reshape(1, ax.N.length)
-        p_x = be.placeholder(axes=axes)
-        p_x.value = x
+    # Put them in pre-softmax form
+    x = np.log(u) + rng.uniform(-5000, 5000,
+                                be.Axes([ax.N])).reshape(1, ax.N.length)
+    p_x = be.placeholder(axes=axes)
 
-        s, = execute([be.softmax(p_x, softmax_axes=be.Axes([ax.W]))])
-        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    ex = ExecutorFactory()
+    smax_w_fun = ex.executor(be.softmax(p_x, softmax_axes=be.Axes([ax.W])), p_x)
+    smax_fun = ex.executor(be.softmax(p_x), p_x)
 
-        x = rng.uniform(-5000, 5000, be.Axes([ax.W, ax.N]))
-        p_x.value = x
-        u = np_softmax(x, 0)
-        s, = execute([be.softmax(p_x, softmax_axes=be.Axes([ax.W]))])
-        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    s = smax_w_fun(x)
+    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        # Test with softmax_axis default
-        s, = execute([be.softmax(p_x)])
-        assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    x = rng.uniform(-5000, 5000, be.Axes([ax.W, ax.N]))
+    u = np_softmax(x, 0)
+    s = smax_w_fun(x)
+    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        # Now try the derivative
-        axes = be.Axes([ax.W, ax.N])
-        ax.W.length = 3
-        ax.N.length = 10
-
-        x = rng.uniform(0, 1, axes)
-        p_x = be.placeholder(axes=axes)
-        p_x.value = x
-
-        sx = be.softmax(p_x)
-        sxval, = execute([sx])
-
-        # npadiff = adiff_softmax(x)
-        ndsx = transform_numeric_derivative(sx, p_x, .001)
-
-        # assert np.allclose(npadiff, ndsx, atol=1e-2, rtol=1e-2)
-
-        tdsx = transform_derivative(sx, p_x)
-        assert np.allclose(ndsx, tdsx, atol=1e-2, rtol=1e-2)
-
-        # Now try cross-entropy
-        t = np_softmax(rng.uniform(0, 1, axes), 0)
-        p_t = be.placeholder(axes=axes)
-        p_t.value = t
-
-        ce = be.cross_entropy_multi(sx, p_t)
-        npsm = np_softmax(x, 0)
-        nce = np_cross_entropy_multi(npsm, t, axis=0)
-        tce, tsm = execute([ce, sx])
-        assert np.allclose(nce, tce), sum(t)
-
-        def np_all(x):
-            return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
-
-#       npdce = numeric_derivative(np_all, x, .001)
-
-        ndce = transform_numeric_derivative(ce, p_x, .001)
-        tdce = transform_derivative(ce, p_x)
-        assert np.allclose(ndce, tdce, atol=1e-2, rtol=1e-2)
+    # Test with softmax_axis default
+    s = smax_fun(x)
+    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
+@be.with_bound_environment
+def test_softmax_deriv():
+    ax.W.length = 3
+    ax.N.length = 10
+    be.set_batch_axes([ax.N])
+    axes = be.Axes([ax.W, ax.N])
+
+    p_x = be.placeholder(axes=axes)
+    softmax_x = be.softmax(p_x)
+
+    p_t = be.placeholder(axes=axes)
+    cross_entropy_sm_x_t = be.cross_entropy_multi(softmax_x, p_t)
+
+    ex = ExecutorFactory()
+    softmax_x_num_deriv_fun = ex.numeric_derivative(softmax_x, p_x, .001)
+    softmax_x_deriv_fun = ex.derivative(softmax_x, p_x)
+    cross_entropy_fun = ex.executor([cross_entropy_sm_x_t, softmax_x], p_x, p_t)
+    cross_entropy_num_deriv_fun = ex.numeric_derivative(cross_entropy_sm_x_t, p_x, .001, p_t)
+    cross_entropy_deriv_fun = ex.derivative(cross_entropy_sm_x_t, p_x, p_t)
+
+    x = rng.uniform(0, 1, axes)
+    t = np_softmax(rng.uniform(0, 1, axes), 0)
+
+    softmax_x_np = np_softmax(x, 0)
+
+    softmax_x_num_deriv = softmax_x_num_deriv_fun(x)
+    softmax_x_deriv = softmax_x_deriv_fun(x)
+    assert np.allclose(softmax_x_num_deriv, softmax_x_deriv, atol=1e-2, rtol=1e-2)
+
+    cross_entropy_np = np_cross_entropy_multi(softmax_x_np, t, axis=0)
+    cross_entropy, softmax_x = cross_entropy_fun(x, t)
+    assert np.allclose(softmax_x, softmax_x_np)
+    assert np.allclose(cross_entropy_np, cross_entropy)
+
+    cross_entropy_num_deriv = cross_entropy_num_deriv_fun(x, t)
+    cross_entropy_deriv = cross_entropy_deriv_fun(x, t)
+    assert np.allclose(cross_entropy_num_deriv, cross_entropy_deriv, atol=1e-2, rtol=1e-2)
+
+
+@be.with_bound_environment
 def test_sigmoid():
-    with be.bound_environment():
-        delta = .001
-        ax.W.length = 20
-        ax.N.length = 128
-        axes = be.Axes([ax.W, ax.N])
-        p_u = be.placeholder(axes=axes)
-        u = rng.uniform(-3.0, 3.0, p_u.axes)
-        p_u.value = u
+    delta = .001
+    ax.W.length = 20
+    ax.N.length = 128
+    axes = be.Axes([ax.W, ax.N])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(-3.0, 3.0, p_u.axes)
 
-        val_u_np = 1.0 / (1 + np.exp(-u))
-        val_u = be.sigmoid(p_u)
-        val_u_graph, = execute([val_u])
-        assert np.allclose(val_u_np, val_u_graph)
+    val_u_np = 1.0 / (1 + np.exp(-u))
+    val_u = be.sigmoid(p_u)
+    log_val_u = be.log(val_u)
 
-        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
-        dval_u_graph = transform_derivative(val_u, p_u)
-        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    ex = ExecutorFactory()
+    val_u_graph_fun = ex.executor(val_u, p_u)
+    dval_u_num_fun = ex.numeric_derivative(val_u, p_u, delta)
+    dval_u_graph_fun = ex.derivative(val_u, p_u)
+    dlog_val_u_num_fun = ex.numeric_derivative(log_val_u, p_u, delta)
+    dlog_val_u_graph_fun = ex.derivative(log_val_u, p_u)
 
-        val_u = be.log(val_u)
-        dval_u_num = transform_numeric_derivative(val_u, p_u, delta)
-        dval_u_graph = transform_derivative(val_u, p_u)
-        assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    val_u_graph = val_u_graph_fun(u)
+    assert np.allclose(val_u_np, val_u_graph)
+
+    dval_u_num = dval_u_num_fun(u)
+    dval_u_graph = dval_u_graph_fun(u)
+    assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+
+    dlog_val_u_num = dlog_val_u_num_fun(u)
+    dlog_val_u_graph = dlog_val_u_graph_fun(u)
+    assert np.allclose(dlog_val_u_graph, dlog_val_u_num, atol=1e-2, rtol=1e-2)
 
 
 def one_hot_comparison(hot_axes, axes):
     u = rng.random_integers(0, ax.C.length - 1, axes, dtype=np.int8)
     u_p = be.placeholder(axes=axes, dtype=u.dtype)
-    u_p.value = u
     v = np.zeros(hot_axes.lengths, dtype=np.float32)
     udxiter = np.nditer(u, flags=['multi_index'])
     for uiter in udxiter:
@@ -506,22 +559,22 @@ def one_hot_comparison(hot_axes, axes):
         vindex.extend(udxiter.multi_index)
         v[tuple(vindex)] = 1
 
-    v_t, = execute([be.onehot(u_p, axis=ax.C)])
+    v_t = executor(be.onehot(u_p, axis=ax.C), u_p)(u)
     assert np.array_equal(v_t, v)
 
 
+@be.with_bound_environment
 def test_onehot():
-    with be.bound_environment():
-        ax.C.length = 4
-        ax.W.length = 32
-        ax.H.length = 32
-        ax.N.length = 128
-        be.set_batch_axes([ax.N])
-        one_hot_comparison(be.Axes([ax.C, ax.N]), be.Axes([ax.N]))
-        one_hot_comparison(be.Axes([ax.C, ax.W, ax.H, ax.N]), be.Axes([ax.W, ax.H, ax.N]))
+    ax.C.length = 4
+    ax.W.length = 32
+    ax.H.length = 32
+    ax.N.length = 128
+    be.set_batch_axes([ax.N])
+    one_hot_comparison(be.Axes([ax.C, ax.N]), be.Axes([ax.N]))
+    one_hot_comparison(be.Axes([ax.C, ax.W, ax.H, ax.N]), be.Axes([ax.W, ax.H, ax.N]))
 
 
+@be.with_bound_environment
 def test_empty_finalize():
     """ evaluating an empty NumPyTransformer shouldn't raise any exceptions """
-    with be.bound_environment():
-        be.NumPyTransformer(results=[]).evaluate()
+    be.NumPyTransformer().initialize()

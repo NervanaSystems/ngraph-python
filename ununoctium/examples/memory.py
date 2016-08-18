@@ -16,10 +16,18 @@
 from __future__ import print_function
 import geon as be
 import numpy as np
-import mxnet as mx
-import mxnet.symbol as sym
+
+have_mxnet = False
+try:
+    import mxnet as mx
+    import mxnet.symbol as sym
+    have_mxnet = True
+except:
+    pass
 
 
+# TODO If this does something useful, figure out what it is trying to do and fix it,
+# otherwise remove the file.
 class GraphitiMLP(be.Model):
 
     def __init__(self, L, BS, bprop=True, **kargs):
@@ -44,44 +52,47 @@ class GraphitiMLP(be.Model):
 
         # Fusion analysis
         results = dW if bprop else [Error]
-        transformer = be.NumPyTransformer(results=results, fusion=None)
+        transformer = be.NumPyTransformer(fusion=None)
+        comp = transformer.computation(results)
+        transformer.allocate()
         self.memory = transformer.memory
         transformer.dataflow.view()
-        transformer.evaluate(results)
+        comp()
 
 
-class MXNetMLP:
+if have_mxnet:
+    class MXNetMLP:
 
-    def __init__(self, L, BS, bprop=True, **kwargs):
-        # Builds Network
-        # activations = ['tanh' for i in range(len(L) - 2)]
-        X = sym.Variable('X', shape=(BS, L[0]))
-        Y = sym.Variable('Y', shape=(BS,))
+        def __init__(self, L, BS, bprop=True, **kwargs):
+            # Builds Network
+            # activations = ['tanh' for i in range(len(L) - 2)]
+            X = sym.Variable('X', shape=(BS, L[0]))
+            Y = sym.Variable('Y', shape=(BS,))
 
-        fc, act = [], [X]
-        for i, nhid in enumerate(L[1:]):
-            fc.append(sym.FullyConnected(data=act[-1], num_hidden=nhid))
-            if i == len(L) - 2:
-                act.append(sym.Activation(data=fc[-1], act_type='relu'))
-            else:
-                act.append(sym.SoftmaxOutput(
-                    data=fc[-1], label=Y, name='softmax'))
-        net = act[-1]
-        plan = net.simple_bind(
-            ctx=mx.cpu(), grad_req='write' if bprop else 'null')
+            fc, act = [], [X]
+            for i, nhid in enumerate(L[1:]):
+                fc.append(sym.FullyConnected(data=act[-1], num_hidden=nhid))
+                if i == len(L) - 2:
+                    act.append(sym.Activation(data=fc[-1], act_type='relu'))
+                else:
+                    act.append(sym.SoftmaxOutput(
+                        data=fc[-1], label=Y, name='softmax'))
+            net = act[-1]
+            plan = net.simple_bind(
+                ctx=mx.cpu(), grad_req='write' if bprop else 'null')
 
-        # Memory internally allocated by MXNet
-        # Casted to int internally (rounded down)
-        # in average ~.5 smaller than the truth
-        bias = .5
-        self.memory = (int(plan.debug_str().split(
-            '\n')[-3].split()[1]) + bias) * 1024**2
-        # Memory required by arguments
-        args = plan.arg_arrays
-        if plan.grad_arrays:
-            args += plan.grad_arrays
-        for x in args:
-            self.memory += np.prod(x.shape) * 4
+            # Memory internally allocated by MXNet
+            # Casted to int internally (rounded down)
+            # in average ~.5 smaller than the truth
+            bias = .5
+            self.memory = (int(plan.debug_str().split(
+                '\n')[-3].split()[1]) + bias) * 1024**2
+            # Memory required by arguments
+            args = plan.arg_arrays
+            if plan.grad_arrays:
+                args += plan.grad_arrays
+            for x in args:
+                self.memory += np.prod(x.shape) * 4
 
 
 layers = [1024, 200, 10]
@@ -89,7 +100,11 @@ batch = 320000
 bprop = True
 
 graphiti = GraphitiMLP(layers, batch, bprop)
-mxnet = MXNetMLP(layers, batch, bprop)
+
+if have_mxnet:
+    mxnet = MXNetMLP(layers, batch, bprop)
 
 print('Graphiti: {:.2f} MiB'.format(graphiti.memory * 1024**-2))
-print('MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory * 1024**-2))
+
+if have_mxnet:
+    print('MXNet:    {:.2f} MiB (+- 0.5)'.format(mxnet.memory * 1024**-2))

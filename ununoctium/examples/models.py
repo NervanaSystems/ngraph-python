@@ -17,8 +17,6 @@ from __future__ import division, print_function
 from builtins import range, zip
 from geon.frontends.neon import *  # noqa
 
-import numpy as np
-
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -110,90 +108,72 @@ class MyTest(be.Model):
 
         g.loss = g.error + .01 * reg
 
-    @be.with_graph_scope
-    def dump(self):
-        g = self.graph
-
-        g.x.value = np.empty((3, 32, 32, 128))
-        g.y.value = np.empty((1000, 128))
-
-        params = g.error.variables()
-        derivs = [be.deriv(g.error, param) for param in params]
-
-        gnp = evaluation.GenNumPy(results=derivs)
-        gnp.evaluate()
+        self.transformer = be.NumPyTransformer()
+        self.train_comp = None
+        self.test_comp = None
 
     @be.with_graph_scope
     def train(self):
-        with be.bound_environment() as env:
-            # setup data provider
-            imgset_options = dict(
-                inner_size=32,
-                scale_range=40,
-                aspect_ratio=110,
-                repo_dir=args.data_dir,
-                subset_pct=args.subset_pct)
+        # setup data provider
+        imgset_options = dict(
+            inner_size=32,
+            scale_range=40,
+            aspect_ratio=110,
+            repo_dir=args.data_dir,
+            subset_pct=args.subset_pct)
 
-            train = ImageLoader(
-                set_name='train', shuffle=True, **imgset_options)
-            test = ImageLoader(
-                set_name='validation',
-                shuffle=False,
-                do_transforms=False,
-                **imgset_options)
+        train = ImageLoader(
+            set_name='train', shuffle=True, **imgset_options)
+        test = ImageLoader(
+            set_name='validation',
+            shuffle=False,
+            do_transforms=False,
+            **imgset_options)
 
-            graph = self.graph
-            ax.N.length = train.bsz
-            c, h, w = train.shape
-            ax.C.length = c
-            ax.H.length = h
-            ax.W.length = w
-            ax.Y.length = train.nclasses
-
-            learning_rate, updates = grad_descent(graph.error)
-
-            enp = be.NumPyTransformer(
-                results=[self.graph.value, graph.error, updates])
-
-            for epoch in range(args.epochs):
-                print("Epoch {epoch}".format(epoch=epoch))
-                training_error = 0
-                training_n = 0
-                learning_rate.value = .1 / (1 + epoch) / train.bsz
-                for mb_idx, (x, y) in enumerate(train):
-                    graph.x.value = x.reshape(graph.x.shape.lengths)
-                    graph.y.value = y.reshape(graph.y.shape.lengths)
-                    vals = enp.evaluate()
-                    training_error += vals[graph.error] / train.bsz
-                    training_n += 1
-                    # break
-
-                print('Training error: {e}'.format(
-                    e=training_error / training_n))
-                self.test(env, test)
-
-                train.reset()
-
-            return env
-
-    @be.with_graph_scope
-    def test(self, env, test):
         graph = self.graph
-        with be.bound_environment(env):
-            enp = be.NumPyTransformer(results=[self.graph.value, graph.error])
-            total_error = 0
-            n = 0
-            for mb_idx, (xraw, yraw) in enumerate(test):
-                graph.x.value = xraw.reshape(graph.x.shape.lengths)
-                graph.y.value = yraw.reshape(graph.y.shape.lengths)
-                vals = enp.evaluate()
-                total_error += vals[graph.error] / test.bsz
-                n += 1
+        ax.N.length = train.bsz
+        c, h, w = train.shape
+        ax.C.length = c
+        ax.H.length = h
+        ax.W.length = w
+        ax.Y.length = train.nclasses
+
+        learning_rate, updates = grad_descent(graph.error)
+
+        self.train_comp = self.transformer.computation(graph.error, graph.x, graph.y, updates)
+        self.test_comp = self.transformer.computation(graph.error, graph.x, graph.y)
+        self.transformer.allocate()
+
+        for epoch in range(args.epochs):
+            print("Epoch {epoch}".format(epoch=epoch))
+            training_error = 0
+            training_n = 0
+            learning_rate.value = .1 / (1 + epoch) / train.bsz
+            for mb_idx, (x, y) in enumerate(train):
+                error = self.train_comp(x.reshape(graph.x.shape.lengths),
+                                        y.reshape(graph.y.shape.lengths))
+                training_error += error / train.bsz
+                training_n += 1
                 # break
-            print("Test error: {e}".format(e=total_error / n))
+
+            print('Training error: {e}'.format(
+                e=training_error / training_n))
+            self.test(test)
+
+            train.reset()
+
+    def test(self, test):
+        graph = self.graph
+        total_error = 0
+        n = 0
+        for mb_idx, (xraw, yraw) in enumerate(test):
+            error = self.test_comp(xraw.reshape(graph.x.shape.lengths),
+                                   yraw.reshape(graph.y.shape.lengths))
+            total_error += error / test.bsz
+            n += 1
+            # break
+        print("Test error: {e}".format(e=total_error / n))
 
 
 y = MyTest()
-# y.dump()
-env = y.train()
-# y.test(env)
+y.train()
