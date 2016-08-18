@@ -74,6 +74,8 @@ class Node(NameableValue, DebugInfo):
         self.__args = ()
         self.tags = set()
         self.args = args
+        # TODO: is this ok?  __repr__ wants a .name
+        self.name = None
 
         if tags is not None:
             if isinstance(tags, collections.Iterable) and \

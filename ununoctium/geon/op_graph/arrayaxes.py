@@ -89,8 +89,9 @@ class AxisVar(Axis):
 
 class NumericAxis(Axis):
     """
-    A NumericAxis is an axis which is uniquely identified by its length.  All
-    NumericAxis with the same length are the same NumericAxis.
+    A NumericAxis is an axis which is uniquely identified by its length.
+    Every NumericAxis with the same length is the same instance of
+    NumericAxis.
     """
 
     cache = {}
@@ -1095,6 +1096,24 @@ def get_batch_axes(default=Axes()):
     if environment is None:
         return default
     return environment.get_value('batch_axes', default)
+
+
+def get_batch_axis():
+    """ return the batch axis used in this environment.
+
+    raises a ValueError if there are more than 1 batch axis.
+    """
+    batch_axes = get_batch_axes()
+    if len(batch_axes) == 0:
+        raise ValueError("expected a batch axes, but found none.")
+    elif len(batch_axes) > 1:
+        raise ValueError(
+            "expected 1 batch axes, but found {}: {}".format(
+                len(batch_axes), [str(axis) for axis in batch_axes]
+            )
+        )
+    else:
+        return batch_axes[0]
 
 
 @with_args_as_axes

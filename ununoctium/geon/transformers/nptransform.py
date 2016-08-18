@@ -13,11 +13,64 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import division
+
 import numpy as np
 from builtins import range
+import math
+
+from neon.backends.layer_cpu import ConvLayer
 
 from geon.op_graph.op_graph import AllocationOp
+from geon.op_graph import arrayaxes
 from geon.transformers.base import Transformer
+
+
+class proxy_backend(object):
+    """ a fake neon backend to make ConvLayer not raise an exception. """
+    # TODO: refactor away
+
+    def check_caffe_compat(self):
+        """ no caffe compat for now """
+        return False
+
+    def output_dim(self, X, S, padding, strides, pooling=False):
+        """
+        Compute along 1 dimension, with these sizes, what will be the output dimension.
+
+        Arguments:
+            X (int): input data dimension
+            S (int): filter dimension
+            padding (int): padding on each side
+            strides (int): striding
+            pooling (bool): flag for setting pooling layer size
+        """
+        if X < S:
+            raise ValueError((
+                'filter dimension {S} can not be large than input data '
+                'dimension {X}'
+            ).format(S=S, X=X))
+
+        if self.check_caffe_compat() and pooling:
+            size = int(math.ceil((float(X - S + 2 * padding) / strides))) + 1
+            if padding > 0 and (size - 1) * strides >= X + padding:
+                # decrement size if last pooling op is completely in padding
+                size -= 1
+        else:
+            # normal neon output size determination
+            size = ((X - S + 2 * padding) // strides) + 1
+
+        if pooling and padding >= S:
+            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
+
+        return size
+
+
+class proxy_tensor(object):
+    """ A fake CPUTensor to make old neon implementation of ConvLayer happy """
+    # TODO: refactor away
+    def __init__(self, tensor):
+        self._tensor = tensor
 
 
 class NumPyTransformer(Transformer):
@@ -508,6 +561,39 @@ class NumPyTransformer(Transformer):
 
         """
         np.tanh(x, out=out)
+
+    def conv(self, input, filter, output, input_shape, filter_shape, padding, strides):
+        # TODO: change args to ConvLayer to meaningful names instead of random
+        # upper case letters.
+
+        # TODO: only create ConvLayer once per op per session so that things
+        # like autotune only need to be run once per session.
+
+        # TODO: fork ConvLayer and refactor into here/conv op.
+
+        neon_conv_layer = ConvLayer(
+            proxy_backend(), output.dtype,
+            N=arrayaxes.get_batch_axis().length,
+            C=input_shape[0],
+            D=input_shape[1],
+            H=input_shape[2],
+            W=input_shape[3],
+
+            K=filter_shape[0],
+            T=filter_shape[1],
+            R=filter_shape[2],
+            S=filter_shape[3],
+
+            pad_d=padding[0], pad_h=padding[1], pad_w=padding[2],
+            str_d=strides[0], str_h=strides[1], str_w=strides[2],
+        )
+
+        # neon_conv_layer...
+        neon_conv_layer.xprop_conv(
+            proxy_tensor(input),
+            proxy_tensor(filter),
+            proxy_tensor(output),
+        )
 
 
 class NPNormal(AllocationOp):

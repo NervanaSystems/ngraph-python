@@ -1123,6 +1123,16 @@ class NumPyTensor(AllocationOp):
     def __init__(self, nptensor, axes, **kwargs):
         axes = Axes(axes)
         self.nptensor = nptensor
+        if nptensor.shape != axes.lengths:
+            raise ValueError((
+                "Tried to initialize NumPyTensor with numpy array of "
+                "shape {np_shape} though gave axes with a different "
+                "shape {axes_shape}."
+            ).format(
+                np_shape=nptensor.shape,
+                axes_shape=axes.lengths,
+            ))
+
         super(NumPyTensor, self).__init__(
             dtype=nptensor.dtype, axes=axes, **kwargs
         )

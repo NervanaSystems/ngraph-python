@@ -26,6 +26,35 @@ rng = RandomTensorGenerator(0, np.float32)
 
 
 @be.with_bound_environment
+def test_constant_multiply():
+    # TODO: better error message when missing axes length in cases where it
+    # is needed
+    ax.Y.length = 1
+
+    # TODO: don't require axes
+    a = be.NumPyTensor(np.array([4.0], dtype='float32'), axes=[ax.Y])
+    b = be.NumPyTensor(np.array([2.0], dtype='float32'), axes=[ax.Y])
+
+    c = be.multiply(a, b)
+
+    result = executor(c)()
+    assert result == [8]
+
+
+@be.with_bound_environment
+def test_constant_tensor_multiply():
+    ax.Y.length = 2
+
+    a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+    b = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+
+    c = be.multiply(a, b)
+
+    result = executor(c)()
+    assert np.allclose(result, [[1.0, 1.0], [1.0, 1.0]])
+
+
+@be.with_bound_environment
 def test_tensor_sum_single_reduction_axes():
     """TODO."""
     ax.N.length = 2
