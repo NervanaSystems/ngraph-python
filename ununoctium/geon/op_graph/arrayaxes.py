@@ -252,6 +252,10 @@ class Axes(object):
     def __ne__(self, other):
         return not self == other
 
+    def __nonzero__(self):
+        """ Axes considered nonzero if axes are nonzero. """
+        return bool(self._axes)
+
     def concat(self, other):
         """
         TODO.
@@ -1052,7 +1056,7 @@ def with_args_as_axes(f):
         elif isinstance(arg, AxisID):
             return arg.as_axes()
         else:
-            return Axes(*arg)
+            return Axes(arg)
 
     def wrapper(*args):
         """
