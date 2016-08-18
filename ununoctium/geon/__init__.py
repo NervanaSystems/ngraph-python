@@ -17,7 +17,7 @@ from __future__ import print_function
 
 # Flattens backend
 import geon.backends.dataloaderbackend
-from geon.backends.graph.environment import bound_environment, Environment
+from geon.backends.graph.environment import bound_environment, Environment, with_bound_environment
 
 # Flattens frontends
 from geon.frontends.base import graph

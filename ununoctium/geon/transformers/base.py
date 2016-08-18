@@ -16,20 +16,89 @@ from __future__ import division
 
 import abc
 from builtins import object
+import numbers
+import collections
 from future.utils import with_metaclass
 
+import numpy as np
+
 from geon.backends.graph.environment import get_current_environment
-from geon.op_graph.op_graph import Op
+from geon.op_graph.op_graph import Op, placeholder
 from geon.analysis.memory import assign_buffers
 
 
 class Computation(with_metaclass(abc.ABCMeta, object)):
-    def __init__(self, transformer, results):
-        self.transformer = transformer
-        self.results = results
+    def __init__(self, transformer, returns, *args):
+        """
+        Defines computation.
 
-    def evaluate(self):
-        return self.transformer.evaluate(self.results)
+        :param transformer:
+        :param returns: If an Op, return the value of the Op, if sequence of Ops, return
+         the sequence of values, if a Set return a map, if None, return None.
+        :param args: placeholders will be arguments to the function, other values are ops
+        to compute but not return.
+        """
+        self.transformer = transformer
+        self.returns = returns
+        self.__ops = set()
+        if isinstance(returns, collections.Set):
+            self.__ops.update(returns)
+        elif isinstance(returns, collections.Sequence):
+            self.__ops.update(returns)
+        elif isinstance(returns, Op):
+            self.__ops.add(returns)
+        elif returns is None:
+            pass
+        else:
+            raise ValueError()
+
+        self.parameters = []
+        for arg in args:
+            if isinstance(arg, placeholder):
+                self.parameters.append(arg)
+            if isinstance(arg, Op):
+                self.__ops.add(arg)
+            else:
+                raise ValueError()
+
+        self.transformer.all_results.update(self.ops)
+        self.executor = None
+
+    @property
+    def ops(self):
+        """
+        Ops that must be computed
+
+        :return: Set of ops
+        """
+        return self.__ops
+
+    def __call__(self, *args):
+        # TODO Should this be automatic?
+        self.transformer.initialize()
+
+        # Get the parameters to the device
+        for param, arg in zip(self.parameters, args):
+            self.transformer.copy_to_model(param, arg)
+        self.executor()
+
+        # TODO Should copy this out of the device to a destination when it is not scalar
+        def value(op):
+            return op.tensor_description(self.transformer).value
+
+        if isinstance(self.returns, Op):
+            return value(self.returns)
+        elif isinstance(self.returns, collections.Set):
+            result = dict()
+            for op in self.returns:
+                dict[op] = value(op)
+            return result
+
+        elif isinstance(self.returns, collections.Sequence):
+            return tuple(value(op) for op in self.returns)
+
+        else:
+            return None
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
@@ -39,7 +108,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     evaluate method to execute the compiled graph.
     """
 
-    def __init__(self, results=None, environment=None, fusion=None, **kvargs):
+    def __init__(self, environment=None, fusion=None, **kvargs):
         """
         :param results: a list of Ops whose results the Transformer should
             return on `.evaluate()`.  There aren't any good reasons to initialize a
@@ -52,19 +121,23 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if environment is None:
             environment = get_current_environment()
         self.environment = environment
+        self.computations = set()
         self.all_results = set()
         self.values = dict()
         self.cache = dict()
         self.tds = set()
         self.finalized = False
+        self.allocated = False
+        self.initialized = False
         self.opids = dict()
         self.fusion = fusion
 
-        if results is not None:
-            self.all_results.update(results)
-            self.finalize()
-
     def finalize(self):
+        """
+        Prepare for running.
+
+        :return:
+        """
         Op.simple_prune(self.all_results)
 
         # Crate tensor descriptions
@@ -79,18 +152,81 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
-        self.allocate_ordered_ops(self.initializers)
-        self.allocate_ordered_ops(self.ops)
-        self.transform_ordered_ops(self.initializers)
+
         self.finalized = True
 
-    def computation(self, results):
+    def allocate(self):
+        """
+        Allocate storage.
+
+        Will finalize if not already done.
+        :return:
+        """
+        if self.allocated:
+            return
+        if not self.finalized:
+            self.finalize()
+        self.allocate_ordered_ops(self.initializers)
+        self.allocate_ordered_ops(self.ops)
+
+        # Compile the computations now that we know their storage
+        for computation in self.computations:
+            ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
+            computation.executor = self.compile_computation(ordered_ops)
+
+        self.allocated = True
+
+    def initialize(self):
+        """
+        Initialize storage.  Will allocate if not already performed.
+
+        :return:
+        """
+        if self.initialized:
+            return
+        self.allocate()
+        self.transform_ordered_ops(self.initializers)
+        self.initialized = True
+
+    def compile_computation(self, ordered_ops):
+        """
+        Return a function that will run the computation in this transformer.
+
+        Should be overridden by transformers.
+
+        :param computation:
+        :return: Function that runs the computation
+        """
+        return lambda: self.transform_ordered_ops(ordered_ops)
+
+    def computation(self, results, *parameters):
+        """
+        Adds a computation to the transformer.
+
+        :param results: Values to be computed
+        :param parameters: Values to be set as arguments to evaluate
+        :return: Dictionary from results to their values
+        """
         if self.finalized:
             raise ValueError(
                 'Cannot create computations from a finalized transformer'
             )
-        self.all_results.update(results)
-        return Computation(self, results)
+
+        result = Computation(self, results, *parameters)
+        self.computations.add(result)
+        return result
+
+    def copy_to_model(self, tensor_op, value):
+        self.allocate()
+        td = tensor_op.tensor_description(self)
+        if isinstance(value, numbers.Real):
+            self.fill(td.value, value)
+        elif isinstance(value, np.ndarray):
+            if td.value.shape != value.shape:
+                raise ValueError()
+            self.set_item(td.value, (), value)
+        else:
+            raise ValueError()
 
     def initialize_views(self, ordered_ops):
         # Give ids
@@ -155,9 +291,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if transform_hooks are present on the op or on this transformer, call
         those as well.well
         """
-        # ???
-        for op in ordered_ops:
-            op.sync(self)
 
         def transform_op(op):
             """
@@ -176,23 +309,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             else:
                 # run the transform without any hooks
                 transform_op(op)
-
-    def evaluate(self, results=None):
-        """
-        evaluate the compiled graph (stored in self) and return a dictionary of
-        results.
-
-        The dictionary will be of the form: {
-            Op: value,
-            ...
-        }
-        """
-        if results is None:
-            results = self.all_results
-        ordered_ops = self.dataflow.can_reach(results, order=self.ops)
-        self.transform_ordered_ops(ordered_ops)
-
-        return {op: op.tensor_description(self).value for op in results}
 
     def set_value(self, op, tensor):
         op.tensor_description(self).value = tensor

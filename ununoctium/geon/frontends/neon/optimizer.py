@@ -49,7 +49,7 @@ class Optimizer(object):
         super(Optimizer, self).__init__(**kargs)
         self.name = name
 
-    def configure(self, cost):
+    def configure(self, transformer, cost):
         raise NotImplementedError()
 
     def optimize(self, params_to_optimize, epoch):
@@ -77,8 +77,10 @@ class GradientDescentMomentum(Optimizer):
         self.wdecay = wdecay
         self.schedule = schedule
         self.stochastic_round = stochastic_round
+        self.transformer = None
 
-    def configure(self, cost):
+    def configure(self, transformer, cost):
+        self.transformer = transformer
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
@@ -115,4 +117,4 @@ class GradientDescentMomentum(Optimizer):
     def optimize(self, epoch):
         learning_rate = self.schedule.get_learning_rate(
             self.learning_rate, epoch)
-        self.learning_rate_placeholder.value = learning_rate
+        self.transformer.copy_to_model(self.learning_rate_placeholder, learning_rate)

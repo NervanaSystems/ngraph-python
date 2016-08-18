@@ -14,13 +14,10 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import numbers
-
 import numpy as np
 from builtins import object, str
 
-from geon.backends.graph.environment import get_current_environment,\
-    get_current_ops, captured_ops
+from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, FlattenedAxis, Axis, sample_axes, batch_axes
 from geon.op_graph.nodes import Node, generic_method
@@ -209,16 +206,6 @@ class Op(Node):
         Called by self.transform_call_info which is called by
         Transformer.transform_ordered_ops.
 
-        WILL BE DEPRECATED SOON
-        """
-        pass
-
-    def sync(self, transformer):
-        """
-        Make sure transformer has local changes.
-        Used to copy the value assigned to the op externally into our
-        internally allocated memory.
-        See placeholder.
         WILL BE DEPRECATED SOON
         """
         pass
@@ -674,22 +661,6 @@ class placeholder(AllocationOp):
 
     def generate_adjoints(self, tape, delta):
         pass
-
-    @property
-    def value(self):
-        return get_current_environment()[self]
-
-    @value.setter
-    def value(self, value):
-        get_current_environment()[self] = value
-
-    def sync(self, transformer):
-        value = self.value
-        td = self.tensor_description(transformer)
-        if isinstance(value, numbers.Real):
-            transformer.fill(td.value, value)
-        else:
-            td.value = value
 
 
 class Fill(VoidOp):

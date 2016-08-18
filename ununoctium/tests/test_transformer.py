@@ -1,5 +1,6 @@
 import geon as be
 import numpy as np
+from geon.util.utils import executor
 
 
 def test_evalutaion_twice():
@@ -23,10 +24,8 @@ def test_evalutaion_twice():
 
     hidden1 = be.dot(x, hidden1_weights) + hidden1_biases
 
-    trans = be.NumPyTransformer()
-    comp = trans.computation([hidden1])
-    trans.finalize()
+    comp = executor(hidden1)
 
-    result_1 = comp.evaluate()[hidden1]
-    result_2 = comp.evaluate()[hidden1]
+    result_1 = comp()
+    result_2 = comp()
     assert np.array_equal(result_1, result_2)

@@ -36,14 +36,14 @@ def test_create_nervana_graph(pb_file, execute=False):
     graph = create_nervana_graph(pb_file, env)
 
     trans = be.NumPyTransformer()
-    comp = trans.computation([graph.last_op])
+    comp = trans.computation(graph.last_op)
     trans.finalize()
     trans.dataflow.view()
 
     if execute:
         with be.bound_environment(env):
-            result = comp.evaluate()
-            print(result[graph.last_op])
+            result = comp()
+            print(result)
 
 test_create_nervana_graph("sample/constant_graph.pb", True)
 test_create_nervana_graph("sample/variable_graph_froze.pb", False)

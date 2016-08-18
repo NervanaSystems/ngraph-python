@@ -15,10 +15,7 @@
 
 import numpy as np
 
-from geon.util.utils import execute
-from geon.util.utils import in_bound_environment
-from geon.util.utils import transform_numeric_derivative
-from geon.util.utils import transform_derivative
+from geon.util.utils import ExecutorFactory
 import geon as be
 import geon.frontends.base.axis as ax
 
@@ -27,7 +24,7 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-@in_bound_environment
+@be.with_bound_environment
 def test_expand_dims():
     max_new_axis_length = 4
 
@@ -52,6 +49,7 @@ def test_expand_dims():
             tensor_axes_lengths = test['tensor_axes_lengths']
 
             for dim in range(len(tensor_axes) + 1):
+                ex = ExecutorFactory()
                 for axis, length in zip(tensor_axes, tensor_axes_lengths):
                     axis.length = length
 
@@ -62,10 +60,12 @@ def test_expand_dims():
                     test['tensor'], dtype=np.float32
                 )
                 tensor = be.placeholder(axes=be.Axes(tensor_axes))
-                tensor.value = tensor_np
 
                 expanded = be.ExpandDims(tensor, new_axis, dim)
-                expanded_result, = execute([expanded])
+                expander_fun = ex.executor(expanded, tensor)
+
+                num_deriv_fun = ex.numeric_derivative(expanded, tensor, delta)
+                sym_deriv_fun = ex.derivative(expanded, tensor)
 
                 expanded_shape = tensor_np.shape[:dim] \
                     + (new_axis.length,) + tensor_np.shape[dim:]
@@ -78,19 +78,18 @@ def test_expand_dims():
                     dtype=tensor_np.dtype
                 )
 
+                expanded_result = expander_fun(tensor_np)
                 assert np.array_equal(expanded_np, expanded_result)
 
                 # Test backpropagation
-                numeric_deriv = transform_numeric_derivative(
-                    expanded, tensor, delta
-                )
-                sym_deriv = transform_derivative(expanded, tensor)
+                numeric_deriv = num_deriv_fun(tensor_np)
+                sym_deriv = sym_deriv_fun(tensor_np)
                 assert np.allclose(
                     numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                 )
 
 
-@in_bound_environment
+@be.with_bound_environment
 def test_slice():
     tests = [
         {
@@ -128,6 +127,7 @@ def test_slice():
     ]
 
     for test in tests:
+        ex = ExecutorFactory()
         for axis, length in test['axes_lengths'].items():
             axis.length = length
         tensor_axes = test['tensor_axes']
@@ -136,29 +136,30 @@ def test_slice():
             test['tensor'], dtype='float32'
         )
         tensor = be.placeholder(axes=be.Axes(tensor_axes))
-        tensor.value = tensor_np
         expected = np.array(test['expected'], dtype='float32')
 
         s = test['slice']
         s_axes = test['sliced_axes']
 
         sliced = be.Slice(tensor, s, s_axes)
-        sliced_val, = execute([sliced])
+        sliced_val_fun = ex.executor(sliced, tensor)
 
+        num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
+        # Test backpropagation
+        sym_deriv_fun = ex.derivative(sliced, tensor)
+
+        sliced_val = sliced_val_fun(tensor_np)
         assert np.array_equal(sliced_val, expected)
 
-        # Test backpropagation
-        numeric_deriv = transform_numeric_derivative(
-            sliced, tensor, delta
-        )
-        sym_deriv = transform_derivative(sliced, tensor)
+        numeric_deriv = num_deriv_fun(tensor_np)
+        sym_deriv = sym_deriv_fun(tensor_np)
 
         assert np.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
 
 
-@in_bound_environment
+@be.with_bound_environment
 def test_padding():
     tests = [
         {
@@ -178,6 +179,7 @@ def test_padding():
     ]
 
     for test in tests:
+        ex = ExecutorFactory()
         for axis, length in test['axes_lengths'].items():
             axis.length = length
         tensor_axes = test['tensor_axes']
@@ -185,25 +187,26 @@ def test_padding():
             test['tensor'], dtype='float32'
         )
         tensor = be.placeholder(axes=be.Axes(tensor_axes))
-        tensor.value = tensor_np
 
         padding = test['padding']
         padded_axes = test['padded_axes']
         padded = be.pad(tensor, padded_axes, padding)
-        computed_val, = execute([padded])
+        computed_val_fun = ex.executor(padded, tensor)
+
+        # Test backpropagation
+        numeric_deriv_fun = ex.numeric_derivative(padded, tensor, delta)
+        sym_deriv_fun = ex.derivative(padded, tensor)
 
         def to_tuple(p):
             return (p, p) if isinstance(p, int) else p
         np_padding = tuple(to_tuple(p) for p in padding)
         expected_val = np.pad(tensor_np, np_padding, mode='constant')
 
+        computed_val = computed_val_fun(tensor_np)
         assert np.array_equal(expected_val, computed_val)
 
-        # Test backpropagation
-        numeric_deriv = transform_numeric_derivative(
-            padded, tensor, delta
-        )
-        sym_deriv = transform_derivative(padded, tensor)
+        numeric_deriv = numeric_deriv_fun(tensor_np)
+        sym_deriv = sym_deriv_fun(tensor_np)
 
         assert np.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol

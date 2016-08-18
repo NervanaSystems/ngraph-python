@@ -22,21 +22,19 @@ from subprocess import Popen, PIPE
 Test the usage of transformer.allreduce
 
 '''
-import geon as be
 from geon.backends.graph.mpihandle import MPIHandle
 
 
 def test_mpi_allreduce():
-    with be.bound_environment():
-        a = np.array([[4, 1, 2, -3, 4],
-                      [5, -6, 7, -8, 9]], dtype=np.float32)
+    a = np.array([[4, 1, 2, -3, 4],
+                  [5, -6, 7, -8, 9]], dtype=np.float32)
 
-        handle = MPIHandle()
-        result = handle.allreduceAvg(a)
+    handle = MPIHandle()
+    result = handle.allreduceAvg(a)
 
-        assert(np.array_equal(a, result))
+    assert(np.array_equal(a, result))
 
-        print("pass mpi allreduce test")
+    print("pass mpi allreduce test")
 
 
 def test_mpi_reduce():

@@ -69,7 +69,7 @@ inference_comp = None
 if args.infer_node in nervana_graph.name_to_op:
     # TODO: should determine automatically or receive as arg parameter
     pred_op = nervana_graph.name_to_op[args.infer_node]
-    inference_comp = trans.computation([pred_op])
+    inference_comp = trans.computation(pred_op)
 
 debug_comp = None
 debug_op = None
@@ -87,7 +87,7 @@ if nervana_graph.loss is not None and nervana_graph.update is not None:
 trans.finalize()
 trans.dataflow.view()
 
-def eval_test(test_data, graph, infernce_comp, pred_op):
+def eval_test(test_data, graph, inference_comp, pred_op):
     # TODO: pass the inference computation graph only without provide the last node for inference.
     """
     :param test_data: test input
@@ -101,7 +101,7 @@ def eval_test(test_data, graph, infernce_comp, pred_op):
         n_sample = 0
         for mb_idx, (xraw, yraw) in enumerate(test_data):
             graph.x.value = xraw
-            result = infernce_comp.evaluate()[pred_op]
+            result = inference_comp()
             pred = np.argmax(result, axis=1)
             gt = np.argmax(yraw, axis=0)
             test_error += np.sum(np.not_equal(pred, gt))
@@ -126,8 +126,7 @@ with be.bound_environment(env):
             nervana_graph.x.value = xraw
             nervana_graph.y.value = yraw
 
-            result = update_comp.evaluate()
-            avg_loss += result[nervana_graph.loss]
+            avg_loss = update_comp()
 
             if mb_idx % 1000 == 0:
                 print("epoch: %d minibatch: %d" % (epoch, mb_idx))

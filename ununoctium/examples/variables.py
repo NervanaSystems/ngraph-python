@@ -30,9 +30,10 @@ def test_init_variable():
         ax.Y.length = 1
         hello = be.Variable(axes=(ax.Y,), init=Constant(4))
 
-        enp = be.NumPyTransformer(results=[hello])
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(hello)
 
-        result = enp.evaluate()[hello]
+        result = comp()
         print(result)
 
         assert (result == 4)
@@ -44,9 +45,10 @@ def test_init_1D_variable():
         ax.Y.length = 2
         hello = be.Variable(axes=(ax.Y,), init=Constant(3))
 
-        enp = be.NumPyTransformer(results=[hello])
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(hello)
 
-        result = enp.evaluate()[hello]
+        result = comp()
         print(result)
 
         print("pass 1D variable initialization")
@@ -58,9 +60,10 @@ def test_init_2D_variable():
         ax.N.length = 2
         hello = be.Variable(axes=[ax.M, ax.N], init=Constant(5))
 
-        enp = be.NumPyTransformer(results=[hello])
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(hello)
 
-        result = enp.evaluate()[hello]
+        result = comp()[hello]
         print(result)
 
         print("pass 2D variable initialization")
@@ -73,9 +76,10 @@ def test_init_1D_variable_from_numpy_array():
             np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
         hello = be.Variable(axes=[ax.Y], init=Array(npvar))
 
-        enp = be.NumPyTransformer(results=[hello])
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(hello)
 
-        result = enp.evaluate()[hello]
+        result = comp()
         print(result)
 
         print("pass numpy variable initialization")
@@ -89,8 +93,9 @@ def test_assign_1D_variable_with_numpy_tensor():
             np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
 
         hello = npvar
-        enp = be.NumPyTransformer(results=[hello])
-        result = enp.evaluate()[hello]
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(hello)
+        result = comp()
         print(result)
 
         print("pass 1D numpy tensor assignment")
@@ -107,7 +112,8 @@ def test_assign_2D_variable_with_numpy_tensor():
 
         op = be.assign(var, npvar)
 
-        enp = be.NumPyTransformer(results=[op])
-        result = enp.evaluate()[op]
+        transformer = be.NumPyTransformer()
+        comp = transformer.computation(op)
+        result = comp()
         print(result)
         print(var.value)

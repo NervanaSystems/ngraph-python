@@ -51,14 +51,6 @@ class RandomTensorGenerator(object):
         return self.rng.random_integers(low, high, Axes(axes).lengths).astype(dtype)
 
 
-def in_bound_environment(f):
-    def wrapper(*args, **kargs):
-        with be.bound_environment():
-            return f(*args, **kargs)
-
-    return wrapper
-
-
 def with_error_settings(**new_settings):
     def decorator(f):
         def wrapper(*args, **kargs):
@@ -81,29 +73,73 @@ def raise_all_numpy_errors(f):
     return with_error_settings(**settings)(f)
 
 
-def execute(nodes):
+def executor(results, *parameters):
     """
-    Evaluates nodes and returns their values.
-
-    All necessary placeholders should already have values.
-    :param nodes: list of nodes to evaluate.
-    :return: list of values of the nodes after evaluation.
+    Generate a single-entry transformer that computes results from parameters
+    :param results:
+    :param parameters:
+    :return: Function of placeholders in parameters
     """
-    trans = be.NumPyTransformer(results=nodes)
-    result = trans.evaluate()
-    return (result[node] for node in nodes)
+    return be.NumPyTransformer().computation(results, *parameters)
 
 
-def shape(x):
-    """
-    Shape of a tensor/scalar
-    :param x:
-    :return:
-    """
-    if isinstance(x, np.ndarray):
-        return x.shape
-    else:
-        return ()
+class ExecutorFactory(object):
+    def __init__(self):
+        self.transformer = be.NumPyTransformer()
+
+    def executor(self, results, *parameters):
+        return self.transformer.computation(results, *parameters)
+
+    def numeric_derivative(self, f, p_x, dx, *params):
+        comp = self.transformer.computation(f, p_x, *params)
+
+        def helper(x, *args):
+            def comp_helper(xx):
+                return comp(xx, *args)
+
+            return numeric_derivative(comp_helper, x, dx)
+
+        return helper
+
+    def derivative(self, f, px, *parameters):
+        """
+        Full derivative of f wrt placeholder px
+        :param f:
+        :param px:
+        :return:
+        """
+        fshape = f.axes.lengths
+        xshape = px.axes.lengths
+
+        dfdx = be.deriv(f, px)
+
+        if len(fshape) is 0:
+            return self.transformer.computation(dfdx, px, *parameters)
+        else:
+            comp = self.transformer.computation(dfdx, f.initial_adjoint, px, *parameters)
+
+            def helper(x, *args):
+                dfdxshape = list(fshape)
+                dfdxshape.extend(xshape)
+                npdfdx = np.empty(dfdxshape, dtype=x.dtype)
+
+                dindex = [0 for _ in fshape]
+                dindex.extend([slice(None) for _ in xshape])
+
+                adjoint = np.zeros(fshape, dtype=x.dtype)
+
+                idxiter = np.nditer(
+                    adjoint, flags=['multi_index'], op_flags=['readwrite'])
+                for dfdxiter in idxiter:
+                    dfdxiter[...] = 1
+                    df = comp(adjoint, x, *args)
+                    dindex[0:len(fshape)] = idxiter.multi_index
+                    npdfdx[tuple(dindex)] = df
+                    dfdxiter[...] = 0
+
+                return npdfdx
+
+            return helper
 
 
 def numeric_derivative(f, x, dx):
@@ -119,6 +155,18 @@ def numeric_derivative(f, x, dx):
     :param dx: scalar dx change in each dimension
     :return: Derivative, with f(x), x indexing, i.e. if f is 2x4 and x is 3x7, result is 2x4x3x7.
     """
+
+    def shape(x):
+        """
+        Shape of a tensor/scalar
+        :param x:
+        :return:
+        """
+        if isinstance(x, np.ndarray):
+            return x.shape
+        else:
+            return ()
+
     xshape = shape(x)
     # Copy because we always compute into the same place
     y = np.copy(f(x))
@@ -138,53 +186,3 @@ def numeric_derivative(f, x, dx):
         d[tuple(dindex)] = (dy / dx)
         xiter[...] = old_x
     return d
-
-
-def transform_numeric_derivative(f, p_x, dx):
-    trans = be.NumPyTransformer(results=[f])
-
-    def trans_softmax(x):
-        p_x.value = x
-        result = trans.evaluate()
-        return result[f]
-
-    return numeric_derivative(trans_softmax, p_x.value, dx)
-
-
-def transform_derivative(f, px):
-    """
-    Full derivative of f wrt placeholder px
-    :param f:
-    :param px:
-    :return:
-    """
-    x = px.value
-    fshape = f.axes.lengths
-    xshape = px.axes.lengths
-
-    dfdx = be.deriv(f, px)
-
-    trans = be.NumPyTransformer(results=[dfdx])
-    if len(fshape) is 0:
-        return trans.evaluate()[dfdx]
-    else:
-        dfdxshape = list(fshape)
-        dfdxshape.extend(xshape)
-        npdfdx = np.empty(dfdxshape, dtype=x.dtype)
-
-        dindex = [0 for _ in fshape]
-        dindex.extend([slice(None) for _ in xshape])
-
-        adjoint = np.zeros(fshape, dtype=x.dtype)
-        f.initial_adjoint.value = adjoint
-
-        idxiter = np.nditer(
-            adjoint, flags=['multi_index'], op_flags=['readwrite'])
-        for dfdxiter in idxiter:
-            dfdxiter[...] = 1
-            df = trans.evaluate()[dfdx]
-            dindex[0:len(fshape)] = idxiter.multi_index
-            npdfdx[tuple(dindex)] = df
-            dfdxiter[...] = 0
-
-        return npdfdx
