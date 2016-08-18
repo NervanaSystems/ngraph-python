@@ -27,7 +27,7 @@ from builtins import str
 from geon.frontends.neon import *
 
 import geon as be
-from geon.op_graph.op_graph import Tensor, softmax
+from geon.op_graph.op_graph import TensorOp, softmax
 
 import tensorflow as tf
 from tensorflow.python.framework import tensor_util
@@ -309,7 +309,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             inputs.append(input_name)
             print('inputs[' + str(i) + "]: " + inputs[i])
 
-            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], Tensor):
+            if inputs[i] in name_to_op and isinstance(name_to_op[inputs[i]], TensorOp):
                 print(name_to_op[inputs[i]])
 
         if skip_this_node:
@@ -420,7 +420,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
             elif op_type == 'TruncatedNormal' or op_type == 'RandomStandardNormal':
                 # TODO: implement tf.truncated_normal and tf.random_normal
                 shape_tensor = name_to_op[inputs[0]]  # numpy ndarray
-                assert isinstance(shape_tensor, Tensor)
+                assert isinstance(shape_tensor, TensorOp)
                 shape = shape_tensor.nptensor
                 print(shape)
                 if op_type == 'TruncatedNormal':
@@ -469,7 +469,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
 
             elif op_type in reduction_ops:
                 input_tensor = name_to_op[inputs[0]]
-                assert isinstance(input_tensor, Tensor)
+                assert isinstance(input_tensor, TensorOp)
                 input_tensor_axes = name_to_op[inputs[0]].axes
                 reduction_indices = name_to_op[inputs[1]]
                 assert reduction_indices is None or isinstance(reduction_indices, be.NumPyTensor)
