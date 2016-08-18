@@ -23,6 +23,7 @@ comm = MPI.COMM_WORLD
 
 
 class MPIHandle(object):
+    """TODO."""
     MPICallDict = {
         "max": MPI.MAX,
         "min": MPI.MIN,
@@ -42,9 +43,23 @@ class MPIHandle(object):
         self.name = name
 
     def reduce(self, x, op=MPI.SUM):
+        """
+        TODO.
+
+        Arguments:
+          x: TODO
+          op: TODO
+        """
         raise NotImplementedError()
 
     def allreduce(self, x, op="sum"):
+        """
+        TODO.
+
+        Arguments:
+          x: TODO
+          op: TODO
+        """
         if not isinstance(x, np.ndarray):
             raise NotImplementedError("Input x should be a numpy ndarray")
 
@@ -55,17 +70,54 @@ class MPIHandle(object):
         return recv_buffer
 
     def allreduceAvg(self, x):
+        """
+        TODO.
+
+        Arguments:
+          x: TODO
+        """
         mpi_size = comm.Get_size()
         return (self.allreduce(x, op="sum") / mpi_size)
 
     def bcast(self, value, root=0):
+        """
+        TODO.
+
+        Arguments:
+          value: TODO
+          root: TODO
+        """
         raise NotImplementedError()
 
     def scatter(self, value, local_value, root=0):
+        """
+        TODO.
+
+        Arguments:
+          value: TODO
+          local_value: TODO
+          root: TODO
+        """
         raise NotImplementedError()
 
     def scatterv(self, recv_buff, root=0, *values):
+        """
+        TODO.
+
+        Arguments:
+          recv_buff: TODO
+          root: TODO
+          *values: TODO
+        """
         raise NotImplementedError()
 
     def gatherv(self, xlocal, root=0, *values):
+        """
+        TODO.
+
+        Arguments:
+          xlocal: TODO
+          root: TODO
+          *values: TODO
+        """
         raise NotImplementedError()

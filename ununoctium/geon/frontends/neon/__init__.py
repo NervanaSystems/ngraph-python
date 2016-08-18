@@ -29,7 +29,7 @@ from geon.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer
 
 # include Axes here because old 2.0 code needs to be updated to include Axes
 # annotations in the call to model.fit.
-# TODO: depricate this Axes, you should just use be.Axes instead
+# TODO: deprecate this Axes, you should just use be.Axes instead
 from geon import Axes
 
 # old neon code which hasn't changed but should be available in this namespace

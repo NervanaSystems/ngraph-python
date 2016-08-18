@@ -18,6 +18,7 @@ import geon as be
 
 
 class Transform(object):
+    """TODO."""
 
     def __init__(self, name=None):
         self.name = name
@@ -33,7 +34,7 @@ class Rectlin(Transform):
         """
         Class constructor.
 
-        Args:
+        Arguments:
             slope (float, optional): Slope for negative domain. Defaults to 0.
             name (string, optional): Name to assign this class instance.
         """
@@ -54,9 +55,7 @@ class Rectlin(Transform):
 
 
 class Identity(Transform):
-    """
-    Identity activation function, :math:`f(x) = x`
-    """
+    """Identity activation function, :math:`f(x) = x`"""
 
     def __init__(self, **kargs):
         """
@@ -80,7 +79,6 @@ class Identity(Transform):
 class Explin(Transform):
     """
     Exponential Linear activation function, :math:`f(x) = \max(x, 0) + \\alpha (e^{\min(x, 0)}-1)`
-
     From: Clevert, Unterthiner and Hochreiter, ICLR 2016.
     """
 
@@ -109,9 +107,7 @@ class Explin(Transform):
 
 
 class Normalizer(Transform):
-    """
-    Normalize inputs by a fixed divisor.
-    """
+    """Normalize inputs by a fixed divisor."""
 
     def __init__(self, divisor=128., **kargs):
         """
@@ -138,9 +134,7 @@ class Normalizer(Transform):
 
 
 class Softmax(Transform):
-    """
-    SoftMax activation function. Ensures that the activation output sums to 1.
-    """
+    """SoftMax activation function. Ensures that the activation output sums to 1."""
 
     def __init__(self, epsilon=2 ** -23, **kargs):
         """
@@ -166,9 +160,7 @@ class Softmax(Transform):
 
 
 class Tanh(Transform):
-    """
-    Hyperbolic tangent activation function, :math:`f(x) = \\tanh(x)`.
-    """
+    """Hyperbolic tangent activation function, :math:`f(x) = \\tanh(x)`."""
 
     def __init__(self, **kargs):
         """
@@ -202,9 +194,9 @@ class Logistic(Transform):
         should be set to true when Logistic is used in conjunction with a CrossEntropy cost.
         Doing so allows a shortcut calculation to be used during backpropagation.
 
-        Args:
+        Arguments:
             shortcut (bool): If True, shortcut calculation will be used during backpropagation.
-
+            **kargs: TODO
         """
         super(Logistic, self).__init__(**kargs)
 

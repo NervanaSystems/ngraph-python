@@ -29,6 +29,7 @@ except:
 # TODO If this does something useful, figure out what it is trying to do and fix it,
 # otherwise remove the file.
 class GraphitiMLP(be.Model):
+    """TODO."""
 
     def __init__(self, L, BS, bprop=True, **kargs):
         super(GraphitiMLP, self).__init__(**kargs)
@@ -62,6 +63,7 @@ class GraphitiMLP(be.Model):
 
 if have_mxnet:
     class MXNetMLP:
+        """TODO."""
 
         def __init__(self, L, BS, bprop=True, **kwargs):
             # Builds Network

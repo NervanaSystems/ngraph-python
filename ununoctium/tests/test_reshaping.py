@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
 import numpy as np
 
 from geon.util.utils import ExecutorFactory
@@ -26,6 +25,7 @@ rtol = atol = 1e-2
 
 @be.with_bound_environment
 def test_expand_dims():
+    """TODO."""
     max_new_axis_length = 4
 
     tests = [
@@ -91,6 +91,7 @@ def test_expand_dims():
 
 @be.with_bound_environment
 def test_slice():
+    """TODO."""
     tests = [
         {
             'tensor': [[1, 3], [2, 5]],
@@ -161,6 +162,7 @@ def test_slice():
 
 @be.with_bound_environment
 def test_padding():
+    """TODO."""
     tests = [
         {
             'tensor': [[1, 3], [2, 5]],
@@ -187,7 +189,6 @@ def test_padding():
             test['tensor'], dtype='float32'
         )
         tensor = be.placeholder(axes=be.Axes(tensor_axes))
-
         padding = test['padding']
         padded_axes = test['padded_axes']
         padded = be.pad(tensor, padded_axes, padding)
@@ -198,6 +199,15 @@ def test_padding():
         sym_deriv_fun = ex.derivative(padded, tensor)
 
         def to_tuple(p):
+            """
+            TODO.
+
+            Arguments:
+              p: TODO
+
+            Returns:
+
+            """
             return (p, p) if isinstance(p, int) else p
         np_padding = tuple(to_tuple(p) for p in padding)
         expected_val = np.pad(tensor_np, np_padding, mode='constant')

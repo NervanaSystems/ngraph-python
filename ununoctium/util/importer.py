@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
 """
-import a TensorFlow GraphDef from a protobuf file and convert it to Neon's computation graph.
-
+Import a TensorFlow GraphDef from a protobuf file and convert it to neon's computation graph.
 """
 
 from __future__ import absolute_import, division, print_function
@@ -69,7 +67,7 @@ reduction_ops = {
 
 one_inputs_ops = {
     'Tanh': be.tanh,
-    'Sigmod': be.sigmoid,
+    'Sigmoid': be.sigmoid,
     # TODO: 'Relu': be.relu,
 }
 
@@ -85,9 +83,9 @@ TODO: ops used in the CIFAR10_conv example:
 - QueueDequeueMany, RandomShuffleQueue, QueneEnqueue
 
 
-TODO: ops used in the MNIST_LSTM example:
+TODO: ops used in the MNIST_LTSM example:
 
-- Sequence Comparision and Indexing: ArgMax(tf.argmax)
+- Sequence Comparison and Indexing: ArgMax(tf.argmax)
 - Comparison: Equal(tf.equal)
 - Shapes and Shaping: Squeeze(tf.squeeze)
 - Slicing and Joining: Slice(tf.slice), Split(tf.split), Concat(tf.concat), Transpose(tf.transpose)
@@ -96,15 +94,17 @@ TODO: ops used in the MNIST_LSTM example:
 
 def scan_nameable_axes(graph_def, env):
     """
-    [Deprecated] Scan the graph to get the nameable axes for each variable/placehoder/const.
+    [Deprecated] Scan the graph to get the nameable axes for each variable/placeholder/const.
     Variables are defined and initialized in the next round of graph traversal.
 
-    :param
-      - graph_def: a GraphDef object
-    :return:
-      - names_to_axes: a map from variable name to its axes
-      - batch_axis: the batch axis
-      - y_axis: axis for labels, not used for inference graph
+    Arguments:
+      graph_def: a GraphDef object
+      env: TODO
+
+    Returns:
+      names_to_axes: a map from variable name to its axes
+      batch_axis: the batch axis
+      y_axis: axis for labels, not used for inference graph
     """
     name_to_axes = {}
     in_axis = None
@@ -184,12 +184,14 @@ def scan_numerical_axes(graph_def, env):
     Scan the graph to get the numerical axes for each variable.
     Variables are defined and initialized in the next round of graph traversal.
 
-    :param
-      - graph_def: a GraphDef object
-    :return:
-      - names_to_axes: a map from variable name to its axes
-      - batch_axis: the batch axis
-      - y_axis: axis for labels, not used for inference graph
+    Arguments:
+      graph_def: a GraphDef object
+      env: TODO
+
+    Returns:
+      names_to_axes: a map from variable name to its axes
+      batch_axis: the batch axis
+      y_axis: axis for labels, not used for inference graph
     """
     name_to_axes = {}
     batch_axis = None
@@ -250,15 +252,19 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
     """
     convert the GraphDef object to Neon's graph
 
-    :param
-      - graph_def: a (frozen) GraphDef object
-    :return:
-      - graph: converted graph, including:
-       - variables: a map from variable names to variables
-       - last_op: the last operator of the graph
-       - name_to_op: the map from operation name to its corresponding operator.
-                     This structure is similar with TF graph's collection.
-       - init: initialization graph
+    Arguments:
+      graph_def: a GraphDef object
+      env: TODO
+      end_node: TODO
+      loss_node: TODO
+
+    Returns:
+      graph: converted graph, including:
+      variables: a map from variable names to variables
+      last_op: the last operator of the graph
+      name_to_op: the map from operation name to its corresponding operator.
+                  This structure is similar with TF graph's collection.
+      init: initialization graph
     """
 
     name_to_op = {}  # a map from TF node name to Neon op
@@ -527,11 +533,11 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                 name_to_op[node.name] = name_to_op[inputs[0]]
 
             elif op_type == 'DynamicStitch':
-                # TODO: implemente tf.dynamic_stich, currently just use a constant
+                # TODO: implement tf.dynamic_stich, currently just use a constant
                 name_to_op[node.name] = be.Constant(1)
 
             elif op_type == 'Reshape':
-                # TODO: implemente tf.reshape
+                # TODO: implement tf.reshape
                 # Currently it just does nothing but pass the first input without actually reshape
                 name_to_op[node.name] = name_to_op[inputs[0]]
 
@@ -650,6 +656,18 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
 
 
 def create_nervana_graph(pb_file, env, end_node="", loss_node=""):
+    """
+    TODO.
+
+    Arguments:
+      pb_file: TODO
+      env: TODO
+      end_node: TODO
+      loss_node: TODO
+
+    Returns:
+      TODO
+    """
     graph_def = tf.GraphDef()
     with open(pb_file, 'rb') as f:
         graph_def.ParseFromString(f.read())

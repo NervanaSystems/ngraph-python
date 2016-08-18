@@ -33,13 +33,20 @@ args = parser.parse_args()
 
 # noinspection PyPep8Naming
 def L2(x):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+
+    Returns:
+      TODO
+    """
     return be.dot(x, x)
 
 
 class MyRnn(be.Model):
-    """
-    An example of how the future might look like.  Should parse but doesn't run.
-    """
+    """An example of how the future might look like.  Should parse but doesn't run."""
 
     def __init__(self, **kargs):
         super(MyRnn, self).__init__(**kargs)
@@ -102,6 +109,15 @@ class MyRnn(be.Model):
         g.loss = g.error + .01 * reg
 
     def train(self, epochs):
+        """
+        TODO.
+
+        Arguments:
+          epochs: TODO
+
+        Returns:
+          TODO
+        """
         g = self.graph
 
         # setup data provider
@@ -140,6 +156,7 @@ class MyRnn(be.Model):
     @be.with_environment
     def dump(self):
         def visitor(_):
+            """TODO."""
             print('{s} # {info}'.format(
                 s=_, info=_.file_info))
 

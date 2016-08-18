@@ -89,7 +89,7 @@ class Callbacks(NervanaObject):
         if output_file is None:
             if hasattr(self, 'callback_data'):
                 del self.callback_data
-            # self.name sould give a unique filename
+            # self.name should give a unique filename
             self.callback_data = h5py.File(
                 self.name, driver='core', backing_store=False)
         else:
@@ -158,6 +158,14 @@ class Callbacks(NervanaObject):
     def load_callbacks(cls, cdict, model, data=[]):
         """
         Load callbacks.
+
+        Arguments:
+            cdict: TODO
+            model: TODO
+            data: TODO
+
+        Returns:
+            Callbacks
         """
         if isinstance(native(cdict), str):
             cdict = load_obj(cdict)
@@ -222,7 +230,7 @@ class Callbacks(NervanaObject):
 
     def add_hist_callback(self, plot_per_mini=False, filter_key=['W']):
         """
-        Convenience function to create and add a histgram callback.
+        Convenience function to create and add a histogram callback.
         """
         self.callbacks.append(HistCallback(
             plot_per_mini=plot_per_mini, filter_key=filter_key))
@@ -363,7 +371,7 @@ class Callbacks(NervanaObject):
             epoch (int): index of current epoch
             minibatch (int): index of minibatch that is ending
         """
-        # restore the orignal handler
+        # restore the original handler
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         # save the model
@@ -401,7 +409,7 @@ class Callback(NervanaObject):
         skip = []
         for key in keys:
             if isinstance(getattr(self, key), NervanaDataIterator):
-                # data iterator inputs are serialized serpartely
+                # data iterator inputs are serialized separately
                 skip.append(key)
         pdict = super(Callback, self).get_description(skip=skip)
         for datap in skip:
@@ -486,6 +494,9 @@ class Callback(NervanaObject):
             time (int): current time, in an arbitrary unit
             freq (int, list, None): firing frequency, in multiples of the unit used
                                     for time, or a list of times, or None (never fire)
+
+        Returns:
+            Boolean
         """
         t, f = time, freq
         if ((isinstance(f, int) and (t + 1) % f == 0)
@@ -562,6 +573,10 @@ class SerializeModelCallback(Callback):
     def save_history(self, epoch, model):
         """
         Save history
+
+        Arguments:
+            epoch: TODO
+            model: TODO
         """
         # if history > 1, this function will save the last N checkpoints
         # where N is equal to self.history.  The files will have the form
@@ -893,13 +908,22 @@ class HistCallback(Callback):
         Called when an epoch is about to end
 
         Arguments:
-
+            callback_data (HDF5 dataset): shared data between callbacks
+            model (Model): model object
             epoch (int): index of epoch that is ending
         """
         if not self.plot_per_mini:
             self._save_hist_data(callback_data, model, epoch)
 
     def _save_hist_data(self, callback_data, model, timestamp):
+        """
+        TODO.
+
+        Arguments:
+            callback_data (HDF5 dataset): shared data between callbacks
+            model (Model): model object
+            timestamp (int): TODO
+        """
         for l_i, l in enumerate(model.layers.layers):
             for item in self.filter:
                 if hasattr(l, item):
@@ -1119,7 +1143,7 @@ class SaveBestStateCallback(Callback):
         _eil = self._get_cached_epoch_loss(callback_data, model, epoch, 'loss')
         if _eil:
             if self.best_cost is None or _eil['cost'] < self.best_cost:
-                # TODO: switch this to a general seralization op
+                # TODO: switch this to a general serialization op
                 save_obj(model.serialize(keep_states=True), self.best_path)
                 self.best_cost = _eil['cost']
 
@@ -1180,6 +1204,20 @@ class DeconvCallback(Callback):
     """
 
     def __init__(self, train_set, valid_set, max_fm=16, dataset_pct=25):
+        """
+        TODO.
+
+        Arguments:
+            tag: TODO
+            curr: TODO
+            total: TODO
+            unit: TODO
+            time: TODO
+            blockchar: TODO
+
+        Returns:
+
+        """
         super(DeconvCallback, self).__init__(epoch_freq=1)
         self.train_set = train_set
         self.valid_set = valid_set
@@ -1302,6 +1340,18 @@ class DeconvCallback(Callback):
             W):
         """
         Store images
+
+        Arguments:
+            callback_data TODO
+            batch_ind: TODO
+            imgs_to_store: TODO
+            img_batch_data: TODO
+            C: TODO
+            H: TODO
+            W: TODO
+
+        Returns:
+
         """
         n_imgs = len(imgs_to_store)
         if n_imgs:
@@ -1331,6 +1381,15 @@ class DeconvCallback(Callback):
     def get_layer_acts(self, callback_data, model, x, batch_ind):
         """
         Get layer activations
+
+        Arguments:
+            callback_data TODO
+            model: TODO
+            x: TODO
+            batch_ind: TODO
+
+        Returns:
+
         """
         imgs_to_store = set()
 
@@ -1379,6 +1438,16 @@ class DeconvCallback(Callback):
             layer_ind):
         """
         Visualize layer
+
+        Arguments:
+            callback_data TODO
+            model: TODO
+            num_fm: TODO
+            act_size: TODO
+            layer_ind: TODO
+
+        Returns:
+
         """
         be = model.be
         act_data = callback_data["deconv/max_act/{0:04}".format(layer_ind)]
@@ -1438,6 +1507,7 @@ class BatchNormTuneCallback(Callback):
     Arguments:
         tune_set (Dataset):  data set over which to tune parameters (usually a subset of the
                              training set)
+        epoch_freq (int): TODO
     """
 
     def __init__(self, tune_set, epoch_freq=1):

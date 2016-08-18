@@ -29,19 +29,29 @@ ax.D = arrayaxes.Axis(25)
 
 
 def test_axes_constructor_canonicalization():
+    """TODO."""
     a1 = arrayaxes.Axes(ax.A)
     a2 = arrayaxes.Axes([[ax.A]])
     assert a1 == a2
 
 
 def test_axes_equal():
+    """TODO."""
     a1 = arrayaxes.Axes([ax.A, ax.B, ax.C])
     a2 = arrayaxes.Axes([ax.A, ax.B, ax.C])
     assert a1 == a2
 
 
 def to_nested_tuple(axes):
-    """ recursively replace instances of FlattenedAxis with instances of type tuple. """
+    """
+    Recursively replace instances of FlattenedAxis with instances of type tuple.
+
+    Arguments:
+      axes: TODO
+
+    Returns:
+      TODO
+    """
     return tuple(
         to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.FlattenedAxis) else axis
         for axis in axes
@@ -49,10 +59,15 @@ def to_nested_tuple(axes):
 
 
 def test_canonicalize_axes():
-    """
-
-    """
+    """ """
     def test(l, r):
+        """
+        TODO.
+
+        Arguments:
+          l: TODO
+          r: TODO
+        """
         a = arrayaxes.Axes(l)
         assert to_nested_tuple(a) == r, (
             'Failed. Original collection: {l}, axes: {a},'
@@ -67,8 +82,20 @@ def test_canonicalize_axes():
 
 
 def test_axes_ops():
+    """TODO."""
     # Subtraction
     def test_sub(axes1, axes2, target):
+        """
+        TODO.
+
+        Arguments:
+          axes1: TODO
+          axes2: TODO
+          target: TODO
+
+        Returns:
+
+        """
         assert arrayaxes.AxisIDTuple.sub(
             axes1.as_axis_ids(),
             axes2.as_axis_ids()).as_axes() == target
@@ -85,16 +112,36 @@ def test_axes_ops():
 
 
 def empty(td):
+    """
+    TODO.
+
+    Arguments:
+      td: TODO
+
+    Returns:
+      TODO
+    """
     return np.empty(td.shape, td.dtype)
 
 
 def tensorview(td, nparr):
+    """
+    TODO.
+
+    Arguments:
+      td: TODO
+      nparr: TODO
+
+    Returns:
+      TODO
+    """
     return np.ndarray(shape=td.shape, dtype=td.dtype,
                       buffer=nparr, offset=td.offset,
                       strides=td.strides)
 
 
 def test_simple_tensors():
+    """TODO."""
     transformer = NumPyTransformer()
     # A scalar
     td0 = arrayaxes.TensorDescription(
@@ -169,6 +216,16 @@ def test_simple_tensors():
             assert e1_3[j, i] == i
 
     def val2(i, j):
+        """
+        TODO.
+
+        Arguments:
+          i: TODO
+          j: TODO
+
+        Returns:
+
+        """
         return (i + 1) * (j + 2)
 
     for i in range(ax.A.length):

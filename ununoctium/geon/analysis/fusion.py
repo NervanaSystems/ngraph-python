@@ -22,7 +22,14 @@ import graphviz
 # Fusion Policies
 def never_fusible(op1, op2):
     """
-    Default fusion policies: things are not fusible
+    Default fusion policies: things are not fusible.
+
+    Arguments:
+      op1: TODO
+      op2: TODO
+
+    Returns:
+      Boolean: False
     """
 
     return False
@@ -31,6 +38,14 @@ def never_fusible(op1, op2):
 def gpu_fusible(transformer, op1, op2):
     """
     Fusion policies for the GPU
+
+    Arguments:
+      transformer: TODO
+      op1: TODO
+      op2: TODO
+
+    Returns:
+      Boolean
     """
 
     # Only computations can be merged
@@ -56,9 +71,7 @@ def gpu_fusible(transformer, op1, op2):
 
 
 class KernelFlowGraph(DataFlowGraph):
-    """
-    Class representing a fused dataflow graph
-    """
+    """Class representing a fused dataflow graph"""
 
     def __init__(self, dataflow, fusible=never_fusible):
         """
@@ -111,9 +124,11 @@ class KernelFlowGraph(DataFlowGraph):
         Export fused dataflow to graphviz.
         Involves some hackery to get graphviz to draw edge between subgraphs
 
-        :param: name (str): name of the resulting graph
+        Arguments:
+          name (str): Name of the resulting graph
 
-        :return: pygraphgiz object
+        Returns:
+          pygraphviz object
         """
 
         predecessors = Digraph._invert(self.successors)
@@ -149,14 +164,16 @@ class KernelFlowGraph(DataFlowGraph):
 
     def _compute_paths(self):
         """
-        Computes useful datastructures for fusion analysis
+        Computes useful data structures for fusion analysis.
 
         path_from: maps node v to nodes that have a path from w
         bad_path_from: map node v to nodes that have a bad path from w
 
         'bad_paths' are paths that can not be merged.
-        """
 
+        Returns:
+          TODO
+        """
         path_from, bad_path_from = dict(), dict()
         order = self.topsort()
         for v in reversed(order):
@@ -172,11 +189,15 @@ class KernelFlowGraph(DataFlowGraph):
 
     def between(self, v, w, path_from):
         """
-        Finds all the nodes on any path between v and w
+        Finds all the nodes on any path between v and w.
 
-        :param v (operation): start node
-        :param w (operation): end_node
-        :param path_from (dict): maps node v to nodes that have a path from w
+        Arguments:
+          v (operation): start node
+          w (operation): end_node
+          path_from: (dict): maps node v to nodes that have a path from w
+
+        Returns:
+          set of vertices
         """
 
         vertices = set()
@@ -196,8 +217,10 @@ class KernelFlowGraph(DataFlowGraph):
         """
         Transfers edges from a node into another
 
-        :param v (operation): node that receives edges
-        :param w (operation): node that loses edges
+        Arguments:
+          v: (operation): node that receives edges
+          w: (operation): node that loses edges
+          dct: TODO
         """
 
         dct[v] |= dct.pop(w, set()) - {v}

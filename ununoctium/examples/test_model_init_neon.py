@@ -41,9 +41,9 @@ class myCallback(Callback):
     Callback for printing the initial weight value before training.
 
     Arguments:
-        eval_set (NervanaDataIterator): dataset to evaluate
-        epoch_freq (int, optional): how often (in epochs) to log info.
-                                    Defaults to every 1 epoch.
+      eval_set: dataset to evaluate
+      epoch_freq: how often (in epochs) to log info.
+
     """
 
     def __init__(self, eval_set, epoch_freq=1):
@@ -52,6 +52,15 @@ class myCallback(Callback):
         self.loss = self.be.zeros((1, 1), dtype=np.float32)
 
     def on_train_begin(self, callback_data, model, epochs):
+        """
+        TODO.
+
+        Arguments:
+          callback_data: TODO
+          model: TODO
+          epochs: TODO
+
+        """
         print(model.layers.layers[0].W.shape)
         print(model.layers.layers[0].W.get())
         print(model.layers.layers[2].W.shape)
@@ -62,6 +71,15 @@ class myCallback(Callback):
         neon_logger.display('Misclassification error = %.2f%%' % init_error)
 
     def on_epoch_begin(self, callback_data, model, epoch):
+        """
+        TODO.
+
+        Arguments:
+          callback_data: TODO
+          model: TODO
+          epoch: TODO
+
+        """
         lrate = model.optimizer.schedule.get_learning_rate(0.01, epoch)
         neon_logger.display('epoch: ' +
                             str(epoch) +

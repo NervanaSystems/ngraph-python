@@ -23,6 +23,7 @@ from functools import reduce
 # TODO These are stubs for implementing Neon's layers
 
 class Layer(object):
+    """TODO."""
 
     def __init__(
             self,
@@ -38,31 +39,40 @@ class Layer(object):
     def configure(self, in_obj):
         """
         Add to computation graph for the layer.
-        :param in_obj: The input for the layer
+
+        Arguments:
+          in_obj: The input for the layer
         :return: The output of the layer
+
+        Returns:
+
         """
         return in_obj
 
 
 class BranchNode(Layer):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(BranchNode, self).__init__(**kargs)
 
 
 class SkipNode(Layer):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(SkipNode, self).__init__(**kargs)
 
 
 class Pooling(Layer):
+    """TODO."""
 
     def __init__(self, fshape, op="max", strides={}, padding={}, **kargs):
         super(Pooling, self).__init__(**kargs)
 
 
 class ParameterLayer(Layer):
+    """TODO."""
 
     def __init__(self, init=None, **kargs):
         super(ParameterLayer, self).__init__(**kargs)
@@ -78,18 +88,18 @@ class Convolution(ParameterLayer):
     Convolutional layer implementation.
 
     Arguments:
-        fshape (tuple(int)): three dimensional shape of convolution window
-        strides (int, dict, optional): strides to apply convolution
-            window over. An int applies to both dimensions, or a dict with
-            str_h and str_w applies to h and w dimensions distinctly.  Defaults
-            to str_w = str_h = None
-        padding (int, dict, optional): padding to apply to edges of
-            input. An int applies to both dimensions, or a dict with pad_h
-            and pad_w applies to h and w dimensions distinctly.  Defaults
-            to pad_w = pad_h = None
-        init (Initializer, optional): Initializer object to use for
-            initializing layer weights
-        name (str, optional): layer name. Defaults to "ConvolutionLayer"
+       fshape (tuple(int)): three dimensional shape of convolution window
+       strides (int, dict, optional): strides to apply convolution
+           window over. An int applies to both dimensions, or a dict with
+           str_h and str_w applies to h and w dimensions distinctly.  Defaults
+           to str_w = str_h = None
+       padding (int, dict, optional): padding to apply to edges of
+           input. An int applies to both dimensions, or a dict with pad_h
+           and pad_w applies to h and w dimensions distinctly.  Defaults
+           to pad_w = pad_h = None
+       init (Initializer, optional): Initializer object to use for
+           initializing layer weights
+       name (str, optional): layer name. Defaults to "ConvolutionLayer"
     """
 
     def __init__(self, fshape, strides={}, padding={}, init=None, bsum=False,
@@ -99,7 +109,7 @@ class Convolution(ParameterLayer):
         self.bsum = bsum
         self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
                            'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
-                           'T': 1, 'D': 1}  # 3D paramaters
+                           'T': 1, 'D': 1}  # 3D parameters
 
         # keep around args in __dict__ for get_description.
         self.fshape = fshape
@@ -144,11 +154,12 @@ class Convolution(ParameterLayer):
         or input layer.
 
         Arguments:
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
+           in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                 information for layer
 
         Returns:
             (tuple): shape of output data
+
         """
         super(Convolution, self).configure(in_obj)
         if self.nglayer is None:
@@ -172,12 +183,13 @@ class Convolution(ParameterLayer):
         Apply the forward pass transformation to the input data.
 
         Arguments:
-            inputs (Tensor): input data
-            inference (bool): is inference only
-            beta (float, optional): scale to apply to the outputs
+           inputs (Tensor): input data
+           inference (bool): is inference only
+           beta (float, optional): scale to apply to the outputs
 
         Returns:
             Tensor: output data
+
         """
         self.inputs = inputs
         self.be.fprop_conv(
@@ -194,14 +206,15 @@ class Convolution(ParameterLayer):
         Apply the backward pass transformation to the input data.
 
         Arguments:
-            error (Tensor): deltas back propagated from the adjacent higher layer
-            alpha (float, optional): scale to apply to input for activation
-                                     gradient bprop.  Defaults to 1.0
-            beta (float, optional): scale to apply to output activation
-                                    gradient bprop.  Defaults to 0.0
+           error (Tensor): deltas back propagated from the adjacent higher layer
+           alpha (float, optional): scale to apply to input for activation
+                                    gradient bprop.  Defaults to 1.0
+           beta (float, optional): scale to apply to output activation
+                                   gradient bprop.  Defaults to 0.0
 
         Returns:
             Tensor: deltas to propagate to the adjacent lower layer
+
         """
         if self.deltas:
             self.be.bprop_conv(self.nglayer, self.W, error, self.deltas,
@@ -288,6 +301,19 @@ class ConvLayer(object):
                 q, S, W, pad_w, str_w) for q in range(Q)]
 
     def fprop_slice(self, q, S, X, padding, strides):
+        """
+        TODO.
+
+        Arguments:
+          q: TODO
+          S: TODO
+          X: TODO
+          padding: TODO
+          strides: TODO
+
+        Returns:
+
+        """
         firstF = 0
         lastF = S - 1
         qs = q * strides - padding
@@ -315,6 +341,17 @@ class ConvLayer(object):
     #####
 
     def fprop_conv(self, I, F, O):
+        """
+        TODO.
+
+        Arguments:
+          I: TODO
+          F: TODO
+          O: TODO
+
+        Returns:
+
+        """
 
         # if X is None:
         #     X = O
@@ -368,6 +405,26 @@ class ConvLayer(object):
             brelu=False,
             slope=0.0,
             backward=False):
+        """
+        TODO.
+
+        Arguments:
+          I: TODO
+          F: TODO
+          O: TODO
+          X: TODO
+          bias: TODO
+          bsum: TODO
+          alpha: TODO
+          beta: TODO
+          relu: TODO
+          brelu: TODO
+          slope: TODO
+          backward: TODO
+
+        Returns:
+
+        """
 
         if X is None:
             X = O
@@ -435,6 +492,19 @@ class ConvLayer(object):
             self.compound_ops(O, X, bias, bsum, relu, brelu, slope)
 
     def update_conv(self, I, E, U, alpha=1.0, beta=0.0):
+        """
+        TODO.
+
+        Arguments:
+          I: TODO
+          E: TODO
+          U: TODO
+          alpha: TODO
+          beta: TODO
+
+        Returns:
+
+        """
 
         C = self.C
         K, M, P, Q, N = self.dimO
@@ -590,7 +660,6 @@ class PoolLayer(object):
     strides: factor to step the window by in a given direction (overlap allowed)
 
     Leave spatial dimensions at 1 to allow feature map pooling in the fc layers.
-
     """
 
     def __init__(self, lib, dtype,
@@ -656,6 +725,19 @@ class PoolLayer(object):
                        for q in range(Q)]
 
     def pool_slice(self, q, S, X, padding, strides):
+        """
+        TODO.
+
+        Arguments:
+          q: TODO
+          S: TODO
+          X: TODO
+          padding: TODO
+          strides: TODO
+
+        Returns:
+
+        """
         qs = q * strides - padding
         firstI = None
         for s in range(S):
@@ -668,12 +750,14 @@ class PoolLayer(object):
 
 
 class Deconvolution(ParameterLayer):
+    """TODO."""
 
     def __init__(self, fshape, strides={}, padding={}, bsum=False, **kargs):
         super(Deconvolution, self).__init__(**kargs)
 
 
 class Linear(ParameterLayer):
+    """TODO."""
 
     def __init__(self, nout, bsum=False, **kargs):
         super(Linear, self).__init__(**kargs)
@@ -687,11 +771,12 @@ class Linear(ParameterLayer):
         or input layer.
 
         Arguments:
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
+           in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                 information for layer
 
         Returns:
-            (Tensor): output
+           (Tensor): output
+
         """
         in_obj = super(Linear, self).configure(in_obj)
 
@@ -710,9 +795,12 @@ class Bias(ParameterLayer):
     outputs of the same shape.
 
     Arguments:
-        init (Initializer, optional): Initializer object to use for
-            initializing layer bias
-        name (str, optional): Layer name. Defaults to "BiasLayer"
+       init (Initializer, optional): Initializer object to use for
+           initializing layer bias
+       name (str, optional): Layer name. Defaults to "BiasLayer"
+
+    Returns:
+
     """
 
     def __init__(self, init, **kargs):
@@ -727,11 +815,12 @@ class Bias(ParameterLayer):
         or input layer.
 
         Arguments:
+            graph: TODO.
             in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
-
+                                                 information for layer
         Returns:
             (Tensor): output
+
         """
         in_obj = super(Bias, self).configure(graph, in_obj)
         return in_obj + be.Variable(axes=be.sample_axes(in_obj))
@@ -742,12 +831,12 @@ class Activation(Layer):
     A layer that applies a specified transform to the inputs and
     produces outputs of the same shape.
 
-    Generally used to implemenent nonlinearities for layer post activations.
+    Generally used to implement nonlinearities for layer post activations.
 
     Arguments:
-        transform (Transform): a transform object with fprop and bprop
-            functions to apply
-        name (str, optional): Layer name. Defaults to "ActivationLayer"
+       transform (Transform): a transform object with fprop and bprop
+           functions to apply
+       name (str, optional): Layer name. Defaults to "ActivationLayer"
     """
 
     def __init__(self, transform, **kargs):
@@ -760,22 +849,25 @@ class Activation(Layer):
         or input layer.
 
         Arguments:
-            in_obj : input to the layer
+          in_obj: input to the layer
 
         Returns:
-            (Tensor): output
+          (Tensor): output
+
         """
         in_obj = super(Activation, self).configure(in_obj)
         return self.transform(in_obj)
 
 
 class DataTransform(Layer):
+    """TODO."""
 
     def __init__(self, transform, **kargs):
         super(DataTransform, self).__init__(**kargs)
 
 
 class ColorNoise(Layer):
+    """TODO."""
 
     def __init__(
             self,
@@ -788,9 +880,7 @@ class ColorNoise(Layer):
 
 
 class CompoundLayer(list):
-    """
-    Base class for macro layers.
-    """
+    """Base class for macro layers."""
 
     def __init__(
             self,
@@ -807,6 +897,7 @@ class CompoundLayer(list):
         self.axes = axes
 
     def add_postfilter_layers(self):
+        """TODO."""
         if self.bias is not None:
             self.append(Bias(init=self.bias))
         if self.batch_norm:
@@ -821,14 +912,16 @@ class Affine(CompoundLayer):
     composing separate linear, bias/batchnorm and activation layers.
 
     Arguments:
-        nout (int, tuple): Desired size or shape of layer output
-        init (Initializer, optional): Initializer object to use for
-            initializing layer weights and bias
-        bias (Initializer): an initializer to use for bias parameters
-        activation (Transform): a transform object with fprop and bprop
-            functions to apply
-        name (str): the root name for the layer, suffixes are automatically
-            generated for the component layers
+       nout (int, tuple): Desired size or shape of layer output
+       init (Initializer, optional): Initializer object to use for
+           initializing layer weights and bias
+       bias (Initializer): an initializer to use for bias parameters
+       activation (Transform): a transform object with fprop and bprop
+           functions to apply
+       name (str): the root name for the layer, suffixes are automatically
+           generated for the component layers
+
+    Returns:
 
     """
 
@@ -847,22 +940,24 @@ class Conv(CompoundLayer):
     list composing separate Convolution, Bias and Activation layers.
 
     Arguments:
-        fshape (tuple(int)): three dimensional shape of convolution window
-        init (Initializer, optional): Initializer object to use for
-            initializing layer weights and bias
-        strides (int, dict, optional): strides to apply convolution
-            window over. An int applies to both dimensions, or a dict with
-            str_h and str_w applies to h and w dimensions distinctly.  Defaults
-            to str_w = str_h = None
-        pad (int, dict, optional): padding to apply to edges of
-            input. An int applies to both dimensions, or a dict with pad_h
-            and pad_w applies to h and w dimensions distinctly.  Defaults
-            to pad_w = pad_h = None
-        bias (Initializer): an initializer to use for bias parameters
-        activation (Transform): a transform object with fprop and bprop
-            functions to apply
-        name (str): the root name for the layer, suffixes are automatically
-            generated for the component layers
+       fshape (tuple(int)): three dimensional shape of convolution window
+       init (Initializer, optional): Initializer object to use for
+           initializing layer weights and bias
+       strides (int, dict, optional): strides to apply convolution
+           window over. An int applies to both dimensions, or a dict with
+           str_h and str_w applies to h and w dimensions distinctly.  Defaults
+           to str_w = str_h = None
+       pad (int, dict, optional): padding to apply to edges of
+           input. An int applies to both dimensions, or a dict with pad_h
+           and pad_w applies to h and w dimensions distinctly.  Defaults
+           to pad_w = pad_h = None
+       bias (Initializer): an initializer to use for bias parameters
+       activation (Transform): a transform object with fprop and bprop
+           functions to apply
+       name (str): the root name for the layer, suffixes are automatically
+           generated for the component layers
+
+    Returns:
 
     """
 
@@ -885,9 +980,7 @@ class Conv(CompoundLayer):
 
 
 class Deconv(CompoundLayer):
-    """
-    Same as Conv layer, but implements a composite deconvolution layer.
-    """
+    """Same as Conv layer, but implements a composite deconvolution layer."""
 
     def __init__(
             self,
@@ -912,6 +1005,7 @@ class Deconv(CompoundLayer):
 
 
 class LRN(Layer):
+    """TODO."""
 
     def __init__(
             self,
@@ -925,12 +1019,14 @@ class LRN(Layer):
 
 
 class Dropout(Layer):
+    """TODO."""
 
     def __init__(self, keep=0.5, **kargs):
         super(Dropout, self).__init__(**kargs)
 
 
 class LookupTable(ParameterLayer):
+    """TODO."""
 
     def __init__(self, vocab_size, embedding_dim, init, update=True,
                  pad_idx=None, **kargs):
@@ -943,7 +1039,10 @@ class GeneralizedCost(object):
     with respect to inputs and targets.
 
     Arguments:
-       costfunc (Cost): class with costfunc that computes errors
+      costfunc (Cost): Class with costfunc that computes error.
+
+    Returns:
+
     """
 
     def __init__(self, costfunc, name=None, **kargs):
@@ -956,12 +1055,12 @@ class GeneralizedCost(object):
         Compute the cost function over the inputs and targets.
 
         Arguments:
-            inputs (Tensor): Tensor containing input values to be compared to
-                targets
-            targets (Tensor): Tensor containing target values.
+         inputs (Tensor): Tensor containing input values to be compared to
+             targets
+         targets (Tensor): Tensor containing target values.
 
         Returns:
-            Tensors containing mean cost, total costs, sample costs
+          Tensors containing mean cost, total costs, sample costs
 
         """
         self.costs = self.costfunc(inputs, targets)
@@ -971,12 +1070,14 @@ class GeneralizedCost(object):
 
 
 class BatchNorm(Layer):
+    """TODO."""
 
     def __init__(self, rho=0.9, eps=1e-3, **kargs):
         super(BatchNorm, self).__init__(**kargs)
 
 
 class BatchNormAutodiff(BatchNorm):
+    """TODO."""
 
     def __init__(self, rho=0.99, eps=1e-6, **kargs):
         super(BatchNormAutodiff, self).__init__(**kargs)
