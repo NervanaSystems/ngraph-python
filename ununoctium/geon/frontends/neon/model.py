@@ -68,28 +68,28 @@ def in_graph(f):
     Returns:
 
     """
-    def wrapper(self, *args, **kargs):
+    def wrapper(self, *args, **kwargs):
         """
         TODO.
 
         Arguments:
           *args: TODO
-          **kargs: TODO
+          **kwargs: TODO
 
         Returns:
 
         """
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
-                return f(self, *args, **kargs)
+                return f(self, *args, **kwargs)
     return wrapper
 
 
 class Model(GraphComponent):
     """TODO."""
 
-    def __init__(self, layers, name=None, optimizer=None, **kargs):
-        super(Model, self).__init__(**kargs)
+    def __init__(self, layers, name=None, optimizer=None, **kwargs):
+        super(Model, self).__init__(**kwargs)
         self.initialized = False
         self.name = name
         self.epoch_index = 0

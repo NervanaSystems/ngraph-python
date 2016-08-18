@@ -96,24 +96,24 @@ def with_name_scope(fun, name=None):
         cname = fun.__name__
 
     @wraps(fun)
-    def wrapper(*args, **kargs):
+    def wrapper(*args, **kwargs):
         """
         TODO.
 
         Arguments:
           *args: TODO
-          **kargs: TODO
+          **kwargs: TODO
 
         Returns:
 
         """
         myname = cname
-        if 'name' in kargs:
-            myname = kargs['name']
-            del kargs['name']
+        if 'name' in kwargs:
+            myname = kwargs['name']
+            del kwargs['name']
 
         with name_scope(name=myname) as ctx:
-            return fun(ctx, *args, **kargs)
+            return fun(ctx, *args, **kwargs)
 
     return wrapper
 
@@ -130,8 +130,8 @@ class NameableValue(object):
 
     """A value with a name and debugging info that can be set."""
 
-    def __init__(self, name=None, **kargs):
-        super(NameableValue, self).__init__(**kargs)
+    def __init__(self, name=None, **kwargs):
+        super(NameableValue, self).__init__(**kwargs)
         self.id = NameableValue.generate_id()
         self.__name = name if name is not None else self.id
         self.style = {}
@@ -168,8 +168,8 @@ _default_parent = object()
 class Parented(NameableValue):
     """A nameable value with a parent, defaults to current name scope."""
 
-    def __init__(self, parent=_default_parent, name=None, **kargs):
-        super(Parented, self).__init__(name=name, **kargs)
+    def __init__(self, parent=_default_parent, name=None, **kwargs):
+        super(Parented, self).__init__(name=name, **kwargs)
         if parent is _default_parent:
             parent = get_current_name_scope()
         if parent is not None:
@@ -200,8 +200,8 @@ class Parented(NameableValue):
 class NameScope(Parented):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(NameScope, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(NameScope, self).__init__(**kwargs)
 
     def __setattr__(self, name, value):
         super(NameScope, self).__setattr__(name, value)
@@ -211,8 +211,8 @@ class NameScope(Parented):
 class NameScopeList(Parented, list):
     """A named list of name scopes"""
 
-    def __init__(self, **kargs):
-        super(NameScopeList, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(NameScopeList, self).__init__(**kwargs)
 
 
 class NameScopeListExtender(object):

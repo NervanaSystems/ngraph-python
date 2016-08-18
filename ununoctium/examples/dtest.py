@@ -42,7 +42,7 @@ def linear(m, x, x_axes, axes, batch_axes=(), init=None):
     return nm.dot(m.weights, x) + m.bias
 
 
-def affine(x, activation, batch_axes=None, **kargs):
+def affine(x, activation, batch_axes=None, **kwargs):
     """
     TODO.
 
@@ -50,7 +50,7 @@ def affine(x, activation, batch_axes=None, **kargs):
       x: TODO
       activation: TODO
       batch_axes: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -59,12 +59,12 @@ def affine(x, activation, batch_axes=None, **kargs):
         linear(
             x,
             batch_axes=batch_axes,
-            **kargs),
+            **kwargs),
         batch_axes=batch_axes)
 
 
 @nm.with_name_scope
-def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
+def mlp(params, x, activation, x_axes, shape_spec, axes, **kwargs):
     """
     TODO.
 
@@ -75,7 +75,7 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
       x_axes: TODO
       shape_spec: TODO
       axes: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -89,11 +89,11 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
                 for axis, length in zip(layer.axes, shape):
                     axis.length = length
                 value = affine(value, activation=hidden_activation,
-                               x_axes=last_axes, axes=layer.axes, **kargs)
+                               x_axes=last_axes, axes=layer.axes, **kwargs)
                 last_axes = value.axes
         next(layers)
         value = affine(value, activation=activation,
-                       x_axes=last_axes, axes=axes, **kargs)
+                       x_axes=last_axes, axes=axes, **kwargs)
     return value
 
 
@@ -128,8 +128,8 @@ def cross_entropy(y, t):
 class MyTest(nm.Model):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(MyTest, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(MyTest, self).__init__(**kwargs)
 
         uni = Uniform(-.01, .01)
 

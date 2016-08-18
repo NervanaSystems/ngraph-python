@@ -32,8 +32,8 @@ from geon.backends.graph.environment import get_current_environment
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """TODO."""
 
-    def __init__(self, length, **kargs):
-        super(Axis, self).__init__(**kargs)
+    def __init__(self, length, **kwargs):
+        super(Axis, self).__init__(**kwargs)
         self.__length = length
 
     def axis_id(self, key):
@@ -60,8 +60,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 class AxisVar(Axis):
     """Like an axis, except the length comes from the environment."""
 
-    def __init__(self, length=None, **kargs):
-        super(AxisVar, self).__init__(length=-1, **kargs)
+    def __init__(self, length=None, **kwargs):
+        super(AxisVar, self).__init__(length=-1, **kwargs)
         if length is not None:
             self.length = length
 
@@ -91,17 +91,17 @@ class NumericAxis(Axis):
     """TODO."""
     cache = {}
 
-    def __new__(cls, length=None, **kargs):
+    def __new__(cls, length=None, **kwargs):
         if length in NumericAxis.cache:
             return NumericAxis.cache[length]
 
-        axis = super(NumericAxis, cls).__new__(cls, **kargs)
+        axis = super(NumericAxis, cls).__new__(cls, **kwargs)
         NumericAxis.cache[length] = axis
 
         return axis
 
-    def __init__(self, length=None, **kargs):
-        super(NumericAxis, self).__init__(length=length, **kargs)
+    def __init__(self, length=None, **kwargs):
+        super(NumericAxis, self).__init__(length=length, **kwargs)
 
     def __repr__(self):
         return 'NumericAxis({length})'.format(length=self.length)
@@ -110,9 +110,9 @@ class NumericAxis(Axis):
 class AxisID(object):
     """TODO."""
 
-    def __init__(self, axis, idx, **kargs):
+    def __init__(self, axis, idx, **kwargs):
         assert isinstance(idx, int)
-        super(AxisID, self).__init__(**kargs)
+        super(AxisID, self).__init__(**kwargs)
         self.axis = axis
         self.idx = idx
 
@@ -474,10 +474,10 @@ class FlattenedAxis(Axis):
 
     """
 
-    def __init__(self, axes, **kargs):
+    def __init__(self, axes, **kwargs):
         assert isinstance(axes, Axes)
         length = reduce(operator.mul, axes.lengths, 1)
-        super(FlattenedAxis, self).__init__(length=length, **kargs)
+        super(FlattenedAxis, self).__init__(length=length, **kwargs)
         self.__axes = axes
 
     @property
@@ -534,8 +534,8 @@ class TensorDescription(NameableValue):
     def __init__(self, axes, transformer, base=None,
                  dtype=np.dtype(np.float32),
                  full_strides=None, full_sizes=None, offset=0,
-                 **kargs):
-        super(TensorDescription, self).__init__(**kargs)
+                 **kwargs):
+        super(TensorDescription, self).__init__(**kwargs)
         # TODO: get the default type from the backend. May not always be numpy.
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
