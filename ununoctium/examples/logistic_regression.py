@@ -21,7 +21,7 @@ import geon.frontends.base.axis as ax
 
 def numpy_logistic_regression(xs, ys, max_iter, alpha):
     def sigmoid(x):
-        return 0.5 * (np.tanh(x) + 1)
+        return 1. / (1. + np.exp(-x))
 
     def predict(thetas, xs):
         return sigmoid(np.dot(xs, thetas))
@@ -34,7 +34,7 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
 
     def get_grad(thetas, xs, ys):
         ys_pred = predict(thetas, xs)
-        grad = -np.dot(ys - ys_pred, xs) * 2.
+        grad = -np.dot(ys - ys_pred, xs)
         return grad
 
     # init weights
@@ -56,7 +56,8 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
 
 def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     def sigmoid(x):
-        return 0.5 * (be.tanh(x) + 1)
+        # return 1. / (1. + be.exp(-x))
+        return be.sigmoid(x)
 
     def predict(thetas, xs):
         return sigmoid(be.dot(xs, thetas))
