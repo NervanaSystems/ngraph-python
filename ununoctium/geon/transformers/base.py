@@ -40,13 +40,13 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
         """
         self.transformer = transformer
         self.returns = returns
-        self.__ops = set()
+        self.ops = set()
         if isinstance(returns, collections.Set):
-            self.__ops.update(returns)
+            self.ops.update(returns)
         elif isinstance(returns, collections.Sequence):
-            self.__ops.update(returns)
+            self.ops.update(returns)
         elif isinstance(returns, Op):
-            self.__ops.add(returns)
+            self.ops.add(returns)
         elif returns is None:
             pass
         else:
@@ -57,21 +57,12 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
             if isinstance(arg, placeholder):
                 self.parameters.append(arg)
             if isinstance(arg, Op):
-                self.__ops.add(arg)
+                self.ops.add(arg)
             else:
                 raise ValueError()
 
         self.transformer.all_results.update(self.ops)
         self.executor = None
-
-    @property
-    def ops(self):
-        """
-        Ops that must be computed
-
-        :return: Set of ops
-        """
-        return self.__ops
 
     def __call__(self, *args):
         # TODO Should this be automatic?
@@ -125,7 +116,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.all_results = set()
         self.values = dict()
         self.cache = dict()
-        self.tds = set()
+        self.tensor_descriptions = set()
         self.finalized = False
         self.allocated = False
         self.initialized = False
@@ -134,21 +125,30 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def finalize(self):
         """
-        Prepare for running.
-
-        :return:
+        Prepare for allocation.
         """
         Op.simple_prune(self.all_results)
 
         # Crate tensor descriptions
         ops = Op.ordered_ops(self.all_results)
         inits = self.ordered_initializers(ops)
-        self.initialize_views(ops + inits)
+        all_ops = ops + inits
+        # Give ids
+        for op in all_ops:
+            if op not in self.opids:
+                self.opids[op] = len(self.opids)
+
+        # Create tensor descriptions
+        for op in all_ops:
+            op.create_tensor_descriptions(self)
 
         self.dataflow, self.memory = assign_buffers(
             self, self.all_results, self.fusion
         )
-        self.initialize_tds()
+
+        for tensor_description in self.tensor_descriptions:
+            tensor_description.initialize()
+
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
@@ -227,20 +227,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             self.set_item(td.value, (), value)
         else:
             raise ValueError()
-
-    def initialize_views(self, ordered_ops):
-        # Give ids
-        for op in ordered_ops:
-            if op not in self.opids:
-                self.opids[op] = len(self.opids)
-
-        # Create tensor descriptions
-        for op in ordered_ops:
-            op.create_tensor_descriptions(self)
-
-    def initialize_tds(self):
-        for td in self.tds:
-            td.initialize()
 
     def ordered_initializers(self, ordered_ops):
         todo = set(ordered_ops)

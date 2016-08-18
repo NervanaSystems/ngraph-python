@@ -16,6 +16,7 @@ from __future__ import division
 
 import numpy as np
 from builtins import object, str
+from functools import wraps
 
 from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
@@ -42,6 +43,7 @@ def from_transformer_cache(f):
 
     TODO: why cache in the transformer instead of self?
     """
+    @wraps(f)
     def wrapper(self, transformer):
         key = (f.__name__, self)
         if key not in transformer.cache:
