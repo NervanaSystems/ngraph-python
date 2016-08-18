@@ -398,7 +398,7 @@ class TensorDescription(NameableValue):
 
         if base is not None:
             base.views.add(self)
-        transformer.tds.add(self)
+        transformer.tensor_descriptions.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.

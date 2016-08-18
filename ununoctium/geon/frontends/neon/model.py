@@ -115,22 +115,20 @@ class Model(GraphComponent):
 
         self.cost = cost
         self.cost.initialize(self.output, self.target)
-        updates = self.optimizer.configure(self.cost.total_cost)
+        self.transformer = be.NumPyTransformer()
+        updates = self.optimizer.configure(self.transformer, self.cost.total_cost)
 
-        transformer = be.NumPyTransformer()
-        self.train_comp = transformer.computation(
-            [self.cost.mean_cost, updates]
-        )
-        self.epoch_eval_comp = transformer.computation(
-            [self.cost.mean_cost]
-        )
+        self.train_comp = self.transformer.computation(self.cost.mean_cost, self.input,
+                                                       self.target,
+                                                       updates)
+        self.epoch_eval_comp = self.transformer.computation(self.cost.mean_cost, self.input,
+                                                            self.target)
 
         if metric is not None:
             self.metric = metric
             self.error = metric(self.output, self.target)
-            self.test_comp = transformer.computation([self.error])
+            self.test_comp = self.transformer.computation(self.error, self.input, self.target)
 
-        transformer.finalize()
         self.initialized = True
 
     @in_graph
@@ -175,12 +173,10 @@ class Model(GraphComponent):
         # iterate through minibatches of the dataset
         for mb_idx, (x, t) in enumerate(dataset):
             callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.input.value = x.reshape(self.batch_input_shape)
-            self.target.value = t.reshape(self.batch_target_shape)
             self.optimizer.optimize(self.epoch_index)
 
-            vals = self.train_comp.evaluate()
-            batch_cost = vals[self.cost.mean_cost]
+            batch_cost = self.train_comp(x.reshape(self.batch_input_shape),
+                                         t.reshape(self.batch_target_shape))
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
             batch = batch + 1
@@ -197,14 +193,12 @@ class Model(GraphComponent):
         self.loss = 0
         dataset.reset()
         for x, t in dataset:
-            self.input.value = x.reshape(self.batch_input_shape)
-            self.target.value = t.reshape(self.batch_target_shape)
             bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
             nsteps = x.shape[1] // dataset_batchsize(dataset)\
                 if not isinstance(x, list)\
                 else x[0].shape[1] // dataset_batchsize(dataset)
-            vals = self.epoch_eval_comp.evaluate()
-            batch_cost = vals[self.cost.mean_cost]
+            batch_cost = self.epoch_eval_comp(x.reshape(self.batch_input_shape),
+                                              t.reshape(self.batch_target_shape))
             nprocessed += bsz
             self.loss += batch_cost / nsteps
         return float(self.loss) / nprocessed
@@ -226,16 +220,14 @@ class Model(GraphComponent):
         nprocessed = 0
         dataset.reset()
         for x, t in dataset:
-            self.input.value = x.reshape(self.batch_input_shape)
-            self.target.value = t.reshape(self.batch_target_shape)
             bsz = min(dataset.ndata - nprocessed,
                       dataset_batchsize(dataset))
             nsteps = x.shape[1] // dataset_batchsize(dataset)\
                 if not isinstance(x, list)\
                 else x[0].shape[1] // dataset_batchsize(dataset)
             # calcrange = slice(0, nsteps * bsz)
-            vals = self.test_comp.evaluate()
-            error_val = vals[self.error]
+            error_val = self.test_comp(x.reshape(self.batch_input_shape),
+                                       t.reshape(self.batch_target_shape))
             running_error += error_val * bsz * nsteps
             nprocessed += bsz * nsteps
         running_error /= nprocessed

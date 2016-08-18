@@ -110,12 +110,12 @@ class MyTest(nm.Model):
                 reg = reg + l2
         g.loss = g.error + .01 * reg
 
-    @nm.with_graph_scope
-    @nm.with_environment
     def dump(self):
-        for _ in nm.get_all_defs():
-            print('{s} # File "{filename}", line {lineno}'.format(
-                s=_, filename=_.filename, lineno=_.lineno))
+        def visitor(_):
+            print('{s} # {info}'.format(
+                s=_, info=_.file_info))
+
+        nm.Node.visit_input_closure([self.graph.loss], visitor)
 
 
 MyTest().dump()

@@ -17,20 +17,13 @@ import numpy as np
 import random
 import geon as be
 import geon.frontends.base.axis as ax
-from geon.util.utils import in_bound_environment
 from geon.util.utils import raise_all_numpy_errors
-from geon.util.utils import transform_numeric_derivative
-from geon.util.utils import transform_derivative
+from geon.util.utils import ExecutorFactory, executor
 
 '''
 Test graphiti's implementation of the dot product.
 
 '''
-
-
-def evaluate(result):
-    """ given an op `result` evaluate it and return the result """
-    return be.NumPyTransformer(results=[result]).evaluate()[result]
 
 
 def get_random_shape(max_num_axes, max_axis_length):
@@ -57,14 +50,14 @@ def get_random_np_array(
     return arr
 
 
-@in_bound_environment
+@be.with_bound_environment
 def graphiti_l2_norm(np_array):
     axes = ()
     for i, l in enumerate(np_array.shape):
         axes += (be.AxisVar(name='axis%s' % i, length=l),)
     np_tensor = be.NumPyTensor(np_array, axes=axes)
     var = be.Variable(axes=axes, initial_value=np_tensor)
-    return evaluate(be.sqrt(be.dot(var, var)))
+    return executor(be.sqrt(be.dot(var, var)))()
 
 
 @raise_all_numpy_errors
@@ -81,7 +74,7 @@ def test_l2_norm():
 
 
 @raise_all_numpy_errors
-@in_bound_environment
+@be.with_bound_environment
 def test_tensor_dot_tensor():
     delta = 1e-3
     rtol = atol = 1e-2
@@ -143,30 +136,41 @@ def test_tensor_dot_tensor():
 
         # set up tensors
         tensor1 = be.placeholder(axes=test['tensor1_axes'])
-        tensor1.value = np.array(
+        value1 = np.array(
             test['tensor1'], dtype=np.float32
         )
 
         if 'tensor2' in test:
             tensor2 = be.placeholder(axes=test['tensor2_axes'])
-            tensor2.value = np.array(
+            value2 = np.array(
                 test['tensor2'], dtype=np.float32
             )
         else:
             tensor2 = tensor1
+            value2 = value1
 
         # compute outputs
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
+        ex = ExecutorFactory()
         dot = be.dot(tensor1, tensor2)
-        evaluated = evaluate(dot)
+        evaluated_fun = ex.executor(dot, tensor1, tensor2)
+
+        numeric_deriv_fun1 = ex.numeric_derivative(dot, tensor1, delta, tensor2)
+        numeric_deriv_fun2 = ex.numeric_derivative(dot, tensor2, delta, tensor1)
+        sym_deriv_fun1 = ex.derivative(dot, tensor1, tensor2)
+        sym_deriv_fun2 = ex.derivative(dot, tensor2, tensor1)
 
         # assert outputs are equal
+        evaluated = evaluated_fun(value1, value2)
         np.testing.assert_equal(evaluated, expected_output)
 
         # assert derivative wrt to both tensors is the same when computed
         # symbolicly by graphiti and numerically
-        for tensor in (tensor1, tensor2):
-            numeric_deriv = transform_numeric_derivative(dot, tensor, delta)
-            sym_deriv = transform_derivative(dot, tensor)
-            np.testing.assert_allclose(numeric_deriv, sym_deriv, rtol=rtol, atol=atol)
+        numeric_deriv1 = numeric_deriv_fun1(value1, value2)
+        sym_deriv1 = sym_deriv_fun1(value1, value2)
+        np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)
+
+        numeric_deriv2 = numeric_deriv_fun2(value2, value1)
+        sym_deriv2 = sym_deriv_fun2(value2, value1)
+        np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=rtol, atol=atol)

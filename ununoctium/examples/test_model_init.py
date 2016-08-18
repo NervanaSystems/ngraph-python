@@ -85,6 +85,10 @@ class MyTest(be.Model):
 
         g.loss = be.cross_entropy_multi(g.value, g.y)
 
+        self.transformer = be.NumPyTransformer()
+        self.train_comp = None
+        self.test_comp = None
+
     @be.with_graph_scope
     def train(self, train, test):
         with be.bound_environment() as env:
@@ -110,23 +114,16 @@ class MyTest(be.Model):
                 synced_derivs = derivs
 
             updates = be.doall(
-                all=[
-                    be.assign(
-                        param,
-                        param -
-                        learning_rate *
-                        deriv) for param,
-                    deriv in zip(
-                        graph.variables,
-                        synced_derivs)])
+                all=[be.assign(param, param - learning_rate * deriv)
+                     for param, deriv in zip(graph.variables, synced_derivs)])
 
-            enp = be.NumPyTransformer(
-                results=[
-                    self.graph.value,
-                    graph.loss,
-                    updates] +
-                synced_derivs +
-                graph.variables)
+            self.train_comp = self.transformer.computation(self.graph.value,
+                                                           graph.loss,
+                                                           updates,
+                                                           synced_derivs,
+                                                           graph.variables)
+            self.test_comp = self.transformer.computation(self.graph.value)
+            self.transformer.allocate()
 
             for epoch in range(args.epochs):
                 # TODO: need to fix that the processed data does not equal to
@@ -139,12 +136,11 @@ class MyTest(be.Model):
                 nprocessed = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    graph.x.value = xraw
-                    graph.y.value = yraw
+                    self.transformer.copy_to_model(graph.x, xraw)
+                    self.transformer.copy_to_model(graph.y, yraw)
+                    loss = self.train_comp()
 
-                    vals = enp.evaluate()
-
-                    train_loss += vals[graph.loss] / float(train.bsz)
+                    train_loss += loss / float(train.bsz)
                     train_error += np.sum(np.not_equal(np.argmax(
                         vals[graph.value], axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
                     n_bs += 1
@@ -165,23 +161,20 @@ class MyTest(be.Model):
     def test(self, env, test, printParam=False):
         graph = self.graph
         with be.bound_environment(env):
-            enp = be.NumPyTransformer(
-                results=[self.graph.value] + graph.params)
+            enp = be.NumPyTransformer(self.graph.value)
+            comp = enp.computation(self.graph.value, graph.x, graph.y)
 
             test_error = 0
             n_bs = 0
             for mb_idx, (xraw, yraw) in enumerate(test):
                 # TODO: need to fix that the processed data does not equal to
                 # the actual number of the data
-                graph.x.value = xraw
-                graph.y.value = yraw
-                vals = enp.evaluate()
+                val = comp(xraw, yraw)
 
                 test_error += np.sum(
                     np.not_equal(
                         np.argmax(
-                            vals[
-                                graph.value], axis=0), np.argmax(
+                            val, axis=0), np.argmax(
                             yraw, axis=0)))
                 n_bs += 1
 

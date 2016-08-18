@@ -47,7 +47,7 @@ nervana_graph = create_nervana_graph(args.pb_file, env)  # trans = be.NumPyTrans
 
 with be.bound_environment(env):
     trans = be.NumPyTransformer()
-    infer_comp = trans.computation([nervana_graph.last_op])
+    infer_comp = trans.computation(nervana_graph.last_op)
     trans.finalize()
     trans.dataflow.view()
 
@@ -59,7 +59,7 @@ with be.bound_environment(env):
         nervana_graph.x.value = xraw
         yraw1 = yraw
 
-        result = infer_comp.evaluate()[nervana_graph.last_op]
+        result = infer_comp()
 
         print("minibatch: %d" % mb_idx)
         print("prediction result: ")
