@@ -18,6 +18,15 @@ from geon.frontends.neon.layer import Layer, BranchNode
 
 
 def flatten(item):
+    """
+    TODO.
+
+    Arguments:
+      item: TODO
+
+    Returns:
+
+    """
     if isinstance(item, collections.Iterable):
         for i in iter(item):
             for j in flatten(i):
@@ -30,6 +39,11 @@ class LayerContainer(Layer):
     """
     Layer containers are a generic class that are used to encapsulate groups of layers and
     provide methods for propagating through the constituent layers, allocating memory.
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __init__(self, **kargs):
@@ -41,8 +55,11 @@ class Sequential(LayerContainer):
     Layer container that encapsulates a simple linear pathway of layers.
 
     Arguments:
-        layers (list): List of objects which can be either a list of layers
-                       (including layer containers).
+      layers: list
+      including: layer containers
+
+    Returns:
+
     """
 
     def __init__(self, layers, **kargs):
@@ -57,7 +74,10 @@ class Sequential(LayerContainer):
         the shapes correspond to the layer_container attribute
 
         Arguments:
-            in_obj: any object that has an out_shape (Layer) or shape (Tensor, dataset)
+          in_obj: any object that has an out_shape
+
+        Returns:
+
         """
         config_layers = self.layers if in_obj else self._layers
         in_obj = in_obj if in_obj else self.layers[0]
@@ -72,12 +92,15 @@ class Tree(LayerContainer):
     Layer container that encapsulates a simple linear pathway of layers.
 
     Arguments:
-        layers (list): List of Sequential containers corresponding to the branches of the Tree.
-                       The branches must be provided with main trunk first, and then the auxiliary
-                       branches in the order the branch nodes are encountered
-        name (string, optional): Name for the container
-        alphas (list(float), optional): list of weighting factors to apply to each branch for
-                                        backpropagating error.
+      layers: list
+      The: branches must be provided with main trunk first
+      branches: in the order the branch nodes are encountered
+      name: string
+      alphas: list
+      backpropagating: error
+
+    Returns:
+
     """
 
     def __init__(self, layers, alphas=None, **kargs):
@@ -89,6 +112,11 @@ class SingleOutputTree(Tree):
     Subclass of the Tree container which returns only
     the output of the main branch (branch index 0) during
     inference.
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __init__(self, **kargs):

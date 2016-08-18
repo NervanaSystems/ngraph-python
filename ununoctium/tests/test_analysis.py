@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-'''
-Test the graph analysis functions
+"""
+Test the graph analysis functions.
+"""
 
-'''
 from __future__ import print_function
 
 from builtins import range, zip
@@ -26,6 +26,16 @@ import geon as be
 
 
 def build_graphs(L, BS):
+    """
+    TODO.
+
+    Arguments:
+      L: TODO
+      BS: TODO
+
+    Returns:
+      TODO
+    """
     with be.bound_environment():
         # Axes
         L = [ax.AxisVar(length=N, name='L%d' % i) for i, N in enumerate(L)]
@@ -53,6 +63,7 @@ dataflow, interference = build_graphs([1024, 256, 512, 10], 320)
 
 
 def test_coloring():
+    """TODO."""
     interference.color()
     for u, vs in iter(interference.neighbors.items()):
         # u must have a different color from all its neighbors
@@ -62,6 +73,7 @@ def test_coloring():
 
 
 def test_topsort():
+    """TODO."""
     edges = {(u, v) for u, vs in iter(list(dataflow.successors.items())) for v in vs}
     order = dataflow.topsort()
     for u, v in edges:

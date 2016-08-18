@@ -31,7 +31,7 @@ class Cost(object):
         """
         Applies the cost function
 
-        Args:
+        Arguments::
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -57,7 +57,7 @@ class CrossEntropyBinary(Cost):
 
     def __init__(self, scale=None):
         """
-        Args:
+        Arguments::
             scale (float, optional): Amount by which to scale the backpropagated error (default: 1)
         """
         self.scale = scale
@@ -66,7 +66,7 @@ class CrossEntropyBinary(Cost):
         """
         Returns the binary cross entropy cost.
 
-        Args:
+        Arguments::
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -91,14 +91,14 @@ class CrossEntropyMulti(Cost):
     can also be specified with the ``usebits`` argument.
 
     Note:
-        The back-propogation assumes that this cost is coupled with an output layer
+        The back-propagation assumes that this cost is coupled with an output layer
         that uses the Softmax() activation function. This allows for a shortcut in
         the deriviate that saves computation.
     """
 
     def __init__(self, scale=1, usebits=False):
         """
-        Args:
+        Arguments::
             scale (float, optional): scale factor for the backpropagated error (default: 1)
             usebits (boolean, optional): Display costs in bits (default: False)
         """
@@ -110,7 +110,7 @@ class CrossEntropyMulti(Cost):
         """
         Returns the multiclass cross entropy cost
 
-        Args:
+        Arguments::
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -123,11 +123,7 @@ class CrossEntropyMulti(Cost):
 
 
 class SumSquared(Cost):
-    """
-    Total Squared Error cost function. Computes :math:`\sum_i (y_i-t_i)^2`.
-
-
-    """
+    """Total Squared Error cost function. Computes :math:`\sum_i (y_i-t_i)^2`."""
 
     def __call__(self, y, t):
         """
@@ -138,9 +134,7 @@ class SumSquared(Cost):
 
 
 class MeanSquared(Cost):
-    """
-    Average Squared Error cost function. Computes :math:`\\frac{1}{N}\\sum_i (y_i-t_i)^2`.
-    """
+    """Average Squared Error cost function. Computes :math:`\\frac{1}{N}\\sum_i (y_i-t_i)^2`."""
 
     def __init__(self):
         """
@@ -158,11 +152,22 @@ class SmoothL1Loss(Cost):
     The L1 loss is less sensitive to outliers than the L2 loss since.
     See `Girshick 2015 <http://arxiv.org/pdf/1504.08083v2.pdf>`__. This
     cost is used for training object localization models such as Fast-RCNN.
+
+    Arguments:
+
+    Returns:
+
     """
 
     def smoothL1(self, x):
         """
         Returns the Smooth-L1 cost
+
+        Arguments:
+          x: TODO
+
+        Returns:
+
         """
         return (0.5 * self.be.square(x) * (self.be.absolute(x) < 1) +
                 (self.be.absolute(x) - 0.5) * (self.be.absolute(x) >= 1))
@@ -170,6 +175,12 @@ class SmoothL1Loss(Cost):
     def smoothL1grad(self, x):
         """
         Returns the gradient of the Smooth-L1 cost.
+
+        Arguments:
+          x: TODO
+
+        Returns:
+
         """
         return (x * (self.be.absolute(x) < 1) + self.be.sign(x) *
                 (self.be.absolute(x) >= 1))
@@ -185,17 +196,22 @@ class SmoothL1Loss(Cost):
 class Metric(Cost):
     """
     Base class for Metrics. Metrics are quantities not used during training
-    for the back-propogration but are useful to compute and display to check
+    for the back-propagation but are useful to compute and display to check
     on progress.
 
     For example, when training on image classification network,
     we may want to use the Cross-entropy cost to train the weights, but display
     the misclassification rate metric.
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __call__(self, y, t):
         """
-        Args:
+        Arguments::
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -218,7 +234,7 @@ class LogLoss(Metric):
 
     def __call__(self, y, t, calcrange=slice(0, None)):
         """
-        Args:
+        Arguments::
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -256,7 +272,7 @@ class TopKMisclassification(Metric):
         """
         Returns a numpy array of metrics for: LogLoss, Top-1, and Top-K.
 
-        Args:
+        Arguments:
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
             calcrange (slice, optional): Slice of data used for the metric (default: all)
@@ -279,9 +295,7 @@ class TopKMisclassification(Metric):
 
 
 class Misclassification(Metric):
-    """
-    Misclassification error metric.
-    """
+    """Misclassification error metric."""
 
     def __init__(self):
         """
@@ -293,7 +307,7 @@ class Misclassification(Metric):
         """
         Returns the misclassification error metric
 
-        Args:
+        Arguments:
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -308,10 +322,7 @@ class Misclassification(Metric):
 
 
 class Accuracy(Metric):
-    """
-    Accuracy metric (correct rate).
-
-    """
+    """Accuracy metric (correct rate)."""
 
     def __init__(self):
         self.preds = self.be.iobuf(1)
@@ -323,7 +334,7 @@ class Accuracy(Metric):
         """
         Returns the accuracy.
 
-        Args:
+        Arguments:
             y (Tensor or OpTree): Output of previous layer or model
             t (Tensor or OpTree): True targets corresponding to y
 
@@ -368,7 +379,7 @@ class PrecisionRecall(Metric):
         """
         Returns a numpy array with the precision and recall metrics.
 
-        Args:
+        Arguments:
             y (Tensor or OpTree): Output of previous layer or model (we assume
                                   already binarized, or you need to ensure
                                   binarize is True during construction).
@@ -406,6 +417,11 @@ class ObjectDetection(Metric):
     """
     The object detection metric includes object label accuracy, and
     bounding box regression.
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __init__(self):
@@ -416,6 +432,12 @@ class ObjectDetection(Metric):
     def smoothL1(self, x):
         """
         Returns the Smooth L1 cost.
+
+        Arguments:
+          x: TODO
+
+        Returns:
+
         """
         return (0.5 * self.be.square(x) * (self.be.absolute(x) < 1) +
                 (self.be.absolute(x) - 0.5) * (self.be.absolute(x) >= 1))
@@ -424,18 +446,18 @@ class ObjectDetection(Metric):
         """
         Returns a numpy array with the accuracy and the Smooth-L1 metrics.
 
-        Args:
+        Arguments:
             y (Tensor or OpTree): Output of a model like Fast-RCNN model with 2 elements:
                                     1. class label: (# classes, # batchsize for ROIs)
-                                    2. object bounding box (# classes * 4, # bacthsize for ROIs)
+                                    2. object bounding box (# classes * 4, # batchsize for ROIs)
             t (Tensor or OpTree): True targets corresponding to y, with 2 elements:
                                     1. class labels: (# classes, # batchsize for ROIs)
                                     2. object bounding box and mask, where mask will indicate the
                                         real object to detect other than the background objects
                                         2.1 object bounding box
-                                                    (# classes * 4, # bacthsize for ROIs)
+                                                    (# classes * 4, # batchsize for ROIs)
                                         2.2 object bounding box mask
-                                                    (# classes * 4, # bacthsize for ROIs)
+                                                    (# classes * 4, # batchsize for ROIs)
 
         Returns:
             numpy ary : Returns the metrics in numpy array [Label Accuracy, Bounding Box Smooth-L1]

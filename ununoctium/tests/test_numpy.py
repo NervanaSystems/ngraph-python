@@ -27,6 +27,7 @@ rng = RandomTensorGenerator(0, np.float32)
 
 @be.with_bound_environment
 def test_tensor_sum_single_reduction_axes():
+    """TODO."""
     ax.N.length = 2
     ax.Y.length = 2
 
@@ -40,6 +41,7 @@ def test_tensor_sum_single_reduction_axes():
 
 @be.with_bound_environment
 def test_scalar():
+    """TODO."""
     # Simple evaluation of a scalar
     val = 5
     x = be.Constant(val)
@@ -162,6 +164,7 @@ def test_reduction_deriv():
 
 @be.with_bound_environment
 def test_reciprocal():
+    """TODO."""
     delta = .001
     ax.W.length = 20
     ax.N.length = 128
@@ -188,6 +191,7 @@ def test_reciprocal():
 
 @be.with_bound_environment
 def test_elementwise_ops_matched_args():
+    """TODO."""
     delta = .001
     ax.W.length = 20
     ax.H.length = 20
@@ -258,6 +262,7 @@ def test_elementwise_ops_matched_args():
 
 @be.with_bound_environment
 def test_elementwise_ops_unmatched_args():
+    """TODO."""
     # delta = .001
     ax.W.length = 5
     ax.H.length = 5
@@ -329,6 +334,16 @@ def test_elementwise_ops_unmatched_args():
 
 
 def np_softmax(x, axis):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+      axis: TODO
+
+    Returns:
+      TODO
+    """
     # Shape for broadcasts
     shape = list(x.shape)
     shape[axis] = 1
@@ -338,17 +353,38 @@ def np_softmax(x, axis):
 
 
 def cross_entropy_binary_logistic(x, t):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+      t: TODO
+
+    Returns:
+      TODO
+    """
     y = 1.0 / (1.0 + np.exp(-x))
     return -(np.log(y) * t + np.log(1 - y) * (1 - t))
 
 
 def cross_entropy_binary_logistic_shortcut(x, t):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+      t: TODO
+
+    Returns:
+      TODO
+    """
     y = 1.0 / (1.0 + np.exp(-x))
     return (1.0 - t) * x - np.log(y)
 
 
 @be.with_bound_environment
 def test_cross_entropy_binary_logistic_shortcut():
+    """TODO."""
     ax.W.length = 20
     ax.N.length = 128
     axes = be.Axes([ax.W, ax.N])
@@ -367,6 +403,7 @@ def test_cross_entropy_binary_logistic_shortcut():
 
 @be.with_bound_environment
 def test_cross_entropy_binary():
+    """TODO."""
     delta = .001
     ax.W.length = 20
     ax.N.length = 128
@@ -392,11 +429,25 @@ def test_cross_entropy_binary():
 def adiff_softmax(x):
     """
     The version of the diff we use in autodiff, without batch axis.
-    :param x:
-    :return:
+
+    Arguments:
+      x: return:
+
+    Returns:
+      TODO
     """
 
     def softmax_adiff(y_, y):
+        """
+        TODO.
+
+        Arguments:
+          y_: TODO
+          y: TODO
+
+        Returns:
+          TODO
+        """
         z = y_ * y
         zs = z.sum()
         x_ = z - zs * y
@@ -415,6 +466,7 @@ def adiff_softmax(x):
 
 @be.with_bound_environment
 def test_np_softmax():
+    """TODO."""
     ax.N.length = 128
     ax.C.length = 20
 
@@ -434,6 +486,15 @@ def test_np_softmax():
     x0 = x[:, 0]
 
     def np_softmax_0(x):
+        """
+        TODO.
+
+        Arguments:
+          x: TODO
+
+        Returns:
+
+        """
         return np_softmax(x, 0)
 
     a = numeric_derivative(np_softmax_0, x0, .001)
@@ -442,11 +503,23 @@ def test_np_softmax():
 
 
 def np_cross_entropy_multi(y, t, axis=None):
+    """
+    TODO.
+
+    Arguments:
+      y: TODO
+      t: TODO
+      axis: TODO
+
+    Returns:
+      TODO
+    """
     return -np.sum(np.log(y) * t, axis=axis)
 
 
 @be.with_bound_environment
 def test_softmax():
+    """TODO."""
     ax.W.length = 128
     ax.N.length = 10
     be.set_batch_axes([ax.N])
@@ -519,6 +592,7 @@ def test_softmax_deriv():
 
 @be.with_bound_environment
 def test_sigmoid():
+    """TODO."""
     delta = .001
     ax.W.length = 20
     ax.N.length = 128
@@ -550,6 +624,13 @@ def test_sigmoid():
 
 
 def one_hot_comparison(hot_axes, axes):
+    """
+    TODO.
+
+    Arguments:
+      hot_axes: TODO
+      axes: TODO
+    """
     u = rng.random_integers(0, ax.C.length - 1, axes, dtype=np.int8)
     u_p = be.placeholder(axes=axes, dtype=u.dtype)
     v = np.zeros(hot_axes.lengths, dtype=np.float32)
@@ -565,6 +646,7 @@ def one_hot_comparison(hot_axes, axes):
 
 @be.with_bound_environment
 def test_onehot():
+    """TODO."""
     ax.C.length = 4
     ax.W.length = 32
     ax.H.length = 32
@@ -576,5 +658,5 @@ def test_onehot():
 
 @be.with_bound_environment
 def test_empty_finalize():
-    """ evaluating an empty NumPyTransformer shouldn't raise any exceptions """
+    """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     be.NumPyTransformer().initialize()

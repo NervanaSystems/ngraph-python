@@ -19,6 +19,11 @@ class Digraph(object):
     """
     Base class for Directed graph.
     Includes Graphviz visualization, DFS, topsort
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __init__(self, successors):
@@ -33,9 +38,11 @@ class Digraph(object):
         """
         Export the current Digraph to Graphviz
 
-        :param name (str): Name of the resulting graph
+        Arguments:
+          name: str): Name of the resulting graph
 
-        :return: pygraphviz object
+        Returns:
+          pygraphviz object
         """
         dot = graphviz.Digraph(name)
         for node, nexts in list(self.successors.items()):
@@ -49,6 +56,12 @@ class Digraph(object):
     def _invert(adjacency):
         """
         Returns the invert of the given adjacency dict (e.g., successors to predecessors)
+
+        Arguments:
+          adjacency: TODO
+
+        Returns:
+          Result
         """
         result = {x: set() for x in list(adjacency.keys())}
         for x, others in list(adjacency.items()):
@@ -60,21 +73,24 @@ class Digraph(object):
         """
         Renders to a graphviz file
 
-        :param fpath (str): file to write too
+        Arguments:
+          fpath: str): file to write too
+          view: TODO
         """
         self._graphviz().render(fpath, view=view)
 
     def view(self):
-        """ View the graph. Requires pygraphviz """
+        """View the graph. Requires pygraphviz."""
         self._graphviz().view()
 
     def dfs(self, starts, fun, reverse=False):
         """
-        Performs DFS, applying the provided function to each node
+        Performs DFS, applying the provided function to each node.
 
-        :param starts: nodes to start from
-        :param fun (Function): Function to apply to each visited node
-        :param reverse (bool): whetehr to do DFS on the reversed graph
+        Arguments:
+          starts: nodes to start from
+          fun: Function): Function to apply to each visited node
+          reverse: bool): whether to do DFS on the reversed graph
         """
         visited = set()
         nexts = self.successors
@@ -83,6 +99,13 @@ class Digraph(object):
 
         # Visit single node
         def visit(u, fun):
+            """
+            TODO.
+
+            Arguments:
+              u: TODO
+              fun: TODO
+            """
             if u not in visited:
                 vs = nexts[u]
                 for v in sorted(vs, key=lambda x: x.id):
@@ -97,6 +120,7 @@ class Digraph(object):
 
     @property
     def inputs(self):
+        """TODO."""
         predecessors = Digraph._invert(self.successors)
         return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
 
@@ -105,10 +129,12 @@ class Digraph(object):
         Computes the vertices that can reach the nodes specified in outs
         ordered as specified
 
-        :param outs (list): nodes to reach
-        :param order (list): list specifying the order of the result nodes
+        Arguments:
+          outs: list): nodes to reach
+          order: list): list specifying the order of the result nodes
 
-        :return: ordered dependencies of outs
+        Returns:
+          Ordered dependencies of outs
         """
         result = set()
         self.dfs(outs, lambda x: result.add(x), reverse=True)
@@ -118,9 +144,10 @@ class Digraph(object):
 
     def topsort(self):
         """
-        Topological sort of the nodes
+        Topological sort of the nodes.
 
-        :return: Sorted list of nodes
+        Returns:
+          Sorted list of nodes.
         """
         result = []
         self.dfs(self.inputs, lambda x: result.insert(0, x))
@@ -137,6 +164,15 @@ class UndirectedGraph(object):
         self.neighbors = neighbors
 
     def _graphviz(self, name=''):
+        """
+        TODO.
+
+        Arguments:
+          name: TODO
+
+        Returns:
+
+        """
         from graphviz import Graph
         dot = Graph()
         processed = set()
@@ -150,7 +186,15 @@ class UndirectedGraph(object):
         return dot
 
     def render(self, fpath, view=True):
+        """
+        TODO.
+
+        Arguments:
+          fpath: TODO
+          view: TODO
+        """
         self._graphviz().render(fpath, view=view)
 
     def view(self):
+        """TODO."""
         self._graphviz().view()

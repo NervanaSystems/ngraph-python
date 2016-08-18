@@ -22,16 +22,37 @@ from geon.frontends.neon import *  # noqa
 
 
 class RandomTensorGenerator(object):
+    """TODO."""
 
     def __init__(self, seed=0, dtype=np.float32):
         self.dtype = dtype
         self.reset(seed)
 
     def reset(self, seed=0):
+        """
+        TODO.
+
+        Arguments:
+          seed: TODO
+
+        Returns:
+
+        """
         self.seed = seed
         self.rng = np.random.RandomState(seed=seed)
 
     def uniform(self, low, high, axes):
+        """
+        TODO.
+
+        Arguments:
+          low: TODO
+          high: TODO
+          axes: TODO
+
+        Returns:
+
+        """
         return np.array(
             self.rng.uniform(
                 low,
@@ -40,6 +61,18 @@ class RandomTensorGenerator(object):
             dtype=self.dtype)
 
     def discrete_uniform(self, low, high, quantum, axes):
+        """
+        TODO.
+
+        Arguments:
+          low: TODO
+          high: TODO
+          quantum: TODO
+          axes: TODO
+
+        Returns:
+
+        """
         n = math.floor((high - low) / quantum)
         result = np.array(self.rng.random_integers(
             0, n, Axes(axes).lengths), dtype=self.dtype)
@@ -48,12 +81,52 @@ class RandomTensorGenerator(object):
         return result
 
     def random_integers(self, low, high, axes, dtype=np.int8):
+        """
+        TODO.
+
+        Arguments:
+          low: TODO
+          high: TODO
+          axes: TODO
+          dtype: TODO
+
+        Returns:
+
+        """
         return self.rng.random_integers(low, high, Axes(axes).lengths).astype(dtype)
 
 
 def with_error_settings(**new_settings):
+    """
+    TODO.
+
+    Arguments:
+      **new_settings: TODO
+
+    Returns:
+
+    """
     def decorator(f):
+        """
+        TODO.
+
+        Arguments:
+          f: TODO
+
+        Returns:
+
+        """
         def wrapper(*args, **kargs):
+            """
+            TODO.
+
+            Arguments:
+              *args: TODO
+              **kargs: TODO
+
+            Returns:
+
+            """
             old_settings = np.geterr()
 
             np.seterr(**new_settings)
@@ -69,6 +142,15 @@ def with_error_settings(**new_settings):
 
 
 def raise_all_numpy_errors(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
     settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
     return with_error_settings(**settings)(f)
 
@@ -76,9 +158,13 @@ def raise_all_numpy_errors(f):
 def executor(results, *parameters):
     """
     Generate a single-entry transformer that computes results from parameters
-    :param results:
-    :param parameters:
-    :return: Function of placeholders in parameters
+
+    Arguments:
+      results: TODO
+      parameters: TODO
+
+    Returns:
+      Function of placeholders in parameters
     """
     return be.NumPyTransformer().computation(results, *parameters)
 
@@ -104,9 +190,14 @@ class ExecutorFactory(object):
     def derivative(self, f, px, *parameters):
         """
         Full derivative of f wrt placeholder px
-        :param f:
-        :param px:
-        :return:
+
+        Arguments:
+          f: TODO
+          px: TODO
+          parameters: TODO
+
+        Returns:
+
         """
         fshape = f.axes.lengths
         xshape = px.axes.lengths
@@ -150,17 +241,24 @@ def numeric_derivative(f, x, dx):
 
     Would be useful to have a batch axis some time.
 
-    :param f: Tensor function.
-    :param x: Derivative position.
-    :param dx: scalar dx change in each dimension
-    :return: Derivative, with f(x), x indexing, i.e. if f is 2x4 and x is 3x7, result is 2x4x3x7.
+    Arguments:
+      f: Tensor function.
+      x: Derivative position.
+      dx: scalar dx change in each dimension
+
+    Returns:
+      Derivative, with f(x), x indexing, i.e. if f is 2x4 and x is 3x7, result is 2x4x3x7.
     """
 
     def shape(x):
         """
         Shape of a tensor/scalar
-        :param x:
-        :return:
+
+        Arguments:
+          x: TODO
+
+        Returns:
+          TODO
         """
         if isinstance(x, np.ndarray):
             return x.shape

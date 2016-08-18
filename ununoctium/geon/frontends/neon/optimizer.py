@@ -21,10 +21,30 @@ from neon.initializers import Constant
 
 # Optimizer support
 def L2(x):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+
+    Returns:
+
+    """
     return be.dot(x, x)
 
 
 def clip_gradient_norm(grad_list, clip_norm, bsz):
+    """
+    TODO.
+
+    Arguments:
+      grad_list: TODO
+      clip_norm: TODO
+      bsz: TODO
+
+    Returns:
+
+    """
     s = None
     for param in grad_list:
         term = be.sqrt(L2(param))
@@ -37,6 +57,16 @@ def clip_gradient_norm(grad_list, clip_norm, bsz):
 
 
 def clip_gradient_value(grad, clip_value=None):
+    """
+    TODO.
+
+    Arguments:
+      grad: TODO
+      clip_value: TODO
+
+    Returns:
+
+    """
     if clip_value:
         return be.clip(grad, -abs(clip_value), abs(clip_value))
     else:
@@ -44,19 +74,41 @@ def clip_gradient_value(grad, clip_value=None):
 
 
 class Optimizer(object):
+    """TODO."""
 
     def __init__(self, name=None, **kargs):
         super(Optimizer, self).__init__(**kargs)
         self.name = name
 
     def configure(self, transformer, cost):
+        """
+        TODO.
+
+        Arguments:
+          transformer: TODO
+          cost: TODO
+
+        Returns:
+
+        """
         raise NotImplementedError()
 
     def optimize(self, params_to_optimize, epoch):
+        """
+        TODO.
+
+        Arguments:
+          params_to_optimize: TODO
+          epoch: TODO
+
+        Returns:
+
+        """
         raise NotImplementedError()
 
 
 class GradientDescentMomentum(Optimizer):
+    """TODO."""
 
     def __init__(
             self,
@@ -80,6 +132,16 @@ class GradientDescentMomentum(Optimizer):
         self.transformer = None
 
     def configure(self, transformer, cost):
+        """
+        TODO.
+
+        Arguments:
+          transformer: TODO
+          cost: TODO
+
+        Returns:
+
+        """
         self.transformer = transformer
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
@@ -115,6 +177,15 @@ class GradientDescentMomentum(Optimizer):
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):
+        """
+        TODO.
+
+        Arguments:
+          epoch: TODO
+
+        Returns:
+
+        """
         learning_rate = self.schedule.get_learning_rate(
             self.learning_rate, epoch)
         self.transformer.copy_to_model(self.learning_rate_placeholder, learning_rate)

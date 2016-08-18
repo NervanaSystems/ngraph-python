@@ -23,6 +23,19 @@ from neon.initializers import Uniform
 
 @nm.with_name_scope
 def linear(m, x, x_axes, axes, batch_axes=(), init=None):
+    """
+    TODO.
+
+    Arguments:
+      m: TODO
+      x: TODO
+      x_axes: TODO
+      axes: TODO
+      batch_axes: TODO
+
+    Returns:
+      TODO
+    """
     m.weights = nm.Variable(axes=axes + x_axes -
                             batch_axes, init=init, tags='parameter')
     m.bias = nm.Variable(axes=axes, init=init, tags='parameter')
@@ -30,6 +43,18 @@ def linear(m, x, x_axes, axes, batch_axes=(), init=None):
 
 
 def affine(x, activation, batch_axes=None, **kargs):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+      activation: TODO
+      batch_axes: TODO
+      **kargs: TODO
+
+    Returns:
+      TODO
+    """
     return activation(
         linear(
             x,
@@ -40,6 +65,21 @@ def affine(x, activation, batch_axes=None, **kargs):
 
 @nm.with_name_scope
 def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
+    """
+    TODO.
+
+    Arguments:
+      params: TODO
+      x: TODO
+      activation: TODO
+      x_axes: TODO
+      shape_spec: TODO
+      axes: TODO
+      **kargs: TODO
+
+    Returns:
+      TODO
+    """
     value = x
     last_axes = x_axes
     with nm.name_scope_list('L') as layers:
@@ -59,20 +99,34 @@ def mlp(params, x, activation, x_axes, shape_spec, axes, **kargs):
 
 # noinspection PyPep8Naming
 def L2(x):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+
+    Returns:
+      TODO
+    """
     return nm.dot(x, x)
 
 
 def cross_entropy(y, t):
     """
+    TODO.
 
-    :param y:  Estimate
-    :param t: Actual 1-hot data
-    :return:
+    Arguments:
+      y: Estimate
+      t: Actual 1-hot data
+
+    Returns:
+      TODO
     """
     return -nm.sum(nm.log(y) * t)
 
 
 class MyTest(nm.Model):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
@@ -111,7 +165,9 @@ class MyTest(nm.Model):
         g.loss = g.error + .01 * reg
 
     def dump(self):
+        """TODO."""
         def visitor(_):
+            """TODO."""
             print('{s} # {info}'.format(
                 s=_, info=_.file_info))
 

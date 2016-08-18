@@ -26,6 +26,7 @@ import geon.backends.graph.axis as ax
 
 
 def test_init_variable():
+    """TODO."""
     with be.bound_environment():
         ax.Y.length = 1
         hello = be.Variable(axes=(ax.Y,), init=Constant(4))
@@ -41,6 +42,7 @@ def test_init_variable():
 
 
 def test_init_1D_variable():
+    """TODO."""
     with be.bound_environment():
         ax.Y.length = 2
         hello = be.Variable(axes=(ax.Y,), init=Constant(3))
@@ -55,6 +57,7 @@ def test_init_1D_variable():
 
 
 def test_init_2D_variable():
+    """TODO."""
     with be.bound_environment():
         ax.M.length = 3
         ax.N.length = 2
@@ -70,6 +73,7 @@ def test_init_2D_variable():
 
 
 def test_init_1D_variable_from_numpy_array():
+    """TODO."""
     with be.bound_environment():
         ax.Y.length = 10
         npvar = be.NumPyTensor(
@@ -86,6 +90,7 @@ def test_init_1D_variable_from_numpy_array():
 
 
 def test_assign_1D_variable_with_numpy_tensor():
+    """TODO."""
     with be.bound_environment():
         ax.Y.length = 10
         hello = be.Variable(axes=[ax.Y])
@@ -102,6 +107,7 @@ def test_assign_1D_variable_with_numpy_tensor():
 
 
 def test_assign_2D_variable_with_numpy_tensor():
+    """TODO."""
     with be.bound_environment():
         ax.M.length = 3
         ax.N.length = 2

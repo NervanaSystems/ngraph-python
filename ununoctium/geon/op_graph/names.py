@@ -20,6 +20,7 @@ from geon.backends.graph.environment import get_thread_name_scope
 
 
 def get_current_name_scope():
+    """TODO."""
     return get_thread_name_scope()[-1]
 
 
@@ -28,9 +29,13 @@ def name_scope(name=None, name_scope=None):
     """
     Create and use a new name scope
 
-    :param name_scope: Reuse an existing name scope
-    :param name: Create a new name scope within the current name scope
+    Arguments:
+      name_scope: Reuse an existing name scope
+      name: Create a new name scope within the current name scope
     :return: The new name scope.
+
+    Returns:
+
     """
 
     name_scope = name_scope or NameScope(name=name)
@@ -46,8 +51,13 @@ def name_scope(name=None, name_scope=None):
 def name_scope_list(name):
     """
     Create and use a list of name scopes.
-    :param name: The name of the list.
+
+    Arguments:
+      name: The name of the list.
     :return: An iterator for new name scopes in the collection.
+
+    Returns:
+
     """
     naming = NameScopeList(name=name)
     yield (NameScopeListExtender(naming))
@@ -55,6 +65,15 @@ def name_scope_list(name):
 
 @contextmanager
 def next_name_scope(name_scope_list):
+    """
+    TODO.
+
+    Arguments:
+      name_scope_list: TODO
+
+    Returns:
+
+    """
     ns = next(name_scope_list)
     with name_scope(name_scope=ns):
         yield (ns)
@@ -64,9 +83,13 @@ def with_name_scope(fun, name=None):
     """
     Function annotator for introducing a name scope.
 
-    :param fun: The function being annotated.
-    :param name: The name scope name, defaults to the function name
+    Arguments:
+      fun: The function being annotated.
+      name: The name scope name, defaults to the function name
     :return: The annotated function.
+
+    Returns:
+
     """
     cname = name
     if cname is None:
@@ -74,6 +97,16 @@ def with_name_scope(fun, name=None):
 
     @wraps(fun)
     def wrapper(*args, **kargs):
+        """
+        TODO.
+
+        Arguments:
+          *args: TODO
+          **kargs: TODO
+
+        Returns:
+
+        """
         myname = cname
         if 'name' in kargs:
             myname = kargs['name']
@@ -86,10 +119,12 @@ def with_name_scope(fun, name=None):
 
 
 class NameableValue(object):
+    """TODO."""
     counter = 0
 
     @staticmethod
     def generate_id():
+        """TODO."""
         NameableValue.counter += 1
         return 't{}'.format(NameableValue.counter)
 
@@ -103,16 +138,27 @@ class NameableValue(object):
 
     @property
     def graph_label(self):
+        """TODO."""
         if self.name != self.id:
             return self.name.split('.')[-1]
         return self.__class__.__name__ + '[' + self.name + ']'
 
     @property
     def name(self):
+        """TODO."""
         return self.__name
 
     @name.setter
     def name(self, name):
+        """
+        TODO.
+
+        Arguments:
+          name: TODO
+
+        Returns:
+
+        """
         self.__name = name
 
 
@@ -120,9 +166,7 @@ _default_parent = object()
 
 
 class Parented(NameableValue):
-    """
-    A nameable value with a parent, defaults to current name scope.
-    """
+    """A nameable value with a parent, defaults to current name scope."""
 
     def __init__(self, parent=_default_parent, name=None, **kargs):
         super(Parented, self).__init__(name=name, **kargs)
@@ -132,6 +176,16 @@ class Parented(NameableValue):
             parent.__setattr__(self.name, self)
 
     def _set_value_name(self, name, value):
+        """
+        TODO.
+
+        Arguments:
+          name: TODO
+          value: TODO
+
+        Returns:
+
+        """
         if isinstance(value, NameableValue):
             myname = self.name
             value.name = myname + name
@@ -144,6 +198,7 @@ class Parented(NameableValue):
 
 
 class NameScope(Parented):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(NameScope, self).__init__(**kargs)

@@ -1,4 +1,3 @@
-from builtins import range
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@ from builtins import range
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from builtins import range
 import numpy as np
 import random
 import geon as be
@@ -20,13 +20,22 @@ import geon.frontends.base.axis as ax
 from geon.util.utils import raise_all_numpy_errors
 from geon.util.utils import ExecutorFactory, executor
 
-'''
+"""
 Test graphiti's implementation of the dot product.
-
-'''
+"""
 
 
 def get_random_shape(max_num_axes, max_axis_length):
+    """
+    TODO.
+
+    Arguments:
+      max_num_axes: TODO
+      max_axis_length: TODO
+
+    Returns:
+      TODO
+    """
     assert max_num_axes >= 2
     num_axes = 0
 
@@ -44,6 +53,19 @@ def get_random_np_array(
         mean=0,
         sigma=1,
         dtype=np.float32):
+    """
+    TODO.
+
+    Arguments:
+      max_num_axes: TODO
+      max_axis_length: TODO
+      mean: TODO
+      sigma: TODO
+      dtype: TODO
+
+    Returns:
+      TODO
+    """
     shape = get_random_shape(max_num_axes, max_axis_length)
     arr = sigma * np.random.randn(*shape) + mean
     arr.dtype = dtype
@@ -52,6 +74,15 @@ def get_random_np_array(
 
 @be.with_bound_environment
 def graphiti_l2_norm(np_array):
+    """
+    TODO.
+
+    Arguments:
+      np_array: TODO
+
+    Returns:
+      TODO
+    """
     axes = ()
     for i, l in enumerate(np_array.shape):
         axes += (be.AxisVar(name='axis%s' % i, length=l),)
@@ -62,6 +93,7 @@ def graphiti_l2_norm(np_array):
 
 @raise_all_numpy_errors
 def test_l2_norm():
+    """TODO."""
     tests_ = [
         [],
         [1],
@@ -76,6 +108,7 @@ def test_l2_norm():
 @raise_all_numpy_errors
 @be.with_bound_environment
 def test_tensor_dot_tensor():
+    """TODO."""
     delta = 1e-3
     rtol = atol = 1e-2
 

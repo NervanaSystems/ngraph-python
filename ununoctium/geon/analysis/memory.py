@@ -25,7 +25,15 @@ from geon.op_graph.op_graph import Buffer, NumPyTensor
 
 def _random_colors(N, alpha=.5):
     """
-    Creates a map of N color of transparency alpha
+    Creates a map of N color of transparency alpha.
+
+    Arguments:
+      N: TODO
+      alpha: TODO
+
+    Returns:
+      TODO
+
     """
     from colorsys import hsv_to_rgb
     HSV = [[x * 1.0 / N, 0.5, 0.5] for x in range(N)]
@@ -46,7 +54,7 @@ class InterferenceGraph(UndirectedGraph):
     In a standard graph coloring problem you want to minimize the number of
     buffers allocated.  in this variant of the graph coloring problem we want
     to minimize the total buffer space allocated.  In academic literature this
-    variant is refered to as ____.
+    variant is referred to as ____.
     """
 
     def __init__(self, lives):
@@ -57,7 +65,7 @@ class InterferenceGraph(UndirectedGraph):
         of the underlying tensor.
 
         This seems to be the performance bottleneck for very large graphs.
-        Construction could be optimized, or coloring could be done direclty
+        Construction could be optimized, or coloring could be done directly
         from the liveness information.
 
         :param lives (op => set(tensor_description)): Live tensors at each point
@@ -110,6 +118,16 @@ class InterferenceGraph(UndirectedGraph):
 
 
 def bind_initializers(transformer, ops):
+    """
+    TODO.
+
+    Arguments:
+      transformer: TODO
+      ops: TODO
+
+    Returns:
+
+    """
     for op in ops:
         buffer = op.tensor_description(transformer).buffer
         # assign the same buffer to all of the op's initializers
@@ -123,13 +141,17 @@ def bind_initializers(transformer, ops):
 
 def assign_buffers(transformer, results, fusible=None):
     """
-    Performs dataflow analysis ou the graph defined by the provide results.
+    Performs dataflow analysis of the graph defined by the provide results.
     Assigns buffer to each node.
 
-    :param results: results to build the graph from
+    Arguments:
+      transformer: TODO
+      fusible: TODO
+      results: results to build the graph from
 
-    :return: dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
-        memory (int): Memory usage of the computations
+    Returns:
+      dfg (DataFlowGraph/KernelFlowGraph): dataflow of the computation
+      memory (int): Memory usage of the computations
     """
 
     dfg = DataFlowGraph(transformer, results)

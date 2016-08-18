@@ -21,7 +21,7 @@ from geon.op_graph.op_graph import RNG
 
 
 class BackendNDArray(np.ndarray):
-
+    """TODO."""
     def __setitem__(self, key, value):
         if isinstance(value, OneHot):
             value.apply(self, key)
@@ -42,11 +42,12 @@ class BackendNDArray(np.ndarray):
         return True
 
     def raw(self):
+        """TODO."""
         return self.ctypes.data
 
 
 class OneHot(object):
-    """Remembers onehot parameters"""
+    """Remembers onehot parameters."""
 
     def __init__(self, name, idx, axis):
         self.name = name
@@ -54,6 +55,13 @@ class OneHot(object):
         self.axis = axis
 
     def apply(self, array, key):
+        """
+        TODO.
+
+        Arguments:
+            array: TODO
+            key: TODO
+        """
         array[key] = 0
         idx = self.idx.reshape(-1)
         axis = self.axis
@@ -92,12 +100,19 @@ class DataloaderBackend(Backend):
         self.device_id = 0
 
     def cleanup_backend(self):
+        """TODO."""
         super(DataloaderBackend, self).cleanup_backend()
 
     def copy_transpose(self, a, out, axes=None, repeat=1):
         """
         Function to perform a fast copy transpose/dimshuffle operation.
         Works just like numpy.transpose, but requires an output tensor argument.
+
+        Arguments:
+            a: TODO
+            out: TODO
+            axes: TODO
+            repeat: TODO
         """
         out[:] = np.transpose(a, axes).copy()
 
@@ -150,7 +165,7 @@ class DataloaderBackend(Backend):
             shape (int, list): length of each dimension of the Tensor.
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             persist_values (bool, optional): If set to True (the default), the
                                              values assigned to this Tensor
                                              will persist across multiple begin
@@ -193,7 +208,7 @@ class DataloaderBackend(Backend):
             shape (int, list): length of each dimension of the Tensor.
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             persist_values (bool, optional): If set to True (the default), the
                                              values assigned to this Tensor
                                              will persist across multiple begin
@@ -267,7 +282,7 @@ class DataloaderBackend(Backend):
                               numpy.ndarray
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             persist_values (bool, optional): If set to True (the default), the
                                              values assigned to this Tensor
                                              will persist across multiple begin
@@ -310,7 +325,7 @@ class DataloaderBackend(Backend):
             shape (int, list): length of each dimension of the Tensor.
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             persist_values (bool, optional): If set to True (the default), the
                                              values assigned to this Tensor
                                              will persist across multiple begin
@@ -348,7 +363,7 @@ class DataloaderBackend(Backend):
 
         Arguments:
             other_ary (tensor object): Tensor to inherit the dimensions of.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
             persist_values (bool, optional): If set to True (the default), the
@@ -379,7 +394,7 @@ class DataloaderBackend(Backend):
 
         Arguments:
             other_ary (tensor object): Tensor to inherit the dimensions of.
-            name (str, optional): name indentifying the tensor (used in printing).
+            name (str, optional): name identifying the tensor (used in printing).
             dtype (data-type, optional): If present, specifies the underlying
                                          type to employ for each element.
             persist_values (bool, optional): If set to True (the default), the
@@ -565,7 +580,7 @@ class DataloaderBackend(Backend):
             a (Tensor): input to be transformed.
             b (Tensor, numeric): exponentiated value to be applied to
                                      element.  Examples include 2 (square),
-                                     0.5 (sqaure root).
+                                     0.5 (square root).
             out (Tensor, optional): where the result will be stored. If out is
                                     None, only the op-tree will be returned.
 
@@ -583,7 +598,7 @@ class DataloaderBackend(Backend):
             a (Tensor): input to be transformed.
             power (Tensor, numeric): exponentiated value to be applied to
                                      element.  Examples include 2 (square),
-                                     0.5 (sqaure root).
+                                     0.5 (square root).
             out (Tensor, optional): where the result will be stored. If out is
                                     None, only the op-tree will be returned.
 
@@ -920,7 +935,7 @@ class DataloaderBackend(Backend):
             a (Tensor, numeric): left-hand side operand.
             b (Tensor, numeric): right-hand side operand.
             out (Tensor, optional): where the result will be stored. If out is
-                                    None, only theshape op-tree will be returned.
+                                    None, only the shape op-tree will be returned.
 
         Returns:
             OpTreeNode: the resulting op-tree
@@ -1170,7 +1185,7 @@ class DataloaderBackend(Backend):
 
         Arguments:
             a (Tensor): the Tensor on which to perform the operation
-            indices (Tensor, numpy ndarray): indicies of elements to select
+            indices (Tensor, numpy ndarray): indices of elements to select
             axis (int, optional): the dimension along which to compute.
                                   If set to None, we will extract over all
                                   dimensions (flattened first)

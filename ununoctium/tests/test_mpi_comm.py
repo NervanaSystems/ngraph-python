@@ -18,14 +18,14 @@ import os
 import numpy as np
 from subprocess import Popen, PIPE
 
-'''
+"""
 Test the usage of transformer.allreduce
-
-'''
+"""
 from geon.backends.graph.mpihandle import MPIHandle
 
 
 def test_mpi_allreduce():
+    """TODO."""
     a = np.array([[4, 1, 2, -3, 4],
                   [5, -6, 7, -8, 9]], dtype=np.float32)
 
@@ -38,22 +38,27 @@ def test_mpi_allreduce():
 
 
 def test_mpi_reduce():
+    """TODO."""
     pass
 
 
 def test_mpi_reduce_avg():
+    """TODO."""
     pass
 
 
 def test_mpi_scatter():
+    """TODO."""
     pass
 
 
 def test_mpi_scatterv():
+    """TODO."""
     pass
 
 
 def test_mpi_gattherv():
+    """TODO."""
     pass
 
 
