@@ -88,7 +88,11 @@ class AxisVar(Axis):
 
 
 class NumericAxis(Axis):
-    """TODO."""
+    """
+    A NumericAxis is an axis which is uniquely identified by its length.  All
+    NumericAxis with the same length are the same NumericAxis.
+    """
+
     cache = {}
 
     def __new__(cls, length=None, **kwargs):
