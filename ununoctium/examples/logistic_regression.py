@@ -106,7 +106,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
 
 
 if __name__ == '__main__':
-    # setup
+    # setups
     xs = np.array([[0.52, 1.12, 0.77],
                    [0.88, -1.08, 0.15],
                    [0.52, 0.06, -1.30],
