@@ -31,6 +31,7 @@ from geon.op_graph.nodes import Node
 
 
 def get_all_defs():
+    """TODO."""
     return Defmod.defs()
 
 
@@ -38,10 +39,14 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
     """
     Find tensors satisfying criteria.
 
-    :param tags: Required tags
-    :param used_by: Restrict to tensors used by this tensor
-    :param types: Restrict to these types, default Tensor.
-    :return: a set of tensors.
+    Arguments:
+      tags: Required tags
+      used_by: Restrict to tensors used by this tensor
+      uses: TODO
+      types: Restrict to these types, default Tensor.
+
+    Returns:
+        A set of tensors.
     """
     result = set()
     visited = set()
@@ -95,7 +100,8 @@ def find_all(tags=None, used_by=None, uses=None, types=None):
 
 
 class Defmod(Node):
-    """Base class for model definitions
+    """
+    Base class for model definitions.
 
     Handles generic printing and tracking object creation order.
     """
@@ -108,6 +114,7 @@ class Defmod(Node):
 
     @staticmethod
     def defs():
+        """TODO."""
         try:
             defs = get_current_environment()[Defmod]
         except KeyError:
@@ -116,6 +123,15 @@ class Defmod(Node):
         return defs
 
     def as_node(self, x):
+        """
+        TODO.
+
+        Arguments:
+          x: TODO
+
+        Returns:
+
+        """
         return Tensor.as_tensor(x)
 
 
@@ -130,13 +146,24 @@ class Tensor(Defmod):
 
     @property
     def size(self):
+        """TODO."""
         return TensorSize(self)
 
     @property
     def axes(self):
+        """TODO."""
         return self._axes
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(
             Tensor,
             self)._repr_attrs(
@@ -148,6 +175,15 @@ class Tensor(Defmod):
 
     @staticmethod
     def as_tensor(tensor):
+        """
+        TODO.
+
+        Arguments:
+          tensor: TODO
+
+        Returns:
+
+        """
         if tensor is None or isinstance(tensor, Tensor):
             return tensor
         return LiteralTensor(tensor)
@@ -197,10 +233,12 @@ class Tensor(Defmod):
 
 
 class Pow(Tensor):
+    """TODO."""
     pass
 
 
 class TensorSize(Tensor):
+    """TODO."""
 
     def __init__(self, tensor, **kargs):
         super(TensorSize, self).__init__(axes=(), args=(tensor,))
@@ -215,9 +253,19 @@ class LiteralTensor(Tensor):
 
     @property
     def graph_label(self):
+        """TODO."""
         return str(self.value)
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(LiteralTensor, self)._repr_attrs('value', *attrs)
 
 
@@ -230,6 +278,15 @@ class ArrayWithAxes(Tensor):
         self.array = array
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(ArrayWithAxes, self)._repr_attrs('array', *attrs)
 
 
@@ -244,6 +301,7 @@ class RecursiveTensor(Tensor):
 
 
 class TensorSetItem(Defmod):
+    """TODO."""
 
     def __init__(self, tensor, key, value, **kargs):
         super(TensorSetItem, self).__init__(**kargs)
@@ -252,6 +310,15 @@ class TensorSetItem(Defmod):
         self.value = value
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(
             TensorSetItem,
             self)._repr_attrs(
@@ -262,6 +329,7 @@ class TensorSetItem(Defmod):
 
 
 class TensorGetItem(Tensor):
+    """TODO."""
 
     def __init__(self, tensor, key, **kargs):
         super(TensorGetItem, self).__init__(**kargs)
@@ -269,16 +337,35 @@ class TensorGetItem(Tensor):
         self.key = key
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(TensorGetItem, self)._repr_attrs('tensor', 'key', *attrs)
 
 
 class VarExpr(Defmod):
+    """TODO."""
 
     def __init__(self, args, **kargs):
         super(VarExpr, self).__init__(**kargs)
         self.args = args
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(VarExpr, self)._repr_attrs('args', *attrs)
 
     def __add__(self, other):
@@ -295,24 +382,36 @@ class VarExpr(Defmod):
 
 
 class VarAdd(VarExpr):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(VarAdd, self).__init__(args=(x, y), **kargs)
 
 
 class VarSub(VarExpr):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(VarSub, self).__init__(args=(x, y), **kargs)
 
 
 class Var(VarExpr):
+    """TODO."""
 
     def __init__(self, kind, **kargs):
         super(Var, self).__init__(args=(), **kargs)
         self.kind = kind
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(Var, self)._repr_attrs('kind', *attrs)
 
 
@@ -324,6 +423,15 @@ class Variable(Tensor):
         self.init = init
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(Variable, self)._repr_attrs('init', *attrs)
 
 
@@ -342,10 +450,12 @@ class ComputedTensor(Tensor):
 
     @property
     def graph_label(self):
+        """TODO."""
         return type(self).__name__
 
     @property
     def axes(self):
+        """TODO."""
         return ValueAxes(self)
 
 
@@ -357,168 +467,221 @@ class ElementWise(ComputedTensor):
         self.e_axes = Axes.as_axes(e_axes)
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(ElementWise, self)._repr_attrs('e_axes', *attrs)
 
 
 class Reduction(ComputedTensor):
+    """TODO."""
 
     def __init__(self, r_axes=None, **kargs):
         super(Reduction, self).__init__(**kargs)
         self.r_axes = Axes.as_axes(r_axes)
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(Reduction, self)._repr_attrs('r_axes', *attrs)
 
 
 class absolute(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(absolute, self).__init__(args=(x,), **kargs)
 
 
 class add(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(add, self).__init__(args=(x, y), **kargs)
 
 
 class cos(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(cos, self).__init__(args=(x,), **kargs)
 
 
 class decrement(ComputedTensor):
+    """TODO."""
 
     def __init__(self, parameter, change, **kargs):
         super(decrement, self).__init__(args=(parameter, change), **kargs)
 
 
 class divide(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(divide, self).__init__(args=(x, y), **kargs)
 
 
 class doall(ComputedTensor):
+    """TODO."""
 
     def __init__(self, all, **kargs):
         super(doall, self).__init__(args=all, **kargs)
 
 
 class dot(ComputedTensor):
+    """TODO."""
 
     def __init__(self, x, y, reduction_axes=None, **kargs):
         super(dot, self).__init__(args=(x, y), **kargs)
         self.r_axes = Axes.as_axes(reduction_axes)
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(dot, self)._repr_attrs('r_axes', *attrs)
 
 
 class exp(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(exp, self).__init__(args=(x,), **kargs)
 
 
 class log(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(log, self).__init__(args=(x,), **kargs)
 
 
 class maximum(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(maximum, self).__init__(args=(x, y), **kargs)
 
 
 class minimum(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(minimum, self).__init__(args=(x, y), **kargs)
 
 
 class multiply(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(multiply, self).__init__(args=(x, y), **kargs)
 
 
 class negative(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(negative, self).__init__(args=(x,), **kargs)
 
 
 class reciprocal(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(reciprocal, self).__init__(args=(x,), **kargs)
 
 
 class sign(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(sign, self).__init__(args=(x,), **kargs)
 
 
 class sigmoid(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(sigmoid, self).__init__(args=(x,), **kargs)
 
 
 class softmax(ComputedTensor):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(softmax, self).__init__(args=(x,), **kargs)
 
 
 class sin(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(sin, self).__init__(args=(x,), **kargs)
 
 
 class sqrt(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(sqrt, self).__init__(args=(x,), **kargs)
 
 
 class square(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(square, self).__init__(args=(x,), **kargs)
 
 
 class subtract(ElementWise):
+    """TODO."""
 
     def __init__(self, x, y, **kargs):
         super(subtract, self).__init__(args=(x, y), **kargs)
 
 
 class sum(Reduction):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(sum, self).__init__(args=(x,), **kargs)
 
 
 class tanh(ElementWise):
+    """TODO."""
 
     def __init__(self, x, **kargs):
         super(tanh, self).__init__(args=(x,), **kargs)
 
 
 class deriv(Tensor):
+    """TODO."""
 
     def __init__(self, dep, indep, **kargs):
         super(deriv, self).__init__(args=(dep, indep), **kargs)
 
 
 class Axis(Defmod):
+    """TODO."""
 
     def __init__(self, length=None, dependents=None, like=None, **kargs):
         super(Axis, self).__init__(**kargs)
@@ -533,13 +696,32 @@ class Axis(Defmod):
 
     @property
     def length(self):
+        """TODO."""
         return self._length or AxisLength(self)
 
     @length.setter
     def length(self, length):
+        """
+        TODO.
+
+        Arguments:
+          length: TODO
+
+        Returns:
+
+        """
         AxisSetLength(self, length)
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(
             Axis,
             self)._repr_attrs(
@@ -550,16 +732,27 @@ class Axis(Defmod):
 
 
 class AxisLength(Defmod):
+    """TODO."""
 
     def __init__(self, axis, **kargs):
         super(AxisLength, self).__init__(**kargs)
         self.axis = axis
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(AxisLength, self)._repr_attrs('axis', *attrs)
 
 
 class AxisSetLength(Defmod):
+    """TODO."""
 
     def __init__(self, axis, length, **kargs):
         super(AxisSetLength, self).__init__(**kargs)
@@ -567,10 +760,20 @@ class AxisSetLength(Defmod):
         self.length = length
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(AxisSetLength, self)._repr_attrs('axis', 'length', *attrs)
 
 
 class AxisIdx(Defmod):
+    """TODO."""
 
     def __init__(self, axis, idx, **kargs):
         super(AxisIdx, self).__init__(**kargs)
@@ -578,22 +781,42 @@ class AxisIdx(Defmod):
         self.idx = idx
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(AxisIdx, self)._repr_attrs('axis', 'idx')
 
 
 class AxisVariable(Defmod):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(AxisVariable, self).__init__(**kargs)
 
 
 class Axes(Defmod):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(Axes, self).__init__(**kargs)
 
     @staticmethod
     def as_axes(axes):
+        """
+        TODO.
+
+        Arguments:
+          axes: TODO
+
+        Returns:
+
+        """
         if axes is None or isinstance(axes, Axes):
             return axes
         return LiteralAxes(axes)
@@ -618,6 +841,7 @@ class Axes(Defmod):
 
 
 class LiteralAxes(Axes):
+    """TODO."""
 
     def __init__(self, axes, **kargs):
         super(LiteralAxes, self).__init__(**kargs)
@@ -626,42 +850,74 @@ class LiteralAxes(Axes):
         self.axes = axes
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(LiteralAxes, self)._repr_attrs('axes', *attrs)
 
 
 class ValueAxes(Axes):
+    """TODO."""
 
     def __init__(self, value, **kargs):
         super(ValueAxes, self).__init__(**kargs)
         self.value = value
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(ValueAxes, self)._repr_attrs('value', *attrs)
 
 
 class CombineAxes(Axes):
+    """TODO."""
 
     def __init__(self, args, **kargs):
         super(CombineAxes, self).__init__(**kargs)
         self.args = [Axes.as_axes(_) for _ in args]
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return super(CombineAxes, self)._repr_attrs('args', *attrs)
 
 
 class AppendAxes(CombineAxes):
+    """TODO."""
 
     def __init__(self, *args, **kargs):
         super(AppendAxes, self).__init__(args=args, **kargs)
 
 
 class SubAxes(CombineAxes):
+    """TODO."""
 
     def __init__(self, *args, **kargs):
         super(SubAxes, self).__init__(args=args, **kargs)
 
 
 class IntersectAxes(CombineAxes):
+    """TODO."""
 
     def __init__(self, *args, **kargs):
         super(IntersectAxes, self).__init__(args=args, **kargs)

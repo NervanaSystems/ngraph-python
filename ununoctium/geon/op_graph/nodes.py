@@ -22,6 +22,7 @@ from geon.op_graph.names import NameableValue
 
 
 class DebugInfo(object):
+    """TODO."""
 
     def __init__(self, **kargs):
         # TODO This is a good first cut for debugging info, but it would be nice to
@@ -50,16 +51,16 @@ class DebugInfo(object):
         """
         Return file location that created the node.
 
-        :return: String with file location that created the node.
+        Returns:
+          String with file location that created the node.
+
         """
         return 'File "{filename}", line {lineno}'.format(
             filename=self.filename, lineno=self.lineno)
 
 
 class Node(NameableValue, DebugInfo):
-    """
-    Basic implementation of DAGs.
-    """
+    """Basic implementation of DAGs."""
 
     def __init__(self, args=(), tags=None, **kargs):
         """
@@ -90,8 +91,13 @@ class Node(NameableValue, DebugInfo):
     def args(self, args):
         """
         Replace old inputs with new inputs, adjusting backpointers as needed.
-        :param args: New arguments
+
+        Arguments:
+          args: New arguments
         :return:
+
+        Returns:
+
         """
         for arg in self.__args:
             arg.users.remove(self)
@@ -103,9 +109,13 @@ class Node(NameableValue, DebugInfo):
         """
         Replace all occurrences of an argument node with another node.
 
-        :param old: Node to be replaced
-        :param new: Replacement
+        Arguments:
+          old: Node to be replaced
+          new: Replacement
         :return:
+
+        Returns:
+
         """
         self.args = [new if arg is old else arg for arg in self.args]
 
@@ -113,8 +123,12 @@ class Node(NameableValue, DebugInfo):
         """
         Convert a sequence of values to a tuple of nodes using as_node.
 
-        :param args: Sequence of values that can be converted to nodes
+        Arguments:
+          args: Sequence of values that can be converted to nodes
         :return: Tuple of nodes
+
+        Returns:
+
         """
         return tuple(self.as_node(arg) for arg in args)
 
@@ -124,8 +138,11 @@ class Node(NameableValue, DebugInfo):
 
         Subclasses should override as appropriate.  Used with as_nodes.
 
-        :param arg: The value to convert to a node.
-        :return: A node.
+        Arguments:
+          arg: The value to convert to a node.
+
+        Returns:
+          A node
         """
         if isinstance(arg, Node):
             return arg
@@ -136,12 +153,25 @@ class Node(NameableValue, DebugInfo):
         """
         Bottom-up traversal of root and their inputs
 
-        :param root: root set of nodes to visit
-        :param fun: Function to call on each visited node
+        Arguments:
+          root: root set of nodes to visit
+          fun: Function to call on each visited node
+
+        Returns:
+
         """
         visited = set()
 
         def visit(node):
+            """
+            TODO.
+
+            Arguments:
+              node: TODO
+
+            Returns:
+
+            """
             if node not in visited:
                 for n in node.args:
                     visit(n)
@@ -156,13 +186,25 @@ class Node(NameableValue, DebugInfo):
         """
         Top-down traversal of root and closure of nodes using root as input.
 
-        :param root:  root set of nodes to visit
-        :param fun: Function to call on each visited node
-        :return:
+        Arguments:
+          root: root set of nodes to visit
+          fun: Function to call on each visited node
+
+        Returns:
+
         """
         visited = set()
 
         def visit(node):
+            """
+            TODO.
+
+            Arguments:
+              node: TODO
+
+            Returns:
+
+            """
             if node not in visited:
                 for n in node.users:
                     visit(n)
@@ -173,9 +215,19 @@ class Node(NameableValue, DebugInfo):
             visit(node)
 
     def _repr_body(self):
+        """TODO."""
         return self._abbrev_args(self._repr_attrs())
 
     def _repr_attrs(self, *attrs):
+        """
+        TODO.
+
+        Arguments:
+          *attrs: TODO
+
+        Returns:
+
+        """
         return attrs
 
     def __shortpr(self):
@@ -185,6 +237,15 @@ class Node(NameableValue, DebugInfo):
         return '{cls}{name}'.format(name=name, cls=self.__class__.__name__)
 
     def _abbrev_value(self, value):
+        """
+        TODO.
+
+        Arguments:
+          value: TODO
+
+        Returns:
+
+        """
         if isinstance(value, Node):
             return value.__shortpr()
         elif isinstance(value, tuple):
@@ -201,6 +262,15 @@ class Node(NameableValue, DebugInfo):
             return '{v}'.format(v=value)
 
     def _abbrev_args(self, keys):
+        """
+        TODO.
+
+        Arguments:
+          keys: TODO
+
+        Returns:
+
+        """
         if not isinstance(keys, tuple):
             keys = (keys,)
         result = ''
@@ -252,13 +322,28 @@ def generic_method(base_method):
         def visit(self, arg):
             self.ys.append(arg)
 
-    :param base_method: Default implementation of the method.
-    :return: The generic method
+    Arguments:
+      base_method: Default implementation of the method.
+
+    Returns:
+      The generic method
     """
     methods = {}
 
     @wraps(base_method)
     def method_dispatch(s, dispatch_arg, *args, **kargs):
+        """
+        TODO.
+
+        Arguments:
+          s: TODO
+          dispatch_arg: TODO
+          *args: TODO
+          **kargs: TODO
+
+        Returns:
+
+        """
         for t in type(dispatch_arg).__mro__:
             handler = methods.get(t, None)
             if handler is not None:
@@ -268,10 +353,23 @@ def generic_method(base_method):
     def on_type(dispatch_type):
         """
         Marks the handler sub-method for when the first argument has type dispatch_type.
-        :param dispatch_type:
-        :return: The generic method.
+
+        Arguments:
+          dispatch_type: return: The generic method.
+
+        Returns:
+
         """
         def make_handler(f):
+            """
+            TODO.
+
+            Arguments:
+              f: TODO
+
+            Returns:
+
+            """
             methods[dispatch_type] = f
             return method_dispatch
 

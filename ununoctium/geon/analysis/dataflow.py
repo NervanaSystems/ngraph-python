@@ -19,15 +19,14 @@ from geon.util.graph import Digraph
 
 
 class DataFlowGraph(Digraph):
-    """
-    Class explicitly representing the dataflow graph
-    """
+    """Class explicitly representing the dataflow graph."""
 
     def __init__(self, transformer, results):
         """
-        Initialize the dataflow graph
+        Initialize the dataflow graph.
 
-        :param results (dict): Results of the desired computation
+        Arguments:
+          results(dict): Results of the desired computation
         """
 
         super(DataFlowGraph, self).__init__(defaultdict(set))
@@ -36,7 +35,12 @@ class DataFlowGraph(Digraph):
         self.results = results
 
     def _fill_successors(self, results):
-        """ Walk through provided results to build the successors map"""
+        """
+        Walk through provided results to build the successors map.
+
+        Arguments:
+          results(dict): Results of the desired computation
+        """
         for w in results:
             self.successors[w] |= set()
             for v in w.args:
@@ -45,7 +49,7 @@ class DataFlowGraph(Digraph):
 
     @property
     def instructions(self):
-        """ Returns the ordered instructions to execute the dataflow graph """
+        """Returns the ordered instructions to execute the dataflow graph."""
 
         return self.topsort()
 
@@ -55,7 +59,8 @@ class DataFlowGraph(Digraph):
         (i.e., instruction line number), which tensors need to be in
         memory (because they will be required later on).
 
-        :return: dict (op => set(tensor_description)): Live tensors at each point
+        Returns:
+          dict (op => set(tensor_description)): Live tensors at each point
         """
 
         can_do_inplace = lambda x: False

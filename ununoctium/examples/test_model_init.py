@@ -51,6 +51,19 @@ args = parser.parse_args()
 
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
+    """
+    TODO.
+
+    Arguments:
+      ns: TODO
+      x: TODO
+      axes: TODO
+      init: TODO
+      bias: TODO
+
+    Returns:
+      TODO
+    """
     ns.weights = be.Variable(axes=be.linear_map_axes(
         be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
     result = be.dot(ns.weights, x)
@@ -62,6 +75,17 @@ def linear(ns, x, axes, init=None, bias=None):
 
 @be.with_name_scope
 def mlp(ns, x, y):
+    """
+    TODO.
+
+    Arguments:
+      ns: TODO
+      x: TODO
+      y: TODO
+
+    Returns:
+      TODO
+    """
     nns_axes = (be.AxisVar(like=ax.Y, length=200),)
     value = be.tanh(linear(x, axes=nns_axes, init=Uniform(-0.1, 0.1)))
     value = be.softmax(linear(value, axes=y.axes, init=Uniform(-0.1, 0.1)))
@@ -70,6 +94,7 @@ def mlp(ns, x, y):
 
 
 class MyTest(be.Model):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
@@ -91,6 +116,16 @@ class MyTest(be.Model):
 
     @be.with_graph_scope
     def train(self, train, test):
+        """
+        TODO.
+
+        Arguments:
+          train: TODO
+          test: TODO
+
+        Returns:
+          TODO
+        """
         with be.bound_environment() as env:
             graph = self.graph
             ax.N.length = train.bsz
@@ -159,6 +194,17 @@ class MyTest(be.Model):
 
     @be.with_graph_scope
     def test(self, env, test, printParam=False):
+        """
+        TODO.
+
+        Arguments:
+          env: TODO
+          test: TODO
+          printParam: TODO
+
+        Returns:
+          TODO
+        """
         graph = self.graph
         with be.bound_environment(env):
             enp = be.NumPyTransformer(self.graph.value)

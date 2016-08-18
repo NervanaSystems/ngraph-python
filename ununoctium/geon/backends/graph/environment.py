@@ -19,12 +19,12 @@ from functools import wraps
 
 # TODO:
 # Store default values directly with the keys, i.e. a default axis length is stored in the axis.
-# When acessing values from the environment, pass the default value.  This lets us get rid of the
+# When accessing values from the environment, pass the default value.  This lets us get rid of the
 # environment that is used to hold default values, and some of the @with_environment uses.  Can
 # have an Empty object if we need a way to throw on undefined values
 
 # store a "batch" attribute on an axis in the environment, so that a @with_batch_axes
-# can automatcially tag those axes as batch.
+# can automatically tag those axes as batch.
 
 # replace the special-cases in the environment with a kind argument to access/set so we don't
 # need all these special-purpose methods
@@ -33,6 +33,7 @@ __thread_state = threading.local()
 
 
 def get_thread_state():
+    """TODO."""
     return __thread_state
 
 
@@ -40,6 +41,7 @@ get_thread_state().name_scope = [None]
 
 
 def get_thread_name_scope():
+    """TODO."""
     return get_thread_state().name_scope
 
 
@@ -47,15 +49,23 @@ get_thread_state().ops = [None]
 
 
 def get_thread_ops():
+    """TODO."""
     return get_thread_state().ops
 
 
 def get_current_ops():
+    """TODO."""
     return get_thread_ops()[-1]
 
 
 @contextmanager
 def captured_ops(ops=None):
+    """
+    TODO.
+
+    Arguments:
+      ops: TODO
+    """
     try:
         get_thread_ops().append(ops)
         yield (ops)
@@ -67,14 +77,17 @@ get_thread_state().environment = [None]
 
 
 def get_thread_environment():
+    """TODO."""
     return get_thread_state().environment
 
 
 def get_current_environment():
+    """TODO."""
     return get_thread_environment()[-1]
 
 
 class EnvironmentProxy(object):
+    """TODO."""
 
     def __init__(self):
         pass
@@ -88,6 +101,13 @@ proxy = EnvironmentProxy()
 
 @contextmanager
 def bound_environment(environment=None, create=True):
+    """
+    TODO.
+
+    Arguments:
+      environment: TODO
+      create: TODO
+    """
     if environment is None and create:
         environment = Environment(parent=get_current_environment())
 
@@ -108,6 +128,7 @@ def with_bound_environment(fun, environment=None, create=True):
 
 
 class Environment(object):
+    """TODO."""
 
     def __init__(self, parent=None, **kargs):
         super(Environment, self).__init__(**kargs)
@@ -116,8 +137,16 @@ class Environment(object):
 
     def _chained_search(self, key, default=None, use_default=False):
         """
-        If key doesnt exist in attr, try looking in the parent's attr, then
+        If key doesn't exist in attr, try looking in the parent's attr, then
         the grandparent's, etc.
+
+        Arguments:
+          key: TODO
+          default: TODO
+          use_default: TODO
+
+        Returns:
+          TODO
         """
         env = self
         while True:
@@ -137,7 +166,24 @@ class Environment(object):
         self.values[key] = value
 
     def get_value(self, key, default):
+        """
+        TODO.
+
+        Arguments:
+          key: TODO
+          default: TODO
+
+        Returns:
+          TODO
+        """
         return self._chained_search(key, default=default, use_default=True)
 
     def set_value(self, key, value):
+        """
+        TODO.
+
+        Arguments:
+          key: TODO
+          value: TODO
+        """
         self.values[key] = value

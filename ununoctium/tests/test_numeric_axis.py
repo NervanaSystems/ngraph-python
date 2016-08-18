@@ -20,6 +20,7 @@ from geon.util.utils import executor
 
 @be.with_bound_environment
 def test_dot_with_numerics():
+    """TODO."""
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
     axes = be.Axes([ax1, ax2])
@@ -35,6 +36,7 @@ def test_dot_with_numerics():
 
 @be.with_bound_environment
 def test_expand_dims():
+    """TODO."""
     ax1 = be.NumericAxis(2)
     ax2 = be.NumericAxis(2)
     axes = be.Axes([ax1, ax2])

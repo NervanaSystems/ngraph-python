@@ -27,6 +27,15 @@ from geon.op_graph.names import name_scope
 
 
 def dataset_nclasses(dataset):
+    """
+    TODO.
+
+    Arguments:
+      dataset: TODO
+
+    Returns:
+
+    """
     if isinstance(dataset, ArrayIterator):
         return dataset.nclass
     elif isinstance(dataset, DataLoader):
@@ -34,6 +43,15 @@ def dataset_nclasses(dataset):
 
 
 def dataset_batchsize(dataset):
+    """
+    TODO.
+
+    Arguments:
+      dataset: TODO
+
+    Returns:
+
+    """
     if isinstance(dataset, ArrayIterator):
         return dataset.be.bsz
     elif isinstance(dataset, DataLoader):
@@ -41,7 +59,26 @@ def dataset_batchsize(dataset):
 
 
 def in_graph(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
     def wrapper(self, *args, **kargs):
+        """
+        TODO.
+
+        Arguments:
+          *args: TODO
+          **kargs: TODO
+
+        Returns:
+
+        """
         with bound_environment(environment=self.environment):
             with name_scope(name_scope=self.graph):
                 return f(self, *args, **kargs)
@@ -49,6 +86,7 @@ def in_graph(f):
 
 
 class Model(GraphComponent):
+    """TODO."""
 
     def __init__(self, layers, name=None, optimizer=None, **kargs):
         super(Model, self).__init__(**kargs)
@@ -76,17 +114,21 @@ class Model(GraphComponent):
                    cost, optimizer, metric=None):
         """
         Propagate shapes through the layers to configure, then allocate space.
+
         Arguments:
-            dataset (NervanaDataIterator): An iterable of minibatches where each
-                element is a (x, y) tuple where x is the input data and y are the labels.
-                x is of dimension (feature_size, batch_size)
-                y is of dimension (label_size, batch_size)
-                Length of the iterator is num_batches which is num_data / batch_size.
-            cost (Cost): Defines the function which the model is minimizing based
-                         on the output of the last layer and the input labels.
-            optimizer (Optimizer): Defines the learning rule for updating the model parameters.
-            num_epochs: Number of times to iterate over the dataset.
-            callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
+           dataset (NervanaDataIterator): An iterable of minibatches where each
+               element is a (x, y) tuple where x is the input data and y are the labels.
+               x is of dimension (feature_size, batch_size)
+               y is of dimension (label_size, batch_size)
+               Length of the iterator is num_batches which is num_data / batch_size.
+           cost (Cost): Defines the function which the model is minimizing based
+                        on the output of the last layer and the input labels.
+           optimizer (Optimizer): Defines the learning rule for updating the model parameters.
+           num_epochs: Number of times to iterate over the dataset.
+           callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
+
+        Returns:
+
         """
         if self.initialized:
             return
@@ -139,15 +181,18 @@ class Model(GraphComponent):
         defined in optimizer.
 
         Arguments:
-            dataset (NervanaDataIterator): An iterable of minibatches where each
-                element is a (x, y) tuple where x is the input data and y are the labels.
-                x is of dimension (feature_size, batch_size)
-                y is of dimension (label_size, batch_size)
-                Length of the iterator is num_batches which is num_data / batch_size.
-            cost (Cost): Defines the function which the model is minimizing based
-                         on the output of the last layer and the input labels.
-            num_epochs: Number of times to iterate over the dataset.
-            callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
+           dataset (NervanaDataIterator): An iterable of minibatches where each
+               element is a (x, y) tuple where x is the input data and y are the labels.
+               x is of dimension (feature_size, batch_size)
+               y is of dimension (label_size, batch_size)
+               Length of the iterator is num_batches which is num_data / batch_size.
+           cost (Cost): Defines the function which the model is minimizing based
+                        on the output of the last layer and the input labels.
+           num_epochs: Number of times to iterate over the dataset.
+           callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
+
+        Returns:
+
         """
         self.nbatches = dataset.nbatches
         self.ndata = dataset.ndata
@@ -165,7 +210,11 @@ class Model(GraphComponent):
         Helper function for fit which performs training on a dataset for one epoch.
 
         Arguments:
-            dataset (NervanaDataIterator): Dataset iterator to perform fit on
+          dataset (NervanaDataIterator): Dataset iterator to perform fit on.
+          callbacks: TODO
+
+        Returns:
+
         """
         epoch = self.epoch_index
         self.total_cost = 0
@@ -189,6 +238,15 @@ class Model(GraphComponent):
 
     @in_graph
     def epoch_eval(self, dataset):
+        """
+        TODO.
+
+        Arguments:
+          dataset: TODO
+
+        Returns:
+
+        """
         nprocessed = 0
         self.loss = 0
         dataset.reset()
@@ -209,11 +267,12 @@ class Model(GraphComponent):
         Evaluates a model on a dataset according to an input metric.
 
         Arguments:
-            datasets (NervanaDataIterator): dataset to evaluate on.
-            metric (Cost): what function to evaluate dataset on.
+          datasets (NervanaDataIterator): dataset to evaluate on.
+          metric (Cost): what function to evaluate dataset on.
 
         Returns:
-            Host numpy array: the error of the final layer for the evaluation dataset
+          Host numpy array: the error of the final layer for the evaluation dataset
+
         """
         running_error = np.zeros(
             (len(self.metric.metric_names)), dtype=np.float32)
@@ -234,5 +293,15 @@ class Model(GraphComponent):
         return running_error
 
     def serialize(self, fn=None, keep_states=True):
+        """
+        TODO.
+
+        Arguments:
+          fn: TODO
+          keep_states: TODO
+
+        Returns:
+
+        """
         # TODO
         pass

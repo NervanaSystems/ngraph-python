@@ -30,16 +30,27 @@ from geon.backends.graph.environment import get_current_environment
 
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
+    """TODO."""
 
     def __init__(self, length, **kargs):
         super(Axis, self).__init__(**kargs)
         self.__length = length
 
     def axis_id(self, key):
+        """
+        TODO.
+
+        Arguments:
+          key: TODO
+
+        Returns:
+
+        """
         return AxisID(self, key)
 
     @property
     def length(self):
+        """TODO."""
         return self.__length
 
     def __repr__(self):
@@ -47,9 +58,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
 
 class AxisVar(Axis):
-    """
-    Like an axis, except the length comes from the environment.
-    """
+    """Like an axis, except the length comes from the environment."""
 
     def __init__(self, length=None, **kargs):
         super(AxisVar, self).__init__(length=-1, **kargs)
@@ -58,10 +67,20 @@ class AxisVar(Axis):
 
     @property
     def length(self):
+        """TODO."""
         return get_current_environment()[self]
 
     @length.setter
     def length(self, item):
+        """
+        TODO.
+
+        Arguments:
+          item: TODO
+
+        Returns:
+
+        """
         get_current_environment()[self] = item
 
     def __repr__(self):
@@ -69,6 +88,7 @@ class AxisVar(Axis):
 
 
 class NumericAxis(Axis):
+    """TODO."""
     cache = {}
 
     def __new__(cls, length=None, **kargs):
@@ -88,6 +108,7 @@ class NumericAxis(Axis):
 
 
 class AxisID(object):
+    """TODO."""
 
     def __init__(self, axis, idx, **kargs):
         assert isinstance(idx, int)
@@ -107,6 +128,15 @@ class AxisID(object):
 
 
 def canonicalize(seq):
+    """
+    TODO.
+
+    Arguments:
+      seq: TODO
+
+    Returns:
+
+    """
     elems = []
     for x in seq:
         if isinstance(x, FlattenedAxis):
@@ -127,6 +157,15 @@ def canonicalize(seq):
 
 
 def no_duplicates(arr):
+    """
+    TODO.
+
+    Arguments:
+      arr: TODO
+
+    Returns:
+
+    """
     s = set()
     for x in enumerate(arr):
         if x in s:
@@ -136,6 +175,7 @@ def no_duplicates(arr):
 
 
 class Axes(object):
+    """TODO."""
 
     def __init__(self, axes=None):
         if axes is None:
@@ -163,11 +203,13 @@ class Axes(object):
 
     @property
     def full_lengths(self):
+        """TODO."""
         return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
                      else x.length for x in self)
 
     @property
     def lengths(self):
+        """TODO."""
         return tuple(x.length for x in self)
 
     def __iter__(self):
@@ -207,20 +249,40 @@ class Axes(object):
         return not self == other
 
     def concat(self, other):
+        """
+        TODO.
+
+        Arguments:
+          other: TODO
+
+        Returns:
+
+        """
         return Axes(tuple(self) + tuple(other))
 
     def index(self, axis):
+        """
+        TODO.
+
+        Arguments:
+          axis: TODO
+
+        Returns:
+
+        """
         return self._axes.index(axis)
 
     # TODO: delete this method, the size should come from the tensor
     @property
     def size(self):
+        """TODO."""
         size = 1
         for x in self:
             size *= x.length
         return size
 
     def as_axis_ids(self):
+        """TODO."""
         m = collections.defaultdict(int)
         elems = []
 
@@ -241,6 +303,17 @@ class Axes(object):
 
 # func(agg, elem) -> agg
 def reduce_nested(elem, agg, func):
+    """
+    TODO.
+
+    Arguments:
+      elem: TODO
+      agg: TODO
+      func: TODO
+
+    Returns:
+
+    """
     if isinstance(elem, collections.Iterable):
         for sub in elem:
             agg = reduce_nested(sub, agg, func)
@@ -250,7 +323,25 @@ def reduce_nested(elem, agg, func):
 
 
 def with_axes_as_axis_ids(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
     def wrapper(*args):
+        """
+        TODO.
+
+        Arguments:
+          *args: TODO
+
+        Returns:
+
+        """
         new_args = []
         for a in args:
             if isinstance(a, Axes):
@@ -261,6 +352,7 @@ def with_axes_as_axis_ids(f):
 
 
 class AxisIDTuple(tuple):
+    """TODO."""
 
     def __new__(cls, *seq):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
@@ -271,23 +363,53 @@ class AxisIDTuple(tuple):
         return tuple.__new__(cls, seq)
 
     def as_axes(self):
+        """TODO."""
         return Axes(x.axis for x in self)
 
     @staticmethod
     @with_axes_as_axis_ids
     def sub(at1, at2):
+        """
+        TODO.
+
+        Arguments:
+          at1: TODO
+          at2: TODO
+
+        Returns:
+
+        """
         assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
         return AxisIDTuple(_ for _ in at1 if _ not in at2)
 
     @staticmethod
     @with_axes_as_axis_ids
     def intersect(at1, at2):
+        """
+        TODO.
+
+        Arguments:
+          at1: TODO
+          at2: TODO
+
+        Returns:
+
+        """
         assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
         return AxisIDTuple(_ for _ in at1 if _ in at2)
 
     @staticmethod
     @with_axes_as_axis_ids
     def append(*at_list):
+        """
+        TODO.
+
+        Arguments:
+          *at_list: TODO
+
+        Returns:
+
+        """
         assert all([isinstance(at, AxisIDTuple) for at in at_list])
         elems = []
         for at in at_list:
@@ -299,6 +421,16 @@ class AxisIDTuple(tuple):
     @staticmethod
     @with_axes_as_axis_ids
     def find(subaxes, axes):
+        """
+        TODO.
+
+        Arguments:
+          subaxes: TODO
+          axes: TODO
+
+        Returns:
+
+        """
         assert isinstance(subaxes, AxisIDTuple)\
             and isinstance(axes, AxisIDTuple)
         for i in range(len(axes)):
@@ -331,9 +463,16 @@ class AxisIDTuple(tuple):
 
 
 class FlattenedAxis(Axis):
-    """ A FlattenedAxis has length which is the product of the lengths of all
+    """
+    A FlattenedAxis has length which is the product of the lengths of all
     Axis in the axes.  The original Axes object is stored so that we can later
-    unflatten this Axis back to its original component Axis. """
+    unflatten this Axis back to its original component Axis.
+
+    Arguments:
+
+    Returns:
+
+    """
 
     def __init__(self, axes, **kargs):
         assert isinstance(axes, Axes)
@@ -343,14 +482,17 @@ class FlattenedAxis(Axis):
 
     @property
     def empty(self):
+        """TODO."""
         return len(self.__axes) == 0
 
     @property
     def single(self):
+        """TODO."""
         return len(self.__axes) == 1
 
     @property
     def axes(self):
+        """TODO."""
         return self.__axes
 
     def __repr__(self):
@@ -363,6 +505,15 @@ class FlattenedAxis(Axis):
 
 
 def reduce_strides(strides):
+    """
+    TODO.
+
+    Arguments:
+      strides: TODO
+
+    Returns:
+
+    """
     return tuple(int(reduce_nested(elem, float('inf'), min))
                  for elem in strides)
 
@@ -373,6 +524,11 @@ class TensorDescription(NameableValue):
     Names the tensor's dimensions with axes and holds pointers to the
     buffer allocated by the analysis and the backend tensor value
     (e.g. a numpy or gpu tensor).
+
+    Arguments:
+
+    Returns:
+
     """
 
     def __init__(self, axes, transformer, base=None,
@@ -419,6 +575,15 @@ class TensorDescription(NameableValue):
             "Strides must have same number of dimensions as axes"
 
     def try_guess_positions(self, new_axes):
+        """
+        TODO.
+
+        Arguments:
+          new_axes: TODO
+
+        Returns:
+
+        """
         # Supports broadcast and combining one level of axes
         # Does not support unrolling
         old_poss = []
@@ -426,6 +591,15 @@ class TensorDescription(NameableValue):
         used_set = set()
 
         def get_old_axis(new_axis):
+            """
+            TODO.
+
+            Arguments:
+              new_axis: TODO
+
+            Returns:
+
+            """
             for i, axis in enumerate(self.axes):
                 if i not in used_set and axis == new_axis:
                     used_set.add(i)
@@ -446,7 +620,26 @@ class TensorDescription(NameableValue):
         return old_poss
 
     def split_reduce_at(self, div_point):
+        """
+        TODO.
+
+        Arguments:
+          div_point: TODO
+
+        Returns:
+
+        """
         def pos_tup(lower, upper):
+            """
+            TODO.
+
+            Arguments:
+              lower: TODO
+              upper: TODO
+
+            Returns:
+
+            """
             if lower == upper - 1:
                 return lower
             else:
@@ -466,6 +659,15 @@ class TensorDescription(NameableValue):
         return self.reaxe_with_positions(new_axes, old_poss)
 
     def dot_reaxe_left(self, red_axis_ids):
+        """
+        TODO.
+
+        Arguments:
+          red_axis_ids: TODO
+
+        Returns:
+
+        """
         old_axis_ids = self.axes.as_axis_ids()
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
         axis_ids = old_axis_ids[:idx]\
@@ -481,11 +683,30 @@ class TensorDescription(NameableValue):
     # of the original output, which is necessary if the derivative is to be
     # projected onto the input correctly.
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
+        """
+        TODO.
+
+        Arguments:
+          red_axis_ids: TODO
+          forward_axis_ids: TODO
+
+        Returns:
+
+        """
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
             trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
+                """
+                TODO.
+
+                Arguments:
+                  x: TODO
+
+                Returns:
+
+                """
                 if x in trans:
                     return trans[x]
                 else:
@@ -499,11 +720,30 @@ class TensorDescription(NameableValue):
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
     def reaxe(self, new_axes, broadcast=True):
+        """
+        TODO.
+
+        Arguments:
+          new_axes: TODO
+          broadcast: TODO
+
+        Returns:
+
+        """
         new_axes = Axes(new_axes)
         old_poss = self.try_guess_positions(new_axes)
         return self.reaxe_with_positions(new_axes, old_poss, broadcast)
 
     def reaxe_with_axis_ids_positions(self, new_axis_id_tuple):
+        """
+        TODO.
+
+        Arguments:
+          new_axis_id_tuple: TODO
+
+        Returns:
+
+        """
         old_axis_ids = self.axes.as_axis_ids()
 
         old_poss = []
@@ -514,6 +754,15 @@ class TensorDescription(NameableValue):
         return old_poss
 
     def reaxe_with_axis_ids(self, new_axis_id_tuple):
+        """
+        TODO.
+
+        Arguments:
+          new_axis_id_tuple: TODO
+
+        Returns:
+
+        """
         # This function does not allow any unrolling of axes
         # The argument is a tuple of axis ids.
         # The indices of the axis ids refer to the existing order of axes
@@ -523,6 +772,16 @@ class TensorDescription(NameableValue):
                                          broadcast=True)
 
     def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
+        """
+        TODO.
+
+        Arguments:
+          dummy_axis: TODO
+          dim: TODO
+
+        Returns:
+
+        """
         if dim == -1:
             dim = len(self.axes)
         new_axes = self.axes[:dim]\
@@ -533,12 +792,33 @@ class TensorDescription(NameableValue):
                                          broadcast=True)
 
     def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
+        """
+        TODO.
+
+        Arguments:
+          new_axes: TODO
+          old_poss: TODO
+          broadcast: TODO
+
+        Returns:
+
+        """
         assert len(new_axes) == len(old_poss)
 
         full_sizes = []
         full_strides = []
 
         def old_info(axis, old_pos):
+            """
+            TODO.
+
+            Arguments:
+              axis: TODO
+              old_pos: TODO
+
+            Returns:
+
+            """
             if old_pos == -1:
                 full_length = axis.axes.full_lengths\
                     if isinstance(axis, FlattenedAxis) else axis.length
@@ -576,7 +856,27 @@ class TensorDescription(NameableValue):
                                  offset=self.offset)
 
     def maybe_collapse_numerics(self, axes, full_strides, full_sizes):
+        """
+        TODO.
+
+        Arguments:
+          axes: TODO
+          full_strides: TODO
+          full_sizes: TODO
+
+        Returns:
+
+        """
         def all_numeric(axes):
+            """
+            TODO.
+
+            Arguments:
+              axes: TODO
+
+            Returns:
+
+            """
             return all([isinstance(axis, NumericAxis) for axis in axes])
 
         new_axes = []
@@ -597,6 +897,16 @@ class TensorDescription(NameableValue):
         return Axes(new_axes), tuple(new_strides), tuple(new_sizes)
 
     def slice(self, slices, new_axes):
+        """
+        TODO.
+
+        Arguments:
+          slices: TODO
+          new_axes: TODO
+
+        Returns:
+
+        """
         slices = list(slices)
         while len(slices) < self.ndim:
             slices.append(slice(None))
@@ -635,46 +945,73 @@ class TensorDescription(NameableValue):
 
     @property
     def shape(self):
+        """TODO."""
         return self.axes.lengths
 
     @property
     def strides(self):
+        """TODO."""
         return reduce_strides(self.full_strides)
 
     @property
     def sizes(self):
+        """TODO."""
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
 
     @property
     def cache_key(self):
+        """TODO."""
         return (self, 'td_values')
 
     @property
     def base(self):
+        """TODO."""
         return self.__base or self
 
     @property
     def buffer(self):
+        """TODO."""
         return self.base.__buffer
 
     @buffer.setter
     def buffer(self, value):
+        """
+        TODO.
+
+        Arguments:
+          value: TODO
+
+        Returns:
+
+        """
         self.base.__buffer = value
 
     @property
     def value(self):
+        """TODO."""
         return self.__value
 
     @value.setter
     def value(self, tensor):
+        """
+        TODO.
+
+        Arguments:
+          tensor: TODO
+
+        Returns:
+
+        """
         assert self.value.shape == tensor.shape
         self.transformer.set_item(self.value, (), tensor)
 
     def is_base(self):
+        """TODO."""
         return self.__base is None
 
     def initialize(self):
+        """TODO."""
         assert self.__value is None
         # If the TensorDescription requires heap storage
         if self.buffer is not None:
@@ -686,8 +1023,26 @@ class TensorDescription(NameableValue):
 
 
 def with_args_as_axes(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
 
     def cast(arg):
+        """
+        TODO.
+
+        Arguments:
+          arg: TODO
+
+        Returns:
+
+        """
         if isinstance(arg, Axes):
             return arg
         elif isinstance(arg, AxisID):
@@ -696,11 +1051,29 @@ def with_args_as_axes(f):
             return Axes(*arg)
 
     def wrapper(*args):
+        """
+        TODO.
+
+        Arguments:
+          *args: TODO
+
+        Returns:
+
+        """
         return f(*(cast(arg) for arg in args))
     return wrapper
 
 
 def get_batch_axes(default=Axes()):
+    """
+    TODO.
+
+    Arguments:
+      default: TODO
+
+    Returns:
+
+    """
     environment = get_current_environment()
     if environment is None:
         return default
@@ -709,10 +1082,28 @@ def get_batch_axes(default=Axes()):
 
 @with_args_as_axes
 def set_batch_axes(axes):
+    """
+    TODO.
+
+    Arguments:
+      axes: TODO
+
+    Returns:
+
+    """
     get_current_environment()['batch_axes'] = axes
 
 
 def get_phase_axes(default=Axes()):
+    """
+    TODO.
+
+    Arguments:
+      default: TODO
+
+    Returns:
+
+    """
     environment = get_current_environment()
     if environment is None:
         return default
@@ -721,16 +1112,43 @@ def get_phase_axes(default=Axes()):
 
 @with_args_as_axes
 def set_phase_axes(axes):
+    """
+    TODO.
+
+    Arguments:
+      axes: TODO
+
+    Returns:
+
+    """
     get_current_environment()['phase_axes'] = axes
 
 
 @with_args_as_axes
 def sample_axes(axes):
+    """
+    TODO.
+
+    Arguments:
+      axes: TODO
+
+    Returns:
+
+    """
     return axes - get_batch_axes()
 
 
 @with_args_as_axes
 def batch_axes(axes):
+    """
+    TODO.
+
+    Arguments:
+      axes: TODO
+
+    Returns:
+
+    """
     return AxisIDTuple.intersect(
         axes.as_axis_ids(),
         get_batch_axes().as_axis_ids()
@@ -739,6 +1157,16 @@ def batch_axes(axes):
 
 @with_args_as_axes
 def linear_map_axes(in_axes, out_axes):
+    """
+    TODO.
+
+    Arguments:
+      in_axes: TODO
+      out_axes: TODO
+
+    Returns:
+
+    """
     in_axis_ids, out_axis_ids = in_axes.as_axis_ids(), out_axes.as_axis_ids()
     return (
         (out_axis_ids + in_axis_ids) -

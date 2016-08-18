@@ -27,6 +27,19 @@ args = parser.parse_args()
 
 @be.with_name_scope
 def linear(ns, x, axes, init=None, bias=None):
+    """
+    TODO.
+
+    Arguments:
+      ns: TODO
+      x: TODO
+      axes: TODO
+      init: TODO
+      bias: TODO
+
+    Returns:
+      TODO
+    """
     ns.weights = be.Variable(
         axes=be.linear_map_axes(
             be.sample_axes(x.axes),
@@ -40,11 +53,36 @@ def linear(ns, x, axes, init=None, bias=None):
 
 
 def affine(x, activation, **kargs):
+    """
+    TODO.
+
+    Arguments:
+      x: TODO
+      activation: TODO
+      **kargs: TODO
+
+    Returns:
+      TODO
+    """
     return activation(linear(x, **kargs))
 
 
 @be.with_name_scope
 def mlp(ns, x, activation, shape_spec, axes, **kargs):
+    """
+    TODO.
+
+    Arguments:
+      ns: TODO
+      x: TODO
+      activation: TODO
+      shape_spec: TODO
+      axes: TODO
+      **kargs: TODO
+
+    Returns:
+      TODO
+    """
     value = x
     with be.name_scope_list('L') as name_scopes:
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
@@ -63,6 +101,15 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
 
 
 def grad_descent(cost):
+    """
+    TODO.
+
+    Arguments:
+      cost: TODO
+
+    Returns:
+      TODO
+    """
     learning_rate = be.placeholder(axes=(), name='learning_rate')
     variables = cost.variables()
     derivs = [be.deriv(cost, variable) for variable in variables]
@@ -74,6 +121,7 @@ def grad_descent(cost):
 
 
 class MyTest(be.Model):
+    """TODO."""
 
     def __init__(self, **kargs):
         super(MyTest, self).__init__(**kargs)
@@ -114,6 +162,7 @@ class MyTest(be.Model):
 
     @be.with_graph_scope
     def train(self):
+        """TODO."""
         # setup data provider
         imgset_options = dict(
             inner_size=32,

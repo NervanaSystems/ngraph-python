@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-'''
+"""
 Test the usage of be.Constant
-
-'''
+"""
 from __future__ import print_function
 
 import geon as be
@@ -25,6 +24,7 @@ import numpy as np
 
 
 def test_constant_init():
+    """TODO."""
     a = be.Constant(5)
     result = executor(a)()
     print(result)
@@ -34,6 +34,7 @@ def test_constant_init():
 
 
 def test_constant_add():
+    """TODO."""
     a = be.Constant(1)
     b = be.Constant(2)
     c = a + b
@@ -44,6 +45,7 @@ def test_constant_add():
 
 
 def test_constant_multiply():
+    """TODO."""
     a = be.Constant(4)
     b = be.Constant(2)
     c = be.multiply(a, b)
@@ -53,6 +55,7 @@ def test_constant_multiply():
 
 @be.with_bound_environment
 def test_numpytensor_add():
+    """TODO."""
     ax.Y.length = 2
     a = be.NumPyTensor(np.array([3, 5], dtype=np.float32), axes=[ax.Y])
     b = be.NumPyTensor(np.array([3, 5], dtype=np.float32), axes=[ax.Y])
@@ -93,6 +96,7 @@ def test_numpytensor_dot():
 
 @be.with_bound_environment
 def test_numpytensor_multiply_constant():
+    """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.multiply(np_a, 2)
 
@@ -108,6 +112,7 @@ def test_numpytensor_multiply_constant():
 
 @be.with_bound_environment
 def test_numpytensor_add_constant():
+    """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.add(np_a, 2)
 
@@ -123,6 +128,7 @@ def test_numpytensor_add_constant():
 
 @be.with_bound_environment
 def test_numpytensor_mlp():
+    """TODO."""
     np_x = np.array([[1, 2, 3]], dtype=np.float32)
     np_w = np.array([[1, 1], [1, 1], [1, 1]], dtype=np.float32)
     np_b = np.array([1, 2], dtype=np.float32)
