@@ -38,8 +38,8 @@ class MPIHandle(object):
         "minloc": MPI.MINLOC
     }
 
-    def __init__(self, name="mpi_handle", **kargs):
-        super(MPIHandle, self).__init__(**kargs)
+    def __init__(self, name="mpi_handle", **kwargs):
+        super(MPIHandle, self).__init__(**kwargs)
         self.name = name
 
     def reduce(self, x, op=MPI.SUM):

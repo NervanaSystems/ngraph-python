@@ -76,8 +76,8 @@ def clip_gradient_value(grad, clip_value=None):
 class Optimizer(object):
     """TODO."""
 
-    def __init__(self, name=None, **kargs):
-        super(Optimizer, self).__init__(**kargs)
+    def __init__(self, name=None, **kwargs):
+        super(Optimizer, self).__init__(**kwargs)
         self.name = name
 
     def configure(self, transformer, cost):
@@ -120,8 +120,8 @@ class GradientDescentMomentum(Optimizer):
             gradient_clip_value=None,
             name=None,
             schedule=ExpSchedule(1.0),
-            **kargs):
-        super(GradientDescentMomentum, self).__init__(**kargs)
+            **kwargs):
+        super(GradientDescentMomentum, self).__init__(**kwargs)
         self.learning_rate = learning_rate
         self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm

@@ -31,8 +31,8 @@ except:
 class GraphitiMLP(be.Model):
     """TODO."""
 
-    def __init__(self, L, BS, bprop=True, **kargs):
-        super(GraphitiMLP, self).__init__(**kargs)
+    def __init__(self, L, BS, bprop=True, **kwargs):
+        super(GraphitiMLP, self).__init__(**kwargs)
 
         # Axes
         L = [be.AxisVar(length=N, name='L%d' % i) for i, N in enumerate(L)]

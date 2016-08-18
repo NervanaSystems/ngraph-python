@@ -24,8 +24,8 @@ from geon.op_graph.op_graph import AllocationOp
 class ArgonTransformer(Transformer):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(ArgonTransformer, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(ArgonTransformer, self).__init__(**kwargs)
         self.be = NervanaObject.be
 
     # allocators
@@ -461,8 +461,8 @@ class ArgonTransformer(Transformer):
 class ArgonUniform(AllocationOp):
     """TODO."""
 
-    def __init__(self, rng, low, high, **kargs):
-        super(ArgonUniform, self).__init__(args=(rng,), **kargs)
+    def __init__(self, rng, low, high, **kwargs):
+        super(ArgonUniform, self).__init__(args=(rng,), **kwargs)
         self.low = low
         self.high = high
 

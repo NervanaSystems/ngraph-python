@@ -120,9 +120,9 @@ def bound_environment(environment=None, create=True):
 
 def with_bound_environment(fun, environment=None, create=True):
     @wraps(fun)
-    def wrapper(*args, **kargs):
+    def wrapper(*args, **kwargs):
         with bound_environment(environment, create):
-            return fun(*args, **kargs)
+            return fun(*args, **kwargs)
 
     return wrapper
 
@@ -130,8 +130,8 @@ def with_bound_environment(fun, environment=None, create=True):
 class Environment(object):
     """TODO."""
 
-    def __init__(self, parent=None, **kargs):
-        super(Environment, self).__init__(**kargs)
+    def __init__(self, parent=None, **kwargs):
+        super(Environment, self).__init__(**kwargs)
         self.parent = parent
         self.values = dict()
 

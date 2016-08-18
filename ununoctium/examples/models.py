@@ -52,23 +52,23 @@ def linear(ns, x, axes, init=None, bias=None):
     return result
 
 
-def affine(x, activation, **kargs):
+def affine(x, activation, **kwargs):
     """
     TODO.
 
     Arguments:
       x: TODO
       activation: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
     """
-    return activation(linear(x, **kargs))
+    return activation(linear(x, **kwargs))
 
 
 @be.with_name_scope
-def mlp(ns, x, activation, shape_spec, axes, **kargs):
+def mlp(ns, x, activation, shape_spec, axes, **kwargs):
     """
     TODO.
 
@@ -78,7 +78,7 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
       activation: TODO
       shape_spec: TODO
       axes: TODO
-      **kargs: TODO
+      **kwargs: TODO
 
     Returns:
       TODO
@@ -94,9 +94,9 @@ def mlp(ns, x, activation, shape_spec, axes, **kargs):
                         value,
                         activation=hidden_activation,
                         axes=nns.axes,
-                        **kargs)
+                        **kwargs)
         with be.next_name_scope(name_scopes):
-            value = affine(value, activation=activation, axes=axes, **kargs)
+            value = affine(value, activation=activation, axes=axes, **kwargs)
     return value
 
 
@@ -123,8 +123,8 @@ def grad_descent(cost):
 class MyTest(be.Model):
     """TODO."""
 
-    def __init__(self, **kargs):
-        super(MyTest, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(MyTest, self).__init__(**kwargs)
 
         uni = Uniform(-.001, .001)
 

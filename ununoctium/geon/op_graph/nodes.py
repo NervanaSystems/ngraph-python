@@ -24,7 +24,7 @@ from geon.op_graph.names import NameableValue
 class DebugInfo(object):
     """TODO."""
 
-    def __init__(self, **kargs):
+    def __init__(self, **kwargs):
         # TODO This is a good first cut for debugging info, but it would be nice to
         # TODO be able to reliably walk the stack back to user code rather than just
         # TODO back past this constructor
@@ -62,14 +62,14 @@ class DebugInfo(object):
 class Node(NameableValue, DebugInfo):
     """Basic implementation of DAGs."""
 
-    def __init__(self, args=(), tags=None, **kargs):
+    def __init__(self, args=(), tags=None, **kwargs):
         """
 
         :param args: Values used by this node
         :param tags: String or a set of strings used for filtering in searches
-        :param kargs:
+        :param kwargs:
         """
-        super(Node, self).__init__(**kargs)
+        super(Node, self).__init__(**kwargs)
         self.users = weakref.WeakSet()
         self.__args = ()
         self.tags = set()
@@ -331,7 +331,7 @@ def generic_method(base_method):
     methods = {}
 
     @wraps(base_method)
-    def method_dispatch(s, dispatch_arg, *args, **kargs):
+    def method_dispatch(s, dispatch_arg, *args, **kwargs):
         """
         TODO.
 
@@ -339,7 +339,7 @@ def generic_method(base_method):
           s: TODO
           dispatch_arg: TODO
           *args: TODO
-          **kargs: TODO
+          **kwargs: TODO
 
         Returns:
 
@@ -347,8 +347,8 @@ def generic_method(base_method):
         for t in type(dispatch_arg).__mro__:
             handler = methods.get(t, None)
             if handler is not None:
-                return handler(s, dispatch_arg, *args, **kargs)
-        return base_method(s, dispatch_arg, *args, **kargs)
+                return handler(s, dispatch_arg, *args, **kwargs)
+        return base_method(s, dispatch_arg, *args, **kwargs)
 
     def on_type(dispatch_type):
         """

@@ -46,8 +46,8 @@ class LayerContainer(Layer):
 
     """
 
-    def __init__(self, **kargs):
-        super(LayerContainer, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(LayerContainer, self).__init__(**kwargs)
 
 
 class Sequential(LayerContainer):
@@ -62,8 +62,8 @@ class Sequential(LayerContainer):
 
     """
 
-    def __init__(self, layers, **kargs):
-        super(Sequential, self).__init__(**kargs)
+    def __init__(self, layers, **kwargs):
+        super(Sequential, self).__init__(**kwargs)
         self.layers = [l for l in flatten(layers)]
         self._layers = [x for x in self.layers if type(x) not in (BranchNode,)]
 #       root = self._layers[0]
@@ -103,8 +103,8 @@ class Tree(LayerContainer):
 
     """
 
-    def __init__(self, layers, alphas=None, **kargs):
-        super(Tree, self).__init__(**kargs)
+    def __init__(self, layers, alphas=None, **kwargs):
+        super(Tree, self).__init__(**kwargs)
 
 
 class SingleOutputTree(Tree):
@@ -119,5 +119,5 @@ class SingleOutputTree(Tree):
 
     """
 
-    def __init__(self, **kargs):
-        super(SingleOutputTree, self).__init__(**kargs)
+    def __init__(self, **kwargs):
+        super(SingleOutputTree, self).__init__(**kwargs)
