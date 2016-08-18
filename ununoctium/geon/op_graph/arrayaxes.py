@@ -1011,7 +1011,16 @@ class TensorDescription(NameableValue):
         Returns:
 
         """
-        assert self.value.shape == tensor.shape
+        if self.value.shape != tensor.shape:
+            raise ValueError((
+                "Tried to set a TensorDescription's value with a tensor of "
+                "the wrong shape.  Expected: {expected_shape}, was given "
+                "{given_shape}."
+            ).format(
+                expected_shape=self.value.shape,
+                given_shape=tensor.shape,
+            ))
+
         self.transformer.set_item(self.value, (), tensor)
 
     def is_base(self):
