@@ -103,5 +103,5 @@ class PyGen(object):
 
         code = compile(self.code, filename, "exec")
         r = {}
-        exec (code, globals(), r)
+        exec(code, globals(), r)
         return r
