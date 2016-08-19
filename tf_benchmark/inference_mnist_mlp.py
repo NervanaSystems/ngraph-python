@@ -43,21 +43,20 @@ env = Environment()
 mnist_data = MNIST(path=args.data_dir).gen_iterators()
 test_data = mnist_data['valid']
 
-nervana_graph = create_nervana_graph(args.pb_file, env)  # trans = be.NumPyTransformer()
+frontend_model = create_nervana_graph(args.pb_file, env)  # trans = be.NumPyTransformer()
 
 with be.bound_environment(env):
     trans = be.NumPyTransformer()
-    infer_comp = trans.computation(nervana_graph.last_op)
+    infer_comp = trans.computation(frontend_model.last_op)
     trans.finalize()
-    trans.dataflow.view()
+    # trans.dataflow.view()
 
     test_error = 0
     n_sample = 0
 
     y_raw_1 = None
     for mb_idx, (xraw, yraw) in enumerate(test_data):
-        nervana_graph.x.value = xraw
-        yraw1 = yraw
+        trans.copy_to_model(frontend_model.x, xraw)
 
         result = infer_comp()
 
@@ -68,7 +67,7 @@ with be.bound_environment(env):
         print(result.shape)
 
         pred = np.argmax(result, axis=1)
-        gt = np.argmax(yraw1, axis=0)
+        gt = np.argmax(yraw, axis=0)
         mb_test_error = np.sum(np.not_equal(pred, gt))
 
         print("test error: %2.2f %%" % (mb_test_error / float(xraw.shape[1]) * 100))
