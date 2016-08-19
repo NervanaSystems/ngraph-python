@@ -143,22 +143,30 @@ class Node(NameableValue, DebugInfo):
         raise ValueError()
 
     @staticmethod
-    def visit_input_closure(root, fun):
+    def visit_input_closure(roots, fun):
         """
-        Bottom-up traversal of root and their inputs
+        "Bottom-up" post-order traversal of root and their inputs.  Nodes
+        will only be visited once, even if there are multiple routes to the
+        same Node.
 
         Arguments:
-          root: root set of nodes to visit
-          fun: Function to call on each visited node
+            roots: root set of nodes to visit
+            fun: Function to call on each visited node
+
+        Returns:
+            None
         """
         visited = set()
 
         def visit(node):
             """
-            TODO.
+            Recursively visit all nodes used to compute this node.
 
             Arguments:
-              node: TODO
+                node: the node to visit
+
+            Returns:
+                None
             """
             if node not in visited:
                 for n in node.args:
@@ -166,7 +174,7 @@ class Node(NameableValue, DebugInfo):
                 fun(node)
                 visited.add(node)
 
-        for node in root:
+        for node in roots:
             visit(node)
 
     @staticmethod
