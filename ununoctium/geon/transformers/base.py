@@ -96,23 +96,19 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
     """
-    given a list of ops you want to compute the results of, this transformer
+    Given a list of ops you want to compute the results of, this transformer
     will compile the graph required to compute those results and exposes an
     evaluate method to execute the compiled graph.
-
-    Arguments:
-
-    Returns:
-
     """
 
     def __init__(self, environment=None, fusion=None, **kvargs):
         """
-        :param results: a list of Ops whose results the Transformer should
-            return on `.evaluate()`.  There aren't any good reasons to initialize a
-            transformer with None except for in tests.
-        :param environment: the environment to use to grab things like axis.
-            WARNING: `environment` will be deprecated soon.
+        TODO.
+
+        Arguments:
+          environment: The environment to use to grab things like axis.  WARNING: `environment`
+                       will be deprecated soon.
+          fusion: Whether to combine sequences of operations into one operation.
         """
         super(Transformer, self).__init__(**kvargs)
         self.transform_hook = None
@@ -167,7 +163,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Allocate storage.
 
         Will finalize if not already done.
-        :return:
         """
         if self.allocated:
             return
@@ -186,8 +181,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def initialize(self):
         """
         Initialize storage.  Will allocate if not already performed.
-
-        :return:
         """
         if self.initialized:
             return
@@ -312,9 +305,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         Arguments:
           ordered_ops: TODO
-
-        Returns:
-
         """
         # Allocate
         for op in ordered_ops:
@@ -322,30 +312,24 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     def transform_ordered_ops(self, ordered_ops):
         """
-        call op.transform_call_info on every op in ordered_ops.
+        Call op.transform_call_info on every op in ordered_ops.
 
-        if transform_hooks are present on the op or on this transformer, call
+        If transform_hooks are present on the op or on this transformer, call
         those as well.well
 
         Arguments:
           ordered_ops: TODO
-
-        Returns:
-
         """
 
         def transform_op(op):
             """
-            this is the call we would make directly if there were no hooks.
+            This is the call we would make directly if there were no hooks.
             wrap it up into a function so we can pass it to a hook which has
             the responsibility of making the call to the hook.  This allows the
             hook to execute both before and after the transform.
 
             Arguments:
               op: TODO
-
-            Returns:
-
             """
             op.transform_call_info(self)
 
@@ -365,22 +349,16 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           op: TODO
           tensor: TODO
-
-        Returns:
-
         """
         op.tensor_description(self).value = tensor
 
     @abc.abstractmethod
     def make_raw_buffer(self, size):
         """
-        Allocate raw buffer
+        Allocate raw buffer.
 
         Arguments:
           size: Size in bytes of the buffer to allocate
-
-        Returns:
-
         """
 
     @abc.abstractmethod
@@ -406,10 +384,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         Arguments:
           seed: An integer.
-        :return: Reference to the random number generator.
 
         Returns:
-
+          Reference to the random number generator.
         """
         raise NotImplementedError()
 
@@ -421,12 +398,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           rng: Random number generator
           tensor_description: Description of the tensor's type, shape, size, and strides.
-          low: param high:
-        :return: Reference to uniform distribution.
+          low: TODO
           high: TODO
 
         Returns:
-
+          Reference to uniform distribution.
         """
         raise NotImplementedError()
 
@@ -438,12 +414,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           rng: Random number generator
           tensor_description: Description of the tensor's type, shape, size, and strides.
-          loc: param scale:
-        :return: Reference to normal distribution.
+          loc: TODO
           scale: TODO
 
         Returns:
-
+          Reference to normal distribution.
         """
         raise NotImplementedError()
 
@@ -454,10 +429,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         Arguments:
           tensor_description: Description of the tensor view.
-        :return: Reference to the tensor view.
 
         Returns:
-
+          Reference to the tensor view.
         """
         raise NotImplementedError()
 
@@ -471,10 +445,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           out: Tensor to initialize
           value: Scalar value.
-        :return:
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -487,10 +457,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
           tensor: Tensor to be modified
           item: Slice/index to set
           value: New values for tensor[item]
-        :return:
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -503,10 +469,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           x: Input tensor
           out: Output tensor, may be input.
-        :return:
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -516,12 +478,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         out = x + y
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -531,12 +490,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Argmax on dim 0 of x.
 
         Arguments:
-          x: param out: Integer tensor
-        :return:
-          out: TODO
-
-        Returns:
-
+          x: TODO
+          out: Integer tensor
         """
         raise NotImplementedError()
 
@@ -546,12 +501,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Argmin on dim 0 of x.
 
         Arguments:
-          x: param out: Integer tensor
-        :return:
-          out: TODO
-
-        Returns:
-
+          x: TODO
+          out: Integer tensor
         """
         raise NotImplementedError()
 
@@ -561,12 +512,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Cosine.
 
         Arguments:
-          x: param out:
-        :return:
+          x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -576,12 +523,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         out = x/y
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -591,12 +535,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Generalized dot using NumPy dimension conventions.
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -606,13 +547,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Numerical equality.
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -622,12 +559,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         out = e^x
 
         Arguments:
-          x: param out:
-        :return:
+          x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -637,13 +570,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x > y
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -653,13 +582,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x >= y
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -669,13 +594,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x < y
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -685,13 +606,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x <= y
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -701,12 +618,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         log(x)
 
         Arguments:
-          x: param out:
-        :return:
-          out: TODO
-
-        Returns:
-
+          x: TODO
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -716,12 +629,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Maximum x value on axis.
 
         Arguments:
-          x: param axis: Axis to maximize over.
-          out: return:
-          axis: TODO
-
-        Returns:
-
+          x: TODO
+          axis: Axis to maximize over.
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -731,12 +641,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         max(x, y)
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -746,12 +653,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Minimum x value on axis.
 
         Arguments:
-          x: param axis: Axis to maximize over.
-          out: return:
-          axis: TODO
-
-        Returns:
-
+          x: TODO
+          axis: Axis to maximize over.
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -761,12 +665,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         min(x, y)
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -776,12 +677,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x*y
 
         Arguments:
-          x: param y:
-          out: return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: TODO
         """
         raise NotImplementedError()
 
@@ -791,12 +689,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         -x
 
         Arguments:
-          x: param out:
-        :return:
+          x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -806,13 +700,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         x != y
 
         Arguments:
-          x: param y:
-          out: Boolean tensor.
-        :return:
+          x: TODO
           y: TODO
-
-        Returns:
-
+          out: Boolean tensor.
         """
         raise NotImplementedError()
 
@@ -824,9 +714,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           idx: Index tensor
           out: 2-d tensor, axis 0 gets onehot expansion
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -838,9 +725,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -852,9 +736,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -866,9 +747,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 
@@ -880,9 +758,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Arguments:
           x: TODO
           out: TODO
-
-        Returns:
-
         """
         raise NotImplementedError()
 

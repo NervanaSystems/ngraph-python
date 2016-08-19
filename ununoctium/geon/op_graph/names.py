@@ -32,10 +32,9 @@ def name_scope(name=None, name_scope=None):
     Arguments:
       name_scope: Reuse an existing name scope
       name: Create a new name scope within the current name scope
-    :return: The new name scope.
 
     Returns:
-
+      The new name scope.
     """
 
     name_scope = name_scope or NameScope(name=name)
@@ -54,10 +53,8 @@ def name_scope_list(name):
 
     Arguments:
       name: The name of the list.
-    :return: An iterator for new name scopes in the collection.
-
     Returns:
-
+      An iterator for new name scopes in the collection.
     """
     naming = NameScopeList(name=name)
     yield (NameScopeListExtender(naming))
@@ -86,10 +83,9 @@ def with_name_scope(fun, name=None):
     Arguments:
       fun: The function being annotated.
       name: The name scope name, defaults to the function name
-    :return: The annotated function.
 
     Returns:
-
+      The annotated function.
     """
     cname = name
     if cname is None:

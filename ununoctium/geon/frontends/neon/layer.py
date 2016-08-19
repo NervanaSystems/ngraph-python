@@ -42,10 +42,9 @@ class Layer(object):
 
         Arguments:
           in_obj: The input for the layer
-        :return: The output of the layer
 
         Returns:
-
+          The output of the layer
         """
         return in_obj
 
