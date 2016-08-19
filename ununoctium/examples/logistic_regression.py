@@ -54,6 +54,7 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
     return thetas
 
 
+@be.with_bound_environment
 def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     def sigmoid(x):
         # return 1. / (1. + be.exp(-x))
@@ -68,41 +69,46 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
         loss = -be.sum(log_likelihoods)
         return loss
 
-    with be.bound_environment():
-        # axis
-        ax.C.length = 3
-        ax.Y.length = 1
-        ax.N.length = 4
+    # axis
+    ax.C.length = 3
+    ax.Y.length = 1
+    ax.N.length = 4
 
-        # input tensors
-        xs = be.placeholder(axes=(ax.C, ax.N))
-        ys = be.placeholder(axes=(ax.Y, ax.N))
-        xs.value = xs_np.transpose()
-        ys.value = ys_np.reshape((ax.Y.length, ax.N.length))
+    # input tensors
+    xs = be.placeholder(axes=(ax.C, ax.N))
+    ys = be.placeholder(axes=(ax.Y, ax.N))
 
-        # init weights
-        thetas_np = np.array([0., 0., 0.])
-        thetas_numpy_tensor = be.NumPyTensor(thetas_np, axes=(ax.C,))
-        thetas = be.Variable(initial_value=thetas_numpy_tensor, axes=(ax.C))
+    # init weights
+    thetas_np = np.array([0., 0., 0.])
+    thetas_numpy_tensor = be.NumPyTensor(thetas_np, axes=(ax.C,))
+    thetas = be.Variable(initial_value=thetas_numpy_tensor, axes=(ax.C))
 
-        # computations
-        loss = get_loss(thetas, xs, ys)
+    # computations
+    loss = get_loss(thetas, xs, ys)
 
-        # auto-diff
-        variable = list(loss.variables())[0]  # we only have one variable
-        grad = be.deriv(loss, variable)
+    # auto-diff
+    variable = list(loss.variables())[0]  # we only have one variable
+    grad = be.deriv(loss, variable)
 
-        # update rule
-        update = be.assign(lvalue=variable, rvalue=variable - alpha * grad)
+    # update rule
+    update = be.assign(lvalue=variable, rvalue=variable - alpha * grad)
 
-        # transformer
-        transformer = be.NumPyTransformer()
-        train_eval_func = transformer.computation([grad, update, loss])
+    # transformer
+    transformer = be.NumPyTransformer()
 
-        # evaluate
-        for i in range(max_iter):
-            grad_val, _, loss_val = train_eval_func()
-            print("grad: %s, loss %s" % (grad_val, loss_val))
+    # Return [grad, loss] and also compute update
+    train_eval_func = transformer.computation([grad, loss], update)
+
+    # Copy data into device.  If we were doing batches, we would add xs and ys to train_eval_func
+    # and pass the batch in on each call, but since the data never changes, we just pass it in
+    # once before running.
+    transformer.copy_to_model(xs, xs_np.transpose())
+    transformer.copy_to_model(ys, ys_np.reshape((ax.Y.length, ax.N.length)))
+
+    # evaluate
+    for i in range(max_iter):
+        grad_val, loss_val = train_eval_func()
+        print("grad: %s, loss %s" % (grad_val, loss_val))
 
 
 if __name__ == '__main__':

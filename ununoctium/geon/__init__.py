@@ -28,6 +28,7 @@ from geon.frontends.base.graph import Model, with_graph_scope, with_environment,
 from geon.op_graph.arrayaxes import *
 from geon.op_graph.names import *
 from geon.op_graph.op_graph import *
+from geon.op_graph.convolution import convolution
 
 # Flattens transformers
 from geon.transformers.nptransform import NumPyTransformer

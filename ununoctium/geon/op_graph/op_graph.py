@@ -45,7 +45,7 @@ def tensor_descriptions(args, transformer):
         Returns:
           TODO
         """
-        if isinstance(arg, Tensor):
+        if isinstance(arg, TensorOp):
             return arg.tensor_description(transformer)
         else:
             return arg
@@ -283,7 +283,7 @@ class Op(Node):
         Returns:
           TODO
         """
-        if isinstance(x, Tensor):
+        if isinstance(x, TensorOp):
             return x
 
         return Constant(x)
@@ -416,11 +416,11 @@ class Op(Node):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
-class Tensor(Op):
+class TensorOp(Op):
     """Super class for all Ops whose output value is a Tensor."""
 
     def __init__(self, dtype=None, axes=None, scale=None, **kwds):
-        super(Tensor, self).__init__(**kwds)
+        super(TensorOp, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
         self.dtype = dtype
@@ -602,7 +602,7 @@ class Tensor(Op):
           TODO
         """
         return [self.tensor_description(transformer)]\
-            + super(Tensor, self).call_info(transformer)
+            + super(TensorOp, self).call_info(transformer)
 
     # Required for parameter initializers
     @property
@@ -623,7 +623,7 @@ class Tensor(Op):
         return mean(self, out_axes=out_axes, **kwargs)
 
 
-class Broadcast(Tensor):
+class Broadcast(TensorOp):
     """Used to add additional axes for a returned derivative."""
 
     def __init__(self, x, **kwargs):
@@ -644,7 +644,7 @@ class Broadcast(Tensor):
         return td.reaxe(self.axes)
 
 
-class ExpandDims(Tensor):
+class ExpandDims(TensorOp):
     """TODO."""
 
     def __init__(self, x, axis, dim, **kwargs):
@@ -685,7 +685,7 @@ class ExpandDims(Tensor):
         )
 
 
-class Slice(Tensor):
+class Slice(TensorOp):
     """TODO."""
 
     def __init__(self, x, slices, axes=None, **kwargs):
@@ -729,7 +729,7 @@ class Slice(Tensor):
         )
 
 
-class AllocationOp(Tensor):
+class AllocationOp(TensorOp):
     """TODO."""
 
     def __init__(
@@ -747,7 +747,7 @@ class AllocationOp(Tensor):
             self.initializers.append(assign(self, initial_value))
 
 
-class ComputationOp(Tensor):
+class ComputationOp(TensorOp):
     """An TensorOp is the result of some sort of operation."""
 
     def __init__(self, dtype=np.dtype(np.float32), batch_axes=None, **kwargs):
@@ -1123,6 +1123,16 @@ class NumPyTensor(AllocationOp):
     def __init__(self, nptensor, axes, **kwargs):
         axes = Axes(axes)
         self.nptensor = nptensor
+        if nptensor.shape != axes.lengths:
+            raise ValueError((
+                "Tried to initialize NumPyTensor with numpy array of "
+                "shape {np_shape} though gave axes with a different "
+                "shape {axes_shape}."
+            ).format(
+                np_shape=nptensor.shape,
+                axes_shape=axes.lengths,
+            ))
+
         super(NumPyTensor, self).__init__(
             dtype=nptensor.dtype, axes=axes, **kwargs
         )

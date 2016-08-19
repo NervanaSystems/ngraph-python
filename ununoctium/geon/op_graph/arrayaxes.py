@@ -88,7 +88,12 @@ class AxisVar(Axis):
 
 
 class NumericAxis(Axis):
-    """TODO."""
+    """
+    A NumericAxis is an axis which is uniquely identified by its length.
+    Every NumericAxis with the same length is the same instance of
+    NumericAxis.
+    """
+
     cache = {}
 
     def __new__(cls, length=None, **kwargs):
@@ -247,6 +252,10 @@ class Axes(object):
 
     def __ne__(self, other):
         return not self == other
+
+    def __nonzero__(self):
+        """ Axes considered nonzero if axes are nonzero. """
+        return bool(self._axes)
 
     def concat(self, other):
         """
@@ -1003,7 +1012,16 @@ class TensorDescription(NameableValue):
         Returns:
 
         """
-        assert self.value.shape == tensor.shape
+        if self.value.shape != tensor.shape:
+            raise ValueError((
+                "Tried to set a TensorDescription's value with a tensor of "
+                "the wrong shape.  Expected: {expected_shape}, was given "
+                "{given_shape}."
+            ).format(
+                expected_shape=self.value.shape,
+                given_shape=tensor.shape,
+            ))
+
         self.transformer.set_item(self.value, (), tensor)
 
     def is_base(self):
@@ -1048,7 +1066,7 @@ def with_args_as_axes(f):
         elif isinstance(arg, AxisID):
             return arg.as_axes()
         else:
-            return Axes(*arg)
+            return Axes(arg)
 
     def wrapper(*args):
         """
@@ -1078,6 +1096,24 @@ def get_batch_axes(default=Axes()):
     if environment is None:
         return default
     return environment.get_value('batch_axes', default)
+
+
+def get_batch_axis():
+    """ return the batch axis used in this environment.
+
+    raises a ValueError if there are more than 1 batch axis.
+    """
+    batch_axes = get_batch_axes()
+    if len(batch_axes) == 0:
+        raise ValueError("expected a batch axes, but found none.")
+    elif len(batch_axes) > 1:
+        raise ValueError(
+            "expected 1 batch axes, but found {}: {}".format(
+                len(batch_axes), [str(axis) for axis in batch_axes]
+            )
+        )
+    else:
+        return batch_axes[0]
 
 
 @with_args_as_axes

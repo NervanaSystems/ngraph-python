@@ -57,7 +57,7 @@ test:
 
 style:
 	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
-	pylint --reports=n --py3k $(PYLINT3K_ARGS) --ignore=.venv *
+	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
 	pylint --output-format=colorized geon
