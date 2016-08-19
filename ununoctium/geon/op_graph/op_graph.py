@@ -37,21 +37,7 @@ def tensor_descriptions(args, transformer):
     Returns:
       TODO
     """
-    def tensor_description(arg):
-        """
-        TODO.
-
-        Arguments:
-          arg: TODO
-
-        Returns:
-          TODO
-        """
-        if isinstance(arg, TensorOp):
-            return arg.tensor_description(transformer)
-        else:
-            return arg
-    return (tensor_description(arg) for arg in args)
+    return (arg.tensor_description(transformer) for arg in args)
 
 
 def from_transformer_cache(f):
@@ -280,7 +266,7 @@ class Op(Node):
         Returns:
           TODO
         """
-        if isinstance(x, TensorOp):
+        if isinstance(x, Op):
             return x
 
         return Constant(x)
@@ -411,6 +397,76 @@ class Op(Node):
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
+
+
+class SetItem(Op):
+    """TODO."""
+
+    def __init__(self, tensor, item, val, **kwargs):
+        super(SetItem, self).__init__(args=(tensor, val), **kwargs)
+        self.item = item
+
+    @from_transformer_cache
+    def call_info(self, transformer):
+        """
+        TODO.
+
+        Arguments:
+          transformer: TODO
+
+        Returns:
+          TODO
+        """
+        tensor, val = tensor_descriptions(self.args, transformer)
+        return [tensor, val.reaxe(tensor.axes)]
+
+    def transform(self, transformer, tensor, val):
+        """
+        TODO.
+
+        Arguments:
+          transformer: TODO
+          tensor: TODO
+          val: TODO
+
+        Returns:
+          TODO
+        """
+        transformer.set_item(tensor, self.item, val)
+
+
+class doall(Op):
+    """TODO."""
+
+    def __init__(self, all, **kwargs):
+        super(doall, self).__init__(args=all, **kwargs)
+
+    def call_info(self, transformer):
+        pass
+
+    def transform_call_info(self, *args, **kargs):
+        pass
+
+
+class Fill(Op):
+    """TODO."""
+
+    def __init__(self, tensor, const, **kwargs):
+        super(Fill, self).__init__(args=(tensor,), **kwargs)
+        self.const = const
+
+    def transform(self, transformer, tensor):
+        """
+        TODO.
+
+        Arguments:
+          transformer: TODO
+          tensor: TODO
+
+        Returns:
+          TODO
+        """
+        transformer.fill(tensor, self.const)
 
 
 class TensorOp(Op):
@@ -905,69 +961,6 @@ class Uniform(RNGOp):
         )
 
 
-class VoidOp(ComputationOp):
-    """TODO."""
-
-    def __init__(self, **kwargs):
-        super(VoidOp, self).__init__(axes=Axes(), **kwargs)
-
-    @from_transformer_cache
-    def call_info(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        return list(tensor_descriptions(self.args, transformer))
-
-
-class SetItem(VoidOp):
-    """TODO."""
-
-    def __init__(self, tensor, item, val, **kwargs):
-        super(SetItem, self).__init__(args=(tensor, val), **kwargs)
-        self.item = item
-
-    @from_transformer_cache
-    def call_info(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        tensor, val = tensor_descriptions(self.args, transformer)
-        return [tensor, val.reaxe(tensor.axes)]
-
-    def transform(self, transformer, tensor, val):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          tensor: TODO
-          val: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.set_item(tensor, self.item, val)
-
-
-class doall(VoidOp):
-    """TODO."""
-
-    def __init__(self, all, **kwargs):
-        super(doall, self).__init__(args=all, **kwargs)
-
-
 class ElementWise(ComputationOp):
     """TODO."""
 
@@ -1039,27 +1032,6 @@ class placeholder(AllocationOp):
           delta: TODO
         """
         pass
-
-
-class Fill(VoidOp):
-    """TODO."""
-
-    def __init__(self, tensor, const, **kwargs):
-        super(Fill, self).__init__(args=(tensor,), **kwargs)
-        self.const = const
-
-    def transform(self, transformer, tensor):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          tensor: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.fill(tensor, self.const)
 
 
 class Constant(AllocationOp):

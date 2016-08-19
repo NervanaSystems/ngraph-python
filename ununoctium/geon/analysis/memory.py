@@ -20,7 +20,7 @@ from itertools import combinations
 from geon.util.graph import UndirectedGraph
 from geon.analysis.dataflow import DataFlowGraph
 from geon.analysis.fusion import KernelFlowGraph
-from geon.op_graph.op_graph import Buffer, NumPyTensor
+from geon.op_graph.op_graph import Buffer, NumPyTensor, TensorOp
 
 
 def _random_colors(N, alpha=.5):
@@ -130,14 +130,18 @@ def bind_initializers(transformer, ops):
 
     """
     for op in ops:
-        buffer = op.tensor_description(transformer).buffer
-        # assign the same buffer to all of the op's initializers
-        for i in op.initializers:
-            i.tensor_description(transformer).buffer = buffer
-            for a in i.args:
-                if isinstance(a, NumPyTensor):
-                    a.tensor_description(transformer).buffer = Buffer(-1, a.nptensor.size)
-                    a.tensor_description(transformer).buffer.data = a.nptensor
+        if isinstance(op, TensorOp):
+            buffer = op.tensor_description(transformer).buffer
+            # assign the same buffer to all of the op's initializers
+            for i in op.initializers:
+                if isinstance(i, TensorOp):
+                    i.tensor_description(transformer).buffer = buffer
+                for a in i.args:
+                    if isinstance(a, NumPyTensor):
+                        a.tensor_description(transformer).buffer\
+                            = Buffer(-1, a.nptensor.size)
+                        a.tensor_description(transformer).buffer.data\
+                            = a.nptensor
 
 
 def assign_buffers(transformer, results, fusible=None):
@@ -165,7 +169,8 @@ def assign_buffers(transformer, results, fusible=None):
     bind_initializers(transformer, dfg.inputs)
     # set style
     for op in all_ops:
-        tensor = op.tensor_description(transformer)
-        op.style = tensor.style
+        if isinstance(op, TensorOp):
+            tensor = op.tensor_description(transformer)
+            op.style = tensor.style
     # dfg.view()
     return dfg, memory
