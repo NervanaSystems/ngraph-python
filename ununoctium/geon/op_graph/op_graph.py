@@ -21,7 +21,8 @@ from functools import wraps
 from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
     AxisIDTuple, Axes, FlattenedAxis, Axis, sample_axes, batch_axes
-from geon.op_graph.nodes import Node, generic_method
+from geon.op_graph.nodes import Node
+from geon.util.generics import generic_method
 
 
 def tensor_descriptions(args, transformer):
