@@ -13,13 +13,10 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-api
-===
-
-This API documentation covers each module within graphiti. 
+This API documentation covers each module within Graphiti.
 
 geon.backends
--------------
+=============
 .. py:module: geon.backends
 
 .. autosummary::
@@ -32,7 +29,7 @@ geon.backends
    geon.backends.graph.mpihandle
 
 geon.frontends
---------------
+==============
 .. py:module: geon.frontends
 
 .. autosummary::
@@ -44,7 +41,7 @@ geon.frontends
    geon.frontends.declarative_graph.declarative_graph
 
 geon.frontends.neon
--------------------
+===================
 .. py:module: geon.frontends.neon
 
 .. autosummary::
@@ -60,7 +57,7 @@ geon.frontends.neon
    geon.frontends.neon.optimizer
 
 geon.op_graph
--------------
+=============
 .. py:module: geon.op_graph
 
 .. autosummary::
@@ -73,7 +70,7 @@ geon.op_graph
    geon.op_graph.op_graph
 
 geon.transformers
------------------
+=================
 .. py:module: geon.transformers
 
 .. autosummary::
@@ -84,7 +81,7 @@ geon.transformers
    geon.transformers.nptransform
 
 geon.util
----------
+=========
 .. py:module: geon.util
 
 .. autosummary::
@@ -95,7 +92,7 @@ geon.util
    geon.util.utils
 
 geon.analysis
--------------
+=============
 .. py:module: geon.analysis
 
 .. autosummary::

@@ -68,8 +68,9 @@ class InterferenceGraph(UndirectedGraph):
         Construction could be optimized, or coloring could be done directly
         from the liveness information.
 
-        :param lives (op => set(tensor_description)): Live tensors at each point
-                                Typically the output of dataflow.liveness()
+        Arguments:
+          lives (op => set(tensor_description)): Live tensors at each point
+                                                 Typically the output of dataflow.liveness()
         """
         neighbors = {x: set() for l in list(lives.values()) for x in l}
         edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]

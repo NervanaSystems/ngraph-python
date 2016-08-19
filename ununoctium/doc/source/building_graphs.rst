@@ -20,7 +20,7 @@ and manipulating machine learning computations.  The API is supported by a few g
 but the important thing for the user is the definition of models and frameworks for defining models.
 
 An operational graph is a device-independent program for performing one or more computations.  In order
-to run the computations, the graph must be tranformed into a format that can be run on the desired
+to run the computations, the graph must be transformed into a format that can be run on the desired
 backend.
 
 Expression basics
@@ -41,16 +41,16 @@ has been performed.
 
 When we work with expressions, we go in the other direction; we start with the last
 thing we would evaluate, in this case the assignment to :math:`y.`  The assignment has two subexpressions,
-the :math:`y` and the  :math:`\tanh(w*x+b).`  The :math:`=` is in the expression, but its role is to
-specify what is being done with the two subexpressions, so it is not a subexpression, but, instead, identifies
-the expresssion as an assignment.
+the :math:`y` expression and the :math:`\tanh(w*x+b)` expression.  The :math:`=` symbol is in the expression, but
+its role is to specify what is being done with the two subexpressions, so it is not a subexpression, but, instead,
+identifies the expression as an assignment.
 
-The :math:`\tanh(w*x+b)` has only one subexpression, :math:`w*x+b` and is a :math:`\tanh` expression.  The
-:math:`w*x+b` is a :math:`+` expression with two subexpressions, :math:`w*x` and :math:`b.`  The :math:`b`
-is a variable reference with no subexpressions.
+The :math:`\tanh(w*x+b)` expression has only one subexpression, :math:`w*x+b` and is a :math:`\tanh` expression.  The
+:math:`w*x+b` expression is a :math:`+` expression with two subexpressions, :math:`w*x` and :math:`b.`  The :math:`b`
+expression is a variable reference with no subexpressions.
 
 Although the :math:`b` expression has no subexpressions, it is different
-from the variable expressins :math:`w` and :math:`x.`  We call ``b, w`` and ``x`` *parameters* of the variable;
+from the variable expressions :math:`w` and :math:`x.`  We call ``b, w`` and ``x`` *parameters* of the variable;
 :math:`b, w` and :math:`x` are all variables with no subexpressions, but they do differ in their parameters.
 This is similar to the difference between :math:`+` and :math:`*`, but the difference between :math:`+` and
 :math:`*` is more significant so for our convenience we will call them different kinds of expressions rather
@@ -71,7 +71,7 @@ that is an expression object.  We can have the ``__init__`` try to coerce its ar
 it is not already one, and this becomes the subexpression of ``tanh``.  Normally a class would not be lowercase
 as in ``tanh`` but since we want to think of it as a function we type it as a function.
 
-Python supportds limited overloading with something called "magic methods."  Certain functions and operators
+Python supports limited overloading with something called "magic methods."  Certain functions and operators
 can be extended to new kinds of objects by defining their magic methods.  For example, if you define a class
 with a ``__add__`` method, and ``x`` is an instance of your class, ``x+y`` will call ``x``'s ``__add__`` with the value
 of ``y`` as an argument.  Likewise, if you define ``__radd__`` and ``y`` is an instance of your class, but
@@ -98,7 +98,7 @@ Unlike some graph/tensor languages, a tensor does not need to be associated with
 
 In the operational graph, all the expressions are operations of some kind, so we call them ops, and they are all
 instances of the class ``Op``.  Most expressions are tensors, and are instance of the ``Tensor`` class.  However,
-some ops are used for side-effects and produce no value; these are instance of ``VoidOp``.  Ops that actually
+some ops are used for side-effects and produce no value; these are instances of ``VoidOp``.  Ops that actually
 perform a computation on their arguments are instances of ``ComputationOp``.
 
 During a computation, the values must be stored somewhere, but only those tensors whose values are explicitly
@@ -129,7 +129,7 @@ previously represented by ``x``.  In other words::
 
 does not double the value of the tensor in the ``placeholder``.  Instead, the Python variable ``x`` is now an
 op that is the sum of the ``placeholder`` and itself.  In order to change the value of the ``placeholder``
-you would need to say::code
+you would need to say::
 
     be.SetItem(x, x + x)
 
@@ -141,7 +141,7 @@ when updating variables after training.  Consider::
 
 The Python variable ``y`` holds an op for a computation that adds the ``placeholder`` to itself, then multiplies
 that value by itself, and then subtracts the original value of the ``placeholder``.  The intermediate
-value ::code``x + x`` is only computed once, since the same op is used for both arguments of the multiplication.
+value ``x + x`` is only computed once, since the same op is used for both arguments of the multiplication.
 Furthermore, in this computation, all the computations will automatically be performed in place.  In NumPy
 it would be like::
 
@@ -190,7 +190,7 @@ will define four additional procedures:
     Allocate required storage required for all computations.  This includes all allocations for all ops
     marked as `in`.
 
-`inititialize`
+`initialize`
     Run all initializations.  These are all the `initializers` for the ops needed for the computations.  These
     are analogous to C++ static initializers.
 
@@ -204,9 +204,9 @@ will define four additional procedures:
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`geon.op_graph.op_graph.Op` which is a subclass of
+All operational graph ops are instances of the class :py:class:`geon.op_graph.op_graph.Op`, which is a subclass of
 the class :py:class:`geon.op_graph.nodes.Node`, which is itself a subclass of the classes
-:py:class:`geon.op_graph.names.NameableValue` and :py:class:`geon.op_graph.nodes.DebugInfo'.
+:py:class:`geon.op_graph.names.NameableValue` and :py:class:`geon.op_graph.nodes.DebugInfo`.
 
 The constructor's required arguments are the subexpressions.  All ops also have key initializers for:
 
