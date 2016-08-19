@@ -15,6 +15,7 @@
 from __future__ import division
 
 import numpy as np
+import cachetools
 from builtins import object, str
 from functools import wraps
 
@@ -36,7 +37,7 @@ def tensor_descriptions(args, transformer):
     Returns:
       TODO
     """
-    def td(arg):
+    def tensor_description(arg):
         """
         TODO.
 
@@ -50,7 +51,7 @@ def tensor_descriptions(args, transformer):
             return arg.tensor_description(transformer)
         else:
             return arg
-    return (td(arg) for arg in args)
+    return (tensor_description(arg) for arg in args)
 
 
 def from_transformer_cache(f):
@@ -197,67 +198,62 @@ class Op(Node):
 
         return set(params)
 
-    @staticmethod
-    def get_ordered_ops(op, ordered_ops):
-        """
-        Get dependent ops ordered for autodiff.
+    @property
+    @cachetools.cached({})
+    def initial_adjoint(self):
+        if len(self.axes) == 0:
+            return Constant(1)
+        else:
+            return placeholder(axes=self.axes)
 
-        Arguments:
-          op: TODO
-          ordered_ops: TODO
-        """
-        Node.visit_input_closure([op], lambda o: ordered_ops.append(o))
-
+    @cachetools.cached({})
     def adjoints(self):
         """
-        Returns a map containing the adjoints of this op with respect
-        to other ops. Creates the map if it does not already exist.
-        Most models only require the adjoints map for their scalar loss
-        functions, in which case the adjoint is initialized to a scalar 1.
-        Some autodiff tests calculate the derivative of a tensor by initializing
-        all but one elements of a tensor to zero and the remaining element to one.
-        To allow this, we create a placeholder for the initial adjoint and allow it
-        to be accessed by the initial_adjoint field.
+        Returns a map containing the adjoints of this op with respect to other
+        ops. Creates the map if it does not already exist.  Most models only
+        require the adjoints map for their scalar loss functions, in which case
+        the adjoint is initialized to a scalar 1.  Some autodiff tests
+        calculate the derivative of a tensor by initializing all but one
+        elements of a tensor to zero and the remaining element to one.  To
+        allow this, we create a placeholder for the initial adjoint and allow
+        it to be accessed by the _initial_adjoint field.
 
         Returns:
           TODO
         """
-        if self._adjoints is not None:
-            return self._adjoints
+        adjoints = {
+            self: self.initial_adjoint,
+        }
 
-        if len(self.axes) == 0:
-            initial_adjoint = Constant(1)
-        else:
-            initial_adjoint = placeholder(axes=self.axes)
-        self.initial_adjoint = initial_adjoint
+        # visit ops in reverse depth first post-order. it is important that
+        # ordered_ops returns a copy of this traversal order since the graph
+        # may change as we generate adjoints and we don't want to visit those
+        # new ops.
+        for o in reversed(Op.ordered_ops([self])):
+            if o in adjoints:
+                adjoint = adjoints[o]
+                if o.scale is not None:
+                    adjoint = adjoint * o.scale
 
-        self._adjoints = dict()
-        ordered_ops = []
-        Op.get_ordered_ops(self, ordered_ops)
-        self._adjoints[self] = self.initial_adjoint
-        for o in list(reversed(ordered_ops)):
-            if o in self._adjoints:
-                scale = o.scale
-                adjoint = self._adjoints[o]
-                if scale is not None:
-                    adjoint = adjoint * scale
-                o.generate_adjoints(self._adjoints, adjoint, *o.args)
-        return self._adjoints
+                o.generate_adjoints(adjoints, adjoint, *o.args)
+
+        return adjoints
 
     @staticmethod
     def ordered_ops(results):
         """
-        TODO.
+        depth-first, post-order "Bottom Up" traversal of Ops in results.
+
+        Ops will only appear once in result.
 
         Arguments:
-          results: TODO
+          results: a list of ops which are the roots of the graph traversal
 
         Returns:
-          TODO
+          list of Ops in depth-first, post-order
         """
         ordered_ops = []
-        Node.visit_input_closure(
-            results, lambda o: ordered_ops.append(o))
+        Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     def as_node(self, x):
