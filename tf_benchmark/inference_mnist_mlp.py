@@ -50,7 +50,8 @@ def inference_mnist_mlp():
 
         # init transformer
         transformer = be.NumPyTransformer()
-        infer_computation = transformer.computation(frontend_model.last_op)
+        infer_computation = transformer.computation(frontend_model.last_op,
+                                                    frontend_model.x)
 
         # set ups
         total_error = 0
@@ -61,11 +62,8 @@ def inference_mnist_mlp():
             num_samples = x_raw.shape[1]
             total_num_samples += num_samples
 
-            # copy dataset to device
-            transformer.copy_to_model(frontend_model.x, x_raw)
-
             # get inference result
-            result = infer_computation()
+            result = infer_computation(x_raw)
 
             # get errors
             pred = np.argmax(result, axis=1)
