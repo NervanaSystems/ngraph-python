@@ -16,6 +16,18 @@
 from __future__ import division
 from collections import defaultdict
 from geon.util.graph import Digraph
+from geon.op_graph.op_graph import TensorOp
+
+
+def base_tensor_descriptions(ops, transformer):
+    """
+    Returns a set containing the base tensor descriptions of the
+    outputs of a collection of ops
+    """
+    return {
+        op.tensor_description(transformer).base
+        for op in ops if isinstance(op, TensorOp)
+    }
 
 
 class DataFlowGraph(Digraph):
@@ -70,19 +82,23 @@ class DataFlowGraph(Digraph):
 
         # Initialize
         liveness = dict((op, set()) for op in order)
-        persistent = {x.tensor_description(self.transformer).base
-                      for x in self.successors if 'persistent' in x.tags}
-        results = {x.tensor_description(self.transformer).base for x in self.results}
+        persistent = base_tensor_descriptions(
+            (x for x in self.successors if 'persistent' in x.tags),
+            self.transformer
+        )
+        results = base_tensor_descriptions(self.results, self.transformer)
         liveness[order[-1]] = results | persistent
         # Update
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
-            use = {x.tensor_description(self.transformer).base for x in current.args}
-            defs = {x.tensor_description(self.transformer).base for x in current.defs}
+            use = base_tensor_descriptions(current.args, self.transformer)
+            defs = base_tensor_descriptions(current.defs, self.transformer)
             liveness[previous] = use | (liveness[current] - defs)
         # Inplace not possible
         for op in order:
             if not can_do_inplace(op):
-                liveness[op] |= {x.tensor_description(self.transformer).base for x in op.args}
+                liveness[op] |= base_tensor_descriptions(
+                    op.args, self.transformer
+                )
 
         # print max([sum(map(lambda x: reduce(mul, x.shapes, 1)*x.dtype.itemsize,
         # l)) for l in liveness.itervalues()])*1024**-2
