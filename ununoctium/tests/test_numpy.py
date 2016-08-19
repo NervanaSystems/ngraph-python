@@ -38,7 +38,7 @@ def test_constant_multiply():
     c = be.multiply(a, b)
 
     result = executor(c)()
-    assert result == [8]
+    np.testing.assert_allclose(result, [8])
 
 
 @be.with_bound_environment
@@ -51,7 +51,7 @@ def test_constant_tensor_multiply():
     c = be.multiply(a, b)
 
     result = executor(c)()
-    assert np.allclose(result, [[1.0, 1.0], [1.0, 1.0]])
+    np.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
 
 
 @be.with_bound_environment
@@ -65,7 +65,7 @@ def test_tensor_sum_single_reduction_axes():
     b = be.sum(a, reduction_axes=ax.Y)
 
     result = executor(b)()
-    assert np.allclose(result, [[2.0], [2.0]])
+    np.testing.assert_allclose(result, [2.0, 2.0])
 
 
 @be.with_bound_environment
@@ -77,7 +77,7 @@ def test_scalar():
 
     cval = executor(x)()
     assert cval.shape == ()
-    assert cval[()] == val
+    np.testing.assert_allclose(cval, val)
 
 
 @be.with_bound_environment
@@ -92,7 +92,7 @@ def test_tensor_constant():
 
     x = be.NumPyTensor(aval, axes=aaxes)
     cval = executor(x)()
-    assert np.array_equal(cval, aval)
+    np.testing.assert_allclose(cval, aval)
 
 
 @be.with_bound_environment
@@ -115,21 +115,21 @@ def test_placeholder():
     prod_fun = ex.executor([d, d2], x)
 
     cval = placeholder_fun(aval)
-    assert np.array_equal(cval, aval)
+    np.testing.assert_allclose(cval, aval)
 
     # Pass a different array though
     u = rng.uniform(-1.0, 1.0, aaxes)
     cval = placeholder_fun(u)
-    assert np.array_equal(cval, u)
+    np.testing.assert_allclose(cval, u)
 
     cval, s = prod_fun(aval)
-    assert np.array_equal(cval, aval * 2)
-    assert s[()] == np.dot(aval.flatten(), aval.flatten())
+    np.testing.assert_allclose(cval, aval * 2)
+    np.testing.assert_allclose(s[()], np.dot(aval.flatten(), aval.flatten()))
 
     cval, s = prod_fun(u)
     u2 = u * 2
-    assert np.array_equal(cval, u2)
-    assert s[()] == np.dot(u.flatten(), u.flatten())
+    np.testing.assert_allclose(cval, u2)
+    np.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
 @be.with_bound_environment
@@ -154,7 +154,7 @@ def test_reduction():
             npval = npred(u, dims)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             graph_val = executor(graph_reduce, p_u)(u)
-            assert np.array_equal(
+            np.testing.assert_allclose(
                 npval, graph_val), 'red:{red}, axes:{axes}'.format(
                 red=red, axes=reduction_axes)
 
@@ -186,9 +186,9 @@ def test_reduction_deriv():
             sym_fun = ex.derivative(graph_reduce, p_u)
             dgraph_val_num = num_fun(u)
             dgraph_val = sym_fun(u)
-            assert np.allclose(dgraph_val, dgraph_val_num, atol=1e-1,
-                               rtol=1e-1), 'red:{red}, axes:{axes}'.format(
-                red=red, axes=reduction_axes)
+            np.testing.assert_allclose(
+                dgraph_val, dgraph_val_num, atol=1e-1,
+                rtol=1e-1)
 
 
 @be.with_bound_environment
@@ -211,11 +211,11 @@ def test_reciprocal():
     drec_u_graph_fun = ex.derivative(rec_u, p_u)
 
     rec_u_graph = fun(u)
-    assert np.allclose(rec_u_np, rec_u_graph)
+    np.testing.assert_allclose(rec_u_np, rec_u_graph)
 
     drec_u_num = drec_u_num_fun(u)
     drec_u_graph = drec_u_graph_fun(u)
-    assert np.allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
 
 
 @be.with_bound_environment
@@ -253,19 +253,19 @@ def test_elementwise_ops_matched_args():
 
         # ensure numpy and neon backend perform the same cacluclation
         result_be = fun(u, v)
-        assert np.allclose(result_np, result_be, atol=1e-4,
-                           rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(result_np, result_be, atol=1e-4,
+                                   rtol=1e-4)
 
         duvdunum = duvdunum_fun(u, v)
         duvdut = duvdut_fun(u, v)
-        assert np.allclose(duvdunum, duvdut, atol=1e-4,
-                           rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-4,
+                                   rtol=1e-4)
 
         # same as above, but for v instead of u
         duvdvnum = duvdvnum_fun(v, u)
         duvdvt = duvdvt_fun(v, u)
-        assert np.allclose(duvdvnum, duvdvt, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3,
+                                   rtol=1e-3)
 
     for np_op, be_op, op in [(np.exp, be.exp, 'exp'),
                              (np.log, be.log, 'log'),
@@ -281,12 +281,12 @@ def test_elementwise_ops_matched_args():
         dudut_fun = ex.derivative(result_op, p_u)
 
         u_t = fun(u)
-        assert np.allclose(u_np, u_t, atol=1e-4,
-                           rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(u_np, u_t, atol=1e-4,
+                                   rtol=1e-4)
         dudunum = dudunum_fun(u)
         dudut = dudut_fun(u)
-        assert np.allclose(dudunum, dudut, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(dudunum, dudut, atol=1e-3,
+                                   rtol=1e-3)
 
 
 @be.with_bound_environment
@@ -334,32 +334,32 @@ def test_elementwise_ops_unmatched_args():
         dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
         result_be = uv_fun(u, v)
-        assert np.allclose(uv_np, result_be, atol=1e-4,
-                           rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(uv_np, result_be, atol=1e-4,
+                                   rtol=1e-4), 'op:{op}'.format(op=op)
         duvdunum = duvdunum_fun(u, v)
         duvdut = duvdut_fun(u, v)
-        assert np.allclose(duvdunum, duvdut, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-3,
+                                   rtol=1e-3), 'op:{op}'.format(op=op)
 
         duvdvnum = duvdvnum_fun(v, u)
         duvdvt = duvdvt_fun(v, u)
-        assert np.allclose(duvdvnum, duvdvt, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3,
+                                   rtol=1e-3), 'op:{op}'.format(op=op)
 
         # v op u
 
         result_be = vu_fun(u, v)
-        assert np.allclose(vu_np, result_be, atol=1e-4,
-                           rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(vu_np, result_be, atol=1e-4,
+                                   rtol=1e-4), 'op:{op}'.format(op=op)
         dvudunum = dvudunum_fun(u, v)
         dvudut = dvudut_fun(u, v)
-        assert np.allclose(dvudunum, dvudut, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(dvudunum, dvudut, atol=1e-3,
+                                   rtol=1e-3), 'op:{op}'.format(op=op)
 
         dvudvnum = dvudvnum_fun(v, u)
         dvudvt = dvudvt_fun(v, u)
-        assert np.allclose(dvudvnum, dvudvt, atol=1e-3,
-                           rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3,
+                                   rtol=1e-3), 'op:{op}'.format(op=op)
 
 
 def np_softmax(x, axis):
@@ -424,10 +424,10 @@ def test_cross_entropy_binary_logistic_shortcut():
 
     cel = cross_entropy_binary_logistic(u, v)
     cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
-    assert np.allclose(cel, cel_shortcut)
+    np.testing.assert_allclose(cel, cel_shortcut)
 
     cel_graph = executor(be.cross_entropy_binary_inner(be.sigmoid(p_u), p_v), p_u, p_v)(u, v)
-    assert np.allclose(cel, cel_graph)
+    np.testing.assert_allclose(cel, cel_graph)
 
 
 @be.with_bound_environment
@@ -452,7 +452,7 @@ def test_cross_entropy_binary():
 
     dval_u_num = dval_u_num_fun(u, v)
     dval_u_graph = dval_u_graph_fun(u, v)
-    assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
 
 def adiff_softmax(x):
@@ -509,7 +509,7 @@ def test_np_softmax():
                                 be.Axes([ax.N])).reshape(1, ax.N.length)
 
     s = np_softmax(x, 0)
-    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     # Drop batch axis and test the derivative
     x0 = x[:, 0]
@@ -528,7 +528,7 @@ def test_np_softmax():
 
     a = numeric_derivative(np_softmax_0, x0, .001)
     s = adiff_softmax(x0)
-    assert np.allclose(s, a, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(s, a, atol=1e-2, rtol=1e-2)
 
 
 def np_cross_entropy_multi(y, t, axis=None):
@@ -568,16 +568,16 @@ def test_softmax():
     smax_fun = ex.executor(be.softmax(p_x), p_x)
 
     s = smax_w_fun(x)
-    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     x = rng.uniform(-5000, 5000, be.Axes([ax.W, ax.N]))
     u = np_softmax(x, 0)
     s = smax_w_fun(x)
-    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     # Test with softmax_axis default
     s = smax_fun(x)
-    assert np.allclose(s, u, atol=1e-6, rtol=1e-3)
+    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
 @be.with_bound_environment
@@ -607,16 +607,16 @@ def test_softmax_deriv():
 
     softmax_x_num_deriv = softmax_x_num_deriv_fun(x)
     softmax_x_deriv = softmax_x_deriv_fun(x)
-    assert np.allclose(softmax_x_num_deriv, softmax_x_deriv, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(softmax_x_num_deriv, softmax_x_deriv, atol=1e-2, rtol=1e-2)
 
     cross_entropy_np = np_cross_entropy_multi(softmax_x_np, t, axis=0)
     cross_entropy, softmax_x = cross_entropy_fun(x, t)
-    assert np.allclose(softmax_x, softmax_x_np)
-    assert np.allclose(cross_entropy_np, cross_entropy)
+    np.testing.assert_allclose(softmax_x, softmax_x_np)
+    np.testing.assert_allclose(cross_entropy_np, cross_entropy)
 
     cross_entropy_num_deriv = cross_entropy_num_deriv_fun(x, t)
     cross_entropy_deriv = cross_entropy_deriv_fun(x, t)
-    assert np.allclose(cross_entropy_num_deriv, cross_entropy_deriv, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(cross_entropy_num_deriv, cross_entropy_deriv, atol=1e-2, rtol=1e-2)
 
 
 @be.with_bound_environment
@@ -641,15 +641,15 @@ def test_sigmoid():
     dlog_val_u_graph_fun = ex.derivative(log_val_u, p_u)
 
     val_u_graph = val_u_graph_fun(u)
-    assert np.allclose(val_u_np, val_u_graph)
+    np.testing.assert_allclose(val_u_np, val_u_graph)
 
     dval_u_num = dval_u_num_fun(u)
     dval_u_graph = dval_u_graph_fun(u)
-    assert np.allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
     dlog_val_u_num = dlog_val_u_num_fun(u)
     dlog_val_u_graph = dlog_val_u_graph_fun(u)
-    assert np.allclose(dlog_val_u_graph, dlog_val_u_num, atol=1e-2, rtol=1e-2)
+    np.testing.assert_allclose(dlog_val_u_graph, dlog_val_u_num, atol=1e-2, rtol=1e-2)
 
 
 def one_hot_comparison(hot_axes, axes):
@@ -670,7 +670,7 @@ def one_hot_comparison(hot_axes, axes):
         v[tuple(vindex)] = 1
 
     v_t = executor(be.onehot(u_p, axis=ax.C), u_p)(u)
-    assert np.array_equal(v_t, v)
+    np.testing.assert_allclose(v_t, v)
 
 
 @be.with_bound_environment
