@@ -97,13 +97,12 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
 
         # transformer
         transformer = be.NumPyTransformer()
-        train_eval_comp = transformer.computation([grad, update, loss])
-        transformer.finalize()
+        train_eval_func = transformer.computation([grad, update, loss])
 
         # evaluate
         for i in range(max_iter):
-            result_dict = train_eval_comp.evaluate()
-            print("grad: %s, loss %s" % (result_dict[grad], result_dict[loss]))
+            grad_val, _, loss_val = train_eval_func()
+            print("grad: %s, loss %s" % (grad_val, loss_val))
 
 
 if __name__ == '__main__':
