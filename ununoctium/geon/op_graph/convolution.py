@@ -33,7 +33,7 @@ def _output_dim(X, S, padding, strides, pooling=False):
     return size
 
 
-class convolution(op_graph.Tensor):
+class convolution(op_graph.TensorOp):
     """
     conv op
 
