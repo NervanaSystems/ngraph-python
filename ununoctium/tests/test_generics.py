@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 
 from geon.util.generics import generic_function, generic_method
-import collections
 
 
 class A(object):
@@ -33,8 +32,6 @@ def generic_checker(check):
     check(object(), 3, 'base')
     check(3.4, 'foo', 'float')
     check(3, 4, 'int')
-    # Doesn't work for abstract types
-    # check([2, 3], 11, 'sequence')
     check((2, 3), 11, 'tuple')
     check(A(), 1, 'A')
     check(B(), 2, 'A')
@@ -42,7 +39,6 @@ def generic_checker(check):
 
 
 def test_generic_function():
-
     @generic_function
     def selector(x, y):
         return ('base', x, y)
@@ -54,10 +50,6 @@ def test_generic_function():
     @selector.on_type(int)
     def selector(x, y):
         return ('int', x, y)
-
-    @selector.on_type(collections.Sequence)
-    def selector(x, y):
-        return ('sequence', x, y)
 
     @selector.on_type(tuple)
     def selector(x, y):
@@ -89,10 +81,6 @@ class Visitor(object):
     @selector.on_type(int)
     def selector(self, x, y):
         return ('int', x, y)
-
-    @selector.on_type(collections.Sequence)
-    def selector(self, x, y):
-        return ('sequence', x, y)
 
     @selector.on_type(tuple)
     def selector(self, x, y):
