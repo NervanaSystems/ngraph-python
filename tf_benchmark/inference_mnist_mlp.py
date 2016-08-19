@@ -17,64 +17,72 @@
 This script illustrates how to convert a pre-trained TF model to Neon and perform
 inference with the model on new data.
 
+TODO: load meta info from TF's MetaGraph including details about dataset,
+      training epochs and etc
 """
 
 from __future__ import print_function
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
+import numpy as np
 import geon as be
 from geon.backends.graph.environment import Environment
-
 from util.importer import create_nervana_graph
-import numpy as np
 
+# args and environment
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
                     help='GraphDef protobuf')
-
 args = parser.parse_args()
-
 env = Environment()
 
-# TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-mnist_data = MNIST(path=args.data_dir).gen_iterators()
-test_data = mnist_data['valid']
+def inference_mnist_mlp():
+    # data loader
+    mnist_data = MNIST(path=args.data_dir).gen_iterators()
+    test_data = mnist_data['valid']
 
-frontend_model = create_nervana_graph(args.pb_file, env)  # trans = be.NumPyTransformer()
+    with be.bound_environment(env):
+        # build graph
+        frontend_model = create_nervana_graph(args.pb_file, env)
 
-with be.bound_environment(env):
-    trans = be.NumPyTransformer()
-    infer_comp = trans.computation(frontend_model.last_op)
-    trans.finalize()
-    # trans.dataflow.view()
+        # init transformer
+        transformer = be.NumPyTransformer()
+        infer_computation = transformer.computation(frontend_model.last_op)
 
-    test_error = 0
-    n_sample = 0
+        # set ups
+        total_error = 0
+        total_num_samples = 0
 
-    y_raw_1 = None
-    for mb_idx, (xraw, yraw) in enumerate(test_data):
-        trans.copy_to_model(frontend_model.x, xraw)
+        for batch_idx, (x_raw, y_raw) in enumerate(test_data):
+            # increment total number of samples
+            num_samples = x_raw.shape[1]
+            total_num_samples += num_samples
 
-        result = infer_comp()
+            # copy dataset to device
+            transformer.copy_to_model(frontend_model.x, x_raw)
 
-        print("minibatch: %d" % mb_idx)
-        print("prediction result: ")
-        print(result)
-        print("shape of the prediction: ")
-        print(result.shape)
+            # get inference result
+            result = infer_computation()
 
-        pred = np.argmax(result, axis=1)
-        gt = np.argmax(yraw, axis=0)
-        mb_test_error = np.sum(np.not_equal(pred, gt))
+            # get errors
+            pred = np.argmax(result, axis=1)
+            gt = np.argmax(y_raw, axis=0)
+            batch_error = float(np.sum(np.not_equal(pred, gt)))
+            batch_error_rate = batch_error / float(num_samples) * 100.
+            total_error += batch_error
 
-        print("test error: %2.2f %%" % (mb_test_error / float(xraw.shape[1]) * 100))
-        test_error += mb_test_error
-        n_sample += xraw.shape[1]
+            print("batch index: %d" % batch_idx)
+            print("prediction result: %s" % result)
+            print("shape of the prediction: %s" % (result.shape,))
+            print("batch error: %2.2f" % batch_error_rate)
+            print("-------------------------------")
 
-        print("-------------------------------")
+        total_error_rate = total_error / float(total_num_samples) * 100
+        print("total error: %2.2f %%" % total_error_rate)
 
-    test_error = test_error / float(n_sample) * 100
-    print("test error: %2.2f %%" % test_error)
+
+if __name__ == '__main__':
+    inference_mnist_mlp()
