@@ -18,15 +18,15 @@
 Graphiti 101
 ************
 
-Nervana's graph architecture has three layers, the model description, the operational graph,
+Nervana's graph architecture has three layers: the model description, the operational graph,
 and the MOP (Machine-learning OPerations).  Models are described using higher-level APIs such
-as neon or TensorFlow\ |trade|.  Front-ends specific to the API use the operational graph API
-to convert the model description into an operational graph.  Back-ends correspond to compute
+as neon or TensorFlow\ |trade|.  Frontends specific to the API use the operational graph API
+to convert the model description into an operational graph.  Backends correspond to compute
 platforms, such as GPUs or CPUs.  A combination of generic and
-back-end specific transformers optimize the operational graph and convert it to a form
-that can be run on the back-end.  The operational graph API is shared by all front-ends and
-back-ends.
+backend specific transformers optimize the operational graph and convert it to a form
+that can be run on the backend.  The operational graph API is shared by all frontends and
+backends.
 
-The operational graph API can be used directly, both as an alternative to a front-end and as
-an extension mechanism for front-ends.  For example, the neon front end
+The operational graph API can be used directly, both as an alternative to a frontend and as
+an extension mechanism for frontends.  For example, the neon frontend
 is implemented by expanding neon layers and costs into graphs.

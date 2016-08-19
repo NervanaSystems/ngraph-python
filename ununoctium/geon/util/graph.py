@@ -30,7 +30,8 @@ class Digraph(object):
         """
         Initialize directed graph from successors dict
 
-        :param successors (dict: op => set(op)): dict that map each op to all its users
+        Arguments:
+          successors (dict: op => set(op)): dict that map each op to all its users
         """
         self.successors = successors
 
@@ -39,7 +40,7 @@ class Digraph(object):
         Export the current Digraph to Graphviz
 
         Arguments:
-          name: str): Name of the resulting graph
+          name (str): Name of the resulting graph
 
         Returns:
           pygraphviz object

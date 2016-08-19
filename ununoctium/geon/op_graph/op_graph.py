@@ -91,8 +91,10 @@ class Op(Node):
 
     def __init__(self, initializers=None, **kwds):
         """
-        :param initializers: should be a list of Ops which are called to initialize
-        this op.
+        TODO.
+
+        Arguments:
+          initializers: Should be a list of Ops which are called to initialize this op.
         """
         super(Op, self).__init__(**kwds)
         self.schemas = []
@@ -120,7 +122,6 @@ class Op(Node):
         Arguments:
           schema: param set_generate_adjoints: Whether to override the node's generate_adjoints
         with the version from the schema.
-        :return:
           set_generate_adjoints: TODO
 
         Returns:
@@ -151,10 +152,9 @@ class Op(Node):
 
         Arguments:
           t: The type of schema desired.
-        :return: A schema of type t, or None.
 
         Returns:
-          TODO
+          A schema of type t, or None.
         """
         for schema in self.schemas:
             if isinstance(schema, t):

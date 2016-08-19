@@ -64,10 +64,12 @@ class Node(NameableValue, DebugInfo):
 
     def __init__(self, args=(), tags=None, **kwargs):
         """
+        TODO.
 
-        :param args: Values used by this node
-        :param tags: String or a set of strings used for filtering in searches
-        :param kwargs:
+        Arguments:
+          args: Values used by this node
+          tags: String or a set of strings used for filtering in searches
+          kwargs: TODO
         """
         super(Node, self).__init__(**kwargs)
         self.users = weakref.WeakSet()
@@ -86,7 +88,7 @@ class Node(NameableValue, DebugInfo):
 
     @property
     def args(self):
-        """All the inputs to this node"""
+        """All the inputs to this node."""
         return self.__args
 
     @args.setter
@@ -96,10 +98,6 @@ class Node(NameableValue, DebugInfo):
 
         Arguments:
           args: New arguments
-        :return:
-
-        Returns:
-
         """
         for arg in self.__args:
             arg.users.remove(self)
@@ -114,10 +112,6 @@ class Node(NameableValue, DebugInfo):
         Arguments:
           old: Node to be replaced
           new: Replacement
-        :return:
-
-        Returns:
-
         """
         self.args = [new if arg is old else arg for arg in self.args]
 
@@ -127,10 +121,9 @@ class Node(NameableValue, DebugInfo):
 
         Arguments:
           args: Sequence of values that can be converted to nodes
-        :return: Tuple of nodes
 
         Returns:
-
+          Tuple of nodes.
         """
         return tuple(self.as_node(arg) for arg in args)
 
@@ -158,9 +151,6 @@ class Node(NameableValue, DebugInfo):
         Arguments:
           root: root set of nodes to visit
           fun: Function to call on each visited node
-
-        Returns:
-
         """
         visited = set()
 
@@ -170,9 +160,6 @@ class Node(NameableValue, DebugInfo):
 
             Arguments:
               node: TODO
-
-            Returns:
-
             """
             if node not in visited:
                 for n in node.args:
@@ -191,9 +178,6 @@ class Node(NameableValue, DebugInfo):
         Arguments:
           root: root set of nodes to visit
           fun: Function to call on each visited node
-
-        Returns:
-
         """
         visited = set()
 
@@ -203,9 +187,6 @@ class Node(NameableValue, DebugInfo):
 
             Arguments:
               node: TODO
-
-            Returns:
-
             """
             if node not in visited:
                 for n in node.users:
