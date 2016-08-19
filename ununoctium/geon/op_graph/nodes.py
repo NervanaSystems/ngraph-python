@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from builtins import str
 import collections
-from functools import wraps
 import inspect
 import weakref
 
@@ -292,91 +291,3 @@ class Node(NameableValue, DebugInfo):
 
     def __repr__(self):
         return '{s}({body})'.format(s=self.__shortpr(), body=self._repr_body())
-
-
-def generic_method(base_method):
-    """
-    Makes a method generic on its first argument.
-
-    A generic method is like a generic function, except that dispatch is on the first
-    non-self argument.  The first argument should be marked with @generic_method.
-    Specialized arguments should be marked with @method.on_type(type)
-
-    Example:
-    class Visitor(object):
-        def __init__(self, values):
-            self.xs = []
-            self.ys = []
-            self.others = []
-
-            for value in values:
-                self.visit(value)
-
-        @generic_method
-        def visit(self, arg)
-            self.others.append(arg)
-
-        @visit.on_type(X):
-        def visit(self, arg):
-            self.xs.append(arg)
-
-        @visit.on_type(Y):
-        def visit(self, arg):
-            self.ys.append(arg)
-
-    Arguments:
-      base_method: Default implementation of the method.
-
-    Returns:
-      The generic method
-    """
-    methods = {}
-
-    @wraps(base_method)
-    def method_dispatch(s, dispatch_arg, *args, **kwargs):
-        """
-        TODO.
-
-        Arguments:
-          s: TODO
-          dispatch_arg: TODO
-          *args: TODO
-          **kwargs: TODO
-
-        Returns:
-
-        """
-        for t in type(dispatch_arg).__mro__:
-            handler = methods.get(t, None)
-            if handler is not None:
-                return handler(s, dispatch_arg, *args, **kwargs)
-        return base_method(s, dispatch_arg, *args, **kwargs)
-
-    def on_type(dispatch_type):
-        """
-        Marks the handler sub-method for when the first argument has type dispatch_type.
-
-        Arguments:
-          dispatch_type: return: The generic method.
-
-        Returns:
-
-        """
-        def make_handler(f):
-            """
-            TODO.
-
-            Arguments:
-              f: TODO
-
-            Returns:
-
-            """
-            methods[dispatch_type] = f
-            return method_dispatch
-
-        return make_handler
-
-    method_dispatch.on_type = on_type
-
-    return method_dispatch
