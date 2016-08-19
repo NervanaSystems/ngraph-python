@@ -106,11 +106,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         TODO.
 
         Arguments:
-          results: A list of Ops whose results the Transformer should
-                   return on `.evaluate()`.  There aren't any good reasons to initialize a
-                   transformer with None except for in tests.
           environment: The environment to use to grab things like axis.  WARNING: `environment`
                        will be deprecated soon.
+          fusion: Whether to combine sequences of operations into one operation.
         """
         super(Transformer, self).__init__(**kvargs)
         self.transform_hook = None
