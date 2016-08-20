@@ -394,15 +394,6 @@ class InitTensor(Op):
         super(InitTensor, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
 
-    @from_transformer_cache
-    def call_info(self, transformer):
-        tensor, = tensor_descriptions(self.args, transformer)
-        return [tensor]
-
-    def transform(self, transformer, tensor):
-        val = self.valfun(tensor)
-        transformer.cpu_set(tensor, val)
-
 
 class SetItem(Op):
     """TODO."""
@@ -909,10 +900,10 @@ class RNG(object):
           TODO
         """
 
-        def value_fun(tensor):
-            self.rng.normal(
-                loc, scale, tensor.tensor_description.sizes).astype(
-                tensor.tensor_description.dtype)
+        def value_fun(tensor_description):
+            return self.rng.normal(
+                loc, scale, tensor_description.sizes).astype(
+                tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
         val.initializers.append(InitTensor(val, value_fun))

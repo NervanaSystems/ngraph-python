@@ -23,8 +23,9 @@ from future.utils import with_metaclass
 import numpy as np
 
 from geon.backends.graph.environment import get_current_environment
-from geon.op_graph.op_graph import Op, placeholder, TensorOp
+from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions
 from geon.analysis.memory import assign_buffers
+from geon.util.generics import generic_method
 
 
 class Computation(with_metaclass(abc.ABCMeta, object)):
@@ -293,8 +294,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Crate tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        inits = self.ordered_initializers(ops)
-        all_ops = ops + inits
+        self.inits = self.ordered_initializers(ops)
+        all_ops = ops + self.inits
         # Give ids
         for op in all_ops:
             if op not in self.opids:
@@ -336,8 +337,20 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # TODO Move to compilation step
         for device_buffer in self.device_buffers:
             device_buffer.allocate()
+        for op in self.inits + self.ops:
+            self.initialize_constant(op)
 
         self.allocated = True
+
+    @generic_method
+    def initialize_constant(self, op):
+        pass
+
+    @initialize_constant.on_type(InitTensor)
+    def initialize_constant(self, op):
+        tensor_description, = tensor_descriptions(op.args, self)
+        value = op.valfun(tensor_description)
+        tensor_description.value[:] = value
 
     def initialize(self):
         """
@@ -347,12 +360,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             return
         self.allocate()
         self.transform_ordered_ops(self.initializers)
-        self.run_cpu_initializations()
         self.initialized = True
-
-    def run_cpu_initializations(self):
-        for tensor, value in self.cpu_initializations:
-            tensor[:] = value
 
     def compile_computation(self, ordered_ops):
         """
@@ -496,9 +504,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             else:
                 # run the transform without any hooks
                 transform_op(op)
-
-    def cpu_set(self, tensor, value):
-        self.cpu_initializations.append((tensor, value))
 
     @abc.abstractmethod
     def device_buffer_storage(self, bytes, alignment):
