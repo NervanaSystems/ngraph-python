@@ -456,19 +456,3 @@ class ArgonTransformer(Transformer):
         x_val = x.get()  # read data from Argon to CPU -- expensive!
         recv_buffer = MPIHandle().allreduceAvg(x_val)
         out.set(recv_buffer)
-
-
-class ArgonUniform(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, low, high, **kwargs):
-        super(ArgonUniform, self).__init__(args=(rng,), **kwargs)
-        self.low = low
-        self.high = high
-
-    def compute_tensor_axes_info(self):
-        """TODO."""
-        rng, = self.args
-        tensor_axes_info = super(ArgonUniform, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: \
-            evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)

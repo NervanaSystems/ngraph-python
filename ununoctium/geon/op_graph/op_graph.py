@@ -317,16 +317,6 @@ class Op(Node):
         """
         pass
 
-    def allocate(self, transformer):
-        """
-        Fills the memory of this op with its initial value.
-        TODO: rename or change this function to actually allocate memory
-
-        Arguments:
-          transformer: TODO
-        """
-        pass
-
     @from_transformer_cache
     def call_info(self, transformer):
         """
@@ -397,6 +387,21 @@ class Op(Node):
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
+
+
+class InitTensor(Op):
+    def __init__(self, tensor, valfun, **kwargs):
+        super(InitTensor, self).__init__(args=(tensor,), **kwargs)
+        self.valfun = valfun
+
+    @from_transformer_cache
+    def call_info(self, transformer):
+        tensor, = tensor_descriptions(self.args, transformer)
+        return [tensor]
+
+    def transform(self, transformer, tensor):
+        val = self.valfun(tensor)
+        transformer.cpu_set(tensor, val)
 
 
 class SetItem(Op):
@@ -483,14 +488,6 @@ class TensorOp(Op):
 
         # Derivative will be scaled by this
         self.scale = scale
-
-    @property
-    def output(self):
-        """TODO."""
-        if self.__out is not None:
-            return self.__out
-        else:
-            return self
 
     def generate_add_delta(self, adjoints, delta):
         """
@@ -628,8 +625,6 @@ class TensorOp(Op):
         """TODO."""
         if self.__axes is not None:
             return self.__axes
-        elif self.__out is not None:
-            return self.__out.axes
         else:
             raise NotImplementedError
 
@@ -891,7 +886,14 @@ class RNG(object):
         Returns:
           TODO
         """
-        return Uniform(rng=self.rng, low=low, high=high, size=size, **kwargs)
+
+        def value_fun(tensor):
+            return self.rng.uniform(low, high, tensor.tensor_description.sizes).astype(
+                tensor.tensor_description.dtype)
+
+        val = constant_storage(axes=size, **kwargs)
+        val.initializers.append(InitTensor(val, value_fun))
+        return val
 
     def normal(self, loc, scale, size, **kwargs):
         """
@@ -906,59 +908,15 @@ class RNG(object):
         Returns:
           TODO
         """
-        return Normal(rng=self.rng, loc=loc, scale=scale, size=size, **kwargs)
 
+        def value_fun(tensor):
+            self.rng.normal(
+                loc, scale, tensor.tensor_description.sizes).astype(
+                tensor.tensor_description.dtype)
 
-class RNGOp(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, **kwargs):
-        super(RNGOp, self).__init__(**kwargs)
-        self.rng = rng
-
-
-class Normal(RNGOp):
-    """TODO."""
-
-    def __init__(self, loc=0.0, scale=1.0, size=None, **kwargs):
-        super(Normal, self).__init__(axes=size, **kwargs)
-        self.loc = loc
-        self.scale = scale
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.rng_normal_tensor(
-            self.rng, td,
-            self.loc, self.scale
-        )
-
-
-class Uniform(RNGOp):
-    """TODO."""
-
-    def __init__(self, low=0.0, high=1.0, size=None, **kwargs):
-        super(Uniform, self).__init__(axes=size, **kwargs)
-        self.low = low
-        self.high = high
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.rng_uniform_tensor(
-            self.rng, td,
-            self.low, self.high
-        )
+        val = constant_storage(axes=size, **kwargs)
+        val.initializers.append(InitTensor(val, value_fun))
+        return val
 
 
 class ElementWise(ComputationOp):
@@ -1082,52 +1040,24 @@ class Constant(AllocationOp):
             cl=self.__class__.__name__, const=self.const)
 
 
-class NumPyTensor(AllocationOp):
-    """
-    A NumPy tensor with attached axes information.
+def NumPyTensor(nptensor, axes, **kwargs):
+    if nptensor.shape != axes.lengths:
+        raise ValueError((
+            "Tried to initialize NumPyTensor with numpy array of "
+            "shape {np_shape} though gave axes with a different "
+            "shape {axes_shape}."
+        ).format(
+            np_shape=nptensor.shape,
+            axes_shape=axes.lengths,
+        ))
 
-    This is how you define tensor valued constants for now.
-    """
+    def value_fun(tensor):
+        return nptensor
 
-    def __init__(self, nptensor, axes, **kwargs):
-        axes = Axes(axes)
-        self.nptensor = nptensor
-        if nptensor.shape != axes.lengths:
-            raise ValueError((
-                "Tried to initialize NumPyTensor with numpy array of "
-                "shape {np_shape} though gave axes with a different "
-                "shape {axes_shape}."
-            ).format(
-                np_shape=nptensor.shape,
-                axes_shape=axes.lengths,
-            ))
+    val = constant_storage(dtype=nptensor.dtype, axes=axes, **kwargs)
+    val.initializers.append(InitTensor(val, value_fun))
 
-        super(NumPyTensor, self).__init__(
-            dtype=nptensor.dtype, axes=axes, **kwargs
-        )
-        self.tags.add('persistent')
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.nparray(self.nptensor)
-
-    @property
-    def graph_label(self):
-        """TODO."""
-        return str(self.nptensor.shape)
-
-    def __str__(self):
-        return '<{cl} ({const})>'.format(
-            cl=self.__class__.__name__, const=self.nptensor)
+    return val
 
 
 class absolute(ElementWise):
@@ -1944,7 +1874,7 @@ def pad(x, axes, paddings, **kwargs):
 class Variable(AllocationOp):
     """TODO."""
 
-    def __init__(self, tags=None, trainable=True, persistent=True, **kwargs):
+    def __init__(self, tags=None, trainable=True, persistent=True, constant=False, **kwargs):
         if tags is None:
             tags = set()
         else:
@@ -1953,6 +1883,8 @@ class Variable(AllocationOp):
             tags.add('trainable')
         if persistent:
             tags.add('persistent')
+        if constant:
+            tags.add('constant')
         super(Variable, self).__init__(tags=tags, **kwargs)
 
 
@@ -1966,7 +1898,11 @@ def temporary(**kwargs):
     Returns:
       TODO
     """
-    return Variable(trainable=False, persistent=True, **kwargs)
+    return Variable(trainable=False, persistent=True, constant=False, **kwargs)
+
+
+def constant_storage(**kwargs):
+    return Variable(trainable=False, persistent=True, constant=True, **kwargs)
 
 
 class exp(ElementWise):
@@ -2104,7 +2040,7 @@ class maximum(ElementWise):
         Returns:
           TODO
         """
-        transformer.maximum(x, y, out=out)
+        transformer.maximum(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2630,19 +2566,6 @@ class Function(Node):
     def inputs(self):
         """TODO."""
         return self.use
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        for op in self.instructions:
-            op.allocate(transformer)
 
 
 class Buffer(object):

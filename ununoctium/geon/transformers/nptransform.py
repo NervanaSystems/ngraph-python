@@ -18,12 +18,14 @@ from __future__ import division
 import numpy as np
 from builtins import range
 import math
+from functools import wraps
 
 from neon.backends.layer_cpu import ConvLayer
 
 from geon.op_graph.op_graph import AllocationOp
 from geon.op_graph import arrayaxes
-from geon.transformers.base import Transformer
+from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
+    DeviceTensor
 
 
 class proxy_backend(object):
@@ -73,6 +75,64 @@ class proxy_tensor(object):
         self._tensor = tensor
 
 
+class NumPyDeviceBufferStorage(DeviceBufferStorage):
+    def __init__(self, transformer, bytes, alignment, **kwargs):
+        super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, alignment, **kwargs)
+        self.storage = None
+
+    def allocate(self):
+        self.storage = bytearray(self.bytes)
+        super(NumPyDeviceBufferStorage, self).allocate()
+
+
+class NumPyDeviceBufferReference(DeviceBufferReference):
+    def __init__(self, transformer, **kwargs):
+        super(NumPyDeviceBufferReference, self).__init__(transformer, **kwargs)
+
+
+class NumPyDeviceTensor(DeviceTensor):
+    def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
+        super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
+                                                **kwargs)
+        self.tensor = None
+
+    def allocate(self):
+        tensor_description = self.tensor_description
+        self.tensor = np.ndarray(
+            shape=tensor_description.shape,
+            dtype=tensor_description.dtype,
+            buffer=self.device_buffer.storage_device_buffer.storage,
+            offset=tensor_description.offset,
+            strides=tensor_description.strides
+        )
+
+    def get(self, tensor):
+        if tensor is None:
+            return self.tensor
+        tensor[:] = self.tensor
+
+    def __getitem__(self, key):
+        return self.tensor.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        self.tensor.__setitem__(key, value)
+
+
+def get_tensors(f):
+    def tensor(x):
+        if isinstance(x, NumPyDeviceTensor):
+            return x.tensor
+        return x
+
+    @wraps(f)
+    def helper(*args):
+        return f(*(tensor(arg) for arg in args))
+
+    return helper
+
+
+
+
 class NumPyTransformer(Transformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
@@ -81,6 +141,36 @@ class NumPyTransformer(Transformer):
     will compile the graph required to compute those results and exposes an
     evaluate method to execute the compiled graph.
     """
+    def __init__(self, **kwargs):
+        super(NumPyTransformer, self).__init__(**kwargs)
+
+    def device_buffer_storage(self, bytes, alignment):
+        """
+        Make a DeviceBuffer.
+
+        :param bytes: Size of buffer.
+        :param alignment: Alignment of buffer.
+        :return: A DeviceBuffer.
+        """
+        return NumPyDeviceBufferStorage(self, bytes, alignment)
+
+    def device_buffer_reference(self):
+        """
+        Make a DeviceBufferReference.
+
+        :return: A DeviceBufferReference.
+        """
+        return NumPyDeviceBufferReference(self)
+
+    def device_tensor(self, tensor_description):
+        """
+        Make a DeviceTensor.
+
+        :param device_buffer: The DeviceBufer[Reference] providing underlying storage.
+        :param tensor_description: The TensorDescription of the tensor.
+        :return: A DeviceTensor.
+        """
+        return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description)
 
     # allocators
     def make_raw_buffer(self, size):
@@ -137,41 +227,8 @@ class NumPyTransformer(Transformer):
         """
         return np.random.RandomState(seed=seed)
 
-    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        """
-        TODO.
-
-        Arguments:
-          rng: TODO
-          tensor_description: TODO
-          loc: TODO
-          scale: TODO
-
-        Returns:
-          TODO
-        """
-        return rng.normal(
-            loc, scale, tensor_description.sizes).astype(
-            tensor_description.dtype)
-
-    def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        """
-        TODO.
-
-        Arguments:
-          rng: TODO
-          tensor_description: TODO
-          low: TODO
-          high: TODO
-
-        Returns:
-          TODO
-        """
-        return rng.uniform(
-            low, high, tensor_description.sizes).astype(
-            tensor_description.dtype)
-
     # Side-effects
+    @get_tensors
     def fill(self, out, value):
         """
         TODO.
@@ -182,6 +239,7 @@ class NumPyTransformer(Transformer):
         """
         out.fill(value)
 
+    @get_tensors
     def set_item(self, tensor, item, value):
         """
         TODO.
@@ -204,6 +262,7 @@ class NumPyTransformer(Transformer):
         """
         np.abs(x, out=out)
 
+    @get_tensors
     def add(self, x, y, out):
         """
         TODO.
@@ -215,6 +274,7 @@ class NumPyTransformer(Transformer):
         """
         np.add(x, y, out=out)
 
+    @get_tensors
     def argmax(self, x, out):
         """
         TODO.
@@ -245,6 +305,7 @@ class NumPyTransformer(Transformer):
         """
         np.cos(x, out=out)
 
+    @get_tensors
     def divide(self, x, y, out):
         """
         TODO.
@@ -256,6 +317,7 @@ class NumPyTransformer(Transformer):
         """
         np.divide(x, y, out=out)
 
+    @get_tensors
     def dot(self, x, y, out):
         """
         TODO.
@@ -272,6 +334,7 @@ class NumPyTransformer(Transformer):
             out = out.T
         np.dot(x, y, out)
 
+    @get_tensors
     def equal(self, x, y, out):
         """
         TODO.
@@ -283,6 +346,7 @@ class NumPyTransformer(Transformer):
         """
         np.equal(x, y, out=out)
 
+    @get_tensors
     def exp(self, x, out):
         """
         TODO.
@@ -337,6 +401,7 @@ class NumPyTransformer(Transformer):
         """
         np.less_equal(x, y, out=out)
 
+    @get_tensors
     def log(self, x, out):
         """
         TODO.
@@ -347,6 +412,7 @@ class NumPyTransformer(Transformer):
         """
         np.log(x, out=out)
 
+    @get_tensors
     def max(self, x, axis, out):
         """
         TODO.
@@ -358,6 +424,7 @@ class NumPyTransformer(Transformer):
         """
         np.max(x, axis, out=out)
 
+    @get_tensors
     def maximum(self, x, y, out):
         """
         TODO.
@@ -400,6 +467,7 @@ class NumPyTransformer(Transformer):
         """
         np.minimum(x, y, out=out)
 
+    @get_tensors
     def multiply(self, x, y, out):
         """
         TODO.
@@ -414,6 +482,7 @@ class NumPyTransformer(Transformer):
         """
         np.multiply(x, y, out=out)
 
+    @get_tensors
     def negative(self, x, out):
         """
         TODO.
@@ -427,6 +496,7 @@ class NumPyTransformer(Transformer):
         """
         np.negative(x, out=out)
 
+    @get_tensors
     def not_equal(self, x, y, out):
         """
         TODO.
@@ -456,6 +526,7 @@ class NumPyTransformer(Transformer):
         for i in range(len(x)):
             out[x[i], i] = 1
 
+    @get_tensors
     def reciprocal(self, x, out):
         """
         TODO.
@@ -521,6 +592,7 @@ class NumPyTransformer(Transformer):
         """
         np.square(x, out=out)
 
+    @get_tensors
     def subtract(self, x, y, out):
         """
         TODO.
@@ -535,6 +607,7 @@ class NumPyTransformer(Transformer):
         """
         np.subtract(x, y, out=out)
 
+    @get_tensors
     def sum(self, x, axis, out):
         """
         TODO.
@@ -549,6 +622,7 @@ class NumPyTransformer(Transformer):
         """
         np.sum(x, axis=axis, out=out)
 
+    @get_tensors
     def tanh(self, x, out):
         """
         TODO.
@@ -594,35 +668,3 @@ class NumPyTransformer(Transformer):
             proxy_tensor(filter),
             proxy_tensor(output),
         )
-
-
-class NPNormal(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, loc, scale, **kwargs):
-        super(NPNormal, self).__init__(args=(rng,), **kwargs)
-        self.loc = loc
-        self.scale = scale
-
-    def compute_tensor_axes_info(self):
-        """TODO."""
-        rng, = self.args
-        tensor_axes_info = super(NPNormal, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_normal_tensor(
-            rng, tensor_description, self.loc, self.scale)
-
-
-class NPUniform(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, low, high, **kwargs):
-        super(NPUniform, self).__init__(args=(rng,), **kwargs)
-        self.low = low
-        self.high = high
-
-    def compute_tensor_axes_info(self):
-        """TODO."""
-        rng, = self.args
-        tensor_axes_info = super(NPUniform, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: \
-            evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)

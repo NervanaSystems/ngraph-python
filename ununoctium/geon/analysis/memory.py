@@ -136,12 +136,6 @@ def bind_initializers(transformer, ops):
             for i in op.initializers:
                 if isinstance(i, TensorOp):
                     i.tensor_description(transformer).buffer = buffer
-                for a in i.args:
-                    if isinstance(a, NumPyTensor):
-                        a.tensor_description(transformer).buffer\
-                            = Buffer(-1, a.nptensor.size)
-                        a.tensor_description(transformer).buffer.data\
-                            = a.nptensor
 
 
 def assign_buffers(transformer, results, fusible=None):

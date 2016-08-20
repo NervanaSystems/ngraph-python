@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 import numpy as np
 
 from geon.backends.graph.environment import get_current_environment
-from geon.op_graph.op_graph import Op, placeholder
+from geon.op_graph.op_graph import Op, placeholder, TensorOp
 from geon.analysis.memory import assign_buffers
 
 
@@ -76,8 +76,16 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         # TODO Should copy this out of the device to a destination when it is not scalar
         def value(op):
-            """TODO."""
-            return op.tensor_description(self.transformer).value
+            """
+            Returns the computed value of op, or None if it has no value.
+
+            :param op:
+            :return: Return value for op.
+            """
+            if isinstance(op, TensorOp):
+                return op.tensor_description(self.transformer).value.get(None)
+            else:
+                return None
 
         if isinstance(self.returns, Op):
             return value(self.returns)
@@ -92,6 +100,155 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         else:
             return None
+
+
+class DeviceBuffer(with_metaclass(abc.ABCMeta, object)):
+    """
+    Something that can provide storage.
+
+    :ivar transformer: The transformer associated with this device buffer.
+    :ivar views: All direct tensor views of this buffer.
+    """
+    def __init__(self, transformer, **kwargs):
+        """
+
+        :param transformer: The associated transformer.
+        :param kwargs: Any additional arguments.
+        """
+        super(DeviceBuffer, self).__init__(**kwargs)
+        self.transformer = transformer
+        self.views = set()
+        self.transformer.device_buffers.add(self)
+
+    def allocate(self):
+        """
+        Allocate storage on the device.
+
+        Finish by allocating views views.
+        """
+        self.allocate_views()
+
+    def allocate_views(self):
+        """
+        Allocate all views of this buffer.
+        """
+        for view in self.views:
+            view.allocate()
+
+    @property
+    @abc.abstractmethod
+    def storage_device_buffer(self):
+        """
+        Get the actual storage buffer.
+
+        :return: A DeviceBufferStorage
+        """
+        raise NotImplementedError()
+
+
+class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
+    """
+    A handle to device storage.
+
+    :ivar bytes: The size of the byte buffer.
+    :ivar alignment: The alignment of the byte buffer.
+    """
+    def __init__(self, transformer, bytes, alignment, **kwargs):
+        """
+
+        :param transformer: The associated transformer.
+        :param bytes: Size of storage.
+        :param alignment: Alignment of storage.
+        :param kwargs: Additional args.
+        """
+        super(DeviceBufferStorage, self).__init__(transformer, **kwargs)
+        self.bytes = bytes
+        self.alignment = alignment
+
+    @property
+    def storage_device_buffer(self):
+        return self
+
+
+class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
+    """
+    Holds a reference to a DeviceBuffer.
+
+    :ivar transformer: The transformer associated with this device buffer reference.
+    :ivar views: All direct tensor views of this buffer reference.  Does not include views of
+     device buffer references set to this device buffer.
+    """
+    def __init__(self, transformer, **kwargs):
+        super(DeviceBufferReference, self).__init__(self, **kwargs)
+        self.__device_buffer = None
+
+    @property
+    def storage_device_buffer(self):
+        return self.device_buffer.storage_device_buffer
+
+    @property
+    def device_buffer(self):
+        """
+        The referenced device buffer.
+        """
+        return self.__device_buffer
+
+    @device_buffer.setter
+    def device_buffer(self, device_buffer):
+        """
+        Change the referenced device buffer.
+
+        :param device_buffer: The new device buffer.
+        """
+        self.__device_buffer = device_buffer
+        self.allocate_views()
+
+
+class DeviceTensor(with_metaclass(abc.ABCMeta, object)):
+    """
+    A handle to a tensor on the device.
+
+    :ivar device_buffer The device buffer [reference] backing this view.
+    :ivar tensor_description: The tensor description for this tensor.
+    """
+    def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
+        super(DeviceTensor, self).__init__(**kwargs)
+        self.device_buffer = device_buffer
+        self.tensor_description = tensor_description
+        device_buffer.views.add(self)
+
+    @abc.abstractmethod
+    def allocate(self):
+        """
+        Make the device tensor usable on the device.
+        """
+
+    @abc.abstractmethod
+    def get(self, tensor):
+        """
+        Copy from device to tensor.
+
+        :param tensor: Destination of copy.  If None, tensor will be allocated.
+        :return: tensor.
+        """
+
+    @abc.abstractmethod
+    def __getitem__(self, key):
+        """
+        Provides read access to the device tensor.
+
+        :param key: The index/slice
+        :return: The item/value.
+        """
+
+    @abc.abstractmethod
+    def __setitem__(self, key, value):
+        """
+        Provides write access to the device tensor.
+
+        :param key: The index/slice
+        :param value: Tensor with same size as index/slice
+        """
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
@@ -125,6 +282,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.initialized = False
         self.opids = dict()
         self.fusion = fusion
+        self.device_buffers = set()
+        self.cpu_initializations = []
 
     def finalize(self):
         """
@@ -156,6 +315,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
 
+        # Compile the computations now that we know their storage
+        for computation in self.computations:
+            ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
+            computation.executor = self.compile_computation(ordered_ops)
+
         self.finalized = True
 
     def allocate(self):
@@ -168,13 +332,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             return
         if not self.finalized:
             self.finalize()
-        self.allocate_ordered_ops(self.initializers)
-        self.allocate_ordered_ops(self.ops)
 
-        # Compile the computations now that we know their storage
-        for computation in self.computations:
-            ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
-            computation.executor = self.compile_computation(ordered_ops)
+        # TODO Move to compilation step
+        for device_buffer in self.device_buffers:
+            device_buffer.allocate()
 
         self.allocated = True
 
@@ -186,7 +347,12 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             return
         self.allocate()
         self.transform_ordered_ops(self.initializers)
+        self.run_cpu_initializations()
         self.initialized = True
+
+    def run_cpu_initializations(self):
+        for tensor, value in self.cpu_initializations:
+            tensor[:] = value
 
     def compile_computation(self, ordered_ops):
         """
@@ -238,7 +404,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if isinstance(value, numbers.Real):
             self.fill(td.value, value)
         elif isinstance(value, np.ndarray):
-            if td.value.shape != value.shape:
+            if td.full_sizes != value.shape:
                 raise ValueError()
             self.set_item(td.value, (), value)
         else:
@@ -299,17 +465,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         return ordered_initializer_ops
 
-    def allocate_ordered_ops(self, ordered_ops):
-        """
-        TODO.
-
-        Arguments:
-          ordered_ops: TODO
-        """
-        # Allocate
-        for op in ordered_ops:
-            op.allocate(self)
-
     def transform_ordered_ops(self, ordered_ops):
         """
         Call op.transform_call_info on every op in ordered_ops.
@@ -342,15 +497,35 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
                 # run the transform without any hooks
                 transform_op(op)
 
-    def set_value(self, op, tensor):
-        """
-        TODO.
+    def cpu_set(self, tensor, value):
+        self.cpu_initializations.append((tensor, value))
 
-        Arguments:
-          op: TODO
-          tensor: TODO
+    @abc.abstractmethod
+    def device_buffer_storage(self, bytes, alignment):
         """
-        op.tensor_description(self).value = tensor
+        Make a DeviceBuffer.
+
+        :param bytes: Size of buffer.
+        :param alignment: Alignment of buffer.
+        :return: A DeviceBuffer.
+        """
+
+    @abc.abstractmethod
+    def device_buffer_reference(self):
+        """
+        Make a DeviceBufferReference.
+
+        :return: A DeviceBufferReference.
+        """
+
+    @abc.abstractmethod
+    def device_tensor(self, tensor_description):
+        """
+        Make a DeviceTensor.
+
+        :param tensor_description: The TensorDescription of the tensor.
+        :return: A DeviceTensor.
+        """
 
     @abc.abstractmethod
     def make_raw_buffer(self, size):
@@ -387,38 +562,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         Returns:
           Reference to the random number generator.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        """
-        Allocate a tensor initialized with a uniform distribution.
-
-        Arguments:
-          rng: Random number generator
-          tensor_description: Description of the tensor's type, shape, size, and strides.
-          low: TODO
-          high: TODO
-
-        Returns:
-          Reference to uniform distribution.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        """
-        Allocate a tensor initialized with a uniform distribution.
-
-        Arguments:
-          rng: Random number generator
-          tensor_description: Description of the tensor's type, shape, size, and strides.
-          loc: TODO
-          scale: TODO
-
-        Returns:
-          Reference to normal distribution.
         """
         raise NotImplementedError()
 

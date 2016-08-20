@@ -1034,10 +1034,10 @@ class TensorDescription(NameableValue):
         # If the TensorDescription requires heap storage
         if self.buffer is not None:
             if self.buffer.data is None:
-                self.buffer.data = self.transformer.make_raw_buffer(
-                    self.buffer.size
+                self.buffer.data = self.transformer.device_buffer_storage(
+                    self.buffer.size, 4
                 )
-            self.__value = self.transformer.tensor_view(self)
+            self.__value = self.transformer.device_tensor(self)
 
 
 def with_args_as_axes(f):
