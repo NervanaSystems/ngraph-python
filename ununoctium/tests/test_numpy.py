@@ -424,10 +424,10 @@ def test_cross_entropy_binary_logistic_shortcut():
 
     cel = cross_entropy_binary_logistic(u, v)
     cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
-    np.testing.assert_allclose(cel, cel_shortcut)
+    np.testing.assert_allclose(cel, cel_shortcut, rtol=1e-5)
 
     cel_graph = executor(be.cross_entropy_binary_inner(be.sigmoid(p_u), p_v), p_u, p_v)(u, v)
-    np.testing.assert_allclose(cel, cel_graph)
+    np.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
 @be.with_bound_environment
@@ -612,7 +612,7 @@ def test_softmax_deriv():
     cross_entropy_np = np_cross_entropy_multi(softmax_x_np, t, axis=0)
     cross_entropy, softmax_x = cross_entropy_fun(x, t)
     np.testing.assert_allclose(softmax_x, softmax_x_np)
-    np.testing.assert_allclose(cross_entropy_np, cross_entropy)
+    np.testing.assert_allclose(cross_entropy_np, cross_entropy, rtol=1e-5)
 
     cross_entropy_num_deriv = cross_entropy_num_deriv_fun(x, t)
     cross_entropy_deriv = cross_entropy_deriv_fun(x, t)
