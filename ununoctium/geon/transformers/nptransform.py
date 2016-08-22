@@ -22,7 +22,6 @@ from functools import wraps
 
 from neon.backends.layer_cpu import ConvLayer
 
-from geon.op_graph.op_graph import AllocationOp
 from geon.op_graph import arrayaxes
 from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -117,6 +116,11 @@ class NumPyDeviceTensor(DeviceTensor):
     def __setitem__(self, key, value):
         self.tensor.__setitem__(key, value)
 
+    def reshape(self, shape):
+        """Temporary for conv"""
+        # TODO Remove when CONV is finished
+        return self.tensor.reshape(shape)
+
 
 def get_tensors(f):
     def tensor(x):
@@ -129,8 +133,6 @@ def get_tensors(f):
         return f(*(tensor(arg) for arg in args))
 
     return helper
-
-
 
 
 class NumPyTransformer(Transformer):
@@ -439,6 +441,7 @@ class NumPyTransformer(Transformer):
         """
         np.maximum(x, y, out=out)
 
+    @get_tensors
     def min(self, x, axis, out):
         """
         TODO.
@@ -511,6 +514,7 @@ class NumPyTransformer(Transformer):
         """
         np.not_equal(x, y, out=out)
 
+    @get_tensors
     def onehot(self, x, out):
         """
         TODO.
@@ -566,6 +570,7 @@ class NumPyTransformer(Transformer):
         """
         np.sin(x, out=out)
 
+    @get_tensors
     def sqrt(self, x, out):
         """
         TODO.

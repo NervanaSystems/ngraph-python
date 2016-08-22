@@ -20,7 +20,7 @@ from itertools import combinations
 from geon.util.graph import UndirectedGraph
 from geon.analysis.dataflow import DataFlowGraph
 from geon.analysis.fusion import KernelFlowGraph
-from geon.op_graph.op_graph import Buffer, NumPyTensor, TensorOp
+from geon.op_graph.op_graph import Buffer, TensorOp
 
 
 def _random_colors(N, alpha=.5):

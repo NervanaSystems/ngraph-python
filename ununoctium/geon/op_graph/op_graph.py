@@ -878,9 +878,9 @@ class RNG(object):
           TODO
         """
 
-        def value_fun(tensor):
-            return self.rng.uniform(low, high, tensor.tensor_description.sizes).astype(
-                tensor.tensor_description.dtype)
+        def value_fun(tensor_description):
+            return self.rng.uniform(low, high, tensor_description.sizes).astype(
+                tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
         val.initializers.append(InitTensor(val, value_fun))
@@ -1032,6 +1032,7 @@ class Constant(AllocationOp):
 
 
 def NumPyTensor(nptensor, axes, **kwargs):
+    axes = Axes(axes)
     if nptensor.shape != axes.lengths:
         raise ValueError((
             "Tried to initialize NumPyTensor with numpy array of "

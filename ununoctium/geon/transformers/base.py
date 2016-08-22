@@ -218,6 +218,10 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, object)):
         self.tensor_description = tensor_description
         device_buffer.views.add(self)
 
+    @property
+    def dtype(self):
+        return self.tensor_description.dtype
+
     @abc.abstractmethod
     def allocate(self):
         """
@@ -306,7 +310,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             op.create_tensor_descriptions(self)
 
         self.dataflow, self.memory = assign_buffers(
-            self, self.all_results, self.fusion
+            self, self.all_results.union(self.inits), self.fusion
         )
 
         for tensor_description in self.tensor_descriptions:

@@ -18,7 +18,6 @@ from neon import NervanaObject
 
 from geon.backends.graph.mpihandle import MPIHandle
 from geon.transformers.base import Transformer
-from geon.op_graph.op_graph import AllocationOp
 
 
 class ArgonTransformer(Transformer):
