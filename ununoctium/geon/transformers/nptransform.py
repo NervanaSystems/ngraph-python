@@ -27,8 +27,8 @@ from geon.util.generics import generic_method
 from geon.op_graph import arrayaxes
 from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
-    negative, not_equal, onehot, reciprocal, SetItem, sign, sin, sqrt, square, subtract, sum, \
-    tanh, tensor_size, Fill, TensorDescription, \
+    negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
+    sum, tanh, tensor_size, Fill, TensorDescription, \
     Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor
 from geon.op_graph.convolution import convolution
 
@@ -107,7 +107,7 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         """
         :return: name to reference variable.
         """
-        return "self." +  self.name
+        return "self." + self.name
 
     def generate_allocate(self):
         self.transformer.init_code.append("""{} = None""", self.ref_str)
@@ -152,7 +152,7 @@ class NumPyDeviceTensor(DeviceTensor):
         """
         :return: name to reference variable.
         """
-        return "self." +  self.name
+        return "self." + self.name
 
     def generate_allocate(self):
         tensor_description = self.tensor_description
@@ -215,18 +215,6 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
-
-    def generate_model(self):
-        if self.model is not None:
-            return
-
-        self.endl()
-        self.indent(-1)
-
-        print(self.code)
-
-        r = self.compile("op")
-        self.model = r['Model']()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -433,6 +421,10 @@ class NumPyCodeGenerator(PyGen):
             out[x[i], i] = 1
         """, x=x, out=out)
 
+    @generate_op.on_type(power)
+    def generate_op(self, op, out, x, y):
+        self.append("np.power({}, {}, out={}", x, y, out)
+
     @generate_op.on_type(reciprocal)
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
@@ -563,7 +555,7 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-        print(self.code.code)
+        # print(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
@@ -573,19 +565,6 @@ class NumPyTransformer(Transformer):
 
     def allocate_storage(self):
         self.model.allocate()
-
-    # allocators
-    def rng(self, seed=None):
-        """
-        TODO.
-
-        Arguments:
-          seed: TODO
-
-        Returns:
-          TODO
-        """
-        return np.random.RandomState(seed=seed)
 
     # Side-effects
     @get_tensors
@@ -610,424 +589,3 @@ class NumPyTransformer(Transformer):
           value: TODO
         """
         tensor.__setitem__(item, value)
-
-    # Operations
-    def absolute(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.abs(x, out=out)
-
-    @get_tensors
-    def add(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.add(x, y, out=out)
-
-    @get_tensors
-    def argmax(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.ndarray.argmax(x, 0, out)
-
-    def argmin(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.ndarray.argmin(x, 0, out)
-
-    def cos(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.cos(x, out=out)
-
-    @get_tensors
-    def divide(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.divide(x, y, out=out)
-
-    @get_tensors
-    def dot(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        if not out.flags.c_contiguous:
-            t = x
-            x = y.T
-            y = t.T
-            out = out.T
-        np.dot(x, y, out)
-
-    @get_tensors
-    def equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.equal(x, y, out=out)
-
-    @get_tensors
-    def exp(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.exp(x, out=out)
-
-    def greater(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.greater(x, y, out=out)
-
-    def greater_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.greater_equal(x, y, out=out)
-
-    def less(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.less(x, y, out=out)
-
-    def less_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.less_equal(x, y, out=out)
-
-    @get_tensors
-    def log(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.log(x, out=out)
-
-    @get_tensors
-    def max(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-        """
-        np.max(x, axis, out=out)
-
-    @get_tensors
-    def maximum(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.maximum(x, y, out=out)
-
-    @get_tensors
-    def min(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.min(x, axis, out=out)
-
-    def minimum(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.minimum(x, y, out=out)
-
-    @get_tensors
-    def multiply(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.multiply(x, y, out=out)
-
-    @get_tensors
-    def negative(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.negative(x, out=out)
-
-    @get_tensors
-    def not_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.not_equal(x, y, out=out)
-
-    @get_tensors
-    def onehot(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        out[:] = 0
-        for i in range(len(x)):
-            out[x[i], i] = 1
-
-    @get_tensors
-    def reciprocal(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.reciprocal(x, out=out)
-
-    def sign(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sign(x, out=out)
-
-    def sin(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sin(x, out=out)
-
-    @get_tensors
-    def sqrt(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sqrt(x, out=out)
-
-    def square(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.square(x, out=out)
-
-    @get_tensors
-    def subtract(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.subtract(x, y, out=out)
-
-    @get_tensors
-    def sum(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sum(x, axis=axis, out=out)
-
-    @get_tensors
-    def tanh(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.tanh(x, out=out)
-
-    def conv(self, input, filter, output, input_shape, filter_shape, padding, strides):
-        # TODO: change args to ConvLayer to meaningful names instead of random
-        # upper case letters.
-
-        # TODO: only create ConvLayer once per op per session so that things
-        # like autotune only need to be run once per session.
-
-        # TODO: fork ConvLayer and refactor into here/conv op.
-
-        neon_conv_layer = ConvLayer(
-            proxy_backend(), output.dtype,
-            N=arrayaxes.get_batch_axis().length,
-            C=input_shape[0],
-            D=input_shape[1],
-            H=input_shape[2],
-            W=input_shape[3],
-
-            K=filter_shape[0],
-            T=filter_shape[1],
-            R=filter_shape[2],
-            S=filter_shape[3],
-
-            pad_d=padding[0], pad_h=padding[1], pad_w=padding[2],
-            str_d=strides[0], str_h=strides[1], str_w=strides[2],
-        )
-
-        # neon_conv_layer...
-        neon_conv_layer.xprop_conv(
-            proxy_tensor(input),
-            proxy_tensor(filter),
-            proxy_tensor(output),
-        )
