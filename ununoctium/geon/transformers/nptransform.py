@@ -28,8 +28,8 @@ from geon.op_graph import arrayaxes
 from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, reciprocal, SetItem, sign, sin, sqrt, square, subtract, sum, \
-    tanh, tensor_size, TensorDescription, \
-    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice
+    tanh, tensor_size, Fill, TensorDescription, \
+    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor
 from geon.op_graph.convolution import convolution
 
 from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -139,7 +139,13 @@ class NumPyDeviceTensor(DeviceTensor):
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                                 **kwargs)
-        self.tensor = None
+        self.__tensor = None
+
+    @property
+    def tensor(self):
+        if self.__tensor is None:
+            self.__tensor = getattr(self.transformer.model, self.name)
+        return self.__tensor
 
     @property
     def ref_str(self):
@@ -260,6 +266,14 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(doall)
     def generate_op(self, op):
         pass
+
+    @generate_op.on_type(InitTensor)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(Fill)
+    def generate_op(self, op, out):
+        self.append("{}.fill({})", out, op.const)
 
     @generate_op.on_type(convolution)
     def generate_op(self, op, output, input, filter):
@@ -557,28 +571,8 @@ class NumPyTransformer(Transformer):
             executor = getattr(self.model, computation.name)
             computation.executor = executor
 
-    def allocate(self):
-        """
-        Allocate storage.
-
-        Will finalize if not already done.
-        """
-        if self.allocated:
-            return
-        if not self.finalized:
-            self.finalize()
-
+    def allocate_storage(self):
         self.model.allocate()
-        for device_buffer in self.device_buffers:
-            for tensor in device_buffer.views:
-                tensor.tensor = getattr(self.model, tensor.name)
-
-
-        for op in self.inits + self.ops:
-            self.initialize_constant(op)
-
-        self.allocated = True
-
 
     # allocators
     def rng(self, seed=None):

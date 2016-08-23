@@ -311,6 +311,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.fusion = fusion
         self.device_buffers = set()
         self.cpu_initializations = []
+        self.init_computation = None
 
     def finalize(self):
         """
@@ -321,6 +322,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # Crate tensor descriptions
         ops = Op.ordered_ops(self.all_results)
         self.inits = self.ordered_initializers(ops)
+
+        self.init_computation = self.computation([], *self.inits)
+
         all_ops = ops + self.inits
         # Give ids
         for op in all_ops:
@@ -349,9 +353,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Compile the computations now that we know their storage
         for computation in self.computations:
-            #ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
-            #computation.executor = self.compile_computation(ordered_ops)
             computation.transform()
+        self.init_computation.transform()
         self.generate_model()
         self.finalized = True
 
@@ -393,13 +396,18 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if not self.finalized:
             self.finalize()
 
-        # TODO Move to compilation step
-        for device_buffer in self.device_buffers:
-            device_buffer.allocate()
+        self.allocate_storage()
+
         for op in self.inits + self.ops:
             self.initialize_constant(op)
 
         self.allocated = True
+
+    @abc.abstractmethod
+    def allocate_storage(self):
+        """
+        Allocate storage on the device.
+        """
 
     @generic_method
     def initialize_constant(self, op):
@@ -418,22 +426,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if self.initialized:
             return
         self.allocate()
-        self.transform_ordered_ops(self.initializers)
+        # self.transform_ordered_ops(self.initializers)
         self.initialized = True
-
-    def compile_computation(self, ordered_ops):
-        """
-        Return a function that will run the computation in this transformer.
-
-        Should be overridden by transformers.
-
-        Arguments:
-          ordered_ops: TODO
-
-        Returns:
-          Function that runs the computation
-        """
-        return lambda: self.transform_ordered_ops(ordered_ops)
+        self.init_computation()
 
     def computation(self, results, *parameters):
         """
