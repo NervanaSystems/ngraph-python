@@ -982,6 +982,10 @@ class placeholder(AllocationOp):
         """
         pass
 
+    @property
+    def graph_label(self):
+        return self.__class__.__name__ + '[' + self.name + ']'
+
 
 class Constant(AllocationOp):
     """
