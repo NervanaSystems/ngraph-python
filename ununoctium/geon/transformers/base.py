@@ -23,7 +23,8 @@ from future.utils import with_metaclass
 import numpy as np
 
 from geon.backends.graph.environment import get_current_environment
-from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions
+from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
+    Function
 from geon.analysis.memory import assign_buffers
 from geon.util.generics import generic_method
 from geon.op_graph.names import NameableValue
@@ -90,7 +91,9 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
             :return: Return value for op.
             """
             if isinstance(op, TensorOp):
-                return op.tensor_description(self.transformer).value.get(None)
+                if op.tensor_description().value is None:
+                    pass
+                return op.tensor_description().value.get(None)
             else:
                 return None
 
@@ -331,16 +334,13 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
-        # Create tensor descriptions
-        for op in all_ops:
-            op.create_tensor_descriptions(self)
-
         self.dataflow, self.memory = assign_buffers(
             self, self.all_results.union(self.inits), self.fusion
         )
 
-        for tensor_description in self.tensor_descriptions:
-            tensor_description.initialize()
+        # Initialize tensor descriptions
+        for op in set(all_ops):
+            self.initialize_tensor_descriptions(op)
 
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
@@ -357,6 +357,21 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.init_computation.transform()
         self.generate_model()
         self.finalized = True
+
+    @generic_method
+    def initialize_tensor_descriptions(self, op):
+        tensor_description = op.tensor_description()
+        if tensor_description is not None and tensor_description.transformer is None:
+            tensor_description.initialize(self)
+
+        for tensor_description in op.call_info():
+            if tensor_description.transformer is None:
+                tensor_description.initialize(self)
+
+    @initialize_tensor_descriptions.on_type(Function)
+    def initialize_tensor_descriptions(self, op):
+        for inst in op.instructions:
+            self.initialize_tensor_descriptions(inst)
 
     @abc.abstractmethod
     def start_transfrom_allocate(self):
@@ -415,7 +430,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
     @initialize_constant.on_type(InitTensor)
     def initialize_constant(self, op):
-        tensor_description, = tensor_descriptions(op.args, self)
+        tensor_description, = tensor_descriptions(op.args)
         value = op.valfun(tensor_description)
         tensor_description.value[:] = value
 
@@ -462,7 +477,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         """
         self.allocate()
-        td = tensor_op.tensor_description(self)
+        td = tensor_op.tensor_description()
         if isinstance(value, numbers.Real):
             self.fill(td.value, value)
         elif isinstance(value, np.ndarray):

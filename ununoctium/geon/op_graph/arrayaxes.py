@@ -540,7 +540,7 @@ class TensorDescription(NameableValue):
 
     """
 
-    def __init__(self, axes, transformer, base=None,
+    def __init__(self, axes, base=None,
                  dtype=np.dtype(np.float32),
                  full_strides=None, full_sizes=None, offset=0,
                  **kwargs):
@@ -549,7 +549,7 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
-        self.transformer = transformer
+        self.transformer = None
         self.__value = None
         self.__buffer = None
         self.__base = base
@@ -563,7 +563,6 @@ class TensorDescription(NameableValue):
 
         if base is not None:
             base.views.add(self)
-        transformer.tensor_descriptions.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -857,7 +856,6 @@ class TensorDescription(NameableValue):
             )
 
         return TensorDescription(new_axes,
-                                 self.transformer,
                                  base=self.base,
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
@@ -945,7 +943,6 @@ class TensorDescription(NameableValue):
 
             offset += idx * stride
         return TensorDescription(new_axes,
-                                 self.transformer,
                                  base=self.base,
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
@@ -1028,9 +1025,10 @@ class TensorDescription(NameableValue):
         """TODO."""
         return self.__base is None
 
-    def initialize(self):
+    def initialize(self, transformer):
         """TODO."""
         assert self.__value is None
+        self.transformer = transformer
         # If the TensorDescription requires heap storage
         if self.buffer is not None:
             if self.buffer.data is None:

@@ -17,7 +17,6 @@ from __future__ import division
 import numpy as np
 import cachetools
 from builtins import object, str
-from functools import wraps
 
 from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
@@ -26,52 +25,17 @@ from geon.op_graph.nodes import Node
 from geon.util.generics import generic_method
 
 
-def tensor_descriptions(args, transformer):
+def tensor_descriptions(args):
     """
     TODO.
 
     Arguments:
       args: TODO
-      transformer: TODO
 
     Returns:
       TODO
     """
-    return (arg.tensor_description(transformer) for arg in args)
-
-
-def from_transformer_cache(f):
-    """
-    Decorator which caches the return value of method `f` inside the `cache`
-    attribute of the transformer.
-
-    The transformer should be passed in as the first and only argument to the
-    wrapped method.
-
-    TODO: why cache in the transformer instead of self?
-
-    Arguments:
-      f: TODO
-
-    Returns:
-      TODO
-    """
-    @wraps(f)
-    def wrapper(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        key = (f.__name__, self)
-        if key not in transformer.cache:
-            transformer.cache[key] = f(self, transformer)
-        return transformer.cache[key]
-    return wrapper
+    return (arg.tensor_description() for arg in args)
 
 
 class Op(Node):
@@ -94,10 +58,6 @@ class Op(Node):
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
-
-        # if transform_hook is not None, it should be a function which will
-        # be called when this Op is transformed by a Transformer
-        self.transform_hook = None
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -302,8 +262,11 @@ class Op(Node):
         """
         SimplePrune(results)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    def tensor_description(self):
+        return None
+
+    @cachetools.cached({})
+    def call_info(self):
         """
         Creates the tensor descriptions (of this op or its arguments)
         required to evaluate it.
@@ -312,21 +275,11 @@ class Op(Node):
         (in the transform_call_info) method.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        return list(tensor_descriptions(self.args, transformer))
-
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        self.call_info(transformer)
+        return list(tensor_descriptions(self.args))
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
@@ -356,18 +309,17 @@ class SetItem(Op):
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        tensor, val = tensor_descriptions(self.args, transformer)
+        tensor, val = tensor_descriptions(self.args)
         return [tensor, val.reaxe(tensor.axes)]
 
 
@@ -377,7 +329,7 @@ class doall(Op):
     def __init__(self, all, **kwargs):
         super(doall, self).__init__(args=all, **kwargs)
 
-    def call_info(self, transformer):
+    def call_info(self):
         return []
 
 
@@ -509,31 +461,15 @@ class TensorOp(Op):
     def __axes__(self):
         return self.axes
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         Returns a TensorDescription describing the output of this TensorOp
 
-        Arguments:
-          transformer: TODO
-
         Returns:
-          TODO
+          TensorDescription for this op.
         """
-        return TensorDescription(self.axes, transformer, dtype=self.dtype)
-
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        self.tensor_description(transformer)
-        self.call_info(transformer)
+        return TensorDescription(self.axes, dtype=self.dtype)
 
     @property
     def axes(self):
@@ -552,20 +488,6 @@ class TensorOp(Op):
           **kwargs: TODO
         """
         pass
-
-    @from_transformer_cache
-    def call_info(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        return [self.tensor_description(transformer)]\
-            + super(TensorOp, self).call_info(transformer)
 
     # Required for parameter initializers
     @property
@@ -592,18 +514,17 @@ class Broadcast(TensorOp):
     def __init__(self, x, **kwargs):
         super(Broadcast, self).__init__(args=(x,), **kwargs)
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        td, = tensor_descriptions(self.args, transformer)
+        td, = tensor_descriptions(self.args)
         return td.reaxe(self.axes)
 
 
@@ -616,18 +537,17 @@ class ExpandDims(TensorOp):
         self.axis = axis
         self.dim = dim
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         return x.reaxe_with_dummy_axis(self.axis, self.dim)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -660,18 +580,17 @@ class Slice(TensorOp):
         )
         self.slices = slices
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         return x.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -742,19 +661,18 @@ class Unslice(ComputationOp):
         self.slices = slices
         self.input_axes = x.axes
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        td, x = super(Unslice, self).call_info(transformer)
-        return [td, td.slice(self.slices, self.input_axes), x]
+        x, = super(Unslice, self).call_info()
+        return [self.tensor_description().slice(self.slices, self.input_axes), x]
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -836,21 +754,17 @@ class ElementWise(ComputationOp):
             **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        ci = [self.tensor_description(transformer)]
-        for arg in tensor_descriptions(self.args, transformer):
-            ci.append(arg.reaxe(self.axes))
-        return ci
+        return [arg.reaxe(self.axes) for arg in tensor_descriptions(self.args)]
 
 
 class AllReduce(ElementWise):
@@ -1011,22 +925,18 @@ class argmax(ComputationOp):
             args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
-        return [
-            self.tensor_description(transformer),
-            x.reaxe(self.max_axes + self.axes)
-        ]
+        x, = tensor_descriptions(self.args)
+        return [x.reaxe(self.max_axes + self.axes)]
 
 
 class argmin(ComputationOp):
@@ -1043,22 +953,18 @@ class argmin(ComputationOp):
             args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
         x, = tensor_descriptions(self.args)
-        return [
-            self.tensor_description(transformer),
-            x.reaxe(self.min_axes + self.axes)
-        ]
+        return [x.reaxe(self.min_axes + self.axes)]
 
 
 class cos(ElementWise):
@@ -1184,18 +1090,17 @@ class dot(ComputationOp):
             return (out_axis_ids, red_axis_ids, red_axis_ids,
                     dummy, forward_axis_ids)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, y = tensor_descriptions(self.args, transformer)
+        x, y = tensor_descriptions(self.args)
         out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
             = self.axis_id_info
 
@@ -1209,8 +1114,7 @@ class dot(ComputationOp):
             forward_axis_ids=forward_axis_ids
         )
         a_axes, b_axes = a.axes, b.axes
-        o = self.tensor_description(transformer)\
-            .reaxe(a_axes[:-1].concat(b_axes[1:]))
+        o = self.tensor_description().reaxe(a_axes[:-1].concat(b_axes[1:]))
 
         return [o, a, b]
 
@@ -1356,31 +1260,29 @@ class ReductionOp(ComputationOp):
 
         return out_axes, reduction_axes
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
-        out = self.tensor_description(transformer)
+        x, = tensor_descriptions(self.args)
 
         if len(self.reduction_axes) == 0:
             # TODO do this as a reaxe to 1d or something
             xr = x.reaxe(self.axes)
             self.mode = 'copy'
-            return [out, xr]
+            return [xr]
         else:
             red_axes = [FlattenedAxis(self.reduction_axes)]
             red_axes.extend(self.axes)
             red_axes = Axes(red_axes)
             self.mode = 0
-            return [out, x.reaxe(red_axes)]
+            return [x.reaxe(red_axes)]
 
 
 class max(ReductionOp):
@@ -1718,22 +1620,21 @@ class onehot(ComputationOp):
         self.axis = axis
         super(onehot, self).__init__(args=(x,), axes=axes, **kwargs)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         axis, axes = self.axis, self.axes
         reaxes = Axes([axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes()])
         return [
-            self.tensor_description(transformer).reaxe(reaxes),
+            self.tensor_description().reaxe(reaxes),
             x.reaxe(Axes(FlattenedAxis(x.axes)))
         ]
 
@@ -1952,19 +1853,6 @@ class Function(Node):
         self.defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
-
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        for op in self.instructions:
-            op.create_tensor_descriptions(transformer)
 
     @property
     def inputs(self):

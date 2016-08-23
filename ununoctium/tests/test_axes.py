@@ -142,26 +142,25 @@ def tensorview(td, nparr):
 
 def test_simple_tensors():
     """TODO."""
-    transformer = NumPyTransformer()
     # A scalar
     td0 = arrayaxes.TensorDescription(
-        axes=(), transformer=transformer
+        axes=()
     )
     e0 = empty(td0)
 
     # A simple vector
     td1 = arrayaxes.TensorDescription(
-        axes=[ax.A], transformer=transformer
+        axes=[ax.A]
     )
     e1 = empty(td1)
 
     td2 = arrayaxes.TensorDescription(
-        axes=[ax.A, ax.B], transformer=transformer
+        axes=[ax.A, ax.B]
     )
     e2 = empty(td2)
 
     td3 = arrayaxes.TensorDescription(
-        axes=(ax.D, ax.D), transformer=transformer
+        axes=(ax.D, ax.D)
     )
     e3 = empty(td3)
 

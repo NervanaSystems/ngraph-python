@@ -227,41 +227,29 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, *args):
         raise ValueError("Unhandled op: {}".format(op))
 
-    @generate_op.on_type(Constant)
-    def generate_op(self, op, out):
-        pass
+    @generate_op.on_type(absolute)
+    def generate_op(self, op, out, x):
+        self.append("np.abs({}, out={}", x, out)
 
-    @generate_op.on_type(Variable)
-    def generate_op(self, op, out):
-        pass
+    @generate_op.on_type(add)
+    def generate_op(self, op, out, x, y):
+        self.append("np.add({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(placeholder)
-    def generate_op(self, op, out):
-        pass
+    @generate_op.on_type(argmax)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
+
+    @generate_op.on_type(argmin)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
     @generate_op.on_type(Broadcast)
     def generate_op(self, op, out, x):
         pass
 
-    @generate_op.on_type(ExpandDims)
-    def generate_op(self, op, out, x):
-        pass
-
-    @generate_op.on_type(Slice)
-    def generate_op(self, op, out, x):
-        pass
-
-    @generate_op.on_type(doall)
-    def generate_op(self, op):
-        pass
-
-    @generate_op.on_type(InitTensor)
+    @generate_op.on_type(Constant)
     def generate_op(self, op, out):
         pass
-
-    @generate_op.on_type(Fill)
-    def generate_op(self, op, out):
-        self.append("{}.fill({})", out, op.const)
 
     @generate_op.on_type(convolution)
     def generate_op(self, op, output, input, filter):
@@ -297,35 +285,6 @@ class NumPyCodeGenerator(PyGen):
                     input_shape=input_shape, filter_shape=filter_shape,
                     padding=padding, strides=strides)
 
-    @generate_op.on_type(Unslice)
-    def generate_op(self, op, out, out_sliced, x):
-        self.append("{}.fill(0)", out)
-        self.append("{}.__setitem__((), {})", out_sliced, x)
-
-    @generate_op.on_type(SetItem)
-    def generate_op(self, op, tensor, value):
-        self.append("{}.__setitem__({}, {})", tensor, op.item, value)
-
-    @generate_op.on_type(tensor_size)
-    def generate_op(self, op, out):
-        self.append("{}.fill({})", out, op.reduction_axes.size)
-
-    @generate_op.on_type(absolute)
-    def generate_op(self, op, out, x):
-        self.append("np.abs({}, out={}", x, out)
-
-    @generate_op.on_type(add)
-    def generate_op(self, op, out, x, y):
-        self.append("np.add({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(argmax)
-    def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
-
-    @generate_op.on_type(argmin)
-    def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
-
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
@@ -334,20 +293,24 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
+    @generate_op.on_type(doall)
+    def generate_op(self, op, out):
+        pass
+
     @generate_op.on_type(dot)
-    def generate_op(self, op, out, x, y):
+    def generate_op(self, op, out, o, x, y):
         # TODO Do this testing in the op setup, not at runtime
         self.append("""
-        out = {out}
+        o = {o}
         x = {x}
         y = {y}
-        if not out.flags.c_contiguous:
+        if not o.flags.c_contiguous:
             t = x
             x = y.T
             y = t.T
-            out = out.T
-        np.dot(x, y, out)
-        """, x=x, y=y, out=out)
+            o = o.T
+        np.dot(x, y, o)
+        """, x=x, y=y, o=o)
 
     @generate_op.on_type(equal)
     def generate_op(self, op, out, x, y):
@@ -357,6 +320,14 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.exp({}, out={})", x, out)
 
+    @generate_op.on_type(ExpandDims)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(Fill)
+    def generate_op(self, op, out, x):
+        self.append("{}.fill({})", x, op.const)
+
     @generate_op.on_type(greater)
     def generate_op(self, op, out, x, y):
         self.append("np.greater({}, {}, out={})", x, y, out)
@@ -364,6 +335,10 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(greater_equal)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(InitTensor)
+    def generate_op(self, op, out, var):
+        pass
 
     @generate_op.on_type(less)
     def generate_op(self, op, out, x, y):
@@ -412,14 +387,18 @@ class NumPyCodeGenerator(PyGen):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(onehot)
-    def generate_op(self, op, out, x):
+    def generate_op(self, op, out, o, x):
         self.append("""
-        out = {out}
+        o = {o}
         x = {x}
-        out[:] = 0
+        o[:] = 0
         for i in range(len(x)):
-            out[x[i], i] = 1
-        """, x=x, out=out)
+            o[x[i], i] = 1
+        """, x=x, o=o)
+
+    @generate_op.on_type(placeholder)
+    def generate_op(self, op, out):
+        pass
 
     @generate_op.on_type(power)
     def generate_op(self, op, out, x, y):
@@ -429,6 +408,10 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
+    @generate_op.on_type(SetItem)
+    def generate_op(self, op, out, tensor, value):
+        self.append("{}.__setitem__({}, {})", tensor, op.item, value)
+
     @generate_op.on_type(sign)
     def generate_op(self, op, out, x):
         self.append("np.sign({}, out=out)", x, out)
@@ -436,6 +419,10 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(sin)
     def generate_op(self, op, out, x):
         self.append("np.sin({}, out={})", x, out)
+
+    @generate_op.on_type(Slice)
+    def generate_op(self, op, out, x):
+        pass
 
     @generate_op.on_type(sqrt)
     def generate_op(self, op, out, x):
@@ -459,6 +446,19 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(tanh)
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
+
+    @generate_op.on_type(tensor_size)
+    def generate_op(self, op, out):
+        self.append("{}.fill({})", out, op.reduction_axes.size)
+
+    @generate_op.on_type(Unslice)
+    def generate_op(self, op, out, out_sliced, x):
+        self.append("{}.fill(0)", out)
+        self.append("{}.__setitem__((), {})", out_sliced, x)
+
+    @generate_op.on_type(Variable)
+    def generate_op(self, op, out):
+        pass
 
 
 class NumPyTransformer(Transformer):
@@ -530,8 +530,9 @@ class NumPyTransformer(Transformer):
 
         with indenting(self.compute_code):
             for op in ordered_ops:
-                call_info = (tensor_description_value(_) for _ in op.call_info(self))
-                self.compute_code.generate_op(op, *call_info)
+                out = tensor_description_value(op.tensor_description())
+                call_info = (tensor_description_value(_) for _ in op.call_info())
+                self.compute_code.generate_op(op, out, *call_info)
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
         self.compute_code.endl()
