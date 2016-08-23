@@ -110,20 +110,20 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         return "self." + self.name
 
     def generate_allocate(self):
-        self.transformer.init_code.append("""{} = None""", self.ref_str)
-        self.transformer.allocate_storage_code.append("""def {}(self):""", self.alloc_name)
+        self.transformer.init_code.append("{} = None", self.ref_str)
+        self.transformer.allocate_storage_code.append("def {}(self):", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
-            self.transformer.allocate_storage_code.append("""self.{}(bytearray({}))""",
+            self.transformer.allocate_storage_code.append("self.{}(bytearray({}))",
                                                           self.update_name, self.bytes)
             self.transformer.allocate_storage_code.endl()
 
-        self.transformer.allocate_storage_code.append("""def {}(self, buffer):""",
+        self.transformer.allocate_storage_code.append("def {}(self, buffer):",
                                                       self.update_name)
         with indenting(self.transformer.allocate_storage_code):
             self.generate_allocate_views()
         self.transformer.allocate_storage_code.endl()
 
-        self.transformer.allocate_code.append("""self.{}()""", self.alloc_name)
+        self.transformer.allocate_code.append("self.{}()", self.alloc_name)
 
     def allocate(self):
         self.storage = bytearray(self.bytes)
@@ -156,7 +156,7 @@ class NumPyDeviceTensor(DeviceTensor):
 
     def generate_allocate(self):
         tensor_description = self.tensor_description
-        self.transformer.init_code.append("""{} = None""", self.ref_str)
+        self.transformer.init_code.append("{} = None", self.ref_str)
         self.transformer.allocate_storage_code.append(
             """
             {ref} = np.ndarray(
@@ -508,16 +508,16 @@ class NumPyTransformer(Transformer):
         return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description,
                                  name="v_" + tensor_description.name)
 
-    def start_generate_allocate(self):
+    def start_transfrom_allocate(self):
         self.init_code.append("""def __init__(self):""")
         self.init_code.indent(1)
         self.allocate_code.append("""def allocate(self):""")
         self.allocate_code.indent(1)
 
-    def finish_generate_allocate(self):
+    def finish_transfrom_allocate(self):
         pass
 
-    def generate_computation(self, ordered_ops):
+    def transform_ordered_ops(self, ordered_ops):
         name = "c_" + str(self.n_computations)
         self.n_computations += 1
         self.compute_code.append("def {}(self):", name)
@@ -541,7 +541,9 @@ class NumPyTransformer(Transformer):
         if self.model is not None:
             return
 
-        self.code.append(""" class Model(object):""")
+        self.code.append("import numpy as np")
+        self.code.endl(2)
+        self.code.append(" class Model(object):")
         with indenting(self.code):
             if len(self.device_buffers) == 0:
                 self.init_code.append("pass")

@@ -70,7 +70,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
     def transform(self):
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-        self.name = self.transformer.generate_computation(ordered_ops)
+        self.name = self.transformer.transform_ordered_ops(ordered_ops)
 
     def __call__(self, *args):
         # TODO Should this be automatic?
@@ -313,9 +313,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.cpu_initializations = []
         self.init_computation = None
 
-    def finalize(self):
+    def transform_computations(self):
         """
-        Prepare for allocation.
+        Transform computation graphs to a form that can be run.
         """
         Op.simple_prune(self.all_results)
 
@@ -346,10 +346,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
 
-        self.start_generate_allocate()
+        self.start_transfrom_allocate()
         for device_buffer in self.device_buffers:
             device_buffer.generate_allocate()
-        self.finish_generate_allocate()
+        self.finish_transfrom_allocate()
 
         # Compile the computations now that we know their storage
         for computation in self.computations:
@@ -359,21 +359,21 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.finalized = True
 
     @abc.abstractmethod
-    def start_generate_allocate(self):
+    def start_transfrom_allocate(self):
         """
         Called just before allocation code is generated.
         """
 
     @abc.abstractmethod
-    def finish_generate_allocate(self):
+    def finish_transfrom_allocate(self):
         """
         Called after last allocation is generated.
         """
 
     @abc.abstractmethod
-    def generate_computation(self, ordered_ops):
+    def transform_ordered_ops(self, ordered_ops):
         """
-        Generate coee to compute ordered_ops.
+        Generate code to compute ordered_ops.
 
         :param ordered_ops: Ops to compute
         :return: Handle for generated code
@@ -394,7 +394,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         if self.allocated:
             return
         if not self.finalized:
-            self.finalize()
+            self.transform_computations()
 
         self.allocate_storage()
 
