@@ -438,7 +438,7 @@ class doall(Op):
         super(doall, self).__init__(args=all, **kwargs)
 
     def call_info(self, transformer):
-        pass
+        return []
 
     def transform_call_info(self, *args, **kargs):
         pass

@@ -26,9 +26,10 @@ from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions
 from geon.analysis.memory import assign_buffers
 from geon.util.generics import generic_method
+from geon.op_graph.names import NameableValue
 
 
-class Computation(with_metaclass(abc.ABCMeta, object)):
+class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
     def __init__(self, transformer, returns, *args):
         """
         Defines computation.
@@ -65,6 +66,11 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         self.transformer.all_results.update(self.ops)
         self.executor = None
+        self.name = None
+
+    def transform(self):
+        ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
+        self.name = self.transformer.generate_computation(ordered_ops)
 
     def __call__(self, *args):
         # TODO Should this be automatic?
@@ -103,7 +109,7 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
             return None
 
 
-class DeviceBuffer(with_metaclass(abc.ABCMeta, object)):
+class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
     """
     Something that can provide storage.
 
@@ -120,6 +126,17 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, object)):
         self.transformer = transformer
         self.views = set()
         self.transformer.device_buffers.add(self)
+
+    def generate_allocate(self):
+        """
+        Generate allocation code.
+        """
+        self.generate_allocate_views()
+
+    def generate_allocate_views(self):
+        """Generate code for allocating views"""
+        for view in self.views:
+            view.generate_allocate()
 
     def allocate(self):
         """
@@ -205,7 +222,7 @@ class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
         self.allocate_views()
 
 
-class DeviceTensor(with_metaclass(abc.ABCMeta, object)):
+class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
     """
     A handle to a tensor on the device.
 
@@ -214,6 +231,7 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, object)):
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(DeviceTensor, self).__init__(**kwargs)
+        self.transformer = transformer
         self.device_buffer = device_buffer
         self.tensor_description = tensor_description
         device_buffer.views.add(self)
@@ -221,6 +239,10 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, object)):
     @property
     def dtype(self):
         return self.tensor_description.dtype
+
+    @abc.abstractmethod
+    def generate_allocate(self):
+        """Generate code for making the device tensor usable on the device."""
 
     @abc.abstractmethod
     def allocate(self):
@@ -320,12 +342,45 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
 
+        self.start_generate_allocate()
+        for device_buffer in self.device_buffers:
+            device_buffer.generate_allocate()
+        self.finish_generate_allocate()
+
         # Compile the computations now that we know their storage
         for computation in self.computations:
-            ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
-            computation.executor = self.compile_computation(ordered_ops)
-
+            #ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
+            #computation.executor = self.compile_computation(ordered_ops)
+            computation.transform()
+        self.generate_model()
         self.finalized = True
+
+    @abc.abstractmethod
+    def start_generate_allocate(self):
+        """
+        Called just before allocation code is generated.
+        """
+
+    @abc.abstractmethod
+    def finish_generate_allocate(self):
+        """
+        Called after last allocation is generated.
+        """
+
+    @abc.abstractmethod
+    def generate_computation(self, ordered_ops):
+        """
+        Generate coee to compute ordered_ops.
+
+        :param ordered_ops: Ops to compute
+        :return: Handle for generated code
+        """
+
+    @abc.abstractmethod
+    def generate_model(self):
+        """
+        Finish generating the model.
+        """
 
     def allocate(self):
         """
@@ -510,12 +565,13 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
                 transform_op(op)
 
     @abc.abstractmethod
-    def device_buffer_storage(self, bytes, alignment):
+    def device_buffer_storage(self, bytes, alignment, name):
         """
         Make a DeviceBuffer.
 
         :param bytes: Size of buffer.
         :param alignment: Alignment of buffer.
+        :param name: Name of the storage variable
         :return: A DeviceBuffer.
         """
 
@@ -537,31 +593,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
 
     @abc.abstractmethod
-    def make_raw_buffer(self, size):
-        """
-        Allocate raw buffer.
-
-        Arguments:
-          size: Size in bytes of the buffer to allocate
-        """
-
-    @abc.abstractmethod
-    def nparray(self, tensor_description, array):
-        """
-        Allocate a tensor and initialize it with a numpy array.
-
-        This needs to be executed from the CPU since that's where the NumPy array is.
-
-        Arguments:
-          tensor_description: TODO
-          array: TODO
-
-        Returns:
-          Reference to the tensor
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
     def rng(self, seed=None):
         """
         Allocate a random number generator.
@@ -571,19 +602,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         Returns:
           Reference to the random number generator.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def tensor_view(self, tensor_description):
-        """
-        Allocate a view of a tensor.
-
-        Arguments:
-          tensor_description: Description of the tensor view.
-
-        Returns:
-          Reference to the tensor view.
         """
         raise NotImplementedError()
 

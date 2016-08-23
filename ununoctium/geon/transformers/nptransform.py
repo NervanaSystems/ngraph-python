@@ -21,8 +21,17 @@ import math
 from functools import wraps
 
 from neon.backends.layer_cpu import ConvLayer
+from geon.util.pygen import PyGen, indenting
+from geon.util.generics import generic_method
 
 from geon.op_graph import arrayaxes
+from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
+    greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
+    negative, not_equal, onehot, reciprocal, SetItem, sign, sin, sqrt, square, subtract, sum, \
+    tanh, tensor_size, TensorDescription, \
+    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice
+from geon.op_graph.convolution import convolution
+
 from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 
@@ -79,6 +88,43 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, alignment, **kwargs)
         self.storage = None
 
+    @property
+    def alloc_name(self):
+        """
+        :return: Name for allocation method.
+        """
+        return "alloc_" + self.name
+
+    @property
+    def update_name(self):
+        """
+        :return: name for update method.
+        """
+        return "update_" + self.name
+
+    @property
+    def ref_str(self):
+        """
+        :return: name to reference variable.
+        """
+        return "self." +  self.name
+
+    def generate_allocate(self):
+        self.transformer.init_code.append("""{} = None""", self.ref_str)
+        self.transformer.allocate_storage_code.append("""def {}(self):""", self.alloc_name)
+        with indenting(self.transformer.allocate_storage_code):
+            self.transformer.allocate_storage_code.append("""self.{}(bytearray({}))""",
+                                                          self.update_name, self.bytes)
+            self.transformer.allocate_storage_code.endl()
+
+        self.transformer.allocate_storage_code.append("""def {}(self, buffer):""",
+                                                      self.update_name)
+        with indenting(self.transformer.allocate_storage_code):
+            self.generate_allocate_views()
+        self.transformer.allocate_storage_code.endl()
+
+        self.transformer.allocate_code.append("""self.{}()""", self.alloc_name)
+
     def allocate(self):
         self.storage = bytearray(self.bytes)
         super(NumPyDeviceBufferStorage, self).allocate()
@@ -94,6 +140,31 @@ class NumPyDeviceTensor(DeviceTensor):
         super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                                 **kwargs)
         self.tensor = None
+
+    @property
+    def ref_str(self):
+        """
+        :return: name to reference variable.
+        """
+        return "self." +  self.name
+
+    def generate_allocate(self):
+        tensor_description = self.tensor_description
+        self.transformer.init_code.append("""{} = None""", self.ref_str)
+        self.transformer.allocate_storage_code.append(
+            """
+            {ref} = np.ndarray(
+                shape={shape},
+                dtype=np.{dtype},
+                buffer=buffer,
+                offset={offset},
+                strides={strides})
+            """,
+            ref=self.ref_str,
+            shape=tensor_description.shape,
+            dtype=tensor_description.dtype,
+            offset=tensor_description.offset,
+            strides=tensor_description.strides)
 
     def allocate(self):
         tensor_description = self.tensor_description
@@ -135,6 +206,255 @@ def get_tensors(f):
     return helper
 
 
+class NumPyCodeGenerator(PyGen):
+    def __init__(self, **kwargs):
+        super(NumPyCodeGenerator, self).__init__(**kwargs)
+
+    def generate_model(self):
+        if self.model is not None:
+            return
+
+        self.endl()
+        self.indent(-1)
+
+        print(self.code)
+
+        r = self.compile("op")
+        self.model = r['Model']()
+
+    def name(self, x):
+        if isinstance(x, NumPyDeviceBufferStorage):
+            return x.ref_str
+        if isinstance(x, NumPyDeviceTensor):
+            return x.ref_str
+        return x
+
+    @generic_method
+    def generate_op(self, op, *args):
+        raise ValueError("Unhandled op: {}".format(op))
+
+    @generate_op.on_type(Constant)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(Variable)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(placeholder)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(Broadcast)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(ExpandDims)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(Slice)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(doall)
+    def generate_op(self, op):
+        pass
+
+    @generate_op.on_type(convolution)
+    def generate_op(self, op, output, input, filter):
+        input_shape = op._input_shape
+        filter_shape = op._filter_shape
+        padding = op._padding
+        strides = op._strides
+        self.append("""
+        neon_conv_layer = ConvLayer(
+            proxy_backend(), {output}.dtype,
+            N=arrayaxes.get_batch_axis().length,
+            C={input_shape}[0],
+            D={input_shape}[1],
+            H={input_shape}[2],
+            W={input_shape}[3],
+
+            K={filter_shape}[0],
+            T={filter_shape}[1],
+            R={filter_shape}[2],
+            S={filter_shape}[3],
+
+            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
+            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
+        )
+
+        # neon_conv_layer...
+        neon_conv_layer.xprop_conv(
+            proxy_tensor({input}),
+            proxy_tensor({filter}),
+            proxy_tensor({output}),
+        )
+        """, output=output, input=input, filter=filter,
+                    input_shape=input_shape, filter_shape=filter_shape,
+                    padding=padding, strides=strides)
+
+    @generate_op.on_type(Unslice)
+    def generate_op(self, op, out, out_sliced, x):
+        self.append("{}.fill(0)", out)
+        self.append("{}.__setitem__((), {})", out_sliced, x)
+
+    @generate_op.on_type(SetItem)
+    def generate_op(self, op, tensor, value):
+        self.append("{}.__setitem__({}, {})", tensor, op.item, value)
+
+    @generate_op.on_type(tensor_size)
+    def generate_op(self, op, out):
+        self.append("{}.fill({})", out, op.reduction_axes.size)
+
+    @generate_op.on_type(absolute)
+    def generate_op(self, op, out, x):
+        self.append("np.abs({}, out={}", x, out)
+
+    @generate_op.on_type(add)
+    def generate_op(self, op, out, x, y):
+        self.append("np.add({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(argmax)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
+
+    @generate_op.on_type(argmin)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
+
+    @generate_op.on_type(cos)
+    def generate_op(self, op, out, x):
+        self.append("np.cos({}, out={})", x, out)
+
+    @generate_op.on_type(divide)
+    def generate_op(self, op, out, x, y):
+        self.append("np.divide({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(dot)
+    def generate_op(self, op, out, x, y):
+        # TODO Do this testing in the op setup, not at runtime
+        self.append("""
+        out = {out}
+        x = {x}
+        y = {y}
+        if not out.flags.c_contiguous:
+            t = x
+            x = y.T
+            y = t.T
+            out = out.T
+        np.dot(x, y, out)
+        """, x=x, y=y, out=out)
+
+    @generate_op.on_type(equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(exp)
+    def generate_op(self, op, out, x):
+        self.append("np.exp({}, out={})", x, out)
+
+    @generate_op.on_type(greater)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(greater_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(less)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(less_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(log)
+    def generate_op(self, op, out, x):
+        self.append("np.log({}, out={})", x, out)
+
+    @generate_op.on_type(max)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.max({}, {}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(maximum)
+    def generate_op(self, op, out, x, y):
+        self.append("np.maximum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(min)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.min({}, {}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(minimum)
+    def generate_op(self, op, out, x, y):
+        self.append("np.minimum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(multiply)
+    def generate_op(self, op, out, x, y):
+        self.append("np.multiply({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(negative)
+    def generate_op(self, op, out, x):
+        self.append("np.negative({}, out={})", x, out)
+
+    @generate_op.on_type(not_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.not_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(onehot)
+    def generate_op(self, op, out, x):
+        self.append("""
+        out = {out}
+        x = {x}
+        out[:] = 0
+        for i in range(len(x)):
+            out[x[i], i] = 1
+        """, x=x, out=out)
+
+    @generate_op.on_type(reciprocal)
+    def generate_op(self, op, out, x):
+        self.append("np.reciprocal({}, out={})", x, out)
+
+    @generate_op.on_type(sign)
+    def generate_op(self, op, out, x):
+        self.append("np.sign({}, out=out)", x, out)
+
+    @generate_op.on_type(sin)
+    def generate_op(self, op, out, x):
+        self.append("np.sin({}, out={})", x, out)
+
+    @generate_op.on_type(sqrt)
+    def generate_op(self, op, out, x):
+        self.append("np.sqrt({}, out={})", x, out)
+
+    @generate_op.on_type(square)
+    def generate_op(self, op, out, x):
+        self.append("np.square({}, out={})", x, out)
+
+    @generate_op.on_type(subtract)
+    def generate_op(self, op, out, x, y):
+        self.append("np.subtract({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(sum)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.sum({}, axis={}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(tanh)
+    def generate_op(self, op, out, x):
+        self.append("np.tanh({}, out={})", x, out)
+
+
 class NumPyTransformer(Transformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
@@ -145,8 +465,15 @@ class NumPyTransformer(Transformer):
     """
     def __init__(self, **kwargs):
         super(NumPyTransformer, self).__init__(**kwargs)
+        self.init_code = NumPyCodeGenerator()
+        self.allocate_storage_code = NumPyCodeGenerator()
+        self.allocate_code = NumPyCodeGenerator()
+        self.compute_code = NumPyCodeGenerator()
+        self.code = NumPyCodeGenerator()
+        self.model = None
+        self.n_computations = 0
 
-    def device_buffer_storage(self, bytes, alignment):
+    def device_buffer_storage(self, bytes, alignment, name):
         """
         Make a DeviceBuffer.
 
@@ -154,7 +481,7 @@ class NumPyTransformer(Transformer):
         :param alignment: Alignment of buffer.
         :return: A DeviceBuffer.
         """
-        return NumPyDeviceBufferStorage(self, bytes, alignment)
+        return NumPyDeviceBufferStorage(self, bytes, alignment, name="a_" + name)
 
     def device_buffer_reference(self):
         """
@@ -172,51 +499,88 @@ class NumPyTransformer(Transformer):
         :param tensor_description: The TensorDescription of the tensor.
         :return: A DeviceTensor.
         """
-        return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description)
+        return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description,
+                                 name="v_" + tensor_description.name)
+
+    def start_generate_allocate(self):
+        self.init_code.append("""def __init__(self):""")
+        self.init_code.indent(1)
+        self.allocate_code.append("""def allocate(self):""")
+        self.allocate_code.indent(1)
+
+    def finish_generate_allocate(self):
+        pass
+
+    def generate_computation(self, ordered_ops):
+        name = "c_" + str(self.n_computations)
+        self.n_computations += 1
+        self.compute_code.append("def {}(self):", name)
+        code = self.compute_code.code
+
+        def tensor_description_value(x):
+            if isinstance(x, TensorDescription):
+                return x.value
+            return x
+
+        with indenting(self.compute_code):
+            for op in ordered_ops:
+                call_info = (tensor_description_value(_) for _ in op.call_info(self))
+                self.compute_code.generate_op(op, *call_info)
+            if code is self.compute_code.code:
+                self.compute_code.append("pass")
+        self.compute_code.endl()
+        return name
+
+    def generate_model(self):
+        if self.model is not None:
+            return
+
+        self.code.append(""" class Model(object):""")
+        with indenting(self.code):
+            if len(self.device_buffers) == 0:
+                self.init_code.append("pass")
+            self.code.append(self.init_code.code)
+            self.code.endl()
+            self.code.append(self.allocate_storage_code.code)
+            self.code.endl()
+            if len(self.device_buffers) == 0:
+                self.allocate_code.append("pass")
+            self.code.append(self.allocate_code.code)
+            self.code.endl(2)
+            self.code.append(self.compute_code.code)
+
+        print(self.code.code)
+
+        r = self.code.compile("op", globals())
+        self.model = r['Model']()
+        for computation in self.computations:
+            executor = getattr(self.model, computation.name)
+            computation.executor = executor
+
+    def allocate(self):
+        """
+        Allocate storage.
+
+        Will finalize if not already done.
+        """
+        if self.allocated:
+            return
+        if not self.finalized:
+            self.finalize()
+
+        self.model.allocate()
+        for device_buffer in self.device_buffers:
+            for tensor in device_buffer.views:
+                tensor.tensor = getattr(self.model, tensor.name)
+
+
+        for op in self.inits + self.ops:
+            self.initialize_constant(op)
+
+        self.allocated = True
+
 
     # allocators
-    def make_raw_buffer(self, size):
-        """
-        TODO.
-
-        Arguments:
-          size: TODO
-
-        Returns:
-          TODO
-        """
-        return bytearray(size)
-
-    def tensor_view(self, tensor_description):
-        """
-        TODO.
-
-        Arguments:
-          tensor_description: TODO
-
-        Returns:
-          TODO
-        """
-        return np.ndarray(
-            shape=tensor_description.shape,
-            dtype=tensor_description.dtype,
-            buffer=tensor_description.buffer.data,
-            offset=tensor_description.offset,
-            strides=tensor_description.strides
-        )
-
-    def nparray(self, array):
-        """
-        TODO.
-
-        Arguments:
-          array: TODO
-
-        Returns:
-          TODO
-        """
-        return array
-
     def rng(self, seed=None):
         """
         TODO.

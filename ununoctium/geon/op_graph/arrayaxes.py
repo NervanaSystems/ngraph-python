@@ -1035,7 +1035,7 @@ class TensorDescription(NameableValue):
         if self.buffer is not None:
             if self.buffer.data is None:
                 self.buffer.data = self.transformer.device_buffer_storage(
-                    self.buffer.size, 4
+                    self.buffer.size, 4, self.name
                 )
             self.__value = self.transformer.device_tensor(self)
 

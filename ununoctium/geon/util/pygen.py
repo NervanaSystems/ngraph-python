@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from six import exec_
 import tempfile
 import re
 import atexit
@@ -95,7 +96,7 @@ class PyGen(object):
     def code(self):
         return self.__code
 
-    def compile(self, prefix):
+    def compile(self, prefix, globs):
         fd, filename = tempfile.mkstemp(".py", prefix, text=True)
         os.write(fd, self.code)
         os.close(fd)
@@ -103,5 +104,5 @@ class PyGen(object):
 
         code = compile(self.code, filename, "exec")
         r = {}
-        exec(code, globals(), r)
+        exec_(code, globs, r)
         return r
