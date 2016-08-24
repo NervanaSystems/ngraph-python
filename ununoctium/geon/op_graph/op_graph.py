@@ -2178,20 +2178,20 @@ def mean(x, **kwargs):
     return sum(x, **kwargs) / tensor_size(x, **kwargs)
 
 
-def deriv(dep, indep):
+def deriv(dependent_op, independent_op):
     """
     TODO.
 
     Arguments:
-      dep: TODO
-      indep: TODO
+      dependent_op: TODO
+      independent_op: TODO
 
     Returns:
       TODO
     """
-    Op.simple_prune([dep, indep])
-    adjoint = dep.adjoints()[indep]
-    return Broadcast(adjoint, axes=indep.axes)
+    Op.simple_prune([dependent_op, independent_op])
+    adjoint = dependent_op.adjoints()[independent_op]
+    return Broadcast(adjoint, axes=independent_op.axes)
 
 
 class CrossEntropyMultiInner(object):
