@@ -761,6 +761,19 @@ class Slice(TensorOp):
     """TODO."""
 
     def __init__(self, x, slices, axes=None, **kwargs):
+        """
+        TODO.
+        """
+        if len(slices) != len(x.shape):
+            raise ValueError((
+                'There should be one slice in slices for each dimension in '
+                'input tensor.  Input tensor had {tensor_dim} dimensions, '
+                'but slices has length {slices_len}.'
+            ).format(
+                tensor_dim=len(x.shape),
+                slices_len=len(slices),
+            ))
+
         if axes is None:
             axes = []
             for axis, s in zip(x.axes, slices):
