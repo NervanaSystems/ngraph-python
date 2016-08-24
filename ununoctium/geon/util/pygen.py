@@ -97,9 +97,10 @@ class PyGen(object):
         return self.__code
 
     def compile(self, prefix, globs):
-        fd, filename = tempfile.mkstemp(".py", prefix, text=True)
-        os.write(fd, self.code)
-        os.close(fd)
+        file = tempfile.NamedTemporaryFile(mode='w', suffix='py', prefix=prefix, delete=False)
+        filename = file.name
+        file.write(self.code)
+        file.close()
         atexit.register(lambda: os.unlink(filename))
 
         code = compile(self.code, filename, "exec")

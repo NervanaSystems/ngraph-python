@@ -138,16 +138,6 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         for view in self.views:
             view.transform_allocate()
 
-    @property
-    @abc.abstractmethod
-    def storage_device_buffer(self):
-        """
-        Get the actual storage buffer.
-
-        :return: A DeviceBufferStorage
-        """
-        raise NotImplementedError()
-
 
 class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
