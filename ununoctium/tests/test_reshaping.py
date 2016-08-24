@@ -230,7 +230,6 @@ def test_axes_cast():
     ax.C.length = 2
     ax.D.length = 3
 
-    x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
     x = be.placeholder(axes=(ax.C, ax.D))
 
     x_slice = x[1, :]
@@ -243,6 +242,7 @@ def test_axes_cast():
     num_deriv_fun = ex.numeric_derivative(y, x, delta)
     sym_deriv_fun = ex.derivative(y, x)
 
+    x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
     assert np.allclose(
         y_fun(x_np),
         np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')

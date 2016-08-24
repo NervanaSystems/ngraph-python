@@ -131,7 +131,7 @@ class FunctionAxis(Axis):
 class SlicedAxis(FunctionAxis):
     """
     An axis created by slicing a parent axis. Its length is computed
-    dynamically fromt the length of the parent.
+    dynamically from the length of the parent.
     """
     def __init__(self, parent, s, **kwargs):
         def sliced_length():
