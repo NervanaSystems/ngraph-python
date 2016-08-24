@@ -176,9 +176,11 @@ class convolution(op_graph.TensorOp):
         filter_batch_axes = filter.axes.batch_axes()
         if filter_batch_axes:
             raise ValueError((
-                "filter_axes should not contain batch_axes.  Found "
-                "{filter_batch_axes}."
-            ).format(filter_batch_axes=filter_batch_axes))
+                "filter's axes should not contain any batch_axes.  Found "
+                "batch axes: {filter_batch_axes}."
+            ).format(
+                filter_batch_axes=', '.join(map(str, filter_batch_axes))
+            ))
 
     def transform(self, transformer, out, input, filter):
         """
