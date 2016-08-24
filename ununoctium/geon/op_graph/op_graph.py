@@ -20,7 +20,8 @@ from builtins import object, str
 
 from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
-    AxisIDTuple, Axes, FlattenedAxis, Axis, sample_axes, batch_axes
+    AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis,\
+    sample_axes, batch_axes
 from geon.op_graph.nodes import Node
 from geon.util.generics import generic_method
 
@@ -458,6 +459,12 @@ class TensorOp(Op):
     def __idiv__(self, val):
         return SetItem(self, slice(None, None, None), self / val)
 
+    def __getitem__(self, item):
+        return Slice(self, item)
+
+    def with_axes(self, axes):
+        return AxesCastOp(self, axes=axes)
+
     def __axes__(self):
         return self.axes
 
@@ -517,6 +524,22 @@ class TensorOp(Op):
         :return: A handle to the device tensor.
         """
         return self.tensor_description().value
+
+
+class AxesCastOp(TensorOp):
+    """Used to label a tensor with known axes, without altering its value"""
+    def __init__(self, x, axes, **kwargs):
+        super(AxesCastOp, self).__init__(args=(x,), axes=axes, **kwargs)
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        return self.args[0].tensor_description().cast(self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, AxesCastOp(
+            Broadcast(delta, axes=self.axes),
+            axes=x.axes
+        ))
 
 
 class Broadcast(TensorOp):
@@ -583,7 +606,12 @@ class Slice(TensorOp):
     """TODO."""
 
     def __init__(self, x, slices, axes=None, **kwargs):
-        assert axes is not None, 'The axes of a sliced tensor must be named.'
+        if axes is None:
+            axes = []
+            for axis, s in zip(x.axes, slices):
+                if not isinstance(s, int):
+                    axes.append(SlicedAxis(axis, s))
+            axes = Axes(axes)
         super(Slice, self).__init__(
             args=(x,),
             axes=axes,
@@ -1387,19 +1415,35 @@ class tensor_size(ComputationOp):
         super(tensor_size, self).__init__(axes=Axes())
 
 
-def pad(x, axes, paddings, **kwargs):
+def pad(x, paddings, axes=None, **kwargs):
     """
-    TODO.
+    Pads a tensor with zeroes along each of its dimensions.
 
     Arguments:
-      x: TODO
-      axes: TODO
-      paddings: TODO
+      x: the tensor to be padded
+      paddings: the length of the padding along each dimension.
+        should be an array with the same length as x.axes.
+        Each element of the array should be either an integer,
+        in which case the padding will be symmetrical, or a tuple
+        of the form (before, after)
+      axes: the axes to be given to the padded tensor.
+        If unsupplied, we create anonymous axes of the correct lengths.
       **kwargs: TODO
 
     Returns:
-      TODO
+        TensorOp: symbolic expression for the padded tensor
     """
+    def pad_to_tuple(pad):
+        if isinstance(pad, int):
+            pad = (pad, pad)
+        return pad
+
+    paddings = tuple(pad_to_tuple(pad) for pad in paddings)
+    if axes is None:
+        axes = Axes(
+            PaddedAxis(axis, pad) for axis, pad in zip(x.axes, paddings)
+        )
+
     def to_slice(pad):
         """
         TODO.
@@ -1410,8 +1454,6 @@ def pad(x, axes, paddings, **kwargs):
         Returns:
           TODO
         """
-        if isinstance(pad, int):
-            pad = (pad, pad)
         s = (pad[0], -pad[1])
         s = tuple(None if p == 0 else p for p in s)
         return slice(s[0], s[1], 1)

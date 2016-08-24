@@ -121,8 +121,8 @@ def test_slice():
             'tensor': [[1, 4, 5], [2, 5, 6]],
             'tensor_axes': (ax.C, ax.D),
             'slice': [1, slice(1, 3)],
-            'sliced_axes': (ax.N,),
-            'axes_lengths': {ax.C: 2, ax.D: 3, ax.N: 2},
+            'sliced_axes': None,
+            'axes_lengths': {ax.C: 2, ax.D: 3},
             'expected': [5, 6]
         }
     ]
@@ -175,8 +175,8 @@ def test_padding():
             'tensor': [[1, 4, 5], [1, 4, 6]],
             'tensor_axes': (ax.C, ax.D),
             'padding': [(0, 1), 1],
-            'padded_axes': (ax.M, ax.N),
-            'axes_lengths': {ax.C: 2, ax.D: 3, ax.M: 3, ax.N: 5}
+            'padded_axes': None,
+            'axes_lengths': {ax.C: 2, ax.D: 3}
         }
     ]
 
@@ -191,7 +191,7 @@ def test_padding():
         tensor = be.placeholder(axes=be.Axes(tensor_axes))
         padding = test['padding']
         padded_axes = test['padded_axes']
-        padded = be.pad(tensor, padded_axes, padding)
+        padded = be.pad(tensor, padding, padded_axes)
         computed_val_fun = ex.executor(padded, tensor)
 
         # Test backpropagation
@@ -221,3 +221,36 @@ def test_padding():
         assert np.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
+
+
+@be.with_bound_environment
+def test_axes_cast():
+    ex = ExecutorFactory()
+
+    ax.C.length = 2
+    ax.D.length = 3
+
+    x = be.placeholder(axes=(ax.C, ax.D))
+
+    x_slice = x[1, :]
+    # Cast back to known axes
+    x_cast = x_slice.with_axes(ax.D)
+
+    # Verfiy that the tensor broadcasts along ax.D
+    y = x + x_cast
+    y_fun = ex.executor(y, x)
+    num_deriv_fun = ex.numeric_derivative(y, x, delta)
+    sym_deriv_fun = ex.derivative(y, x)
+
+    x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
+    assert np.allclose(
+        y_fun(x_np),
+        np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
+    )
+
+    assert np.allclose(
+        num_deriv_fun(x_np),
+        sym_deriv_fun(x_np),
+        rtol=rtol,
+        atol=atol
+    )
