@@ -193,3 +193,39 @@ class convolution(op_graph.TensorOp):
             self._input_shape, self._filter_shape,
             self._padding, self._strides,
         )
+
+    def generate_adjoints(self, adjoints, delta, input, filter):
+        """
+        warning: no adjoints computed for filter for now.
+        """
+
+        # TODO: not so many requirements!
+        if any(d.length != 3 for d in filter.shape):
+            raise ValueError((
+                'conv adjoints doesnt currently support non-3 sized filters. '
+                'found filters sized: {}'
+            ).format([d.length for d in filter.shape]))
+
+        if any(padding != 1 for padding in self._padding):
+            raise ValueError((
+                'conv adjoints doesnt currently support non-one padding. '
+                'found padding: {}'
+            ).format(self._padding))
+
+        if any(stride != 1 for stride in self._strides):
+            raise ValueError((
+                'conv adjoints doesnt currently support non-one strides. '
+                'found: {}'
+            ).format(self._strides))
+
+        # TODO: delta has N in the axes, but convolution doesn't allow an N in
+        # the filter's axes.  Should there be a reduce before the convolution
+        # or after?  If after, how to get convolution to run inspite of N.
+        filter.generate_add_delta(adjoints, convolution(input, delta))
+        input.generate_add_delta(
+            adjoints, convolution(
+                delta,
+                op_graph.Slice(filter, slice(None, None, -1)),
+                padding=self._padding,
+            )
+        )

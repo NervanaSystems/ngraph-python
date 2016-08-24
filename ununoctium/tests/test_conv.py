@@ -48,3 +48,35 @@ def test_constant_tensor_convolution_fprop():
 
     result = executor(output)()
     assert np.allclose(result, [[[8.0]]])
+
+
+@be.with_bound_environment
+def test_constant_tensor_convolution_deriv():
+    """
+    A simple test running a convolution filter over an input where both filter
+    and input are ones and both are the same size.
+    """
+
+    arrayaxes.set_batch_axes([ax.N])
+
+    ax.N.length = 1
+    ax.C.length = 3
+    ax.H.length = 5
+    ax.W.length = 5
+    ax.FilterH = arrayaxes.Axis(3)
+    ax.FilterW = arrayaxes.Axis(3)
+    ax.Cout = arrayaxes.Axis(3)
+
+    input_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.N])
+    filter_axes = arrayaxes.Axes([ax.C, ax.FilterH, ax.FilterW, ax.Cout])
+
+    input = be.Variable(axes=input_axes)
+    filter = be.Variable(axes=filter_axes)
+
+    output = be.convolution(input, filter, padding=[1, 1, 1, 1])
+
+    dido = be.deriv(output, input)
+
+    print dido
+
+    assert False
