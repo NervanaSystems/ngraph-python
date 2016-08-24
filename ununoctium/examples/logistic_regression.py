@@ -98,13 +98,14 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
 
     # return [grad, loss] and also compute update
     train_eval_func = transformer.computation([grad, loss], update)
+    transformer.initialize()
 
     # copy data into device
     # if we were doing batches, we would add xs and ys to train_eval_func
     # and pass the batch in on each call, but since the data never changes,
     # we just pass it in once before running
-    transformer.copy_to_model(xs, xs_np.transpose())
-    transformer.copy_to_model(ys, ys_np.reshape((ax.Y.length, ax.N.length)))
+    xs.value[()] = xs_np.transpose()
+    ys.value[()] = ys_np.reshape((ax.Y.length, ax.N.length))
 
     # evaluate
     for i in range(max_iter):

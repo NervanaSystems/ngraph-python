@@ -171,6 +171,7 @@ class Model(GraphComponent):
             self.error = metric(self.output, self.target)
             self.test_comp = self.transformer.computation(self.error, self.input, self.target)
 
+        self.transformer.initialize()
         self.initialized = True
 
     @in_graph

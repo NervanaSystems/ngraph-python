@@ -171,13 +171,13 @@ class MyTest(be.Model):
                 nprocessed = 0
                 learning_rate.value = .1 / (1 + epoch) / train.bsz
                 for mb_idx, (xraw, yraw) in enumerate(train):
-                    self.transformer.copy_to_model(graph.x, xraw)
-                    self.transformer.copy_to_model(graph.y, yraw)
+                    graph.x.value[()] = xraw
+                    graph.y.value[()] = yraw
                     loss = self.train_comp()
 
                     train_loss += loss / float(train.bsz)
                     train_error += np.sum(np.not_equal(np.argmax(
-                        vals[graph.value], axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
+                        loss, axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
                     n_bs += 1
                     nprocessed += xraw.shape[1]
 

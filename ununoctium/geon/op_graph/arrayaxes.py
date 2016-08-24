@@ -998,29 +998,6 @@ class TensorDescription(NameableValue):
         """TODO."""
         return self.__value
 
-    @value.setter
-    def value(self, tensor):
-        """
-        TODO.
-
-        Arguments:
-          tensor: TODO
-
-        Returns:
-
-        """
-        if self.value.shape != tensor.shape:
-            raise ValueError((
-                "Tried to set a TensorDescription's value with a tensor of "
-                "the wrong shape.  Expected: {expected_shape}, was given "
-                "{given_shape}."
-            ).format(
-                expected_shape=self.value.shape,
-                given_shape=tensor.shape,
-            ))
-
-        self.transformer.set_item(self.value, (), tensor)
-
     def is_base(self):
         """TODO."""
         return self.__base is None
@@ -1033,7 +1010,7 @@ class TensorDescription(NameableValue):
         if self.buffer is not None:
             if self.buffer.data is None:
                 self.buffer.data = self.transformer.device_buffer_storage(
-                    self.buffer.size, 4, self.name
+                    self.buffer.size, self.dtype, self.name
                 )
             self.__value = self.transformer.device_tensor(self)
 

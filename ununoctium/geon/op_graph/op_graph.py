@@ -507,6 +507,17 @@ class TensorOp(Op):
         """
         return mean(self, out_axes=out_axes, **kwargs)
 
+    @property
+    def value(self):
+        """
+        Returns a handle to the device tensor.
+
+        The transformer must have been initialized.
+
+        :return: A handle to the device tensor.
+        """
+        return self.tensor_description().value
+
 
 class Broadcast(TensorOp):
     """Used to add additional axes for a returned derivative."""

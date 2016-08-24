@@ -17,7 +17,6 @@ from builtins import range
 
 import geon.op_graph.names as names
 from geon.op_graph import arrayaxes
-from geon.transformers.nptransform import NumPyTransformer
 
 # Make some axes
 ax = names.NameScope()

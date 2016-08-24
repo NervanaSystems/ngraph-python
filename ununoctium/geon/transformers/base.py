@@ -16,11 +16,8 @@ from __future__ import division
 
 import abc
 from builtins import object
-import numbers
 import collections
 from future.utils import with_metaclass
-
-import numpy as np
 
 from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
@@ -79,7 +76,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
         # Get the parameters to the device
         for param, arg in zip(self.parameters, args):
-            self.transformer.copy_to_model(param, arg)
+            param.value[()] = arg
         self.executor()
 
         # TODO Should copy this out of the device to a destination when it is not scalar
@@ -91,9 +88,9 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
             :return: Return value for op.
             """
             if isinstance(op, TensorOp):
-                if op.tensor_description().value is None:
+                if op.value is None:
                     pass
-                return op.tensor_description().value.get(None)
+                return op.value.get(None)
             else:
                 return None
 
@@ -130,31 +127,16 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         self.views = set()
         self.transformer.device_buffers.add(self)
 
-    def generate_allocate(self):
+    def transform_allocate(self):
         """
         Generate allocation code.
         """
-        self.generate_allocate_views()
+        self.transform_allocate_views()
 
-    def generate_allocate_views(self):
+    def transform_allocate_views(self):
         """Generate code for allocating views"""
         for view in self.views:
-            view.generate_allocate()
-
-    def allocate(self):
-        """
-        Allocate storage on the device.
-
-        Finish by allocating views views.
-        """
-        self.allocate_views()
-
-    def allocate_views(self):
-        """
-        Allocate all views of this buffer.
-        """
-        for view in self.views:
-            view.allocate()
+            view.transform_allocate()
 
     @property
     @abc.abstractmethod
@@ -174,7 +156,7 @@ class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     :ivar bytes: The size of the byte buffer.
     :ivar alignment: The alignment of the byte buffer.
     """
-    def __init__(self, transformer, bytes, alignment, **kwargs):
+    def __init__(self, transformer, bytes, dtype, **kwargs):
         """
 
         :param transformer: The associated transformer.
@@ -184,11 +166,7 @@ class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
         """
         super(DeviceBufferStorage, self).__init__(transformer, **kwargs)
         self.bytes = bytes
-        self.alignment = alignment
-
-    @property
-    def storage_device_buffer(self):
-        return self
+        self.dtype = dtype
 
 
 class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
@@ -202,27 +180,6 @@ class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     def __init__(self, transformer, **kwargs):
         super(DeviceBufferReference, self).__init__(self, **kwargs)
         self.__device_buffer = None
-
-    @property
-    def storage_device_buffer(self):
-        return self.device_buffer.storage_device_buffer
-
-    @property
-    def device_buffer(self):
-        """
-        The referenced device buffer.
-        """
-        return self.__device_buffer
-
-    @device_buffer.setter
-    def device_buffer(self, device_buffer):
-        """
-        Change the referenced device buffer.
-
-        :param device_buffer: The new device buffer.
-        """
-        self.__device_buffer = device_buffer
-        self.allocate_views()
 
 
 class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
@@ -244,14 +201,8 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
         return self.tensor_description.dtype
 
     @abc.abstractmethod
-    def generate_allocate(self):
+    def transform_allocate(self):
         """Generate code for making the device tensor usable on the device."""
-
-    @abc.abstractmethod
-    def allocate(self):
-        """
-        Make the device tensor usable on the device.
-        """
 
     @abc.abstractmethod
     def get(self, tensor):
@@ -346,43 +297,54 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
 
-        self.start_transfrom_allocate()
+        self.start_transform_allocate()
         for device_buffer in self.device_buffers:
-            device_buffer.generate_allocate()
-        self.finish_transfrom_allocate()
+            device_buffer.transform_allocate()
+        self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
         for computation in self.computations:
             computation.transform()
         self.init_computation.transform()
-        self.generate_model()
+        self.finish_transform()
         self.finalized = True
 
     @generic_method
     def initialize_tensor_descriptions(self, op):
+        """
+        Ensures that tensor descriptions associated with op are initialized.
+        :param op:
+        """
+        # op
         tensor_description = op.tensor_description()
         if tensor_description is not None and tensor_description.transformer is None:
             tensor_description.initialize(self)
 
+        # Call info for op
         for tensor_description in op.call_info():
             if tensor_description.transformer is None:
                 tensor_description.initialize(self)
 
     @initialize_tensor_descriptions.on_type(Function)
     def initialize_tensor_descriptions(self, op):
+        """
+        For Function, recurse into instructions
+        :param op:
+        :return:
+        """
         for inst in op.instructions:
             self.initialize_tensor_descriptions(inst)
 
     @abc.abstractmethod
-    def start_transfrom_allocate(self):
+    def start_transform_allocate(self):
         """
-        Called just before allocation code is generated.
+        Called just before allocation code is transformed.
         """
 
     @abc.abstractmethod
-    def finish_transfrom_allocate(self):
+    def finish_transform_allocate(self):
         """
-        Called after last allocation is generated.
+        Called after last allocation is transformed.
         """
 
     @abc.abstractmethod
@@ -395,28 +357,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
 
     @abc.abstractmethod
-    def generate_model(self):
+    def finish_transform(self):
         """
         Finish generating the model.
         """
-
-    def allocate(self):
-        """
-        Allocate storage.
-
-        Will finalize if not already done.
-        """
-        if self.allocated:
-            return
-        if not self.finalized:
-            self.transform_computations()
-
-        self.allocate_storage()
-
-        for op in self.inits + self.ops:
-            self.initialize_constant(op)
-
-        self.allocated = True
 
     @abc.abstractmethod
     def allocate_storage(self):
@@ -433,59 +377,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         tensor_description, = tensor_descriptions(op.args)
         value = op.valfun(tensor_description)
         tensor_description.value[:] = value
-
-    def initialize(self):
-        """
-        Initialize storage.  Will allocate if not already performed.
-        """
-        if self.initialized:
-            return
-        self.allocate()
-        # self.transform_ordered_ops(self.initializers)
-        self.initialized = True
-        self.init_computation()
-
-    def computation(self, results, *parameters):
-        """
-        Adds a computation to the transformer.
-
-        Arguments:
-          results: Values to be computed
-          parameters: Values to be set as arguments to evaluate
-
-        Returns:
-          Dictionary from results to their values
-        """
-        if self.finalized:
-            raise ValueError(
-                'Cannot create computations from a finalized transformer'
-            )
-
-        result = Computation(self, results, *parameters)
-        self.computations.add(result)
-        return result
-
-    def copy_to_model(self, tensor_op, value):
-        """
-        TODO.
-
-        Arguments:
-          tensor_op: TODO
-          value: TODO
-
-        Returns:
-
-        """
-        self.allocate()
-        td = tensor_op.tensor_description()
-        if isinstance(value, numbers.Real):
-            self.fill(td.value, value)
-        elif isinstance(value, np.ndarray):
-            if td.full_sizes != value.shape:
-                raise ValueError()
-            self.set_item(td.value, (), value)
-        else:
-            raise ValueError()
 
     def ordered_initializers(self, ordered_ops):
         """
@@ -543,12 +434,12 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         return ordered_initializer_ops
 
     @abc.abstractmethod
-    def device_buffer_storage(self, bytes, alignment, name):
+    def device_buffer_storage(self, bytes, dtype, name):
         """
         Make a DeviceBuffer.
 
         :param bytes: Size of buffer.
-        :param alignment: Alignment of buffer.
+        :param dtype: dtype of buffer.
         :param name: Name of the storage variable
         :return: A DeviceBuffer.
         """
@@ -570,27 +461,54 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         :return: A DeviceTensor.
         """
 
-    # Side-effects
-    # TODO Should this be combined with set_item?
-    @abc.abstractmethod
-    def fill(self, out, value):
+    # User API follows
+    def computation(self, results, *parameters):
         """
-        Initialize a tensor with a scalar.
+        Adds a computation to the transformer.
 
         Arguments:
-          out: Tensor to initialize
-          value: Scalar value.
-        """
-        raise NotImplementedError()
+          results: Values to be computed
+          parameters: Values to be set as arguments to evaluate
 
-    @abc.abstractmethod
-    def set_item(self, tensor, item, value):
+        Returns:
+          Dictionary from results to their values
         """
-        Implements __setitem__.
+        if self.finalized:
+            raise ValueError(
+                'Cannot create computations from a finalized transformer'
+            )
 
-        Arguments:
-          tensor: Tensor to be modified
-          item: Slice/index to set
-          value: New values for tensor[item]
+        result = Computation(self, results, *parameters)
+        self.computations.add(result)
+        return result
+
+    def allocate(self):
         """
-        raise NotImplementedError()
+        Allocate storage and then initializes constants.
+
+        Will finalize if not already done.
+        """
+        if self.allocated:
+            return
+        if not self.finalized:
+            self.transform_computations()
+
+        self.allocate_storage()
+
+        for op in self.inits + self.ops:
+            self.initialize_constant(op)
+
+        self.allocated = True
+
+    def initialize(self):
+        """
+        Initialize storage.  Will allocate if not already performed.
+        """
+        if self.initialized:
+            return
+        self.allocate()
+
+        # Need to set initialized before we are done because the init computation will
+        # try to initialize.
+        self.initialized = True
+        self.init_computation()

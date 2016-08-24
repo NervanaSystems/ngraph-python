@@ -15,16 +15,17 @@
 
 from __future__ import division
 
-import numpy as np
-from builtins import range
 import math
 from functools import wraps
 
-from neon.backends.layer_cpu import ConvLayer
+# These are indirectly used by the generated code
+import numpy as np  # noqa
+from neon.backends.layer_cpu import ConvLayer  # noqa
+from geon.op_graph import arrayaxes  # noqa
+
 from geon.util.pygen import PyGen, indenting
 from geon.util.generics import generic_method
 
-from geon.op_graph import arrayaxes
 from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
@@ -84,8 +85,8 @@ class proxy_tensor(object):
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
-    def __init__(self, transformer, bytes, alignment, **kwargs):
-        super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, alignment, **kwargs)
+    def __init__(self, transformer, bytes, dtype, **kwargs):
+        super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
 
     @property
@@ -109,25 +110,26 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         """
         return "self." + self.name
 
-    def generate_allocate(self):
+    def transform_allocate(self):
         self.transformer.init_code.append("{} = None", self.ref_str)
         self.transformer.allocate_storage_code.append("def {}(self):", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
-            self.transformer.allocate_storage_code.append("self.{}(bytearray({}))",
-                                                          self.update_name, self.bytes)
+            elts = self.bytes // self.dtype.itemsize
+            self.transformer.allocate_storage_code.append(
+                """
+                self.{}(np.empty({}, dtype=np.dtype('{}')))
+                """,
+                self.update_name, elts, self.dtype.name)
             self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_storage_code.append("def {}(self, buffer):",
                                                       self.update_name)
         with indenting(self.transformer.allocate_storage_code):
-            self.generate_allocate_views()
+            self.transformer.allocate_storage_code.append("{} = buffer", self.ref_str)
+            self.transform_allocate_views()
         self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_code.append("self.{}()", self.alloc_name)
-
-    def allocate(self):
-        self.storage = bytearray(self.bytes)
-        super(NumPyDeviceBufferStorage, self).allocate()
 
 
 class NumPyDeviceBufferReference(DeviceBufferReference):
@@ -154,7 +156,7 @@ class NumPyDeviceTensor(DeviceTensor):
         """
         return "self." + self.name
 
-    def generate_allocate(self):
+    def transform_allocate(self):
         tensor_description = self.tensor_description
         self.transformer.init_code.append("{} = None", self.ref_str)
         self.transformer.allocate_storage_code.append(
@@ -171,16 +173,6 @@ class NumPyDeviceTensor(DeviceTensor):
             dtype=tensor_description.dtype,
             offset=tensor_description.offset,
             strides=tensor_description.strides)
-
-    def allocate(self):
-        tensor_description = self.tensor_description
-        self.tensor = np.ndarray(
-            shape=tensor_description.shape,
-            dtype=tensor_description.dtype,
-            buffer=self.device_buffer.storage_device_buffer.storage,
-            offset=tensor_description.offset,
-            strides=tensor_description.strides
-        )
 
     def get(self, tensor):
         if tensor is None:
@@ -479,7 +471,7 @@ class NumPyTransformer(Transformer):
         self.model = None
         self.n_computations = 0
 
-    def device_buffer_storage(self, bytes, alignment, name):
+    def device_buffer_storage(self, bytes, dtype, name):
         """
         Make a DeviceBuffer.
 
@@ -487,7 +479,7 @@ class NumPyTransformer(Transformer):
         :param alignment: Alignment of buffer.
         :return: A DeviceBuffer.
         """
-        return NumPyDeviceBufferStorage(self, bytes, alignment, name="a_" + name)
+        return NumPyDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
 
     def device_buffer_reference(self):
         """
@@ -508,13 +500,13 @@ class NumPyTransformer(Transformer):
         return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description,
                                  name="v_" + tensor_description.name)
 
-    def start_transfrom_allocate(self):
+    def start_transform_allocate(self):
         self.init_code.append("""def __init__(self):""")
         self.init_code.indent(1)
         self.allocate_code.append("""def allocate(self):""")
         self.allocate_code.indent(1)
 
-    def finish_transfrom_allocate(self):
+    def finish_transform_allocate(self):
         pass
 
     def transform_ordered_ops(self, ordered_ops):
@@ -538,12 +530,10 @@ class NumPyTransformer(Transformer):
         self.compute_code.endl()
         return name
 
-    def generate_model(self):
+    def finish_transform(self):
         if self.model is not None:
             return
 
-        self.code.append("import numpy as np")
-        self.code.endl(2)
         self.code.append(" class Model(object):")
         with indenting(self.code):
             if len(self.device_buffers) == 0:
@@ -568,27 +558,3 @@ class NumPyTransformer(Transformer):
 
     def allocate_storage(self):
         self.model.allocate()
-
-    # Side-effects
-    @get_tensors
-    def fill(self, out, value):
-        """
-        TODO.
-
-        Arguments:
-          out: TODO
-          value: TODO
-        """
-        out.fill(value)
-
-    @get_tensors
-    def set_item(self, tensor, item, value):
-        """
-        TODO.
-
-        Arguments:
-          tensor: TODO
-          item: TODO
-          value: TODO
-        """
-        tensor.__setitem__(item, value)

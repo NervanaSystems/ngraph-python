@@ -188,4 +188,4 @@ class GradientDescentMomentum(Optimizer):
         """
         learning_rate = self.schedule.get_learning_rate(
             self.learning_rate, epoch)
-        self.transformer.copy_to_model(self.learning_rate_placeholder, learning_rate)
+        self.learning_rate_placeholder.value[()] = learning_rate
