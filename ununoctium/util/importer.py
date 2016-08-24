@@ -248,7 +248,8 @@ def scan_numerical_axes(graph_def, env):
     return name_to_axes, batch_axis, y_axis
 
 
-def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
+
+def create_nervana_graph(pb_file, env, end_node="", loss_node=""):
     """
     convert the GraphDef object to Neon's graph
 
@@ -266,6 +267,11 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
                   This structure is similar with TF graph's collection.
       init: initialization graph
     """
+
+    # make graph_def
+    graph_def = tf.GraphDef()
+    with open(pb_file, 'rb') as f:
+        graph_def.ParseFromString(f.read())
 
     name_to_op = {}  # a map from TF node name to Neon op
     variables = {}  # trainable variables
@@ -653,24 +659,3 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
         graph.loss = name_to_op[loss_node]
 
     return graph
-
-
-def create_nervana_graph(pb_file, env, end_node="", loss_node=""):
-    # TODO Remove env everywhere
-    """
-    TODO.
-
-    Arguments:
-      pb_file: TODO
-      env: TODO
-      end_node: TODO
-      loss_node: TODO
-
-    Returns:
-      TODO
-    """
-    graph_def = tf.GraphDef()
-    with open(pb_file, 'rb') as f:
-        graph_def.ParseFromString(f.read())
-
-    return _create_nervana_graph(graph_def, env, end_node, loss_node)
