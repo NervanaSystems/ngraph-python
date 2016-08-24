@@ -29,7 +29,7 @@ from geon.util.generics import generic_method
 from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
-    sum, tanh, tensor_size, Fill, TensorDescription, \
+    sum, tanh, tensor_size, Fill, TensorDescription, AxesCastOp,\
     Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor
 from geon.op_graph.convolution import convolution
 
@@ -241,6 +241,10 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Constant)
     def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(AxesCastOp)
+    def generate_op(self, op, out, x):
         pass
 
     @generate_op.on_type(convolution)

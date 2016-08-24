@@ -112,6 +112,45 @@ class NumericAxis(Axis):
         return 'NumericAxis({length})'.format(length=self.length)
 
 
+class FunctionAxis(Axis):
+    """
+    A function axis is an axis whose length is computed by a user-supplied
+    function. Instances should only be created internally because using a
+    function that changes the length after a transformation will result in
+    undefined behaviour.
+    """
+    def __init__(self, length_fun, **kwargs):
+        super(FunctionAxis, self).__init__(length=-1, **kwargs)
+        self.length_fun = length_fun
+
+    @property
+    def length(self):
+        return self.length_fun()
+
+
+class SlicedAxis(FunctionAxis):
+    """
+    An axis created by slicing a parent axis. Its length is computed
+    dynamically fromt the length of the parent.
+    """
+    def __init__(self, parent, s, **kwargs):
+        def sliced_length():
+            start, stop, step = s.indices(parent.length)
+            assert step == 1
+            return stop - start
+        super(SlicedAxis, self).__init__(length_fun=sliced_length, **kwargs)
+
+
+class PaddedAxis(FunctionAxis):
+    """
+    An axis created by padding a parent axis.
+    """
+    def __init__(self, parent, pad, **kwargs):
+        def padded_length():
+            return parent.length + pad[0] + pad[1]
+        super(PaddedAxis, self).__init__(length_fun=padded_length, **kwargs)
+
+
 class AxisID(object):
     """TODO."""
 
@@ -861,6 +900,16 @@ class TensorDescription(NameableValue):
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=self.offset)
+
+    def cast(self, new_axes):
+        return TensorDescription(
+            new_axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=self.full_strides,
+            full_sizes=self.full_sizes,
+            offset=self.offset
+        )
 
     def maybe_collapse_numerics(self, axes, full_strides, full_sizes):
         """
