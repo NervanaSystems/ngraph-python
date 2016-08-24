@@ -15,15 +15,26 @@
 
 from __future__ import division
 
-import numpy as np
-from builtins import range
 import math
+from functools import wraps
 
-from neon.backends.layer_cpu import ConvLayer
+# These are indirectly used by the generated code
+import numpy as np  # noqa
+from neon.backends.layer_cpu import ConvLayer  # noqa
+from geon.op_graph import arrayaxes  # noqa
 
-from geon.op_graph.op_graph import AllocationOp
-from geon.op_graph import arrayaxes
-from geon.transformers.base import Transformer
+from geon.util.pygen import PyGen, indenting
+from geon.util.generics import generic_method
+
+from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
+    greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
+    negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
+    sum, tanh, tensor_size, Fill, TensorDescription, \
+    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor
+from geon.op_graph.convolution import convolution
+
+from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
+    DeviceTensor
 
 
 class proxy_backend(object):
@@ -73,6 +84,375 @@ class proxy_tensor(object):
         self._tensor = tensor
 
 
+class NumPyDeviceBufferStorage(DeviceBufferStorage):
+    def __init__(self, transformer, bytes, dtype, **kwargs):
+        super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
+        self.storage = None
+
+    @property
+    def alloc_name(self):
+        """
+        :return: Name for allocation method.
+        """
+        return "alloc_" + self.name
+
+    @property
+    def update_name(self):
+        """
+        :return: name for update method.
+        """
+        return "update_" + self.name
+
+    @property
+    def ref_str(self):
+        """
+        :return: name to reference variable.
+        """
+        return "self." + self.name
+
+    def transform_allocate(self):
+        self.transformer.init_code.append("{} = None", self.ref_str)
+        self.transformer.allocate_storage_code.append("def {}(self):", self.alloc_name)
+        with indenting(self.transformer.allocate_storage_code):
+            elts = self.bytes // self.dtype.itemsize
+            self.transformer.allocate_storage_code.append(
+                """
+                self.{}(np.empty({}, dtype=np.dtype('{}')))
+                """,
+                self.update_name, elts, self.dtype.name)
+            self.transformer.allocate_storage_code.endl()
+
+        self.transformer.allocate_storage_code.append("def {}(self, buffer):",
+                                                      self.update_name)
+        with indenting(self.transformer.allocate_storage_code):
+            self.transformer.allocate_storage_code.append("{} = buffer", self.ref_str)
+            self.transform_allocate_views()
+        self.transformer.allocate_storage_code.endl()
+
+        self.transformer.allocate_code.append("self.{}()", self.alloc_name)
+
+
+class NumPyDeviceBufferReference(DeviceBufferReference):
+    def __init__(self, transformer, **kwargs):
+        super(NumPyDeviceBufferReference, self).__init__(transformer, **kwargs)
+
+
+class NumPyDeviceTensor(DeviceTensor):
+    def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
+        super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
+                                                **kwargs)
+        self.__tensor = None
+
+    @property
+    def tensor(self):
+        if self.__tensor is None:
+            self.__tensor = getattr(self.transformer.model, self.name)
+        return self.__tensor
+
+    @property
+    def ref_str(self):
+        """
+        :return: name to reference variable.
+        """
+        return "self." + self.name
+
+    def transform_allocate(self):
+        tensor_description = self.tensor_description
+        self.transformer.init_code.append("{} = None", self.ref_str)
+        self.transformer.allocate_storage_code.append(
+            """
+            {ref} = np.ndarray(
+                shape={shape},
+                dtype=np.{dtype},
+                buffer=buffer,
+                offset={offset},
+                strides={strides})
+            """,
+            ref=self.ref_str,
+            shape=tensor_description.shape,
+            dtype=tensor_description.dtype,
+            offset=tensor_description.offset,
+            strides=tensor_description.strides)
+
+    def get(self, tensor):
+        if tensor is None:
+            return self.tensor
+        tensor[:] = self.tensor
+
+    def __getitem__(self, key):
+        return self.tensor.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        self.tensor.__setitem__(key, value)
+
+    def reshape(self, shape):
+        """Temporary for conv"""
+        # TODO Remove when CONV is finished
+        return self.tensor.reshape(shape)
+
+
+def get_tensors(f):
+    def tensor(x):
+        if isinstance(x, NumPyDeviceTensor):
+            return x.tensor
+        return x
+
+    @wraps(f)
+    def helper(*args):
+        return f(*(tensor(arg) for arg in args))
+
+    return helper
+
+
+class NumPyCodeGenerator(PyGen):
+    def __init__(self, **kwargs):
+        super(NumPyCodeGenerator, self).__init__(**kwargs)
+
+    def name(self, x):
+        if isinstance(x, NumPyDeviceBufferStorage):
+            return x.ref_str
+        if isinstance(x, NumPyDeviceTensor):
+            return x.ref_str
+        return x
+
+    @generic_method
+    def generate_op(self, op, *args):
+        raise ValueError("Unhandled op: {}".format(op))
+
+    @generate_op.on_type(absolute)
+    def generate_op(self, op, out, x):
+        self.append("np.abs({}, out={}", x, out)
+
+    @generate_op.on_type(add)
+    def generate_op(self, op, out, x, y):
+        self.append("np.add({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(argmax)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
+
+    @generate_op.on_type(argmin)
+    def generate_op(self, op, out, x):
+        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
+
+    @generate_op.on_type(Broadcast)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(Constant)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(convolution)
+    def generate_op(self, op, output, input, filter):
+        input_shape = op._input_shape
+        filter_shape = op._filter_shape
+        padding = op._padding
+        strides = op._strides
+        self.append("""
+        neon_conv_layer = ConvLayer(
+            proxy_backend(), {output}.dtype,
+            N=arrayaxes.get_batch_axis().length,
+            C={input_shape}[0],
+            D={input_shape}[1],
+            H={input_shape}[2],
+            W={input_shape}[3],
+
+            K={filter_shape}[0],
+            T={filter_shape}[1],
+            R={filter_shape}[2],
+            S={filter_shape}[3],
+
+            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
+            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
+        )
+
+        # neon_conv_layer...
+        neon_conv_layer.xprop_conv(
+            proxy_tensor({input}),
+            proxy_tensor({filter}),
+            proxy_tensor({output}),
+        )
+        """, output=output, input=input, filter=filter,
+                    input_shape=input_shape, filter_shape=filter_shape,
+                    padding=padding, strides=strides)
+
+    @generate_op.on_type(cos)
+    def generate_op(self, op, out, x):
+        self.append("np.cos({}, out={})", x, out)
+
+    @generate_op.on_type(divide)
+    def generate_op(self, op, out, x, y):
+        self.append("np.divide({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(doall)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(dot)
+    def generate_op(self, op, out, o, x, y):
+        # TODO Do this testing in the op setup, not at runtime
+        self.append("""
+        o = {o}
+        x = {x}
+        y = {y}
+        if not o.flags.c_contiguous:
+            t = x
+            x = y.T
+            y = t.T
+            o = o.T
+        np.dot(x, y, o)
+        """, x=x, y=y, o=o)
+
+    @generate_op.on_type(equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(exp)
+    def generate_op(self, op, out, x):
+        self.append("np.exp({}, out={})", x, out)
+
+    @generate_op.on_type(ExpandDims)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(Fill)
+    def generate_op(self, op, out, x):
+        self.append("{}.fill({})", x, op.const)
+
+    @generate_op.on_type(greater)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(greater_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(InitTensor)
+    def generate_op(self, op, out, var):
+        pass
+
+    @generate_op.on_type(less)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(less_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(log)
+    def generate_op(self, op, out, x):
+        self.append("np.log({}, out={})", x, out)
+
+    @generate_op.on_type(max)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.max({}, {}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(maximum)
+    def generate_op(self, op, out, x, y):
+        self.append("np.maximum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(min)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.min({}, {}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(minimum)
+    def generate_op(self, op, out, x, y):
+        self.append("np.minimum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(multiply)
+    def generate_op(self, op, out, x, y):
+        self.append("np.multiply({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(negative)
+    def generate_op(self, op, out, x):
+        self.append("np.negative({}, out={})", x, out)
+
+    @generate_op.on_type(not_equal)
+    def generate_op(self, op, out, x, y):
+        self.append("np.not_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(onehot)
+    def generate_op(self, op, out, o, x):
+        self.append("""
+        o = {o}
+        x = {x}
+        o[:] = 0
+        for i in range(len(x)):
+            o[x[i], i] = 1
+        """, x=x, o=o)
+
+    @generate_op.on_type(placeholder)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(power)
+    def generate_op(self, op, out, x, y):
+        self.append("np.power({}, {}, out={}", x, y, out)
+
+    @generate_op.on_type(reciprocal)
+    def generate_op(self, op, out, x):
+        self.append("np.reciprocal({}, out={})", x, out)
+
+    @generate_op.on_type(SetItem)
+    def generate_op(self, op, out, tensor, value):
+        self.append("{}.__setitem__({}, {})", tensor, op.item, value)
+
+    @generate_op.on_type(sign)
+    def generate_op(self, op, out, x):
+        self.append("np.sign({}, out=out)", x, out)
+
+    @generate_op.on_type(sin)
+    def generate_op(self, op, out, x):
+        self.append("np.sin({}, out={})", x, out)
+
+    @generate_op.on_type(Slice)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(sqrt)
+    def generate_op(self, op, out, x):
+        self.append("np.sqrt({}, out={})", x, out)
+
+    @generate_op.on_type(square)
+    def generate_op(self, op, out, x):
+        self.append("np.square({}, out={})", x, out)
+
+    @generate_op.on_type(subtract)
+    def generate_op(self, op, out, x, y):
+        self.append("np.subtract({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(sum)
+    def generate_op(self, op, out, x):
+        if op.mode is 'copy':
+            self.append("{}.__setitem__((), {})", out, x)
+        else:
+            self.append("np.sum({}, axis={}, out={})", x, op.mode, out)
+
+    @generate_op.on_type(tanh)
+    def generate_op(self, op, out, x):
+        self.append("np.tanh({}, out={})", x, out)
+
+    @generate_op.on_type(tensor_size)
+    def generate_op(self, op, out):
+        self.append("{}.fill({})", out, op.reduction_axes.size)
+
+    @generate_op.on_type(Unslice)
+    def generate_op(self, op, out, out_sliced, x):
+        self.append("{}.fill(0)", out)
+        self.append("{}.__setitem__((), {})", out_sliced, x)
+
+    @generate_op.on_type(Variable)
+    def generate_op(self, op, out):
+        pass
+
+
 class NumPyTransformer(Transformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
@@ -81,548 +461,100 @@ class NumPyTransformer(Transformer):
     will compile the graph required to compute those results and exposes an
     evaluate method to execute the compiled graph.
     """
-
-    # allocators
-    def make_raw_buffer(self, size):
-        """
-        TODO.
-
-        Arguments:
-          size: TODO
-
-        Returns:
-          TODO
-        """
-        return bytearray(size)
-
-    def tensor_view(self, tensor_description):
-        """
-        TODO.
-
-        Arguments:
-          tensor_description: TODO
-
-        Returns:
-          TODO
-        """
-        return np.ndarray(
-            shape=tensor_description.shape,
-            dtype=tensor_description.dtype,
-            buffer=tensor_description.buffer.data,
-            offset=tensor_description.offset,
-            strides=tensor_description.strides
-        )
-
-    def nparray(self, array):
-        """
-        TODO.
-
-        Arguments:
-          array: TODO
-
-        Returns:
-          TODO
-        """
-        return array
-
-    def rng(self, seed=None):
-        """
-        TODO.
-
-        Arguments:
-          seed: TODO
-
-        Returns:
-          TODO
-        """
-        return np.random.RandomState(seed=seed)
-
-    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        """
-        TODO.
-
-        Arguments:
-          rng: TODO
-          tensor_description: TODO
-          loc: TODO
-          scale: TODO
-
-        Returns:
-          TODO
-        """
-        return rng.normal(
-            loc, scale, tensor_description.sizes).astype(
-            tensor_description.dtype)
-
-    def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        """
-        TODO.
-
-        Arguments:
-          rng: TODO
-          tensor_description: TODO
-          low: TODO
-          high: TODO
-
-        Returns:
-          TODO
-        """
-        return rng.uniform(
-            low, high, tensor_description.sizes).astype(
-            tensor_description.dtype)
-
-    # Side-effects
-    def fill(self, out, value):
-        """
-        TODO.
-
-        Arguments:
-          out: TODO
-          value: TODO
-        """
-        out.fill(value)
-
-    def set_item(self, tensor, item, value):
-        """
-        TODO.
-
-        Arguments:
-          tensor: TODO
-          item: TODO
-          value: TODO
-        """
-        tensor.__setitem__(item, value)
-
-    # Operations
-    def absolute(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.abs(x, out=out)
-
-    def add(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.add(x, y, out=out)
-
-    def argmax(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.ndarray.argmax(x, 0, out)
-
-    def argmin(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.ndarray.argmin(x, 0, out)
-
-    def cos(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.cos(x, out=out)
-
-    def divide(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.divide(x, y, out=out)
-
-    def dot(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        if not out.flags.c_contiguous:
-            t = x
-            x = y.T
-            y = t.T
-            out = out.T
-        np.dot(x, y, out)
-
-    def equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.equal(x, y, out=out)
-
-    def exp(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.exp(x, out=out)
-
-    def greater(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.greater(x, y, out=out)
-
-    def greater_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.greater_equal(x, y, out=out)
-
-    def less(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.less(x, y, out=out)
-
-    def less_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        np.less_equal(x, y, out=out)
-
-    def log(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        np.log(x, out=out)
-
-    def max(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-        """
-        np.max(x, axis, out=out)
-
-    def maximum(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.maximum(x, y, out=out)
-
-    def min(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.min(x, axis, out=out)
-
-    def minimum(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.minimum(x, y, out=out)
-
-    def multiply(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.multiply(x, y, out=out)
-
-    def negative(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.negative(x, out=out)
-
-    def not_equal(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.not_equal(x, y, out=out)
-
-    def onehot(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        out[:] = 0
-        for i in range(len(x)):
-            out[x[i], i] = 1
-
-    def reciprocal(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.reciprocal(x, out=out)
-
-    def sign(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sign(x, out=out)
-
-    def sin(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sin(x, out=out)
-
-    def sqrt(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sqrt(x, out=out)
-
-    def square(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.square(x, out=out)
-
-    def subtract(self, x, y, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.subtract(x, y, out=out)
-
-    def sum(self, x, axis, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.sum(x, axis=axis, out=out)
-
-    def tanh(self, x, out):
-        """
-        TODO.
-
-        Arguments:
-          x: TODO
-          out: TODO
-
-        Returns:
-
-        """
-        np.tanh(x, out=out)
-
-    def conv(self, input, filter, output, input_shape, filter_shape, padding, strides):
-        # TODO: change args to ConvLayer to meaningful names instead of random
-        # upper case letters.
-
-        # TODO: only create ConvLayer once per op per session so that things
-        # like autotune only need to be run once per session.
-
-        # TODO: fork ConvLayer and refactor into here/conv op.
-
-        neon_conv_layer = ConvLayer(
-            proxy_backend(), output.dtype,
-            N=arrayaxes.get_batch_axis().length,
-            C=input_shape[0],
-            D=input_shape[1],
-            H=input_shape[2],
-            W=input_shape[3],
-
-            K=filter_shape[0],
-            T=filter_shape[1],
-            R=filter_shape[2],
-            S=filter_shape[3],
-
-            pad_d=padding[0], pad_h=padding[1], pad_w=padding[2],
-            str_d=strides[0], str_h=strides[1], str_w=strides[2],
-        )
-
-        # neon_conv_layer...
-        neon_conv_layer.xprop_conv(
-            proxy_tensor(input),
-            proxy_tensor(filter),
-            proxy_tensor(output),
-        )
-
-
-class NPNormal(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, loc, scale, **kwargs):
-        super(NPNormal, self).__init__(args=(rng,), **kwargs)
-        self.loc = loc
-        self.scale = scale
-
-    def compute_tensor_axes_info(self):
-        """TODO."""
-        rng, = self.args
-        tensor_axes_info = super(NPNormal, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: evaluator.rng_normal_tensor(
-            rng, tensor_description, self.loc, self.scale)
-
-
-class NPUniform(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, low, high, **kwargs):
-        super(NPUniform, self).__init__(args=(rng,), **kwargs)
-        self.low = low
-        self.high = high
-
-    def compute_tensor_axes_info(self):
-        """TODO."""
-        rng, = self.args
-        tensor_axes_info = super(NPUniform, self).compute_tensor_axes_info()
-        tensor_axes_info.alloc = lambda evaluator, tensor_description: \
-            evaluator.rng_uniform_tensor(rng, tensor_description, self.low, self.high)
+    def __init__(self, **kwargs):
+        super(NumPyTransformer, self).__init__(**kwargs)
+        self.init_code = NumPyCodeGenerator()
+        self.allocate_storage_code = NumPyCodeGenerator()
+        self.allocate_code = NumPyCodeGenerator()
+        self.compute_code = NumPyCodeGenerator()
+        self.code = NumPyCodeGenerator()
+        self.model = None
+        self.n_computations = 0
+
+    def device_buffer_storage(self, bytes, dtype, name):
+        """
+        Make a DeviceBuffer.
+
+        :param bytes: Size of buffer.
+        :param alignment: Alignment of buffer.
+        :return: A DeviceBuffer.
+        """
+        return NumPyDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+
+    def device_buffer_reference(self):
+        """
+        Make a DeviceBufferReference.
+
+        :return: A DeviceBufferReference.
+        """
+        return NumPyDeviceBufferReference(self)
+
+    def device_tensor(self, tensor_description):
+        """
+        Make a DeviceTensor.
+
+        :param device_buffer: The DeviceBufer[Reference] providing underlying storage.
+        :param tensor_description: The TensorDescription of the tensor.
+        :return: A DeviceTensor.
+        """
+        return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description,
+                                 name="v_" + tensor_description.name)
+
+    def start_transform_allocate(self):
+        self.init_code.append("""def __init__(self):""")
+        self.init_code.indent(1)
+        self.allocate_code.append("""def allocate(self):""")
+        self.allocate_code.indent(1)
+
+    def finish_transform_allocate(self):
+        pass
+
+    def transform_ordered_ops(self, ordered_ops):
+        name = "c_" + str(self.n_computations)
+        self.n_computations += 1
+        self.compute_code.append("def {}(self):", name)
+        code = self.compute_code.code
+
+        def tensor_description_value(x):
+            if isinstance(x, TensorDescription):
+                return x.value
+            return x
+
+        with indenting(self.compute_code):
+            for op in ordered_ops:
+                out = tensor_description_value(op.tensor_description())
+                call_info = (tensor_description_value(_) for _ in op.call_info())
+                self.compute_code.generate_op(op, out, *call_info)
+            if code is self.compute_code.code:
+                self.compute_code.append("pass")
+        self.compute_code.endl()
+        return name
+
+    def finish_transform(self):
+        if self.model is not None:
+            return
+
+        self.code.append(" class Model(object):")
+        with indenting(self.code):
+            if len(self.device_buffers) == 0:
+                self.init_code.append("pass")
+            self.code.append(self.init_code.code)
+            self.code.endl()
+            self.code.append(self.allocate_storage_code.code)
+            self.code.endl()
+            if len(self.device_buffers) == 0:
+                self.allocate_code.append("pass")
+            self.code.append(self.allocate_code.code)
+            self.code.endl(2)
+            self.code.append(self.compute_code.code)
+
+        # print(self.code.code)
+
+        r = self.code.compile("op", globals())
+        self.model = r['Model']()
+        for computation in self.computations:
+            executor = getattr(self.model, computation.name)
+            computation.executor = executor
+
+    def allocate_storage(self):
+        self.model.allocate()

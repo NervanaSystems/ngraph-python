@@ -140,7 +140,6 @@ def test_reduction():
     axes = be.Axes([ax.C, ax.W, ax.H])
 
     u = rng.uniform(-1.0, 1.0, axes)
-    p_u = be.placeholder(axes=axes)
 
     for npred, bered, red in [(np.sum, be.sum, 'sum'),
                               (np.max, be.max, 'max'),
@@ -150,6 +149,7 @@ def test_reduction():
                                [ax.H],
                                [ax.C, ax.W],
                                [ax.W, ax.H]]:
+            p_u = be.placeholder(axes=axes)
             dims = tuple(axes.index(axis) for axis in reduction_axes)
             npval = npred(u, dims)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
@@ -169,8 +169,6 @@ def test_reduction_deriv():
 
     u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
-    p_u = be.placeholder(axes=axes)
-
     # Need to test max/min differently since if two elements are extremums
     # and we modify one, the derivative will change.
     for npred, bered, red in [(np.sum, be.sum, 'sum')]:
@@ -179,7 +177,7 @@ def test_reduction_deriv():
                                [ax.H],
                                [ax.C, ax.W],
                                [ax.W, ax.H]]:
-            # dims = tuple(axes.index(axis) for axis in reduction_axes)
+            p_u = be.placeholder(axes=axes)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             ex = ExecutorFactory()
             num_fun = ex.numeric_derivative(graph_reduce, p_u, delta)

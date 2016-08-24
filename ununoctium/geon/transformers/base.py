@@ -16,18 +16,18 @@ from __future__ import division
 
 import abc
 from builtins import object
-import numbers
 import collections
 from future.utils import with_metaclass
 
-import numpy as np
-
 from geon.backends.graph.environment import get_current_environment
-from geon.op_graph.op_graph import Op, placeholder
+from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
+    Function
 from geon.analysis.memory import assign_buffers
+from geon.util.generics import generic_method
+from geon.op_graph.names import NameableValue
 
 
-class Computation(with_metaclass(abc.ABCMeta, object)):
+class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
     def __init__(self, transformer, returns, *args):
         """
         Defines computation.
@@ -64,6 +64,11 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         self.transformer.all_results.update(self.ops)
         self.executor = None
+        self.name = None
+
+    def transform(self):
+        ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
+        self.name = self.transformer.transform_ordered_ops(ordered_ops)
 
     def __call__(self, *args):
         # TODO Should this be automatic?
@@ -71,13 +76,23 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         # Get the parameters to the device
         for param, arg in zip(self.parameters, args):
-            self.transformer.copy_to_model(param, arg)
+            param.value[()] = arg
         self.executor()
 
         # TODO Should copy this out of the device to a destination when it is not scalar
         def value(op):
-            """TODO."""
-            return op.tensor_description(self.transformer).value
+            """
+            Returns the computed value of op, or None if it has no value.
+
+            :param op:
+            :return: Return value for op.
+            """
+            if isinstance(op, TensorOp):
+                if op.value is None:
+                    pass
+                return op.value.get(None)
+            else:
+                return None
 
         if isinstance(self.returns, Op):
             return value(self.returns)
@@ -92,6 +107,119 @@ class Computation(with_metaclass(abc.ABCMeta, object)):
 
         else:
             return None
+
+
+class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
+    """
+    Something that can provide storage.
+
+    :ivar transformer: The transformer associated with this device buffer.
+    :ivar views: All direct tensor views of this buffer.
+    """
+    def __init__(self, transformer, **kwargs):
+        """
+
+        :param transformer: The associated transformer.
+        :param kwargs: Any additional arguments.
+        """
+        super(DeviceBuffer, self).__init__(**kwargs)
+        self.transformer = transformer
+        self.views = set()
+        self.transformer.device_buffers.add(self)
+
+    def transform_allocate(self):
+        """
+        Generate allocation code.
+        """
+        self.transform_allocate_views()
+
+    def transform_allocate_views(self):
+        """Generate code for allocating views"""
+        for view in self.views:
+            view.transform_allocate()
+
+
+class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
+    """
+    A handle to device storage.
+
+    :ivar bytes: The size of the byte buffer.
+    :ivar alignment: The alignment of the byte buffer.
+    """
+    def __init__(self, transformer, bytes, dtype, **kwargs):
+        """
+
+        :param transformer: The associated transformer.
+        :param bytes: Size of storage.
+        :param alignment: Alignment of storage.
+        :param kwargs: Additional args.
+        """
+        super(DeviceBufferStorage, self).__init__(transformer, **kwargs)
+        self.bytes = bytes
+        self.dtype = dtype
+
+
+class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
+    """
+    Holds a reference to a DeviceBuffer.
+
+    :ivar transformer: The transformer associated with this device buffer reference.
+    :ivar views: All direct tensor views of this buffer reference.  Does not include views of
+     device buffer references set to this device buffer.
+    """
+    def __init__(self, transformer, **kwargs):
+        super(DeviceBufferReference, self).__init__(self, **kwargs)
+        self.__device_buffer = None
+
+
+class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
+    """
+    A handle to a tensor on the device.
+
+    :ivar device_buffer The device buffer [reference] backing this view.
+    :ivar tensor_description: The tensor description for this tensor.
+    """
+    def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
+        super(DeviceTensor, self).__init__(**kwargs)
+        self.transformer = transformer
+        self.device_buffer = device_buffer
+        self.tensor_description = tensor_description
+        device_buffer.views.add(self)
+
+    @property
+    def dtype(self):
+        return self.tensor_description.dtype
+
+    @abc.abstractmethod
+    def transform_allocate(self):
+        """Generate code for making the device tensor usable on the device."""
+
+    @abc.abstractmethod
+    def get(self, tensor):
+        """
+        Copy from device to tensor.
+
+        :param tensor: Destination of copy.  If None, tensor will be allocated.
+        :return: tensor.
+        """
+
+    @abc.abstractmethod
+    def __getitem__(self, key):
+        """
+        Provides read access to the device tensor.
+
+        :param key: The index/slice
+        :return: The item/value.
+        """
+
+    @abc.abstractmethod
+    def __setitem__(self, key, value):
+        """
+        Provides write access to the device tensor.
+
+        :param key: The index/slice
+        :param value: Tensor with same size as index/slice
+        """
 
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
@@ -125,124 +253,120 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         self.initialized = False
         self.opids = dict()
         self.fusion = fusion
+        self.device_buffers = set()
+        self.cpu_initializations = []
+        self.init_computation = None
 
-    def finalize(self):
+    def transform_computations(self):
         """
-        Prepare for allocation.
+        Transform computation graphs to a form that can be run.
         """
         Op.simple_prune(self.all_results)
 
         # Crate tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        inits = self.ordered_initializers(ops)
-        all_ops = ops + inits
+        self.inits = self.ordered_initializers(ops)
+
+        self.init_computation = self.computation([], *self.inits)
+
+        all_ops = ops + self.inits
         # Give ids
         for op in all_ops:
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
-        # Create tensor descriptions
-        for op in all_ops:
-            op.create_tensor_descriptions(self)
-
         self.dataflow, self.memory = assign_buffers(
-            self, self.all_results, self.fusion
+            self, self.all_results.union(self.inits), self.fusion
         )
 
-        for tensor_description in self.tensor_descriptions:
-            tensor_description.initialize()
+        # Initialize tensor descriptions
+        for op in set(all_ops):
+            self.initialize_tensor_descriptions(op)
 
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
         self.initializers = self.ordered_initializers(self.ops)
 
-        self.finalized = True
-
-    def allocate(self):
-        """
-        Allocate storage.
-
-        Will finalize if not already done.
-        """
-        if self.allocated:
-            return
-        if not self.finalized:
-            self.finalize()
-        self.allocate_ordered_ops(self.initializers)
-        self.allocate_ordered_ops(self.ops)
+        self.start_transform_allocate()
+        for device_buffer in self.device_buffers:
+            device_buffer.transform_allocate()
+        self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
         for computation in self.computations:
-            ordered_ops = self.dataflow.can_reach(computation.ops, order=self.ops)
-            computation.executor = self.compile_computation(ordered_ops)
+            computation.transform()
+        self.init_computation.transform()
+        self.finish_transform()
+        self.finalized = True
 
-        self.allocated = True
-
-    def initialize(self):
+    @generic_method
+    def initialize_tensor_descriptions(self, op):
         """
-        Initialize storage.  Will allocate if not already performed.
+        Ensures that tensor descriptions associated with op are initialized.
+        :param op:
         """
-        if self.initialized:
-            return
-        self.allocate()
-        self.transform_ordered_ops(self.initializers)
-        self.initialized = True
+        # op
+        tensor_description = op.tensor_description()
+        if tensor_description is not None and tensor_description.transformer is None:
+            tensor_description.initialize(self)
 
-    def compile_computation(self, ordered_ops):
+        # Call info for op
+        for tensor_description in op.call_info():
+            if tensor_description.transformer is None:
+                tensor_description.initialize(self)
+
+    @initialize_tensor_descriptions.on_type(Function)
+    def initialize_tensor_descriptions(self, op):
         """
-        Return a function that will run the computation in this transformer.
-
-        Should be overridden by transformers.
-
-        Arguments:
-          ordered_ops: TODO
-
-        Returns:
-          Function that runs the computation
+        For Function, recurse into instructions
+        :param op:
+        :return:
         """
-        return lambda: self.transform_ordered_ops(ordered_ops)
+        for inst in op.instructions:
+            self.initialize_tensor_descriptions(inst)
 
-    def computation(self, results, *parameters):
+    @abc.abstractmethod
+    def start_transform_allocate(self):
         """
-        Adds a computation to the transformer.
-
-        Arguments:
-          results: Values to be computed
-          parameters: Values to be set as arguments to evaluate
-
-        Returns:
-          Dictionary from results to their values
+        Called just before allocation code is transformed.
         """
-        if self.finalized:
-            raise ValueError(
-                'Cannot create computations from a finalized transformer'
-            )
 
-        result = Computation(self, results, *parameters)
-        self.computations.add(result)
-        return result
-
-    def copy_to_model(self, tensor_op, value):
+    @abc.abstractmethod
+    def finish_transform_allocate(self):
         """
-        TODO.
-
-        Arguments:
-          tensor_op: TODO
-          value: TODO
-
-        Returns:
-
+        Called after last allocation is transformed.
         """
-        self.allocate()
-        td = tensor_op.tensor_description(self)
-        if isinstance(value, numbers.Real):
-            self.fill(td.value, value)
-        elif isinstance(value, np.ndarray):
-            if td.value.shape != value.shape:
-                raise ValueError()
-            self.set_item(td.value, (), value)
-        else:
-            raise ValueError()
+
+    @abc.abstractmethod
+    def transform_ordered_ops(self, ordered_ops):
+        """
+        Generate code to compute ordered_ops.
+
+        :param ordered_ops: Ops to compute
+        :return: Handle for generated code
+        """
+
+    @abc.abstractmethod
+    def finish_transform(self):
+        """
+        Finish generating the model.
+        """
+
+    @abc.abstractmethod
+    def allocate_storage(self):
+        """
+        Allocate storage on the device.
+        """
+
+    @generic_method
+    def initialize_constant(self, op):
+        pass
+
+    @initialize_constant.on_type(InitTensor)
+    def initialize_constant(self, op):
+        tensor_description, = tensor_descriptions(op.args)
+        value = op.valfun(tensor_description)
+        tensor_description.value[:] = value
 
     def ordered_initializers(self, ordered_ops):
         """
@@ -299,533 +423,82 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         return ordered_initializer_ops
 
-    def allocate_ordered_ops(self, ordered_ops):
-        """
-        TODO.
-
-        Arguments:
-          ordered_ops: TODO
-        """
-        # Allocate
-        for op in ordered_ops:
-            op.allocate(self)
-
-    def transform_ordered_ops(self, ordered_ops):
-        """
-        Call op.transform_call_info on every op in ordered_ops.
-
-        If transform_hooks are present on the op or on this transformer, call
-        those as well.well
-
-        Arguments:
-          ordered_ops: TODO
-        """
-
-        def transform_op(op):
-            """
-            This is the call we would make directly if there were no hooks.
-            wrap it up into a function so we can pass it to a hook which has
-            the responsibility of making the call to the hook.  This allows the
-            hook to execute both before and after the transform.
-
-            Arguments:
-              op: TODO
-            """
-            op.transform_call_info(self)
-
-        for op in ordered_ops:
-            if op.transform_hook is not None:
-                op.transform_hook(self, op, transform_op)
-            elif self.transform_hook is not None:
-                self.transform_hook(self, op, transform_op)
-            else:
-                # run the transform without any hooks
-                transform_op(op)
-
-    def set_value(self, op, tensor):
-        """
-        TODO.
-
-        Arguments:
-          op: TODO
-          tensor: TODO
-        """
-        op.tensor_description(self).value = tensor
-
     @abc.abstractmethod
-    def make_raw_buffer(self, size):
+    def device_buffer_storage(self, bytes, dtype, name):
         """
-        Allocate raw buffer.
+        Make a DeviceBuffer.
 
-        Arguments:
-          size: Size in bytes of the buffer to allocate
+        :param bytes: Size of buffer.
+        :param dtype: dtype of buffer.
+        :param name: Name of the storage variable
+        :return: A DeviceBuffer.
         """
 
     @abc.abstractmethod
-    def nparray(self, tensor_description, array):
+    def device_buffer_reference(self):
         """
-        Allocate a tensor and initialize it with a numpy array.
+        Make a DeviceBufferReference.
 
-        This needs to be executed from the CPU since that's where the NumPy array is.
+        :return: A DeviceBufferReference.
+        """
+
+    @abc.abstractmethod
+    def device_tensor(self, tensor_description):
+        """
+        Make a DeviceTensor.
+
+        :param tensor_description: The TensorDescription of the tensor.
+        :return: A DeviceTensor.
+        """
+
+    # User API follows
+    def computation(self, results, *parameters):
+        """
+        Adds a computation to the transformer.
 
         Arguments:
-          tensor_description: TODO
-          array: TODO
+          results: Values to be computed
+          parameters: Values to be set as arguments to evaluate
 
         Returns:
-          Reference to the tensor
+          Dictionary from results to their values
         """
-        raise NotImplementedError()
+        if self.finalized:
+            raise ValueError(
+                'Cannot create computations from a finalized transformer'
+            )
 
-    @abc.abstractmethod
-    def rng(self, seed=None):
-        """
-        Allocate a random number generator.
-
-        Arguments:
-          seed: An integer.
-
-        Returns:
-          Reference to the random number generator.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def rng_uniform_tensor(self, rng, tensor_description, low, high):
-        """
-        Allocate a tensor initialized with a uniform distribution.
-
-        Arguments:
-          rng: Random number generator
-          tensor_description: Description of the tensor's type, shape, size, and strides.
-          low: TODO
-          high: TODO
-
-        Returns:
-          Reference to uniform distribution.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def rng_normal_tensor(self, rng, tensor_description, loc, scale):
-        """
-        Allocate a tensor initialized with a uniform distribution.
-
-        Arguments:
-          rng: Random number generator
-          tensor_description: Description of the tensor's type, shape, size, and strides.
-          loc: TODO
-          scale: TODO
-
-        Returns:
-          Reference to normal distribution.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def tensor_view(self, tensor_description):
-        """
-        Allocate a view of a tensor.
-
-        Arguments:
-          tensor_description: Description of the tensor view.
-
-        Returns:
-          Reference to the tensor view.
-        """
-        raise NotImplementedError()
-
-    # Side-effects
-    # TODO Should this be combined with set_item?
-    @abc.abstractmethod
-    def fill(self, out, value):
-        """
-        Initialize a tensor with a scalar.
-
-        Arguments:
-          out: Tensor to initialize
-          value: Scalar value.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def set_item(self, tensor, item, value):
-        """
-        Implements __setitem__.
-
-        Arguments:
-          tensor: Tensor to be modified
-          item: Slice/index to set
-          value: New values for tensor[item]
-        """
-        raise NotImplementedError()
-
-    # Operations
-    @abc.abstractmethod
-    def absolute(self, x, out):
-        """
-        Absolute value.
-
-        Arguments:
-          x: Input tensor
-          out: Output tensor, may be input.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def add(self, x, y, out):
-        """
-        out = x + y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def argmax(self, x, out):
-        """
-        Argmax on dim 0 of x.
-
-        Arguments:
-          x: TODO
-          out: Integer tensor
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def argmin(self, x, out):
-        """
-        Argmin on dim 0 of x.
-
-        Arguments:
-          x: TODO
-          out: Integer tensor
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def cos(self, x, out):
-        """
-        Cosine.
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def divide(self, x, y, out):
-        """
-        out = x/y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def dot(self, x, y, out):
-        """
-        Generalized dot using NumPy dimension conventions.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def equal(self, x, y, out):
-        """
-        Numerical equality.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def exp(self, x, out):
-        """
-        out = e^x
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def greater(self, x, y, out):
-        """
-        x > y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def greater_equal(self, x, y, out):
-        """
-        x >= y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def less(self, x, y, out):
-        """
-        x < y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def less_equal(self, x, y, out):
-        """
-        x <= y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def log(self, x, out):
-        """
-        log(x)
-
-        Arguments:
-          x: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def max(self, x, axis, out):
-        """
-        Maximum x value on axis.
-
-        Arguments:
-          x: TODO
-          axis: Axis to maximize over.
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def maximum(self, x, y, out):
-        """
-        max(x, y)
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def min(self, x, axis, out):
-        """
-        Minimum x value on axis.
-
-        Arguments:
-          x: TODO
-          axis: Axis to maximize over.
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def minimum(self, x, y, out):
-        """
-        min(x, y)
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def multiply(self, x, y, out):
-        """
-        x*y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def negative(self, x, out):
-        """
-        -x
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def not_equal(self, x, y, out):
-        """
-        x != y
-
-        Arguments:
-          x: TODO
-          y: TODO
-          out: Boolean tensor.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def onehot(self, idx, out):
-        """
-        TODO
-
-        Arguments:
-          idx: Index tensor
-          out: 2-d tensor, axis 0 gets onehot expansion
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def reciprocal(self, x, out):
-        """
-        1/x
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def sign(self, x, out):
-        """
-        signum(x)
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def sin(self, x, out):
-        """
-        sine(x)
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def sqrt(self, x, out):
-        """
-        sqrt(x)
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def square(self, x, out):
-        """
-        x^2
-
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
+        result = Computation(self, results, *parameters)
+        self.computations.add(result)
+        return result
 
-    @abc.abstractmethod
-    def subtract(self, x, y, out):
+    def allocate(self):
         """
-        x - y
+        Allocate storage and then initializes constants.
 
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
+        Will finalize if not already done.
         """
-        raise NotImplementedError()
+        if self.allocated:
+            return
+        if not self.finalized:
+            self.transform_computations()
 
-    @abc.abstractmethod
-    def sum(self, x, axis, out):
-        """
-        sum of x over axis
-
-        Arguments:
-          x: TODO
-          axis: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def tanh(self, x, out):
-        """
-        tanh(x)
+        self.allocate_storage()
 
-        Arguments:
-          x: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
+        for op in self.inits + self.ops:
+            self.initialize_constant(op)
 
-    # @abc.abstractmethod
-    def allreduce(self, x, out):
-        """
-        MPI allreduce
+        self.allocated = True
 
-        Arguments:
-          x: TODO
-          out: TODO
+    def initialize(self):
         """
-        raise NotImplementedError()
-
-    # @abc.abstractmethod
-    def conv2d(self, x, y, out):
+        Initialize storage.  Will allocate if not already performed.
         """
-        2 dimensional convolution
+        if self.initialized:
+            return
+        self.allocate()
 
-        Arguments:
-          x: TODO
-          y: TODO
-          out: TODO
-        """
-        raise NotImplementedError()
+        # Need to set initialized before we are done because the init computation will
+        # try to initialize.
+        self.initialized = True
+        self.init_computation()

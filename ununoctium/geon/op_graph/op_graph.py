@@ -17,7 +17,6 @@ from __future__ import division
 import numpy as np
 import cachetools
 from builtins import object, str
-from functools import wraps
 
 from geon.backends.graph.environment import get_current_ops, captured_ops
 from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
@@ -26,52 +25,17 @@ from geon.op_graph.nodes import Node
 from geon.util.generics import generic_method
 
 
-def tensor_descriptions(args, transformer):
+def tensor_descriptions(args):
     """
     TODO.
 
     Arguments:
       args: TODO
-      transformer: TODO
 
     Returns:
       TODO
     """
-    return (arg.tensor_description(transformer) for arg in args)
-
-
-def from_transformer_cache(f):
-    """
-    Decorator which caches the return value of method `f` inside the `cache`
-    attribute of the transformer.
-
-    The transformer should be passed in as the first and only argument to the
-    wrapped method.
-
-    TODO: why cache in the transformer instead of self?
-
-    Arguments:
-      f: TODO
-
-    Returns:
-      TODO
-    """
-    @wraps(f)
-    def wrapper(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        key = (f.__name__, self)
-        if key not in transformer.cache:
-            transformer.cache[key] = f(self, transformer)
-        return transformer.cache[key]
-    return wrapper
+    return (arg.tensor_description() for arg in args)
 
 
 class Op(Node):
@@ -94,10 +58,6 @@ class Op(Node):
         ops = get_current_ops()
         if ops is not None:
             ops.append(self)
-
-        # if transform_hook is not None, it should be a function which will
-        # be called when this Op is transformed by a Transformer
-        self.transform_hook = None
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -302,33 +262,11 @@ class Op(Node):
         """
         SimplePrune(results)
 
-    def transform(self, transformer, *args):
-        """
-        Should call transformer.op_name(...) to execute low level ops.
+    def tensor_description(self):
+        return None
 
-        Called by self.transform_call_info which is called by
-        Transformer.transform_ordered_ops.
-
-        WILL BE DEPRECATED SOON
-
-        Arguments:
-          transformer: TODO
-          *args: TODO
-        """
-        pass
-
-    def allocate(self, transformer):
-        """
-        Fills the memory of this op with its initial value.
-        TODO: rename or change this function to actually allocate memory
-
-        Arguments:
-          transformer: TODO
-        """
-        pass
-
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         Creates the tensor descriptions (of this op or its arguments)
         required to evaluate it.
@@ -337,66 +275,31 @@ class Op(Node):
         (in the transform_call_info) method.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        return list(tensor_descriptions(self.args, transformer))
-
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        self.call_info(transformer)
-
-    def transform_call_info(self, transformer):
-        """
-        Takes the value of the evaluated call info and passes it into
-        the transform method to compute the result of this op.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        def value(arg):
-            """
-            TODO.
-
-            Arguments:
-              arg: TODO
-
-            Returns:
-              TODO
-            """
-            if isinstance(arg, TensorDescription):
-                return arg.value
-            else:
-                raise TypeError((
-                    'call_info is expected to return an iterable of '
-                    'TensorDescriptions.  Found a {arg_type} inside the '
-                    'iterable returned by an Op of type {op_type}.  If '
-                    'you are trying to pass parameters from your Op to the '
-                    'Transformer, override the transform method and add '
-                    'those parameters to the argument list passed to the '
-                    'transformer.op_name method there.'
-                ).format(
-                    arg_type=type(arg),
-                    op_type=type(self)
-                ))
-
-        self.transform(
-            transformer,
-            *list(map(value, self.call_info(transformer)))
-        )
+        return list(tensor_descriptions(self.args))
 
     def __str__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
+
+
+class InitTensor(Op):
+    """
+    Initializes a device tensor from a CPU tensor.
+
+    :ivar valfun: A CPU function that produces the initial value for the tensor.
+    """
+    def __init__(self, tensor, valfun, **kwargs):
+        """
+
+        :param tensor: Tensor to be intialized.
+        :param valfun: Function that performs initialization
+        :param kwargs: Other op args.
+        """
+        super(InitTensor, self).__init__(args=(tensor,), **kwargs)
+        self.valfun = valfun
 
 
 class SetItem(Op):
@@ -406,33 +309,18 @@ class SetItem(Op):
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        tensor, val = tensor_descriptions(self.args, transformer)
+        tensor, val = tensor_descriptions(self.args)
         return [tensor, val.reaxe(tensor.axes)]
-
-    def transform(self, transformer, tensor, val):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          tensor: TODO
-          val: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.set_item(tensor, self.item, val)
 
 
 class doall(Op):
@@ -441,11 +329,8 @@ class doall(Op):
     def __init__(self, all, **kwargs):
         super(doall, self).__init__(args=all, **kwargs)
 
-    def call_info(self, transformer):
-        pass
-
-    def transform_call_info(self, *args, **kargs):
-        pass
+    def call_info(self):
+        return []
 
 
 class Fill(Op):
@@ -454,19 +339,6 @@ class Fill(Op):
     def __init__(self, tensor, const, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
         self.const = const
-
-    def transform(self, transformer, tensor):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          tensor: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.fill(tensor, self.const)
 
 
 class TensorOp(Op):
@@ -483,14 +355,6 @@ class TensorOp(Op):
 
         # Derivative will be scaled by this
         self.scale = scale
-
-    @property
-    def output(self):
-        """TODO."""
-        if self.__out is not None:
-            return self.__out
-        else:
-            return self
 
     def generate_add_delta(self, adjoints, delta):
         """
@@ -597,39 +461,21 @@ class TensorOp(Op):
     def __axes__(self):
         return self.axes
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         Returns a TensorDescription describing the output of this TensorOp
 
-        Arguments:
-          transformer: TODO
-
         Returns:
-          TODO
+          TensorDescription for this op.
         """
-        return TensorDescription(self.axes, transformer, dtype=self.dtype)
-
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        self.tensor_description(transformer)
-        self.call_info(transformer)
+        return TensorDescription(self.axes, dtype=self.dtype)
 
     @property
     def axes(self):
         """TODO."""
         if self.__axes is not None:
             return self.__axes
-        elif self.__out is not None:
-            return self.__out.axes
         else:
             raise NotImplementedError
 
@@ -642,20 +488,6 @@ class TensorOp(Op):
           **kwargs: TODO
         """
         pass
-
-    @from_transformer_cache
-    def call_info(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        return [self.tensor_description(transformer)]\
-            + super(TensorOp, self).call_info(transformer)
 
     # Required for parameter initializers
     @property
@@ -675,6 +507,17 @@ class TensorOp(Op):
         """
         return mean(self, out_axes=out_axes, **kwargs)
 
+    @property
+    def value(self):
+        """
+        Returns a handle to the device tensor.
+
+        The transformer must have been initialized.
+
+        :return: A handle to the device tensor.
+        """
+        return self.tensor_description().value
+
 
 class Broadcast(TensorOp):
     """Used to add additional axes for a returned derivative."""
@@ -682,18 +525,17 @@ class Broadcast(TensorOp):
     def __init__(self, x, **kwargs):
         super(Broadcast, self).__init__(args=(x,), **kwargs)
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        td, = tensor_descriptions(self.args, transformer)
+        td, = tensor_descriptions(self.args)
         return td.reaxe(self.axes)
 
 
@@ -706,18 +548,17 @@ class ExpandDims(TensorOp):
         self.axis = axis
         self.dim = dim
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         return x.reaxe_with_dummy_axis(self.axis, self.dim)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -750,18 +591,17 @@ class Slice(TensorOp):
         )
         self.slices = slices
 
-    @from_transformer_cache
-    def tensor_description(self, transformer):
+    @cachetools.cached({})
+    def tensor_description(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         return x.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -832,32 +672,18 @@ class Unslice(ComputationOp):
         self.slices = slices
         self.input_axes = x.axes
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        td, x = super(Unslice, self).call_info(transformer)
-        return [td, td.slice(self.slices, self.input_axes), x]
-
-    def transform(self, transformer, out, out_sliced, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          out_sliced: TODO
-          x: TODO
-        """
-        transformer.fill(out, 0)
-        transformer.set_item(out_sliced, (), x)
+        x, = super(Unslice, self).call_info()
+        return [self.tensor_description().slice(self.slices, self.input_axes), x]
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -891,7 +717,14 @@ class RNG(object):
         Returns:
           TODO
         """
-        return Uniform(rng=self.rng, low=low, high=high, size=size, **kwargs)
+
+        def value_fun(tensor_description):
+            return self.rng.uniform(low, high, tensor_description.sizes).astype(
+                tensor_description.dtype)
+
+        val = constant_storage(axes=size, **kwargs)
+        val.initializers.append(InitTensor(val, value_fun))
+        return val
 
     def normal(self, loc, scale, size, **kwargs):
         """
@@ -906,59 +739,15 @@ class RNG(object):
         Returns:
           TODO
         """
-        return Normal(rng=self.rng, loc=loc, scale=scale, size=size, **kwargs)
 
+        def value_fun(tensor_description):
+            return self.rng.normal(
+                loc, scale, tensor_description.sizes).astype(
+                tensor_description.dtype)
 
-class RNGOp(AllocationOp):
-    """TODO."""
-
-    def __init__(self, rng, **kwargs):
-        super(RNGOp, self).__init__(**kwargs)
-        self.rng = rng
-
-
-class Normal(RNGOp):
-    """TODO."""
-
-    def __init__(self, loc=0.0, scale=1.0, size=None, **kwargs):
-        super(Normal, self).__init__(axes=size, **kwargs)
-        self.loc = loc
-        self.scale = scale
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.rng_normal_tensor(
-            self.rng, td,
-            self.loc, self.scale
-        )
-
-
-class Uniform(RNGOp):
-    """TODO."""
-
-    def __init__(self, low=0.0, high=1.0, size=None, **kwargs):
-        super(Uniform, self).__init__(axes=size, **kwargs)
-        self.low = low
-        self.high = high
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.rng_uniform_tensor(
-            self.rng, td,
-            self.low, self.high
-        )
+        val = constant_storage(axes=size, **kwargs)
+        val.initializers.append(InitTensor(val, value_fun))
+        return val
 
 
 class ElementWise(ComputationOp):
@@ -976,21 +765,17 @@ class ElementWise(ComputationOp):
             **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        ci = [self.tensor_description(transformer)]
-        for arg in tensor_descriptions(self.args, transformer):
-            ci.append(arg.reaxe(self.axes))
-        return ci
+        return [arg.reaxe(self.axes) for arg in tensor_descriptions(self.args)]
 
 
 class AllReduce(ElementWise):
@@ -998,20 +783,6 @@ class AllReduce(ElementWise):
 
     def __init__(self, x, **kwargs):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        return transformer.allreduce(x, out)
 
 
 class placeholder(AllocationOp):
@@ -1086,52 +857,25 @@ class Constant(AllocationOp):
             cl=self.__class__.__name__, const=self.const)
 
 
-class NumPyTensor(AllocationOp):
-    """
-    A NumPy tensor with attached axes information.
+def NumPyTensor(nptensor, axes, **kwargs):
+    axes = Axes(axes)
+    if nptensor.shape != axes.lengths:
+        raise ValueError((
+            "Tried to initialize NumPyTensor with numpy array of "
+            "shape {np_shape} though gave axes with a different "
+            "shape {axes_shape}."
+        ).format(
+            np_shape=nptensor.shape,
+            axes_shape=axes.lengths,
+        ))
 
-    This is how you define tensor valued constants for now.
-    """
+    def value_fun(tensor):
+        return nptensor
 
-    def __init__(self, nptensor, axes, **kwargs):
-        axes = Axes(axes)
-        self.nptensor = nptensor
-        if nptensor.shape != axes.lengths:
-            raise ValueError((
-                "Tried to initialize NumPyTensor with numpy array of "
-                "shape {np_shape} though gave axes with a different "
-                "shape {axes_shape}."
-            ).format(
-                np_shape=nptensor.shape,
-                axes_shape=axes.lengths,
-            ))
+    val = constant_storage(dtype=nptensor.dtype, axes=axes, **kwargs)
+    val.initializers.append(InitTensor(val, value_fun))
 
-        super(NumPyTensor, self).__init__(
-            dtype=nptensor.dtype, axes=axes, **kwargs
-        )
-        self.tags.add('persistent')
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        td = self.tensor_description(transformer)
-        td.value = transformer.nparray(self.nptensor)
-
-    @property
-    def graph_label(self):
-        """TODO."""
-        return str(self.nptensor.shape)
-
-    def __str__(self):
-        return '<{cl} ({const})>'.format(
-            cl=self.__class__.__name__, const=self.nptensor)
+    return val
 
 
 class absolute(ElementWise):
@@ -1139,20 +883,6 @@ class absolute(ElementWise):
 
     def __init__(self, x, **kwargs):
         super(absolute, self).__init__(args=(x,), **kwargs)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.absolute(x, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1174,21 +904,6 @@ class add(ElementWise):
 
     def __init__(self, x, y, **kwargs):
         super(add, self).__init__(args=(x, y), **kwargs)
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.add(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -1221,36 +936,18 @@ class argmax(ComputationOp):
             args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
-        return [
-            self.tensor_description(transformer),
-            x.reaxe(self.max_axes + self.axes)
-        ]
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.argmax(x, out)
+        x, = tensor_descriptions(self.args)
+        return [x.reaxe(self.max_axes + self.axes)]
 
 
 class argmin(ComputationOp):
@@ -1267,36 +964,18 @@ class argmin(ComputationOp):
             args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
         )
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
         x, = tensor_descriptions(self.args)
-        return [
-            self.tensor_description(transformer),
-            x.reaxe(self.min_axes + self.axes)
-        ]
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.argmax(x, out)
+        return [x.reaxe(self.min_axes + self.axes)]
 
 
 class cos(ElementWise):
@@ -1319,41 +998,12 @@ class cos(ElementWise):
         """
         x.generate_add_delta(adjoints, delta * sin(x))
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.cos(x, out)
-
 
 class divide(ElementWise):
     """TODO."""
 
     def __init__(self, x, y, **kwargs):
         super(divide, self).__init__(args=(x, y), **kwargs)
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.divide(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -1451,18 +1101,17 @@ class dot(ComputationOp):
             return (out_axis_ids, red_axis_ids, red_axis_ids,
                     dummy, forward_axis_ids)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, y = tensor_descriptions(self.args, transformer)
+        x, y = tensor_descriptions(self.args)
         out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
             = self.axis_id_info
 
@@ -1476,25 +1125,9 @@ class dot(ComputationOp):
             forward_axis_ids=forward_axis_ids
         )
         a_axes, b_axes = a.axes, b.axes
-        o = self.tensor_description(transformer)\
-            .reaxe(a_axes[:-1].concat(b_axes[1:]))
+        o = self.tensor_description().reaxe(a_axes[:-1].concat(b_axes[1:]))
 
         return [o, a, b]
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.dot(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -1532,115 +1165,25 @@ class ElementWiseBoolean(ElementWise):
 class equal(ElementWiseBoolean):
     """TODO."""
 
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.equal(x, y, out)
-
 
 class not_equal(ElementWiseBoolean):
     """TODO."""
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.not_equal(x, y, out)
 
 
 class greater(ElementWiseBoolean):
     """TODO."""
 
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.greater(x, y, out)
-
 
 class less(ElementWiseBoolean):
     """TODO."""
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.less(x, y, out)
 
 
 class greater_equal(ElementWiseBoolean):
     """TODO."""
 
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.greater_equal(x, y, out)
-
 
 class less_equal(ElementWiseBoolean):
     """TODO."""
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.less_equal(x, y, out)
 
 
 class Softmax(object):
@@ -1728,31 +1271,29 @@ class ReductionOp(ComputationOp):
 
         return out_axes, reduction_axes
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
-        out = self.tensor_description(transformer)
+        x, = tensor_descriptions(self.args)
 
         if len(self.reduction_axes) == 0:
             # TODO do this as a reaxe to 1d or something
             xr = x.reaxe(self.axes)
             self.mode = 'copy'
-            return [out, xr]
+            return [xr]
         else:
             red_axes = [FlattenedAxis(self.reduction_axes)]
             red_axes.extend(self.axes)
             red_axes = Axes(red_axes)
             self.mode = 0
-            return [out, x.reaxe(red_axes)]
+            return [x.reaxe(red_axes)]
 
 
 class max(ReductionOp):
@@ -1760,24 +1301,6 @@ class max(ReductionOp):
 
     def __init__(self, x, **kwargs):
         super(max, self).__init__(x, **kwargs)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        if self.mode is 'copy':
-            # TODO Change this to a node replace
-            transformer.set_item(out, (), x)
-        else:
-            transformer.max(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1800,24 +1323,6 @@ class min(ReductionOp):
     def __init__(self, x, **kwargs):
         super(min, self).__init__(x, **kwargs)
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        if self.mode is 'copy':
-            # TODO Change this to a node replace
-            transformer.set_item(out, (), x)
-        else:
-            transformer.min(x, self.mode, out)
-
     def generate_adjoints(self, adjoints, delta, x):
         """
         TODO.
@@ -1838,24 +1343,6 @@ class sum(ReductionOp):
 
     def __init__(self, x, **kwargs):
         super(sum, self).__init__(x, **kwargs)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        if self.mode is 'copy':
-            # TODO Change this to a node replace
-            transformer.set_item(out, (), x)
-        else:
-            transformer.sum(x, self.mode, out)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1899,19 +1386,6 @@ class tensor_size(ComputationOp):
         self.reduction_axes = reduction_axes
         super(tensor_size, self).__init__(axes=Axes())
 
-    def transform(self, transformer, out):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.fill(out, self.reduction_axes.size)
-
 
 def pad(x, axes, paddings, **kwargs):
     """
@@ -1948,7 +1422,7 @@ def pad(x, axes, paddings, **kwargs):
 class Variable(AllocationOp):
     """TODO."""
 
-    def __init__(self, tags=None, trainable=True, persistent=True, **kwargs):
+    def __init__(self, tags=None, trainable=True, persistent=True, constant=False, **kwargs):
         if tags is None:
             tags = set()
         else:
@@ -1957,6 +1431,8 @@ class Variable(AllocationOp):
             tags.add('trainable')
         if persistent:
             tags.add('persistent')
+        if constant:
+            tags.add('constant')
         super(Variable, self).__init__(tags=tags, **kwargs)
 
 
@@ -1970,7 +1446,11 @@ def temporary(**kwargs):
     Returns:
       TODO
     """
-    return Variable(trainable=False, persistent=True, **kwargs)
+    return Variable(trainable=False, persistent=True, constant=False, **kwargs)
+
+
+def constant_storage(**kwargs):
+    return Variable(trainable=False, persistent=True, constant=True, **kwargs)
 
 
 class exp(ElementWise):
@@ -1992,20 +1472,6 @@ class exp(ElementWise):
           TODO
         """
         x.generate_add_delta(adjoints, delta * self)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.exp(x, out)
 
 
 class log(ElementWise):
@@ -2054,39 +1520,9 @@ class log(ElementWise):
 
         do_adjoints(delta, x)
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
 
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.log(x, out)
-
-
-class safelog(log):
-    """TODO."""
-    expm50 = np.exp(-50.)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.maximum(x, safelog.expm50, out)
-        transformer.log(out, out)
+def safelog(x, limit=np.exp(-50)):
+    return log(maximum(x, limit))
 
 
 class maximum(ElementWise):
@@ -2094,21 +1530,6 @@ class maximum(ElementWise):
 
     def __init__(self, x, y, **kwargs):
         super(maximum, self).__init__(args=(x, y), **kwargs)
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.maximum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2132,21 +1553,6 @@ class minimum(ElementWise):
 
     def __init__(self, x, y, **kwargs):
         super(minimum, self).__init__(args=(x, y), **kwargs)
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.minimum(x, y, out=out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2187,21 +1593,6 @@ class multiply(ElementWise):
         x.generate_add_delta(adjoints, delta * y)
         y.generate_add_delta(adjoints, x * delta)
 
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.multiply(x, y, out)
-
 
 class negative(ElementWise):
     """TODO."""
@@ -2223,20 +1614,6 @@ class negative(ElementWise):
         """
         x.generate_add_delta(adjoints, -delta)
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.negative(x, out)
-
 
 class onehot(ComputationOp):
     """TODO."""
@@ -2254,38 +1631,23 @@ class onehot(ComputationOp):
         self.axis = axis
         super(onehot, self).__init__(args=(x,), axes=axes, **kwargs)
 
-    @from_transformer_cache
-    def call_info(self, transformer):
+    @cachetools.cached({})
+    def call_info(self):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
 
         Returns:
           TODO
         """
-        x, = tensor_descriptions(self.args, transformer)
+        x, = tensor_descriptions(self.args)
         axis, axes = self.axis, self.axes
         reaxes = Axes([axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes()])
         return [
-            self.tensor_description(transformer).reaxe(reaxes),
+            self.tensor_description().reaxe(reaxes),
             x.reaxe(Axes(FlattenedAxis(x.axes)))
         ]
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.onehot(x, out)
 
 
 class power(ElementWise):
@@ -2293,21 +1655,6 @@ class power(ElementWise):
 
     def __init__(self, x, y, **kwargs):
         super(power, self).__init__(args=(x,), **kwargs)
-
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.pow(x, y, out)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -2346,40 +1693,12 @@ class reciprocal(ElementWise):
         """
         x.generate_add_delta(adjoints, -self * self * delta)
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.reciprocal(x, out)
-
 
 class sign(ElementWise):
     """TODO."""
 
     def __init__(self, x, **kwargs):
         super(sign, self).__init__(args=(x,), **kwargs)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.sign(x, out)
 
 
 class Sigmoid(object):
@@ -2439,20 +1758,6 @@ class sin(ElementWise):
         """
         x.generate_add_delta(adjoints, delta * cos(x))
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.sin(x, out)
-
 
 class sqrt(ElementWise):
     """TODO."""
@@ -2474,20 +1779,6 @@ class sqrt(ElementWise):
         """
         x.generate_add_delta(adjoints, .5 * delta * self)
 
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.sqrt(x, out)
-
 
 class square(ElementWise):
     """TODO."""
@@ -2508,20 +1799,6 @@ class square(ElementWise):
           TODO
         """
         x.generate_add_delta(adjoints, 2.0 * delta * x)
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.square(x, out)
 
 
 class subtract(ElementWise):
@@ -2546,21 +1823,6 @@ class subtract(ElementWise):
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, -delta)
 
-    def transform(self, transformer, out, x, y):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.subtract(x, y, out)
-
 
 class tanh(ElementWise):
     """TODO."""
@@ -2581,20 +1843,6 @@ class tanh(ElementWise):
           TODO
         """
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
-
-    def transform(self, transformer, out, x):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          out: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        transformer.tanh(x, out)
 
 
 class Function(Node):
@@ -2617,36 +1865,10 @@ class Function(Node):
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
 
-    def create_tensor_descriptions(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        for op in self.instructions:
-            op.create_tensor_descriptions(transformer)
-
     @property
     def inputs(self):
         """TODO."""
         return self.use
-
-    def allocate(self, transformer):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-
-        Returns:
-          TODO
-        """
-        for op in self.instructions:
-            op.allocate(transformer)
 
 
 class Buffer(object):
@@ -2812,36 +2034,6 @@ def cross_entropy_binary(y, t, out_axes=None):
       TODO
     """
     return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
-
-
-def set_break(op, name=None):
-    """
-    TODO.
-
-    Arguments:
-      op: TODO
-      name: TODO
-
-    Returns:
-      TODO
-    """
-    def hook(transformer, op, transform_op):
-        """
-        TODO.
-
-        Arguments:
-          transformer: TODO
-          op: TODO
-          transform_op: TODO
-
-        Returns:
-          TODO
-        """
-        transform_op(op)
-        # print(name)
-        pass
-    op.transform_hook = hook
-    return op
 
 
 class SimplePrune(object):

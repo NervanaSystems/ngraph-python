@@ -84,7 +84,7 @@ if nervana_graph.loss is not None and nervana_graph.update is not None:
     else:
         update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
 
-trans.finalize()
+trans.transform_computations()
 trans.dataflow.view()
 
 def eval_test(test_data, graph, inference_comp, pred_op):

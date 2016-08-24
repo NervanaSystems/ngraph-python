@@ -37,7 +37,7 @@ def test_create_nervana_graph(pb_file, execute=False):
 
     trans = be.NumPyTransformer()
     comp = trans.computation(graph.last_op)
-    trans.finalize()
+    trans.transform_computations()
     trans.dataflow.view()
 
     if execute:

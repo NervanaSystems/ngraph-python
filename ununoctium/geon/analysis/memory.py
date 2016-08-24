@@ -20,7 +20,7 @@ from itertools import combinations
 from geon.util.graph import UndirectedGraph
 from geon.analysis.dataflow import DataFlowGraph
 from geon.analysis.fusion import KernelFlowGraph
-from geon.op_graph.op_graph import Buffer, NumPyTensor, TensorOp
+from geon.op_graph.op_graph import Buffer, TensorOp
 
 
 def _random_colors(N, alpha=.5):
@@ -118,7 +118,7 @@ class InterferenceGraph(UndirectedGraph):
         return total_mem, buffers
 
 
-def bind_initializers(transformer, ops):
+def bind_initializers(ops):
     """
     TODO.
 
@@ -131,17 +131,11 @@ def bind_initializers(transformer, ops):
     """
     for op in ops:
         if isinstance(op, TensorOp):
-            buffer = op.tensor_description(transformer).buffer
+            buffer = op.tensor_description().buffer
             # assign the same buffer to all of the op's initializers
             for i in op.initializers:
                 if isinstance(i, TensorOp):
-                    i.tensor_description(transformer).buffer = buffer
-                for a in i.args:
-                    if isinstance(a, NumPyTensor):
-                        a.tensor_description(transformer).buffer\
-                            = Buffer(-1, a.nptensor.size)
-                        a.tensor_description(transformer).buffer.data\
-                            = a.nptensor
+                    i.tensor_description().buffer = buffer
 
 
 def assign_buffers(transformer, results, fusible=None):
@@ -166,11 +160,11 @@ def assign_buffers(transformer, results, fusible=None):
     ifg = InterferenceGraph(dfg.liveness())
     memory, buffers = ifg.color()
     # Binds initializers
-    bind_initializers(transformer, dfg.inputs)
+    bind_initializers(dfg.inputs)
     # set style
     for op in all_ops:
         if isinstance(op, TensorOp):
-            tensor = op.tensor_description(transformer)
+            tensor = op.tensor_description()
             op.style = tensor.style
     # dfg.view()
     return dfg, memory

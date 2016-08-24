@@ -197,7 +197,7 @@ class MyTest(be.Model):
             print("Epoch {epoch}".format(epoch=epoch))
             training_error = 0
             training_n = 0
-            learning_rate.value = .1 / (1 + epoch) / train.bsz
+            learning_rate.value[()] = .1 / (1 + epoch) / train.bsz
             for mb_idx, (x, y) in enumerate(train):
                 error = self.train_comp(x.reshape(graph.x.shape.lengths),
                                         y.reshape(graph.y.shape.lengths))
