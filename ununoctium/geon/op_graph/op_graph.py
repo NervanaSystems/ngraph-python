@@ -228,6 +228,14 @@ class Op(Node):
     @property
     @cachetools.cached({})
     def initial_adjoint(self):
+        """
+        Most models only require the adjoints map for their scalar loss
+        functions, in which case the adjoint is initialized to a scalar 1.
+        Some autodiff tests calculate the derivative of a tensor by
+        initializing all but one elements of a tensor to zero and the remaining
+        element to one.  To allow this, we create a placeholder for the initial
+        adjoint and allow it to be accessed by the _initial_adjoint field.
+        """
         if len(self.axes) == 0:
             return Constant(1)
         else:
