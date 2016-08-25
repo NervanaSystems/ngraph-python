@@ -72,7 +72,6 @@ def get_random_np_array(
     return arr
 
 
-@be.with_bound_environment
 def graphiti_l2_norm(np_array):
     """
     TODO.
@@ -85,7 +84,7 @@ def graphiti_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (be.AxisVar(name='axis%s' % i, length=l),)
+        axes += (be.Axis(name='axis%s' % i, length=l),)
     np_tensor = be.NumPyTensor(np_array, axes=axes)
     var = be.Variable(axes=axes, initial_value=np_tensor)
     return executor(be.sqrt(be.dot(var, var)))()
@@ -106,7 +105,6 @@ def test_l2_norm():
 
 
 @raise_all_numpy_errors
-@be.with_bound_environment
 def test_tensor_dot_tensor():
     """TODO."""
     delta = 1e-3

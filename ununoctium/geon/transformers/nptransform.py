@@ -256,7 +256,7 @@ class NumPyCodeGenerator(PyGen):
         self.append("""
         neon_conv_layer = ConvLayer(
             proxy_backend(), {output}.dtype,
-            N=arrayaxes.get_batch_axis().length,
+            N={bsz},
             C={input_shape}[0],
             D={input_shape}[1],
             H={input_shape}[2],
@@ -279,7 +279,7 @@ class NumPyCodeGenerator(PyGen):
         )
         """, output=output, input=input, filter=filter,
                     input_shape=input_shape, filter_shape=filter_shape,
-                    padding=padding, strides=strides)
+                    padding=padding, strides=strides, bsz=op.batch_axis.length)
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):

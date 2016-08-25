@@ -14,15 +14,16 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import numpy as np
+from contextlib import contextmanager
+
 import cachetools
+import numpy as np
 from builtins import object, str
 
-from geon.backends.graph.environment import get_current_ops, captured_ops
-from geon.op_graph.arrayaxes import get_batch_axes, TensorDescription, \
-    AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis,\
-    sample_axes, batch_axes
+from geon.op_graph.arrayaxes import TensorDescription, \
+    AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
 from geon.op_graph.nodes import Node
+from geon.util.threadstate import get_thread_state
 from geon.util.generics import generic_method
 
 
@@ -42,21 +43,42 @@ def tensor_descriptions(args):
 class Op(Node):
     """Any operation that can be in an AST"""
 
+    # Default is to not collect Ops as they are created
+    get_thread_state().ops = [None]
+
+    @staticmethod
+    def _get_thread_ops():
+        """
+        :return: The stack of Ops being collected.
+        """
+        return get_thread_state().ops
+
+    @staticmethod
+    @contextmanager
+    def captured_ops(ops=None):
+        """
+        Capture all Ops created within the context.
+
+        :param ops: List for collecting created ops.
+        """
+        try:
+            Op._get_thread_ops().append(ops)
+            yield (ops)
+        finally:
+            Op._get_thread_ops().pop()
+
     def __init__(self, initializers=None, **kwds):
         """
-        TODO.
 
-        Arguments:
-          initializers: Should be a list of Ops which are called to initialize this op.
+        :param initializers: List of one-time initializations to run before the op.
+        :param kwds:
         """
         super(Op, self).__init__(**kwds)
         self.schemas = []
         self._adjoints = None
         self.initializers = initializers or []
 
-        # TODO: used to capture assignment operations, required for compatibility with
-        # existing neon initializers.
-        ops = get_current_ops()
+        ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
 
@@ -343,9 +365,21 @@ class Fill(Op):
 
 
 class TensorOp(Op):
-    """Super class for all Ops whose output value is a Tensor."""
+    """
+    Super class for all Ops whose value is a Tensor.
+
+    :ivar dtype: The dtype of the tensor elements.
+    :ivar scale: If not None, scale grad by this amount.
+    """
 
     def __init__(self, dtype=None, axes=None, scale=None, **kwds):
+        """
+
+        :param dtype: The dtype of the tensor; defaults to np.float32
+        :param axes: The tensor axes.
+        :param scale: If specified, scales the gradient by this amount.
+        :param kwds: Op keywords.
+        """
         super(TensorOp, self).__init__(**kwds)
         if dtype is None:
             dtype = np.dtype(np.float32)
@@ -660,7 +694,7 @@ class AllocationOp(TensorOp):
             **kwargs):
         super(AllocationOp, self).__init__(**kwargs)
         if init is not None:
-            with captured_ops(self.initializers):
+            with Op.captured_ops(self.initializers):
                 init.fill(self)
         elif callable(initial_value):
             self.initializers.append(assign(self, initial_value()))
@@ -669,18 +703,15 @@ class AllocationOp(TensorOp):
 
 
 class ComputationOp(TensorOp):
-    """An TensorOp is the result of some sort of operation."""
+    """
+    A CopmutationOp is a Tensor result of some sort of operation.
+    """
 
-    def __init__(self, dtype=np.dtype(np.float32), batch_axes=None, **kwargs):
+    def __init__(self, **kwargs):
         super(ComputationOp, self).__init__(**kwargs)
-        self.dtype = dtype
 
         for arg in self.args:
             arg.users.add(self)
-
-        if batch_axes is None:
-            batch_axes = get_batch_axes()
-        self.batch_axes = batch_axes
 
     @property
     def defs(self):
@@ -955,8 +986,8 @@ class argmax(ComputationOp):
 
     def __init__(self, x, max_axes=None, **kwargs):
         if max_axes is None:
-            max_axes = sample_axes(x.axes)
-            axes = batch_axes(x.axes)
+            max_axes = x.axes.sample_axes()
+            axes = x.axes.batch_axes()
         else:
             axes = x.axes - max_axes
         self.max_axes = max_axes
@@ -983,8 +1014,8 @@ class argmin(ComputationOp):
 
     def __init__(self, x, min_axes=None, **kwargs):
         if min_axes is None:
-            min_axes = sample_axes(x.axes)
-            axes = batch_axes(x.axes)
+            min_axes = x.axes.sample_axes()
+            axes = x.axes.batch_axes()
         else:
             axes = x.axes - min_axes
         self.min_axes = min_axes
@@ -1235,7 +1266,7 @@ class Softmax(object):
           TODO
         """
         z = delta * op
-        zs = sum(z, reduction_axes=sample_axes(self.x.axes))
+        zs = sum(z, reduction_axes=self.x.axes.sample_axes())
         self.x.generate_add_delta(adjoints, (z - zs * op))
 
 
@@ -1252,7 +1283,7 @@ def softmax(x, softmax_axes=None, **kwargs):
       TODO
     """
     if softmax_axes is None:
-        softmax_axes = sample_axes(x.axes)
+        softmax_axes = x.axes.sample_axes()
     x = x - max(x, reduction_axes=softmax_axes)
     exps = exp(x)
     Z = sum(exps, reduction_axes=softmax_axes)
@@ -1286,7 +1317,7 @@ class ReductionOp(ComputationOp):
         """
         if reduction_axes is None:
             if out_axes is None:
-                reduction_axes = sample_axes(x.axes)
+                reduction_axes = x.axes.sample_axes()
             else:
                 reduction_axes = x.axes - Axes(out_axes)
         else:
@@ -1406,7 +1437,7 @@ class tensor_size(ComputationOp):
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         if reduction_axes is None:
             if out_axes is None:
-                reduction_axes = sample_axes(x.axes)
+                reduction_axes = x.axes.sample_axes()
             else:
                 reduction_axes = x.axes - Axes(out_axes)
         else:
@@ -1667,8 +1698,8 @@ class onehot(ComputationOp):
             axis = (axes - x.axes)[0]
         else:
             if axes is None:
-                x_sample = sample_axes(x.axes)
-                x_batch = batch_axes(x.axes)
+                x_sample = x.axes.sample_axes()
+                x_batch = x.axes.batch_axes()
                 axes = Axes(axis) + x_sample + x_batch
         self.axis = axis
         super(onehot, self).__init__(args=(x,), axes=axes, **kwargs)

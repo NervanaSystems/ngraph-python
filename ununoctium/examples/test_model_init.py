@@ -64,8 +64,9 @@ def linear(ns, x, axes, init=None, bias=None):
     Returns:
       TODO
     """
+    axes = Axes.as_axes(axes)
     ns.weights = be.Variable(axes=be.linear_map_axes(
-        be.sample_axes(x.axes), be.sample_axes(axes)), init=init)
+        x.axes.sample_axes(), axes.sample_axes()), init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
         ns.bias = be.Variable(axes=result.axes.sample, init=bias)
@@ -86,7 +87,7 @@ def mlp(ns, x, y):
     Returns:
       TODO
     """
-    nns_axes = (be.AxisVar(like=ax.Y, length=200),)
+    nns_axes = (be.Axis(like=ax.Y, length=200),)
     value = be.tanh(linear(x, axes=nns_axes, init=Uniform(-0.1, 0.1)))
     value = be.softmax(linear(value, axes=y.axes, init=Uniform(-0.1, 0.1)))
 
@@ -99,9 +100,6 @@ class MyTest(be.Model):
     def __init__(self, **kwargs):
         super(MyTest, self).__init__(**kwargs)
         g = self.graph
-
-        be.set_batch_axes([ax.N])
-        be.set_phase_axes([ax.Phi])
 
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))
@@ -126,71 +124,72 @@ class MyTest(be.Model):
         Returns:
           TODO
         """
-        with be.bound_environment() as env:
-            graph = self.graph
-            ax.N.length = train.bsz
-            c, h, w = train.shape
-            ax.C.length = c
-            ax.H.length = h
-            ax.W.length = w
-            ax.Y.length = train.nclasses
+        # TODO Remove env
+        env = None
+        graph = self.graph
+        ax.N.length = train.bsz
+        c, h, w = train.shape
+        ax.C.length = c
+        ax.H.length = h
+        ax.W.length = w
+        ax.Y.length = train.nclasses
 
-            # TODO: learning_rate might be a variable rather than placeholder.
-            learning_rate = be.placeholder(axes=())
-            graph.variables = graph.loss.variables()
-            derivs = [be.deriv(graph.loss, param) for param in graph.variables]
-            # check for the mpi_flag
-            # if the flag is set, we add an AllReduce node after each derivs
-            # node to synch up
-            synced_derivs = []
-            if args.mpi_flag:
-                synced_derivs = [be.AllReduce(deriv) for deriv in derivs]
-            else:
-                synced_derivs = derivs
+        # TODO: learning_rate might be a variable rather than placeholder.
+        learning_rate = be.placeholder(axes=())
+        graph.variables = graph.loss.variables()
+        derivs = [be.deriv(graph.loss, param) for param in graph.variables]
+        # check for the mpi_flag
+        # if the flag is set, we add an AllReduce node after each derivs
+        # node to synch up
+        synced_derivs = []
+        if args.mpi_flag:
+            synced_derivs = [be.AllReduce(deriv) for deriv in derivs]
+        else:
+            synced_derivs = derivs
 
-            updates = be.doall(
-                all=[be.assign(param, param - learning_rate * deriv)
-                     for param, deriv in zip(graph.variables, synced_derivs)])
+        updates = be.doall(
+            all=[be.assign(param, param - learning_rate * deriv)
+                 for param, deriv in zip(graph.variables, synced_derivs)])
 
-            self.train_comp = self.transformer.computation(self.graph.value,
-                                                           graph.loss,
-                                                           updates,
-                                                           synced_derivs,
-                                                           graph.variables)
-            self.test_comp = self.transformer.computation(self.graph.value)
-            self.transformer.allocate()
+        self.train_comp = self.transformer.computation(self.graph.value,
+                                                       graph.loss,
+                                                       updates,
+                                                       synced_derivs,
+                                                       graph.variables)
+        self.test_comp = self.transformer.computation(self.graph.value)
+        self.transformer.allocate()
 
-            for epoch in range(args.epochs):
-                # TODO: need to fix that the processed data does not equal to
-                # the actual number of the data
-                start_train = default_timer()
+        for epoch in range(args.epochs):
+            # TODO: need to fix that the processed data does not equal to
+            # the actual number of the data
+            start_train = default_timer()
 
-                train_loss = 0
-                train_error = 0
-                n_bs = 0
-                nprocessed = 0
-                learning_rate.value = .1 / (1 + epoch) / train.bsz
-                for mb_idx, (xraw, yraw) in enumerate(train):
-                    graph.x.value[()] = xraw
-                    graph.y.value[()] = yraw
-                    loss = self.train_comp()
+            train_loss = 0
+            train_error = 0
+            n_bs = 0
+            nprocessed = 0
+            learning_rate.value = .1 / (1 + epoch) / train.bsz
+            for mb_idx, (xraw, yraw) in enumerate(train):
+                graph.x.value[()] = xraw
+                graph.y.value[()] = yraw
+                loss = self.train_comp()
 
-                    train_loss += loss / float(train.bsz)
-                    train_error += np.sum(np.not_equal(np.argmax(
-                        loss, axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
-                    n_bs += 1
-                    nprocessed += xraw.shape[1]
+                train_loss += loss / float(train.bsz)
+                train_error += np.sum(np.not_equal(np.argmax(
+                    loss, axis=0), np.argmax(yraw, axis=0))) / float(train.bsz)
+                n_bs += 1
+                nprocessed += xraw.shape[1]
 
-                train_loss /= n_bs
-                train_error = train_error / n_bs * 100
-                test_error = self.test(env, test)
+            train_loss /= n_bs
+            train_error = train_error / n_bs * 100
+            test_error = self.test(env, test)
 
-                print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} '.format(
-                    epoch, default_timer() - start_train, float(train_error), test_error))
+            print('epoch: {:d} time: {:.2f}s train_error: {:.2f} test_error: {:.2f} '.format(
+                epoch, default_timer() - start_train, float(train_error), test_error))
 
-                # TODO: figure out why train_loss is not scalar
+            # TODO: figure out why train_loss is not scalar
 
-                train.reset()
+            train.reset()
 
     @be.with_graph_scope
     def test(self, env, test, printParam=False):
@@ -206,25 +205,24 @@ class MyTest(be.Model):
           TODO
         """
         graph = self.graph
-        with be.bound_environment(env):
-            enp = be.NumPyTransformer(self.graph.value)
-            comp = enp.computation(self.graph.value, graph.x, graph.y)
+        enp = be.NumPyTransformer(self.graph.value)
+        comp = enp.computation(self.graph.value, graph.x, graph.y)
 
-            test_error = 0
-            n_bs = 0
-            for mb_idx, (xraw, yraw) in enumerate(test):
-                # TODO: need to fix that the processed data does not equal to
-                # the actual number of the data
-                val = comp(xraw, yraw)
+        test_error = 0
+        n_bs = 0
+        for mb_idx, (xraw, yraw) in enumerate(test):
+            # TODO: need to fix that the processed data does not equal to
+            # the actual number of the data
+            val = comp(xraw, yraw)
 
-                test_error += np.sum(
-                    np.not_equal(
-                        np.argmax(
-                            val, axis=0), np.argmax(
-                            yraw, axis=0)))
-                n_bs += 1
+            test_error += np.sum(
+                np.not_equal(
+                    np.argmax(
+                        val, axis=0), np.argmax(
+                        yraw, axis=0)))
+            n_bs += 1
 
-            return float(test_error / float(test.bsz) / n_bs * 100)
+        return float(test_error / float(test.bsz) / n_bs * 100)
 
 # data provider
 imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,

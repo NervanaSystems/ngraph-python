@@ -22,14 +22,11 @@ import geon.frontends.base.axis as ax
 from geon.util.utils import executor
 
 
-@be.with_bound_environment
 def test_constant_tensor_convolution_fprop():
     """
     A simple test running a convolution filter over an input where both filter
     and input are ones and both are the same size.
     """
-
-    arrayaxes.set_batch_axes([ax.N])
 
     ax.N.length = 1
     ax.C.length = 2

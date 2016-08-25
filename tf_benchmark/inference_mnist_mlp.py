@@ -27,7 +27,6 @@ from neon.util.argparser import NeonArgparser
 
 import numpy as np
 import geon as be
-from geon.backends.graph.environment import Environment
 from util.importer import create_nervana_graph
 
 # args and environment
@@ -36,7 +35,8 @@ parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
                     help='GraphDef protobuf')
 args = parser.parse_args()
-env = Environment()
+# TODO Get rid of env
+env = None
 
 
 def inference_mnist_mlp():
@@ -44,42 +44,42 @@ def inference_mnist_mlp():
     mnist_data = MNIST(path=args.data_dir).gen_iterators()
     test_data = mnist_data['valid']
 
-    with be.bound_environment(env):
-        # build graph
-        frontend_model = create_nervana_graph(args.pb_file, env)
+    # build graph
+    # TODO Remove environment
+    frontend_model = create_nervana_graph(args.pb_file, None)
 
-        # init transformer
-        transformer = be.NumPyTransformer()
-        infer_computation = transformer.computation(frontend_model.last_op,
-                                                    frontend_model.x)
+    # init transformer
+    transformer = be.NumPyTransformer()
+    infer_computation = transformer.computation(frontend_model.last_op,
+                                                frontend_model.x)
 
-        # set ups
-        total_error = 0
-        total_num_samples = 0
+    # set ups
+    total_error = 0
+    total_num_samples = 0
 
-        for batch_idx, (x_raw, y_raw) in enumerate(test_data):
-            # increment total number of samples
-            num_samples = x_raw.shape[1]
-            total_num_samples += num_samples
+    for batch_idx, (x_raw, y_raw) in enumerate(test_data):
+        # increment total number of samples
+        num_samples = x_raw.shape[1]
+        total_num_samples += num_samples
 
-            # get inference result
-            result = infer_computation(x_raw)
+        # get inference result
+        result = infer_computation(x_raw)
 
-            # get errors
-            pred = np.argmax(result, axis=1)
-            gt = np.argmax(y_raw, axis=0)
-            batch_error = float(np.sum(np.not_equal(pred, gt)))
-            batch_error_rate = batch_error / float(num_samples) * 100.
-            total_error += batch_error
+        # get errors
+        pred = np.argmax(result, axis=1)
+        gt = np.argmax(y_raw, axis=0)
+        batch_error = float(np.sum(np.not_equal(pred, gt)))
+        batch_error_rate = batch_error / float(num_samples) * 100.
+        total_error += batch_error
 
-            print("batch index: %d" % batch_idx)
-            print("prediction result: %s" % result)
-            print("shape of the prediction: %s" % (result.shape,))
-            print("batch error: %2.2f" % batch_error_rate)
-            print("-------------------------------")
+        print("batch index: %d" % batch_idx)
+        print("prediction result: %s" % result)
+        print("shape of the prediction: %s" % (result.shape,))
+        print("batch error: %2.2f" % batch_error_rate)
+        print("-------------------------------")
 
-        total_error_rate = total_error / float(total_num_samples) * 100
-        print("total error: %2.2f %%" % total_error_rate)
+    total_error_rate = total_error / float(total_num_samples) * 100
+    print("total error: %2.2f %%" % total_error_rate)
 
 
 if __name__ == '__main__':

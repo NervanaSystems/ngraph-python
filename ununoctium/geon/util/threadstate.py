@@ -12,22 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon import Axis
+import threading
 
-# Define the standard Neon axes
-#: The batch axis
-N = Axis(name='N', batch=True)
-C = Axis(name='C')
-D = Axis(name='D')
-H = Axis(name='H')
-W = Axis(name='W')
-T = Axis(name='T')
-R = Axis(name='R')
-S = Axis(name='S')
-K = Axis(name='K')
-M = Axis(name='M')
-P = Axis(name='P')
-Q = Axis(name='Q')
+__thread_state = threading.local()
 
-# Target
-Y = Axis(name='Y')
+
+def get_thread_state():
+    """TODO."""
+    return __thread_state

@@ -12,16 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import next, object
 from contextlib import contextmanager
 from functools import wraps
 
-from geon.backends.graph.environment import get_thread_name_scope
+from builtins import next, object
+
+from geon.util.threadstate import get_thread_state
+
+
+get_thread_state().name_scope = [None]
+
+
+def _get_thread_name_scope():
+    """
+
+    :return: Thread-local NameScope.
+    """
+    return get_thread_state().name_scope
 
 
 def get_current_name_scope():
-    """TODO."""
-    return get_thread_name_scope()[-1]
+    """
+
+    :return: The currently bound NameScope, or None.
+    """
+    return _get_thread_name_scope()[-1]
 
 
 @contextmanager
@@ -38,12 +53,12 @@ def name_scope(name=None, name_scope=None):
     """
 
     name_scope = name_scope or NameScope(name=name)
-    get_thread_name_scope().append(name_scope)
+    _get_thread_name_scope().append(name_scope)
 
     try:
         yield (name_scope)
     finally:
-        get_thread_name_scope().pop()
+        _get_thread_name_scope().pop()
 
 
 @contextmanager

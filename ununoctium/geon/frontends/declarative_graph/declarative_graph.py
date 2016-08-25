@@ -19,7 +19,6 @@ import collections
 # import inspect
 
 # from geon.backends.graph.names import NameableValue
-from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.nodes import Node
 
 
@@ -112,15 +111,12 @@ class Defmod(Node):
         self.seqid = len(defs)
         defs.append(self)
 
+    _defs = []
+
     @staticmethod
     def defs():
         """TODO."""
-        try:
-            defs = get_current_environment()[Defmod]
-        except KeyError:
-            defs = []
-            get_current_environment()[Defmod] = defs
-        return defs
+        return Defmod._defs
 
     def as_node(self, x):
         """
@@ -138,10 +134,9 @@ class Defmod(Node):
 class Tensor(Defmod):
     """Any tensor-value"""
 
-    def __init__(self, axes=None, batch_axes=None, dtype=None, **kwargs):
+    def __init__(self, axes=None, dtype=None, **kwargs):
         super(Tensor, self).__init__(**kwargs)
         self._axes = Axes.as_axes(axes)
-        self.batch_axes = Axes.as_axes(batch_axes)
         self.dtype = dtype
 
     @property
@@ -168,7 +163,6 @@ class Tensor(Defmod):
             Tensor,
             self)._repr_attrs(
             '_axes',
-            'batch_axes',
             'dtype',
             'args',
             *attrs)

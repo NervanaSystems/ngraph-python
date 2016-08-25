@@ -19,7 +19,6 @@ from builtins import object
 import collections
 from future.utils import with_metaclass
 
-from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
     Function
 from geon.analysis.memory import assign_buffers
@@ -229,20 +228,15 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     evaluate method to execute the compiled graph.
     """
 
-    def __init__(self, environment=None, fusion=None, **kvargs):
+    def __init__(self, fusion=None, **kvargs):
         """
         TODO.
 
         Arguments:
-          environment: The environment to use to grab things like axis.  WARNING: `environment`
-                       will be deprecated soon.
           fusion: Whether to combine sequences of operations into one operation.
         """
         super(Transformer, self).__init__(**kvargs)
         self.transform_hook = None
-        if environment is None:
-            environment = get_current_environment()
-        self.environment = environment
         self.computations = set()
         self.all_results = set()
         self.values = dict()

@@ -40,14 +40,15 @@ def linear(ns, x, axes, init=None, bias=None):
     Returns:
       TODO
     """
+    axes = Axes(axes)
     ns.weights = be.Variable(
         axes=be.linear_map_axes(
-            be.sample_axes(x.axes),
-            be.sample_axes(axes)),
+            x.axes.sample_axes(),
+            axes.sample_axes()),
         init=init)
     result = be.dot(ns.weights, x)
     if bias is not None:
-        ns.bias = be.Variable(axes=be.sample_axes(result), init=bias)
+        ns.bias = be.Variable(axes=result.sample_axes(), init=bias)
         result = result + ns.bias
     return result
 
@@ -88,7 +89,7 @@ def mlp(ns, x, activation, shape_spec, axes, **kwargs):
         for hidden_activation, hidden_axes, hidden_shapes in shape_spec:
             for shape in hidden_shapes:
                 with be.next_name_scope(name_scopes) as nns:
-                    nns.axes = tuple(be.AxisVar(length=length)
+                    nns.axes = tuple(be.Axis(length=length)
                                      for axis, length in zip(hidden_axes, shape))
                     value = affine(
                         value,
@@ -129,9 +130,6 @@ class MyTest(be.Model):
         uni = Uniform(-.001, .001)
 
         g = self.graph
-
-        be.set_batch_axes([ax.N])
-        be.set_phase_axes([ax.Phi])
 
         g.x = be.placeholder(axes=(ax.C, ax.H, ax.W, ax.N))
         g.y = be.placeholder(axes=(ax.Y, ax.N))

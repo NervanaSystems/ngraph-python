@@ -18,7 +18,6 @@ import geon as be
 from geon.util.utils import executor
 
 
-@be.with_bound_environment
 def test_dot_with_numerics():
     """TODO."""
     ax1 = be.NumericAxis(2)
@@ -34,7 +33,6 @@ def test_dot_with_numerics():
     assert np.array_equal(d_val, np.dot(x_np, x_np))
 
 
-@be.with_bound_environment
 def test_expand_dims():
     """TODO."""
     ax1 = be.NumericAxis(2)

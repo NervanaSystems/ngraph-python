@@ -25,7 +25,6 @@ from geon.util.utils import numeric_derivative, executor
 rng = RandomTensorGenerator(0, np.float32)
 
 
-@be.with_bound_environment
 def test_constant_multiply():
     # TODO: better error message when missing axes length in cases where it
     # is needed
@@ -41,7 +40,6 @@ def test_constant_multiply():
     np.testing.assert_allclose(result, [8])
 
 
-@be.with_bound_environment
 def test_constant_tensor_multiply():
     ax.Y.length = 2
 
@@ -54,7 +52,6 @@ def test_constant_tensor_multiply():
     np.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
 
 
-@be.with_bound_environment
 def test_tensor_sum_single_reduction_axes():
     """TODO."""
     ax.N.length = 2
@@ -68,7 +65,6 @@ def test_tensor_sum_single_reduction_axes():
     np.testing.assert_allclose(result, [2.0, 2.0])
 
 
-@be.with_bound_environment
 def test_scalar():
     """TODO."""
     # Simple evaluation of a scalar
@@ -80,7 +76,6 @@ def test_scalar():
     np.testing.assert_allclose(cval, val)
 
 
-@be.with_bound_environment
 def test_tensor_constant():
     # Pass a NumPy array through as a constant
     ax.W.length = 10
@@ -95,7 +90,6 @@ def test_tensor_constant():
     np.testing.assert_allclose(cval, aval)
 
 
-@be.with_bound_environment
 def test_placeholder():
     # Pass array through a placeholder
     ax.W.length = 10
@@ -132,7 +126,6 @@ def test_placeholder():
     np.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-@be.with_bound_environment
 def test_reduction():
     ax.C.length = 4
     ax.W.length = 4
@@ -159,7 +152,6 @@ def test_reduction():
                 red=red, axes=reduction_axes)
 
 
-@be.with_bound_environment
 def test_reduction_deriv():
     delta = .001
     ax.C.length = 4
@@ -189,7 +181,6 @@ def test_reduction_deriv():
                 rtol=1e-1)
 
 
-@be.with_bound_environment
 def test_reciprocal():
     """TODO."""
     delta = .001
@@ -216,7 +207,6 @@ def test_reciprocal():
     np.testing.assert_allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
 
 
-@be.with_bound_environment
 def test_elementwise_ops_matched_args():
     """TODO."""
     delta = .001
@@ -287,7 +277,6 @@ def test_elementwise_ops_matched_args():
                                    rtol=1e-3)
 
 
-@be.with_bound_environment
 def test_elementwise_ops_unmatched_args():
     """TODO."""
     # delta = .001
@@ -409,7 +398,6 @@ def cross_entropy_binary_logistic_shortcut(x, t):
     return (1.0 - t) * x - np.log(y)
 
 
-@be.with_bound_environment
 def test_cross_entropy_binary_logistic_shortcut():
     """TODO."""
     ax.W.length = 20
@@ -428,7 +416,6 @@ def test_cross_entropy_binary_logistic_shortcut():
     np.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
-@be.with_bound_environment
 def test_cross_entropy_binary():
     """TODO."""
     delta = .001
@@ -491,7 +478,6 @@ def adiff_softmax(x):
     return result
 
 
-@be.with_bound_environment
 def test_np_softmax():
     """TODO."""
     ax.N.length = 128
@@ -544,12 +530,10 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
-@be.with_bound_environment
 def test_softmax():
     """TODO."""
     ax.W.length = 128
     ax.N.length = 10
-    be.set_batch_axes([ax.N])
     axes = be.Axes([ax.W, ax.N])
 
     # set up some distributions
@@ -578,11 +562,9 @@ def test_softmax():
     np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
-@be.with_bound_environment
 def test_softmax_deriv():
     ax.W.length = 3
     ax.N.length = 10
-    be.set_batch_axes([ax.N])
     axes = be.Axes([ax.W, ax.N])
 
     p_x = be.placeholder(axes=axes)
@@ -617,7 +599,6 @@ def test_softmax_deriv():
     np.testing.assert_allclose(cross_entropy_num_deriv, cross_entropy_deriv, atol=1e-2, rtol=1e-2)
 
 
-@be.with_bound_environment
 def test_sigmoid():
     """TODO."""
     delta = .001
@@ -671,19 +652,16 @@ def one_hot_comparison(hot_axes, axes):
     np.testing.assert_allclose(v_t, v)
 
 
-@be.with_bound_environment
 def test_onehot():
     """TODO."""
     ax.C.length = 4
     ax.W.length = 32
     ax.H.length = 32
     ax.N.length = 128
-    be.set_batch_axes([ax.N])
     one_hot_comparison(be.Axes([ax.C, ax.N]), be.Axes([ax.N]))
     one_hot_comparison(be.Axes([ax.C, ax.W, ax.H, ax.N]), be.Axes([ax.W, ax.H, ax.N]))
 
 
-@be.with_bound_environment
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     be.NumPyTransformer().initialize()

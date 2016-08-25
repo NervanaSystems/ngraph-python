@@ -53,7 +53,6 @@ def test_constant_multiply():
     assert result == 8
 
 
-@be.with_bound_environment
 def test_numpytensor_add():
     """TODO."""
     ax.Y.length = 2
@@ -76,7 +75,6 @@ def test_numpytensor_add():
     assert np.array_equal(result, np_c)
 
 
-@be.with_bound_environment
 def test_numpytensor_dot():
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
@@ -94,7 +92,6 @@ def test_numpytensor_dot():
     assert np.array_equal(result, np_c)
 
 
-@be.with_bound_environment
 def test_numpytensor_multiply_constant():
     """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
@@ -110,7 +107,6 @@ def test_numpytensor_multiply_constant():
     assert np.array_equal(result, np_c)
 
 
-@be.with_bound_environment
 def test_numpytensor_add_constant():
     """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
@@ -126,7 +122,6 @@ def test_numpytensor_add_constant():
     assert np.array_equal(result, np_c)
 
 
-@be.with_bound_environment
 def test_numpytensor_mlp():
     """TODO."""
     np_x = np.array([[1, 2, 3]], dtype=np.float32)

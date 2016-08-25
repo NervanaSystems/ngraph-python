@@ -23,7 +23,6 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-@be.with_bound_environment
 def test_expand_dims():
     """TODO."""
     max_new_axis_length = 4
@@ -89,7 +88,6 @@ def test_expand_dims():
                 )
 
 
-@be.with_bound_environment
 def test_slice():
     """TODO."""
     tests = [
@@ -160,7 +158,6 @@ def test_slice():
         )
 
 
-@be.with_bound_environment
 def test_padding():
     """TODO."""
     tests = [
@@ -223,7 +220,6 @@ def test_padding():
         )
 
 
-@be.with_bound_environment
 def test_axes_cast():
     ex = ExecutorFactory()
 
