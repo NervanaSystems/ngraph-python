@@ -47,8 +47,6 @@ parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
 
 args = parser.parse_args()
 
-# TODO Remove environment from functions
-env = None
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
@@ -58,7 +56,7 @@ mnist_data = MNIST(path=args.data_dir).gen_iterators()
 train_data = mnist_data['train']
 test_data = mnist_data['valid']
 
-nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
+nervana_graph = create_nervana_graph(args.pb_file, args.end_node, args.loss_node)
 
 init_comp = None
 trans = be.NumPyTransformer()
