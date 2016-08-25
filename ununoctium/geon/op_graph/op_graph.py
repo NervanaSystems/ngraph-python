@@ -705,19 +705,13 @@ class AllocationOp(TensorOp):
 class ComputationOp(TensorOp):
     """
     A CopmutationOp is a Tensor result of some sort of operation.
-
-    :ivar batch_axes: Batch axes in effect.
     """
 
-    def __init__(self, batch_axes=None, **kwargs):
+    def __init__(self, **kwargs):
         super(ComputationOp, self).__init__(**kwargs)
 
         for arg in self.args:
             arg.users.add(self)
-
-        if batch_axes is None:
-            batch_axes = Axes.batch_axes
-        self.batch_axes = batch_axes
 
     @property
     def defs(self):
