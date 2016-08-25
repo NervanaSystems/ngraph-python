@@ -29,19 +29,30 @@ from geon.util.generics import generic_method
 
 def tensor_descriptions(args):
     """
-    TODO.
+    A list of tensor descriptions for Ops.
 
     Arguments:
-      args: TODO
+      args: A list of Ops.
 
     Returns:
-      TODO
+      A list of the Op's tensor descriptions.
     """
     return (arg.tensor_description() for arg in args)
 
 
 class Op(Node):
-    """Any operation that can be in an AST"""
+    """
+    Any operation that can be in an AST
+
+    Arguments:
+        initializers: List of one-time initializations to run before the op.
+        kwargs: Args defined in related classes.
+
+    Attributes:
+        schemas: Information about how the Op was generated.
+        initializers: A list of additional Ops to run before this Op is run the first time.
+
+    """
 
     # Default is to not collect Ops as they are created
     get_thread_state().ops = [None]
@@ -59,7 +70,9 @@ class Op(Node):
         """
         Capture all Ops created within the context.
 
-        :param ops: List for collecting created ops.
+        Arguments:
+            ops: List for collecting created ops.
+
         """
         try:
             Op._get_thread_ops().append(ops)
@@ -67,13 +80,8 @@ class Op(Node):
         finally:
             Op._get_thread_ops().pop()
 
-    def __init__(self, initializers=None, **kwds):
-        """
-
-        :param initializers: List of one-time initializations to run before the op.
-        :param kwds:
-        """
-        super(Op, self).__init__(**kwds)
+    def __init__(self, initializers=None, **kwargs):
+        super(Op, self).__init__(**kwargs)
         self.schemas = []
         self._adjoints = None
         self.initializers = initializers or []
@@ -312,15 +320,16 @@ class InitTensor(Op):
     """
     Initializes a device tensor from a CPU tensor.
 
-    :ivar valfun: A CPU function that produces the initial value for the tensor.
+    Arguments:
+        tensor: Tensor to be intialized.
+        valfun: Function that performs initialization
+        kwargs: Other op args.
+
+    Attributes:
+        valfun: A CPU function that produces the initial value for the tensor.
+
     """
     def __init__(self, tensor, valfun, **kwargs):
-        """
-
-        :param tensor: Tensor to be intialized.
-        :param valfun: Function that performs initialization
-        :param kwargs: Other op args.
-        """
         super(InitTensor, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
 
@@ -704,7 +713,7 @@ class AllocationOp(TensorOp):
 
 class ComputationOp(TensorOp):
     """
-    A CopmutationOp is a Tensor result of some sort of operation.
+    A ComputationOp is a Tensor result of some sort of operation.
     """
 
     def __init__(self, **kwargs):
@@ -1459,7 +1468,7 @@ def pad(x, paddings, axes=None, **kwargs):
         of the form (before, after)
       axes: the axes to be given to the padded tensor.
         If unsupplied, we create anonymous axes of the correct lengths.
-      **kwargs: TODO
+      **kwargs: Additional args for the created Op.
 
     Returns:
         TensorOp: symbolic expression for the padded tensor
@@ -1489,7 +1498,7 @@ def pad(x, paddings, axes=None, **kwargs):
         s = tuple(None if p == 0 else p for p in s)
         return slice(s[0], s[1], 1)
     slices = tuple(to_slice(p) for p in paddings)
-    return Unslice(x, axes=axes, slices=slices)
+    return Unslice(x, axes=axes, slices=slices, **kwargs)
 
 
 class Variable(AllocationOp):
