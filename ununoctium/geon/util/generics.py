@@ -17,6 +17,8 @@ from functools import wraps
 
 
 class TypeMethods(object):
+    """TODO."""
+
     def __init__(self, base_method, **kvargs):
         super(TypeMethods, self).__init__(**kvargs)
         self.base_method = base_method
@@ -90,7 +92,7 @@ def generic_function(base_function):
         The generic function's implementation.
 
         Arguments:
-          dispatch_arg: The argument that distpaches.
+          dispatch_arg: The argument that dispatches.
           *args: Remaining args.
           **kwargs: Keyword args.
 

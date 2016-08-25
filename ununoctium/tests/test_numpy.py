@@ -239,7 +239,7 @@ def test_elementwise_ops_matched_args():
         duvdvnum_fun = ex.numeric_derivative(result_op, p_v, delta, p_u)
         duvdvt_fun = ex.derivative(result_op, p_v, p_u)
 
-        # ensure numpy and neon backend perform the same cacluclation
+        # ensure numpy and neon backend perform the same calculation
         result_be = fun(u, v)
         np.testing.assert_allclose(result_np, result_be, atol=1e-4,
                                    rtol=1e-4)

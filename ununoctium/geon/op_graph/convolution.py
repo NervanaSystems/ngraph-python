@@ -17,7 +17,7 @@ def _output_dim(X, S, padding, strides, pooling=False):
         pooling (bool): flag for setting pooling layer size
     """
 
-    # coffe compat disabled for now
+    # caffe compat disabled for now
     if False and pooling:
         size = int(math.ceil((float(X - S + 2 * padding) / strides))) + 1
         if padding > 0 and (size - 1) * strides >= X + padding:
@@ -118,10 +118,10 @@ class convolution(op_graph.TensorOp):
         filter_shape = filter_axes.sample_axes().lengths
 
         if len(filter_shape) == 4:
-            # 4d interprested as Cin H W Cout
+            # 4d interpreted as Cin H W Cout
             return filter_shape[:1] + (1,) + filter_shape[1:]
         elif len(filter_shape) == 5:
-            # 5d interprested as Cin D H W Cout
+            # 5d interpreted as Cin D H W Cout
             return filter_shape
         else:
             raise ValueError((

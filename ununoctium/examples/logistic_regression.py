@@ -42,7 +42,7 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
 
     # gradient descent
     for i in range(max_iter):
-        # foward
+        # forward
         loss = get_loss(thetas, xs, ys)
         # backward
         grad = get_grad(thetas, xs, ys)
