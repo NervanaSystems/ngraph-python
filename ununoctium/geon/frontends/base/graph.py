@@ -34,6 +34,7 @@ class GraphComponent(with_metaclass(GraphMetaclass, object)):
 
     Ensures that __metaclass__ is GraphMetaclass.
     """
+
     def __init__(self, **kwargs):
         super(GraphComponent, self).__init__(**kwargs)
         self.graph = get_current_name_scope()

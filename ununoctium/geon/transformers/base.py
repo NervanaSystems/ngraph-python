@@ -27,6 +27,8 @@ from geon.op_graph.names import NameableValue
 
 
 class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
+    """TODO."""
+
     def __init__(self, transformer, returns, *args):
         """
         Defines computation.
@@ -226,6 +228,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     Given a list of ops you want to compute the results of, this transformer
     will compile the graph required to compute those results and exposes an
     evaluate method to execute the compiled graph.
+
+    Arguments:
+      fusion: Whether to combine sequences of operations into one operation.
+
     """
 
     def __init__(self, fusion=None, **kvargs):
@@ -257,7 +263,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Op.simple_prune(self.all_results)
 
-        # Crate tensor descriptions
+        # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
         self.inits = self.ordered_initializers(ops)
 
