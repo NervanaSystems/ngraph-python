@@ -965,27 +965,6 @@ class Constant(AllocationOp):
             cl=self.__class__.__name__, const=self.const)
 
 
-def NumPyTensor(nptensor, axes, **kwargs):
-    axes = Axes(axes)
-    if nptensor.shape != axes.lengths:
-        raise ValueError((
-            "Tried to initialize NumPyTensor with numpy array of "
-            "shape {np_shape} though gave axes with a different "
-            "shape {axes_shape}."
-        ).format(
-            np_shape=nptensor.shape,
-            axes_shape=axes.lengths,
-        ))
-
-    def value_fun(tensor):
-        return nptensor
-
-    val = constant_storage(dtype=nptensor.dtype, axes=axes, **kwargs)
-    val.initializers.append(InitTensor(val, value_fun))
-
-    return val
-
-
 class absolute(ElementWise):
     """TODO."""
 
@@ -1557,6 +1536,30 @@ class Variable(AllocationOp):
         if constant:
             tags.add('constant')
         super(Variable, self).__init__(tags=tags, **kwargs)
+
+
+class NumPyTensor(Variable):
+
+    def __init__(self, nptensor, axes, **kwargs):
+        super(NumPyTensor, self).__init__(trainable=False, persistent=True,
+                                          constant=True, dtype=nptensor.dtype,
+                                          axes=axes, **kwargs)
+
+        axes = Axes(axes)
+        if nptensor.shape != axes.lengths:
+            raise ValueError((
+                "Tried to initialize NumPyTensor with numpy array of "
+                "shape {np_shape} though gave axes with a different "
+                "shape {axes_shape}."
+            ).format(
+                np_shape=nptensor.shape,
+                axes_shape=axes.lengths,
+            ))
+
+        def value_fun(tensor):
+            return nptensor
+
+        self.initializers.append(InitTensor(self, value_fun))
 
 
 def temporary(**kwargs):

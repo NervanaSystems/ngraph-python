@@ -344,6 +344,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             dims = node.attr['shape'].shape
             shape = [d.size for d in dims.dim]
             name_to_op[node.name] = be.placeholder(axes=name_to_axes[node.name], name=node.name)
+            # TODO: handle other placeholders
             if len(shape) == 2:
                 graph.x = name_to_op[node.name]
             elif len(shape) == 1:
