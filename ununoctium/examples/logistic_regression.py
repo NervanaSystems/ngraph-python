@@ -65,7 +65,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     def get_loss(thetas, xs, ys):
         ys_pred = predict(thetas, xs)
         log_likelihoods = be.log(ys_pred) * ys + be.log(1 - ys_pred) * (1 - ys)
-        loss = -be.sum(log_likelihoods)
+        loss = -be.sum(log_likelihoods, reduction_axes=[ax.Y, ax.N])
         return loss
 
     # axis
