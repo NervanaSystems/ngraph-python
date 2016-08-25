@@ -135,6 +135,31 @@ class FunctionAxis(Axis):
         return self.length_fun()
 
 
+def _sliced_length(s, incoming_length):
+    start, stop, step = s.indices(incoming_length)
+
+    # max with 0 so we dont ever return a negative length.  This
+    # matches how python handles it internally.  Raising an exception
+    # might also be reasonable.
+    if step == 1:
+        return max(stop - start, 0)
+    elif step == -1:
+        return max(start - stop, 0)
+    else:
+        _validate_slice(s)
+
+
+def _validate_slice(s):
+    if s.step not in (-1, 1, None):
+        raise ValueError((
+            'SlicedAxis cant currently handle a step size other '
+            'than -1, 1 or None.  Was given {step} in slice {slice}'
+        ).format(
+            step=s.step,
+            slice=s,
+        ))
+
+
 class SlicedAxis(FunctionAxis):
     """
     An axis created by slicing a parent axis.
@@ -145,13 +170,17 @@ class SlicedAxis(FunctionAxis):
         parent: The axis being sliced.
         s: The slice.
         kwargs: Arguments for related classes.
+
+    TODO: Right now, a 0 length slice is allowed.  Perhaps we want to raise an
+    exception instead?
     """
     def __init__(self, parent, s, **kwargs):
-        def sliced_length():
-            start, stop, step = s.indices(parent.length)
-            assert step == 1
-            return stop - start
-        super(SlicedAxis, self).__init__(length_fun=sliced_length, **kwargs)
+        _validate_slice(s)
+
+        super(SlicedAxis, self).__init__(
+            length_fun=lambda: _sliced_length(s, parent.length),
+            **kwargs
+        )
 
 
 class PaddedAxis(FunctionAxis):
@@ -608,6 +637,31 @@ def reduce_strides(strides):
                  for elem in strides)
 
 
+def _check_sliced_axis_length(s, axis, new_axis):
+    """
+    Ensure that the length of the axis resulting from slicing axis with
+    slice s matches the length of new_axis
+    """
+
+    expected_length = _sliced_length(s, axis.length)
+    if expected_length != new_axis.length:
+        raise ValueError((
+            "A slice operation ({slice}) was attempted on axis "
+            "{axis} with length {axis_length}.  The result of "
+            "which is a new sliced axis of length "
+            "{expected_length}.  The new_axis passed in "
+            "{new_axis} has a different length which does not "
+            "match: {new_axis_length}."
+        ).format(
+            slice=s,
+            axis=axis,
+            axis_length=axis.length,
+            expected_length=expected_length,
+            new_axis=new_axis,
+            new_axis_length=new_axis.length,
+        ))
+
+
 class TensorDescription(NameableValue):
     """
     Description of a tensor that will be allocated in hardware.
@@ -650,12 +704,19 @@ class TensorDescription(NameableValue):
             else self.axes.full_lengths
         self.style = {}
 
+        for axis in axes:
+            if axis.length is None:
+                raise ValueError((
+                    'axes used in the constructor of TensorDescription must '
+                    'always have non-None length.  Axis {axis} has length '
+                    'None.'
+                ).format(axis=axis))
+
         if full_strides is None:
             # TODO: deduce strides of nested axes.
             full_strides = []
             stride = self.dtype.itemsize
-            for axis, full_size in reversed(
-                    list(zip(self.axes, self.full_sizes))):
+            for axis, full_size in reversed(list(zip(self.axes, self.full_sizes))):
                 assert not isinstance(axis, FlattenedAxis)
                 full_strides.append(stride)
                 stride *= full_size
@@ -1004,8 +1065,7 @@ class TensorDescription(NameableValue):
         new_axes = []
         new_strides = []
         new_sizes = []
-        for axis, st, si in\
-                zip(axes, full_strides, full_sizes):
+        for axis, st, si in zip(axes, full_strides, full_sizes):
             if isinstance(axis, FlattenedAxis) and all_numeric(axis.axes):
                 new_axes.append(NumericAxis(reduce_nested(
                     axis.axes.lengths, 1, operator.mul
@@ -1032,31 +1092,50 @@ class TensorDescription(NameableValue):
         slices = list(slices)
         while len(slices) < self.ndim:
             slices.append(slice(None))
+
         offset = self.offset
         full_strides = []
         full_sizes = []
         new_index = 0
 
-        for s, axis, stride, size in\
-                zip(slices, self.axes, self.strides, self.sizes):
+        # check new_axes for the correct length
+        num_dimensions_out = len([s for s in slices if isinstance(s, slice)])
+        if len(new_axes) != num_dimensions_out:
+            raise ValueError((
+                'in a slice operation, the number of axes pass in to '
+                'new_axes ({num_new_axes}) must be the same as the number of '
+                'slice objects in slices ({num_slices}).'
+            ).format(
+                num_new_axes=len(new_axes),
+                num_slices=num_dimensions_out,
+            ))
+
+        for s, axis, stride, size in zip(slices, self.axes, self.strides, self.sizes):
             if isinstance(s, slice):
+                # only increment new_axis when the input slice is a slice and
+                # not a integer
                 new_axis = new_axes[new_index]
                 new_index += 1
 
-                start, stop, step = s.indices(axis.length)
-                assert step == 1
-                assert stop - start == new_axis.length,\
-                    'Axis %s has a length of %s but the acutal length is %s.'\
-                    % (new_axis, new_axis.length, stop - start)
+                # ensure slice is of the kind we support
+                _validate_slice(s)
 
-                full_strides.append(stride)
+                # ensure new_axis has the correct length
+                _check_sliced_axis_length(s, axis, new_axis)
+
+                start, stop, step = s.indices(axis.length)
+
+                full_strides.append(stride * step)
                 full_sizes.append(size)
 
                 idx = start
             else:
+                # this is a simple integer slice, ex: y = x[1]
                 idx = s
 
-            offset += idx * stride
+            # TODO: write a test that fails if abs() is removed
+            offset += idx * abs(stride)
+
         return TensorDescription(new_axes,
                                  base=self.base,
                                  dtype=self.dtype,
