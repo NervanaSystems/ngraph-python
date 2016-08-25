@@ -724,6 +724,37 @@ class ComputationOp(TensorOp):
         return self.__class__.__name__ + '[' + self.name + ']'
 
 
+class Stack(ComputationOp):
+    def __init__(self, x_list, axis, pos=0, **kwargs):
+        self.pos = pos
+        x_axes = x_list[0].axes
+        axes = Axes(tuple(x_axes[:pos]) + (axis,) + tuple(x_axes[pos:]))
+        super(Stack, self).__init__(args=tuple(x_list), axes=axes)
+
+    def generate_adjoints(self, adjoints, delta, *x_list):
+        delta = Broadcast(delta, axes=self.axes)
+        s = [slice(None)] * len(self.axes)
+        for i, x in enumerate(x_list):
+            s[self.pos] = i
+            x.generate_add_delta(
+                adjoints,
+                Slice(delta, tuple(s), axes=x.axes)
+            )
+
+
+# Currently implemented using unrolling
+# f_in_to_h should be python functions that take and return tensors
+# The length of time_axis should not be changed after this function
+# is called, else the stacking will be invalid.
+def recurrent(x, f_in_to_h, f_h_to_h, time_axis, stack_pos=-1):
+    h = f_in_to_h(x)
+    hs = [h]
+    for i in range(time_axis.length - 1):
+        h = f_h_to_h(h)
+        hs.append(h)
+    return Stack(hs, time_axis, pos=stack_pos)
+
+
 class Unslice(ComputationOp):
     """TODO."""
     def __init__(self, x, slices, **kwargs):

@@ -30,7 +30,8 @@ from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, d
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
     sum, tanh, tensor_size, Fill, TensorDescription, AxesCastOp,\
-    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor
+    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor,\
+    Stack
 from geon.op_graph.convolution import convolution
 
 from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -451,6 +452,16 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, out_sliced, x):
         self.append("{}.fill(0)", out)
         self.append("{}.__setitem__((), {})", out_sliced, x)
+
+    @generate_op.on_type(Stack)
+    def generate_op(self, op, out, *args):
+        # We cannot use the numpy stack function as it is unavailable in
+        # older versions.
+        self.append("o={}", out)
+        slices = [slice(None)] * len(op.axes)
+        for i, arg in enumerate(args):
+            slices[op.pos] = i
+            self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
 
     @generate_op.on_type(Variable)
     def generate_op(self, op, out):
