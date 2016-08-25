@@ -455,6 +455,8 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Stack)
     def generate_op(self, op, out, *args):
+        # TODO: we may want to have the inputs write into slices of a
+        # preallocated buffer for this op.
         # We cannot use the numpy stack function as it is unavailable in
         # older versions.
         self.append("o={}", out)
