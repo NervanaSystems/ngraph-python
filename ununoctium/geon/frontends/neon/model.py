@@ -20,7 +20,6 @@ from neon.data import ArrayIterator, DataLoader
 
 import geon.frontends.base.axis as ax
 import geon as be
-from geon.backends.graph.environment import bound_environment
 from geon.frontends.base.graph import GraphComponent
 from geon.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from geon.op_graph.names import name_scope
@@ -79,9 +78,8 @@ def in_graph(f):
         Returns:
 
         """
-        with bound_environment(environment=self.environment):
-            with name_scope(name_scope=self.graph):
-                return f(self, *args, **kwargs)
+        with name_scope(name_scope=self.graph):
+            return f(self, *args, **kwargs)
     return wrapper
 
 
@@ -137,8 +135,6 @@ class Model(GraphComponent):
 
         batch_input_axes = input_axes + be.Axes(ax.N, )
         batch_target_axes = target_axes + be.Axes(ax.N, )
-        be.set_batch_axes(be.Axes(ax.N, ))
-        be.set_phase_axes(be.Axes(ax.Phi, ))
         self.input = be.placeholder(axes=batch_input_axes)
         self.target = be.placeholder(axes=batch_target_axes)
         for axis, length in zip(input_axes, dataset.shape):
@@ -148,7 +144,6 @@ class Model(GraphComponent):
                 dataset_nclasses(dataset)]):
             axis.length = length
         ax.N.length = dataset_batchsize(dataset)
-        ax.Phi.length = 2
         self.batch_input_shape = batch_input_axes.lengths
         self.batch_target_shape = batch_target_axes.lengths
 

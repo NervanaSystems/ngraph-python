@@ -77,6 +77,11 @@ class convolution(op_graph.TensorOp):
 
         input_shape = convolution._input_reshape(input.axes)
         filter_shape = convolution._filter_reshape(filter.axes)
+        batch_axes = input.axes.batch_axes()
+
+        if len(batch_axes) != 1:
+            raise ValueError("Input must have one batch axis")
+        self.batch_axis = batch_axes[0]
 
         # TODO: support int arguments to Axes?
         axes = arrayaxes.Axes([
@@ -84,7 +89,7 @@ class convolution(op_graph.TensorOp):
             arrayaxes.Axis(_output_dim(input_shape[1], filter_shape[1], padding[0], strides[0])),
             arrayaxes.Axis(_output_dim(input_shape[2], filter_shape[2], padding[1], strides[1])),
             arrayaxes.Axis(_output_dim(input_shape[3], filter_shape[3], padding[2], strides[2])),
-            arrayaxes.get_batch_axis(),
+            self.batch_axis,
         ])
 
         self._input_shape = input_shape
@@ -110,7 +115,7 @@ class convolution(op_graph.TensorOp):
     def _filter_reshape(filter_axes):
         """ take a filter shape as input and return a 5d reshape necessary for
         ConvLayer """
-        filter_shape = arrayaxes.sample_axes(filter_axes).lengths
+        filter_shape = filter_axes.sample_axes().lengths
 
         if len(filter_shape) == 4:
             # 4d interprested as Cin H W Cout
@@ -161,14 +166,14 @@ class convolution(op_graph.TensorOp):
             a shape tuple with axes in order: Channels Depth Height Width
         """
         return convolution._reshape_4d(
-            arrayaxes.sample_axes(axes).lengths, 1
+            axes.sample_axes().lengths, 1
         )
 
     @staticmethod
     def _check_filter_axes(filter):
         """ ensure filter_axes have no batch_axes """
 
-        filter_batch_axes = arrayaxes.batch_axes(filter.axes)
+        filter_batch_axes = filter.axes.batch_axes()
         if filter_batch_axes:
             raise ValueError((
                 "filter_axes should not contain batch_axes.  Found "

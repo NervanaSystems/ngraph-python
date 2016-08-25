@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from functools import wraps
 from future.utils import with_metaclass
-from geon.backends.graph.environment import get_current_environment, bound_environment, Environment
 from geon.op_graph.names import NameScope, get_current_name_scope, name_scope
 
 
@@ -25,9 +24,8 @@ class GraphMetaclass(type):
         return super(GraphMetaclass, cls).__new__(cls, name, parents, attrs)
 
     def __call__(cls, *args, **kwargs):
-        with bound_environment(environment=Environment()):
-            with name_scope(name_scope=NameScope(name="graph", parent=None)):
-                return super(GraphMetaclass, cls).__call__(*args, **kwargs)
+        with name_scope(name_scope=NameScope(name="graph", parent=None)):
+            return super(GraphMetaclass, cls).__call__(*args, **kwargs)
 
 
 class GraphComponent(with_metaclass(GraphMetaclass, object)):
@@ -39,7 +37,6 @@ class GraphComponent(with_metaclass(GraphMetaclass, object)):
     def __init__(self, **kwargs):
         super(GraphComponent, self).__init__(**kwargs)
         self.graph = get_current_name_scope()
-        self.environment = get_current_environment()
 
 
 class Model(GraphComponent):
@@ -72,36 +69,7 @@ def with_graph_scope(fun):
         Returns:
 
         """
-        with bound_environment(environment=self.environment):
-            with name_scope(name_scope=self.graph):
-                return fun(self, *args, **kwargs)
-
-    return wrapper
-
-
-def with_environment(fun):
-    """
-    TODO.
-
-    Arguments:
-      fun: TODO
-
-    Returns:
-
-    """
-    @wraps(fun)
-    def wrapper(*args, **kwargs):
-        """
-        TODO.
-
-        Arguments:
-          *args: TODO
-          **kwargs: TODO
-
-        Returns:
-
-        """
-        with bound_environment():
-            return fun(*args, **kwargs)
+        with name_scope(name_scope=self.graph):
+            return fun(self, *args, **kwargs)
 
     return wrapper

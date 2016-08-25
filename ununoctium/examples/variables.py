@@ -27,99 +27,93 @@ import geon.backends.graph.axis as ax
 
 def test_init_variable():
     """TODO."""
-    with be.bound_environment():
-        ax.Y.length = 1
-        hello = be.Variable(axes=(ax.Y,), init=Constant(4))
+    ax.Y.length = 1
+    hello = be.Variable(axes=(ax.Y,), init=Constant(4))
 
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(hello)
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(hello)
 
-        result = comp()
-        print(result)
+    result = comp()
+    print(result)
 
-        assert (result == 4)
-        print("pass variable initialization")
+    assert (result == 4)
+    print("pass variable initialization")
 
 
 def test_init_1D_variable():
     """TODO."""
-    with be.bound_environment():
-        ax.Y.length = 2
-        hello = be.Variable(axes=(ax.Y,), init=Constant(3))
+    ax.Y.length = 2
+    hello = be.Variable(axes=(ax.Y,), init=Constant(3))
 
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(hello)
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(hello)
 
-        result = comp()
-        print(result)
+    result = comp()
+    print(result)
 
-        print("pass 1D variable initialization")
+    print("pass 1D variable initialization")
 
 
 def test_init_2D_variable():
     """TODO."""
-    with be.bound_environment():
-        ax.M.length = 3
-        ax.N.length = 2
-        hello = be.Variable(axes=[ax.M, ax.N], init=Constant(5))
+    ax.M.length = 3
+    ax.N.length = 2
+    hello = be.Variable(axes=[ax.M, ax.N], init=Constant(5))
 
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(hello)
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(hello)
 
-        result = comp()[hello]
-        print(result)
+    result = comp()[hello]
+    print(result)
 
-        print("pass 2D variable initialization")
+    print("pass 2D variable initialization")
 
 
 def test_init_1D_variable_from_numpy_array():
     """TODO."""
-    with be.bound_environment():
-        ax.Y.length = 10
-        npvar = be.NumPyTensor(
-            np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
-        hello = be.Variable(axes=[ax.Y], init=Array(npvar))
+    ax.Y.length = 10
+    npvar = be.NumPyTensor(
+        np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
+    hello = be.Variable(axes=[ax.Y], init=Array(npvar))
 
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(hello)
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(hello)
 
-        result = comp()
-        print(result)
+    result = comp()
+    print(result)
 
-        print("pass numpy variable initialization")
+    print("pass numpy variable initialization")
 
 
 def test_assign_1D_variable_with_numpy_tensor():
     """TODO."""
-    with be.bound_environment():
-        ax.Y.length = 10
-        hello = be.Variable(axes=[ax.Y])
-        npvar = be.NumPyTensor(
-            np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
+    ax.Y.length = 10
+    hello = be.Variable(axes=[ax.Y])
+    npvar = be.NumPyTensor(
+        np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
 
-        hello = npvar
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(hello)
-        result = comp()
-        print(result)
+    hello = npvar
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(hello)
+    result = comp()
+    print(result)
 
-        print("pass 1D numpy tensor assignment")
+    print("pass 1D numpy tensor assignment")
 
 
 def test_assign_2D_variable_with_numpy_tensor():
     """TODO."""
-    with be.bound_environment():
-        ax.M.length = 3
-        ax.N.length = 2
+    ax.M.length = 3
+    ax.N.length = 2
 
-        var = be.Variable(axes=[ax.M, ax.N])
-        npvar = be.NumPyTensor(
-            np.array([[1, 2], [3, 4], [5, 6]]), axes=[ax.M, ax.N])
+    var = be.Variable(axes=[ax.M, ax.N])
+    npvar = be.NumPyTensor(
+        np.array([[1, 2], [3, 4], [5, 6]]), axes=[ax.M, ax.N])
 
-        op = be.assign(var, npvar)
+    op = be.assign(var, npvar)
 
-        transformer = be.NumPyTransformer()
-        comp = transformer.computation(op)
-        result = comp()
-        print(result)
-        print(var.value)
+    transformer = be.NumPyTransformer()
+    comp = transformer.computation(op)
+    result = comp()
+    print(result)
+    print(var.value)

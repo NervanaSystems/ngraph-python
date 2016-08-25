@@ -15,7 +15,7 @@
 from __future__ import division
 from builtins import object, map, range, zip
 from future.utils import with_metaclass
-from functools import reduce
+from functools import reduce, wraps
 
 from abc import ABCMeta
 import collections
@@ -26,15 +26,20 @@ import weakref
 import numpy as np
 
 from geon.op_graph.names import NameableValue
-from geon.backends.graph.environment import get_current_environment
 
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
-    """TODO."""
+    """
+    An Axis of a tensor.
 
-    def __init__(self, length, **kwargs):
+    Tensor operations uses Axis identity to pair/specify dimensions.
+    """
+    batch_axes = set()
+
+    def __init__(self, length=None, batch=False, **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
+        self.batch = batch
 
     def axis_id(self, key):
         """
@@ -49,42 +54,31 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         return AxisID(self, key)
 
     @property
-    def length(self):
-        """TODO."""
-        return self.__length
+    def batch(self):
+        return self.__batch
 
-    def __repr__(self):
-        return 'Axis({name})'.format(name=self.name)
-
-
-class AxisVar(Axis):
-    """Like an axis, except the length comes from the environment."""
-
-    def __init__(self, length=None, **kwargs):
-        super(AxisVar, self).__init__(length=-1, **kwargs)
-        if length is not None:
-            self.length = length
+    @batch.setter
+    def batch(self, value):
+        if value:
+            Axis.batch_axes.add(self)
+        else:
+            Axis.batch_axes.discard(self)
+        self.__batch = value
 
     @property
     def length(self):
-        """TODO."""
-        return get_current_environment()[self]
+        """
+
+        :return: The length of the axis.
+        """
+        return self.__length
 
     @length.setter
-    def length(self, item):
-        """
-        TODO.
-
-        Arguments:
-          item: TODO
-
-        Returns:
-
-        """
-        get_current_environment()[self] = item
+    def length(self, value):
+        self.__length = value
 
     def __repr__(self):
-        return 'AxisVar({name})'.format(name=self.name)
+        return 'Axis({name})'.format(name=self.name)
 
 
 class NumericAxis(Axis):
@@ -245,6 +239,14 @@ class Axes(object):
 
         self._axes = axes
 
+    @staticmethod
+    def as_axes(axes):
+        if isinstance(axes, Axes):
+            return axes
+        elif isinstance(axes, AxisID):
+            return axes.as_axes()
+        return Axes(axes)
+
     @property
     def full_lengths(self):
         """TODO."""
@@ -253,8 +255,25 @@ class Axes(object):
 
     @property
     def lengths(self):
-        """TODO."""
+        """
+
+        :return: The lengths of the axes.
+        """
         return tuple(x.length for x in self)
+
+    def batch_axes(self):
+        """
+
+        :return: The Axes subset that are batch axes.
+        """
+        return Axes(axis for axis in self if axis.batch)
+
+    def sample_axes(self):
+        """
+
+        :return: The Axes subset that are not batch axes.
+        """
+        return Axes(axis for axis in self if not axis.batch)
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -380,6 +399,7 @@ def with_axes_as_axis_ids(f):
     Returns:
 
     """
+    @wraps(f)
     def wrapper(*args):
         """
         TODO.
@@ -589,19 +609,17 @@ class TensorDescription(NameableValue):
         axes = Axes(axes)
         self.axes = axes
         self.transformer = None
+        self.__casts = weakref.WeakValueDictionary()
+        self.__slices = weakref.WeakValueDictionary()
         self.__value = None
         self.__buffer = None
         self.__base = base
         self.dtype = dtype
         self.offset = offset
         self.ndim = len(self.axes)
-        self.views = weakref.WeakSet()
         self.__read_only = False
         self.full_sizes = full_sizes if full_sizes is not None \
             else self.axes.full_lengths
-
-        if base is not None:
-            base.views.add(self)
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -1064,161 +1082,9 @@ class TensorDescription(NameableValue):
             self.__value = self.transformer.device_tensor(self)
 
 
-def with_args_as_axes(f):
-    """
-    TODO.
-
-    Arguments:
-      f: TODO
-
-    Returns:
-
-    """
-
-    def cast(arg):
-        """
-        TODO.
-
-        Arguments:
-          arg: TODO
-
-        Returns:
-
-        """
-        if isinstance(arg, Axes):
-            return arg
-        elif isinstance(arg, AxisID):
-            return arg.as_axes()
-        else:
-            return Axes(arg)
-
-    def wrapper(*args):
-        """
-        TODO.
-
-        Arguments:
-          *args: TODO
-
-        Returns:
-
-        """
-        return f(*(cast(arg) for arg in args))
-    return wrapper
-
-
-def get_batch_axes(default=Axes()):
-    """
-    TODO.
-
-    Arguments:
-      default: TODO
-
-    Returns:
-
-    """
-    environment = get_current_environment()
-    if environment is None:
-        return default
-    return environment.get_value('batch_axes', default)
-
-
-def get_batch_axis():
-    """ return the batch axis used in this environment.
-
-    raises a ValueError if there are more than 1 batch axis.
-    """
-    batch_axes = get_batch_axes()
-    if len(batch_axes) == 0:
-        raise ValueError("expected a batch axes, but found none.")
-    elif len(batch_axes) > 1:
-        raise ValueError(
-            "expected 1 batch axes, but found {}: {}".format(
-                len(batch_axes), [str(axis) for axis in batch_axes]
-            )
-        )
-    else:
-        return batch_axes[0]
-
-
-@with_args_as_axes
-def set_batch_axes(axes):
-    """
-    TODO.
-
-    Arguments:
-      axes: TODO
-
-    Returns:
-
-    """
-    get_current_environment()['batch_axes'] = axes
-
-
-def get_phase_axes(default=Axes()):
-    """
-    TODO.
-
-    Arguments:
-      default: TODO
-
-    Returns:
-
-    """
-    environment = get_current_environment()
-    if environment is None:
-        return default
-    return environment.get_value('phase_axes', default)
-
-
-@with_args_as_axes
-def set_phase_axes(axes):
-    """
-    TODO.
-
-    Arguments:
-      axes: TODO
-
-    Returns:
-
-    """
-    get_current_environment()['phase_axes'] = axes
-
-
-@with_args_as_axes
-def sample_axes(axes):
-    """
-    TODO.
-
-    Arguments:
-      axes: TODO
-
-    Returns:
-
-    """
-    return axes - get_batch_axes()
-
-
-@with_args_as_axes
-def batch_axes(axes):
-    """
-    TODO.
-
-    Arguments:
-      axes: TODO
-
-    Returns:
-
-    """
-    return AxisIDTuple.intersect(
-        axes.as_axis_ids(),
-        get_batch_axes().as_axis_ids()
-    ).as_axes()
-
-
-@with_args_as_axes
 def linear_map_axes(in_axes, out_axes):
     """
-    TODO.
+    Determines the axes of a tensor T so that dot(T, in) has axes out_axes
 
     Arguments:
       in_axes: TODO
@@ -1227,6 +1093,8 @@ def linear_map_axes(in_axes, out_axes):
     Returns:
 
     """
+    in_axes = Axes.as_axes(in_axes)
+    out_axes = Axes.as_axes(out_axes)
     in_axis_ids, out_axis_ids = in_axes.as_axis_ids(), out_axes.as_axis_ids()
     return (
         (out_axis_ids + in_axis_ids) -

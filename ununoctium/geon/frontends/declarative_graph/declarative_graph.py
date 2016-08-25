@@ -19,7 +19,6 @@ import collections
 # import inspect
 
 # from geon.backends.graph.names import NameableValue
-from geon.backends.graph.environment import get_current_environment
 from geon.op_graph.nodes import Node
 
 
@@ -112,15 +111,12 @@ class Defmod(Node):
         self.seqid = len(defs)
         defs.append(self)
 
+    _defs = []
+
     @staticmethod
     def defs():
         """TODO."""
-        try:
-            defs = get_current_environment()[Defmod]
-        except KeyError:
-            defs = []
-            get_current_environment()[Defmod] = defs
-        return defs
+        return Defmod._defs
 
     def as_node(self, x):
         """

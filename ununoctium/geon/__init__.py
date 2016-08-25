@@ -17,12 +17,10 @@ from __future__ import print_function
 
 # Flattens backend
 import geon.backends.dataloaderbackend
-from geon.backends.graph.environment import bound_environment, Environment, with_bound_environment
 
 # Flattens frontends
 from geon.frontends.base import graph
-from geon.frontends.base.graph import Model, with_graph_scope, with_environment, \
-    get_current_environment
+from geon.frontends.base.graph import Model, with_graph_scope
 
 # Flattens op_graph
 from geon.op_graph.arrayaxes import *

@@ -781,7 +781,7 @@ class Linear(ParameterLayer):
 
         v = be.Variable(
             axes=be.linear_map_axes(
-                be.sample_axes(in_obj.axes),
+                in_obj.axes.sample_axes(),
                 self.axes or [be.Axis(self.nout, name='Hidden')]
             ),
             init=self.init)
@@ -822,7 +822,7 @@ class Bias(ParameterLayer):
 
         """
         in_obj = super(Bias, self).configure(graph, in_obj)
-        return in_obj + be.Variable(axes=be.sample_axes(in_obj))
+        return in_obj + be.Variable(axes=in_obj.axes.sample_axes())
 
 
 class Activation(Layer):

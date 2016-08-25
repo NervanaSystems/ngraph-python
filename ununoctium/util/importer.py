@@ -125,15 +125,15 @@ def scan_nameable_axes(graph_def, env):
                 shape = [d.size for d in dims.dim]
 
                 if batch_axis is None:
-                    batch_axis = be.AxisVar(name='batch', length=shape[0])
+                    batch_axis = be.Axis(name='batch', length=shape[0])
 
                 if len(shape) == 2:
-                    x_axis = be.AxisVar(name='x', length=shape[1])
+                    x_axis = be.Axis(name='x', length=shape[1])
                     name_to_axes[node.name] = (x_axis, batch_axis)
                     in_axis = x_axis
 
                 elif len(shape) == 1:
-                    name_to_axes[node.name] = (be.AxisVar(name='y', length=10), batch_axis)
+                    name_to_axes[node.name] = (be.Axis(name='y', length=10), batch_axis)
                     y_name = node.name
 
             elif op_type == 'Variable':
@@ -144,7 +144,7 @@ def scan_nameable_axes(graph_def, env):
                     if 'weights' in node.name:
                         assert (in_axis is not None)
                         assert (in_axis.length == shape[0])
-                        out_axis = be.AxisVar(name=node.name, length=shape[1])
+                        out_axis = be.Axis(name=node.name, length=shape[1])
                         name_to_axes[node.name] = (in_axis, out_axis)
                         in_axis = out_axis  # now the output axis becomes input axis for the next layer
                         y_axis = out_axis
@@ -156,7 +156,7 @@ def scan_nameable_axes(graph_def, env):
                         name_to_axes[node.name] = (in_axis,)
 
                 elif len(shape) == 0:
-                    name_to_axes[node.name] = (be.AxisVar(name=node.name, length=1),)
+                    name_to_axes[node.name] = (be.Axis(name=node.name, length=1),)
 
             elif op_type == 'Const':
                 # in the frozen graph, all variables are converted to constant
@@ -170,7 +170,7 @@ def scan_nameable_axes(graph_def, env):
                 elif len(shape) == 2 and 'weights' in node.name:
                     assert (in_axis is not None)
                     assert (in_axis.length == shape[0])
-                    out_axis = be.AxisVar(name=node.name, length=shape[1])
+                    out_axis = be.Axis(name=node.name, length=shape[1])
                     name_to_axes[node.name] = [in_axis, out_axis]
                     in_axis = out_axis  # now the output axis becomes input axis for the next layer
 
@@ -656,6 +656,7 @@ def _create_nervana_graph(graph_def, env, end_node="", loss_node=""):
 
 
 def create_nervana_graph(pb_file, env, end_node="", loss_node=""):
+    # TODO Remove env everywhere
     """
     TODO.
 

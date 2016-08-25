@@ -35,8 +35,8 @@ class GraphitiMLP(be.Model):
         super(GraphitiMLP, self).__init__(**kwargs)
 
         # Axes
-        L = [be.AxisVar(length=N, name='L%d' % i) for i, N in enumerate(L)]
-        BS = be.AxisVar(length=BS, name='BS')
+        L = [be.Axis(length=N, name='L%d' % i) for i, N in enumerate(L)]
+        BS = be.Axis(length=BS, name='BS')
 
         # Builds Network
         activations = [be.tanh for i in range(len(L) - 2)] + [be.softmax]

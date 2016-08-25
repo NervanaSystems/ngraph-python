@@ -153,7 +153,6 @@ class MyRnn(be.Model):
                 learning_rate[:] = be.ArrayWithAxes(.001, shape=(), axes=())
 
     @be.with_graph_scope
-    @be.with_environment
     def dump(self):
         def visitor(_):
             """TODO."""

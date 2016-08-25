@@ -28,7 +28,6 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import geon as be
-from geon.backends.graph.environment import Environment
 
 from util.importer import create_nervana_graph
 import numpy as np
@@ -48,7 +47,8 @@ parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
 
 args = parser.parse_args()
 
-env = Environment()
+# TODO Remove environment from functions
+env = None
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
@@ -96,57 +96,55 @@ def eval_test(test_data, graph, inference_comp, pred_op):
     :param inference_comp: the transformer.computation
     :return: error rate (1 - accuracy) on test_data
     """
-    with be.bound_environment(env):
-        test_error = 0
-        n_sample = 0
-        for mb_idx, (xraw, yraw) in enumerate(test_data):
-            graph.x.value = xraw
-            result = inference_comp()
-            pred = np.argmax(result, axis=1)
-            gt = np.argmax(yraw, axis=0)
-            test_error += np.sum(np.not_equal(pred, gt))
-            n_sample += pred.shape[0]
+    test_error = 0
+    n_sample = 0
+    for mb_idx, (xraw, yraw) in enumerate(test_data):
+        graph.x.value = xraw
+        result = inference_comp()
+        pred = np.argmax(result, axis=1)
+        gt = np.argmax(yraw, axis=0)
+        test_error += np.sum(np.not_equal(pred, gt))
+        n_sample += pred.shape[0]
 
-        return test_error / float(n_sample) * 100
+    return test_error / float(n_sample) * 100
 
-with be.bound_environment(env):
-    # initialize all variables with the init op
-    if init_comp is None:
-        print("Initialization is not completed.")
-        sys.exit()
+# initialize all variables with the init op
+if init_comp is None:
+    print("Initialization is not completed.")
+    sys.exit()
 
-    init_comp.evaluate()
+init_comp.evaluate()
 
-    for epoch in range(epochs):
-        print("===============================")
-        print("epoch: " + str(epoch))
+for epoch in range(epochs):
+    print("===============================")
+    print("epoch: " + str(epoch))
 
-        avg_loss = 0
-        for mb_idx, (xraw, yraw) in enumerate(train_data):
-            nervana_graph.x.value = xraw
-            nervana_graph.y.value = yraw
+    avg_loss = 0
+    for mb_idx, (xraw, yraw) in enumerate(train_data):
+        nervana_graph.x.value = xraw
+        nervana_graph.y.value = yraw
 
-            avg_loss = update_comp()
+        avg_loss = update_comp()
 
-            if mb_idx % 1000 == 0:
-                print("epoch: %d minibatch: %d" % (epoch, mb_idx))
+        if mb_idx % 1000 == 0:
+            print("epoch: %d minibatch: %d" % (epoch, mb_idx))
 
-                print("the last op: ")
-                print(debug_op)
-                print("result of the last op: ")
-                print(result[debug_op])
-                print("shape of the result: ")
-                print(result[debug_op].shape)
+            print("the last op: ")
+            print(debug_op)
+            print("result of the last op: ")
+            print(result[debug_op])
+            print("shape of the result: ")
+            print(result[debug_op].shape)
 
-                # print out variables
-                for v in nervana_graph.variables:
-                    print(v)
-                    val = nervana_graph.variables[v].tensor_description(trans).value
-                    print(val)
-                    if val is not None and np.isnan(val).any(): sys.exit()
+            # print out variables
+            for v in nervana_graph.variables:
+                print(v)
+                val = nervana_graph.variables[v].tensor_description(trans).value
+                print(val)
+                if val is not None and np.isnan(val).any(): sys.exit()
 
-                print("-------------------------------")
+            print("-------------------------------")
 
-        avg_loss /= mb_idx
-        test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
-        print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))
+    avg_loss /= mb_idx
+    test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
+    print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))

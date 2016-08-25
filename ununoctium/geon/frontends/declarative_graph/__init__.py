@@ -13,9 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from geon.op_graph.names import name_scope_list, with_name_scope
-from geon.frontends.base.graph import Model, with_graph_scope, with_environment, \
-    get_current_environment
-from geon.backends.graph.environment import bound_environment
+from geon.frontends.base.graph import Model, with_graph_scope
 from geon.op_graph.nodes import Node
 
 from geon.frontends.declarative_graph.declarative_graph import Axis, deriv, input, Variable, ArrayWithAxes
