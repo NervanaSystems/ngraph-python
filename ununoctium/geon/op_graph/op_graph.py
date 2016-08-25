@@ -1539,12 +1539,15 @@ class Variable(AllocationOp):
 
 
 class NumPyTensor(Variable):
+    """
+    NumPyTensor is effectively a non-trainable, persistent, constant tensor
+    """
 
     def __init__(self, nptensor, axes, **kwargs):
         super(NumPyTensor, self).__init__(trainable=False, persistent=True,
                                           constant=True, dtype=nptensor.dtype,
                                           axes=axes, **kwargs)
-
+        self.base_tensor = nptensor
         axes = Axes(axes)
         if nptensor.shape != axes.lengths:
             raise ValueError((
@@ -1560,6 +1563,10 @@ class NumPyTensor(Variable):
             return nptensor
 
         self.initializers.append(InitTensor(self, value_fun))
+
+    @property
+    def nptensor(self):
+        return self.base_tensor
 
 
 def temporary(**kwargs):
