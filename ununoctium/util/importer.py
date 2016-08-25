@@ -611,7 +611,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                 val_y = np.array(grad_y_reduce_)
                 name_to_op[node.name + ":1"] = \
                     be.NumPyTensor(val_y,
-                                   axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
+                                   axes=Axes(be.NumericAxis(len(grad_y_reduce_)), ),
                                    name=node.name)
 
         elif op_type == 'ReluGrad':
