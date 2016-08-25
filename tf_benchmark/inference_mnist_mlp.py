@@ -35,8 +35,6 @@ parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
                     help='GraphDef protobuf')
 args = parser.parse_args()
-# TODO Get rid of env
-env = None
 
 
 def inference_mnist_mlp():
@@ -45,8 +43,7 @@ def inference_mnist_mlp():
     test_data = mnist_data['valid']
 
     # build graph
-    # TODO Remove environment
-    frontend_model = create_nervana_graph(args.pb_file, None)
+    frontend_model = create_nervana_graph(args.pb_file)
 
     # init transformer
     transformer = be.NumPyTransformer()
