@@ -50,7 +50,7 @@ args = parser.parse_args()
 
 # TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
 
-epochs = 1
+epochs = 10
 
 mnist_data = MNIST(path=args.data_dir).gen_iterators()
 train_data = mnist_data['train']
@@ -97,7 +97,7 @@ def eval_test(test_data, graph, inference_comp, pred_op):
     test_error = 0
     n_sample = 0
     for mb_idx, (xraw, yraw) in enumerate(test_data):
-        graph.x.value = xraw
+        graph.x.value[:] = xraw
         result = inference_comp()
         pred = np.argmax(result, axis=1)
         gt = np.argmax(yraw, axis=0)
@@ -111,7 +111,7 @@ if init_comp is None:
     print("Initialization is not completed.")
     sys.exit()
 
-init_comp.evaluate()
+init_comp()
 
 for epoch in range(epochs):
     print("===============================")
@@ -119,29 +119,30 @@ for epoch in range(epochs):
 
     avg_loss = 0
     for mb_idx, (xraw, yraw) in enumerate(train_data):
-        nervana_graph.x.value = xraw
-        nervana_graph.y.value = yraw
+        nervana_graph.x.value[:] = xraw
+        nervana_graph.y.value[:] = yraw
 
-        avg_loss = update_comp()
+        avg_loss = update_comp()[0]
 
         if mb_idx % 1000 == 0:
             print("epoch: %d minibatch: %d" % (epoch, mb_idx))
 
             print("the last op: ")
             print(debug_op)
-            print("result of the last op: ")
-            print(result[debug_op])
-            print("shape of the result: ")
-            print(result[debug_op].shape)
+            # print("result of the last op: ")
+            # print(result[debug_op])
+            # print("shape of the result: ")
+            # print(result[debug_op].shape)
 
-            # print out variables
-            for v in nervana_graph.variables:
-                print(v)
-                val = nervana_graph.variables[v].tensor_description(trans).value
-                print(val)
-                if val is not None and np.isnan(val).any(): sys.exit()
-
-            print("-------------------------------")
+            # # print out variables, debug only for now
+            # for v in nervana_graph.variables:
+            #     print(v)
+            #     device_tensor = nervana_graph.variables[v].tensor_description().value
+            #     val = device_tensor._NumPyDeviceTensor__tensor
+            #     print(val)
+            #     if val is not None and np.isnan(val).any(): sys.exit()
+            #
+            # print("-------------------------------")
 
     avg_loss /= mb_idx
     test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
