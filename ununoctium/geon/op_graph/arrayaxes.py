@@ -33,6 +33,14 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     An Axis of a tensor.
 
     Tensor operations uses Axis identity to pair/specify dimensions.
+
+    Arguments:
+        length: The length of the axis.
+        batch: Whether the axis is a batch axis.
+
+    Attributes:
+        length: The length of the axis.
+
     """
     batch_axes = set()
 
@@ -55,6 +63,9 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     @property
     def batch(self):
+        """
+        Whether the axis is a batch axis.
+        """
         return self.__batch
 
     @batch.setter
@@ -84,6 +95,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 class NumericAxis(Axis):
     """
     A NumericAxis is an axis which is uniquely identified by its length.
+
     Every NumericAxis with the same length is the same instance of
     NumericAxis.
     """
@@ -108,8 +120,9 @@ class NumericAxis(Axis):
 
 class FunctionAxis(Axis):
     """
-    A function axis is an axis whose length is computed by a user-supplied
-    function. Instances should only be created internally because using a
+    A function axis is an axis whose length is computed by a user-supplied function.
+
+     Instances should only be created internally because using a
     function that changes the length after a transformation will result in
     undefined behaviour.
     """
@@ -124,8 +137,14 @@ class FunctionAxis(Axis):
 
 class SlicedAxis(FunctionAxis):
     """
-    An axis created by slicing a parent axis. Its length is computed
-    dynamically from the length of the parent.
+    An axis created by slicing a parent axis.
+
+    The length is computed dynamically from the length of the parent.
+
+    Arguments:
+        parent: The axis being sliced.
+        s: The slice.
+        kwargs: Arguments for related classes.
     """
     def __init__(self, parent, s, **kwargs):
         def sliced_length():
@@ -138,6 +157,10 @@ class SlicedAxis(FunctionAxis):
 class PaddedAxis(FunctionAxis):
     """
     An axis created by padding a parent axis.
+
+    Arguments:
+        parent: The axis being padded.
+        pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
         def padded_length():
@@ -163,35 +186,6 @@ class AxisID(object):
 
     def __repr__(self):
         return '{axis}[{idx}]'.format(axis=self.axis, idx=self.idx)
-
-
-def canonicalize(seq):
-    """
-    TODO.
-
-    Arguments:
-      seq: TODO
-
-    Returns:
-
-    """
-    elems = []
-    for x in seq:
-        if isinstance(x, FlattenedAxis):
-            if x.empty:
-                continue
-            elif x.single:
-                x = x.axes[0]
-        elif isinstance(x, collections.Iterable):
-            x = canonicalize(x)
-            if len(x) == 0:
-                continue
-            elif len(x) == 1:
-                x = x[0]
-            else:
-                x = FlattenedAxis(Axes(x))
-        elems.append(x)
-    return elems
 
 
 def no_duplicates(arr):
@@ -224,6 +218,34 @@ class Axes(object):
             axes = tuple(axes)
         elif isinstance(axes, (list, tuple)) and not isinstance(axes, Axes):
             axes = tuple(axes)
+
+        def canonicalize(seq):
+            """
+            TODO.
+
+            Arguments:
+              seq: TODO
+
+            Returns:
+
+            """
+            elems = []
+            for x in seq:
+                if isinstance(x, FlattenedAxis):
+                    if x.empty:
+                        continue
+                    elif x.single:
+                        x = x.axes[0]
+                elif isinstance(x, collections.Iterable):
+                    x = canonicalize(x)
+                    if len(x) == 0:
+                        continue
+                    elif len(x) == 1:
+                        x = x[0]
+                    else:
+                        x = FlattenedAxis(Axes(x))
+                elems.append(x)
+            return elems
 
         axes = canonicalize(axes)
 
@@ -589,13 +611,19 @@ def reduce_strides(strides):
 class TensorDescription(NameableValue):
     """
     Description of a tensor that will be allocated in hardware.
+
     Names the tensor's dimensions with axes and holds pointers to the
     buffer allocated by the analysis and the backend tensor value
     (e.g. a numpy or gpu tensor).
 
     Arguments:
-
-    Returns:
+        axes: Axes of the tensor.
+        base: If a view, the viewed tensor's description.
+        dtype: The type of the tensor.
+        full_strides: The strides of each axis.
+        full_sizes: The allocated size of each axis (may be larger than the axis).
+        offset: An offset into the viewed tensor.
+        kwargs: Additional args for related classes.
 
     """
 
@@ -920,6 +948,16 @@ class TensorDescription(NameableValue):
                                  offset=self.offset)
 
     def cast(self, new_axes):
+        """
+        Return a tensor desciption for a view of the tensor.
+
+        Arguments:
+            new_axes: The axes for the view.
+
+        Returns:
+            The tensor description.
+
+        """
         return TensorDescription(
             new_axes,
             base=self.base,
@@ -972,14 +1010,14 @@ class TensorDescription(NameableValue):
 
     def slice(self, slices, new_axes):
         """
-        TODO.
+        Return a tensor description for a slice view of this tensor.
 
         Arguments:
           slices: TODO
           new_axes: TODO
 
         Returns:
-
+            The tensor description for the slice.
         """
         slices = list(slices)
         while len(slices) < self.ndim:
@@ -1018,17 +1056,21 @@ class TensorDescription(NameableValue):
 
     @property
     def shape(self):
-        """TODO."""
+        """
+
+        Returns: The shape of the tensor.
+
+        """
         return self.axes.lengths
 
     @property
     def strides(self):
-        """TODO."""
+        """The strides of the tensor."""
         return reduce_strides(self.full_strides)
 
     @property
     def sizes(self):
-        """TODO."""
+        """The allocated sizes for each axis."""
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
 
@@ -1039,12 +1081,12 @@ class TensorDescription(NameableValue):
 
     @property
     def base(self):
-        """TODO."""
+        """The viewed tensor description or None if not a view."""
         return self.__base or self
 
     @property
     def buffer(self):
-        """TODO."""
+        """The description of the underlying storage."""
         return self.base.__buffer
 
     @buffer.setter
@@ -1062,15 +1104,15 @@ class TensorDescription(NameableValue):
 
     @property
     def value(self):
-        """TODO."""
+        """A device handle to the value."""
         return self.__value
 
     def is_base(self):
-        """TODO."""
+        """This tensor provides its own storage."""
         return self.__base is None
 
     def initialize(self, transformer):
-        """TODO."""
+        """Called by transformer to set up value."""
         assert self.__value is None
         self.transformer = transformer
         # If the TensorDescription requires heap storage
@@ -1084,11 +1126,11 @@ class TensorDescription(NameableValue):
 
 def linear_map_axes(in_axes, out_axes):
     """
-    Determines the axes of a tensor T so that dot(T, in) has axes out_axes
+    For tensors ``out = dot(T, in)`` determines the axes ``T`` must have.
 
     Arguments:
-      in_axes: TODO
-      out_axes: TODO
+      in_axes: The axes of ``in``.
+      out_axes: The axes of ``out``.
 
     Returns:
 

@@ -21,7 +21,7 @@ from geon.op_graph.names import NameableValue
 
 
 class DebugInfo(object):
-    """TODO."""
+    """Mixin that captures file/line location of an object's creation."""
 
     def __init__(self, **kwargs):
         # TODO This is a good first cut for debugging info, but it would be nice to
@@ -51,7 +51,7 @@ class DebugInfo(object):
         Return file location that created the node.
 
         Returns:
-          String with file location that created the node.
+            String with file location that created the node.
 
         """
         return 'File "{filename}", line {lineno}'.format(
@@ -59,16 +59,23 @@ class DebugInfo(object):
 
 
 class Node(NameableValue, DebugInfo):
-    """Basic implementation of DAGs."""
+    """
+    Basic implementation of DAGs.
+
+    Arguments:
+        args: Values used by this node.
+        tags: String or a set of strings used for filtering in searches.
+        kwargs: Arguments for related classes.
+
+    Attributes:
+        tags: Set of strings used for filtering in searches.
+
+    """
 
     def __init__(self, args=(), tags=None, **kwargs):
         """
         TODO.
 
-        Arguments:
-          args: Values used by this node
-          tags: String or a set of strings used for filtering in searches
-          kwargs: TODO
         """
         super(Node, self).__init__(**kwargs)
         self.users = weakref.WeakSet()
@@ -97,7 +104,7 @@ class Node(NameableValue, DebugInfo):
         Replace old inputs with new inputs, adjusting backpointers as needed.
 
         Arguments:
-          args: New arguments
+            args: New arguments
         """
         for arg in self.__args:
             arg.users.remove(self)
@@ -110,8 +117,8 @@ class Node(NameableValue, DebugInfo):
         Replace all occurrences of an argument node with another node.
 
         Arguments:
-          old: Node to be replaced
-          new: Replacement
+            old: Node to be replaced
+            new: Replacement
         """
         self.args = [new if arg is old else arg for arg in self.args]
 
@@ -120,10 +127,10 @@ class Node(NameableValue, DebugInfo):
         Convert a sequence of values to a tuple of nodes using as_node.
 
         Arguments:
-          args: Sequence of values that can be converted to nodes
+            args: Sequence of values that can be converted to nodes
 
         Returns:
-          Tuple of nodes.
+            Tuple of nodes.
         """
         return tuple(self.as_node(arg) for arg in args)
 
@@ -134,10 +141,10 @@ class Node(NameableValue, DebugInfo):
         Subclasses should override as appropriate.  Used with as_nodes.
 
         Arguments:
-          arg: The value to convert to a node.
+            arg: The value to convert to a node.
 
         Returns:
-          A node
+            A node
         """
         if isinstance(arg, Node):
             return arg
@@ -146,8 +153,9 @@ class Node(NameableValue, DebugInfo):
     @staticmethod
     def visit_input_closure(roots, fun):
         """
-        "Bottom-up" post-order traversal of root and their inputs.  Nodes
-        will only be visited once, even if there are multiple routes to the
+        "Bottom-up" post-order traversal of root and their inputs.
+
+        Nodes will only be visited once, even if there are multiple routes to the
         same Node.
 
         Arguments:
@@ -184,18 +192,12 @@ class Node(NameableValue, DebugInfo):
         Top-down traversal of root and closure of nodes using root as input.
 
         Arguments:
-          root: root set of nodes to visit
-          fun: Function to call on each visited node
+            root: root set of nodes to visit
+            fun: Function to call on each visited node
         """
         visited = set()
 
         def visit(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
             if node not in visited:
                 for n in node.users:
                     visit(n)
