@@ -41,6 +41,7 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
     thetas = np.array([0.0, 0.0, 0.0])
 
     # gradient descent
+    loss = None  # for return safety
     for i in range(max_iter):
         # forward
         loss = get_loss(thetas, xs, ys)
@@ -51,7 +52,7 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
         # update
         thetas -= grad * alpha
 
-    return thetas
+    return loss, thetas
 
 
 def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
@@ -96,7 +97,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     transformer = be.NumPyTransformer()
 
     # return [grad, loss] and also compute update
-    train_eval_func = transformer.computation([grad, loss], update)
+    train_eval_func = transformer.computation([grad, loss, thetas], update)
     transformer.initialize()
 
     # copy data into device
@@ -107,9 +108,12 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     ys.value[()] = ys_np.reshape((ax.Y.length, ax.N.length))
 
     # evaluate
+    loss_val, thetas_val = (None, None)  # for return safety
     for i in range(max_iter):
-        grad_val, loss_val = train_eval_func()
+        grad_val, loss_val, thetas_val = train_eval_func()
         print("grad: %s, loss %s" % (grad_val, loss_val))
+
+    return loss_val, thetas_val
 
 
 if __name__ == '__main__':
@@ -124,8 +128,10 @@ if __name__ == '__main__':
 
     # numpy
     print("# numpy training")
-    numpy_logistic_regression(xs, ys, max_iter, alpha)
+    loss_np, thetas_np = numpy_logistic_regression(xs, ys, max_iter, alpha)
+    print(loss_np, thetas_np)
 
     # geon
     print("# geon training")
-    geon_logistic_regression(xs, ys, max_iter, alpha)
+    loss_ge, thetas_ge = geon_logistic_regression(xs, ys, max_iter, alpha)
+    print(loss_ge, thetas_ge)
