@@ -81,28 +81,29 @@ def train_mnist_mlp():
 
     # frontend_model
     frontend_model = create_nervana_graph(args.pb_file, args.end_node,
-                                         args.loss_node)
+                                          args.loss_node)
 
     # init computation
     init_comp = None
-    trans = be.NumPyTransformer()
+    transformer = be.NumPyTransformer()
     if frontend_model.init is not None:
-        init_comp = trans.computation([frontend_model.init])
+        init_comp = transformer.computation([frontend_model.init])
 
     # inference computation
     pred_op = frontend_model.name_to_op[args.infer_node]
-    predict_comp = trans.computation(pred_op)
+    predict_comp = transformer.computation(pred_op)
 
     # update computation
-    update_comp = trans.computation([frontend_model.loss,
-                                     frontend_model.update])
+    update_comp = transformer.computation([frontend_model.loss,
+                                           frontend_model.update],
+                                          frontend_model.x, frontend_model.y)
 
     # initialize transformer
-    trans.transform_computations()
-    trans.initialize()
+    transformer.transform_computations()
+    transformer.initialize()
 
     # visuzlize
-    # trans.dataflow.view()
+    # transformer.dataflow.view()
 
     # run init computation once
     init_comp()
@@ -112,13 +113,10 @@ def train_mnist_mlp():
         print("epoch: %s" % epoch_index)
 
         total_loss = 0.
-        for mb_idx, (xraw, yraw) in enumerate(train_data):
-            frontend_model.x.value[:] = xraw
-            frontend_model.y.value[:] = yraw
-
-            total_loss += update_comp()[0]
-
+        for mb_idx, (x_raw, y_raw) in enumerate(train_data):
+            total_loss += update_comp(x_raw, y_raw)[0]
         average_loss = total_loss / float(mb_idx)
+
         test_error = eval_test(test_data, frontend_model, predict_comp)
         print("train_loss: %.2f test_error: %.2f" % (average_loss, test_error))
 
