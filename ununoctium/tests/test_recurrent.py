@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from geon.util.utils import ExecutorFactory
 import geon as be
@@ -99,11 +100,9 @@ class T1(RecursionTest):
 class T2(RecursionTest):
     def __init__(self, *args, **kargs):
         def init():
-            self.W1_np = np.random.uniform(low=0, high=1, size=(2, 3, 4))\
-                .astype('float32')
+            self.W1_np = np.ones((2, 3, 4), dtype='float32')
             self.W1 = be.NumPyTensor(self.W1_np, axes=(ax.C, ax.D, ax.H))
-            self.W2_np = np.random.uniform(low=0, high=1, size=(4, 4))\
-                .astype('float32')
+            self.W2_np = np.ones((4, 4), dtype='float32')
             self.W2 = be.NumPyTensor(self.W2_np, axes=(ax.H, ax.H))
 
         super(T2, self).__init__(
@@ -136,6 +135,3 @@ def test_recurrent():
     for test_class in tests:
         for i in range(5):
             test_class().run()
-
-if __name__ == '__main__':
-    pytest.main()
