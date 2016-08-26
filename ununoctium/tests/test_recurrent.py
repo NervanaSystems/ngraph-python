@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+import unittest
 
 from geon.util.utils import ExecutorFactory
 import geon as be
@@ -8,7 +10,7 @@ delta = 1e-3
 
 
 class RecursionTest(object):
-    def __init__(
+    def setUpHelper(
         self, x_np, axes, axes_lengths,
         timesteps=10, init=None, deriv_error=1e-2
     ):
@@ -47,7 +49,7 @@ class RecursionTest(object):
             hs.append(h)
         return np.array(hs, dtype=x.dtype)
 
-    def run(self):
+    def test_rnn(self):
         for axis, length in self.axes_lengths.items():
             axis.length = length
         if self.init is not None:
@@ -75,9 +77,9 @@ class RecursionTest(object):
         )
 
 
-class T1(RecursionTest):
-    def __init__(self, *args, **kargs):
-        super(T1, self).__init__(
+class T1(RecursionTest, unittest.TestCase):
+    def setUp(self):
+        self.setUpHelper(
             x_np=np.array([2, 4, 6], dtype='float32'),
             axes=(ax.C,),
             axes_lengths={ax.C: 3}
@@ -96,15 +98,15 @@ class T1(RecursionTest):
         return h + 2
 
 
-class T2(RecursionTest):
-    def __init__(self, *args, **kargs):
+class T2(RecursionTest, unittest.TestCase):
+    def setUp(self):
         def init():
             self.W1_np = np.ones((2, 3, 4), dtype='float32')
             self.W1 = be.NumPyTensor(self.W1_np, axes=(ax.C, ax.D, ax.H))
             self.W2_np = np.ones((4, 4), dtype='float32')
             self.W2 = be.NumPyTensor(self.W2_np, axes=(ax.H, ax.H))
 
-        super(T2, self).__init__(
+        self.setUpHelper(
             x_np=np.array([[2, 4, 6], [3, 4, 6]], dtype='float32'),
             axes=(ax.C, ax.D),
             axes_lengths={ax.C: 2, ax.D: 3, ax.H: 4},
@@ -126,11 +128,5 @@ class T2(RecursionTest):
         return h.dot(self.W2_np)
 
 
-def test_recurrent():
-    tests = [
-        T1,
-        T2
-    ]
-    for test_class in tests:
-        for i in range(5):
-            test_class().run()
+if __name__ == '__main__':
+    pytest.main(__file__)
