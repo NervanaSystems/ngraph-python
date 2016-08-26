@@ -623,7 +623,7 @@ class TensorDescription(NameableValue):
         full_strides: The strides of each axis.
         full_sizes: The allocated size of each axis (may be larger than the axis).
         offset: An offset into the viewed tensor.
-        kwargs: Additional args for related classes.
+        **kwargs: Additional args for related classes.
 
     """
 
@@ -648,6 +648,7 @@ class TensorDescription(NameableValue):
         self.__read_only = False
         self.full_sizes = full_sizes if full_sizes is not None \
             else self.axes.full_lengths
+        self.style = {}
 
         if full_strides is None:
             # TODO: deduce strides of nested axes.
@@ -666,6 +667,15 @@ class TensorDescription(NameableValue):
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
+
+    @property
+    def parameter_key(self):
+        """
+
+        Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
+
+        """
+        return (self.shape, self.dtype, self.offset, self.strides)
 
     def try_guess_positions(self, new_axes):
         """
@@ -1075,11 +1085,6 @@ class TensorDescription(NameableValue):
                      for _ in self.full_sizes)
 
     @property
-    def cache_key(self):
-        """TODO."""
-        return (self, 'td_values')
-
-    @property
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self
@@ -1121,7 +1126,7 @@ class TensorDescription(NameableValue):
                 self.buffer.data = self.transformer.device_buffer_storage(
                     self.buffer.size, self.dtype, self.name
                 )
-            self.__value = self.transformer.device_tensor(self)
+            self.__value = self.buffer.data.device_tensor(self)
 
 
 def linear_map_axes(in_axes, out_axes):

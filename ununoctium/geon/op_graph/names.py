@@ -130,33 +130,40 @@ def with_name_scope(fun, name=None):
 
 
 class NameableValue(object):
-    """TODO."""
-    counter = 0
+    """
+    An object that can be named.
+
+    Arguments:
+        name (str): The name of the object.
+
+    Attributes:
+        id: Unique id for this object.
+    """
+    __counter = 0
 
     @staticmethod
-    def generate_id():
+    def __generate_id():
         """TODO."""
-        NameableValue.counter += 1
-        return 't{}'.format(NameableValue.counter)
+        NameableValue.__counter += 1
+        return 't{}'.format(NameableValue.__counter)
 
     """A value with a name and debugging info that can be set."""
 
     def __init__(self, name=None, **kwargs):
         super(NameableValue, self).__init__(**kwargs)
-        self.id = NameableValue.generate_id()
+        self.id = NameableValue.__generate_id()
         self.__name = name if name is not None else self.id
-        self.style = {}
 
     @property
     def graph_label(self):
-        """TODO."""
+        """A label for drawing graphs."""
         if self.name != self.id:
             return self.name.split('.')[-1]
         return self.__class__.__name__ + '[' + self.name + ']'
 
     @property
     def name(self):
-        """TODO."""
+        """The name."""
         return self.__name
 
     @name.setter

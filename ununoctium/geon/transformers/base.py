@@ -17,6 +17,7 @@ from __future__ import division
 import abc
 from builtins import object
 import collections
+import weakref
 from future.utils import with_metaclass
 
 from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
@@ -27,19 +28,19 @@ from geon.op_graph.names import NameableValue
 
 
 class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
-    """TODO."""
+    """
+    A handle for a computation function.
+
+    Arguments:
+        transformer (obj:`Transformer`): The associated transformer.
+        returns: If an Op, return the value
+            of the Op, if sequence of Ops, return the sequence of values, if
+            a set return a map, if None, return None.
+        args: Placeholders will be arguments to the function, other values are ops
+            to compute but not return.
+    """
 
     def __init__(self, transformer, returns, *args):
-        """
-        Defines computation.
-
-        Arguments:
-          transformer: TODO
-          returns: If an Op, return the value of the Op, if sequence of Ops, return
-                   the sequence of values, if a Set return a map, if None, return None.
-          args: Placeholders will be arguments to the function, other values are ops
-                to compute but not return.
-        """
         self.transformer = transformer
         self.returns = returns
         self.ops = set()
@@ -68,6 +69,9 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
         self.name = None
 
     def transform(self):
+        """
+        Transforms the computation so that it can be run.
+        """
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
         self.name = self.transformer.transform_ordered_ops(ordered_ops)
 
@@ -114,8 +118,9 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
     """
     Something that can provide storage.
 
-    :ivar transformer: The transformer associated with this device buffer.
-    :ivar views: All direct tensor views of this buffer.
+    Attributes:
+        transformer: The transformer associated with this device buffer.
+        views: All direct tensor views of this buffer.
     """
     def __init__(self, transformer, **kwargs):
         """
@@ -125,8 +130,17 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         """
         super(DeviceBuffer, self).__init__(**kwargs)
         self.transformer = transformer
-        self.views = set()
         self.transformer.device_buffers.add(self)
+        self.__views = weakref.WeakValueDictionary()
+
+    @property
+    def views(self):
+        """
+
+        Returns: Iterator over views of the buffer
+
+        """
+        return self.__views.values()
 
     def transform_allocate(self):
         """
@@ -139,22 +153,49 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         for view in self.views:
             view.transform_allocate()
 
+    def device_tensor(self, tensor_description):
+        """
+        Returns a DeviceTensor for tensor_description.
+
+        Arguments:
+            tensor_description: The TensorDescription of the tensor.
+
+        Returns: A DeviceTensor.
+        """
+        tensor = self.__views.get(tensor_description.parameter_key, None)
+        if tensor is not None:
+            return tensor
+        tensor = self.create_device_tensor(tensor_description)
+        self.__views[tensor_description.parameter_key] = tensor
+        return tensor
+
+    @abc.abstractmethod
+    def create_device_tensor(self, tensor_description):
+        """
+        Creates a DeviceTensor for tensor_description.
+
+        Arguments:
+            tensor_description: The TensorDescription of the tensor.
+
+        Returns: A DeviceTensor.
+        """
+
 
 class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
-    A handle to device storage.
+    A handle to allocated device storage.
 
-    :ivar bytes: The size of the byte buffer.
-    :ivar alignment: The alignment of the byte buffer.
+    Arguments:
+        transformer: The associated transformer.
+        bytes: Size of storage.
+        dtype: Alignment of storage.
+        **kwargs: Args for related classes.
+
+    Attributes:
+        bytes: The size of the byte buffer.
+        dtype: The dtype of the storage.
     """
     def __init__(self, transformer, bytes, dtype, **kwargs):
-        """
-
-        :param transformer: The associated transformer.
-        :param bytes: Size of storage.
-        :param alignment: Alignment of storage.
-        :param kwargs: Additional args.
-        """
         super(DeviceBufferStorage, self).__init__(transformer, **kwargs)
         self.bytes = bytes
         self.dtype = dtype
@@ -162,11 +203,16 @@ class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
 
 class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
-    Holds a reference to a DeviceBuffer.
+    A handle to a reference to a DeviceBuffer.
 
-    :ivar transformer: The transformer associated with this device buffer reference.
-    :ivar views: All direct tensor views of this buffer reference.  Does not include views of
-     device buffer references set to this device buffer.
+    Arguments:
+        transformer: The associated transformer.
+
+    Attributes:
+
+        transformer: The transformer associated with this device buffer reference.
+        views: All direct tensor views of this buffer reference.  Does not include views of
+            device buffer references set to this device buffer.
     """
     def __init__(self, transformer, **kwargs):
         super(DeviceBufferReference, self).__init__(self, **kwargs)
@@ -177,15 +223,17 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
     """
     A handle to a tensor on the device.
 
-    :ivar device_buffer The device buffer [reference] backing this view.
-    :ivar tensor_description: The tensor description for this tensor.
+    Arguments:
+        transformer: The associated transformer.
+        device_buffer: The device buffer for the elements.
+        tensor_description: The tensor_description describing this device tensor.
+        **kwargs: Args for related classes.
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(DeviceTensor, self).__init__(**kwargs)
         self.transformer = transformer
         self.device_buffer = device_buffer
         self.tensor_description = tensor_description
-        device_buffer.views.add(self)
 
     @property
     def dtype(self):
@@ -225,29 +273,34 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
     """
-    Given a list of ops you want to compute the results of, this transformer
-    will compile the graph required to compute those results and exposes an
-    evaluate method to execute the compiled graph.
+    Produce an executable version of Op graphs.
+
+    Computations are subsets of Ops to compute.  The transformer determines storage
+    allocation and transforms the computations and allocations into functions.
 
     Arguments:
-      fusion: Whether to combine sequences of operations into one operation.
+        fusion (bool): Whether to combine sequences of operations into one operation.
+        **kwargs: Args for related classes.
 
+    Attributes:
+        computations (:obj:`set` of :class:`Computation`): The set of requested computations.
+        all_results (:obj:`set` of :class:`geon.op_graph.op_graph.Op`):  A root set of Ops that
+            need to be computed.
+        finalized (bool): True when transformation has been performed.
+        initialized (bool): True when variables have been initialized/restored.
+        opids (dict): TODO
+        fusion (bool): True when fusion was enabled.
+        device_buffers (set): Set of handles for storage allocations.
+        cpu_initializations (list): Initializations to be performed from the CPU after
+            allocation.
+        init_computation (Computation): The computation that performs initialization
+            after allocation.
     """
 
-    def __init__(self, fusion=None, **kvargs):
-        """
-        TODO.
-
-        Arguments:
-          fusion: Whether to combine sequences of operations into one operation.
-        """
-        super(Transformer, self).__init__(**kvargs)
-        self.transform_hook = None
+    def __init__(self, fusion=None, **kwargs):
+        super(Transformer, self).__init__(**kwargs)
         self.computations = set()
         self.all_results = set()
-        self.values = dict()
-        self.cache = dict()
-        self.tensor_descriptions = set()
         self.finalized = False
         self.allocated = False
         self.initialized = False
@@ -303,7 +356,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def initialize_tensor_descriptions(self, op):
         """
         Ensures that tensor descriptions associated with op are initialized.
-        :param op:
+
+        Arguments:
+            op (class:`geon.op_graph.op_graph.Op`): Initialize the tensor description for op.
         """
         # op
         tensor_description = op.tensor_description()
@@ -319,7 +374,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def initialize_tensor_descriptions(self, op):
         """
         For Function, recurse into instructions
-        :param op:
+
+        Arguments:
+            op: The function.
         :return:
         """
         for inst in op.instructions:
@@ -342,8 +399,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Generate code to compute ordered_ops.
 
-        :param ordered_ops: Ops to compute
-        :return: Handle for generated code
+        Arguments:
+        ordered_ops: Ops to compute
+
+        Returns: Handle for generated code
         """
 
     @abc.abstractmethod
@@ -428,10 +487,12 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Make a DeviceBuffer.
 
-        :param bytes: Size of buffer.
-        :param dtype: dtype of buffer.
-        :param name: Name of the storage variable
-        :return: A DeviceBuffer.
+        Arguments:
+            bytes: Size of buffer.
+            dtype: dtype of buffer.
+            name: Name of the storage variable
+
+        returns: A DeviceBuffer.
         """
 
     @abc.abstractmethod
@@ -439,16 +500,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Make a DeviceBufferReference.
 
-        :return: A DeviceBufferReference.
-        """
-
-    @abc.abstractmethod
-    def device_tensor(self, tensor_description):
-        """
-        Make a DeviceTensor.
-
-        :param tensor_description: The TensorDescription of the tensor.
-        :return: A DeviceTensor.
+        Returns: A DeviceBufferReference.
         """
 
     # User API follows
@@ -457,11 +509,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Adds a computation to the transformer.
 
         Arguments:
-          results: Values to be computed
-          parameters: Values to be set as arguments to evaluate
+            results: Values to be computed
+            parameters: Values to be set as arguments to evaluate
 
         Returns:
-          Dictionary from results to their values
+            Dictionary from results to their values
         """
         if self.finalized:
             raise ValueError(

@@ -29,8 +29,8 @@ class TypeMethods(object):
         Makes a wrapper to add the dispatch_type method to method_dispatch
 
         Arguments:
-          generic_function: The generic function.
-          dispatch_type: The dispatch type.
+            generic_function: The generic function.
+            dispatch_type: The dispatch type.
 
         Returns: An wrapper that adds a method for dispatch_type to generic_function
 
@@ -40,7 +40,7 @@ class TypeMethods(object):
             Adds f as the generic_function method for dispatch_type.
 
             Arguments:
-              method: The method.
+                method: The method.
 
             Returns:
 
@@ -66,23 +66,26 @@ def generic_function(base_function):
     Specialized handlers should be marked with @{base}.on_type(type)
 
     Example:
-    @generic_function
-    def visit(arg)
-        print(arg)
 
-    @visit.on_type(X):
-    def visit(arg):
-        print("Visiting an X")
+    .. code-block:: python
 
-    @visit.on_type(Y):
-    def visit(arg):
-        print("Visiting a Y")
+        @generic_function
+        def visit(arg)
+            print(arg)
+
+        @visit.on_type(X):
+        def visit(arg):
+            print("Visiting an X")
+
+        @visit.on_type(Y):
+        def visit(arg):
+            print("Visiting a Y")
 
     Arguments:
-      base_function: Default implementation of the function.
+        base_function: Default implementation of the function.
 
     Returns:
-      The generic function
+        The generic function
     """
     type_methods = TypeMethods(base_function)
 
@@ -92,9 +95,9 @@ def generic_function(base_function):
         The generic function's implementation.
 
         Arguments:
-          dispatch_arg: The argument that dispatches.
-          *args: Remaining args.
-          **kwargs: Keyword args.
+            dispatch_arg: The argument that distpaches.
+            *args: Remaining args.
+            **kwargs: Keyword args.
 
         Returns: The result of the selected method.
 
@@ -106,7 +109,7 @@ def generic_function(base_function):
         Marks the handler sub-method for when the first argument has type dispatch_type.
 
         Arguments:
-          dispatch_type: The dispatch type.
+            dispatch_type: The dispatch type.
 
         Returns: The wrapper for the method.
 
@@ -127,32 +130,35 @@ def generic_method(base_method):
     Specialized methods should be marked with @method.on_type(type)
 
     Example:
-    class Visitor(object):
-        def __init__(self, values):
-            self.xs = []
-            self.ys = []
-            self.others = []
 
-            for value in values:
-                self.visit(value)
+    .. code-block:: python
 
-        @generic_method
-        def visit(self, arg)
-            self.others.append(arg)
+        class Visitor(object):
+            def __init__(self, values):
+                self.xs = []
+                self.ys = []
+                self.others = []
 
-        @visit.on_type(X):
-        def visit(self, arg):
-            self.xs.append(arg)
+                for value in values:
+                    self.visit(value)
 
-        @visit.on_type(Y):
-        def visit(self, arg):
-            self.ys.append(arg)
+            @generic_method
+            def visit(self, arg)
+                self.others.append(arg)
+
+            @visit.on_type(X):
+            def visit(self, arg):
+                self.xs.append(arg)
+
+            @visit.on_type(Y):
+            def visit(self, arg):
+                self.ys.append(arg)
 
     Arguments:
-      base_method: Default implementation of the method.
+        base_method: Default implementation of the method.
 
     Returns:
-      The generic method
+        The generic method
     """
     type_methods = TypeMethods(base_method)
 
@@ -162,10 +168,10 @@ def generic_method(base_method):
         The generic method's implementation.
 
         Arguments:
-          s: self.
-          dispatch_arg: Argument that controls generic method selection.
-          *args: Remaining positional args.
-          **kwargs: Keyword args.
+            s: self.
+            dispatch_arg: Argument that controls generic method selection.
+            *args: Remaining positional args.
+            **kwargs: Keyword args.
 
         Returns: The result of the selected method.
 
@@ -177,7 +183,7 @@ def generic_method(base_method):
         Marks the handler sub-method for when the first argument has type dispatch_type.
 
         Arguments:
-          dispatch_type: The dispatch type.
+            dispatch_type: The dispatch type.
 
         Returns: The wrapper for the method.
 
