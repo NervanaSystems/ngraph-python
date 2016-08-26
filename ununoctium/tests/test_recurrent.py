@@ -10,7 +10,7 @@ delta = 1e-3
 class RecursionTest(object):
     def __init__(
         self, x_np, axes, axes_lengths,
-        timesteps=10, init=None, deriv_error=1e-3
+        timesteps=10, init=None, deriv_error=1e-2
     ):
         self.x_np = x_np
         self.x = be.placeholder(axes=axes)
@@ -64,12 +64,14 @@ class RecursionTest(object):
 
         np.testing.assert_allclose(
             sym_fun(self.x_np),
-            self.np_rec(self.x_np)
+            self.np_rec(self.x_np),
+            err_msg="{} values".format(self.__class__.__name__)
         )
         np.testing.assert_allclose(
             sym_deriv_fun(self.x_np),
             num_deriv_fun(self.x_np),
-            rtol=self.deriv_error
+            rtol=self.deriv_error,
+            err_msg="{} deriv".format(self.__class__.__name__)
         )
 
 
