@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from geon.util.utils import ExecutorFactory
 import geon as be
