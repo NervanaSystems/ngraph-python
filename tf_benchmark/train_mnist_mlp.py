@@ -21,18 +21,22 @@ To Run:
 
     python train_mnist_mlp.py --loss_node="xentropy_mean"
 
+TODO: load meta info from TF's MetaGraph, including details about dataset,
+      training epochs and etc
+TODO: pass the inference computation graph only without provide the last node
+      for inference (in eval_test())
+TODO: infer_node: should determine automatically or receive as arg parameter
+
 """
 
 from __future__ import print_function
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
+from util.importer import create_nervana_graph
 
 import geon as be
-
-from util.importer import create_nervana_graph
 import numpy as np
 import sys
-
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -47,48 +51,8 @@ parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
 
 args = parser.parse_args()
 
-# TODO Remove environment from functions
-env = None
 
-# TODO: load meta info from TF's MetaGraph, including details about dataset, training epochs and etc
-
-epochs = 1
-
-mnist_data = MNIST(path=args.data_dir).gen_iterators()
-train_data = mnist_data['train']
-test_data = mnist_data['valid']
-
-nervana_graph = create_nervana_graph(args.pb_file, env, args.end_node, args.loss_node)
-
-init_comp = None
-trans = be.NumPyTransformer()
-if nervana_graph.init is not None:
-    init_comp = trans.computation([nervana_graph.init])
-
-inference_comp = None
-if args.infer_node in nervana_graph.name_to_op:
-    # TODO: should determine automatically or receive as arg parameter
-    pred_op = nervana_graph.name_to_op[args.infer_node]
-    inference_comp = trans.computation(pred_op)
-
-debug_comp = None
-debug_op = None
-if args.end_node in nervana_graph.name_to_op:
-    debug_op = nervana_graph.name_to_op[args.end_node]
-    debug_comp = trans.computation([debug_op])
-
-update_comp = None
-if nervana_graph.loss is not None and nervana_graph.update is not None:
-    if debug_op is not None:
-        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update, debug_op])
-    else:
-        update_comp = trans.computation([nervana_graph.loss, nervana_graph.update])
-
-trans.transform_computations()
-trans.dataflow.view()
-
-def eval_test(test_data, graph, inference_comp, pred_op):
-    # TODO: pass the inference computation graph only without provide the last node for inference.
+def eval_test(test_data, graph, inference_comp):
     """
     :param test_data: test input
     :param inference_comp: the computation graph for inference
@@ -99,7 +63,7 @@ def eval_test(test_data, graph, inference_comp, pred_op):
     test_error = 0
     n_sample = 0
     for mb_idx, (xraw, yraw) in enumerate(test_data):
-        graph.x.value = xraw
+        graph.x.value[:] = xraw
         result = inference_comp()
         pred = np.argmax(result, axis=1)
         gt = np.argmax(yraw, axis=0)
@@ -108,43 +72,54 @@ def eval_test(test_data, graph, inference_comp, pred_op):
 
     return test_error / float(n_sample) * 100
 
-# initialize all variables with the init op
-if init_comp is None:
-    print("Initialization is not completed.")
-    sys.exit()
 
-init_comp.evaluate()
+def train_mnist_mlp():
+    # dataset
+    mnist_data = MNIST(path=args.data_dir).gen_iterators()
+    train_data = mnist_data['train']
+    test_data = mnist_data['valid']
 
-for epoch in range(epochs):
-    print("===============================")
-    print("epoch: " + str(epoch))
+    # frontend_model
+    frontend_model = create_nervana_graph(args.pb_file, args.end_node,
+                                          args.loss_node)
 
-    avg_loss = 0
-    for mb_idx, (xraw, yraw) in enumerate(train_data):
-        nervana_graph.x.value = xraw
-        nervana_graph.y.value = yraw
+    # init computation
+    init_comp = None
+    transformer = be.NumPyTransformer()
+    if frontend_model.init is not None:
+        init_comp = transformer.computation([frontend_model.init])
 
-        avg_loss = update_comp()
+    # inference computation
+    pred_op = frontend_model.name_to_op[args.infer_node]
+    predict_comp = transformer.computation(pred_op)
 
-        if mb_idx % 1000 == 0:
-            print("epoch: %d minibatch: %d" % (epoch, mb_idx))
+    # update computation
+    update_comp = transformer.computation([frontend_model.loss,
+                                           frontend_model.update],
+                                          frontend_model.x, frontend_model.y)
 
-            print("the last op: ")
-            print(debug_op)
-            print("result of the last op: ")
-            print(result[debug_op])
-            print("shape of the result: ")
-            print(result[debug_op].shape)
+    # initialize transformer
+    transformer.transform_computations()
+    transformer.initialize()
 
-            # print out variables
-            for v in nervana_graph.variables:
-                print(v)
-                val = nervana_graph.variables[v].tensor_description(trans).value
-                print(val)
-                if val is not None and np.isnan(val).any(): sys.exit()
+    # visualize
+    # transformer.dataflow.view()
 
-            print("-------------------------------")
+    # run init computation once
+    init_comp()
 
-    avg_loss /= mb_idx
-    test_error = eval_test(test_data, nervana_graph, inference_comp, pred_op)
-    print("train_loss: %.2f test_error: %.2f" % (avg_loss, test_error))
+    for epoch_index in range(10):
+        print("===============================")
+        print("epoch: %s" % epoch_index)
+
+        total_loss = 0.
+        for mb_idx, (x_raw, y_raw) in enumerate(train_data):
+            total_loss += update_comp(x_raw, y_raw)[0]
+        average_loss = total_loss / float(mb_idx)
+
+        test_error = eval_test(test_data, frontend_model, predict_comp)
+        print("train_loss: %.2f test_error: %.2f" % (average_loss, test_error))
+
+
+if __name__ == '__main__':
+    train_mnist_mlp()

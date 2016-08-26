@@ -28,6 +28,7 @@ from neon.util.argparser import NeonArgparser
 import numpy as np
 import geon as be
 from util.importer import create_nervana_graph
+import geon.analysis as an
 
 # args and environment
 parser = NeonArgparser(__doc__)
@@ -35,8 +36,6 @@ parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
                     help='GraphDef protobuf')
 args = parser.parse_args()
-# TODO Get rid of env
-env = None
 
 
 def inference_mnist_mlp():
@@ -45,8 +44,7 @@ def inference_mnist_mlp():
     test_data = mnist_data['valid']
 
     # build graph
-    # TODO Remove environment
-    frontend_model = create_nervana_graph(args.pb_file, None)
+    frontend_model = create_nervana_graph(args.pb_file)
 
     # init transformer
     transformer = be.NumPyTransformer()
@@ -56,6 +54,15 @@ def inference_mnist_mlp():
     # set ups
     total_error = 0
     total_num_samples = 0
+
+    # visualize
+    dataflow = an.DataFlowGraph(transformer, [frontend_model.last_op])
+    dataflow.render('dataflow.gv')
+    fused = an.KernelFlowGraph(dataflow, fusible=an.gpu_fusible)
+    fused.render('fused-dataflow.gv')
+    interference = an.InterferenceGraph(fused.liveness())
+    interference.color()
+    interference.render('interference.gv')
 
     for batch_idx, (x_raw, y_raw) in enumerate(test_data):
         # increment total number of samples
