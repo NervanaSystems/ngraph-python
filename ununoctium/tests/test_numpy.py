@@ -21,6 +21,7 @@ import geon.frontends.base.axis as ax
 import geon as be
 from geon.util.utils import RandomTensorGenerator, ExecutorFactory
 from geon.util.utils import numeric_derivative, executor
+from geon.util.derivative_check import check_derivative
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -171,19 +172,12 @@ def test_reduction_deriv():
                                [ax.W, ax.H]]:
             p_u = be.placeholder(axes=axes)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-            ex = ExecutorFactory()
-            num_fun = ex.numeric_derivative(graph_reduce, p_u, delta)
-            sym_fun = ex.derivative(graph_reduce, p_u)
-            dgraph_val_num = num_fun(u)
-            dgraph_val = sym_fun(u)
-            np.testing.assert_allclose(
-                dgraph_val, dgraph_val_num, atol=1e-1,
-                rtol=1e-1)
+
+            check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
 def test_reciprocal():
     """TODO."""
-    delta = .001
     ax.W.length = 20
     ax.N.length = 128
     axes = be.Axes([ax.W, ax.N])
@@ -194,70 +188,100 @@ def test_reciprocal():
     rec_u = be.reciprocal(p_u)
 
     ex = ExecutorFactory()
-    fun = ex.executor(rec_u, p_u)
-
-    drec_u_num_fun = ex.numeric_derivative(rec_u, p_u, delta)
-    drec_u_graph_fun = ex.derivative(rec_u, p_u)
-
-    rec_u_graph = fun(u)
+    rec_u_graph = ex.executor(rec_u, p_u)(u)
     np.testing.assert_allclose(rec_u_np, rec_u_graph)
 
-    drec_u_num = drec_u_num_fun(u)
-    drec_u_graph = drec_u_graph_fun(u)
-    np.testing.assert_allclose(drec_u_graph, drec_u_num, atol=1e-2, rtol=1e-2)
 
-
-def test_elementwise_ops_matched_args():
+def test_reciprocal_derivative():
     """TODO."""
     delta = .001
     ax.W.length = 20
-    ax.H.length = 20
     ax.N.length = 128
-    axes = be.Axes([ax.W, ax.H])
+    axes = be.Axes([ax.W, ax.N])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(.1, 5.0, p_u.axes)
 
-    for np_op, be_op, op in [(np.add, be.add, 'add'),
-                             (np.subtract, be.subtract, 'sub'),
-                             (np.multiply, be.multiply, 'multiply'),
-                             (np.divide, be.divide, 'divide')]:
+    rec_u = be.reciprocal(p_u)
+
+    check_derivative(rec_u, p_u, delta, u, atol=1e-2, rtol=1e-2)
+
+ELEMENTWISE_BINARY_OPS = [
+    (np.add, be.add),
+    (np.subtract, be.subtract),
+    (np.multiply, be.multiply),
+    (np.divide, be.divide),
+]
+
+
+ELEMENTWISE_UNARY_OPS = [
+    (np.exp, be.exp),
+    (np.log, be.log),
+    (np.tanh, be.tanh),
+]
+
+
+def test_elementwise_binary_ops_matched_args():
+    """TODO."""
+    axes = be.Axes([be.Axis(20), be.Axis(20)])
+
+    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
         # Matched sizes
         p_u = be.placeholder(axes=axes)
         p_v = be.placeholder(axes=axes)
         u = rng.uniform(-1.0, 1.0, p_u.axes)
         v = rng.uniform(1.0, 2.0, p_v.axes)
-        result_np = np_op(u, v)
 
-        result_op = be_op(p_u, p_v)
+        compare_f_at_x(
+            be_op(p_u, p_v), [p_u, p_v],
+            np_op, [u, v],
+            atol=1e-4, rtol=1e-4
+        )
 
-        ex = ExecutorFactory()
-        fun = ex.executor(result_op, p_u, p_v)
 
-        duvdunum_fun = ex.numeric_derivative(result_op, p_u, delta, p_v)
+def test_elementwise_binary_ops_matched_args_deriv_lhs():
+    """TODO."""
+    axes = be.Axes([be.Axis(20), be.Axis(20)])
 
-        duvdut_fun = ex.derivative(result_op, p_u, p_v)
+    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
+        # Matched sizes
+        p_u = be.placeholder(axes=axes)
+        p_v = be.placeholder(axes=axes)
+        u = rng.uniform(-1.0, 1.0, p_u.axes)
+        v = rng.uniform(1.0, 2.0, p_v.axes)
 
-        # same as above, but for v instead of u
-        duvdvnum_fun = ex.numeric_derivative(result_op, p_v, delta, p_u)
-        duvdvt_fun = ex.derivative(result_op, p_v, p_u)
+        check_derivative(
+            be_op(p_u, p_v), p_u, 0.001, u,
+            parameters=[p_v],
+            parameter_values=[v],
+            atol=1e-4, rtol=1e-4,
+        )
 
-        # ensure numpy and neon backend perform the same calculation
-        result_be = fun(u, v)
-        np.testing.assert_allclose(result_np, result_be, atol=1e-4,
-                                   rtol=1e-4)
 
-        duvdunum = duvdunum_fun(u, v)
-        duvdut = duvdut_fun(u, v)
-        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-4,
-                                   rtol=1e-4)
+def test_elementwise_binary_ops_matched_args_deriv_rhs():
+    """TODO."""
+    axes = be.Axes([be.Axis(20), be.Axis(20)])
 
-        # same as above, but for v instead of u
-        duvdvnum = duvdvnum_fun(v, u)
-        duvdvt = duvdvt_fun(v, u)
-        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3,
-                                   rtol=1e-3)
+    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
+        # Matched sizes
+        p_u = be.placeholder(axes=axes)
+        p_v = be.placeholder(axes=axes)
+        u = rng.uniform(-1.0, 1.0, p_u.axes)
+        v = rng.uniform(1.0, 2.0, p_v.axes)
 
-    for np_op, be_op, op in [(np.exp, be.exp, 'exp'),
-                             (np.log, be.log, 'log'),
-                             (np.tanh, be.tanh, 'tanh')]:
+        check_derivative(
+            be_op(p_u, p_v), p_v, 0.001, v,
+            parameters=[p_u],
+            parameter_values=[u],
+            atol=1e-3, rtol=1e-3,
+        )
+
+
+def test_elementwise_unary_ops_matched_args():
+    """TODO."""
+    delta = .001
+    axes = be.Axes([be.Axis(20), be.Axis(20)])
+
+    for np_op, be_op in ELEMENTWISE_UNARY_OPS:
         p_u = be.placeholder(axes=axes)
         u = rng.uniform(1.0, 2.0, p_u.axes)
         u_np = np_op(u)
@@ -269,12 +293,10 @@ def test_elementwise_ops_matched_args():
         dudut_fun = ex.derivative(result_op, p_u)
 
         u_t = fun(u)
-        np.testing.assert_allclose(u_np, u_t, atol=1e-4,
-                                   rtol=1e-4)
+        np.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
         dudunum = dudunum_fun(u)
         dudut = dudut_fun(u)
-        np.testing.assert_allclose(dudunum, dudut, atol=1e-3,
-                                   rtol=1e-3)
+        np.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
 def test_elementwise_ops_unmatched_args():
@@ -287,10 +309,7 @@ def test_elementwise_ops_unmatched_args():
     batch_axes = [ax.W, ax.H, ax.N]
     broadcast_dims = (ax.W.length, ax.H.length, 1)
 
-    for np_op, be_op, op in [(np.add, be.add, 'add'),
-                             (np.subtract, be.subtract, 'sub'),
-                             (np.multiply, be.multiply, 'multiply'),
-                             (np.divide, be.divide, 'divide')]:
+    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
         # Matched sizes
         p_u = be.placeholder(axes=sample_axes)
         p_v = be.placeholder(axes=batch_axes)
@@ -321,32 +340,26 @@ def test_elementwise_ops_unmatched_args():
         dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
         result_be = uv_fun(u, v)
-        np.testing.assert_allclose(uv_np, result_be, atol=1e-4,
-                                   rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
         duvdunum = duvdunum_fun(u, v)
         duvdut = duvdut_fun(u, v)
-        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-3,
-                                   rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
 
         duvdvnum = duvdvnum_fun(v, u)
         duvdvt = duvdvt_fun(v, u)
-        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3,
-                                   rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
 
         # v op u
 
         result_be = vu_fun(u, v)
-        np.testing.assert_allclose(vu_np, result_be, atol=1e-4,
-                                   rtol=1e-4), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(vu_np, result_be, atol=1e-4, rtol=1e-4)
         dvudunum = dvudunum_fun(u, v)
         dvudut = dvudut_fun(u, v)
-        np.testing.assert_allclose(dvudunum, dvudut, atol=1e-3,
-                                   rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
 
         dvudvnum = dvudvnum_fun(v, u)
         dvudvt = dvudvt_fun(v, u)
-        np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3,
-                                   rtol=1e-3), 'op:{op}'.format(op=op)
+        np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
 
 
 def np_softmax(x, axis):
@@ -562,73 +575,126 @@ def test_softmax():
     np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
+def test_softmax2():
+    ax.W.length = 3
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.N])
+
+    x = rng.uniform(0, 1, axes)
+    p_x = be.placeholder(axes=axes)
+
+    compare_f_at_x(be.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x)
+
+
 def test_softmax_deriv():
     ax.W.length = 3
     ax.N.length = 10
     axes = be.Axes([ax.W, ax.N])
 
+    x = rng.uniform(0, 1, axes)
     p_x = be.placeholder(axes=axes)
-    softmax_x = be.softmax(p_x)
 
+    check_derivative(be.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
+
+
+def test_cross_entropy_softmax():
+    ax.W.length = 3
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.N])
+
+    p_x = be.placeholder(axes=axes)
     p_t = be.placeholder(axes=axes)
-    cross_entropy_sm_x_t = be.cross_entropy_multi(softmax_x, p_t)
 
-    ex = ExecutorFactory()
-    softmax_x_num_deriv_fun = ex.numeric_derivative(softmax_x, p_x, .001)
-    softmax_x_deriv_fun = ex.derivative(softmax_x, p_x)
-    cross_entropy_fun = ex.executor([cross_entropy_sm_x_t, softmax_x], p_x, p_t)
-    cross_entropy_num_deriv_fun = ex.numeric_derivative(cross_entropy_sm_x_t, p_x, .001, p_t)
-    cross_entropy_deriv_fun = ex.derivative(cross_entropy_sm_x_t, p_x, p_t)
+    cross_entropy_sm_x_t = be.cross_entropy_multi(be.softmax(p_x), p_t)
 
     x = rng.uniform(0, 1, axes)
     t = np_softmax(rng.uniform(0, 1, axes), 0)
 
-    softmax_x_np = np_softmax(x, 0)
+    def f_np(x, t):
+        return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
 
-    softmax_x_num_deriv = softmax_x_num_deriv_fun(x)
-    softmax_x_deriv = softmax_x_deriv_fun(x)
-    np.testing.assert_allclose(softmax_x_num_deriv, softmax_x_deriv, atol=1e-2, rtol=1e-2)
-
-    cross_entropy_np = np_cross_entropy_multi(softmax_x_np, t, axis=0)
-    cross_entropy, softmax_x = cross_entropy_fun(x, t)
-    np.testing.assert_allclose(softmax_x, softmax_x_np)
-    np.testing.assert_allclose(cross_entropy_np, cross_entropy, rtol=1e-5)
-
-    cross_entropy_num_deriv = cross_entropy_num_deriv_fun(x, t)
-    cross_entropy_deriv = cross_entropy_deriv_fun(x, t)
-    np.testing.assert_allclose(cross_entropy_num_deriv, cross_entropy_deriv, atol=1e-2, rtol=1e-2)
+    compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_sigmoid():
-    """TODO."""
-    delta = .001
-    ax.W.length = 20
-    ax.N.length = 128
+def test_cross_entropy_softmax_deriv():
+    ax.W.length = 3
+    ax.N.length = 10
     axes = be.Axes([ax.W, ax.N])
+
+    p_x = be.placeholder(axes=axes)
+    p_t = be.placeholder(axes=axes)
+
+    x = rng.uniform(0, 1, axes)
+    t = np_softmax(rng.uniform(0, 1, axes), 0)
+
+    check_derivative(
+        be.cross_entropy_multi(be.softmax(p_x), p_t),
+        p_x, 0.001, x,
+        parameters=[p_t],
+        parameter_values=[t],
+        atol=1e-2, rtol=1e-2
+    )
+
+
+def test_sigmoid_deriv():
+    """TODO."""
+    axes = be.Axes([be.Axis(20), be.Axis(128)])
     p_u = be.placeholder(axes=axes)
     u = rng.uniform(-3.0, 3.0, p_u.axes)
 
-    val_u_np = 1.0 / (1 + np.exp(-u))
     val_u = be.sigmoid(p_u)
-    log_val_u = be.log(val_u)
 
+    check_derivative(val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
+
+
+def test_log_sigmoid_deriv():
+    """TODO."""
+    axes = be.Axes([be.Axis(20), be.Axis(128)])
+    p_u = be.placeholder(axes=axes)
+    u = rng.uniform(-3.0, 3.0, p_u.axes)
+
+    log_val_u = be.log(be.sigmoid(p_u))
+
+    check_derivative(log_val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
+
+
+def compare_f_at_x(f_be, x_be, f_np, x, **kwargs):
+    """
+    Compare op_graph implementation of a function with numpy implementation
+
+    Arguments:
+        f_be: op_graph function
+        x_be: argument to op_graph
+        f_np: numpy function
+        x: value to pass in to both implementations of f
+        kwargs: used to pass rtol/atol on to assert_allclose
+    """
+    # op_graph
     ex = ExecutorFactory()
-    val_u_graph_fun = ex.executor(val_u, p_u)
-    dval_u_num_fun = ex.numeric_derivative(val_u, p_u, delta)
-    dval_u_graph_fun = ex.derivative(val_u, p_u)
-    dlog_val_u_num_fun = ex.numeric_derivative(log_val_u, p_u, delta)
-    dlog_val_u_graph_fun = ex.derivative(log_val_u, p_u)
 
-    val_u_graph = val_u_graph_fun(u)
-    np.testing.assert_allclose(val_u_np, val_u_graph)
+    # if x_be and x are not tuples or lists, put them in lists with length 1
+    if isinstance(x_be, (tuple, list)):
+        assert len(x_be) == len(x)
+    else:
+        x_be = [x_be]
+        x = [x]
 
-    dval_u_num = dval_u_num_fun(u)
-    dval_u_graph = dval_u_graph_fun(u)
-    np.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    # numpy
+    val_np = f_np(*x)
 
-    dlog_val_u_num = dlog_val_u_num_fun(u)
-    dlog_val_u_graph = dlog_val_u_graph_fun(u)
-    np.testing.assert_allclose(dlog_val_u_graph, dlog_val_u_num, atol=1e-2, rtol=1e-2)
+    val_be = ex.executor(f_be, *x_be)(*x)
+
+    # compare numpy and op_graph
+    np.testing.assert_allclose(val_np, val_be, **kwargs)
+
+
+def test_sigmoid_value():
+    """ check the output of sigmoid is the same as np """
+    axes = be.Axes([be.Axis(20), be.Axis(128)])
+    p_x = be.placeholder(axes=axes)
+    x = rng.uniform(-3.0, 3.0, p_x.axes)
+
+    compare_f_at_x(be.sigmoid(p_x), p_x, lambda x: 1.0 / (1 + np.exp(-x)), x)
 
 
 def one_hot_comparison(hot_axes, axes):
