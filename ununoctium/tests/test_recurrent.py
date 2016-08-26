@@ -130,11 +130,12 @@ class T2(RecursionTest):
 
 def xtest_recurrent():
     tests = [
-        T1(),
-        T2()
+        T1,
+        T2
     ]
-    for test in tests:
-        test.run()
+    for test_class in tests:
+        for i in range(5):
+            test_class().run()
 
 if __name__ == '__main__':
     xtest_recurrent()
