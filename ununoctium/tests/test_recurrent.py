@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from geon.util.utils import ExecutorFactory
 import geon as be
@@ -128,8 +127,7 @@ class T2(RecursionTest):
         return h.dot(self.W2_np)
 
 
-@pytest.mark.xfail
-def test_recurrent():
+def xtest_recurrent():
     tests = [
         T1(),
         T2()
@@ -138,4 +136,4 @@ def test_recurrent():
         test.run()
 
 if __name__ == '__main__':
-    test_recurrent()
+    xtest_recurrent()
