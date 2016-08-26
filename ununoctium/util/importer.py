@@ -284,6 +284,9 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
     print(name_to_axes)
 
+    # constant_dict
+    constant_tensor_dict = dict()
+
     for node in graph_def.node:
         op_type = node.op
 
@@ -369,6 +372,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                                                        axes=be.Axes(be.NumericAxis(shape[0]),
                                                                     be.NumericAxis(shape[1])),
                                                        name=node.name)
+            constant_tensor_dict[node.name] = np_val
 
         elif op_type == 'Variable':
             name_to_op[node.name] = be.Variable(axes=name_to_axes[node.name], name=node.name)
@@ -422,10 +426,9 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
         elif op_type == 'TruncatedNormal' or op_type == 'RandomStandardNormal':
             # TODO: implement tf.truncated_normal and tf.random_normal
-            shape_tensor = name_to_op[inputs[0]]  # numpy ndarray
-            assert isinstance(shape_tensor, TensorOp)
-            shape = shape_tensor.nptensor
-            print(shape)
+            # get shape
+            shape = constant_tensor_dict[inputs[0]]
+
             if op_type == 'TruncatedNormal':
                 lower, upper = -2.0, 2.0
                 mu, sigma = 0, 1
