@@ -111,7 +111,8 @@ class T2(RecursionTest):
             axes=(ax.C, ax.D),
             axes_lengths={ax.C: 2, ax.D: 3, ax.H: 4},
             init=init,
-            deriv_error=1e-1
+            deriv_error=1e-1,
+            timesteps=5
         )
 
     def i_to_h(self, x):
