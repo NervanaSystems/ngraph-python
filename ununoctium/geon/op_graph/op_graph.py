@@ -51,7 +51,6 @@ class Op(Node):
     Attributes:
         schemas: Information about how the Op was generated.
         initializers: A list of additional Ops to run before this Op is run the first time.
-
     """
 
     # Default is to not collect Ops as they are created

@@ -65,6 +65,7 @@ geon.op_graph
    :nosignatures:
 
    geon.op_graph.arrayaxes
+   geon.op_graph.convolution
    geon.op_graph.names
    geon.op_graph.nodes
    geon.op_graph.op_graph
@@ -88,7 +89,10 @@ geon.util
    :toctree: generated/
    :nosignatures:
 
+   geon.util.generics
    geon.util.graph
+   geon.util.pygen
+   geon.util.threadstate
    geon.util.utils
 
 geon.analysis

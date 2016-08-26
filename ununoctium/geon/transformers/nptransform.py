@@ -90,6 +90,10 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
 
+    def create_device_tensor(self, tensor_description):
+        return NumPyDeviceTensor(self.transformer, self, tensor_description,
+                                 name="v_" + tensor_description.name)
+
     @property
     def alloc_name(self):
         """
@@ -492,9 +496,11 @@ class NumPyTransformer(Transformer):
         """
         Make a DeviceBuffer.
 
-        :param bytes: Size of buffer.
-        :param alignment: Alignment of buffer.
-        :return: A DeviceBuffer.
+        Arguments:
+            bytes: Size of buffer.
+            alignment: Alignment of buffer.
+
+        Returns: A DeviceBuffer.
         """
         return NumPyDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
 
@@ -502,20 +508,9 @@ class NumPyTransformer(Transformer):
         """
         Make a DeviceBufferReference.
 
-        :return: A DeviceBufferReference.
+        Returns: A DeviceBufferReference.
         """
         return NumPyDeviceBufferReference(self)
-
-    def device_tensor(self, tensor_description):
-        """
-        Make a DeviceTensor.
-
-        :param device_buffer: The DeviceBufer[Reference] providing underlying storage.
-        :param tensor_description: The TensorDescription of the tensor.
-        :return: A DeviceTensor.
-        """
-        return NumPyDeviceTensor(self, tensor_description.buffer.data, tensor_description,
-                                 name="v_" + tensor_description.name)
 
     def start_transform_allocate(self):
         self.init_code.append("""def __init__(self):""")
