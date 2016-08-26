@@ -128,7 +128,7 @@ class T2(RecursionTest):
         return h.dot(self.W2_np)
 
 
-def xtest_recurrent():
+def test_recurrent():
     tests = [
         T1,
         T2
@@ -138,4 +138,4 @@ def xtest_recurrent():
             test_class().run()
 
 if __name__ == '__main__':
-    xtest_recurrent()
+    pytest.main()
