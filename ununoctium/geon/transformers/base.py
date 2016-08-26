@@ -295,7 +295,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             allocation.
         init_computation (Computation): The computation that performs initialization
             after allocation.
-
     """
 
     def __init__(self, fusion=None, **kwargs):
@@ -317,7 +316,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Op.simple_prune(self.all_results)
 
-        # Crate tensor descriptions
+        # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
         self.inits = self.ordered_initializers(ops)
 

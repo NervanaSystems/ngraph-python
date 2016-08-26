@@ -170,6 +170,8 @@ def executor(results, *parameters):
 
 
 class ExecutorFactory(object):
+    """TODO."""
+
     def __init__(self):
         self.transformer = be.NumPyTransformer()
 

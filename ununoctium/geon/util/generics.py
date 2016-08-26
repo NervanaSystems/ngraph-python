@@ -17,6 +17,8 @@ from functools import wraps
 
 
 class TypeMethods(object):
+    """TODO."""
+
     def __init__(self, base_method, **kvargs):
         super(TypeMethods, self).__init__(**kvargs)
         self.base_method = base_method

@@ -81,6 +81,7 @@ class proxy_backend(object):
 class proxy_tensor(object):
     """ A fake CPUTensor to make old neon implementation of ConvLayer happy """
     # TODO: refactor away
+
     def __init__(self, tensor):
         self._tensor = tensor
 

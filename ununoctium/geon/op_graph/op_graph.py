@@ -765,6 +765,7 @@ def recurrent(x, f_in_to_h, f_h_to_h, time_axis, stack_pos=-1):
 
 class Unslice(ComputationOp):
     """TODO."""
+
     def __init__(self, x, slices, **kwargs):
         super(Unslice, self).__init__(args=(x,), **kwargs)
         self.slices = slices
@@ -1473,6 +1474,7 @@ def assign(lvalue, rvalue):
 
 class tensor_size(ComputationOp):
     """TODO."""
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         if reduction_axes is None:
             if out_axes is None:
