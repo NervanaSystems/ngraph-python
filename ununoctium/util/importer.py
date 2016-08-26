@@ -399,18 +399,18 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
         elif op_type == 'Fill':
             # Creates a tensor filled with a scalar value.
-            shape_tensor = name_to_op[inputs[0]]
+            shape_tensor = constant_tensor_dict[inputs[0]]
             init_val = name_to_op[inputs[1]]
             assert isinstance(init_val, be.Constant)
 
             if isinstance(shape_tensor, be.Constant):
                 name_to_op[node.name] = be.Constant(init_val.const, name=node.name)
             else:
-                print(shape_tensor.nptensor)
-                array = np.array(shape_tensor.nptensor)
+                print(shape_tensor)
+                array = np.array(shape_tensor)
                 array.fill(init_val.const)
                 print(array)
-                shape = [axis.length for axis in shape_tensor.axes]
+                shape = shape_tensor.shape
 
                 if len(shape) == 1:
                     name_to_op[node.name] = be.NumPyTensor(array,
@@ -477,12 +477,11 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             input_tensor = name_to_op[inputs[0]]
             assert isinstance(input_tensor, TensorOp)
             input_tensor_axes = name_to_op[inputs[0]].axes
-            reduction_indices = name_to_op[inputs[1]]
-            assert reduction_indices is None or isinstance(reduction_indices, be.NumPyTensor)
+            reduction_indices = constant_tensor_dict.get(inputs[1])
 
             reduction_axes = ()
             if reduction_indices is not None:
-                for i in reduction_indices.nptensor:
+                for i in reduction_indices:
                     reduction_axes += (input_tensor_axes[int(i)],)
 
             name_to_op[node.name] = reduction_ops[op_type](input_tensor,
@@ -491,15 +490,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
         elif op_type == 'Prod':
             # TODO: implement tf.reduce_prod and merge with reduction_ops
-            reduction_indices = name_to_op[inputs[1]]
-
-            if isinstance(name_to_op[inputs[0]], be.Constant):
-                prod_val = np.prod(name_to_op[inputs[0]].const)
-            elif isinstance(name_to_op[inputs[0]], be.NumPyTensor):
-                prod_val = np.prod(name_to_op[inputs[0]].nptensor)
-            else:
-                assert False
-
+            prod_val = np.prod(constant_tensor_dict[inputs[0]])
             name_to_op[node.name] = be.Constant(prod_val, name=node.name)
 
         elif op_type == 'Shape':
@@ -509,10 +500,12 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
             if len(shape) == 0:
                 name_to_op[node.name] = be.Constant(0, name=node.name)
+                constant_tensor_dict[node.name] = be.Constant(0, name=node.name)
             else:
                 name_to_op[node.name] = be.NumPyTensor(np.array(shape),
                                                        axes=Axes(be.NumericAxis(len(shape)), ),
                                                        name=node.name)
+                constant_tensor_dict[node.name] = np.array(shape)
 
         elif op_type == 'Rank':
             # The rank of a tensor is the number of axis
@@ -533,6 +526,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             nums = np.arange(start.const, limit.const, delta.const).astype(np.float32)
             name_to_op[node.name] = be.NumPyTensor(nums, axes=Axes(be.NumericAxis(len(nums)), ),
                                                    name=node.name)
+            constant_tensor_dict[node.name] = nums
 
         elif op_type == 'Mod':
             # TODO: implement tf.mod, currently just skip
@@ -577,8 +571,8 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
         elif op_type == 'BroadcastGradientArgs':
             # implementation of bcast_ops.cc (https://goo.gl/5vx4QN)
-            sx = name_to_op[inputs[0]].nptensor
-            sy = name_to_op[inputs[1]].nptensor
+            sx = constant_tensor_dict[inputs[0]]
+            sy = constant_tensor_dict[inputs[1]]
 
             grad_x_reduce_ = []
             grad_y_reduce_ = []
@@ -608,6 +602,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                 name_to_op[node.name] = be.NumPyTensor(val_x,
                                                        axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
                                                        name=node.name)
+                constant_tensor_dict[node.name] = val_x
 
             name_to_op[node.name + ":1"] = None
             if grad_y_reduce_:
@@ -616,6 +611,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                     be.NumPyTensor(val_y,
                                    axes=Axes(be.NumericAxis(len(grad_y_reduce_)), ),
                                    name=node.name)
+                constant_tensor_dict[node.name + ":1"] = val_y
 
         elif op_type == 'ReluGrad':
             gradient = name_to_op[inputs[0]]
