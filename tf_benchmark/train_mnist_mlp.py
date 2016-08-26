@@ -102,7 +102,7 @@ def train_mnist_mlp():
     transformer.transform_computations()
     transformer.initialize()
 
-    # visuzlize
+    # visualize
     # transformer.dataflow.view()
 
     # run init computation once
