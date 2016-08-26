@@ -25,6 +25,7 @@ TODO: load meta info from TF's MetaGraph, including details about dataset,
       training epochs and etc
 TODO: pass the inference computation graph only without provide the last node
       for inference (in eval_test())
+TODO: infer_node: should determine automatically or receive as arg parameter
 
 """
 
@@ -51,7 +52,7 @@ parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
 args = parser.parse_args()
 
 
-def eval_test(test_data, graph, inference_comp, pred_op):
+def eval_test(test_data, graph, inference_comp):
     """
     :param test_data: test input
     :param inference_comp: the computation graph for inference
@@ -89,28 +90,12 @@ def train_mnist_mlp():
         init_comp = trans.computation([frontend_model.init])
 
     # inference computation
-    inference_comp = None
-    if args.infer_node in frontend_model.name_to_op:
-        # TODO: should determine automatically or receive as arg parameter
-        pred_op = frontend_model.name_to_op[args.infer_node]
-        inference_comp = trans.computation(pred_op)
-
-    # debug computation
-    debug_comp = None
-    debug_op = None
-    if args.end_node in frontend_model.name_to_op:
-        debug_op = frontend_model.name_to_op[args.end_node]
-        debug_comp = trans.computation([debug_op])
+    pred_op = frontend_model.name_to_op[args.infer_node]
+    predict_comp = trans.computation(pred_op)
 
     # update computation
-    update_comp = None
-    if frontend_model.loss is not None and frontend_model.update is not None:
-        if debug_op is not None:
-            update_comp = trans.computation(
-                [frontend_model.loss, frontend_model.update, debug_op])
-        else:
-            update_comp = trans.computation(
-                [frontend_model.loss, frontend_model.update])
+    update_comp = trans.computation([frontend_model.loss,
+                                     frontend_model.update])
 
     # initialize transformer
     trans.transform_computations()
@@ -134,8 +119,7 @@ def train_mnist_mlp():
             total_loss += update_comp()[0]
 
         average_loss = total_loss / float(mb_idx)
-        test_error = eval_test(test_data, frontend_model, inference_comp,
-                               pred_op)
+        test_error = eval_test(test_data, frontend_model, predict_comp)
         print("train_loss: %.2f test_error: %.2f" % (average_loss, test_error))
 
 
