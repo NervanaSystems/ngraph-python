@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 from builtins import range
+import pytest
 
 import geon.op_graph.names as names
 from geon.op_graph import arrayaxes
@@ -243,3 +244,45 @@ def test_simple_tensors():
     for i in range(ax.D.length):
         for j in range(ax.D.length):
             assert e3[i, j] == e3_1[j, i]
+
+
+def test_sliced_axis():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(0, 5))
+    assert s.length == 5
+
+
+def test_sliced_axis_invalid():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(5, 0))
+    assert s.length == 0
+
+
+def test_sliced_axis_none_end():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(0, None))
+    assert s.length == 10
+
+
+def test_sliced_axis_negative():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(5, 0, -1))
+    assert s.length == 5
+
+
+def test_sliced_axis_negative_invalid():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(0, 5, -1))
+    assert s.length == 0
+
+
+def test_sliced_axis_flip():
+    a = arrayaxes.Axis(10)
+    s = arrayaxes.SlicedAxis(a, slice(None, None, -1))
+    assert s.length == 10
+
+
+def test_sliced_axis_invalid_step():
+    a = arrayaxes.Axis(10)
+    with pytest.raises(ValueError):
+        arrayaxes.SlicedAxis(a, slice(0, 5, 2))

@@ -538,10 +538,14 @@ class TensorOp(Op):
         """
         pass
 
-    # Required for parameter initializers
     @property
     def shape(self):
-        """TODO."""
+        """ returns self.axes
+
+        This is required for parameter initializers in legacy neon code.  It
+        expects layers to implement a shape that it can use to pass through
+        layers
+        """
         return self.axes
 
     def mean(self, out_axes=(), **kwargs):
@@ -651,14 +655,19 @@ class Slice(TensorOp):
         if axes is None:
             axes = []
             for axis, s in zip(x.axes, slices):
+                # if s is an int, we are doing a getitem, for example y = x[1]
+                # and so this axis will no longer exist in the result.
                 if not isinstance(s, int):
                     axes.append(SlicedAxis(axis, s))
+
             axes = Axes(axes)
+
         super(Slice, self).__init__(
             args=(x,),
             axes=axes,
             **kwargs
         )
+
         self.slices = slices
 
     @cachetools.cached({})

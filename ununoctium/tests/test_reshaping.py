@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import pytest
 import numpy as np
 
 from geon.util.utils import ExecutorFactory
 import geon as be
 import geon.frontends.base.axis as ax
+from geon.op_graph import arrayaxes
 
 
 delta = 1e-3
@@ -122,6 +124,22 @@ def test_slice():
             'sliced_axes': None,
             'axes_lengths': {ax.C: 2, ax.D: 3},
             'expected': [5, 6]
+        },
+        {
+            'tensor': [[1, 4, 5], [2, 5, 6]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [1, slice(None, None, -1)],
+            'sliced_axes': None,
+            'axes_lengths': {ax.C: 2, ax.D: 3},
+            'expected': [6, 5, 2]
+        },
+        {
+            'tensor': [[1, 4, 5], [2, 5, 6]],
+            'tensor_axes': (ax.C, ax.D),
+            'slice': [slice(None, None, -1), slice(None, None, -1)],
+            'sliced_axes': None,
+            'axes_lengths': {ax.C: 2, ax.D: 3},
+            'expected': [[6, 5, 2], [5, 4, 1]]
         }
     ]
 
@@ -250,3 +268,20 @@ def test_axes_cast():
         rtol=rtol,
         atol=atol
     )
+
+
+def test_slice_tensor_description():
+    C = arrayaxes.Axis(2)
+
+    td = arrayaxes.TensorDescription(arrayaxes.Axes(C))
+    with pytest.raises(ValueError):
+        td.slice(
+            [slice(None)],
+            arrayaxes.Axes([arrayaxes.Axis(1), arrayaxes.Axis(1)]),
+        )
+
+
+def test_tensor_description_init():
+    with pytest.raises(ValueError):
+        # TensorDescription axes require lengths
+        arrayaxes.TensorDescription(arrayaxes.Axes(arrayaxes.Axis()))
