@@ -80,7 +80,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
 
     # init weights
     thetas_np = np.array([0., 0., 0.])
-    thetas_numpy_tensor = be.NumPyTensor(thetas_np, axes=(ax.C,))
+    thetas_numpy_tensor = be.Constant(thetas_np, axes=(ax.C,))
     thetas = be.Variable(initial_value=thetas_numpy_tensor, axes=(ax.C))
 
     # computations

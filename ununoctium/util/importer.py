@@ -381,7 +381,6 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
         elif op_type == 'Assign':
             var = name_to_op[inputs[0]]
             init_value = name_to_op[inputs[1]]
-            assert (isinstance(var, be.Variable))
             name_to_op[node.name] = be.assign(var, init_value)
             var.initializers.append(name_to_op[node.name])
 
@@ -393,7 +392,6 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                 continue
 
             var = name_to_op[inputs[0]]
-            assert (isinstance(var, be.Variable))
             tensor_to_add = name_to_op[inputs[1]]
             name_to_op[node.name] = be.assign(var, var + tensor_to_add)
 

@@ -20,8 +20,8 @@ import collections
 import weakref
 from future.utils import with_metaclass
 
-from geon.op_graph.op_graph import Op, placeholder, TensorOp, InitTensor, tensor_descriptions, \
-    Function
+from geon.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
+    Function, AllocationOp
 from geon.analysis.memory import assign_buffers
 from geon.util.generics import generic_method
 from geon.op_graph.names import NameableValue
@@ -36,7 +36,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
         returns: If an Op, return the value
             of the Op, if sequence of Ops, return the sequence of values, if
             a set return a map, if None, return None.
-        args: Placeholders will be arguments to the function, other values are ops
+        args: AllocationOps marked input will be arguments to the function, other values are ops
             to compute but not return.
     """
 
@@ -57,7 +57,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
         self.parameters = []
         for arg in args:
-            if isinstance(arg, placeholder):
+            if isinstance(arg, AllocationOp) and arg.input:
                 self.parameters.append(arg)
             if isinstance(arg, Op):
                 self.ops.add(arg)
@@ -425,7 +425,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
     def initialize_constant(self, op):
         tensor_description, = tensor_descriptions(op.args)
         value = op.valfun(tensor_description)
-        tensor_description.value[:] = value
+        tensor_description.value[()] = value
 
     def ordered_initializers(self, ordered_ops):
         """
