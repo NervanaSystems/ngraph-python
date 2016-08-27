@@ -88,6 +88,7 @@ class Op(Node):
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
+        self.style = {}
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
