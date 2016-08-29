@@ -32,8 +32,8 @@ def test_constant_multiply():
     ax.Y.length = 1
 
     # TODO: don't require axes
-    a = be.NumPyTensor(np.array([4.0], dtype='float32'), axes=[ax.Y])
-    b = be.NumPyTensor(np.array([2.0], dtype='float32'), axes=[ax.Y])
+    a = be.Constant(np.array([4.0], dtype='float32'), axes=[ax.Y])
+    b = be.Constant(np.array([2.0], dtype='float32'), axes=[ax.Y])
 
     c = be.multiply(a, b)
 
@@ -44,8 +44,8 @@ def test_constant_multiply():
 def test_constant_tensor_multiply():
     ax.Y.length = 2
 
-    a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
-    b = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+    a = be.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+    b = be.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
 
     c = be.multiply(a, b)
 
@@ -58,7 +58,7 @@ def test_tensor_sum_single_reduction_axes():
     ax.N.length = 2
     ax.Y.length = 2
 
-    a = be.NumPyTensor(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.N, ax.Y])
+    a = be.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.N, ax.Y])
 
     b = be.sum(a, reduction_axes=ax.Y)
 
@@ -86,7 +86,7 @@ def test_tensor_constant():
     asize = aaxes.size
     aval = np.arange(asize, dtype=np.float32).reshape(ashape)
 
-    x = be.NumPyTensor(aval, axes=aaxes)
+    x = be.Constant(aval, axes=aaxes)
     cval = executor(x)()
     np.testing.assert_allclose(cval, aval)
 

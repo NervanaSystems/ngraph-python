@@ -893,6 +893,47 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     return val
 
 
+def is_constant(value):
+    """
+    Test an Op to see if it is a constant.
+
+    Args:
+        value: An Op
+
+    Returns: True if value is a constant.
+
+    """
+    return isinstance(value, AllocationOp) and value.constant
+
+
+def is_constant_scalar(value):
+    """
+    Tests an Op to see if it is a constant scalar.
+
+    Args:
+        value: An Op.
+
+    Returns: True if value is a constant scalar.
+
+    """
+    return isinstance(value, AllocationOp) and value.constant and len(value.axes) == 0
+
+
+def constant_value(value):
+    """
+    Returns the constant value of an Op.
+
+    Args:
+        value: A constant op.
+
+    Returns: The constant value.
+
+    """
+    if not is_constant(value):
+        raise ValueError()
+    return value.const
+
+
 def constant_storage(graph_label_type="Constant", **kwargs):
     """
     A tensor that is supposed to remain constant.

@@ -85,7 +85,7 @@ def graphiti_l2_norm(np_array):
     axes = ()
     for i, l in enumerate(np_array.shape):
         axes += (be.Axis(name='axis%s' % i, length=l),)
-    np_tensor = be.NumPyTensor(np_array, axes=axes)
+    np_tensor = be.Constant(np_array, axes=axes)
     var = be.Variable(axes=axes, initial_value=np_tensor)
     return executor(be.sqrt(be.dot(var, var)))()
 

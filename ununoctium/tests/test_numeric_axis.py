@@ -25,7 +25,7 @@ def test_dot_with_numerics():
     axes = be.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
-    x = be.NumPyTensor(x_np, axes=axes)
+    x = be.Constant(x_np, axes=axes)
 
     d = be.dot(x, x, numpy_matching=True)
     d_val = executor(d)()
@@ -40,7 +40,7 @@ def test_expand_dims():
     axes = be.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
-    x = be.NumPyTensor(x_np, axes=axes)
+    x = be.Constant(x_np, axes=axes)
 
     x1 = be.ExpandDims(x, ax1, 0)
     x1_val = executor(x1)()
