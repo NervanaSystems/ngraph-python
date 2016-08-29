@@ -30,7 +30,7 @@ from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, d
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
     sum, tanh, tensor_size, Fill, TensorDescription, AxesCastOp,\
-    Constant, Variable, placeholder, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor,\
+    AllocationOp, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor,\
     Stack
 from geon.op_graph.convolution import convolution
 
@@ -233,6 +233,10 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
+    @generate_op.on_type(AllocationOp)
+    def generate_op(self, op, out):
+        pass
+
     @generate_op.on_type(argmax)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmax({}, 0, out={})", x, out)
@@ -243,10 +247,6 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Broadcast)
     def generate_op(self, op, out, x):
-        pass
-
-    @generate_op.on_type(Constant)
-    def generate_op(self, op, out):
         pass
 
     @generate_op.on_type(AxesCastOp)
@@ -328,7 +328,7 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Fill)
     def generate_op(self, op, out, x):
-        self.append("{}.fill({})", x, op.const)
+        self.append("{}.fill({})", x, op.scalar)
 
     @generate_op.on_type(greater)
     def generate_op(self, op, out, x, y):
@@ -398,10 +398,6 @@ class NumPyCodeGenerator(PyGen):
             o[x[i], i] = 1
         """, x=x, o=o)
 
-    @generate_op.on_type(placeholder)
-    def generate_op(self, op, out):
-        pass
-
     @generate_op.on_type(power)
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={}", x, y, out)
@@ -469,10 +465,6 @@ class NumPyCodeGenerator(PyGen):
         for i, arg in enumerate(args):
             slices[op.pos] = i
             self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
-
-    @generate_op.on_type(Variable)
-    def generate_op(self, op, out):
-        pass
 
 
 class NumPyTransformer(Transformer):
@@ -561,7 +553,7 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-        # print(self.code.code)
+            # print(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()

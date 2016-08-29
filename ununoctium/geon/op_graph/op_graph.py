@@ -18,7 +18,7 @@ from contextlib import contextmanager
 
 import cachetools
 import numpy as np
-from builtins import object, str
+from builtins import object
 
 from geon.op_graph.arrayaxes import TensorDescription, \
     AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
@@ -42,15 +42,27 @@ def tensor_descriptions(args):
 
 class Op(Node):
     """
-    Any operation that can be in an AST
+    Any operation that can be in an AST.
 
     Arguments:
+        const: The value of a constant Op, or None,
+        constant (bool): The Op is constant.  Default False.
         initializers: List of one-time initializations to run before the op.
+        persistent (bool): The value will be retained from computation to computation and
+            not shared.  Default False.
+        reference (bool): The storage is accessed via a reference.  Default False.
+        trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
     Attributes:
+        const: The value of a constant.
+        constant (bool): The value is constant.
+        initializers (list): Additional Ops to run before this Op is run the first time.
+        persistent (bool): The value will be retained from computation to computation and
+            not shared.  Always True if reference is set.
+        reference (bool): The storage is accessed via a reference.  Implies persistent.
+        trainable: The value is trainable.
         schemas: Information about how the Op was generated.
-        initializers: A list of additional Ops to run before this Op is run the first time.
     """
 
     # Default is to not collect Ops as they are created
@@ -79,16 +91,55 @@ class Op(Node):
         finally:
             Op._get_thread_ops().pop()
 
-    def __init__(self, initializers=None, **kwargs):
+    def __init__(self,
+                 const=None,
+                 constant=False,
+                 initializers=None,
+                 persistent=False,
+                 reference=False,
+                 trainable=False,
+                 **kwargs):
         super(Op, self).__init__(**kwargs)
         self.schemas = []
         self._adjoints = None
+        self.const = const
+        self.constant = constant
         self.initializers = initializers or []
+        self.__persistent = persistent
+        self.reference = reference
+        self.trainable = trainable
 
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
         self.style = {}
+
+    @property
+    def assignable(self):
+        """
+
+        Returns: True if the tensor can be assigned to.
+
+        """
+        return False
+
+    @property
+    def scalar(self):
+        return 0 == len(self.axes)
+
+    @property
+    def persistent(self):
+        """
+
+        Returns: True if value is not shared and is retained through computation.  Always true
+        for a reference.
+
+        """
+        return self.__persistent or self.reference
+
+    @persistent.setter
+    def persistent(self, value):
+        self.__persistent = value
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -145,21 +196,20 @@ class Op(Node):
         """TODO."""
         return {}
 
-    def variables(self, trainable=True, filter=None):
+    def variables(self, filter=None):
         """
-        Return all parameters used in computing this node.
+        Return all trainable Ops used in computing this node.
 
         Arguments:
-          trainable: TODO
-          filter: TODO
+            filter: Boolean filter of op, defaults to trainable.
 
         Returns:
-          TODO
+            Set of trainable Ops.
         """
         params = set()
 
         if filter is None:
-            filter = lambda node: ('trainable' in node.tags) is trainable
+            filter = lambda op: op.trainable
 
         def visitor(node):
             """
@@ -168,7 +218,7 @@ class Op(Node):
             Arguments:
               node: TODO
             """
-            if isinstance(node, Variable) and filter(node):
+            if filter(node):
                 params.add(node)
 
         Node.visit_input_closure([self], visitor)
@@ -187,7 +237,9 @@ class Op(Node):
     def adjoints(self):
         """
         Returns a map containing the adjoints of this op with respect to other
-        ops. Creates the map if it does not already exist.  Most models only
+        ops.
+
+        Creates the map if it does not already exist.  Most models only
         require the adjoints map for their scalar loss functions, in which case
         the adjoint is initialized to a scalar 1.  Some autodiff tests
         calculate the derivative of a tensor by initializing all but one
@@ -196,7 +248,7 @@ class Op(Node):
         it to be accessed by the _initial_adjoint field.
 
         Returns:
-          TODO
+            Map from Op to dSelf/dOp.
         """
         adjoints = {
             self: self.initial_adjoint,
@@ -335,9 +387,20 @@ class InitTensor(Op):
 
 
 class SetItem(Op):
-    """TODO."""
+    """
+    tensor[item] = val.
 
-    def __init__(self, tensor, item, val, **kwargs):
+    Arguments:
+        tensor: An assignable TensorOp.
+        item: The index.
+        val: The value to assign.
+        force (bool): Override constant check on tensor.
+        **kwargs: Args for related classes.
+    """
+
+    def __init__(self, tensor, item, val, force=False, **kwargs):
+        if not force and not tensor.assignable:
+            raise ValueError("{} is not assignable.".format(tensor))
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
 
@@ -356,7 +419,13 @@ class SetItem(Op):
 
 
 class doall(Op):
-    """TODO."""
+    """
+    Compute every Op in all.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
 
     def __init__(self, all, **kwargs):
         super(doall, self).__init__(args=all, **kwargs)
@@ -366,30 +435,46 @@ class doall(Op):
 
 
 class Fill(Op):
-    """TODO."""
+    """
+    Fill a tensor with a scalar value.
 
-    def __init__(self, tensor, const, **kwargs):
+    Arguments:
+        tensor: An assignable TensorOp.
+        scalar: A scalar value.
+        force (bool): Disable constant check on tensor.
+    """
+
+    def __init__(self, tensor, scalar, force=False, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
-        self.const = const
+        if not force and not tensor.assignable:
+            raise ValueError("{} is not assignable.".format(tensor))
+        if isinstance(scalar, TensorOp):
+            if scalar.constant:
+                scalar = scalar.const
+            else:
+                raise ValueError("{} is not a scalar constant".format(scalar))
+        else:
+            npscalar = np.asarray(scalar, dtype=tensor.dtype)
+            if 0 != len(npscalar.shape):
+                raise ValueError("{} is not a scalar".format(scalar))
+            scalar = npscalar[()]
+
+        self.scalar = scalar
 
 
 class TensorOp(Op):
     """
     Super class for all Ops whose value is a Tensor.
 
-    :ivar dtype: The dtype of the tensor elements.
-    :ivar scale: If not None, scale grad by this amount.
+    Arguments:
+        axes: The axes of the tensor.
+        dtype: The element type of the tensor.
+        scale: If specified, a scaling factor applied during updates.
+        **kwargs: Arguments for related classes.
     """
 
-    def __init__(self, dtype=None, axes=None, scale=None, **kwds):
-        """
-
-        :param dtype: The dtype of the tensor; defaults to np.float32
-        :param axes: The tensor axes.
-        :param scale: If specified, scales the gradient by this amount.
-        :param kwds: Op keywords.
-        """
-        super(TensorOp, self).__init__(**kwds)
+    def __init__(self, dtype=None, axes=None, scale=None, **kwargs):
+        super(TensorOp, self).__init__(**kwargs)
         if dtype is None:
             dtype = np.dtype(np.float32)
         self.dtype = dtype
@@ -397,19 +482,15 @@ class TensorOp(Op):
             axes = Axes(axes)
         self.__axes = axes
 
-        # Derivative will be scaled by this
         self.scale = scale
 
     def generate_add_delta(self, adjoints, delta):
         """
-        TODO.
+        Adds delta to the backprop contribution..
 
         Arguments:
-          adjoints: TODO
-          delta: TODO
-
-        Returns:
-          TODO
+            adjoints: dy/dOp for all Ops used to compute y.
+            delta: Backprop contribute.
         """
         delta = sum(delta, reduction_axes=delta.axes - self.axes)
         if self not in adjoints:
@@ -523,43 +604,62 @@ class TensorOp(Op):
 
     @property
     def axes(self):
-        """TODO."""
+        """
+
+        Returns: The axes of the tensor.
+
+        """
         if self.__axes is not None:
             return self.__axes
         else:
             raise NotImplementedError
 
-    def generate_adjoints(self, *args, **kwargs):
-        """
-        TODO.
+    @axes.setter
+    def axes(self, value):
+        if self.__axes is not None:
+            raise ValueError()
+        self.__axes = value
 
-        Arguments:
-          *args: TODO
-          **kwargs: TODO
+    @property
+    def has_axes(self):
+        """
+
+        Returns: True if axes have been set.
+
+        """
+        return self.__axes is not None
+
+    def generate_adjoints(self, adjoints, delta, *args):
+        """
+        With delta as the computation for the adjoint of this Op, incorporates delta into the
+        adjoints for thr args.
+
+        Args:
+            adjoints: dy/dOp for all ops involved in computing y.
+            delta: Backprop amount for this Op.
+            *args: The args of this Op.
         """
         pass
 
     @property
     def shape(self):
-        """ returns self.axes
-
+        """
         This is required for parameter initializers in legacy neon code.  It
         expects layers to implement a shape that it can use to pass through
-        layers
+        layers.
+
+        Returns: self.axes
         """
         return self.axes
 
-    def mean(self, out_axes=(), **kwargs):
+    def mean(self, **kwargs):
         """
-        TODO.
+        Used in Neon front end.
 
-        Arguments:
-          out_axes: TODO
+        Returns: mean(self)
 
-        Returns:
-          TODO
         """
-        return mean(self, out_axes=out_axes, **kwargs)
+        return mean(self, **kwargs)
 
     @property
     def value(self):
@@ -703,14 +803,40 @@ class Slice(TensorOp):
 
 
 class AllocationOp(TensorOp):
-    """TODO."""
+    """
+    Value comes directly from storage.
+
+    Arguments:
+        input: The storage is used as an input from the CPU. Implies persistent.
+        init: A Neon initialization function with a fill method that takes the tensor
+            as an argument.
+        initial_value: If callable, a function that generates an Op whose tensor should be
+            used as the initial value.  Otherwise an Op that should be used as the initial
+            value.
+        graph_label_type: A label that should be used when drawing the graph.  Defaults to
+            the class name.
+
+    Attributes:
+        graph_label_type (str): Label used for the Op when drawing the graph.
+        input (bool): The storage is used as an input.
+    """
 
     def __init__(
             self,
             init=None,
             initial_value=None,
+            graph_label_type=None,
+            input=False,
+            persistent=False,
             **kwargs):
-        super(AllocationOp, self).__init__(**kwargs)
+        if input:
+            persistent = True
+        super(AllocationOp, self).__init__(persistent=persistent, **kwargs)
+        if graph_label_type is None:
+            graph_label_type = self.__class__.__name__
+        self.graph_label_type = graph_label_type
+        self.input = input
+
         if init is not None:
             with Op.captured_ops(self.initializers):
                 init.fill(self)
@@ -718,6 +844,168 @@ class AllocationOp(TensorOp):
             self.initializers.append(assign(self, initial_value()))
         elif initial_value is not None:
             self.initializers.append(assign(self, initial_value))
+
+    @property
+    def assignable(self):
+        """
+        True if the tensor can be assigned to.
+
+        Returns: True if not constant.
+
+        """
+        return not self.constant
+
+    @property
+    def graph_label(self):
+        return "{}[{}]".format(self.graph_label_type, self.name)
+
+
+def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
+    if graph_label_type is None:
+        graph_label_type = "<Const({})>".format(const)
+    val = AllocationOp(axes=axes, constant=constant, trainable=trainable,
+                       graph_label_type=graph_label_type, **kwargs)
+    nptensor = np.asarray(const, dtype=val.dtype)
+
+    if not val.has_axes:
+        val.axes = Axes(nptensor.shape)
+
+    if nptensor.shape != val.axes.lengths:
+        raise ValueError((
+            "Tried to initialize constant with numpy array of "
+            "shape {np_shape} though gave axes with a different "
+            "shape {axes_shape}."
+        ).format(
+            np_shape=nptensor.shape,
+            axes_shape=val.axes.lengths,
+        ))
+
+    val_tensor = nptensor
+    if len(val.axes) == 0:
+        val_tensor = nptensor[()]
+    val.const = val_tensor
+
+    def value_fun(tensor):
+        return val_tensor
+
+    val.initializers.append(InitTensor(val, value_fun))
+
+    return val
+
+
+def is_constant(value):
+    """
+    Test an Op to see if it is a constant.
+
+    Args:
+        value: An Op
+
+    Returns: True if value is a constant.
+
+    """
+    return isinstance(value, AllocationOp) and value.constant
+
+
+def is_constant_scalar(value):
+    """
+    Tests an Op to see if it is a constant scalar.
+
+    Args:
+        value: An Op.
+
+    Returns: True if value is a constant scalar.
+
+    """
+    return isinstance(value, AllocationOp) and value.constant and len(value.axes) == 0
+
+
+def constant_value(value):
+    """
+    Returns the constant value of an Op.
+
+    Args:
+        value: A constant op.
+
+    Returns: The constant value.
+
+    """
+    if not is_constant(value):
+        raise ValueError()
+    return value.const
+
+
+def constant_storage(graph_label_type="Constant", **kwargs):
+    """
+    A tensor that is supposed to remain constant.
+
+    Args:
+        graph_label_type: Label for drawing graphs.
+        **kwargs: Other args for AllocationOp.
+
+    Returns:
+
+    """
+
+    return AllocationOp(graph_label_type=graph_label_type,
+                        constant=True, persistent=True,
+                        trainable=False, **kwargs)
+
+
+def NumPyTensor(*args, **kwargs):
+    return Constant(*args, **kwargs)
+
+
+def placeholder(constant=False, trainable=False, input=True, graph_label_type="placeholder",
+                **kwargs):
+    """
+    A persistent tensor to be initialized from the CPU.
+
+    Args:
+        constant (bool): False.
+        trainable (bool): False.
+        input (bool): Allow value to be passed in computation args.  Default True.
+        graph_label_type (str): Used for drawing graphs.
+        **kwargs: Other args for AllocationOp.
+
+    Returns: An AllocationOp.
+
+    """
+    return AllocationOp(graph_label_type=graph_label_type,
+                        constant=constant, persistent=True, trainable=trainable,
+                        input=input, **kwargs)
+
+
+def temporary(graph_label_type="Temp", **kwargs):
+    """
+    Temporary storage.
+
+    Args:
+        graph_label_type (str): Used for drawing graphs.
+        **kwargs: Other args for AllocationOp.
+
+    Returns: An AllocationOp.
+
+    """
+    return AllocationOp(graph_label_type=graph_label_type,
+                        constant=False, persistent=False,
+                        trainable=False, **kwargs)
+
+
+def Variable(trainable=True, graph_label_type="Variable", **kwargs):
+    """
+    A trainable tensor.
+
+    Args:
+        trainable (bool): Is in lists of trainable variables.  Default True.
+        graph_label_type: Used for drawing graphs.
+        **kwargs: Other args for AllocationOp.
+
+    Returns: An AllocationOp.
+
+    """
+    return AllocationOp(graph_label_type=graph_label_type,
+                        constant=False, persistent=True,
+                        trainable=trainable, **kwargs)
 
 
 class ComputationOp(TensorOp):
@@ -892,99 +1180,6 @@ class AllReduce(ElementWise):
 
     def __init__(self, x, **kwargs):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
-
-
-class placeholder(AllocationOp):
-    """Can be set externally."""
-
-    def __init__(self, tags=None, **kwargs):
-        if tags is None:
-            tags = set()
-        tags.add('persistent')
-        super(placeholder, self).__init__(tags=tags, **kwargs)
-
-    def generate_adjoints(self, tape, delta):
-        """
-        TODO.
-
-        Arguments:
-          tape: TODO
-          delta: TODO
-        """
-        pass
-
-    @property
-    def graph_label(self):
-        return self.__class__.__name__ + '[' + self.name + ']'
-
-
-class Constant(AllocationOp):
-    """
-    A scalar constant that appears in a graph.
-
-    if you want a constant tensor and a numpy array to initialize it, use
-    NumPyTensor for now.
-
-    Arguments:
-
-    Returns:
-      TODO
-    """
-
-    def __init__(self, const, axes=Axes(), **kwargs):
-        self.const = const
-        super(Constant, self).__init__(
-            axes=axes, dtype=np.dtype(np.float32), **kwargs)
-        self.initializers.append(Fill(self, const))
-        self.tags.add('persistent')
-
-    def generate_adjoints(self, adjoints, delta):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-
-        Returns:
-          TODO
-        """
-        pass
-
-    @property
-    def graph_label(self):
-        """TODO."""
-        shapes = self.axes.lengths
-        if not shapes or max(shapes) <= 2:
-            return str(self.const)
-        if self.name == self.id:
-            return 'Constant'
-        return self.name
-
-    def __str__(self):
-        return '<{cl} ({const})>'.format(
-            cl=self.__class__.__name__, const=self.const)
-
-
-def NumPyTensor(nptensor, axes, **kwargs):
-    axes = Axes(axes)
-    if nptensor.shape != axes.lengths:
-        raise ValueError((
-            "Tried to initialize NumPyTensor with numpy array of "
-            "shape {np_shape} though gave axes with a different "
-            "shape {axes_shape}."
-        ).format(
-            np_shape=nptensor.shape,
-            axes_shape=axes.lengths,
-        ))
-
-    def value_fun(tensor):
-        return nptensor
-
-    val = constant_storage(dtype=nptensor.dtype, axes=axes, **kwargs)
-    val.initializers.append(InitTensor(val, value_fun))
-
-    return val
 
 
 class absolute(ElementWise):
@@ -1470,14 +1665,12 @@ class sum(ReductionOp):
 
 def assign(lvalue, rvalue):
     """
-    TODO.
+    Assignment; lvalue <= rvalue
 
     Arguments:
-      lvalue: TODO
-      rvalue: TODO
+        lvalue: Tensor to assign to.
+        rvalue: Value to be assigned.
 
-    Returns:
-      TODO
     """
     return SetItem(lvalue, (), rvalue)
 
@@ -1541,40 +1734,6 @@ def pad(x, paddings, axes=None, **kwargs):
         return slice(s[0], s[1], 1)
     slices = tuple(to_slice(p) for p in paddings)
     return Unslice(x, axes=axes, slices=slices, **kwargs)
-
-
-class Variable(AllocationOp):
-    """TODO."""
-
-    def __init__(self, tags=None, trainable=True, persistent=True, constant=False, **kwargs):
-        if tags is None:
-            tags = set()
-        else:
-            tags = set(tags)
-        if trainable:
-            tags.add('trainable')
-        if persistent:
-            tags.add('persistent')
-        if constant:
-            tags.add('constant')
-        super(Variable, self).__init__(tags=tags, **kwargs)
-
-
-def temporary(**kwargs):
-    """
-    TODO.
-
-    Arguments:
-      **kwargs: TODO
-
-    Returns:
-      TODO
-    """
-    return Variable(trainable=False, persistent=True, constant=False, **kwargs)
-
-
-def constant_storage(**kwargs):
-    return Variable(trainable=False, persistent=True, constant=True, **kwargs)
 
 
 class exp(ElementWise):
@@ -2223,7 +2382,7 @@ class SimplePrune(object):
           TODO
         """
         x, = op.args
-        if isinstance(x, Constant):
+        if x.scalar and x.constant:
             self.add_rep(op, Constant(-x.const))
 
     @visit.on_type(multiply)
@@ -2239,14 +2398,14 @@ class SimplePrune(object):
         """
         x, y = op.args
         rep = None
-        if isinstance(x, Constant):
+        if x.scalar and x.constant:
             if x.const == 0:
                 rep = x
             elif x.const == 1:
                 rep = y
             elif x.const == -1:
                 rep = negative(y)
-        elif isinstance(y, Constant):
+        elif y.scalar and y.constant:
             if y.const == 0:
                 rep = y
             elif y.const == 1:
@@ -2269,10 +2428,10 @@ class SimplePrune(object):
         """
         x, y = op.args
         rep = None
-        if isinstance(x, Constant):
+        if x.scalar and x.constant:
             if x.const == 0:
                 rep = y
-        elif isinstance(y, Constant):
+        elif y.scalar and y.constant:
             if y.const == 0:
                 rep = x
         if rep is not None:
@@ -2290,7 +2449,7 @@ class SimplePrune(object):
           TODO
         """
         x, = op.args
-        if isinstance(x, Constant):
+        if x.scalar and x.constant:
             val = x.const * op.reduction_axes.size
             self.add_rep(op, Constant(val))
 

@@ -72,7 +72,7 @@ def test_init_2D_variable():
 def test_init_1D_variable_from_numpy_array():
     """TODO."""
     ax.Y.length = 10
-    npvar = be.NumPyTensor(
+    npvar = be.Constant(
         np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
     hello = be.Variable(axes=[ax.Y], init=Array(npvar))
 
@@ -89,7 +89,7 @@ def test_assign_1D_variable_with_numpy_tensor():
     """TODO."""
     ax.Y.length = 10
     hello = be.Variable(axes=[ax.Y])
-    npvar = be.NumPyTensor(
+    npvar = be.Constant(
         np.arange(ax.Y.length, dtype=np.float32), axes=[ax.Y])
 
     hello = npvar
@@ -107,7 +107,7 @@ def test_assign_2D_variable_with_numpy_tensor():
     ax.N.length = 2
 
     var = be.Variable(axes=[ax.M, ax.N])
-    npvar = be.NumPyTensor(
+    npvar = be.Constant(
         np.array([[1, 2], [3, 4], [5, 6]]), axes=[ax.M, ax.N])
 
     op = be.assign(var, npvar)

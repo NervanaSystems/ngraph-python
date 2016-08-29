@@ -83,7 +83,7 @@ class DataFlowGraph(Digraph):
         # Initialize
         liveness = dict((op, set()) for op in order)
         persistent = base_tensor_descriptions(
-            (x for x in self.successors if 'persistent' in x.tags),
+            (x for x in self.successors if x.persistent),
         )
         results = base_tensor_descriptions(self.results)
         liveness[order[-1]] = results | persistent

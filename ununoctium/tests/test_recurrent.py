@@ -102,9 +102,9 @@ class T2(RecursionTest, unittest.TestCase):
     def setUp(self):
         def init():
             self.W1_np = np.ones((2, 3, 4), dtype='float32')
-            self.W1 = be.NumPyTensor(self.W1_np, axes=(ax.C, ax.D, ax.H))
+            self.W1 = be.Constant(self.W1_np, axes=(ax.C, ax.D, ax.H))
             self.W2_np = np.ones((4, 4), dtype='float32')
-            self.W2 = be.NumPyTensor(self.W2_np, axes=(ax.H, ax.H))
+            self.W2 = be.Constant(self.W2_np, axes=(ax.H, ax.H))
 
         self.setUpHelper(
             x_np=np.array([[2, 4, 6], [3, 4, 6]], dtype='float32'),

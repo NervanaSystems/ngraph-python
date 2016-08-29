@@ -37,10 +37,10 @@ def test_constant_tensor_convolution_fprop():
     input_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.N])
     filter_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.Cout])
 
-    input = be.NumPyTensor(
+    input = be.Constant(
         np.ones(input_axes.lengths, dtype='float32'), axes=input_axes,
     )
-    filter = be.NumPyTensor(
+    filter = be.Constant(
         np.ones(filter_axes.lengths, dtype='float32'), axes=filter_axes,
     )
 
