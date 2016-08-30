@@ -2147,6 +2147,7 @@ class Function(Node):
         self.defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
+        self.persistent = False
 
     @property
     def inputs(self):
