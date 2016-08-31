@@ -2128,13 +2128,13 @@ class tanh(ElementWise):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
 
-class Function(Node):
+class Function(Op):
     """TODO."""
 
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.analysis import Digraph
-        self.ops = Digraph(ops)
+        self._ops = Digraph(ops)
         self.instructions = self.ops.topsort()
         args, defs = set(), set()
         for op in self.instructions:
@@ -2144,15 +2144,22 @@ class Function(Node):
             # except whatever is being defined
             args |= set(op.args) - defs
         self.args = args
-        self.defs = defs
+        self._defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
-        self.persistent = False
 
     @property
     def inputs(self):
         """TODO."""
         return self.use
+
+    @property
+    def ops(self):
+        return self._ops
+
+    @property
+    def defs(self):
+        return self._defs
 
 
 class Buffer(object):
