@@ -126,9 +126,11 @@ class FunctionAxis(Axis):
     function that changes the length after a transformation will result in
     undefined behaviour.
     """
-    def __init__(self, length_fun, **kwargs):
+    def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1, **kwargs)
         self.length_fun = length_fun
+        self.batch = parent.batch
+        # TODO: self.recurrent = parent.recurrent
 
     @property
     def length(self):
@@ -178,6 +180,7 @@ class SlicedAxis(FunctionAxis):
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
+            parent=parent,
             length_fun=lambda: _sliced_length(s, parent.length),
             **kwargs
         )
@@ -192,9 +195,25 @@ class PaddedAxis(FunctionAxis):
         pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
+        self.parent = parent
+        self.pad = pad
+
         def padded_length():
             return parent.length + pad[0] + pad[1]
-        super(PaddedAxis, self).__init__(length_fun=padded_length, **kwargs)
+
+        super(PaddedAxis, self).__init__(
+            parent=parent, length_fun=padded_length, **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            pad=self.pad,
+        )
 
 
 class AxisID(object):
