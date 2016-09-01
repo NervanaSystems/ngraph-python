@@ -372,7 +372,7 @@ class Op(Node):
         """
         return list(tensor_descriptions(self.args))
 
-    def __str__(self):
+    def __repr__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
@@ -880,6 +880,12 @@ class AllocationOp(TensorOp):
     def graph_label(self):
         return "{}[{}]".format(self.graph_label_type, self.name)
 
+    def __repr__(self):
+        return '<{cl}({gl}):{id}>'.format(
+            cl=self.__class__.__name__,
+            gl=self.graph_label_type,
+            id=id(self)
+        )
 
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
     if graph_label_type is None:
@@ -1729,6 +1735,15 @@ def pad(x, paddings, axes=None, **kwargs):
     Returns:
         TensorOp: symbolic expression for the padded tensor
     """
+    if len(x.axes) != len(paddings):
+        raise ValueError((
+            "pad's paddings has length {pad} which needs to be the same "
+            "as the number of axes in x ({x})"
+        ).format(
+            pad=len(paddings),
+            x=len(x.axes),
+        ))
+
     def pad_to_tuple(pad):
         if isinstance(pad, int):
             pad = (pad, pad)
@@ -1737,7 +1752,8 @@ def pad(x, paddings, axes=None, **kwargs):
     paddings = tuple(pad_to_tuple(pad) for pad in paddings)
     if axes is None:
         axes = Axes(
-            PaddedAxis(axis, pad) for axis, pad in zip(x.axes, paddings)
+            PaddedAxis(axis, pad) if pad != (0, 0) else axis
+            for axis, pad in zip(x.axes, paddings)
         )
 
     def to_slice(pad):
@@ -2211,7 +2227,26 @@ def deriv(dependent_op, independent_op):
       TODO
     """
     Op.simple_prune([dependent_op, independent_op])
-    adjoint = dependent_op.adjoints()[independent_op]
+    adjoints = dependent_op.adjoints()
+
+    if independent_op not in adjoints:
+        # TODO: check to see if independent_op is even used to compute
+        # dependent_op.  If so, pinpoint which Op isn't defining the necessary
+        # adjoints.  If it isn't used, give that more specific error to the
+        # user.
+        raise ValueError((
+            "Attempted to take the derivative of {dependent_op} with respect "
+            "to {independent_op}, but {independent_op} was not present in "
+            "{dependent_op}'s adjoints.  This is most likely because "
+            "{independent_op} isn't used to compute {dependent_op} or one of "
+            "the ops used to compute {independent_op} hasn't defined the "
+            "necessary adjoints."
+        ).format(
+            dependent_op=dependent_op,
+            independent_op=independent_op,
+        ))
+
+    adjoint = adjoints[independent_op]
     return Broadcast(adjoint, axes=independent_op.axes)
 
 
