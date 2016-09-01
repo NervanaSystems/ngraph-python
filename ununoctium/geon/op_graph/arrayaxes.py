@@ -89,7 +89,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.__length = value
 
     def __repr__(self):
-        return 'Axis({name})'.format(name=self.name)
+        return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
 
 class NumericAxis(Axis):
