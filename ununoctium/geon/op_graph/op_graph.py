@@ -1671,16 +1671,16 @@ class sum(ReductionOp):
         x.generate_add_delta(adjoints, delta)
 
 
-def assign(lvalue, rvalue):
+def assign(lvalue, rvalue, **kwargs):
     """
     Assignment; lvalue <= rvalue
 
     Arguments:
         lvalue: Tensor to assign to.
         rvalue: Value to be assigned.
-
+        kwargs: options, including name
     """
-    return SetItem(lvalue, (), rvalue)
+    return SetItem(lvalue, (), rvalue, **kwargs)
 
 
 class tensor_size(ComputationOp):
