@@ -414,7 +414,7 @@ class Axes(object):
     def __repr__(self):
         s = 'Axes('
         for x in self:
-            s += repr(x) + ','
+            s += repr(x) + ', '
         s += ')'
         return s
 
