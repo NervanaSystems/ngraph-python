@@ -1568,7 +1568,7 @@ class ReductionOp(ComputationOp):
 
     def _compute_axes(self, x, reduction_axes, out_axes):
         """
-        A helper function to choose compatible reduction and output 
+        A helper function to choose compatible reduction and output
         axes from the arguments and defaults.
 
         Arguments:
