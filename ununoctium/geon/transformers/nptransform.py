@@ -92,8 +92,9 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
+        shape_str = "_".join((str(_) for _ in tensor_description.shape))
         return NumPyDeviceTensor(self.transformer, self, tensor_description,
-                                 name="v_" + tensor_description.name)
+                                 name="v_" + tensor_description.name + "_" + shape_str)
 
     @property
     def alloc_name(self):
@@ -301,18 +302,10 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(dot)
     def generate_op(self, op, out, o, x, y):
-        # TODO Do this testing in the op setup, not at runtime
-        self.append("""
-        o = {o}
-        x = {x}
-        y = {y}
-        if not o.flags.c_contiguous:
-            t = x
-            x = y.T
-            y = t.T
-            o = o.T
-        np.dot(x, y, o)
-        """, x=x, y=y, o=o)
+        if o.tensor_description.c_contiguous:
+            self.append("np.dot({}, {}, out={})", x, y, o)
+        else:
+            self.append("np.dot({}.T, {}.T, out={}.T)", y, x, o)
 
     @generate_op.on_type(equal)
     def generate_op(self, op, out, x, y):
