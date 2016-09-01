@@ -347,7 +347,7 @@ class Axes(object):
     def recurrent_axes(self):
         """
 
-        :return: The Axes subset that are not recurrent axes.
+        :return: The Axes subset that are recurrent axes.
         """
         return Axes(axis for axis in self if axis.recurrent)
 
