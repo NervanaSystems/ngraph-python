@@ -677,7 +677,8 @@ def test_cross_enropy_rec():
 
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
-def test_cross_entropy_softmax_deriv():
+
+def test_cross_entropy_softmax_rec_deriv():
     ax.W.length = 3
     ax.T.length = 4
     ax.N.length = 10
