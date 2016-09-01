@@ -780,7 +780,11 @@ class Slice(TensorOp):
                 # if s is an int, we are doing a getitem, for example y = x[1]
                 # and so this axis will no longer exist in the result.
                 if not isinstance(s, int):
-                    axes.append(SlicedAxis(axis, s))
+                    # if nop slice, don't slice the axis
+                    if s == slice(None, None, None):
+                        axes.append(axis)
+                    else:
+                        axes.append(SlicedAxis(axis, s))
 
             axes = Axes(axes)
 

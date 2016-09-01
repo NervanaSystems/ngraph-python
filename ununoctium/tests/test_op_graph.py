@@ -56,3 +56,22 @@ def test_pad_mixed():
 
     assert pad.axes[0] == x.axes[0]
     assert pad.axes[1] != x.axes[1]
+
+
+def test_slice_nop():
+    """
+    slicing with nop slice should return same axis
+    """
+
+    N = be.Axis(1)
+    M = be.Axis(1)
+
+    x = be.Variable(axes=[N, M])
+
+    s = be.Slice(x, [
+        slice(None, None, None),
+        slice(None, None, -1),
+    ])
+
+    assert s.axes[0] == x.axes[0]
+    assert s.axes[1] != x.axes[1]
