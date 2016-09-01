@@ -113,6 +113,8 @@ class Op(Node):
         if ops is not None:
             ops.append(self)
         self.style = {}
+        self.ops = []
+        self.defs = set()
 
     @property
     def assignable(self):
@@ -190,11 +192,6 @@ class Op(Node):
             if isinstance(schema, t):
                 return schema
         return None
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {}
 
     def variables(self, filter=None):
         """
@@ -326,11 +323,6 @@ class Op(Node):
           TODO
         """
         return tuple(Op.as_op(x) for x in xs)
-
-    @property
-    def ops(self):
-        """TODO."""
-        return []
 
     @staticmethod
     def simple_prune(results):
@@ -1018,11 +1010,7 @@ class ComputationOp(TensorOp):
 
         for arg in self.args:
             arg.users.add(self)
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {self}
+        self.defs = {self}
 
     @property
     def graph_label(self):
@@ -2134,7 +2122,7 @@ class Function(Op):
     def __init__(self, ops):
         super(Function, self).__init__()
         from geon.analysis import Digraph
-        self._ops = Digraph(ops)
+        self.ops = Digraph(ops)
         self.instructions = self.ops.topsort()
         args, defs = set(), set()
         for op in self.instructions:
@@ -2144,7 +2132,7 @@ class Function(Op):
             # except whatever is being defined
             args |= set(op.args) - defs
         self.args = args
-        self._defs = defs
+        self.defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
 
@@ -2152,14 +2140,6 @@ class Function(Op):
     def inputs(self):
         """TODO."""
         return self.use
-
-    @property
-    def ops(self):
-        return self._ops
-
-    @property
-    def defs(self):
-        return self._defs
 
 
 class Buffer(object):
