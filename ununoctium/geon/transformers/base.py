@@ -373,7 +373,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # Compile the computations now that we know their storage
         for computation in self.computations:
             computation.transform()
-        self.init_computation.transform()
         self.finish_transform()
         self.finalized = True
 
