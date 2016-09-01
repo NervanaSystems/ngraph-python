@@ -177,12 +177,25 @@ class SlicedAxis(FunctionAxis):
     exception instead?
     """
     def __init__(self, parent, s, **kwargs):
+        self.parent = parent
+        self.slice = s
+
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
             parent=parent,
             length_fun=lambda: _sliced_length(s, parent.length),
             **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'SlicedAxis({name}: {length}; parent: {parent}; slice: {slice})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            slice=self.slice,
         )
 
 
