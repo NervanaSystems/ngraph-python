@@ -1189,6 +1189,20 @@ class TensorDescription(NameableValue):
                      for _ in self.full_sizes)
 
     @property
+    def c_contiguous(self):
+        """
+
+        Returns:
+            True if the tensor's strides are row-major contiguous.
+        """
+        s = self.dtype.itemsize
+        cstrides = []
+        for _ in reversed(self.shape):
+            cstrides.insert(0, s)
+            s = s * _
+        return tuple(cstrides) == self.strides
+
+    @property
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self
