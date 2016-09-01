@@ -113,6 +113,8 @@ class Op(Node):
         if ops is not None:
             ops.append(self)
         self.style = {}
+        self.ops = []
+        self.defs = set()
 
     @property
     def assignable(self):
@@ -190,11 +192,6 @@ class Op(Node):
             if isinstance(schema, t):
                 return schema
         return None
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {}
 
     def variables(self, filter=None):
         """
@@ -326,11 +323,6 @@ class Op(Node):
           TODO
         """
         return tuple(Op.as_op(x) for x in xs)
-
-    @property
-    def ops(self):
-        """TODO."""
-        return []
 
     @staticmethod
     def simple_prune(results):
@@ -1037,11 +1029,7 @@ class ComputationOp(TensorOp):
 
         for arg in self.args:
             arg.users.add(self)
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {self}
+        self.defs = {self}
 
     @property
     def graph_label(self):
@@ -2148,7 +2136,7 @@ class tanh(ElementWise):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
 
-class Function(Node):
+class Function(Op):
     """TODO."""
 
     def __init__(self, ops):
