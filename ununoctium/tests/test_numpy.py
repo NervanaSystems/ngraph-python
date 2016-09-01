@@ -597,6 +597,28 @@ def test_softmax_deriv():
     check_derivative(be.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
+def test_softmax_rec():
+    ax.W.length = 3
+    ax.T.length = 4
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.T, ax.N])
+
+    x = rng.uniform(0, 1, axes)
+    p_x = be.placeholder(axes=axes)
+    compare_f_at_x(be.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x)
+
+
+def test_softmax_rec_deriv():
+    ax.W.length = 3
+    ax.T.length = 4
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.T, ax.N])
+
+    x = rng.uniform(0, 1, axes)
+    p_x = be.placeholder(axes=axes)
+    check_derivative(be.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
+
+
 def test_cross_entropy_softmax():
     ax.W.length = 3
     ax.N.length = 10
@@ -620,6 +642,46 @@ def test_cross_entropy_softmax_deriv():
     ax.W.length = 3
     ax.N.length = 10
     axes = be.Axes([ax.W, ax.N])
+
+    p_x = be.placeholder(axes=axes)
+    p_t = be.placeholder(axes=axes)
+
+    x = rng.uniform(0, 1, axes)
+    t = np_softmax(rng.uniform(0, 1, axes), 0)
+
+    check_derivative(
+        be.cross_entropy_multi(be.softmax(p_x), p_t),
+        p_x, 0.001, x,
+        parameters=[p_t],
+        parameter_values=[t],
+        atol=1e-2, rtol=1e-2
+    )
+
+
+def test_cross_enropy_rec():
+    ax.W.length = 3
+    ax.T.length = 4
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.T, ax.N])
+
+    p_x = be.placeholder(axes=axes)
+    p_t = be.placeholder(axes=axes)
+
+    cross_entropy_sm_x_t = be.cross_entropy_multi(be.softmax(p_x), p_t)
+
+    x = rng.uniform(0, 1, axes)
+    t = np_softmax(rng.uniform(0, 1, axes), 0)
+
+    def f_np(x, t):
+        return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
+
+    compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
+
+def test_cross_entropy_softmax_deriv():
+    ax.W.length = 3
+    ax.T.length = 4
+    ax.N.length = 10
+    axes = be.Axes([ax.W, ax.T, ax.N])
 
     p_x = be.placeholder(axes=axes)
     p_t = be.placeholder(axes=axes)
