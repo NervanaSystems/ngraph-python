@@ -444,11 +444,9 @@ class Axes(object):
         return AxisIDTuple(*elems)
 
     def __repr__(self):
-        s = 'Axes('
-        for x in self:
-            s += repr(x) + ', '
-        s += ')'
-        return s
+        return 'Axes({})'.format(
+            ', '.join(map(repr, self))
+        )
 
 
 # func(agg, elem) -> agg
