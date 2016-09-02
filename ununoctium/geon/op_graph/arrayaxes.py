@@ -776,8 +776,6 @@ class TensorDescription(NameableValue):
         Returns:
 
         """
-        # Supports broadcast and combining one level of axes
-        # Does not support unrolling
         old_poss = []
 
         used_set = set()
@@ -868,37 +866,20 @@ class TensorDescription(NameableValue):
         div_point = len(old_axis_ids) - len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    # This function is symmetric to dot_reaxe_left unless forward_axis
-    # ids is specified. It then attempts to rename the reduction axis using
-    # the mapping from the forward axis ids to the current axis ids.
-    # In the case of backpropagation, this helps preserve the axis id numbering
-    # of the original output, which is necessary if the derivative is to be
-    # projected onto the input correctly.
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         """
-        TODO.
-
-        Arguments:
-          red_axis_ids: TODO
-          forward_axis_ids: TODO
-
-        Returns:
-
+        This function is symmetric to dot_reaxe_left unless forward_axis ids is
+        specified. It then attempts to rename the reduction axis using the
+        mapping from the forward axis ids to the current axis ids.  In the case
+        of backpropagation, this helps preserve the axis id numbering of the
+        original output, which is necessary if the derivative is to be
+        projected onto the input correctly.
         """
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
             trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
-                """
-                TODO.
-
-                Arguments:
-                  x: TODO
-
-                Returns:
-
-                """
                 if x in trans:
                     return trans[x]
                 else:
@@ -911,20 +892,19 @@ class TensorDescription(NameableValue):
         div_point = len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    def reaxe(self, new_axes, broadcast=True):
+    def reaxe(self, new_axes):
         """
         TODO.
 
         Arguments:
           new_axes: TODO
-          broadcast: TODO
 
         Returns:
 
         """
         new_axes = Axes(new_axes)
         old_poss = self.try_guess_positions(new_axes)
-        return self.reaxe_with_positions(new_axes, old_poss, broadcast)
+        return self.reaxe_with_positions(new_axes, old_poss)
 
     def reaxe_with_axis_ids_positions(self, new_axis_id_tuple):
         """
@@ -960,8 +940,7 @@ class TensorDescription(NameableValue):
         # The indices of the axis ids refer to the existing order of axes
         old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
         return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
     def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
         """
@@ -980,17 +959,15 @@ class TensorDescription(NameableValue):
             .concat(Axes(dummy_axis,)).concat(self.axes[dim:])
         old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
-    def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
+    def reaxe_with_positions(self, new_axes, old_poss):
         """
         TODO.
 
         Arguments:
           new_axes: TODO
           old_poss: TODO
-          broadcast: TODO
 
         Returns:
 
