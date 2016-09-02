@@ -27,7 +27,7 @@ Nervana |Geon|
 
    installation.rst
    overview.rst
-   basic_usage.rst
+   walk_through.rst
 
 .. toctree::
    :hidden:
@@ -44,10 +44,8 @@ Nervana |Geon|
    :maxdepth: 1
    :caption: Basic Concepts
 
-   graphiti_101.rst
    analysis.rst
    axes.rst
-   environments.rst
    frontends.rst
    op_graph.rst
    transformers.rst
