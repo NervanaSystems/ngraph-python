@@ -762,9 +762,7 @@ class TensorDescription(NameableValue):
     @property
     def parameter_key(self):
         """
-
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
-
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
@@ -1176,9 +1174,7 @@ class TensorDescription(NameableValue):
     @property
     def shape(self):
         """
-
         Returns: The shape of the tensor.
-
         """
         return self.axes.lengths
 

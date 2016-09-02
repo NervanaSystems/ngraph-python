@@ -29,14 +29,14 @@ ax.D = arrayaxes.Axis(25)
 
 
 def test_axes_constructor_canonicalization():
-    """TODO."""
+    """ Test canonicalization of Axes constructor """
     a1 = arrayaxes.Axes(ax.A)
     a2 = arrayaxes.Axes([[ax.A]])
     assert a1 == a2
 
 
 def test_axes_equal():
-    """TODO."""
+    """ Test axes == operator """
     a1 = arrayaxes.Axes([ax.A, ax.B, ax.C])
     a2 = arrayaxes.Axes([ax.A, ax.B, ax.C])
     assert a1 == a2
@@ -47,10 +47,11 @@ def to_nested_tuple(axes):
     Recursively replace instances of FlattenedAxis with instances of type tuple.
 
     Arguments:
-      axes: TODO
+        axes: Axes object or iterable of Axis objects
 
     Returns:
-      TODO
+        passes through axes objects with everything unchanged except
+        FlattenedAxis are replaced with tuple
     """
     return tuple(
         to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.FlattenedAxis) else axis
@@ -96,9 +97,13 @@ def test_axes_ops():
         Returns:
 
         """
-        assert arrayaxes.AxisIDTuple.sub(
+        result = arrayaxes.AxisIDTuple.sub(
             axes1.as_axis_ids(),
-            axes2.as_axis_ids()).as_axes() == target
+            axes2.as_axis_ids()
+        ).as_axes()
+
+        assert result == target
+
     test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.A]), arrayaxes.Axes([ax.B]))
     test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.B]), arrayaxes.Axes([ax.A]))
 
@@ -111,94 +116,104 @@ def test_axes_ops():
         == ax.A.length * ax.B.length * ax.C.length
 
 
-def empty(td):
+def random(tensor_description):
     """
-    TODO.
+    return a ranom numpy array with dimension and dtype specified by
+    tensor_description.
 
     Arguments:
-      td: TODO
-
-    Returns:
-      TODO
+        tensor_description: location of dimension and dtype specifications for
+            returned array.
     """
-    return np.empty(td.shape, td.dtype)
+    return np.random.random(
+        tensor_description.shape
+    ).astype(tensor_description.dtype)
 
 
 def tensorview(td, nparr):
     """
-    TODO.
+    Returns a numpy array which whose buffer is nparr using the
+    tensordescription in td
 
     Arguments:
-      td: TODO
-      nparr: TODO
+        td TensorDescription: the description of the view of the nparr buffer
+        nparr: the memory the np.array should use
 
     Returns:
-      TODO
+      np.array view of nparr
     """
-    return np.ndarray(shape=td.shape, dtype=td.dtype,
-                      buffer=nparr, offset=td.offset,
-                      strides=td.strides)
+    return np.ndarray(
+        shape=td.shape,
+        dtype=td.dtype,
+        buffer=nparr,
+        offset=td.offset,
+        strides=td.strides
+    )
+
+
+def test_reaxe_0d_to_1d():
+    td = arrayaxes.TensorDescription(axes=())
+    x = random(td)
+
+    # create view of x
+    x_view = tensorview(td.reaxe([ax.A]), x)
+
+    # set x
+    x[()] = 3
+
+    # setting e also sets x_view
+    assert x_view.shape == (ax.A.length,)
+    assert np.all(x_view == 3)
+
+
+def test_reaxe_0d_to_2d():
+    td = arrayaxes.TensorDescription(axes=())
+    x = random(td)
+
+    x_view = tensorview(td.reaxe([ax.A, ax.B]), x)
+
+    # set x
+    x[()] = 3
+
+    assert x_view.shape == (ax.A.length, ax.B.length)
+    assert np.all(x_view == 3)
 
 
 def test_simple_tensors():
-    """TODO."""
-    # A scalar
-    td0 = arrayaxes.TensorDescription(
-        axes=()
-    )
-    e0 = empty(td0)
+    """
+    tons of tests relating to reaxeing tensors.
 
+    variables names have a postfix integer which represents the dimensionality
+    of the value.  Views have x_y postfix which means they are y dimensional
+    views of x dimensional buffers.
+
+    I started refactoring into smaller pieces as seen in tests above, but
+    stopped ...
+    """
     # A simple vector
-    td1 = arrayaxes.TensorDescription(
-        axes=[ax.A]
-    )
-    e1 = empty(td1)
+    td1 = arrayaxes.TensorDescription(axes=[ax.A])
+    e1 = random(td1)
 
-    td2 = arrayaxes.TensorDescription(
-        axes=[ax.A, ax.B]
-    )
-    e2 = empty(td2)
+    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
+    e2 = random(td2)
 
-    td3 = arrayaxes.TensorDescription(
-        axes=(ax.D, ax.D)
-    )
-    e3 = empty(td3)
+    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D))
+    e3 = random(td3)
 
     # Reaxes
-    td0_1 = td0.reaxe([ax.A])
-    e0_1 = tensorview(td0_1, e0)
+    e1_1 = tensorview(td1.reaxe([ax.A, ax.B]), e1)
+    e1_2 = tensorview(td1.reaxe([ax.B, ax.A]), e1)
+    e1_3 = tensorview(td1.reaxe([(ax.B, ax.C), ax.A]), e1)
 
-    td0_2 = td0.reaxe([ax.A, ax.B])
-    e0_2 = tensorview(td0_2, e0)
-
-    td1_1 = td1.reaxe([ax.A, ax.B])
-    td1_2 = td1.reaxe([ax.B, ax.A])
-    td1_3 = td1.reaxe([(ax.B, ax.C), ax.A])
-    e1_1 = tensorview(td1_1, e1)
-    e1_2 = tensorview(td1_2, e1)
-    e1_3 = tensorview(td1_3, e1)
-
-    td2_1 = td2.reaxe(arrayaxes.Axes([ax.B, ax.A]))
-    e2_1 = tensorview(td2_1, e2)
-    td2_2 = td2.reaxe(arrayaxes.Axes([ax.A, ax.B]))
-    e2_2 = tensorview(td2_2, e2)
-    td2_3 = td2.reaxe(arrayaxes.Axes([arrayaxes.FlattenedAxis(td2.axes)]))
-    e2_3 = tensorview(td2_3, e2)
+    e2_1 = tensorview(td2.reaxe(arrayaxes.Axes([ax.B, ax.A])), e2)
+    e2_2 = tensorview(td2.reaxe(arrayaxes.Axes([ax.A, ax.B])), e2)
+    e2_3 = tensorview(td2.reaxe(arrayaxes.Axes([arrayaxes.FlattenedAxis(td2.axes)])), e2)
 
     td3_1 = td3.reaxe_with_axis_ids(arrayaxes.AxisIDTuple(
         arrayaxes.AxisID(ax.D, 1),
         arrayaxes.AxisID(ax.D, 0)
     ))
     e3_1 = tensorview(td3_1, e3)
-
-    val1 = 3
-
-    e0[()] = val1
-    assert all([e0_1[i] == e0 for i in range(ax.A.length)])
-
-    for i in range(ax.A.length):
-        for j in range(ax.B.length):
-            assert e0_2[i, j] == e0
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
     assert e1_2.shape == (ax.B.length, ax.A.length)
@@ -215,16 +230,6 @@ def test_simple_tensors():
             assert e1_3[j, i] == i
 
     def val2(i, j):
-        """
-        TODO.
-
-        Arguments:
-          i: TODO
-          j: TODO
-
-        Returns:
-
-        """
         return (i + 1) * (j + 2)
 
     for i in range(ax.A.length):
