@@ -16,4 +16,4 @@
 Installation
 ************
 
-Install information
+Installation instructions for |geon| are in the README.

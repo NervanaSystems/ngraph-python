@@ -279,3 +279,11 @@ intersphinx_mapping = {
     'python': ('http://docs.python.org/', None),
     'numpy': ('http://docs.scipy.org/doc/numpy/', None),
 }
+
+# These go in every file
+rst_epilog = """
+.. include :: <isonum.txt>
+.. |geon| replace:: gneon
+.. |Geon| replace:: Gneon
+.. |TF| replace:: TensorFlow\ |trade|
+"""
