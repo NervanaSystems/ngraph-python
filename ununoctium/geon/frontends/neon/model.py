@@ -155,9 +155,8 @@ class Model(GraphComponent):
         self.transformer = be.NumPyTransformer()
         updates = self.optimizer.configure(self.transformer, self.cost.total_cost)
 
-        self.train_comp = self.transformer.computation(self.cost.mean_cost, self.input,
-                                                       self.target,
-                                                       updates)
+        self.train_comp = self.transformer.computation([self.cost.mean_cost, updates], self.input,
+                                                       self.target)
         self.epoch_eval_comp = self.transformer.computation(self.cost.mean_cost, self.input,
                                                             self.target)
 
@@ -220,8 +219,8 @@ class Model(GraphComponent):
             callbacks.on_minibatch_begin(epoch, mb_idx)
             self.optimizer.optimize(self.epoch_index)
 
-            batch_cost = self.train_comp(x.reshape(self.batch_input_shape),
-                                         t.reshape(self.batch_target_shape))
+            batch_cost, _ = self.train_comp(x.reshape(self.batch_input_shape),
+                                            t.reshape(self.batch_target_shape))
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
             batch = batch + 1
