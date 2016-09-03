@@ -14,14 +14,15 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 
-import os
-import numpy as np
 from subprocess import Popen, PIPE
+
+import numpy as np
+import os
 
 """
 Test the usage of transformer.allreduce
 """
-from geon.backends.graph.mpihandle import MPIHandle
+from geon.transformers.argon.mpihandle import MPIHandle
 
 
 def test_mpi_allreduce():

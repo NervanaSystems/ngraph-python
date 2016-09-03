@@ -15,23 +15,16 @@
 
 from __future__ import print_function
 
-# Flattens backend
 import geon.backends.dataloaderbackend
-
-# Flattens frontends
 from geon.frontends.base import graph
 from geon.frontends.base.graph import Model, with_graph_scope
-
-# Flattens op_graph
 from geon.op_graph.arrayaxes import *
+from geon.op_graph.convolution import convolution
 from geon.op_graph.names import *
 from geon.op_graph.op_graph import *
-from geon.op_graph.convolution import convolution
-
-# Flattens transformers
 from geon.transformers.nptransform import NumPyTransformer
 try:
-    from geon.backends.graph.artransform import ArgonTransformer
+    from geon.transformers.argon.artransform import ArgonTransformer
 except ImportError as e:
     if 'argon' in str(e):
         print("Argon backend and tensor are defined in argon package, which is not installed.")
