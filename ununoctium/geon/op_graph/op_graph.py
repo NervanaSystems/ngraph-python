@@ -22,9 +22,9 @@ from builtins import object
 
 from geon.op_graph.arrayaxes import TensorDescription, \
     AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
-from geon.op_graph.nodes import Node
-from geon.util.threadstate import get_thread_state
 from geon.util.generics import generic_method
+from geon.util.nodes import Node
+from geon.util.threadstate import get_thread_state
 
 
 def tensor_descriptions(args):

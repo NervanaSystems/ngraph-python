@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.op_graph import nodes
+from geon.util import nodes
 
 
 def test_bytes_tags():

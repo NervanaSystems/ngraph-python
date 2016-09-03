@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.frontends.base.graph import Model, with_graph_scope
-from geon.op_graph.nodes import Node
+from geon.util.nodes import Node
 
-from attic.geon.frontends.declarative_graph import Axis, deriv, input, Variable, ArrayWithAxes
-from attic.geon.frontends.declarative_graph import absolute, add, cos, divide, dot, exp, log, \
-    maximum, minimum, multiply
 from attic.geon.frontends.declarative_graph import tanh
 
 from attic.geon.frontends.declarative_graph import Axis, Tensor, Variable, RecursiveTensor, Var

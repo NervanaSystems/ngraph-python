@@ -20,9 +20,7 @@ from neon.data import ArrayIterator, DataLoader
 
 import geon.frontends.base.axis as ax
 import geon as be
-from geon.frontends.base.graph import GraphComponent
 from geon.frontends.neon.container import Sequential, Tree, SingleOutputTree
-from geon.op_graph.names import name_scope
 
 
 def dataset_nclasses(dataset):
@@ -57,33 +55,7 @@ def dataset_batchsize(dataset):
         return dataset.bsz
 
 
-def in_graph(f):
-    """
-    TODO.
-
-    Arguments:
-      f: TODO
-
-    Returns:
-
-    """
-    def wrapper(self, *args, **kwargs):
-        """
-        TODO.
-
-        Arguments:
-          *args: TODO
-          **kwargs: TODO
-
-        Returns:
-
-        """
-        with name_scope(name_scope=self.graph):
-            return f(self, *args, **kwargs)
-    return wrapper
-
-
-class Model(GraphComponent):
+class Model(object):
     """TODO."""
 
     def __init__(self, layers, name=None, optimizer=None, **kwargs):
@@ -106,7 +78,6 @@ class Model(GraphComponent):
         self.metric = None
         self.cost = None
 
-    @in_graph
     def initialize(self,
                    dataset, input_axes, target_axes,
                    cost, optimizer, metric=None):
@@ -168,7 +139,6 @@ class Model(GraphComponent):
         self.transformer.initialize()
         self.initialized = True
 
-    @in_graph
     def fit(self, dataset, num_epochs, callbacks):
         """
         Trains the model parameters on a dataset by minimizing the cost function through
@@ -231,7 +201,6 @@ class Model(GraphComponent):
         # across all the minibatches we trained on
         self.total_cost = self.total_cost / dataset.nbatches
 
-    @in_graph
     def epoch_eval(self, dataset):
         """
         TODO.
@@ -256,7 +225,6 @@ class Model(GraphComponent):
             self.loss += batch_cost / nsteps
         return float(self.loss) / nprocessed
 
-    @in_graph
     def eval(self, dataset):
         """
         Evaluates a model on a dataset according to an input metric.

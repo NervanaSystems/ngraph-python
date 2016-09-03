@@ -13,8 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from functools import wraps
+
 from future.utils import with_metaclass
-from geon.op_graph.names import NameScope, get_current_name_scope, name_scope
+
+from geon.util.names import NameScope, get_current_name_scope, name_scope
 
 
 class GraphMetaclass(type):

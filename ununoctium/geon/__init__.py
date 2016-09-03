@@ -15,14 +15,12 @@
 
 from __future__ import print_function
 
-import geon.backends.dataloaderbackend
-from geon.frontends.base import graph
-from geon.frontends.base.graph import Model, with_graph_scope
+import geon.dataloader.dataloaderbackend
 from geon.op_graph.arrayaxes import *
 from geon.op_graph.convolution import convolution
-from geon.op_graph.names import *
 from geon.op_graph.op_graph import *
 from geon.transformers.nptransform import NumPyTransformer
+from geon.util.names import *
 try:
     from geon.transformers.argon.artransform import ArgonTransformer
 except ImportError as e:

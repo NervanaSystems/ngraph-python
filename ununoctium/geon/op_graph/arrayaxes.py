@@ -13,19 +13,19 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import object, map, range, zip
-from future.utils import with_metaclass
-from functools import reduce, wraps
 
-from abc import ABCMeta
 import collections
 import operator
-import types
 import weakref
+from functools import reduce, wraps
 
 import numpy as np
+import types
+from abc import ABCMeta
+from builtins import object, map, range, zip
+from future.utils import with_metaclass
 
-from geon.op_graph.names import NameableValue
+from geon.util.names import NameableValue
 
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):

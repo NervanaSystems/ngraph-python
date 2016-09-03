@@ -13,13 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import str
-import collections
-# import weakref
-# import inspect
 
-# from geon.backends.graph.names import NameableValue
-from geon.op_graph.nodes import Node
+import collections
+
+from builtins import str
+
+from geon.util.nodes import Node
 
 
 # TODO This implementation only read the model description.  These model descriptions use
