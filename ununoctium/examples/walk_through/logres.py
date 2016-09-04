@@ -21,11 +21,11 @@ L = geon.cross_entropy_binary(Y_hat, Y)
 
 grad = geon.deriv(L, W)
 
-update = geon.assign(W, W - alpha * grad)
+update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
 
 transformer = geon.NumPyTransformer()
 update_fun = transformer.computation([L, W, update], alpha, X, Y)
 
-for i in range(10):
-    loss_val, w_val, _ = update_fun(.1, xs, ys)
+for i in range(20):
+    loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
     print("W: %s, loss %s" % (w_val, loss_val))

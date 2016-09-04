@@ -518,6 +518,9 @@ class TensorOp(Op):
     def __rmul__(self, val):
         return multiply(val, self)
 
+    def __div__(self, val):
+        return divide(self, val)
+
     def __truediv__(self, val):
         return divide(self, val)
 

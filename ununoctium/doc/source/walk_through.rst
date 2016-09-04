@@ -25,6 +25,9 @@ Our program will provide values for :math:`x` and receive :math:`x+1` for each :
 
 The x + 1 program
 =================
+
+The complete program source can be found in :download:`../../examples/walk_through/x_plus_one.py`.
+
 The complete program is::
 
     import geon
@@ -141,6 +144,8 @@ so let's look at a more complex example next.
 Logistic Regression
 ===================
 
+The complete program source can be found in :download:`../../examples/walk_through/logres.py`.
+
 The next example is logistic regression.  We want to classify an observation :math:`x` as having some property,
 where we will say :math:`y=1` if it has the property, and :math:`y=0` if it does not.  We want to find the best values
 for :math:`W` for the model :math:`\hat{y}=\sigma(Wx)`, using binary cross-entropy of the samples as the
@@ -191,7 +196,7 @@ The ``geon.deriv`` function computes the backprop computation that computes the 
 
 We are almost done.  The update is the gradient descent operation::
 
-    update = geon.assign(W, W - alpha * grad)
+    update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
 
 Now we can make a transformer and define a computation::
 
@@ -204,10 +209,59 @@ it happens.  We pass in values for the training rate and samples.
 Finally, we run it::
 
     for i in range(10):
-        loss_val, w_val, _ = update_fun(.1, xs, ys)
+        loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
         print("W: %s, loss %s" % (w_val, loss_val))
 
 After each update, we return the loss and the new weights.
 
 Logistic Regression with Axes
 =============================
+
+The complete program source can be found in :download:`../../examples/walk_through/logres.py`.
+
+When implementing front ends, the length of tensor axes, or even their dimensions, may not be known until later.
+|Geon| provides a facility called axes for making it easier to work with tensors at a more abstract level.  We begin
+by converting the logistic regression example to using axes rather than specific lengths::
+
+    import numpy as np
+    import geon
+
+    C = geon.Axis("C")
+    N = geon.Axis("N")
+
+    X = geon.placeholder(axes=geon.Axes([C, N]))
+    Y = geon.placeholder(axes=geon.Axes([N]))
+    alpha = geon.placeholder(axes=geon.Axes())
+
+    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+
+    Y_hat = geon.sigmoid(geon.dot(W, X))
+    L = geon.cross_entropy_binary(Y_hat, Y, out_axes=geon.Axes())
+
+    grad = geon.deriv(L, W)
+
+    update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
+
+Rather than ``C`` and ``N`` being lengths, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
+is something like a variable for an axis length, but we will later see that an ``Axis`` is more like a type in
+the opgraph.
+
+When we are ready to use our model, we do need to specify lengths for the axes we are using::
+
+    xs = np.array([[0.52, 1.12, 0.77],
+                   [0.88, -1.08, 0.15],
+                   [0.52, 0.06, -1.30],
+                   [0.74, -2.49, 1.39]]).T
+
+    ys = np.array([1, 1, 0, 1])
+
+    C.length, N.length = xs.shape
+    transformer = geon.NumPyTransformer()
+    update_fun = transformer.computation([L, W, update], alpha, X, Y)
+
+    for i in range(20):
+        loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+        print("W: %s, loss %s" % (w_val, loss_val))
+
+Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we the axis lengths.
+
