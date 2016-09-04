@@ -15,7 +15,7 @@
 
 .. include:: <isonum.txt>
 
-Walk Through
+Walk-through
 ************
 
 Let's begin with a very simple example, computing :math:`x+1` for several values of :math:`x` using the front end
@@ -137,3 +137,77 @@ initialization is empty.  Constants, such as 1, are copied to the device as part
 
 The method ``c_1`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
 so let's look at a more complex example next.
+
+Logistic Regression
+===================
+
+The next example is logistic regression.  We want to classify an observation :math:`x` as having some property,
+where we will say :math:`y=1` if it has the property, and :math:`y=0` if it does not.  We want to find the best values
+for :math:`W` for the model :math:`\hat{y}=\sigma(Wx)`, using binary cross-entropy of the samples as the
+error function and gradient descent with a learning rate of :math:`\alpha`.
+
+We start with basic setup and some training data::
+
+    import numpy as np
+    import geon
+
+    xs = np.array([[0.52, 1.12, 0.77],
+                   [0.88, -1.08, 0.15],
+                   [0.52, 0.06, -1.30],
+                   [0.74, -2.49, 1.39]]).T
+
+    ys = np.array([1, 1, 0, 1])
+
+    C, N = xs.shape
+
+Our model will have three placeholders, ``X``, ``Y``, and ``alpha``.  ``alpha`` is a scalar, so we already know how
+to specify its axes.  ``X`` and ``Y`` do have shape, and we will need to provide the shape to the placeholders.
+|Geon| has a unique Axes facility for making it easier to describe tensor computations, but we will begin with
+conventional shapes.  Our convention is to use the last axis for samples.  The placeholders can be specified as::
+
+    X = geon.placeholder(axes=geon.Axes([C, N]))
+    Y = geon.placeholder(axes=geon.Axes([N]))
+    alpha = geon.placeholder(axes=geon.Axes())
+
+We also need our training weights, ``W``.  Unlike the placeholders, we want ``W`` to retain its value from computation
+to computation.  Following |TF|, we call this a *Variable*.  Again, we need to specify the axes.  In addition, we
+want to specify an initial value for the tensor::
+
+    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+
+Other than the axes, the syntax is the same as |TF|. The transformer's initialization function will initialize `W`
+to 0 after allocating storage.
+
+Now we can estimate :math:`y` and compute the loss::
+
+    Y_hat = geon.sigmoid(geon.dot(W, X))
+    L = geon.cross_entropy_binary(Y_hat, Y)
+
+To do gradient descent we will need the gradient, i.e. :math:`dL/dW`::
+
+    grad = geon.deriv(L, W)
+
+The ``geon.deriv`` function computes the backprop computation that computes the derivative using autodiff.
+
+We are almost done.  The update is the gradient descent operation::
+
+    update = geon.assign(W, W - alpha * grad)
+
+Now we can make a transformer and define a computation::
+
+    transformer = geon.NumPyTransformer()
+    update_fun = transformer.computation([L, W, update], alpha, X, Y)
+
+Here, the computation returns three values, although the update's value is ``None``.  We just need to make sure that
+it happens.  We pass in values for the training rate and samples.
+
+Finally, we run it::
+
+    for i in range(10):
+        loss_val, w_val, _ = update_fun(.1, xs, ys)
+        print("W: %s, loss %s" % (w_val, loss_val))
+
+After each update, we return the loss and the new weights.
+
+Logistic Regression with Axes
+=============================

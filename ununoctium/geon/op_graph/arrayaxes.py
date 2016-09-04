@@ -15,6 +15,7 @@
 from __future__ import division
 
 import collections
+import numbers
 import operator
 import weakref
 from functools import reduce, wraps
@@ -278,6 +279,8 @@ class Axes(object):
             """
             elems = []
             for x in seq:
+                if isinstance(x, numbers.Integral):
+                    x = NumericAxis(x)
                 if isinstance(x, FlattenedAxis):
                     if x.empty:
                         continue
