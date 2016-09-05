@@ -11,13 +11,15 @@ Y = geon.placeholder(axes=geon.Axes([N]))
 alpha = geon.placeholder(axes=geon.Axes())
 
 W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+b = geon.Variable(axes=geon.Axes(), initial_value=0)
 
-Y_hat = geon.sigmoid(geon.dot(W, X))
+Y_hat = geon.sigmoid(geon.dot(W, X) + b)
 L = geon.cross_entropy_binary(Y_hat, Y, out_axes=geon.Axes())
 
-grad = geon.deriv(L, W)
+updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat))
+           for v in L.variables()]
 
-update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
+all_updates = geon.doall(updates)
 
 xs = np.array([[0.52, 1.12, 0.77],
                [0.88, -1.08, 0.15],
@@ -28,8 +30,8 @@ ys = np.array([1, 1, 0, 1])
 
 C.length, N.length = xs.shape
 transformer = geon.NumPyTransformer()
-update_fun = transformer.computation([L, W, update], alpha, X, Y)
+update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
 
 for i in range(20):
-    loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-    print("W: %s, loss %s" % (w_val, loss_val))
+    loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+    print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))

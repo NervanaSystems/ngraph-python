@@ -217,7 +217,7 @@ After each update, we return the loss and the new weights.
 Logistic Regression with Axes
 =============================
 
-The complete program source can be found in :download:`../../examples/walk_through/logres.py`.
+The complete program source can be found in :download:`../../examples/walk_through/logres_axes.py`.
 
 When implementing front ends, the length of tensor axes, or even their dimensions, may not be known until later.
 |Geon| provides a facility called axes for making it easier to work with tensors at a more abstract level.  We begin
@@ -265,3 +265,31 @@ When we are ready to use our model, we do need to specify lengths for the axes w
 
 Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we the axis lengths.
 
+Adding a Bias
+=============
+
+The complete program source can be found in :download:`../../examples/walk_through/logres_bias.py`.
+
+We can add a bias to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This changes the model to::
+
+    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+    b = geon.Variable(axes=geon.Axes(), initial_value=0)
+
+    Y_hat = geon.sigmoid(geon.dot(W, X) + b)
+
+Now we have two variables to update, ``W`` and ``b``.  However, all the updates are essentially the same, and
+we know that everything to be udated is a variable.  We can use the ``variables`` method to find all the
+trainable variables used in an ``Op``'s computation::
+
+    updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat)) for v in L.variables()]
+
+    all_updates = geon.doall(updates)
+
+The function ``geon.doall`` is a short-hand for ensuring that all the updates get run.  We can change the computation
+and printing of results to::
+
+    update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
+
+    for i in range(20):
+        loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+        print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
