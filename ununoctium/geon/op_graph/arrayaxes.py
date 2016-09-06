@@ -37,17 +37,20 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     Arguments:
         length: The length of the axis.
         batch: Whether the axis is a batch axis.
+        recurrent: Whether the axis is a recurrent axis.
 
     Attributes:
         length: The length of the axis.
 
     """
     batch_axes = set()
+    recurrent_axes = set()
 
-    def __init__(self, length=None, batch=False, **kwargs):
+    def __init__(self, length=None, batch=False, recurrent=False, **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
         self.batch = batch
+        self.recurrent = recurrent
 
     def axis_id(self, key):
         """
@@ -75,6 +78,21 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         else:
             Axis.batch_axes.discard(self)
         self.__batch = value
+
+    @property
+    def recurrent(self):
+        """
+        Whether the axis is a recurrent axis.
+        """
+        return self.__recurrent
+
+    @recurrent.setter
+    def recurrent(self, value):
+        if value:
+            Axis.recurrent_axes.add(self)
+        else:
+            Axis.recurrent_axes.discard(self)
+        self.__recurrent = value
 
     @property
     def length(self):
@@ -357,6 +375,13 @@ class Axes(object):
         :return: The Axes subset that are not batch axes.
         """
         return Axes(axis for axis in self if not axis.batch)
+
+    def recurrent_axes(self):
+        """
+
+        :return: The Axes subset that are recurrent axes.
+        """
+        return Axes(axis for axis in self if axis.recurrent)
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -1139,6 +1164,20 @@ class TensorDescription(NameableValue):
         """The allocated sizes for each axis."""
         return tuple(reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
+
+    @property
+    def c_contiguous(self):
+        """
+
+        Returns:
+            True if the tensor's strides are row-major contiguous.
+        """
+        s = self.dtype.itemsize
+        cstrides = []
+        for _ in reversed(self.shape):
+            cstrides.insert(0, s)
+            s = s * _
+        return tuple(cstrides) == self.strides
 
     @property
     def base(self):

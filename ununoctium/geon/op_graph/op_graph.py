@@ -113,6 +113,8 @@ class Op(Node):
         if ops is not None:
             ops.append(self)
         self.style = {}
+        self.ops = []
+        self.defs = set()
 
     @property
     def assignable(self):
@@ -190,11 +192,6 @@ class Op(Node):
             if isinstance(schema, t):
                 return schema
         return None
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {}
 
     def variables(self, filter=None):
         """
@@ -334,11 +331,6 @@ class Op(Node):
           TODO
         """
         return tuple(Op.as_op(x) for x in xs)
-
-    @property
-    def ops(self):
-        """TODO."""
-        return []
 
     @staticmethod
     def simple_prune(results):
@@ -827,6 +819,25 @@ class Slice(TensorOp):
         )
 
 
+def slice_along_axis(x, axis, idx):
+    """
+    Returns a slice of a tensor constructed by indexing into a single axis
+    at a single position. If the axis occurs multiple times in the dimensions
+    of the input tensor, we select only on the first occurrence.
+
+    Arguments:
+        x: input tensor
+        axis: axis along which to slice
+        idx: index to select from the axis
+    Returns:
+        y: a slice of x
+    """
+    pos = x.axes.index(axis)
+    ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
+    axes = x.axes[:pos].concat(x.axes[pos + 1:])
+    return Slice(x, ss, axes=axes)
+
+
 class AllocationOp(TensorOp):
     """
     Value comes directly from storage.
@@ -1050,11 +1061,7 @@ class ComputationOp(TensorOp):
 
         for arg in self.args:
             arg.users.add(self)
-
-    @property
-    def defs(self):
-        """TODO."""
-        return {self}
+        self.defs = {self}
 
     @property
     def graph_label(self):
@@ -1080,21 +1087,14 @@ class Stack(ComputationOp):
             )
 
 
-# Currently implemented using unrolling
-# f_in_to_h should be python functions that take and return tensors
-# The length of time_axis should not be changed after this function
-# is called, else the stacking will be invalid.
-def recurrent(x, f_in_to_h, f_h_to_h, time_axis, stack_pos=-1):
-    h = f_in_to_h(x)
-    hs = [h]
-    for i in range(time_axis.length - 1):
-        h = f_h_to_h(h)
-        hs.append(h)
-    return Stack(hs, time_axis, pos=stack_pos)
-
-
 class Unslice(ComputationOp):
-    """TODO."""
+    """
+    A computation to reverse a slicing operation.
+    Primarily used internally to implement expansions of tensors
+    such as the derivative of a slice and a padding function.
+    However, there is no reason why this operation should not be used
+    by a higher-level module or the end user.
+    """
 
     def __init__(self, x, slices, **kwargs):
         super(Unslice, self).__init__(args=(x,), **kwargs)
@@ -1523,7 +1523,9 @@ class less_equal(ElementWiseBoolean):
 
 
 class Softmax(object):
-    """TODO."""
+    """
+    A schema to use to shortcut formula for the softmax derivative.
+    """
 
     def __init__(self, x, exps, Z):
         self.x = x
@@ -1543,58 +1545,64 @@ class Softmax(object):
           TODO
         """
         z = delta * op
-        zs = sum(z, reduction_axes=self.x.axes.sample_axes())
+        zs = sum(z)
         self.x.generate_add_delta(adjoints, (z - zs * op))
 
 
-def softmax(x, softmax_axes=None, **kwargs):
+def softmax(x, normalization_axes=None, **kwargs):
     """
-    TODO.
+    The softmax activation function.
 
     Arguments:
-      x: TODO
-      softmax_axes: TODO
-      **kwargs: TODO
+      x: input
+      normalization_axes: dimensions over which we normalize
+      **kwargs: options
 
     Returns:
-      TODO
+        y: output of softmax function
     """
-    if softmax_axes is None:
-        softmax_axes = x.axes.sample_axes()
-    x = x - max(x, reduction_axes=softmax_axes)
+    if normalization_axes is None:
+        normalization_axes = x.axes.sample_axes()\
+            - x.axes.recurrent_axes()
+    x = x - max(x, reduction_axes=normalization_axes)
     exps = exp(x)
-    Z = sum(exps, reduction_axes=softmax_axes)
+    Z = sum(exps, reduction_axes=normalization_axes)
     result = exps / Z
     result.add_schema(Softmax(x=x, exps=exps, Z=Z))
     return result
 
 
 class ReductionOp(ComputationOp):
-    """TODO."""
+    """
+    Handles shared behaviour of computations that aggregate their inputs
+    over some dimensions, e.g. sum, max.
+    """
 
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         self.out_axes, self.reduction_axes\
-            = self.compute_axes(x, reduction_axes, out_axes)
+            = self._compute_axes(x, reduction_axes, out_axes)
         self.mode = None
         super(ReductionOp, self).__init__(
             args=(x,), axes=self.out_axes, **kwargs
         )
 
-    def compute_axes(self, x, reduction_axes, out_axes):
+    def _compute_axes(self, x, reduction_axes, out_axes):
         """
-        TODO.
+        A helper function to choose compatible reduction and output
+        axes from the arguments and defaults.
 
         Arguments:
-          x: TODO
-          reduction_axes: TODO
-          out_axes: TODO
+          x: input
+          reduction_axes: may contain reduction axes specified by the user
+          out_axes: may contain output axes specified by ther user
 
         Returns:
-          TODO
+            (reduction_axes, output_axes): computed axes
         """
         if reduction_axes is None:
             if out_axes is None:
-                reduction_axes = x.axes.sample_axes()
+                reduction_axes = x.axes.sample_axes()\
+                    - x.axes.recurrent_axes()
             else:
                 reduction_axes = x.axes - Axes(out_axes)
         else:
@@ -1695,16 +1703,16 @@ class sum(ReductionOp):
         x.generate_add_delta(adjoints, delta)
 
 
-def assign(lvalue, rvalue):
+def assign(lvalue, rvalue, **kwargs):
     """
     Assignment; lvalue <= rvalue
 
     Arguments:
         lvalue: Tensor to assign to.
         rvalue: Value to be assigned.
-
+        kwargs: options, including name
     """
-    return SetItem(lvalue, (), rvalue)
+    return SetItem(lvalue, (), rvalue, **kwargs)
 
 
 class tensor_size(ComputationOp):
@@ -2170,7 +2178,7 @@ class tanh(ElementWise):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
 
-class Function(Node):
+class Function(Op):
     """TODO."""
 
     def __init__(self, ops):
@@ -2297,6 +2305,8 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None,
     Returns:
       TODO
     """
+    if out_axes is None:
+        out_axes = y.axes.recurrent_axes() + y.axes.batch_axes()
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:
         # This depends on sum(t) being 1

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import pytest
+
 import geon as be
 import numpy as np
 from geon.util.utils import executor
@@ -41,3 +43,32 @@ def test_evalutaion_twice():
     result_1 = comp()
     result_2 = comp()
     assert np.array_equal(result_1, result_2)
+
+
+def test_missing_arguments_to_execute():
+    """
+    Expect a failure if the wrong number of arguments are passed to a
+    computation.
+    """
+    N = be.Axis(1)
+
+    x = be.placeholder(axes=[N])
+    y = be.placeholder(axes=[N])
+
+    f = executor(x + y, x, y)
+    with pytest.raises(ValueError):
+        f(1)
+
+
+def test_execute_non_placeholder():
+    """
+    Expect a failure if a non-input (Variable) is used as an argument to
+    executor.
+    """
+    N = be.Axis(1)
+
+    x = be.Variable(axes=[N])
+    y = be.Variable(axes=[N])
+
+    with pytest.raises(ValueError):
+        executor(x + y, x, y)

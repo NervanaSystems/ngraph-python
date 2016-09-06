@@ -358,20 +358,25 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             shape = [d.size for d in const_tensor.tensor_shape.dim]
             np_val = tensor_util.MakeNdarray(const_tensor)
 
+            if np_val.dtype is np.dtype('O'):
+                ignored_nodes[node.name] = True
+                continue
+
             if node.name in name_to_axes:
-                name_to_op[node.name] = be.Constant(np_val, axes=name_to_axes[node.name],
-                                                       name=node.name)
+                name_to_op[node.name] = be.Constant(np_val,
+                                                    axes=name_to_axes[node.name],
+                                                    name=node.name)
             elif len(shape) == 0:
                 name_to_op[node.name] = be.Constant(np_val, name=node.name)
             elif len(shape) == 1:
                 name_to_op[node.name] = be.Constant(np_val,
-                                                       axes=be.Axes(be.NumericAxis(shape[0]), ),
-                                                       name=node.name)
+                                                    axes=be.Axes(be.NumericAxis(shape[0]), ),
+                                                    name=node.name)
             elif len(shape) == 2:
                 name_to_op[node.name] = be.Constant(np_val,
-                                                       axes=be.Axes(be.NumericAxis(shape[0]),
-                                                                    be.NumericAxis(shape[1])),
-                                                       name=node.name)
+                                                    axes=be.Axes(be.NumericAxis(shape[0]),
+                                                                 be.NumericAxis(shape[1])),
+                                                    name=node.name)
             constant_tensor_dict[node.name] = np_val
 
         elif op_type == 'Variable':
@@ -412,13 +417,13 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
                 if len(shape) == 1:
                     name_to_op[node.name] = be.Constant(array,
-                                                           axes=be.Axes(be.NumericAxis(shape[0])),
-                                                           name=node.name)
+                                                        axes=be.Axes(be.NumericAxis(shape[0])),
+                                                        name=node.name)
                 elif len(shape) == 2:
                     name_to_op[node.name] = be.Constant(array,
-                                                           axes=be.Axes(be.NumericAxis(shape[0]),
+                                                        axes=be.Axes(be.NumericAxis(shape[0]),
                                                                      be.NumericAxis(shape[1])),
-                                                           name=node.name)
+                                                        name=node.name)
                 else:
                     assert False
 
@@ -439,11 +444,11 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                 name_to_op[node.name] = be.Constant(val, name=node.name)
             elif len(shape) == 1:
                 name_to_op[node.name] = be.Constant(val, axes=be.Axes([be.NumericAxis(shape[0])]),
-                                                       name=node.name)
+                                                    name=node.name)
             elif len(shape) == 2:
                 name_to_op[node.name] = be.Constant(val,
-                                                       axes=be.Axes([be.NumericAxis(shape[0]),
-                                                                     be.NumericAxis(shape[1])]), name=node.name)
+                                                    axes=be.Axes([be.NumericAxis(shape[0]),
+                                                                  be.NumericAxis(shape[1])]), name=node.name)
             else:
                 print("Not supported")
                 assert False
@@ -488,7 +493,10 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
 
         elif op_type == 'Prod':
             # TODO: implement tf.reduce_prod and merge with reduction_ops
-            prod_val = np.prod(constant_tensor_dict[inputs[0]])
+            if isinstance(constant_tensor_dict[inputs[0]], np.ndarray):
+                prod_val = np.prod(constant_tensor_dict[inputs[0]])
+            else:
+                prod_val = np.prod(constant_tensor_dict[inputs[0]].const)
             name_to_op[node.name] = be.Constant(prod_val, name=node.name)
 
         elif op_type == 'Shape':
@@ -523,7 +531,7 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             delta = name_to_op[inputs[2]]
             nums = np.arange(start.const, limit.const, delta.const).astype(np.float32)
             name_to_op[node.name] = be.Constant(nums, axes=Axes(be.NumericAxis(len(nums)), ),
-                                                   name=node.name)
+                                                name=node.name)
             constant_tensor_dict[node.name] = nums
 
         elif op_type == 'Mod':
@@ -596,8 +604,8 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
             if grad_x_reduce_:
                 val_x = np.array(grad_x_reduce_)
                 name_to_op[node.name] = be.Constant(val_x,
-                                                       axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
-                                                       name=node.name)
+                                                    axes=Axes(be.NumericAxis(len(grad_x_reduce_)), ),
+                                                    name=node.name)
                 constant_tensor_dict[node.name] = val_x
 
             name_to_op[node.name + ":1"] = None
@@ -605,8 +613,8 @@ def create_nervana_graph(pb_file, end_node="", loss_node=""):
                 val_y = np.array(grad_y_reduce_)
                 name_to_op[node.name + ":1"] = \
                     be.Constant(val_y,
-                                   axes=Axes(be.NumericAxis(len(grad_y_reduce_)), ),
-                                   name=node.name)
+                                axes=Axes(be.NumericAxis(len(grad_y_reduce_)), ),
+                                name=node.name)
                 constant_tensor_dict[node.name + ":1"] = val_y
 
         elif op_type == 'ReluGrad':

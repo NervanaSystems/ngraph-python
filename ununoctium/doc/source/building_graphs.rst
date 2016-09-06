@@ -35,26 +35,20 @@ will be returned as the result.  When you type the expression, :math:`y` will co
 but behind the scenes many more actions take place.  When we work with computations, we need to think
 about both what the computation is doing and how the computation is performed.
 
-When we work evaluate an expression, we start with the things that have no dependencies, like :math:`w, x` and
-:math:`b,` and compute something that only depends on things we already have values for, until every operation
-has been performed.
+When we want to evaluate an expression, we start with the things that have no dependencies, like :math:`w, x` and 
+:math:`b,` and compute quantities that only depend on known values, until all operations have been performed.
 
-When we work with expressions, we go in the other direction; we start with the last
-thing we would evaluate, in this case the assignment to :math:`y.`  The assignment has two subexpressions,
-the :math:`y` expression and the :math:`\tanh(w*x+b)` expression.  The :math:`=` symbol is in the expression, but
-its role is to specify what is being done with the two subexpressions, so it is not a subexpression, but, instead,
-identifies the expression as an assignment.
+When we build expressions, we tend to go the other direction by considering the last thing we would evaluate first, in 
+this case the assignment to :math:`y`. The assignment has two subexpressions, the :math:`y` expression and the 
+:math:`\tanh(w*x+b)` expression. The :math:`=` symbol is in the expression, but its role is to specify what is being 
+done with the two subexpressions, so it is not a subexpression, but, instead, identifies the expression as an 
+assignment.
 
-The :math:`\tanh(w*x+b)` expression has only one subexpression, :math:`w*x+b` and is a :math:`\tanh` expression.  The
-:math:`w*x+b` expression is a :math:`+` expression with two subexpressions, :math:`w*x` and :math:`b.`  The :math:`b`
-expression is a variable reference with no subexpressions.
-
-Although the :math:`b` expression has no subexpressions, it is different
-from the variable expressions :math:`w` and :math:`x.`  We call ``b, w`` and ``x`` *parameters* of the variable;
-:math:`b, w` and :math:`x` are all variables with no subexpressions, but they do differ in their parameters.
-This is similar to the difference between :math:`+` and :math:`*`, but the difference between :math:`+` and
-:math:`*` is more significant so for our convenience we will call them different kinds of expressions rather
-than the same kind of expression with different parameters.
+The :math:`\tanh(w*x+b)` expression is a :math:`\tanh` expression and has only one subexpression, :math:`w*x+b`. The 
+:math:`w*x+b` expression is a :math:`+` expression with two subexpressions, :math:`w*x` and :math:`b.` The :math:`b` 
+expression is a variable reference with no subexpressions. Although the :math:`b, w` and :math:`x` expressions have no 
+subexpressions, they are all distinct from one another because they contain *parameters* ``b, w`` and ``x``, 
+respectively.
 
 Expressions with Python
 =======================
@@ -93,12 +87,12 @@ Operational Graph Expressions
 =============================
 Almost all operational graph expressions describe tensor computations.  Associated with every tensor is a dtype and a
 sequence of zero or more axes.  A tensor with zero axes is also called a scalar, a tensor with one axis a vector,
-and two axes a matrix.  Axes are described elsewhere.
-Unlike some graph/tensor languages, a tensor does not need to be associated with storage.
+and two axes a matrix.  Axes are described elsewhere. Unlike some graph/tensor languages, a tensor does not need to be 
+associated with storage.
 
-In the operational graph, all the expressions are operations of some kind, so we call them ops, and they are all
-instances of the class ``Op``.  Most expressions are tensors, and are instance of the ``Tensor`` class.  However,
-some ops are used for side-effects and produce no value; these are instances of ``VoidOp``.  Ops that actually
+In the operational graph, all expressions are operations of some kind, so we call them ops, and they are all
+instances of the class ``Op``. Most of these operations are tensors, and are instances of the ``Tensor`` class.  
+However, some ops are used for side-effects and produce no values such as ``InitTensor`` and ``Fill``. Ops that actually
 perform a computation on their arguments are instances of ``ComputationOp``.
 
 During a computation, the values must be stored somewhere, but only those tensors whose values are explicitly
@@ -116,10 +110,8 @@ and then make the ``placeholder``::
 
     x = be.placeholder(axes=be.Axes(ax.C, ax.W, ax.H, ax.N))
 
-
-This will create an op for a ``placeholder`` with the indicated list of axes and assign the Python
-variable `x` to the op.  When the op is used in a graph, the op serves as a Python handle
-for the tensor stored in the device.
+This will create an op for a ``placeholder`` with the indicated list of axes and assign the Python variable `x` to the 
+op.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
 
 It is important to remember that ``x`` is a Python variable that holds an op.  There are no magic methods for
 Python variable assignment or use, so assigning a new value to ``x`` has no effect on the the tensor
@@ -127,9 +119,12 @@ previously represented by ``x``.  In other words::
 
     x = x + x
 
-does not double the value of the tensor in the ``placeholder``.  Instead, the Python variable ``x`` is now an
-op that is the sum of the ``placeholder`` and itself.  In order to change the value of the ``placeholder``
-you would need to say::
+does not directly double the value of the tensor in the ``placeholder``. Instead, if we carefully follow Python variable 
+resolution, the right hand side expression is evaluated first where the first ``x``'s ``__add__`` method is called with 
+both arguments resolving to the same ``placeholder`` object. This then returns a new sum ``Op`` with both subexpressions 
+pointing to that original ``placeholder`` object. Only if this ``Op`` was subsequently evaluated would the underlying 
+value of the original ``placeholder`` effectively be doubled and used as the resulting value of the sum ``Op``. On the 
+other hand, to directly modify the value of the ``placeholder`` ``Op`` you would need to say::
 
     be.SetItem(x, x + x)
 
@@ -245,11 +240,3 @@ Some useful properties of ops are:
 
 `file_info`
     The file and line number formatted for debuggers that support clicking on a file location to edit that location.
-
-
-
-
-
-
-
-

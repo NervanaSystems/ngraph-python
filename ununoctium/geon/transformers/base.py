@@ -21,7 +21,7 @@ import weakref
 from future.utils import with_metaclass
 
 from geon.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, AllocationOp
+    Function, doall
 from geon.analysis.memory import assign_buffers
 from geon.util.generics import generic_method
 from geon.op_graph.names import NameableValue
@@ -36,8 +36,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
         returns: If an Op, return the value
             of the Op, if sequence of Ops, return the sequence of values, if
             a set return a map, if None, return None.
-        args: AllocationOps marked input will be arguments to the function, other values are ops
-            to compute but not return.
+        args: AllocationOps marked input will be arguments to the function.
     """
 
     def __init__(self, transformer, returns, *args):
@@ -57,8 +56,19 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
         self.parameters = []
         for arg in args:
-            if isinstance(arg, AllocationOp) and arg.input:
+            if arg.input:
                 self.parameters.append(arg)
+            else:
+                raise ValueError((
+                    'The arguments to a computation must all have property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
             if isinstance(arg, Op):
                 self.ops.add(arg)
             else:
@@ -76,12 +86,25 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
         self.name = self.transformer.transform_ordered_ops(ordered_ops)
 
     def __call__(self, *args):
+        """
+        Executes the computation passing args in to the function.
+        """
+        if len(args) != len(self.parameters):
+            raise ValueError((
+                'Computation was expecting {expected} arguments, but was '
+                'called with {called}.'
+            ).format(
+                expected=len(self.parameters),
+                called=len(args),
+            ))
+
         # TODO Should this be automatic?
         self.transformer.initialize()
 
         # Get the parameters to the device
         for param, arg in zip(self.parameters, args):
             param.value[()] = arg
+
         self.executor()
 
         # TODO Should copy this out of the device to a destination when it is not scalar
@@ -294,7 +317,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         cpu_initializations (list): Initializations to be performed from the CPU after
             allocation.
         init_computation (Computation): The computation that performs initialization
-            after allocation.
+            after allocation.  This happens once per training session, not once per-minibatch.
     """
 
     def __init__(self, fusion=None, **kwargs):
@@ -320,7 +343,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         ops = Op.ordered_ops(self.all_results)
         self.inits = self.ordered_initializers(ops)
 
-        self.init_computation = self.computation([], *self.inits)
+        # create computation which initializes values (called once per
+        # session)
+        self.init_computation = self.computation(doall(self.inits))
 
         all_ops = ops + self.inits
         # Give ids
@@ -348,7 +373,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # Compile the computations now that we know their storage
         for computation in self.computations:
             computation.transform()
-        self.init_computation.transform()
         self.finish_transform()
         self.finalized = True
 
