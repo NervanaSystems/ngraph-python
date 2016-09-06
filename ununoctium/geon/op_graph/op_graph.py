@@ -891,6 +891,7 @@ class AllocationOp(TensorOp):
             id=id(self)
         )
 
+
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
     if graph_label_type is None:
         graph_label_type = "<Const({})>".format(const)

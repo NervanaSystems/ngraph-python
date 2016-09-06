@@ -2,6 +2,7 @@ import pytest
 
 import geon as be
 
+
 def test_deriv_missing_connection():
     """
     Taking the derivative of an expression with respect to a variable not

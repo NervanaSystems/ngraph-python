@@ -297,4 +297,4 @@ def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
     a = arrayaxes.Axis(10, batch=True)
     s = arrayaxes.SlicedAxis(a, slice(0, 5))
-    assert s.batch == True
+    assert s.batch is True
