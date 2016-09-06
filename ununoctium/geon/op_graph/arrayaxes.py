@@ -30,9 +30,23 @@ from geon.op_graph.names import NameableValue
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
-    An Axis of a tensor.
+    An Axis labels a dimension of a tensor. The graph backend uses
+    the identity of Axis objects to pair and specify dimensions in
+    symbolic expressions. This system has several advantages over
+    using the length and position of the axis as in other frameworks:
 
-    Tensor operations uses Axis identity to pair/specify dimensions.
+    1) Convenience. The dimensions of tensors, which may be nested
+    deep in a computation graph, can be specified without having to
+    calculate their lengths.
+
+    2) Safety. Axis labels are analogous to types in general-purpose
+    programming langauges, allowing objects to interact only when
+    they are permitted to do so in advance. In symbolic computation,
+    this prevents interference between axes that happen to have the
+    same lengths but are logically distinct, e.g. if the number of
+    training examples and the number of input features are both 50.
+
+    Please add...
 
     Arguments:
         length: The length of the axis.
@@ -54,13 +68,13 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def axis_id(self, key):
         """
-        TODO.
+        Returns an AxisID, used to disambiguate axes that recur in a tensor.
 
         Arguments:
-          key: TODO
+          key: the index of the occurrence.
 
         Returns:
-
+            An AxisID
         """
         return AxisID(self, key)
 
@@ -113,14 +127,33 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 class NumericAxis(Axis):
     """
     A NumericAxis is an axis which is uniquely identified by its length.
+    Tensors labelled with NumericAxis objects will have the same labelling
+    system as other deep learning frameworks (i.e. length and position) and
+    we primarily use NumericAxis in our TensorFlow importer. NumericAxis
+    should be used when deciding on axes names is unnecessary or impossible,
+    perhaps because the graph comes from an external source.
 
-    Every NumericAxis with the same length is the same instance of
-    NumericAxis.
+    Once a NumericAxis has been created, its length is immutable.
+
+    We override the default python __new__ method to make the objects unique
+    by length. This allows us to use the same matching method for numeric
+    axes as we do for named axes, i.e. object identity.
     """
 
     cache = {}
 
     def __new__(cls, length=None, **kwargs):
+        """
+        Creates a numeric axis object if an instance for the length
+        does not already exist. Otherwise, returns the existing object.
+
+        Arguments:
+            cls: dynamic type of object to be created.
+            length: length of numeric axis.
+
+        Returns:
+            A NumericAxis (uninitialized)
+        """
         if length in NumericAxis.cache:
             return NumericAxis.cache[length]
 
@@ -140,9 +173,14 @@ class FunctionAxis(Axis):
     """
     A function axis is an axis whose length is computed by a user-supplied function.
 
-     Instances should only be created internally because using a
+    Instances should only be created internally because using a
     function that changes the length after a transformation will result in
     undefined behaviour.
+
+    Currently, this class is only used by the SlicedAxis and PaddedAxis subclasses,
+    which derive their length from a parent axis's length. This satisfies the above
+    restriction, because we expect the parent axis to become immutable once
+    the transformation begins.
     """
     def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1, **kwargs)
@@ -248,9 +286,34 @@ class PaddedAxis(FunctionAxis):
 
 
 class AxisID(object):
-    """TODO."""
+    """
+    An AxisID labels an occurrence of an axis in the dimensions of
+    a tensor, identified by the Axis and the number of its occurrence.
+
+    e.g. if a tensor has dimensions, (H, W, H), it has axis ids
+    (H[0], W[0], H[1]).
+
+    AxisIDs are used to disambiguate axes that recur in the dimensions of
+    tensors in a symbolic expression. This is particularly important in
+    dot products: if we wish to project a dimension into the same axis,
+    the weights will have a repeated axis. E.g. a projection H -> H with
+    weights of dimensions (H, H).
+
+    AxisIDs are identical if their axes and indices are the same.
+    """
 
     def __init__(self, axis, idx, **kwargs):
+        """
+        Creates an AxisID.
+
+        Arguments:
+            axis: the axis in the AxisID.
+            idx: the number of the occurrence of the axis
+                in the tensor.
+
+        Returns:
+            An AxisID.
+        """
         assert isinstance(idx, int)
         super(AxisID, self).__init__(**kwargs)
         self.axis = axis
@@ -269,13 +332,14 @@ class AxisID(object):
 
 def no_duplicates(arr):
     """
-    TODO.
+    Returns whether there are duplicates in a list. The elements
+    of the list should be hashable.
 
     Arguments:
-      arr: TODO
+      arr: the list to check
 
     Returns:
-
+        bool: True if there are no duplicates, False if there are.
     """
     s = set()
     for x in enumerate(arr):
@@ -286,7 +350,14 @@ def no_duplicates(arr):
 
 
 class Axes(object):
-    """TODO."""
+    """
+    An Axes is a tuple of Axis objects used as a label for a tensor's
+    dimensions.
+
+    The Axes class ensures that the tuple is represented in a cancnical form
+    (see canonicalize) and contains methods to select sub-lists of the Axes
+    that contain the dimensions of the training examples or features.
+    """
 
     def __init__(self, axes=None):
         if axes is None:
@@ -300,13 +371,20 @@ class Axes(object):
 
         def canonicalize(seq):
             """
-            TODO.
+            Converts the list to a canonical form in which FlattenAxis objects,
+            representing two logical axes that have been collapsed into one,
+            must contain one or more axes. In the conversion, we discard
+            flattened axes with no members and rename a flattened axis with
+            only one member to the axis it contains.
+
+            We also cast the sequence and its elements to the expected types
+            i.e. Axis and FlattenedAxis objects.
 
             Arguments:
-              seq: TODO
+              seq: the sequence to canonicalize.
 
             Returns:
-
+                a canonicalized Axis object.
             """
             elems = []
             for x in seq:
@@ -342,6 +420,14 @@ class Axes(object):
 
     @staticmethod
     def as_axes(axes):
+        """
+        Casts a sequence into an Axes object.
+
+        Arguments:
+            axes: the sequence to be interpreted as Axes
+        Returns:
+            Axes
+        """
         if isinstance(axes, Axes):
             return axes
         elif isinstance(axes, AxisID):
@@ -350,36 +436,44 @@ class Axes(object):
 
     @property
     def full_lengths(self):
-        """TODO."""
+        """
+        Returns all information about the lengths of the axis objects
+        in this Axes in the form of a nested tuple. An element of the
+        outer tuple that is itself a tuple contains the restored lengths
+        of axes that have been flattened in this Axis object.
+
+        Returns:
+            tuple: a nested tuple with the axis lengths
+        """
         return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
                      else x.length for x in self)
 
     @property
     def lengths(self):
         """
-
-        :return: The lengths of the axes.
+        Returns:
+            tuple: the lengths of the outer axes
         """
         return tuple(x.length for x in self)
 
     def batch_axes(self):
         """
-
-        :return: The Axes subset that are batch axes.
+        Returns:
+            The Axes subset that are batch axes.
         """
         return Axes(axis for axis in self if axis.batch)
 
     def sample_axes(self):
         """
-
-        :return: The Axes subset that are not batch axes.
+        Returns:
+            The Axes subset that are not batch axes.
         """
         return Axes(axis for axis in self if not axis.batch)
 
     def recurrent_axes(self):
         """
-
-        :return: The Axes subset that are recurrent axes.
+        Returns:
+            The Axes subset that are recurrent axes.
         """
         return Axes(axis for axis in self if axis.recurrent)
 
