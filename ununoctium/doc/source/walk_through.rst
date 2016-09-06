@@ -18,17 +18,20 @@
 Walk-through
 ************
 
-Let's begin with a very simple example, computing :math:`x+1` for several values of :math:`x` using the front end
+Let's begin with a very simple example: computing :math:`x+1` for several values of :math:`x` using the front end
 API.  We should think of the computation as being invoked from our program, *the CPU*, but possibly taking place
 somewhere else, which we will refer to as *the device.*
+
 Our program will provide values for :math:`x` and receive :math:`x+1` for each :math:`x` provided.
 
 The x + 1 program
 =================
 
-The complete program source can be found in :download:`../../examples/walk_through/x_plus_one.py`.
+The source code can be found in :download:`../../examples/walk_through/x_plus_one.py`.
 
-The complete program is::
+The complete program is
+
+.. code-block:: python
 
     import geon
 
@@ -45,21 +48,17 @@ The complete program is::
 
 We begin by importing ``geon``, the Python module for the front end API.
 
-Next we create the operational graph (opgraph) for the computation.  Following |TF| terminology, we call the
+Next we create an operational graph (opgraph) for the computation.  Following |TF| terminology, we call the
 parameter that receives the value of :math:`x` a ``placeholder``.  A placeholder has a tensor value, so we need
-to indicate what kind of tensor by specifying its axes.  In this simple example, :math:`x` is a scalar,
+to indicate the tensor shape by specifying its axes.  In this simple example, :math:`x` is a scalar,
 so the axes are empty.  We follow this with the computation that adds 1 to the ``placeholder.``  Even though
-this looks like we are adding 1, the opgraph objects overload arithmetic, so ``x_plus_one`` is really
+this looks like we are adding 1, the opgraph objects overload the arithmetic method, so ``x_plus_one`` is really
 an opgraph object.
 
-Once the graph is set up, we can compile it with a *transformer*.  Here we use the transformer that uses NumPy, but
-the procedure would be the same for any other transformer.  We tell the transformer that we will want a function
-that computes ``x_plus_one`` and that it has one parameter, ``x``.  We could specify additional computations,
-as well as have computations return more than one value.
+Once the op-graph is set up, we can compile it with a *transformer*.  Here the transformer uses NumPy and runs on the CPU, but
+the procedure would be the same for any other transformer.  We tell the transformer the function to compute (``x_plus_one``) and the associated parameter (``x``).
 
-Once all our computations have been specified, we can run them.  The first time some computation for a transformer
-is run, all the computations for the transformer are analyzed and compiled, and storage is allocated and initialized
-on the device.  These steps can be performed manually, for example if some device state is to be restored from
+The first time the transformer executes a computation, the op-graph is analyzed and compiled, and the storage is allocated and initialized on the device.  These steps can be performed manually, for example if some device state is to be restored from
 previously saved state.  Once compiled, the computations are callable Python objects.
 
 On each call to ``plus_one`` the value of ``x`` is copied to the device, 1 is added, and then the result is copied
@@ -68,17 +67,20 @@ back from the device.
 The Compiled x + 1 Program
 --------------------------
 
-We can examine the compiled code to get an idea of the runtime device model::
+We can examine the compiled code (currently located in ``/tmp`` folder) to view the runtime device model. Here we show the code with some clarifying comments.
+
+.. code-block:: python
 
     class Model(object):
         def __init__(self):
-            self.a_t7 = None
-            self.v_t7_ = None
+            self.a_t7 = None  # allocated storage for tensor t7
+            self.v_t7_ = None  # a view of tensor t7
             self.a_t8 = None
             self.v_t8_ = None
             self.a_t6 = None
             self.v_t6_ = None
 
+        # allocate and create the views on tensor t7
         def alloc_a_t7(self):
             self.update_a_t7(np.empty(1, dtype=np.dtype('float32')))
 
@@ -91,6 +93,7 @@ We can examine the compiled code to get an idea of the runtime device model::
                 offset=0,
                 strides=())
 
+        # allocate and create the views on tensor t8
         def alloc_a_t8(self):
             self.update_a_t8(np.empty(1, dtype=np.dtype('float32')))
 
@@ -103,6 +106,7 @@ We can examine the compiled code to get an idea of the runtime device model::
                 offset=0,
                 strides=())
 
+        # allocate and create the views on tensor t6
         def alloc_a_t6(self):
             self.update_a_t6(np.empty(1, dtype=np.dtype('float32')))
 
@@ -115,27 +119,28 @@ We can examine the compiled code to get an idea of the runtime device model::
                 offset=0,
                 strides=())
 
+        # allocate all tensors
         def allocate(self):
             self.alloc_a_t7()
             self.alloc_a_t8()
             self.alloc_a_t6()
 
-
+        # perform the addition computation
         def c_0(self):
             np.add(self.v_t6_, self.v_t7_, out=self.v_t8_)
 
+        # tensor initialization (not used in this example)
         def c_1(self):
             pass
 
 
-Tensors have two components, storage for their elements, and views of that storage.  The ``alloc_`` methods allocate
+Tensors have two components, storage for their elements (using the convention ``a_t7`` for the allocated storage of the tensor ``t7``) and views of that storage (denoted as ``v_t7_``).  The ``alloc_`` methods allocate
 storage and then create the views of the storage that will be needed.  The view creation is separated from the
-allocation because we also allow storage to be allocated by other mechanisms.  The ``allocate`` method calls each
+allocation because storage may be allocated in multiple ways.  The ``allocate`` method calls each
 allocator, and each allocator creates the needed views.  The NumPy transformer's ``allocate`` method calls the
-``allocate`` method.  A GPU transformer might handle allocation off device.
+``allocate`` method.
 
-Initializations can be associated with allocated storage.  For example, trainable variables could be intialized
-uniformly.  In this case, there are no initializations, so the method `c_1` which performs one-time device
+Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method `c_1` which performs  the one-time device
 initialization is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
 
 The method ``c_1`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
@@ -144,14 +149,11 @@ so let's look at a more complex example next.
 Logistic Regression
 ===================
 
+This example performs logistic regression. We want to classify an obervation :math:`x` into one of two classes, denoted by :math:`y=0` and :math:`y=1`. With a simple linear model :math:`\hat{y}=\sigma(Wx)`, we want to find the optimal values for :math:`W`. Here, we use gradient descent with a learning rate of :math:`\alpha` and the cross-entropy as the error function.
+
 The complete program source can be found in :download:`../../examples/walk_through/logres.py`.
 
-The next example is logistic regression.  We want to classify an observation :math:`x` as having some property,
-where we will say :math:`y=1` if it has the property, and :math:`y=0` if it does not.  We want to find the best values
-for :math:`W` for the model :math:`\hat{y}=\sigma(Wx)`, using binary cross-entropy of the samples as the
-error function and gradient descent with a learning rate of :math:`\alpha`.
-
-For data, we will use generated data, a mixture of two Gaussian distributions in 4-d space.  We will use 10
+The data is synthetically generated as a mixture of two Gaussian distributions in 4-d space.  Our dataset consists of 10
 mini-batches of 128 samples each::
 
     import gendata
@@ -160,18 +162,19 @@ mini-batches of 128 samples each::
     g = gendata.MixtureGenerator([.5, .5], C)
     XS, YS = g.gen_data(N, 10)
 
-Our model will have three placeholders, ``X``, ``Y``, and ``alpha``.  ``alpha`` is a scalar, so we already know how
-to specify its axes.  ``X`` and ``Y`` do have shape, and we will need to provide the shape to the placeholders.
-|Geon| has a unique Axes facility for making it easier to describe tensor computations, but we will begin with
-conventional shapes.  Our convention is to use the last axis for samples.  The placeholders can be specified as::
+Our model has three placeholders, ``X``, ``Y``, and ``alpha``. Each placeholder needs to have axis specified.
 
-    X = geon.placeholder(axes=geon.Axes([C, N]))
-    Y = geon.placeholder(axes=geon.Axes([N]))
+``alpha`` is a scalar, so we pass in empty axes::
+
     alpha = geon.placeholder(axes=geon.Axes())
 
-We also need our training weights, ``W``.  Unlike the placeholders, we want ``W`` to retain its value from computation
-to computation.  Following |TF|, we call this a *Variable*.  Again, we need to specify the axes.  In addition, we
-want to specify an initial value for the tensor::
+``X`` and ``Y`` have shape, which we provide to the placeholders. Our convention is to use the last axis for samples.  The placeholders can be specified as::
+
+    X = geon.placeholder(axes=geon.Axes([C, N]))  # input data has 4 features for each datapoint
+    Y = geon.placeholder(axes=geon.Axes([N]))
+
+We also need to specify the training weights, ``W``.  Unlike placeholders, ``W`` should retain its value from computation
+to computation (for example, across mini-batches of training).  Following |TF|, we call this a *Variable*.  We specify the variable with both an axes and also an initial value::
 
     W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
 
@@ -183,25 +186,24 @@ Now we can estimate :math:`y` and compute the average loss::
     Y_hat = geon.sigmoid(geon.dot(W, X))
     L = geon.cross_entropy_binary(Y_hat, Y) / geon.tensor_size(Y_hat)
 
-To do gradient descent we will need the gradient, i.e. :math:`dL/dW`::
+Gradient descent requires computing the gradient, :math:`dL/dW`::
 
     grad = geon.deriv(L, W)
 
-The ``geon.deriv`` function computes the backprop computation that computes the derivative using autodiff.
+The ``geon.deriv`` function computes the backprop computation using autodiff.
 
 We are almost done.  The update is the gradient descent operation::
 
     update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
 
-Now we can make a transformer and define a computation::
+Now we create a transformer and define a computation. We pass the ops from which we want to retrieve the results for, followed by the placeholders::
 
     transformer = geon.NumPyTransformer()
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
 
-Here, the computation returns three values, although the update's value is ``None``.  We just need to make sure that
-it happens.  We pass in values for the training rate and samples.
+Here, the computation will return three values for the ``L``, ``W``, and ``update``, given inputs to fill the placeholders.
 
-Finally, we run it::
+Finally, we train the model across 10 epochs::
 
     for i in range(10):
         for xs, ys in zip(XS, YS):
@@ -260,11 +262,11 @@ by converting the logistic regression example to using axes rather than specific
 
     update = geon.assign(W, W - alpha * grad)
 
-Rather than ``C`` and ``N`` being lengths, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
+Rather than ``C`` and ``N`` holding integers, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
 is something like a variable for an axis length, but we will later see that an ``Axis`` is more like a type in
 the opgraph.
 
-When we are ready to use our model, we do need to specify lengths for the axes we are using::
+When we are ready to use our model, we specify the lengths for the axes we are using::
 
     C.length = 4
     N.length = 128
@@ -288,14 +290,14 @@ When we are ready to use our model, we do need to specify lengths for the axes w
         total_loss += loss_val
     print("Loss: {}".format(total_loss / len(xs)))
 
-Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we the axis lengths.
+Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we use the axis lengths.
 
 Adding a Bias
 =============
 
 The complete program source can be found in :download:`../../examples/walk_through/logres_bias.py`.
 
-We can add a bias to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This changes the model to::
+We can add a bias :math:`b` to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This changes the model to::
 
     W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
     b = geon.Variable(axes=geon.Axes(), initial_value=0)
@@ -303,7 +305,7 @@ We can add a bias to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This changes the 
     Y_hat = geon.sigmoid(geon.dot(W, X) + b)
 
 Now we have two variables to update, ``W`` and ``b``.  However, all the updates are essentially the same, and
-we know that everything to be udated is a variable.  We can use the ``variables`` method to find all the
+we know that everything to be updated is a variable.  We can use the ``variables`` method to find all the
 trainable variables used in an ``Op``'s computation::
 
     updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat))
