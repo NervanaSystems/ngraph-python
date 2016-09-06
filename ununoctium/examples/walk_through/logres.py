@@ -10,6 +10,11 @@ xs = np.array([[0.52, 1.12, 0.77],
 
 ys = np.array([1, 1, 0, 1])
 
+import gendata
+g = gendata.MixtureGenerator([.5, .5], 4)
+xs, ys = g.make_mixture(100)
+g.fill_mixture(xs, ys)
+
 C, N = xs.shape
 
 X = geon.placeholder(axes=geon.Axes([C, N]))

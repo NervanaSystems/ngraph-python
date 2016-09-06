@@ -281,7 +281,8 @@ Now we have two variables to update, ``W`` and ``b``.  However, all the updates 
 we know that everything to be udated is a variable.  We can use the ``variables`` method to find all the
 trainable variables used in an ``Op``'s computation::
 
-    updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat)) for v in L.variables()]
+    updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat))
+               for v in L.variables()]
 
     all_updates = geon.doall(updates)
 
@@ -293,3 +294,6 @@ and printing of results to::
     for i in range(20):
         loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
         print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
+
+Multi-dimensional Logistic Regression
+=====================================
