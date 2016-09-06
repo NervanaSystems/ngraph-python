@@ -151,19 +151,14 @@ where we will say :math:`y=1` if it has the property, and :math:`y=0` if it does
 for :math:`W` for the model :math:`\hat{y}=\sigma(Wx)`, using binary cross-entropy of the samples as the
 error function and gradient descent with a learning rate of :math:`\alpha`.
 
-We start with basic setup and some training data::
+For data, we will use generated data, a mixture of two Gaussian distributions in 4-d space.  We will use 10
+mini-batches of 128 samples each::
 
-    import numpy as np
-    import geon
-
-    xs = np.array([[0.52, 1.12, 0.77],
-                   [0.88, -1.08, 0.15],
-                   [0.52, 0.06, -1.30],
-                   [0.74, -2.49, 1.39]]).T
-
-    ys = np.array([1, 1, 0, 1])
-
-    C, N = xs.shape
+    import gendata
+    N = 128
+    C = 4
+    g = gendata.MixtureGenerator([.5, .5], C)
+    XS, YS = g.gen_data(N, 10)
 
 Our model will have three placeholders, ``X``, ``Y``, and ``alpha``.  ``alpha`` is a scalar, so we already know how
 to specify its axes.  ``X`` and ``Y`` do have shape, and we will need to provide the shape to the placeholders.
@@ -183,10 +178,10 @@ want to specify an initial value for the tensor::
 Other than the axes, the syntax is the same as |TF|. The transformer's initialization function will initialize `W`
 to 0 after allocating storage.
 
-Now we can estimate :math:`y` and compute the loss::
+Now we can estimate :math:`y` and compute the average loss::
 
     Y_hat = geon.sigmoid(geon.dot(W, X))
-    L = geon.cross_entropy_binary(Y_hat, Y)
+    L = geon.cross_entropy_binary(Y_hat, Y) / geon.tensor_size(Y_hat)
 
 To do gradient descent we will need the gradient, i.e. :math:`dL/dW`::
 
@@ -209,10 +204,32 @@ it happens.  We pass in values for the training rate and samples.
 Finally, we run it::
 
     for i in range(10):
-        loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-        print("W: %s, loss %s" % (w_val, loss_val))
+        for xs, ys in zip(XS, YS):
+            loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+            print("W: %s, loss %s" % (w_val, loss_val))
 
 After each update, we return the loss and the new weights.
+
+Adding a second computation for Evaluation
+==========================================
+
+The complete program source can be found in :download:`../../examples/walk_through/logres_eval.py`.
+
+If we want to evaluate our model, we can also generate some evaluation data::
+
+    EVAL_XS, EVAL_YS = g.gen_data(N, 4)
+
+We need to add a second computation, which just computes the average batch loss, with no update::
+
+    eval_fun = transformer.computation(L, X, Y)
+
+Finally, after training, we evaluate the model::
+
+    total_loss = 0
+    for xs, ys in zip(EVAL_XS, EVAL_YS):
+        loss_val = eval_fun(xs, ys)
+        total_loss += loss_val
+    print("Loss: {}".format(total_loss / len(xs)))
 
 Logistic Regression with Axes
 =============================
@@ -225,6 +242,7 @@ by converting the logistic regression example to using axes rather than specific
 
     import numpy as np
     import geon
+    import gendata
 
     C = geon.Axis("C")
     N = geon.Axis("N")
@@ -240,7 +258,7 @@ by converting the logistic regression example to using axes rather than specific
 
     grad = geon.deriv(L, W)
 
-    update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
+    update = geon.assign(W, W - alpha * grad)
 
 Rather than ``C`` and ``N`` being lengths, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
 is something like a variable for an axis length, but we will later see that an ``Axis`` is more like a type in
@@ -248,20 +266,27 @@ the opgraph.
 
 When we are ready to use our model, we do need to specify lengths for the axes we are using::
 
-    xs = np.array([[0.52, 1.12, 0.77],
-                   [0.88, -1.08, 0.15],
-                   [0.52, 0.06, -1.30],
-                   [0.74, -2.49, 1.39]]).T
+    C.length = 4
+    N.length = 128
 
-    ys = np.array([1, 1, 0, 1])
+    g = gendata.MixtureGenerator([.5, .5], C.length)
+    XS, YS = g.gen_data(N.length, 10)
+    EVAL_XS, EVAL_YS = g.gen_data(N.length, 4)
 
-    C.length, N.length = xs.shape
     transformer = geon.NumPyTransformer()
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
+    eval_fun = transformer.computation(L, X, Y)
 
-    for i in range(20):
-        loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-        print("W: %s, loss %s" % (w_val, loss_val))
+    for i in range(10):
+        for xs, ys in zip(XS, YS):
+            loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+            print("W: %s, loss %s" % (w_val, loss_val))
+
+    total_loss = 0
+    for xs, ys in zip(EVAL_XS, EVAL_YS):
+        loss_val = eval_fun(xs, ys)
+        total_loss += loss_val
+    print("Loss: {}".format(total_loss / len(xs)))
 
 Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we the axis lengths.
 
@@ -290,10 +315,18 @@ The function ``geon.doall`` is a short-hand for ensuring that all the updates ge
 and printing of results to::
 
     update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
+    eval_fun = transformer.computation(L, X, Y)
 
-    for i in range(20):
-        loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-        print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
+    for i in range(10):
+        for xs, ys in zip(XS, YS):
+            loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+            print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
+
+    total_loss = 0
+    for xs, ys in zip(EVAL_XS, EVAL_YS):
+        loss_val = eval_fun(xs, ys)
+        total_loss += loss_val
+    print("Loss: {}".format(total_loss / len(xs)))
 
 Multi-dimensional Logistic Regression
 =====================================

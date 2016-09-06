@@ -47,3 +47,13 @@ class MixtureGenerator(object):
 
     def make_mixture(self, N):
         return np.empty((self.d, N)), np.empty((N,), dtype=int)
+
+    def gen_data(self, batch_size, n_batches):
+        XS = []
+        YS = []
+        for i in range(n_batches):
+            xs, ys = self.make_mixture(batch_size)
+            self.fill_mixture(xs, ys)
+            XS.append(xs)
+            YS.append(ys)
+        return XS, YS
