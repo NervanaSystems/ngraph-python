@@ -570,7 +570,7 @@ class Axes(object):
 
 def reduce_nested(elem, agg, func):
     """
-    Reduces a nested sequence by applying a function to each 
+    Reduces a nested sequence by applying a function to each
     of its elements and returns an aggregation.
 
     Arguments:
@@ -1221,7 +1221,7 @@ class TensorDescription(NameableValue):
         Return a tensor description for a slice view of this tensor.
 
         Arguments:
-            slices: the slices to take from the tensor, each of which is 
+            slices: the slices to take from the tensor, each of which is
             either an integer or a python slice. If the input has too few
             axes for the tensor, we assume that the entire axis should be
             taken for dimensions towards the end of the tensor.
