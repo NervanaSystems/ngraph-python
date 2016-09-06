@@ -107,7 +107,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.__length = value
 
     def __repr__(self):
-        return 'Axis({name})'.format(name=self.name)
+        return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
 
 class NumericAxis(Axis):
@@ -144,9 +144,11 @@ class FunctionAxis(Axis):
     function that changes the length after a transformation will result in
     undefined behaviour.
     """
-    def __init__(self, length_fun, **kwargs):
+    def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1, **kwargs)
         self.length_fun = length_fun
+        self.batch = parent.batch
+        # TODO: self.recurrent = parent.recurrent
 
     @property
     def length(self):
@@ -193,11 +195,25 @@ class SlicedAxis(FunctionAxis):
     exception instead?
     """
     def __init__(self, parent, s, **kwargs):
+        self.parent = parent
+        self.slice = s
+
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
+            parent=parent,
             length_fun=lambda: _sliced_length(s, parent.length),
             **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'SlicedAxis({name}: {length}; parent: {parent}; slice: {slice})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            slice=self.slice,
         )
 
 
@@ -210,9 +226,25 @@ class PaddedAxis(FunctionAxis):
         pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
+        self.parent = parent
+        self.pad = pad
+
         def padded_length():
             return parent.length + pad[0] + pad[1]
-        super(PaddedAxis, self).__init__(length_fun=padded_length, **kwargs)
+
+        super(PaddedAxis, self).__init__(
+            parent=parent, length_fun=padded_length, **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            pad=self.pad,
+        )
 
 
 class AxisID(object):
@@ -437,11 +469,9 @@ class Axes(object):
         return AxisIDTuple(*elems)
 
     def __repr__(self):
-        s = 'Axes('
-        for x in self:
-            s += repr(x) + ','
-        s += ')'
-        return s
+        return 'Axes({})'.format(
+            ', '.join(map(repr, self))
+        )
 
 
 # func(agg, elem) -> agg
@@ -757,56 +787,46 @@ class TensorDescription(NameableValue):
     @property
     def parameter_key(self):
         """
-
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
-
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
     def try_guess_positions(self, new_axes):
         """
-        TODO.
+        Returns the index of each axis in new_axes as it is found in self.axes.
+        Only returns each index once.
 
-        Arguments:
-          new_axes: TODO
+        If the same axis appears twice in either new_axes or self.axes, the
+        first occurrences will be paired, the second occurences will form a
+        pair, etc.
 
-        Returns:
-
+        WARNING:
+        zach: so the function may do the wrong thing in some cases, but we
+            haven't figured out exactly which cases those are yet?
+        varun: Yes, it's computing by faith.
         """
-        # Supports broadcast and combining one level of axes
-        # Does not support unrolling
-        old_poss = []
+        used_positions = set()
 
-        used_set = set()
-
-        def get_old_axis(new_axis):
+        def old_position(new_axis):
             """
-            TODO.
-
-            Arguments:
-              new_axis: TODO
-
-            Returns:
-
+            given an Axis returns the position in self.axes that matches
             """
             for i, axis in enumerate(self.axes):
-                if i not in used_set and axis == new_axis:
-                    used_set.add(i)
+                if i not in used_positions and axis == new_axis:
+                    used_positions.add(i)
                     return i
-            else:
-                return -1
 
-        for axis in new_axes:
-            old_pos = get_old_axis(axis)
-            if old_pos == -1 and isinstance(axis, FlattenedAxis):
-                poss = []
-                for sub in axis.axes:
-                    assert not isinstance(sub, FlattenedAxis)
-                    poss.append(get_old_axis(sub))
-                old_poss.append(tuple(poss))
-            else:
-                old_poss.append(old_pos)
-        return old_poss
+            # if we couldn't find an exact match and the axis we're looking for
+            # is a FlattenedAxis, look for the sub_axes of the FlattenedAxis
+            # instead.
+            if isinstance(new_axis, FlattenedAxis):
+                return tuple(map(old_position, new_axis.axes))
+
+            return -1
+
+        return [
+            old_position(axis) for axis in new_axes
+        ]
 
     def split_reduce_at(self, div_point):
         """
@@ -819,20 +839,11 @@ class TensorDescription(NameableValue):
 
         """
         def pos_tup(lower, upper):
-            """
-            TODO.
-
-            Arguments:
-              lower: TODO
-              upper: TODO
-
-            Returns:
-
-            """
             if lower == upper - 1:
                 return lower
             else:
                 return tuple(range(lower, upper))
+
         if div_point == 0 or div_point == self.ndim:
             new_axes = Axes([FlattenedAxis(self.axes)])
             old_poss = (pos_tup(0, self.ndim),)
@@ -865,37 +876,20 @@ class TensorDescription(NameableValue):
         div_point = len(old_axis_ids) - len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    # This function is symmetric to dot_reaxe_left unless forward_axis
-    # ids is specified. It then attempts to rename the reduction axis using
-    # the mapping from the forward axis ids to the current axis ids.
-    # In the case of backpropagation, this helps preserve the axis id numbering
-    # of the original output, which is necessary if the derivative is to be
-    # projected onto the input correctly.
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         """
-        TODO.
-
-        Arguments:
-          red_axis_ids: TODO
-          forward_axis_ids: TODO
-
-        Returns:
-
+        This function is symmetric to dot_reaxe_left unless forward_axis ids is
+        specified. It then attempts to rename the reduction axis using the
+        mapping from the forward axis ids to the current axis ids.  In the case
+        of backpropagation, this helps preserve the axis id numbering of the
+        original output, which is necessary if the derivative is to be
+        projected onto the input correctly.
         """
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
             trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
-                """
-                TODO.
-
-                Arguments:
-                  x: TODO
-
-                Returns:
-
-                """
                 if x in trans:
                     return trans[x]
                 else:
@@ -908,20 +902,19 @@ class TensorDescription(NameableValue):
         div_point = len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    def reaxe(self, new_axes, broadcast=True):
+    def reaxe(self, new_axes):
         """
         TODO.
 
         Arguments:
           new_axes: TODO
-          broadcast: TODO
 
         Returns:
 
         """
         new_axes = Axes(new_axes)
         old_poss = self.try_guess_positions(new_axes)
-        return self.reaxe_with_positions(new_axes, old_poss, broadcast)
+        return self.reaxe_with_positions(new_axes, old_poss)
 
     def reaxe_with_axis_ids_positions(self, new_axis_id_tuple):
         """
@@ -957,8 +950,7 @@ class TensorDescription(NameableValue):
         # The indices of the axis ids refer to the existing order of axes
         old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
         return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
     def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
         """
@@ -977,20 +969,18 @@ class TensorDescription(NameableValue):
             .concat(Axes(dummy_axis,)).concat(self.axes[dim:])
         old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
-    def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
+    def reaxe_with_positions(self, new_axes, old_poss):
         """
-        TODO.
+        change axes to new_axes.  Use old_poss as hints to where in the
+        existing axes each new axis exists.
 
         Arguments:
-          new_axes: TODO
-          old_poss: TODO
-          broadcast: TODO
-
-        Returns:
-
+            new_axes Axes: new axes for self
+            old_poss: a list of integers representing the position of each axis
+                new_axes in the current axes.  should be the same length as
+                new_axes.
         """
         assert len(new_axes) == len(old_poss)
 
@@ -998,16 +988,6 @@ class TensorDescription(NameableValue):
         full_strides = []
 
         def old_info(axis, old_pos):
-            """
-            TODO.
-
-            Arguments:
-              axis: TODO
-              old_pos: TODO
-
-            Returns:
-
-            """
             if old_pos == -1:
                 full_length = axis.axes.full_lengths\
                     if isinstance(axis, FlattenedAxis) else axis.length
@@ -1031,10 +1011,9 @@ class TensorDescription(NameableValue):
                 full_sizes.append(fsi)
                 full_strides.append(fst)
 
-        new_axes, full_strides, full_sizes\
-            = self.maybe_collapse_numerics(
-                new_axes, full_strides, full_sizes
-            )
+        new_axes, full_strides, full_sizes = self.maybe_collapse_numerics(
+            new_axes, full_strides, full_sizes
+        )
 
         return TensorDescription(new_axes,
                                  base=self.base,
@@ -1171,9 +1150,7 @@ class TensorDescription(NameableValue):
     @property
     def shape(self):
         """
-
         Returns: The shape of the tensor.
-
         """
         return self.axes.lengths
 

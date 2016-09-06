@@ -225,6 +225,14 @@ class Op(Node):
     @property
     @cachetools.cached({})
     def initial_adjoint(self):
+        """
+        Most models only require the adjoints map for their scalar loss
+        functions, in which case the adjoint is initialized to a scalar 1.
+        Some autodiff tests calculate the derivative of a tensor by
+        initializing all but one elements of a tensor to zero and the remaining
+        element to one.  To allow this, we create a placeholder for the initial
+        adjoint and allow it to be accessed by the _initial_adjoint field.
+        """
         if len(self.axes) == 0:
             return Constant(1)
         else:
@@ -356,7 +364,7 @@ class Op(Node):
         """
         return list(tensor_descriptions(self.args))
 
-    def __str__(self):
+    def __repr__(self):
         return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
 
 
@@ -745,13 +753,30 @@ class Slice(TensorOp):
     """TODO."""
 
     def __init__(self, x, slices, axes=None, **kwargs):
+        """
+        TODO.
+        """
+        if len(slices) != len(x.shape):
+            raise ValueError((
+                'There should be one slice in slices for each dimension in '
+                'input tensor.  Input tensor had {tensor_dim} dimensions, '
+                'but slices has length {slices_len}.'
+            ).format(
+                tensor_dim=len(x.shape),
+                slices_len=len(slices),
+            ))
+
         if axes is None:
             axes = []
             for axis, s in zip(x.axes, slices):
                 # if s is an int, we are doing a getitem, for example y = x[1]
                 # and so this axis will no longer exist in the result.
                 if not isinstance(s, int):
-                    axes.append(SlicedAxis(axis, s))
+                    # if nop slice, don't slice the axis
+                    if s == slice(None, None, None):
+                        axes.append(axis)
+                    else:
+                        axes.append(SlicedAxis(axis, s))
 
             axes = Axes(axes)
 
@@ -869,6 +894,13 @@ class AllocationOp(TensorOp):
     @property
     def graph_label(self):
         return "{}[{}]".format(self.graph_label_type, self.name)
+
+    def __repr__(self):
+        return '<{cl}({gl}):{id}>'.format(
+            cl=self.__class__.__name__,
+            gl=self.graph_label_type,
+            id=id(self)
+        )
 
 
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
@@ -1716,6 +1748,15 @@ def pad(x, paddings, axes=None, **kwargs):
     Returns:
         TensorOp: symbolic expression for the padded tensor
     """
+    if len(x.axes) != len(paddings):
+        raise ValueError((
+            "pad's paddings has length {pad} which needs to be the same "
+            "as the number of axes in x ({x})"
+        ).format(
+            pad=len(paddings),
+            x=len(x.axes),
+        ))
+
     def pad_to_tuple(pad):
         if isinstance(pad, int):
             pad = (pad, pad)
@@ -1724,7 +1765,8 @@ def pad(x, paddings, axes=None, **kwargs):
     paddings = tuple(pad_to_tuple(pad) for pad in paddings)
     if axes is None:
         axes = Axes(
-            PaddedAxis(axis, pad) for axis, pad in zip(x.axes, paddings)
+            PaddedAxis(axis, pad) if pad != (0, 0) else axis
+            for axis, pad in zip(x.axes, paddings)
         )
 
     def to_slice(pad):
@@ -2186,20 +2228,39 @@ def mean(x, **kwargs):
     return sum(x, **kwargs) / tensor_size(x, **kwargs)
 
 
-def deriv(dep, indep):
+def deriv(dependent_op, independent_op):
     """
     TODO.
 
     Arguments:
-      dep: TODO
-      indep: TODO
+      dependent_op: TODO
+      independent_op: TODO
 
     Returns:
       TODO
     """
-    Op.simple_prune([dep, indep])
-    adjoint = dep.adjoints()[indep]
-    return Broadcast(adjoint, axes=indep.axes)
+    Op.simple_prune([dependent_op, independent_op])
+    adjoints = dependent_op.adjoints()
+
+    if independent_op not in adjoints:
+        # TODO: check to see if independent_op is even used to compute
+        # dependent_op.  If so, pinpoint which Op isn't defining the necessary
+        # adjoints.  If it isn't used, give that more specific error to the
+        # user.
+        raise ValueError((
+            "Attempted to take the derivative of {dependent_op} with respect "
+            "to {independent_op}, but {independent_op} was not present in "
+            "{dependent_op}'s adjoints.  This is most likely because "
+            "{independent_op} isn't used to compute {dependent_op} or one of "
+            "the ops used to compute {independent_op} hasn't defined the "
+            "necessary adjoints."
+        ).format(
+            dependent_op=dependent_op,
+            independent_op=independent_op,
+        ))
+
+    adjoint = adjoints[independent_op]
+    return Broadcast(adjoint, axes=independent_op.axes)
 
 
 class CrossEntropyMultiInner(object):
