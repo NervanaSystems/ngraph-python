@@ -73,7 +73,3 @@ def test_constant_tensor_convolution_deriv():
     output = be.convolution(input, filter, padding=[1, 1, 1, 1])
 
     dido = be.deriv(output, input)
-
-    print dido
-
-    assert False
