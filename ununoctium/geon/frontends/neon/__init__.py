@@ -15,6 +15,7 @@
 
 # commonly used modules.  Should these still be imported in neon frontend?
 import geon as be
+# TODO Use an ax namescope, but also move this into neon front end.
 import geon.frontends.base.axis as ax
 
 # neon frontend modules

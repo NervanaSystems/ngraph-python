@@ -297,7 +297,7 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
 
 class Transformer(with_metaclass(abc.ABCMeta, object)):
     """
-    Produce an executable version of Op graphs.
+    Produce an executable version of op-graphs.
 
     Computations are subsets of Ops to compute.  The transformer determines storage
     allocation and transforms the computations and allocations into functions.

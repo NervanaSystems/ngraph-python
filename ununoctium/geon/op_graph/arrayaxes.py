@@ -31,7 +31,7 @@ from geon.util.names import NameableValue
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
-    An Axis labels a dimension of a tensor. The opgraph uses
+    An Axis labels a dimension of a tensor. The op-graph uses
     the identity of Axis objects to pair and specify dimensions in
     symbolic expressions. This system has several advantages over
     using the length and position of the axis as in other frameworks:

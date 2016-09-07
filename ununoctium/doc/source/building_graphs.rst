@@ -54,7 +54,7 @@ On the other hand, to directly modify the value of the ``placeholder``, use::
 
     be.SetItem(x, x + x)
 
-Constructing the graph is mostly manipulating expressions, so``SetItem`` is rarely used, except for updating variables during training. Consider::
+Constructing the graph is mostly manipulating expressions, so ``SetItem`` is rarely used, except for updating variables at the end of training a batch. Consider::
 
     x1 = x + x
     y = x1 * x1 - x

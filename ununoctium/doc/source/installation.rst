@@ -17,7 +17,7 @@
 Installation
 ************
 
-To install graphiti, be sure to first install neon installed in a virtual environment.
+To install |geon|, be sure to first install neon in a virtual environment.
 Activate the virtualenv with ``. .venv/bin/activate``, then run:
 
 .. code-block:: bash

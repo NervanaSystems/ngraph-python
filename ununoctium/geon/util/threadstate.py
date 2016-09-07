@@ -18,5 +18,8 @@ __thread_state = threading.local()
 
 
 def get_thread_state():
-    """TODO."""
+    """
+    Returns:
+        Thread state specific to |geon|.
+    """
     return __thread_state

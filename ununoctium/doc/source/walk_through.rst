@@ -48,12 +48,12 @@ The complete program is
 
 We begin by importing ``geon``, the Python module for the front end API.
 
-Next we create an operational graph (opgraph) for the computation.  Following |TF| terminology, we call the
+Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we call the
 parameter that receives the value of :math:`x` a ``placeholder``.  A placeholder has a tensor value, so we need
 to indicate the tensor shape by specifying its axes.  In this simple example, :math:`x` is a scalar,
 so the axes are empty.  We follow this with the computation that adds 1 to the ``placeholder.``  Even though
-this looks like we are adding 1, the opgraph objects overload the arithmetic method, so ``x_plus_one`` is really
-an opgraph object.
+this looks like we are adding 1, the op-graph objects overload the arithmetic method, so ``x_plus_one`` is really
+an op-graph object.
 
 Once the op-graph is set up, we can compile it with a *transformer*.  Here the transformer uses NumPy and runs on the CPU, but
 the procedure would be the same for any other transformer.  We tell the transformer the function to compute (``x_plus_one``) and the associated parameter (``x``).
@@ -264,7 +264,7 @@ by converting the logistic regression example to using axes rather than specific
 
 Rather than ``C`` and ``N`` holding integers, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
 is something like a variable for an axis length, but we will later see that an ``Axis`` is more like a type in
-the opgraph.
+the op-graph.
 
 When we are ready to use our model, we specify the lengths for the axes we are using::
 
