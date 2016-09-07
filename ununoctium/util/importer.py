@@ -51,7 +51,7 @@ ignored_ops = {
 }
 
 
-def _scan_numerical_axes(graph_def):
+def _scan_axes(graph_def):
     """
     Scan the graph to get the numerical axes for each variable.
     Variables are defined and initialized in the next round of graph traversal.
@@ -139,59 +139,72 @@ def _shape_to_numeric_axis(shape):
 class TensorFlowImporter:
     """
     Tensorflow GraphDef object to Neon graph converter
+
+    Arguments:
+        pb_file (str): path to protobuf file
+        end_node_name (str, optional): the last node name in TensorFlow's graph
+        loss_node_name (str, optional): the final node representing loss
+                                        computation
+        verbose (bool, optional): if True, prints TensorFlow nodes during
+                                  imports
+
+    Attributes:
+        pb_file (str): path to protobuf file
+        end_node_name (str): name of the last node in TensorFlow graph
+        loss_node_name (str): name of the loss node in TensorFlow graph
+        verbose (bool): if True, prints TensorFlow nodes during imports
+        x (Op): Op corresponding to TensorFlow's input data placeholder
+        y (Op): Op corresponding to TensorFlow's training target placeholder
+        init_op (Op): initialization Op for allocation / init tensors and consts
+        last_op (Op): Op corresponding to `end_node_name`
+        loss_op (Op): Op to calculate loss value, corresponds to
+                      `loss_node_name`
+        update_op (Op): Op corresponding to weight update
+        variables (dict): Trainable variables
+        name_to_op (dict): maps TensorFlow node name to Neon Op
+        ignored_nodes (set): ignored TensorFlow nodes
+        name_to_axes (dict): maps TensorFlow name to NumericAxis
+        batch_axis (NumericAxis): the batch axis
+        y_axis (NumericAxis): the y axis of result
     """
 
     def __init__(self, pb_file, end_node_name="", loss_node_name="",
                  verbose=False):
-        """
-        Arguments:
-            pb_file (str):
-            end_node_name (str, optional): the last node name in TensorFlow's
-                                           graph
-            loss_node_name (str, optional): the final node representing loss
-                                            computation
-            verbose (bool, optional): if True, prints TensorFlow nodes during
-                                      imports
-        """
-
-        # fields
-        self.x = None
-        self.y = None
-        self.variables = None
-        self.last_op = None
-        self.name_to_op = None
-        self.loss_op = None
-        self.verbose = verbose
-
         # input fields
         self.pb_file = pb_file
         self.end_node_name = end_node_name
         self.loss_node_name = loss_node_name
+        self.verbose = verbose
+
+        # special ops
+        self.x = None
+        self.y = None
+        self.init_op = None
+        self.last_op = None
+        self.loss_op = None
+        self.update_op = None
+
+        # collections
+        self.variables = dict()  # trainable variables
+        self.name_to_op = dict()  # maps TF node name to Neon op
+        self.ignored_nodes = set()
 
         # read graph_def
         graph_def = tf.GraphDef()
         with open(pb_file, 'rb') as f:
             graph_def.ParseFromString(f.read())
 
-        self.name_to_op = {}  # a map from TF node name to Neon op
-        self.variables = {}  # trainable variables
-        self.init_op = None
-        self.update_op = None
-
-        self.ignored_nodes = set()
-
-        # scan axis info
-        self.name_to_axes, self.batch_axis, self.y_axis = _scan_numerical_axes(
-            graph_def)
+        # axis
+        self.name_to_axes, self.batch_axis, self.y_axis = _scan_axes(graph_def)
 
         # process nodes
         for tf_node in graph_def.node:
             if self.verbose:
                 print(tf_node)
             self.process(tf_node)
-        self.last_op = self.name_to_op[tf_node.name]
 
-        # loss op
+        # last op and loss op
+        self.last_op = self.name_to_op[tf_node.name]
         if loss_node_name in self.name_to_op:
             self.loss_op = self.name_to_op[loss_node_name]
 
