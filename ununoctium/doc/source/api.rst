@@ -15,18 +15,27 @@
 
 This API documentation covers each module within Graphiti.
 
-geon.backends
+geon.analysis
 =============
-.. py:module: geon.backends
+.. py:module: geon.analysis
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.backends.dataloaderbackend
-   geon.backends.graph.artransform
-   geon.backends.graph.environment
-   geon.backends.graph.mpihandle
+   geon.analysis.dataflow.py
+   geon.analysis.fusion.py
+   geon.analysis.memory.py
+
+geon.dataloader
+===============
+.. py:module: geon.dataloader
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   geon.dataloader.dataloaderbackend
 
 geon.frontends
 ==============
@@ -37,8 +46,6 @@ geon.frontends
    :nosignatures:
 
    geon.frontends.base.axis
-   geon.frontends.base.graph
-   geon.frontends.declarative_graph.declarative_graph
 
 geon.frontends.neon
 ===================
@@ -66,8 +73,6 @@ geon.op_graph
 
    geon.op_graph.arrayaxes
    geon.op_graph.convolution
-   geon.op_graph.names
-   geon.op_graph.nodes
    geon.op_graph.op_graph
 
 geon.transformers
@@ -91,19 +96,9 @@ geon.util
 
    geon.util.generics
    geon.util.graph
+   geon.util.names
+   geon.util.nodes
    geon.util.pygen
    geon.util.threadstate
    geon.util.utils
-
-geon.analysis
-=============
-.. py:module: geon.analysis
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-
-   geon.analysis.dataflow
-   geon.analysis.fusion
-   geon.analysis.memory
 

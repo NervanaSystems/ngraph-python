@@ -13,10 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-from builtins import range
 import pytest
+from builtins import range
 
-import geon.op_graph.names as names
+import geon.util.names as names
 from geon.op_graph import arrayaxes
 
 # Make some axes

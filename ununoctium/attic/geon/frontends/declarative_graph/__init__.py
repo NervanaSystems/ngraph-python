@@ -12,16 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.util import nodes
+from geon.util.nodes import Node
 
+from attic.geon.frontends.declarative_graph import tanh
 
-def test_bytes_tags():
-    """TODO."""
-    n = nodes.Node(tags=b'abc')
-    assert len(n.tags) == 1
-
-
-def test_unicode_tags():
-    """TODO."""
-    n = nodes.Node(tags=u'abc')
-    assert len(n.tags) == 1
+from attic.geon.frontends.declarative_graph import Axis, Tensor, Variable, RecursiveTensor, Var

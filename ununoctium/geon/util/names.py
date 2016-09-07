@@ -45,11 +45,11 @@ def name_scope(name=None, name_scope=None):
     Create and use a new name scope
 
     Arguments:
-      name_scope: Reuse an existing name scope
-      name: Create a new name scope within the current name scope
+        name_scope: Reuse an existing name scope
+        name: Create a new name scope within the current name scope
 
     Returns:
-      The new name scope.
+        The new name scope.
     """
 
     name_scope = name_scope or NameScope(name=name)
@@ -67,9 +67,10 @@ def name_scope_list(name):
     Create and use a list of name scopes.
 
     Arguments:
-      name: The name of the list.
+        name: The name of the list.
+
     Returns:
-      An iterator for new name scopes in the collection.
+        An iterator for new name scopes in the collection.
     """
     naming = NameScopeList(name=name)
     yield (NameScopeListExtender(naming))
@@ -78,12 +79,13 @@ def name_scope_list(name):
 @contextmanager
 def next_name_scope(name_scope_list):
     """
-    TODO.
+    Makes the name scope be the next in the list of name scopes.
 
     Arguments:
-      name_scope_list: TODO
+        name_scope_list: A NameScopeList object.
 
     Returns:
+        The next namescope.
 
     """
     ns = next(name_scope_list)
@@ -96,11 +98,11 @@ def with_name_scope(fun, name=None):
     Function annotator for introducing a name scope.
 
     Arguments:
-      fun: The function being annotated.
-      name: The name scope name, defaults to the function name
+        fun: The function being annotated.
+        name: The name scope name, defaults to the function name
 
     Returns:
-      The annotated function.
+        The annotated function.
     """
     cname = name
     if cname is None:
@@ -135,6 +137,7 @@ class NameableValue(object):
 
     Arguments:
         name (str): The name of the object.
+        **kwargs: Parameters for related classes.
 
     Attributes:
         id: Unique id for this object.
@@ -184,7 +187,13 @@ _default_parent = object()
 
 
 class Parented(NameableValue):
-    """A nameable value with a parent, defaults to current name scope."""
+    """
+    A nameable value with a parent, defaults to current name scope.
+
+    Arguments:
+        parent: The parent scope for naming.
+        name: The name of this scope.
+    """
 
     def __init__(self, parent=_default_parent, name=None, **kwargs):
         super(Parented, self).__init__(name=name, **kwargs)
@@ -195,13 +204,11 @@ class Parented(NameableValue):
 
     def _set_value_name(self, name, value):
         """
-        TODO.
+        Internal function for setting an attribute to a value.
 
         Arguments:
-          name: TODO
-          value: TODO
-
-        Returns:
+            name: The attribute name.
+            value: The value being set.
 
         """
         if isinstance(value, NameableValue):
@@ -216,12 +223,28 @@ class Parented(NameableValue):
 
 
 class NameScope(Parented):
-    """TODO."""
+    """
+    A NameScope is a hierarchical namespace for objects.
+
+    When NameableValues are assigned to attributes, the value's name is set to the attribute name.
+
+    Arguments:
+        name: The name of this scope.
+        **kwargs: Parameters for related classes.
+    """
 
     def __init__(self, **kwargs):
         super(NameScope, self).__init__(**kwargs)
 
     def __setattr__(self, name, value):
+        """
+
+        Args:
+            name: The name of the attribute.
+            value: The value to set to name.  The value's name attribute will be set to name if
+                value is a NameableValue.
+
+        """
         super(NameScope, self).__setattr__(name, value)
         self._set_value_name("." + name, value)
 

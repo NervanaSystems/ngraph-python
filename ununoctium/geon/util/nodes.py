@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import str
 import collections
 import inspect
 import weakref
 
-from geon.op_graph.names import NameableValue
+from builtins import str
+
+from geon.util.names import NameableValue
 
 
 class DebugInfo(object):

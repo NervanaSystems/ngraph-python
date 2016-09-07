@@ -20,7 +20,7 @@ from builtins import zip
 from neon.data import ImageLoader
 from neon.util.argparser import NeonArgparser
 
-import geon.frontends.declarative_graph as be
+import attic.geon.frontends.declarative_graph as be
 
 
 # parse the command line arguments (generates the backend)

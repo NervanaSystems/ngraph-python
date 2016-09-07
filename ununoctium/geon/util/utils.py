@@ -22,76 +22,90 @@ from geon.frontends.neon import *  # noqa
 
 
 class RandomTensorGenerator(object):
-    """TODO."""
+    """
+    Generate various pseudo-random values from a seed.
+
+    Arguments:
+        seed: The seed for the random number generator.
+        dtype: The type of the generated values.
+    """
 
     def __init__(self, seed=0, dtype=np.float32):
         self.dtype = dtype
+        self.seed = 0
         self.reset(seed)
 
-    def reset(self, seed=0):
+    def reset(self, seed=None):
         """
-        TODO.
+        Restart generation from the seed.
 
         Arguments:
-          seed: TODO
-
-        Returns:
-
+            seed: If supplied, a new seed for generation, otherwise the original seed.
         """
-        self.seed = seed
-        self.rng = np.random.RandomState(seed=seed)
+        if seed is not None:
+            self.seed = seed
+        self.rng = np.random.RandomState(seed=self.seed)
 
-    def uniform(self, low, high, axes):
+    def uniform(self, low, high, axes, dtype=None):
         """
-        TODO.
+        Returns a tensor initialized with a uniform distribution from low to high with axes.
 
         Arguments:
-          low: TODO
-          high: TODO
-          axes: TODO
+            low: The lower limit of the distribution.
+            high: The upper limit of the distribution.
+            axes: The axes of the tensor.
+            dtype: If supplied, the type of the values.
 
         Returns:
+            The initialized tensor.
 
         """
+        if dtype is None:
+            dtype = self.dtype
+
         return np.array(
             self.rng.uniform(
                 low,
                 high,
                 Axes(axes).lengths),
-            dtype=self.dtype)
+            dtype=dtype)
 
-    def discrete_uniform(self, low, high, quantum, axes):
+    def discrete_uniform(self, low, high, quantum, axes, dtype=None):
         """
-        TODO.
+        Returns a tensor initialized with a discrete uniform distribution.
 
         Arguments:
-          low: TODO
-          high: TODO
-          quantum: TODO
-          axes: TODO
+            low: The lower limit of the values.
+            high: The upper limit of the values.
+            quantum: Distance between values.
+            axes: The axes of the tensor.
 
         Returns:
+            The tensor.
 
         """
+        if dtype is None:
+            dtype = self.dtype
+
         n = math.floor((high - low) / quantum)
         result = np.array(self.rng.random_integers(
-            0, n, Axes(axes).lengths), dtype=self.dtype)
+            0, n, Axes(axes).lengths), dtype=dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result
 
     def random_integers(self, low, high, axes, dtype=np.int8):
         """
-        TODO.
+        Returns a tensor initialized with random integers.
 
         Arguments:
-          low: TODO
-          high: TODO
-          axes: TODO
-          dtype: TODO
+            low: The lower limit of values.
+            high: the upper limit of values.
+            axes: The axes of the tensors.
+            dtype: The dtype of the values.
 
         Returns:
-
+            The tensor.
         """
         return self.rng.random_integers(low, high, Axes(axes).lengths).astype(dtype)
 

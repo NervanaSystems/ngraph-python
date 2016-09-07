@@ -13,16 +13,16 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-import numpy as np
 
+import numpy as np
 from neon.initializers import Constant, Array
 
 '''
 Test the usage of be.Variable
 
 '''
-import geon.backends.graph.funs as be
-import geon.backends.graph.axis as ax
+import geon.transformers.graph.funs as be
+import geon.transformers.graph.axis as ax
 
 
 def test_init_variable():

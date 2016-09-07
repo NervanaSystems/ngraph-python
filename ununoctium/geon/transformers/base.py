@@ -14,17 +14,18 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import abc
-from builtins import object
 import collections
 import weakref
+
+import abc
+from builtins import object
 from future.utils import with_metaclass
 
+from geon.analysis.memory import assign_buffers
 from geon.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
     Function, doall
-from geon.analysis.memory import assign_buffers
 from geon.util.generics import generic_method
-from geon.op_graph.names import NameableValue
+from geon.util.names import NameableValue
 
 
 class Computation(with_metaclass(abc.ABCMeta, NameableValue)):

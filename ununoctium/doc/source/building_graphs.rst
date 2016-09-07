@@ -15,140 +15,52 @@
 
 Building graphs
 ***************
-Although the name "operational graph API" contains the word "graph," the API is for defining, analyzing
-and manipulating machine learning computations.  The API is supported by a few graphs behind the scenes,
-but the important thing for the user is the definition of models and frameworks for defining models.
+An operational graph is a device-independent program for performing computations. One can interact directly with the op-graph API, or use a variety of frontends (such as neon) to convert a model description into an op-graph. In order
+to run the computations, use a transformer to compile the graph into a format that can be executed a desired backend (e.g. CPU, GPU, etc.)
 
-An operational graph is a device-independent program for performing one or more computations.  In order
-to run the computations, the graph must be transformed into a format that can be run on the desired
-backend.
+To build op-graphs, we link together a sequence of operations that are instances of the class ``Op``. These operations are organized under several base classes:
 
-Expression basics
-=================
-Manipulating expressions in a programming language that already has expressions can get a little
-confusing, so we will start with a mathematical expression that is not from a program:
+* ``Op``: Base class for all ops.
+* ``TensorOp (Op)``: Ops that produce a Tensor.
+* ``ComputationOp (TensorOp)``: TensorOps with added backtrace functionality.
+* ``ReductionOp (ComputationOp)``: Ops that reduce over some axes (e.g. sum).
+* ``ElementWise (ComputationOp)``: Ops that perform element-wise calculations.
+* ``ElementWiseBoolean (ElementWise)``: Boolean element-wise ops.
 
-.. math:: y = \tanh(w*x+b)
+Supported ops are shown in the below figure:
 
-where :math:`w` and :math:`b` are parameters, :math:`x` will be provided as input, and :math:`y`
-will be returned as the result.  When you type the expression, :math:`y` will contain the result,
-but behind the scenes many more actions take place.  When we work with computations, we need to think
-about both what the computation is doing and how the computation is performed.
+.. image:: assets/op_heirarchy.png
 
-When we want to evaluate an expression, we start with the things that have no dependencies, like :math:`w, x` and 
-:math:`b,` and compute quantities that only depend on known values, until all operations have been performed.
 
-When we build expressions, we tend to go the other direction by considering the last thing we would evaluate first, in 
-this case the assignment to :math:`y`. The assignment has two subexpressions, the :math:`y` expression and the 
-:math:`\tanh(w*x+b)` expression. The :math:`=` symbol is in the expression, but its role is to specify what is being 
-done with the two subexpressions, so it is not a subexpression, but, instead, identifies the expression as an 
-assignment.
+Graph evaluation
+================
 
-The :math:`\tanh(w*x+b)` expression is a :math:`\tanh` expression and has only one subexpression, :math:`w*x+b`. The 
-:math:`w*x+b` expression is a :math:`+` expression with two subexpressions, :math:`w*x` and :math:`b.` The :math:`b` 
-expression is a variable reference with no subexpressions. Although the :math:`b, w` and :math:`x` expressions have no 
-subexpressions, they are all distinct from one another because they contain *parameters* ``b, w`` and ``x``, 
-respectively.
-
-Expressions with Python
-=======================
-If we included the following in a Python program::
-
-    tanh(w*x+b)
-
-we would get an error that ``w`` is not defined.  If gave values ``w, x,`` and ``b`` we would get a result,
-such as ``0.76159415595576485``, not the expression.  There are two ways to get the expression, write a
-parser and pass the expression to it as a string to be parsed, or trick Python into returning an expression.
-
-It is easy to turn ``tanh`` into an expression object.  All we need to do is define a class called ``tanh``
-that is an expression object.  We can have the ``__init__`` try to coerce its argument to an expression if
-it is not already one, and this becomes the subexpression of ``tanh``.  Normally a class would not be lowercase
-as in ``tanh`` but since we want to think of it as a function we type it as a function.
-
-Python supports limited overloading with something called "magic methods."  Certain functions and operators
-can be extended to new kinds of objects by defining their magic methods.  For example, if you define a class
-with a ``__add__`` method, and ``x`` is an instance of your class, ``x+y`` will call ``x``'s ``__add__`` with the value
-of ``y`` as an argument.  Likewise, if you define ``__radd__`` and ``y`` is an instance of your class, but
-``x`` is neither a number nor an instance of a class with an ``__add__`` method, ``x+y`` would cause ``y``'s
-``__radd__`` to be called with ``x`` as an argument.
-
-In ``x+y``, if ``x`` is some kind of expression object with an ``__add__`` method, the ``__add__`` method can
-coerce the ``y`` to be an expression object if it is not already one, and return an expression object for
-the sum.  This expression object would have two subexpressions, the expression object that was in ``x`` and
-the expression object that ``y`` was coerced into.
-
-When Python evaluates a Python expression, each subexpression must be evaluated before the expression can be
-evaluated, so we just need to ensure that Python expressions with no subexpressions are objects of our
-expression class, or can be coerced into objects of our expression class, and that functions without magic
-method support are expression-aware functions of our own, something we can arrange via imports.  Then the result
-of Python evaluating one of these expressions will be an expression object.
-
-Operational Graph Expressions
-=============================
-Almost all operational graph expressions describe tensor computations.  Associated with every tensor is a dtype and a
-sequence of zero or more axes.  A tensor with zero axes is also called a scalar, a tensor with one axis a vector,
-and two axes a matrix.  Axes are described elsewhere. Unlike some graph/tensor languages, a tensor does not need to be 
-associated with storage.
-
-In the operational graph, all expressions are operations of some kind, so we call them ops, and they are all
-instances of the class ``Op``. Most of these operations are tensors, and are instances of the ``Tensor`` class.  
-However, some ops are used for side-effects and produce no values such as ``InitTensor`` and ``Fill``. Ops that actually
-perform a computation on their arguments are instances of ``ComputationOp``.
-
-During a computation, the values must be stored somewhere, but only those tensors whose values are explicitly
-marked as being needed at the end of a computation are available when the computation completes.
-The general computation model is that computation may occur on a device with its own memory, so we need a way
-to copy data to/from the device.  A tensor marked as ``in`` can be written to before a computation, and as
-``out`` can be read after a computation.  A tensor can be both ``in`` and ``out``.
-
-A ``placeholder`` is a tensor marked as ``in``, so it can be written to before a computation.
-To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols
-and then make the ``placeholder``::
+During computation, the input and output values must be stored somehwere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``::
 
     import geon as be
     import geon.frontends.base.axis as ax
 
     x = be.placeholder(axes=be.Axes(ax.C, ax.W, ax.H, ax.N))
 
-This will create an op for a ``placeholder`` with the indicated list of axes and assign the Python variable `x` to the 
-op.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
+This will create an ``AllocationOp`` for a ``placeholder`` with the provided list of axes and assign the op to the python variable ``x``.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
 
-It is important to remember that ``x`` is a Python variable that holds an op.  There are no magic methods for
-Python variable assignment or use, so assigning a new value to ``x`` has no effect on the the tensor
-previously represented by ``x``.  In other words::
+It is important to remember that ``x`` is a Python variable that holds an op.  Therefore, the following code::
 
     x = x + x
 
-does not directly double the value of the tensor in the ``placeholder``. Instead, if we carefully follow Python variable 
-resolution, the right hand side expression is evaluated first where the first ``x``'s ``__add__`` method is called with 
-both arguments resolving to the same ``placeholder`` object. This then returns a new sum ``Op`` with both subexpressions 
-pointing to that original ``placeholder`` object. Only if this ``Op`` was subsequently evaluated would the underlying 
-value of the original ``placeholder`` effectively be doubled and used as the resulting value of the sum ``Op``. On the 
-other hand, to directly modify the value of the ``placeholder`` ``Op`` you would need to say::
+does not directly double the value of the tensor in the ``placeholder``. Instead, the ``__add__`` method is called with
+both arguments pointing to the same ``placeholder`` object. This returns a new ``Op`` that is now stored as the python variable ``x``.
+On the other hand, to directly modify the value of the ``placeholder``, use::
 
     be.SetItem(x, x + x)
 
-Perhaps surprisingly, because we are manipulating expressions, you rarely need to use ``SetItem``, other than
-when updating variables after training.  Consider::
+Constructing the graph is mostly manipulating expressions, so``SetItem`` is rarely used, except for updating variables during training. Consider::
 
     x1 = x + x
     y = x1 * x1 - x
 
-The Python variable ``y`` holds an op for a computation that adds the ``placeholder`` to itself, then multiplies
-that value by itself, and then subtracts the original value of the ``placeholder``.  The intermediate
-value ``x + x`` is only computed once, since the same op is used for both arguments of the multiplication.
-Furthermore, in this computation, all the computations will automatically be performed in place.  In NumPy
-it would be like::
-
-    y = x + x
-    np.multiply(y, y, out=y)
-    bp.subtract(y, x, out=y)
-
-However, if you later modified the computation so that you needed ``x + x`` in some other operation, we would
-automatically adjust the computation's implementation so that the intermediate result ``x + x`` was available
-wherever it was needed.  You can get this flexibility with NumPy or PyCUDA with the original expression, but they
-will be allocating tensors for the intermediate values and letting Python's garbage collector clean them up; the
-peak memory usage will be higher and there will be more overhead.
+The intermediate value ``x + x`` is only computed once, since the same op is used for both arguments of the multiplication in ``y``.
+Furthermore, in this computation, all the computations will automatically be performed in place. If the computation is later modified such that the intermediate value ``x + x`` is needed, the op-graph will automatically adjust the computation's implementation to make the intermediate result ``x + x`` available.  This same flexibility exists with NumPy or PyCUDA, but those implementations always allocate tensors for the intermediate values, relying on Python's garbage collector clean them up; the peak memory usage will be higher and there will be more overhead.
 
 Derivatives
 ===========
@@ -169,16 +81,14 @@ function::
 
 The op `d` will be the op for the derivative of the value of `dc/dw`.
 
-In this example, we knew which ops contain the variables to be trained.  If we were writing a general
-optimizer that takes a loss op as an input, we could search through all the subexpressions looking for variables
-that it depended on.  This is handled by the ``variables`` method, so ``c.variables()`` would be the list
-``[w, b]``.
+In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general
+optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would be the list ``[w, b]``.
 
 Graph execution
 ===============
 
 A *computation* is a subset of ops whose values are desired and corresponds to a callable procedure on a backend.
-The client defines one or more computations by specifying sets of ops to be computed.  In addition, the transformer
+Users define one or more computations by specifying sets of ops to be computed.  In addition, the transformer
 will define four additional procedures:
 
 `allocate`
