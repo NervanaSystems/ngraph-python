@@ -403,6 +403,7 @@ class SetItem(Op):
             raise ValueError("{} is not assignable.".format(tensor))
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
+        self.input = None
 
     @cachetools.cached({})
     def call_info(self):

@@ -57,7 +57,7 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
         self.parameters = []
         for arg in args:
-            if hasattr(arg, 'input') and arg.input:
+            if arg.input:
                 self.parameters.append(arg)
             else:
                 raise ValueError((
