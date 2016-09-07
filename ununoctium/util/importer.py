@@ -201,14 +201,22 @@ class TensorFlowImporter:
         for tf_node in graph_def.node:
             if self.verbose:
                 print(tf_node)
-            self.process(tf_node)
+            self._process(tf_node)
 
         # last op and loss op
         self.last_op = self.name_to_op[tf_node.name]
         if loss_node_name in self.name_to_op:
             self.loss_op = self.name_to_op[loss_node_name]
 
-    def process(self, tf_node):
+    def _process(self, tf_node):
+        """
+        Process one TensorFlow node. It checks validity then calls `_convert`
+        to do the conversion.
+
+        Args:
+          tf_node (NodeDef): a TensorFlow node
+        """
+
         # skip ignored ops
         if tf_node.op in ignored_ops or 'save' in tf_node.name:
             self.ignored_nodes.add(tf_node.name)
@@ -223,14 +231,21 @@ class TensorFlowImporter:
 
         # convert other ops
         self.name_to_op[tf_node.name] = None
-        self.convert(tf_node, inputs)
+        self._convert(tf_node, inputs)
 
     @op_generic_method
-    def convert(self, tf_node, inputs):
+    def _convert(self, tf_node, inputs):
+        """
+        Converts one TensorFlow node.
+
+        Args:
+          tf_node (NodeDef): a TensorFlow node
+          inputs (list): same as `tf_node.inputs`, used for convenience
+        """
         raise NotImplementedError('op not supported')
 
-    @convert.on_op(['Tanh', 'Sigmoid'])
-    def convert(self, tf_node, inputs):
+    @_convert.on_op(['Tanh', 'Sigmoid'])
+    def _convert(self, tf_node, inputs):
         # unary ops
         unary_ops = {
             'Tanh': be.tanh,
@@ -240,8 +255,8 @@ class TensorFlowImporter:
         self.name_to_op[tf_node.name] = unary_ops[tf_node.op](
             self.name_to_op[inputs[0]])
 
-    @convert.on_op(['Add', 'Div', 'MatMul', 'Maximum', 'Mul'])
-    def convert(self, tf_node, inputs):
+    @_convert.on_op(['Add', 'Div', 'MatMul', 'Maximum', 'Mul'])
+    def _convert(self, tf_node, inputs):
         binary_ops = {
             'Add': be.add,
             'Div': be.divide,
@@ -262,8 +277,8 @@ class TensorFlowImporter:
                 self.name_to_op[inputs[0]],
                 self.name_to_op[inputs[1]], name=tf_node.name)
 
-    @convert.on_op(['Mean', 'Sum'])
-    def convert(self, tf_node, inputs):
+    @_convert.on_op(['Mean', 'Sum'])
+    def _convert(self, tf_node, inputs):
         reduction_ops = {
             'Mean': be.mean,
             'Sum': be.sum,
@@ -288,17 +303,17 @@ class TensorFlowImporter:
             reduction_axes=reduction_axes,
             name=tf_node.name)
 
-    @convert.on_op('Relu')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Relu')
+    def _convert(self, tf_node, inputs):
         self.name_to_op[tf_node.name] = be.maximum(self.name_to_op[inputs[0]],
                                                    0)
 
-    @convert.on_op('Identity')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Identity')
+    def _convert(self, tf_node, inputs):
         self.name_to_op[tf_node.name] = self.name_to_op[inputs[0]]
 
-    @convert.on_op('Placeholder')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Placeholder')
+    def _convert(self, tf_node, inputs):
         dims = tf_node.attr['shape'].shape
         shape = [d.size for d in dims.dim]
         self.name_to_op[tf_node.name] = be.placeholder(
@@ -309,8 +324,8 @@ class TensorFlowImporter:
         elif len(shape) == 1:
             self.y = self.name_to_op[tf_node.name]
 
-    @convert.on_op('Const')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Const')
+    def _convert(self, tf_node, inputs):
         const_tensor = tf_node.attr['value'].tensor
         shape = [d.size for d in const_tensor.tensor_shape.dim]
         np_val = tensor_util.MakeNdarray(const_tensor)
@@ -326,21 +341,21 @@ class TensorFlowImporter:
         self.name_to_op[tf_node.name] = be.Constant(np_val, axes=axes,
                                                     name=tf_node.name)
 
-    @convert.on_op('Variable')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Variable')
+    def _convert(self, tf_node, inputs):
         self.name_to_op[tf_node.name] = be.Variable(
             axes=self.name_to_axes[tf_node.name], name=tf_node.name)
         self.variables[tf_node.name] = self.name_to_op[tf_node.name]
 
-    @convert.on_op('Assign')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Assign')
+    def _convert(self, tf_node, inputs):
         var = self.name_to_op[inputs[0]]
         init_value = self.name_to_op[inputs[1]]
         self.name_to_op[tf_node.name] = be.assign(var, init_value)
         var.initializers.append(self.name_to_op[tf_node.name])
 
-    @convert.on_op('AssignAdd')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('AssignAdd')
+    def _convert(self, tf_node, inputs):
         # TODO: check operations for scala variable
         # Things may broken for other graph in which the scala variable is not
         # named 'global_step'
@@ -351,8 +366,8 @@ class TensorFlowImporter:
         tensor_to_add = self.name_to_op[inputs[1]]
         self.name_to_op[tf_node.name] = be.assign(var, var + tensor_to_add)
 
-    @convert.on_op('Fill')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Fill')
+    def _convert(self, tf_node, inputs):
         # Creates a tensor filled with a scalar value.
         shape_tensor = self.name_to_op[inputs[0]].const
         init_val = self.name_to_op[inputs[1]]
@@ -370,8 +385,8 @@ class TensorFlowImporter:
                                                         axes=axes,
                                                         name=tf_node.name)
 
-    @convert.on_op(['TruncatedNormal', 'RandomStandardNormal'])
-    def convert(self, tf_node, inputs):
+    @_convert.on_op(['TruncatedNormal', 'RandomStandardNormal'])
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.truncated_normal and tf.random_normal
         # get shape
         shape = self.name_to_op[inputs[0]].const
@@ -392,15 +407,15 @@ class TensorFlowImporter:
         self.name_to_op[tf_node.name] = be.Constant(val, axes=axes,
                                                     name=tf_node.name)
 
-    @convert.on_op('Cast')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Cast')
+    def _convert(self, tf_node, inputs):
         # TODO: need a real cast, currently just skip this op
         dst_type = tf_node.attr['DstT']
         src_type = tf_node.attr['SrcT']
         self.name_to_op[tf_node.name] = self.name_to_op[inputs[0]]
 
-    @convert.on_op('SparseSoftmaxCrossEntropyWithLogits')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('SparseSoftmaxCrossEntropyWithLogits')
+    def _convert(self, tf_node, inputs):
         # implementation of tf.nn.sparse_softmax_cross_entropy_with_logits
         # check its doc via https://goo.gl/7ytJNB and its C++ implementation via
         # https://goo.gl/z5T2my
@@ -419,15 +434,15 @@ class TensorFlowImporter:
         grad = be.divide(pred, sum_exp_logits) - label
         self.name_to_op[tf_node.name + ":1"] = grad
 
-    @convert.on_op('Prod')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Prod')
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.reduce_prod and merge with reduction_ops
         prod_val = np.prod(self.name_to_op[inputs[0]].const)
         self.name_to_op[tf_node.name] = be.Constant(prod_val,
                                                     name=tf_node.name)
 
-    @convert.on_op('Shape')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Shape')
+    def _convert(self, tf_node, inputs):
         axes = self.name_to_op[inputs[0]].axes
         shape = [axis.length for axis in axes]
 
@@ -440,22 +455,22 @@ class TensorFlowImporter:
                                                         axes=axes,
                                                         name=tf_node.name)
 
-    @convert.on_op('Rank')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Rank')
+    def _convert(self, tf_node, inputs):
         # The rank of a tensor is the number of axis
         shape = self.name_to_op[inputs[0]].shape
         self.name_to_op[tf_node.name] = be.Constant(len(shape),
                                                     name=tf_node.name)
 
-    @convert.on_op('Size')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Size')
+    def _convert(self, tf_node, inputs):
         axes = self.name_to_op[inputs[0]].axes
         shape = [axis.length for axis in axes]
         self.name_to_op[tf_node.name] = be.Constant(np.prod(shape),
                                                     name=tf_node.name)
 
-    @convert.on_op('Range')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Range')
+    def _convert(self, tf_node, inputs):
         start = self.name_to_op[inputs[0]]
         limit = self.name_to_op[inputs[1]]
         delta = self.name_to_op[inputs[2]]
@@ -464,25 +479,25 @@ class TensorFlowImporter:
         self.name_to_op[tf_node.name] = be.Constant(nums, axes=be.Axes(
             be.NumericAxis(len(nums)), ), name=tf_node.name)
 
-    @convert.on_op('Mod')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Mod')
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.mod, currently just skip
         self.name_to_op[tf_node.name] = self.name_to_op[inputs[0]]
 
-    @convert.on_op('DynamicStitch')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('DynamicStitch')
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.dynamic_stich, currently just use a constant
         self.name_to_op[tf_node.name] = be.Constant(1)
 
-    @convert.on_op('Reshape')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Reshape')
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.reshape
         # Currently it just does nothing but pass the first input without
         # actually reshape
         self.name_to_op[tf_node.name] = self.name_to_op[inputs[0]]
 
-    @convert.on_op('Tile')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('Tile')
+    def _convert(self, tf_node, inputs):
         # Constructs a tensor by tiling a given tensor. Currently use numpy.tile
         # The first input is the result of tf.reshape, which is currently not
         # available
@@ -504,14 +519,14 @@ class TensorFlowImporter:
         else:
             assert False
 
-    @convert.on_op('ExpandDims')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('ExpandDims')
+    def _convert(self, tf_node, inputs):
         # TODO: implement tf.expand_dims
         dim = self.name_to_op[inputs[1]]
         self.name_to_op[tf_node.name] = self.name_to_op[inputs[0]]
 
-    @convert.on_op('BroadcastGradientArgs')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('BroadcastGradientArgs')
+    def _convert(self, tf_node, inputs):
         # implementation of bcast_ops.cc (https://goo.gl/5vx4QN)
         sx = self.name_to_op[inputs[0]].const
         sy = self.name_to_op[inputs[1]].const
@@ -551,22 +566,22 @@ class TensorFlowImporter:
             self.name_to_op[tf_node.name + ":1"] = be.Constant(val_y, axes=axes,
                                                                name=tf_node.name)
 
-    @convert.on_op('ReluGrad')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('ReluGrad')
+    def _convert(self, tf_node, inputs):
         gradient = self.name_to_op[inputs[0]]
         output = self.name_to_op[inputs[1]]
         self.name_to_op[tf_node.name] = gradient * output
 
-    @convert.on_op('ApplyGradientDescent')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('ApplyGradientDescent')
+    def _convert(self, tf_node, inputs):
         var = self.name_to_op[inputs[0]]
         lr = self.name_to_op[inputs[1]]
         grad = self.name_to_op[inputs[2]]
         updated_var = var - lr * grad
         self.name_to_op[tf_node.name] = be.assign(var, updated_var)
 
-    @convert.on_op('NoOp')
-    def convert(self, tf_node, inputs):
+    @_convert.on_op('NoOp')
+    def _convert(self, tf_node, inputs):
         # NoOp adds '^' before each original input name
         if tf_node.name == "GradientDescent/update":
             # gradient descent ops
