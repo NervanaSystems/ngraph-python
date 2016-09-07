@@ -29,9 +29,7 @@ from geon.util.generics import generic_method
 from geon.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
-    sum, tanh, tensor_size, Fill, TensorDescription, AxesCastOp,\
-    AllocationOp, Broadcast, doall, ExpandDims, Slice, Unslice, InitTensor,\
-    Stack
+    sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack
 from geon.op_graph.convolution import convolution
 
 from geon.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -224,7 +222,8 @@ class NumPyCodeGenerator(PyGen):
 
     @generic_method
     def generate_op(self, op, *args):
-        raise ValueError("Unhandled op: {}".format(op))
+        if op.device_op:
+            raise ValueError("Unhandled op: {}".format(op))
 
     @generate_op.on_type(absolute)
     def generate_op(self, op, out, x):
@@ -234,10 +233,6 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(AllocationOp)
-    def generate_op(self, op, out):
-        pass
-
     @generate_op.on_type(argmax)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmax({}, 0, out={})", x, out)
@@ -245,14 +240,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(argmin)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
-
-    @generate_op.on_type(Broadcast)
-    def generate_op(self, op, out, x):
-        pass
-
-    @generate_op.on_type(AxesCastOp)
-    def generate_op(self, op, out, x):
-        pass
 
     @generate_op.on_type(convolution)
     def generate_op(self, op, output, input, filter):
@@ -296,10 +283,6 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(doall)
-    def generate_op(self, op, out):
-        pass
-
     @generate_op.on_type(dot)
     def generate_op(self, op, out, o, x, y):
         if o.tensor_description.c_contiguous:
@@ -315,10 +298,6 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.exp({}, out={})", x, out)
 
-    @generate_op.on_type(ExpandDims)
-    def generate_op(self, op, out, x):
-        pass
-
     @generate_op.on_type(Fill)
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", x, op.scalar)
@@ -330,10 +309,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(greater_equal)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(InitTensor)
-    def generate_op(self, op, out, var):
-        pass
 
     @generate_op.on_type(less)
     def generate_op(self, op, out, x, y):
@@ -410,10 +385,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(sin)
     def generate_op(self, op, out, x):
         self.append("np.sin({}, out={})", x, out)
-
-    @generate_op.on_type(Slice)
-    def generate_op(self, op, out, x):
-        pass
 
     @generate_op.on_type(sqrt)
     def generate_op(self, op, out, x):
