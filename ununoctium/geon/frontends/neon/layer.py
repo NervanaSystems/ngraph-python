@@ -808,7 +808,7 @@ class Bias(ParameterLayer):
         self.owns_output = False
         self.owns_delta = False
 
-    def configure(self, graph, in_obj):
+    def configure(self, in_obj):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -821,7 +821,7 @@ class Bias(ParameterLayer):
             (Tensor): output
 
         """
-        in_obj = super(Bias, self).configure(graph, in_obj)
+        in_obj = super(Bias, self).configure(in_obj)
         return in_obj + be.Variable(axes=in_obj.axes.sample_axes())
 
 

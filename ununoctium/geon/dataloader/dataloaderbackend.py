@@ -21,7 +21,9 @@ from geon.op_graph.op_graph import RNG
 
 
 class BackendNDArray(np.ndarray):
-    """TODO."""
+    """
+    A subclass of NumPy's ndarray that supplies the extra methods needed by neon's dataloader.
+    """
     def __setitem__(self, key, value):
         if isinstance(value, OneHot):
             value.apply(self, key)
