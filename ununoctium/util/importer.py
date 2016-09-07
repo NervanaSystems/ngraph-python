@@ -41,7 +41,7 @@ from functools import wraps
 import geon as be
 from geon.op_graph.op_graph import (TensorOp, softmax, is_constant,
                                     constant_value)
-from geon.util.generics import TypeMethods
+from geon.util.generics import op_generic_method
 
 import tensorflow as tf
 from tensorflow.python.framework import tensor_util
@@ -49,41 +49,6 @@ from tensorflow.python.framework import tensor_util
 ignored_ops = {
     'ScalarSummary', 'ZerosLike', 'InTopK', 'MergeSummary',
 }
-
-
-class _OpTypeMethods(TypeMethods):
-    def __init__(self, base_method, **kwargs):
-        super(_OpTypeMethods, self).__init__(base_method, **kwargs)
-
-    def on_type_wrapper(self, generic_function, dispatch_type):
-        def add_method(method):
-            if isinstance(dispatch_type, (list, tuple)):
-                for type in dispatch_type:
-                    self.methods[type] = method
-            else:
-                self.methods[dispatch_type] = method
-            return generic_function
-
-        return add_method
-
-    def get_method(self, tf_node):
-        method = self.methods.get(tf_node.op)
-        return method if method is not None else self.base_method
-
-
-def _generic_method(base_method):
-    type_methods = _OpTypeMethods(base_method)
-
-    @wraps(base_method)
-    def generic(s, dispatch_arg, *args, **kwargs):
-        return type_methods.get_method(dispatch_arg)(s, dispatch_arg, *args,
-                                                     **kwargs)
-
-    def on_op(op_str):
-        return type_methods.on_type_wrapper(generic, op_str)
-
-    generic.on_op = on_op
-    return generic
 
 
 def _scan_numerical_axes(graph_def):
@@ -247,7 +212,7 @@ class TensorFlowImporter:
         self.name_to_op[tf_node.name] = None
         self.convert(tf_node, inputs)
 
-    @_generic_method
+    @op_generic_method
     def convert(self, tf_node, inputs):
         raise NotImplementedError('op not supported')
 
