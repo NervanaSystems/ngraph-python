@@ -18,7 +18,7 @@ from builtins import object
 import math
 import numpy as np
 
-from geon.frontends.neon import *  # noqa
+from geon.frontends.neon import be, Axes
 
 
 class RandomTensorGenerator(object):
