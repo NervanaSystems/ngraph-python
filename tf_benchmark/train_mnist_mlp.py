@@ -109,7 +109,7 @@ def train_mnist_mlp():
     # run init computation once
     init_comp()
 
-    for epoch_index in range(50):
+    for epoch_index in range(20):
         print("===============================")
         print("epoch: %s" % epoch_index)
 
