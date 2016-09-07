@@ -1,14 +1,20 @@
 import numpy as np
+import numbers
 
 
 class MixtureGenerator(object):
 
-    def __init__(self, pvals, d, seed=0):
+    def __init__(self, pvals, shape, seed=0):
+        if isinstance(shape, numbers.Integral):
+            shape = (shape,)
         self.__rng = np.random.RandomState(seed)
         self.nclasses = len(pvals)
-        self.d = d
-        self.As = self.__rng.uniform(-1, 1, (d, d, self.nclasses))
-        self.bs = self.__rng.uniform(-1, 1, (d, self.nclasses))
+        self.shape = shape
+        self.size = 1
+        for s in shape:
+            self.size = self.size * s
+        self.As = self.__rng.uniform(-1, 1, (self.size, self.size, self.nclasses,))
+        self.bs = self.__rng.uniform(-1, 1, (self.size, self.nclasses,))
 
         self.accum = []
         s = 0
@@ -39,14 +45,14 @@ class MixtureGenerator(object):
         xs[...] = self.__rng.normal(0, 1, xs.shape)
         for i in range(ys.size):
             y = ys[i]
-            x = xs[..., i]
+            x = xs[..., i].reshape(self.size)
             A = self.As[..., y]
             b = self.bs[..., y]
             x0 = np.dot(A, x) + b
-            xs[..., i] = x0
+            xs[..., i] = x0.reshape(self.shape)
 
     def make_mixture(self, N):
-        return np.empty((self.d, N)), np.empty((N,), dtype=int)
+        return np.empty(self.shape + (N,)), np.empty((N,), dtype=int)
 
     def gen_data(self, batch_size, n_batches):
         XS = []

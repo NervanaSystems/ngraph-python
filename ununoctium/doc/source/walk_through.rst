@@ -332,3 +332,59 @@ and printing of results to::
 
 Multi-dimensional Logistic Regression
 =====================================
+
+The complete program source can be found in :download:`../../examples/walk_through/logres_multi.py`.
+
+In this example, we begin by introducing a class, ``NameScope``, than can be useful for naming values::
+
+    ax = geon.NameScope(name="ax")
+
+    ax.W = geon.Axis()
+    ax.H = geon.Axis()
+    ax.N = geon.Axis()
+
+Many |geon| objects are ``NameableValue``s, which means they have a ``name`` attribute.  When a ``NameableValue``
+is assigned to a ``NameScope``'s attribute, the name of the ``NameableValue`` will be set.  Here, we give
+``ax`` the name ``ax``.  Then the axis ``ax.W`` will have the name ``ax.W``.  Referring to the axes with
+``ax.`` prefixes makes it easier to identify axes in programs, and keeps them from using up the desirable
+short variable names.
+
+Also notice the ``batch`` parameter to ``ax.N``.  This tells |geon| that ``ax.N`` is used as the axis for
+samples within a batch.
+
+We are switching from a flat :math:`C`-dimensional featurespace to an :math:`W\times H` feature space.  The
+weights are now also a :math:`W\times H` tensor::
+
+    X = geon.placeholder(axes=geon.Axes([ax.W, ax.H, ax.N]))
+    Y = geon.placeholder(axes=geon.Axes([ax.N]))
+    alpha = geon.placeholder(axes=geon.Axes())
+
+    W = geon.Variable(axes=geon.Axes([ax.W, ax.H]), initial_value=0)
+    b = geon.Variable(axes=geon.Axes(), initial_value=0)
+
+The calculation remains::
+
+    Y_hat = geon.sigmoid(geon.dot(W, X) + b)
+
+What does it mean to ``dot`` tensors with axes?  The tensor ``dot`` operation has *reduction axes*, which
+defaults to the intersection of the axes.  Both arguments
+have their axes extended (broadcast) by axes they are missing in the reduction axes.  Then for each set of all indices
+not in the reduction axes, the elements matching in the reduction axes are multiplied and all of these are summed
+to form the result.  In this case, ``W`` has axes ``(ax.W, ax.H)`` and ``X`` has axes ``(ax.W, ax.H, ax.N)``.
+The reduction axes are ``(ax.W, ax.H)``, so for each index in ``ax.N`` the matching pairs elements are multiplied
+and summed, resulting in a tensor with one axes, ``ax.N``.
+
+In general, when axes are missing in a computation, they will be automatically broadcast; axis identity indicates
+which axes are missing.
+
+The data generator is able to generate multi-dimensional data; it just reshapes::
+
+    ax.W.length = 2
+    ax.H.length = 2
+    ax.N.length = 128
+
+    g = gendata.MixtureGenerator([.5, .5], (ax.W.length, ax.H.length))
+    XS, YS = g.gen_data(ax.N.length, 10)
+    EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
+
+Note: Some bugs in geon.dot and its derivative were discovered while making this example.  They are not fixed yet.
