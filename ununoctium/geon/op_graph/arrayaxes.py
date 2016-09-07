@@ -31,9 +31,23 @@ from geon.util.names import NameableValue
 
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
-    An Axis of a tensor.
+    An Axis labels a dimension of a tensor. The opgraph uses
+    the identity of Axis objects to pair and specify dimensions in
+    symbolic expressions. This system has several advantages over
+    using the length and position of the axis as in other frameworks:
 
-    Tensor operations uses Axis identity to pair/specify dimensions.
+    1) Convenience. The dimensions of tensors, which may be nested
+    deep in a computation graph, can be specified without having to
+    calculate their lengths.
+
+    2) Safety. Axis labels are analogous to types in general-purpose
+    programming langauges, allowing objects to interact only when
+    they are permitted to do so in advance. In symbolic computation,
+    this prevents interference between axes that happen to have the
+    same lengths but are logically distinct, e.g. if the number of
+    training examples and the number of input features are both 50.
+
+    TODO: Please add to the list...
 
     Arguments:
         length: The length of the axis.
@@ -55,13 +69,13 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def axis_id(self, key):
         """
-        TODO.
+        Returns an AxisID, used to disambiguate axes that recur in a tensor.
 
         Arguments:
-          key: TODO
+          key: the index of the occurrence.
 
         Returns:
-
+            An AxisID.
         """
         return AxisID(self, key)
 
@@ -98,8 +112,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     @property
     def length(self):
         """
-
-        :return: The length of the axis.
+        Returns:
+            The length of the axis.
         """
         return self.__length
 
@@ -108,20 +122,39 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.__length = value
 
     def __repr__(self):
-        return 'Axis({name})'.format(name=self.name)
+        return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
 
 class NumericAxis(Axis):
     """
     A NumericAxis is an axis which is uniquely identified by its length.
+    Tensors labelled with NumericAxis objects will have the same labelling
+    system as other deep learning frameworks (i.e. length and position) and
+    we primarily use NumericAxis in our TensorFlow importer. NumericAxis
+    should be used when deciding on axes names is unnecessary or impossible,
+    perhaps because the graph comes from an external source.
 
-    Every NumericAxis with the same length is the same instance of
-    NumericAxis.
+    Once a NumericAxis has been created, its length is immutable.
+
+    We override the default python __new__ method to make the objects unique
+    by length. This allows us to use the same matching method for numeric
+    axes as we do for named axes, i.e. object identity.
     """
 
     cache = {}
 
     def __new__(cls, length=None, **kwargs):
+        """
+        Creates a numeric axis object if an instance for the length
+        does not already exist. Otherwise, returns the existing object.
+
+        Arguments:
+            cls: dynamic type of object to be created.
+            length: length of numeric axis.
+
+        Returns:
+            A NumericAxis (uninitialized).
+        """
         if length in NumericAxis.cache:
             return NumericAxis.cache[length]
 
@@ -141,13 +174,20 @@ class FunctionAxis(Axis):
     """
     A function axis is an axis whose length is computed by a user-supplied function.
 
-     Instances should only be created internally because using a
+    Instances should only be created internally because using a
     function that changes the length after a transformation will result in
     undefined behaviour.
+
+    Currently, this class is only used by the SlicedAxis and PaddedAxis subclasses,
+    which derive their length from a parent axis's length. This satisfies the above
+    restriction, because we expect the parent axis to become immutable once
+    the transformation begins.
     """
-    def __init__(self, length_fun, **kwargs):
+    def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1, **kwargs)
         self.length_fun = length_fun
+        self.batch = parent.batch
+        # TODO: self.recurrent = parent.recurrent
 
     @property
     def length(self):
@@ -194,11 +234,25 @@ class SlicedAxis(FunctionAxis):
     exception instead?
     """
     def __init__(self, parent, s, **kwargs):
+        self.parent = parent
+        self.slice = s
+
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
+            parent=parent,
             length_fun=lambda: _sliced_length(s, parent.length),
             **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'SlicedAxis({name}: {length}; parent: {parent}; slice: {slice})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            slice=self.slice,
         )
 
 
@@ -211,13 +265,50 @@ class PaddedAxis(FunctionAxis):
         pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
+        self.parent = parent
+        self.pad = pad
+
         def padded_length():
             return parent.length + pad[0] + pad[1]
-        super(PaddedAxis, self).__init__(length_fun=padded_length, **kwargs)
+
+        super(PaddedAxis, self).__init__(
+            parent=parent, length_fun=padded_length, **kwargs
+        )
+
+    def __repr__(self):
+        return (
+            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
+        ).format(
+            name=self.name,
+            length=self.length,
+            parent=self.parent,
+            pad=self.pad,
+        )
 
 
 class AxisID(object):
-    """TODO."""
+    """
+    An AxisID labels an occurrence of an axis in the dimensions of
+    a tensor, identified by the Axis and the number of its occurrence.
+
+    e.g. if a tensor has dimensions, (H, W, H), it has axis ids
+    (H[0], W[0], H[1]).
+
+    AxisIDs are used to disambiguate axes that recur in the dimensions of
+    tensors in a symbolic expression. This is particularly important in
+    dot products: if we wish to project a dimension into the same axis,
+    the weights will have a repeated axis. E.g. a projection H -> H with
+    weights of dimensions (H, H).
+
+    AxisIDs are identical if their axes and indices are the same.
+
+    Arguments:
+        axis: The axis in the AxisID.
+        idx: The number of the occurrence of the axis in the tensor.
+
+    Returns:
+        An AxisID.
+    """
 
     def __init__(self, axis, idx, **kwargs):
         assert isinstance(idx, int)
@@ -238,13 +329,14 @@ class AxisID(object):
 
 def no_duplicates(arr):
     """
-    TODO.
+    Returns whether there are duplicates in a list. The elements
+    of the list should be hashable.
 
     Arguments:
-      arr: TODO
+        arr: The list to check.
 
     Returns:
-
+        bool: True if there are no duplicates, False if there are.
     """
     s = set()
     for x in enumerate(arr):
@@ -255,7 +347,14 @@ def no_duplicates(arr):
 
 
 class Axes(object):
-    """TODO."""
+    """
+    An Axes is a tuple of Axis objects used as a label for a tensor's
+    dimensions.
+
+    The Axes class ensures that the tuple is represented in a cancnical form
+    (see canonicalize) and contains methods to select sub-lists of the Axes
+    that contain the dimensions of the training examples or features.
+    """
 
     def __init__(self, axes=None):
         if axes is None:
@@ -269,13 +368,20 @@ class Axes(object):
 
         def canonicalize(seq):
             """
-            TODO.
+            Converts the list to a canonical form in which FlattenAxis objects,
+            representing two logical axes that have been collapsed into one,
+            must contain one or more axes. In the conversion, we discard
+            flattened axes with no members and rename a flattened axis with
+            only one member to the axis it contains.
+
+            We also cast the sequence and its elements to the expected types
+            i.e. Axis and FlattenedAxis objects.
 
             Arguments:
-              seq: TODO
+              seq: The sequence to canonicalize.
 
             Returns:
-
+                A canonicalized Axis object.
             """
             elems = []
             for x in seq:
@@ -313,6 +419,14 @@ class Axes(object):
 
     @staticmethod
     def as_axes(axes):
+        """
+        Casts a sequence into an Axes object.
+
+        Arguments:
+            axes: The sequence to be interpreted as Axes.
+        Returns:
+            Axes
+        """
         if isinstance(axes, Axes):
             return axes
         elif isinstance(axes, AxisID):
@@ -321,36 +435,44 @@ class Axes(object):
 
     @property
     def full_lengths(self):
-        """TODO."""
+        """
+        Returns all information about the lengths of the axis objects
+        in this Axes in the form of a nested tuple. An element of the
+        outer tuple that is itself a tuple contains the restored lengths
+        of axes that have been flattened in this Axis object.
+
+        Returns:
+            tuple: A nested tuple with the axis lengths.
+        """
         return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
                      else x.length for x in self)
 
     @property
     def lengths(self):
         """
-
-        :return: The lengths of the axes.
+        Returns:
+            tuple: The lengths of the outer axes.
         """
         return tuple(x.length for x in self)
 
     def batch_axes(self):
         """
-
-        :return: The Axes subset that are batch axes.
+        Returns:
+            The Axes subset that are batch axes.
         """
         return Axes(axis for axis in self if axis.batch)
 
     def sample_axes(self):
         """
-
-        :return: The Axes subset that are not batch axes.
+        Returns:
+            The Axes subset that are not batch axes.
         """
         return Axes(axis for axis in self if not axis.batch)
 
     def recurrent_axes(self):
         """
-
-        :return: The Axes subset that are recurrent axes.
+        Returns:
+            The Axes subset that are recurrent axes.
         """
         return Axes(axis for axis in self if axis.recurrent)
 
@@ -396,25 +518,25 @@ class Axes(object):
 
     def concat(self, other):
         """
-        TODO.
+        Appends one Axes to another, keeping duplicates.
 
         Arguments:
-          other: TODO
+            other: The Axes object to concatanate to this one.
 
         Returns:
-
+            The concatenated axes.
         """
         return Axes(tuple(self) + tuple(other))
 
     def index(self, axis):
         """
-        TODO.
+        Returns the index of an axis in this sequence.
 
         Arguments:
-          axis: TODO
+            axis: The axis to search for.
 
         Returns:
-
+            The index.
         """
         return self._axes.index(axis)
 
@@ -428,7 +550,13 @@ class Axes(object):
         return size
 
     def as_axis_ids(self):
-        """TODO."""
+        """
+        Converts this sequence into axis ids, assigning indices by
+        the ordering of axes.
+
+        Returns:
+            An AxisIDTuple.
+        """
         m = collections.defaultdict(int)
         elems = []
 
@@ -440,25 +568,26 @@ class Axes(object):
         return AxisIDTuple(*elems)
 
     def __repr__(self):
-        s = 'Axes('
-        for x in self:
-            s += repr(x) + ','
-        s += ')'
-        return s
+        return 'Axes({})'.format(
+            ', '.join(map(repr, self))
+        )
 
 
-# func(agg, elem) -> agg
 def reduce_nested(elem, agg, func):
     """
-    TODO.
+    Reduces a nested sequence by applying a function to each
+    of its elements and returns an aggregation.
 
     Arguments:
-      elem: TODO
-      agg: TODO
-      func: TODO
+      elem: The object to be reduced, either a sequence
+        or a singleton.
+      agg: A variable holding information collected
+        as the sequence is collapsed.
+      func: A function to augment the aggregate by processing
+        a singleton. Should have the form func(agg, elem) -> agg
 
     Returns:
-
+        agg: The final aggregate returned by the function.
     """
     if isinstance(elem, collections.Iterable):
         for sub in elem:
@@ -470,24 +599,26 @@ def reduce_nested(elem, agg, func):
 
 def with_axes_as_axis_ids(f):
     """
-    TODO.
+    A decorator to convert Axes objects passed in as
+    arguments into AxisIDs.
 
     Arguments:
-      f: TODO
+        f: The function to be decorated
 
     Returns:
-
+        The decorated function.
     """
     @wraps(f)
     def wrapper(*args):
         """
-        TODO.
+        The decorated function. Performs the conversion
+        to AxisIDs.
 
         Arguments:
-          *args: TODO
+          *args: Arguments intended for the original function.
 
         Returns:
-
+            Return value of the original function.
         """
         new_args = []
         for a in args:
@@ -499,7 +630,13 @@ def with_axes_as_axis_ids(f):
 
 
 class AxisIDTuple(tuple):
-    """TODO."""
+    """
+    Contains a labelling of a tensor using AxisIDs the same way that
+    Axes contain a collection of Axis objects.
+
+    This class stores the labelling along with methods to manipulate
+    it, such as functions to add and subtract two tuples.
+    """
 
     def __new__(cls, *seq):
         if len(seq) > 0 and isinstance(seq[0], types.GeneratorType):
@@ -510,21 +647,24 @@ class AxisIDTuple(tuple):
         return tuple.__new__(cls, seq)
 
     def as_axes(self):
-        """TODO."""
+        """
+        Casts the tuple back to axes, dropping the indices.
+        """
         return Axes(x.axis for x in self)
 
     @staticmethod
     @with_axes_as_axis_ids
     def sub(at1, at2):
         """
-        TODO.
+        Returns the elements of at1 that are not in at2, in the order of
+        at1.
 
         Arguments:
-          at1: TODO
-          at2: TODO
+          at1: First operand.
+          at2: Second operand.
 
         Returns:
-
+            AxisIDTuple: The result.
         """
         assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
         return AxisIDTuple(_ for _ in at1 if _ not in at2)
@@ -533,14 +673,14 @@ class AxisIDTuple(tuple):
     @with_axes_as_axis_ids
     def intersect(at1, at2):
         """
-        TODO.
+        Returns elements of at1 that are in at at2, in the order of at1.
 
         Arguments:
-          at1: TODO
-          at2: TODO
+          at1: First operand.
+          at2: Second operand.
 
         Returns:
-
+            AxisIDTuple: The result.
         """
         assert isinstance(at1, AxisIDTuple) and isinstance(at2, AxisIDTuple)
         return AxisIDTuple(_ for _ in at1 if _ in at2)
@@ -549,13 +689,14 @@ class AxisIDTuple(tuple):
     @with_axes_as_axis_ids
     def append(*at_list):
         """
-        TODO.
+        Returns the union of the elements in each AxisIDtuple in at_list,
+        leaving out duplicate AxisIDs.
 
         Arguments:
-          *at_list: TODO
+          *at_list: A collection of operands.
 
         Returns:
-
+            AxisIDTuple: The result, ordered union of the operands.
         """
         assert all([isinstance(at, AxisIDTuple) for at in at_list])
         elems = []
@@ -569,14 +710,15 @@ class AxisIDTuple(tuple):
     @with_axes_as_axis_ids
     def find(subaxes, axes):
         """
-        TODO.
+        Attempts to locate a subsequence of AxisIDs in this tuple.
 
         Arguments:
-          subaxes: TODO
-          axes: TODO
+            subaxes: AxisIDTuple to search for.
+            axes: The superset of AxisIDs.
 
         Returns:
-
+            int: The index at which the subsequence subaxes occurs in
+            axes.
         """
         assert isinstance(subaxes, AxisIDTuple)\
             and isinstance(axes, AxisIDTuple)
@@ -614,11 +756,6 @@ class FlattenedAxis(Axis):
     A FlattenedAxis has length which is the product of the lengths of all
     Axis in the axes.  The original Axes object is stored so that we can later
     unflatten this Axis back to its original component Axis.
-
-    Arguments:
-
-    Returns:
-
     """
 
     def __init__(self, axes, **kwargs):
@@ -629,17 +766,26 @@ class FlattenedAxis(Axis):
 
     @property
     def empty(self):
-        """TODO."""
+        """
+        Returns:
+            Whether this axes contains no collapsed axes.
+        """
         return len(self.__axes) == 0
 
     @property
     def single(self):
-        """TODO."""
+        """
+        Returns:
+            Whether this axes contains exactly one collapsed axes.
+        """
         return len(self.__axes) == 1
 
     @property
     def axes(self):
-        """TODO."""
+        """
+        Returns:
+            The flattened axes contained in this object.
+        """
         return self.__axes
 
     def __repr__(self):
@@ -653,13 +799,14 @@ class FlattenedAxis(Axis):
 
 def reduce_strides(strides):
     """
-    TODO.
+    Reduces a nested tuple describing the strides of a tensor
+    into a tuple giving the stride of each of its dimensions.
 
     Arguments:
-      strides: TODO
+        strides: The nested tuple.
 
     Returns:
-
+        strides: The tuple of strides.
     """
     return tuple(int(reduce_nested(elem, float('inf'), min))
                  for elem in strides)
@@ -760,82 +907,72 @@ class TensorDescription(NameableValue):
     @property
     def parameter_key(self):
         """
-
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
-
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
     def try_guess_positions(self, new_axes):
         """
-        TODO.
+        Returns the index of each axis in new_axes as it is found in self.axes.
+        Only returns each index once.
+
+        If the same axis appears twice in either new_axes or self.axes, the
+        first occurrences will be paired, the second occurences will form a
+        pair, etc.
+
+        WARNING:
+        zach: so the function may do the wrong thing in some cases, but we
+            haven't figured out exactly which cases those are yet?
+        varun: Yes, it's computing by faith.
 
         Arguments:
-          new_axes: TODO
-
+            new_axes: The axes labelling the reshaped tensor.
         Returns:
-
+            The reshaped tensor.
         """
-        # Supports broadcast and combining one level of axes
-        # Does not support unrolling
-        old_poss = []
+        used_positions = set()
 
-        used_set = set()
-
-        def get_old_axis(new_axis):
+        def old_position(new_axis):
             """
-            TODO.
-
-            Arguments:
-              new_axis: TODO
-
-            Returns:
-
+            given an Axis returns the position in self.axes that matches
             """
             for i, axis in enumerate(self.axes):
-                if i not in used_set and axis == new_axis:
-                    used_set.add(i)
+                if i not in used_positions and axis == new_axis:
+                    used_positions.add(i)
                     return i
-            else:
-                return -1
 
-        for axis in new_axes:
-            old_pos = get_old_axis(axis)
-            if old_pos == -1 and isinstance(axis, FlattenedAxis):
-                poss = []
-                for sub in axis.axes:
-                    assert not isinstance(sub, FlattenedAxis)
-                    poss.append(get_old_axis(sub))
-                old_poss.append(tuple(poss))
-            else:
-                old_poss.append(old_pos)
-        return old_poss
+            # if we couldn't find an exact match and the axis we're looking for
+            # is a FlattenedAxis, look for the sub_axes of the FlattenedAxis
+            # instead.
+            if isinstance(new_axis, FlattenedAxis):
+                return tuple(map(old_position, new_axis.axes))
+
+            return -1
+
+        return [
+            old_position(axis) for axis in new_axes
+        ]
 
     def split_reduce_at(self, div_point):
         """
-        TODO.
+        Collapses a tensor description into two dimensions, flattening
+        the axes before and after the index div_point.
+
+        E.g. (C, D, E, F) with div_point 2 becomes ((C, D), (E, F)),
+        that is two flattened axes.
 
         Arguments:
-          div_point: TODO
+          div_point: The index at which we separate the axes.
 
         Returns:
-
+            The reshaped tensor description.
         """
         def pos_tup(lower, upper):
-            """
-            TODO.
-
-            Arguments:
-              lower: TODO
-              upper: TODO
-
-            Returns:
-
-            """
             if lower == upper - 1:
                 return lower
             else:
                 return tuple(range(lower, upper))
+
         if div_point == 0 or div_point == self.ndim:
             new_axes = Axes([FlattenedAxis(self.axes)])
             old_poss = (pos_tup(0, self.ndim),)
@@ -852,13 +989,20 @@ class TensorDescription(NameableValue):
 
     def dot_reaxe_left(self, red_axis_ids):
         """
-        TODO.
+        Reshapes a tensor so that it can be used in a two-dimensional
+        dot product, while matching correctly with our semantics.
+
+        Red_axis_ids contains the axis ids of the dimensions that will
+        be reduced in the dot product. We reshape the tensor so that these
+        dimensions are leftmost and then collapse the tensor into the two axes:
+        the first containing the axes to be preserved and the second with the
+        axes to be reduced.
 
         Arguments:
-          red_axis_ids: TODO
+            red_axis_ids: The axes to be reduced.
 
         Returns:
-
+            The tensor description to be used in the dot product.
         """
         old_axis_ids = self.axes.as_axis_ids()
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
@@ -868,37 +1012,30 @@ class TensorDescription(NameableValue):
         div_point = len(old_axis_ids) - len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    # This function is symmetric to dot_reaxe_left unless forward_axis
-    # ids is specified. It then attempts to rename the reduction axis using
-    # the mapping from the forward axis ids to the current axis ids.
-    # In the case of backpropagation, this helps preserve the axis id numbering
-    # of the original output, which is necessary if the derivative is to be
-    # projected onto the input correctly.
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         """
-        TODO.
+        See dot_reaxe_left. This function reshapes the second operand similarly.
+
+        This function is symmetric to dot_reaxe_left unless forward_axis ids is
+        specified. It then attempts to rename the reduction axis using the
+        mapping from the forward axis ids to the current axis ids.  In the case
+        of backpropagation, this helps preserve the axis id numbering of the
+        original output, which is necessary if the derivative is to be
+        projected onto the input correctly.
 
         Arguments:
-          red_axis_ids: TODO
-          forward_axis_ids: TODO
+            red_axis_ids: The axes to be reduced.
+            forward_axis_ids: If supplied, used to relabel the reduction axes so
+            that they compute the derivative correctly.
 
         Returns:
-
+            The tensor description to be used in the dot product.
         """
         old_axis_ids = self.axes.as_axis_ids()
         if forward_axis_ids:
             trans = dict(list(zip(forward_axis_ids, old_axis_ids)))
 
             def trans_func(x):
-                """
-                TODO.
-
-                Arguments:
-                  x: TODO
-
-                Returns:
-
-                """
                 if x in trans:
                     return trans[x]
                 else:
@@ -911,68 +1048,63 @@ class TensorDescription(NameableValue):
         div_point = len(red_axis_ids)
         return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
 
-    def reaxe(self, new_axes, broadcast=True):
+    def reaxe(self, new_axes):
         """
-        TODO.
+        Returns a new tensor description labelled by the axes in
+        new_axes. Ambiguities in the transposition are resolved by preserving
+        the order in the existing axes.
 
         Arguments:
-          new_axes: TODO
-          broadcast: TODO
+            new_axes: The new axes of the tensor.
 
         Returns:
-
+            A tensor description with the new axes.
         """
         new_axes = Axes(new_axes)
         old_poss = self.try_guess_positions(new_axes)
-        return self.reaxe_with_positions(new_axes, old_poss, broadcast)
+        return self.reaxe_with_positions(new_axes, old_poss)
 
-    def reaxe_with_axis_ids_positions(self, new_axis_id_tuple):
+    def reaxe_with_axis_ids(self, new_axis_id_tuple):
         """
-        TODO.
+        Returns a new tensor description labelled by the axes in
+        new_axis_id_tuple. Reaxing with axis ids may be more precise
+        than using axes as the indices supply additional information
+        about the transposition. E.g. in order to flip the dimensions
+        of a tensor with axes (H, H), we need to specify the new axes
+        by index, which we can do with the axis id tuple (H[1], H[0])
 
         Arguments:
-          new_axis_id_tuple: TODO
+            new_axis_id_tuple: The axes to label the new tensor description,
+            with indices corresponding to their occurrences in the current
+            tensor description.
 
         Returns:
-
+            The new tensor description.
         """
+        # This function does not allow any unrolling of axes
+        # The argument is a tuple of axis ids.
+        # The indices of the axis ids refer to the existing order of axes
         old_axis_ids = self.axes.as_axis_ids()
-
         old_poss = []
         for axis_id in new_axis_id_tuple:
             for i, old_axis_id in enumerate(old_axis_ids):
                 if axis_id == old_axis_id:
                     old_poss.append(i)
-        return old_poss
-
-    def reaxe_with_axis_ids(self, new_axis_id_tuple):
-        """
-        TODO.
-
-        Arguments:
-          new_axis_id_tuple: TODO
-
-        Returns:
-
-        """
-        # This function does not allow any unrolling of axes
-        # The argument is a tuple of axis ids.
-        # The indices of the axis ids refer to the existing order of axes
-        old_poss = self.reaxe_with_axis_ids_positions(new_axis_id_tuple)
         return self.reaxe_with_positions(new_axes=new_axis_id_tuple.as_axes(),
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
     def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
         """
-        TODO.
+        Returns a new tensor description in which this tensor is broadcasted
+        over a new dimension. The added axis has stride 0 and does not range
+        over any data.
 
         Arguments:
-          dummy_axis: TODO
-          dim: TODO
+            dummy_axis: The Axis object to be added.
+            dim: The position at which the axis should be added.
 
         Returns:
-
+            The new tensor description.
         """
         if dim == -1:
             dim = len(self.axes)
@@ -980,20 +1112,18 @@ class TensorDescription(NameableValue):
             .concat(Axes(dummy_axis,)).concat(self.axes[dim:])
         old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
-                                         old_poss=old_poss,
-                                         broadcast=True)
+                                         old_poss=old_poss)
 
-    def reaxe_with_positions(self, new_axes, old_poss, broadcast=True):
+    def reaxe_with_positions(self, new_axes, old_poss):
         """
-        TODO.
+        change axes to new_axes.  Use old_poss as hints to where in the
+        existing axes each new axis exists.
 
         Arguments:
-          new_axes: TODO
-          old_poss: TODO
-          broadcast: TODO
-
-        Returns:
-
+            new_axes Axes: The new axes for self.
+            old_poss: A list of integers representing the position of each axis
+                new_axes in the current axes.  Should be the same length as
+                new_axes.
         """
         assert len(new_axes) == len(old_poss)
 
@@ -1001,16 +1131,6 @@ class TensorDescription(NameableValue):
         full_strides = []
 
         def old_info(axis, old_pos):
-            """
-            TODO.
-
-            Arguments:
-              axis: TODO
-              old_pos: TODO
-
-            Returns:
-
-            """
             if old_pos == -1:
                 full_length = axis.axes.full_lengths\
                     if isinstance(axis, FlattenedAxis) else axis.length
@@ -1034,10 +1154,9 @@ class TensorDescription(NameableValue):
                 full_sizes.append(fsi)
                 full_strides.append(fst)
 
-        new_axes, full_strides, full_sizes\
-            = self.maybe_collapse_numerics(
-                new_axes, full_strides, full_sizes
-            )
+        new_axes, full_strides, full_sizes = self._maybe_collapse_numerics(
+            new_axes, full_strides, full_sizes
+        )
 
         return TensorDescription(new_axes,
                                  base=self.base,
@@ -1066,27 +1185,32 @@ class TensorDescription(NameableValue):
             offset=self.offset
         )
 
-    def maybe_collapse_numerics(self, axes, full_strides, full_sizes):
+    def _maybe_collapse_numerics(self, axes, full_strides, full_sizes):
         """
-        TODO.
+        When creating a tensor description with numeric axes, we do not want
+        to preserve nested axes, since they are no different from a top-level
+        axis of the same length. Instead, we evaluate the flattened axis's
+        length and use a single axis object.
+
 
         Arguments:
-          axes: TODO
-          full_strides: TODO
-          full_sizes: TODO
+          axes: The axes to analyse.
+          full_strides: The strides to analyse.
+          full_sizes: The sizes to analyse.
 
         Returns:
-
+            axes, full-strides, full-sizes with flattened numeric axes having
+            been evaluated.
         """
         def all_numeric(axes):
             """
-            TODO.
+            Checks whether a set of axes contains only numeric axes
 
             Arguments:
-              axes: TODO
+                axes: The axes to be checked.
 
             Returns:
-
+                True if there are only numeric axes, False otherwise
             """
             return all([isinstance(axis, NumericAxis) for axis in axes])
 
@@ -1111,8 +1235,11 @@ class TensorDescription(NameableValue):
         Return a tensor description for a slice view of this tensor.
 
         Arguments:
-          slices: TODO
-          new_axes: TODO
+            slices: The slices to take from the tensor, each of which is
+            either an integer or a python slice. If the input has too few
+            axes for the tensor, we assume that the entire axis should be
+            taken for dimensions towards the end of the tensor.
+            new_axes: the axes to use as labels for the sliced tensor.
 
         Returns:
             The tensor description for the slice.
@@ -1174,9 +1301,7 @@ class TensorDescription(NameableValue):
     @property
     def shape(self):
         """
-
         Returns: The shape of the tensor.
-
         """
         return self.axes.lengths
 
@@ -1218,13 +1343,12 @@ class TensorDescription(NameableValue):
     @buffer.setter
     def buffer(self, value):
         """
-        TODO.
+        Sets the backend-specific memory to be used by the tensor.
 
         Arguments:
-          value: TODO
+          value: the buffer to use
 
         Returns:
-
         """
         self.base.__buffer = value
 
@@ -1252,7 +1376,8 @@ class TensorDescription(NameableValue):
 
 def linear_map_axes(in_axes, out_axes):
     """
-    For tensors ``out = dot(T, in)`` determines the axes ``T`` must have.
+    For tensors ``out = dot(T, in)`` used in linear transformations
+    determines the axes ``T`` must have.
 
     Arguments:
       in_axes: The axes of ``in``.

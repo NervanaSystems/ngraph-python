@@ -176,9 +176,11 @@ class convolution(op_graph.TensorOp):
         filter_batch_axes = filter.axes.batch_axes()
         if filter_batch_axes:
             raise ValueError((
-                "filter_axes should not contain batch_axes.  Found "
-                "{filter_batch_axes}."
-            ).format(filter_batch_axes=filter_batch_axes))
+                "filter's axes should not contain any batch_axes.  Found "
+                "batch axes: {filter_batch_axes}."
+            ).format(
+                filter_batch_axes=', '.join(map(str, filter_batch_axes))
+            ))
 
     def transform(self, transformer, out, input, filter):
         """
@@ -190,4 +192,33 @@ class convolution(op_graph.TensorOp):
             input, filter, out,
             self._input_shape, self._filter_shape,
             self._padding, self._strides,
+        )
+
+    def generate_adjoints(self, adjoints, delta, input, filter):
+        """
+        warning: no adjoints computed for filter for now.
+        """
+
+        if any(stride != 1 for stride in self._strides):
+            raise ValueError((
+                'conv adjoints doesnt currently support non-one strides. '
+                'found: {}'
+            ).format(self._strides))
+
+        # TODO: delta has N in the axes, but convolution doesn't allow an N in
+        # the filter's axes.  Should there be a reduce before the convolution
+        # or after?  If after, how to get convolution to run inspite of N.
+        # filter.generate_add_delta(adjoints, convolution(input, delta))
+        input.generate_add_delta(
+            adjoints, convolution(
+                delta,
+                op_graph.Slice(filter, [
+                    slice(None, None, -1)
+                    for _ in range(len(filter.shape))
+                ]),
+                padding=[
+                    axis.length - 1 + padding
+                    for axis, padding in zip(filter.axes, self._padding)
+                ],
+            )
         )

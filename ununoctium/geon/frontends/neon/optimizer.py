@@ -167,13 +167,10 @@ class GradientDescentMomentum(Optimizer):
             for variable, grad, velocity in zip(variables, grads, velocities)]
 
         param_updates = [
-            be.assign(
-                lvalue=variable,
-                rvalue=variable +
-                velocity) for variable,
-            velocity in zip(
-                variables,
-                velocities)]
+            be.assign(lvalue=variable, rvalue=variable + velocity)
+            for variable, velocity in zip(variables, velocities)
+        ]
+
         return be.doall(velocity_updates + param_updates)
 
     def optimize(self, epoch):
