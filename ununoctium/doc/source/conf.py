@@ -283,7 +283,7 @@ intersphinx_mapping = {
 # These go in every file
 rst_epilog = """
 .. include :: <isonum.txt>
-.. |geon| replace:: graphiti
-.. |Geon| replace:: Graphiti
+.. |geon| replace:: nervana graph
+.. |Geon| replace:: Nervana graph
 .. |TF| replace:: TensorFlow\ |trade|
 """
