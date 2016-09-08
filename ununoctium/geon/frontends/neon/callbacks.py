@@ -54,7 +54,8 @@ class Callbacks(NervanaObject):
                  history=1,
                  model_file=None,
                  eval_set=None,
-                 metric=None):
+                 metric=None,
+                 log_token=None):
         """
         Create a callbacks container with the default callbacks.
 
