@@ -202,7 +202,8 @@ class Op(Node):
     def defs(self):
         """
         Returns:
-            Values invalidated by this Op.
+            For liveness analysis.  The storage associated with everything
+            in the returned list is modified when the Op is executed.
 
         """
         return [self]
@@ -463,6 +464,12 @@ class SetItem(Op):
 
     @property
     def defs(self):
+        """
+
+        Returns:
+            SetItem modifies the variable being set.
+
+        """
         return [self.args[0]]
 
 
@@ -975,6 +982,13 @@ class AllocationOp(TensorOp):
 
     @property
     def defs(self):
+        """
+
+        Returns:
+            AllocationOp is not executed, so its appearance in the instruction stream does
+            not affect liveness of its value.
+
+        """
         return []
 
     @property
@@ -2267,6 +2281,12 @@ class Function(Op):
 
     @property
     def defs(self):
+        """
+
+        Returns:
+            The cumulative invalidated storage for the op sequence.
+
+        """
         return self.__defs
 
     @property
