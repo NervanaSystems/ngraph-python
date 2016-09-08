@@ -33,12 +33,12 @@ The complete program is
 
 .. code-block:: python
 
-    import geon
+    import ng
 
-    x = geon.placeholder(axes=geon.Axes())
+    x = ng.placeholder(axes=ng.Axes())
     x_plus_one = x + 1
 
-    transformer = geon.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
 
     plus_one = transformer.computation(x_plus_one, x)
 
@@ -46,7 +46,7 @@ The complete program is
         print(plus_one(i))
 
 
-We begin by importing ``geon``, the Python module for the front end API.
+We begin by importing ``ng``, the Python module for the front end API.
 
 Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we call the
 parameter that receives the value of :math:`x` a ``placeholder``.  A placeholder has a tensor value, so we need
@@ -166,39 +166,39 @@ Our model has three placeholders, ``X``, ``Y``, and ``alpha``. Each placeholder 
 
 ``alpha`` is a scalar, so we pass in empty axes::
 
-    alpha = geon.placeholder(axes=geon.Axes())
+    alpha = ng.placeholder(axes=ng.Axes())
 
 ``X`` and ``Y`` have shape, which we provide to the placeholders. Our convention is to use the last axis for samples.  The placeholders can be specified as::
 
-    X = geon.placeholder(axes=geon.Axes([C, N]))  # input data has 4 features for each datapoint
-    Y = geon.placeholder(axes=geon.Axes([N]))
+    X = ng.placeholder(axes=ng.Axes([C, N]))  # input data has 4 features for each datapoint
+    Y = ng.placeholder(axes=ng.Axes([N]))
 
 We also need to specify the training weights, ``W``.  Unlike placeholders, ``W`` should retain its value from computation
 to computation (for example, across mini-batches of training).  Following |TF|, we call this a *Variable*.  We specify the variable with both an axes and also an initial value::
 
-    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+    W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
 
 Other than the axes, the syntax is the same as |TF|. The transformer's initialization function will initialize `W`
 to 0 after allocating storage.
 
 Now we can estimate :math:`y` and compute the average loss::
 
-    Y_hat = geon.sigmoid(geon.dot(W, X))
-    L = geon.cross_entropy_binary(Y_hat, Y) / geon.tensor_size(Y_hat)
+    Y_hat = ng.sigmoid(ng.dot(W, X))
+    L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
 Gradient descent requires computing the gradient, :math:`dL/dW`::
 
-    grad = geon.deriv(L, W)
+    grad = ng.deriv(L, W)
 
-The ``geon.deriv`` function computes the backprop computation using autodiff.
+The ``ng.deriv`` function computes the backprop computation using autodiff.
 
 We are almost done.  The update is the gradient descent operation::
 
-    update = geon.assign(W, W - alpha * grad / geon.tensor_size(Y_hat))
+    update = ng.assign(W, W - alpha * grad / ng.tensor_size(Y_hat))
 
 Now we create a transformer and define a computation. We pass the ops from which we want to retrieve the results for, followed by the placeholders::
 
-    transformer = geon.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
 
 Here, the computation will return three values for the ``L``, ``W``, and ``update``, given inputs to fill the placeholders.
@@ -243,24 +243,24 @@ When implementing front ends, the length of tensor axes, or even their dimension
 by converting the logistic regression example to using axes rather than specific lengths::
 
     import numpy as np
-    import geon
+    import ng
     import gendata
 
-    C = geon.Axis("C")
-    N = geon.Axis("N")
+    C = ng.Axis("C")
+    N = ng.Axis("N")
 
-    X = geon.placeholder(axes=geon.Axes([C, N]))
-    Y = geon.placeholder(axes=geon.Axes([N]))
-    alpha = geon.placeholder(axes=geon.Axes())
+    X = ng.placeholder(axes=ng.Axes([C, N]))
+    Y = ng.placeholder(axes=ng.Axes([N]))
+    alpha = ng.placeholder(axes=ng.Axes())
 
-    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+    W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
 
-    Y_hat = geon.sigmoid(geon.dot(W, X))
-    L = geon.cross_entropy_binary(Y_hat, Y, out_axes=geon.Axes())
+    Y_hat = ng.sigmoid(ng.dot(W, X))
+    L = ng.cross_entropy_binary(Y_hat, Y, out_axes=ng.Axes())
 
-    grad = geon.deriv(L, W)
+    grad = ng.deriv(L, W)
 
-    update = geon.assign(W, W - alpha * grad)
+    update = ng.assign(W, W - alpha * grad)
 
 Rather than ``C`` and ``N`` holding integers, they are now ``Axis`` objects of unspecified length.  Here, an ``Axis``
 is something like a variable for an axis length, but we will later see that an ``Axis`` is more like a type in
@@ -275,7 +275,7 @@ When we are ready to use our model, we specify the lengths for the axes we are u
     XS, YS = g.gen_data(N.length, 10)
     EVAL_XS, EVAL_YS = g.gen_data(N.length, 4)
 
-    transformer = geon.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
     eval_fun = transformer.computation(L, X, Y)
 
@@ -299,21 +299,21 @@ The complete program source can be found in :download:`../../examples/walk_throu
 
 We can add a bias :math:`b` to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This changes the model to::
 
-    W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
-    b = geon.Variable(axes=geon.Axes(), initial_value=0)
+    W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
+    b = ng.Variable(axes=ng.Axes(), initial_value=0)
 
-    Y_hat = geon.sigmoid(geon.dot(W, X) + b)
+    Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 
 Now we have two variables to update, ``W`` and ``b``.  However, all the updates are essentially the same, and
 we know that everything to be updated is a variable.  We can use the ``variables`` method to find all the
 trainable variables used in an ``Op``'s computation::
 
-    updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat))
+    updates = [ng.assign(v, v - alpha * ng.deriv(L, v) / ng.tensor_size(Y_hat))
                for v in L.variables()]
 
-    all_updates = geon.doall(updates)
+    all_updates = ng.doall(updates)
 
-The function ``geon.doall`` is a short-hand for ensuring that all the updates get run.  We can change the computation
+The function ``ng.doall`` is a short-hand for ensuring that all the updates get run.  We can change the computation
 and printing of results to::
 
     update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
@@ -337,11 +337,11 @@ The complete program source can be found in :download:`../../examples/walk_throu
 
 In this example, we begin by introducing a class, ``NameScope``, than can be useful for naming values::
 
-    ax = geon.NameScope(name="ax")
+    ax = ng.NameScope(name="ax")
 
-    ax.W = geon.Axis()
-    ax.H = geon.Axis()
-    ax.N = geon.Axis()
+    ax.W = ng.Axis()
+    ax.H = ng.Axis()
+    ax.N = ng.Axis()
 
 Many |geon| objects are ``NameableValue``s, which means they have a ``name`` attribute.  When a ``NameableValue``
 is assigned to a ``NameScope``'s attribute, the name of the ``NameableValue`` will be set.  Here, we give
@@ -355,16 +355,16 @@ samples within a batch.
 We are switching from a flat :math:`C`-dimensional featurespace to an :math:`W\times H` feature space.  The
 weights are now also a :math:`W\times H` tensor::
 
-    X = geon.placeholder(axes=geon.Axes([ax.W, ax.H, ax.N]))
-    Y = geon.placeholder(axes=geon.Axes([ax.N]))
-    alpha = geon.placeholder(axes=geon.Axes())
+    X = ng.placeholder(axes=ng.Axes([ax.W, ax.H, ax.N]))
+    Y = ng.placeholder(axes=ng.Axes([ax.N]))
+    alpha = ng.placeholder(axes=ng.Axes())
 
-    W = geon.Variable(axes=geon.Axes([ax.W, ax.H]), initial_value=0)
-    b = geon.Variable(axes=geon.Axes(), initial_value=0)
+    W = ng.Variable(axes=ng.Axes([ax.W, ax.H]), initial_value=0)
+    b = ng.Variable(axes=ng.Axes(), initial_value=0)
 
 The calculation remains::
 
-    Y_hat = geon.sigmoid(geon.dot(W, X) + b)
+    Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 
 What does it mean to ``dot`` tensors with axes?  The tensor ``dot`` operation has *reduction axes*, which
 defaults to the intersection of the axes.  Both arguments
@@ -387,4 +387,4 @@ The data generator is able to generate multi-dimensional data; it just reshapes:
     XS, YS = g.gen_data(ax.N.length, 10)
     EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
 
-Note: Some bugs in geon.dot and its derivative were discovered while making this example.  They are not fixed yet.
+Note: Some bugs in ng.dot and its derivative were discovered while making this example.  They are not fixed yet.

@@ -1,23 +1,23 @@
 from __future__ import division, print_function
 
-import geon
+import geon as ng
 import gendata
 
-C = geon.Axis("C")
-N = geon.Axis("N")
+C = ng.Axis("C")
+N = ng.Axis("N")
 
-X = geon.placeholder(axes=geon.Axes([C, N]))
-Y = geon.placeholder(axes=geon.Axes([N]))
-alpha = geon.placeholder(axes=geon.Axes())
+X = ng.placeholder(axes=ng.Axes([C, N]))
+Y = ng.placeholder(axes=ng.Axes([N]))
+alpha = ng.placeholder(axes=ng.Axes())
 
-W = geon.Variable(axes=geon.Axes([C]), initial_value=0)
+W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
 
-Y_hat = geon.sigmoid(geon.dot(W, X))
-L = geon.cross_entropy_binary(Y_hat, Y) / geon.tensor_size(Y_hat)
+Y_hat = ng.sigmoid(ng.dot(W, X))
+L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
-grad = geon.deriv(L, W)
+grad = ng.deriv(L, W)
 
-update = geon.assign(W, W - alpha * grad)
+update = ng.assign(W, W - alpha * grad)
 
 C.length = 4
 N.length = 128
@@ -26,7 +26,7 @@ g = gendata.MixtureGenerator([.5, .5], C.length)
 XS, YS = g.gen_data(N.length, 10)
 EVAL_XS, EVAL_YS = g.gen_data(N.length, 4)
 
-transformer = geon.NumPyTransformer()
+transformer = ng.NumPyTransformer()
 update_fun = transformer.computation([L, W, update], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)
 
