@@ -16,19 +16,18 @@
 """
 This script illustrates how to convert a pre-trained TF model to Neon and perform
 inference with the model on new data.
-
 TODO: load meta info from TF's MetaGraph including details about dataset,
       training epochs and etc
 """
 
-from __future__ import division, print_function
+from __future__ import print_function, division
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import numpy as np
-import ngraph as be
+import geon as be
 from util.importer import TensorFlowImporter
-import ngraph.analysis as an
+import geon.analysis as an
 
 # args and environment
 parser = NeonArgparser(__doc__)

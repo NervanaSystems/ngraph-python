@@ -16,27 +16,22 @@
 """
 This script illustrates how to import a model that was defined by a TF script and
 train the model from scratch with Neon following the original script's specification.
-
 To Run:
-
     python train_mnist_mlp.py --loss_node="xentropy_mean"
-
 TODO: load meta info from TF's MetaGraph, including details about dataset,
       training epochs and etc
 TODO: pass the inference computation graph only without provide the last node
       for inference (in eval_test())
 TODO: infer_node: should determine automatically or receive as arg parameter
-
 """
 
-from __future__ import division, print_function
+from __future__ import print_function, division
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 from util.importer import TensorFlowImporter
 
-import ngraph as ng
+import geon as be
 import numpy as np
-import sys
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -86,7 +81,7 @@ def train_mnist_mlp():
 
     # init computation
     init_comp = None
-    transformer = ng.NumPyTransformer()
+    transformer = be.NumPyTransformer()
     if tf_importer.init_op is not None:
         init_comp = transformer.computation([tf_importer.init_op])
 

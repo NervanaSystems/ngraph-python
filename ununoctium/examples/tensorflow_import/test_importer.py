@@ -42,6 +42,7 @@ def test_create_nervana_graph(pb_file, execute=False):
         result = comp()
         print(result)
 
+
 test_create_nervana_graph("sample/constant_graph.pb", True)
 test_create_nervana_graph("sample/variable_graph_froze.pb", False)
 test_create_nervana_graph("sample/variable_graph.pb", True)

@@ -48,6 +48,6 @@ neon/backends/kernels/dump
 *.pb
 *.ckpt
 *.ckpt.meta
-tf_benchmark/mnist/data
-tf_benchmark/mnist/checkpoint
+**/mnist/data
+**/mnist/checkpoint
 

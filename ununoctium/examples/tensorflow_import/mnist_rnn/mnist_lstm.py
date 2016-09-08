@@ -1,3 +1,5 @@
+# flake8: noqa
+
 '''
 A Reccurent Neural Network (LSTM) implementation example using TensorFlow library.
 This example is using the MNIST database of handwritten digits (http://yann.lecun.com/exdb/mnist/)

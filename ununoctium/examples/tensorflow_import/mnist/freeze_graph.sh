@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 python ../freeze_graph.py \
   --input_graph=graph.pb.txt \
   --input_checkpoint=model.ckpt \
