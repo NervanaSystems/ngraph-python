@@ -795,6 +795,7 @@ def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     be.NumPyTransformer().initialize()
 
+
 def test_elementwise_broadcast_with_1_numeric():
     delta = .001
     C = be.NumericAxis(2)
