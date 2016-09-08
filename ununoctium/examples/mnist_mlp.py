@@ -41,7 +41,9 @@ Examples:
         the values stored in the checkpoint file named checkpoint.pkl.
 
 """
-from geon.frontends.neon import *  # noqa
+import numpy as np
+from geon.frontends.neon import ax, Axes, Affine, Rectlin, Logistic, GeneralizedCost,\
+    CrossEntropyBinary, Misclassification, GradientDescentMomentum, Model, Callbacks
 from neon.data import MNIST
 from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
