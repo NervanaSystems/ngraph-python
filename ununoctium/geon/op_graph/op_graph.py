@@ -47,6 +47,8 @@ class Op(Node):
     Arguments:
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
+        graph_label_type: A label that should be used when drawing the graph.  Defaults to
+            the class name.
         initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
@@ -57,6 +59,7 @@ class Op(Node):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
+        graph_label_type: A label that should be used when drawing the graph.
         initializers (list): Additional Ops to run before this Op is run the first time.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
@@ -98,8 +101,14 @@ class Op(Node):
                  persistent=False,
                  reference=False,
                  trainable=False,
+                 graph_label_type=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
+
+        if graph_label_type is None:
+            graph_label_type = self.__class__.__name__
+        self.graph_label_type = graph_label_type
+
         self.schemas = []
         self._adjoints = None
         self.const = const
@@ -114,7 +123,6 @@ class Op(Node):
             ops.append(self)
         self.style = {}
         self.ops = []
-        self.defs = set()
 
     @property
     def assignable(self):
@@ -123,7 +131,12 @@ class Op(Node):
         Returns: True if the tensor can be assigned to.
 
         """
-        return False
+        return not self.constant
+
+    @property
+    def graph_label(self):
+        """The label used for drawings of the graph."""
+        return "{}[{}]".format(self.graph_label_type, self.name)
 
     @property
     def scalar(self):
@@ -138,6 +151,15 @@ class Op(Node):
 
         """
         return self.__persistent or self.reference
+
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            True if the Op executes on the device.
+        """
+        return True
 
     @persistent.setter
     def persistent(self, value):
@@ -175,6 +197,16 @@ class Op(Node):
                 schema.generate_adjoints(adjoints, adjoint, self)
             # Replace generate_adjoints for self
             self.generate_adjoints = generate_adjoints
+
+    @property
+    def defs(self):
+        """
+        Returns:
+            For liveness analysis.  The storage associated with everything
+            in the returned list is modified when the Op is executed.
+
+        """
+        return [self]
 
     def find_schema(self, t):
         """
@@ -365,7 +397,11 @@ class Op(Node):
         return list(tensor_descriptions(self.args))
 
     def __repr__(self):
-        return '<{cl}:{id}>'.format(cl=self.__class__.__name__, id=id(self))
+        return '<{cl}({gl}):{id}>'.format(
+            cl=self.__class__.__name__,
+            gl=self.graph_label_type,
+            id=id(self)
+        )
 
 
 class InitTensor(Op):
@@ -384,6 +420,15 @@ class InitTensor(Op):
     def __init__(self, tensor, valfun, **kwargs):
         super(InitTensor, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
+
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is run from the CPU.
+        """
+        return False
 
 
 class SetItem(Op):
@@ -418,6 +463,16 @@ class SetItem(Op):
         tensor, val = tensor_descriptions(self.args)
         return [tensor, val.reaxe(tensor.axes)]
 
+    @property
+    def defs(self):
+        """
+
+        Returns:
+            SetItem modifies the variable being set.
+
+        """
+        return [self.args[0]]
+
 
 class doall(Op):
     """
@@ -433,6 +488,15 @@ class doall(Op):
 
     def call_info(self):
         return []
+
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is handled by the transformer.
+        """
+        return False
 
 
 class Fill(Op):
@@ -692,6 +756,15 @@ class AxesCastOp(TensorOp):
             axes=x.axes
         ))
 
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is handled by the transformer.
+        """
+        return False
+
 
 class Broadcast(TensorOp):
     """Used to add additional axes for a returned derivative."""
@@ -711,6 +784,16 @@ class Broadcast(TensorOp):
         """
         td, = tensor_descriptions(self.args)
         return td.reaxe(self.axes)
+
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is handled by the transformer.
+
+        """
+        return False
 
 
 class ExpandDims(TensorOp):
@@ -751,6 +834,16 @@ class ExpandDims(TensorOp):
             adjoints,
             sum(delta, reduction_axes=Axes(self.axis,))
         )
+
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is handled by the transformer.
+
+        """
+        return False
 
 
 class Slice(TensorOp):
@@ -822,6 +915,16 @@ class Slice(TensorOp):
             Unslice(delta, self.slices, axes=x.axes)
         )
 
+    @property
+    def device_op(self):
+        """
+
+        Returns:
+            False, because this is handled by the transformer.
+
+        """
+        return False
+
 
 def slice_along_axis(x, axis, idx):
     """
@@ -853,11 +956,8 @@ class AllocationOp(TensorOp):
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
             value.
-        graph_label_type: A label that should be used when drawing the graph.  Defaults to
-            the class name.
 
     Attributes:
-        graph_label_type (str): Label used for the Op when drawing the graph.
         input (bool): The storage is used as an input.
     """
 
@@ -865,16 +965,12 @@ class AllocationOp(TensorOp):
             self,
             init=None,
             initial_value=None,
-            graph_label_type=None,
             input=False,
             persistent=False,
             **kwargs):
         if input:
             persistent = True
         super(AllocationOp, self).__init__(persistent=persistent, **kwargs)
-        if graph_label_type is None:
-            graph_label_type = self.__class__.__name__
-        self.graph_label_type = graph_label_type
         self.input = input
 
         if init is not None:
@@ -886,25 +982,25 @@ class AllocationOp(TensorOp):
             self.initializers.append(assign(self, initial_value))
 
     @property
-    def assignable(self):
+    def defs(self):
         """
-        True if the tensor can be assigned to.
 
-        Returns: True if not constant.
+        Returns:
+            AllocationOp is not executed, so its appearance in the instruction stream does
+            not affect liveness of its value.
 
         """
-        return not self.constant
+        return []
 
     @property
-    def graph_label(self):
-        return "{}[{}]".format(self.graph_label_type, self.name)
+    def device_op(self):
+        """
 
-    def __repr__(self):
-        return '<{cl}({gl}):{id}>'.format(
-            cl=self.__class__.__name__,
-            gl=self.graph_label_type,
-            id=id(self)
-        )
+        Returns:
+            False, because this is handled by the transformer.
+
+        """
+        return False
 
 
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
@@ -1055,25 +1151,7 @@ def Variable(trainable=True, graph_label_type="Variable", **kwargs):
                         trainable=trainable, **kwargs)
 
 
-class ComputationOp(TensorOp):
-    """
-    A ComputationOp is a Tensor result of some sort of operation.
-    """
-
-    def __init__(self, **kwargs):
-        super(ComputationOp, self).__init__(**kwargs)
-
-        for arg in self.args:
-            arg.users.add(self)
-        self.defs = {self}
-
-    @property
-    def graph_label(self):
-        """TODO."""
-        return self.__class__.__name__ + '[' + self.name + ']'
-
-
-class Stack(ComputationOp):
+class Stack(TensorOp):
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
@@ -1091,7 +1169,7 @@ class Stack(ComputationOp):
             )
 
 
-class Unslice(ComputationOp):
+class Unslice(TensorOp):
     """
     A computation to reverse a slicing operation.
     Primarily used internally to implement expansions of tensors
@@ -1183,7 +1261,7 @@ class RNG(object):
         return val
 
 
-class ElementWise(ComputationOp):
+class ElementWise(TensorOp):
     """TODO."""
 
     def __init__(self, args, **kwargs):
@@ -1211,7 +1289,7 @@ class ElementWise(ComputationOp):
         return [arg.reaxe(self.axes) for arg in tensor_descriptions(self.args)]
 
 
-class AllReduce(ElementWise):
+class AllReduce(Op):
     """TODO."""
 
     def __init__(self, x, **kwargs):
@@ -1262,7 +1340,7 @@ class add(ElementWise):
         y.generate_add_delta(adjoints, delta)
 
 
-class argmax(ComputationOp):
+class argmax(TensorOp):
     """TODO."""
 
     def __init__(self, x, max_axes=None, **kwargs):
@@ -1290,7 +1368,7 @@ class argmax(ComputationOp):
         return [x.reaxe(self.max_axes + self.axes)]
 
 
-class argmin(ComputationOp):
+class argmin(TensorOp):
     """TODO."""
 
     def __init__(self, x, min_axes=None, **kwargs):
@@ -1362,7 +1440,7 @@ class divide(ElementWise):
         y.generate_add_delta(adjoints, -delta * self / y)
 
 
-class dot(ComputationOp):
+class dot(TensorOp):
     """TODO."""
 
     def __init__(self, x, y,
@@ -1576,7 +1654,7 @@ def softmax(x, normalization_axes=None, **kwargs):
     return result
 
 
-class ReductionOp(ComputationOp):
+class ReductionOp(TensorOp):
     """
     Handles shared behaviour of computations that aggregate their inputs
     over some dimensions, e.g. sum, max.
@@ -1719,7 +1797,7 @@ def assign(lvalue, rvalue, **kwargs):
     return SetItem(lvalue, (), rvalue, **kwargs)
 
 
-class tensor_size(ComputationOp):
+class tensor_size(TensorOp):
     """
     A scalar returning the total size of a tensor.
     Arguments:
@@ -1728,7 +1806,6 @@ class tensor_size(ComputationOp):
             of these axes instead.
         kwargs: options, including name
     """
-
     def __init__(self, x, reduction_axes=None, **kwargs):
         if reduction_axes is None:
             reduction_axes = x.axes
@@ -1970,7 +2047,7 @@ class negative(ElementWise):
         x.generate_add_delta(adjoints, -delta)
 
 
-class onehot(ComputationOp):
+class onehot(TensorOp):
     """TODO."""
 
     def __init__(self, x, axis=None, axes=None, **kwargs):
@@ -2211,14 +2288,24 @@ class Function(Op):
         args, defs = set(), set()
         for op in self.instructions:
             # Kernel defines the def of each operation
-            defs |= set([op])
+            defs.add(op)
             # Kernel uses the args of each operation
             # except whatever is being defined
             args |= set(op.args) - defs
         self.args = args
-        self.defs = defs
+        self.__defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
+
+    @property
+    def defs(self):
+        """
+
+        Returns:
+            The cumulative invalidated storage for the op sequence.
+
+        """
+        return self.__defs
 
     @property
     def inputs(self):
