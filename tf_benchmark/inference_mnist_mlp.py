@@ -27,7 +27,7 @@ from neon.util.argparser import NeonArgparser
 
 import numpy as np
 import geon as be
-from util.importer import create_nervana_graph
+from util.importer import TensorFlowImporter
 import geon.analysis as an
 
 # args and environment
@@ -44,25 +44,25 @@ def inference_mnist_mlp():
     test_data = mnist_data['valid']
 
     # build graph
-    frontend_model = create_nervana_graph(args.pb_file)
+    tf_importer = TensorFlowImporter(args.pb_file)
 
     # init transformer
     transformer = be.NumPyTransformer()
-    infer_computation = transformer.computation(frontend_model.last_op,
-                                                frontend_model.x)
+    infer_computation = transformer.computation(tf_importer.last_op,
+                                                tf_importer.x)
 
     # set ups
     total_error = 0
     total_num_samples = 0
 
     # visualize
-    dataflow = an.DataFlowGraph(transformer, [frontend_model.last_op])
-    dataflow.render('dataflow.gv')
+    dataflow = an.DataFlowGraph(transformer, [tf_importer.last_op])
+    # dataflow.render('dataflow.gv')
     fused = an.KernelFlowGraph(dataflow, fusible=an.gpu_fusible)
-    fused.render('fused-dataflow.gv')
+    # fused.render('fused-dataflow.gv')
     interference = an.InterferenceGraph(fused.liveness())
     interference.color()
-    interference.render('interference.gv')
+    # interference.render('interference.gv')
 
     for batch_idx, (x_raw, y_raw) in enumerate(test_data):
         # increment total number of samples
