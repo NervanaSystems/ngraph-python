@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 from geon.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
-    GeneralizedCost, GradientDescentMomentum, ImageLoader, Misclassification, Model,\
+    GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
     NeonArgparser, Rectlin, Softmax, Uniform
 
 from neon.data import CIFAR10
