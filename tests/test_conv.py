@@ -16,10 +16,10 @@
 import numpy as np
 # import pytest
 
-import geon as be
-from geon.op_graph import arrayaxes
-import geon.frontends.base.axis as ax
-from geon.util.utils import executor
+import nervanagraph as ng
+from nervanagraph.op_graph import arrayaxes
+import nervanagraph.frontends.base.axis as ax
+from nervanagraph.util.utils import executor
 
 
 def test_constant_tensor_convolution_fprop():
@@ -37,14 +37,14 @@ def test_constant_tensor_convolution_fprop():
     input_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.N])
     filter_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.Cout])
 
-    input = be.Constant(
+    input = ng.Constant(
         np.ones(input_axes.lengths, dtype='float32'), axes=input_axes,
     )
-    filter = be.Constant(
+    filter = ng.Constant(
         np.ones(filter_axes.lengths, dtype='float32'), axes=filter_axes,
     )
 
-    output = be.convolution(input, filter)
+    output = ng.convolution(input, filter)
 
     result = executor(output)()
     assert np.allclose(result, [[[8.0]]])
@@ -67,9 +67,9 @@ def test_constant_tensor_convolution_deriv():
     input_axes = arrayaxes.Axes([ax.C, ax.H, ax.W, ax.N])
     filter_axes = arrayaxes.Axes([ax.C, ax.FilterH, ax.FilterW, ax.Cout])
 
-    input = be.Variable(axes=input_axes)
-    filter = be.Variable(axes=filter_axes)
+    input = ng.Variable(axes=input_axes)
+    filter = ng.Variable(axes=filter_axes)
 
-    output = be.convolution(input, filter, padding=[1, 1, 1, 1])
+    output = ng.convolution(input, filter, padding=[1, 1, 1, 1])
 
-    be.deriv(output, input)
+    ng.deriv(output, input)

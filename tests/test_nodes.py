@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.util import nodes
+from nervanagraph.util import nodes
 
 
 def test_bytes_tags():

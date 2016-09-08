@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 from builtins import range
 
-import geon.util.names as names
-from geon.op_graph import arrayaxes
+import nervanagraph.util.names as names
+from nervanagraph.op_graph import arrayaxes
 
 # Make some axes
 ax = names.NameScope()

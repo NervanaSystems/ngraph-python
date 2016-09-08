@@ -15,10 +15,10 @@
 from builtins import range
 import numpy as np
 import random
-import geon as be
-import geon.frontends.base.axis as ax
-from geon.util.utils import raise_all_numpy_errors
-from geon.util.utils import ExecutorFactory, executor
+import nervanagraph as ng
+import nervanagraph.frontends.base.axis as ax
+from nervanagraph.util.utils import raise_all_numpy_errors
+from nervanagraph.util.utils import ExecutorFactory, executor
 
 """
 Test graphiti's implementation of the dot product.
@@ -84,10 +84,10 @@ def graphiti_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (be.Axis(name='axis%s' % i, length=l),)
-    np_tensor = be.Constant(np_array, axes=axes)
-    var = be.Variable(axes=axes, initial_value=np_tensor)
-    return executor(be.sqrt(be.dot(var, var)))()
+        axes +=  ng.Axis(name='axis%s' % i, length=l),)
+    np_tensor = ng.Constant(np_array, axes=axes)
+    var = ng.Variable(axes=axes, initial_value=np_tensor)
+    return executor ng.sqrt ng.dot(var, var)))()
 
 
 @raise_all_numpy_errors
@@ -112,15 +112,15 @@ def test_dot_sum_backprop():
     ax.C.length = 2
     ax.N.length = 3
     ax.N.batch = True
-    x_axes, y_axes = be.Axes((ax.C, ax.N)), be.Axes((ax.C,))
+    x_axes, y_axes = ng.Axes((ax.C, ax.N)), ng.Axes((ax.C,))
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
     expected_output = np.sum(x_np.T.dot(y_np))
 
-    x = be.placeholder(axes=x_axes)
-    y = be.placeholder(axes=y_axes)
-    d = be.dot(x, y)
-    s = be.sum(d, out_axes=())
+    x = ng.placeholder(axes=x_axes)
+    y = ng.placeholder(axes=y_axes)
+    d = ng.dot(x, y)
+    s = ng.sum(d, out_axes=())
 
     ex = ExecutorFactory()
     evaluated_fun = ex.executor(s, x, y)
@@ -206,13 +206,13 @@ def test_tensor_dot_tensor():
             axis.length = length
 
         # set up tensors
-        tensor1 = be.placeholder(axes=test['tensor1_axes'])
+        tensor1 = ng.placeholder(axes=test['tensor1_axes'])
         value1 = np.array(
             test['tensor1'], dtype=np.float32
         )
 
         if 'tensor2' in test:
-            tensor2 = be.placeholder(axes=test['tensor2_axes'])
+            tensor2 = ng.placeholder(axes=test['tensor2_axes'])
             value2 = np.array(
                 test['tensor2'], dtype=np.float32
             )
@@ -224,7 +224,7 @@ def test_tensor_dot_tensor():
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
         ex = ExecutorFactory()
-        dot = be.dot(tensor1, tensor2)
+        dot = ng.dot(tensor1, tensor2)
         evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
         numeric_deriv_fun1 = ex.numeric_derivative(dot, tensor1, delta, tensor2)

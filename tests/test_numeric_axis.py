@@ -14,20 +14,20 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 
-import geon as be
-from geon.util.utils import executor
+import nervanagraph as ng
+from nervanagraph.util.utils import executor
 
 
 def test_dot_with_numerics():
     """TODO."""
-    ax1 = be.NumericAxis(2)
-    ax2 = be.NumericAxis(2)
-    axes = be.Axes([ax1, ax2])
+    ax1 = ng.NumericAxis(2)
+    ax2 = ng.NumericAxis(2)
+    axes = ng.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
-    x = be.Constant(x_np, axes=axes)
+    x = ng.Constant(x_np, axes=axes)
 
-    d = be.dot(x, x, numpy_matching=True)
+    d = ng.dot(x, x, numpy_matching=True)
     d_val = executor(d)()
 
     assert np.array_equal(d_val, np.dot(x_np, x_np))
@@ -35,14 +35,14 @@ def test_dot_with_numerics():
 
 def test_expand_dims():
     """TODO."""
-    ax1 = be.NumericAxis(2)
-    ax2 = be.NumericAxis(2)
-    axes = be.Axes([ax1, ax2])
+    ax1 = ng.NumericAxis(2)
+    ax2 = ng.NumericAxis(2)
+    axes = ng.Axes([ax1, ax2])
 
     x_np = np.array([[1, 2], [1, 2]], dtype='float32')
-    x = be.Constant(x_np, axes=axes)
+    x = ng.Constant(x_np, axes=axes)
 
-    x1 = be.ExpandDims(x, ax1, 0)
+    x1 = ng.ExpandDims(x, ax1, 0)
     x1_val = executor(x1)()
     for i in range(ax1.length):
         assert np.array_equal(x1_val[i], x_np)

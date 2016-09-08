@@ -14,29 +14,29 @@
 # ----------------------------------------------------------------------------
 import pytest
 
-import geon as be
+import nervanagraph as ng
 import numpy as np
 from geon.util.utils import executor
 
 
 def test_evalutaion_twice():
     """Test executing a computation graph twice on a one layer MLP."""
-    x = be.Constant(
+    x = ng.Constant(
         np.array([[1, 2], [3, 4]], dtype='float32'),
-        axes=be.Axes([be.NumericAxis(2), be.NumericAxis(2)])
+        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(2)])
     )
 
-    hidden1_weights = be.Constant(
+    hidden1_weights = ng.Constant(
         np.array([[1], [1]], dtype='float32'),
-        axes=be.Axes([be.NumericAxis(2), be.NumericAxis(1)])
+        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(1)])
     )
 
-    hidden1_biases = be.Constant(
+    hidden1_biases = ng.Constant(
         np.array([[2], [2]], dtype='float32'),
-        axes=be.Axes([be.NumericAxis(2), be.NumericAxis(1)])
+        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(1)])
     )
 
-    hidden1 = be.dot(x, hidden1_weights) + hidden1_biases
+    hidden1 = ng.dot(x, hidden1_weights) + hidden1_biases
 
     comp = executor(hidden1)
 
@@ -50,10 +50,10 @@ def test_missing_arguments_to_execute():
     Expect a failure if the wrong number of arguments are passed to a
     computation.
     """
-    N = be.Axis(1)
+    N = ng.Axis(1)
 
-    x = be.placeholder(axes=[N])
-    y = be.placeholder(axes=[N])
+    x = ng.placeholder(axes=[N])
+    y = ng.placeholder(axes=[N])
 
     f = executor(x + y, x, y)
     with pytest.raises(ValueError):
@@ -65,10 +65,10 @@ def test_execute_non_placeholder():
     Expect a failure if a non-input (Variable) is used as an argument to
     executor.
     """
-    N = be.Axis(1)
+    N = ng.Axis(1)
 
-    x = be.Variable(axes=[N])
-    y = be.Variable(axes=[N])
+    x = ng.Variable(axes=[N])
+    y = ng.Variable(axes=[N])
 
     with pytest.raises(ValueError):
         executor(x + y, x, y)

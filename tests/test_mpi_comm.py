@@ -22,7 +22,7 @@ import os
 """
 Test the usage of transformer.allreduce
 """
-from geon.transformers.argon.mpihandle import MPIHandle
+from nervanagraph.transformers.argon.mpihandle import MPIHandle
 
 
 def test_mpi_allreduce():

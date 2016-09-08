@@ -15,10 +15,10 @@
 import pytest
 import numpy as np
 
-from geon.util.utils import ExecutorFactory
-import geon as be
-import geon.frontends.base.axis as ax
-from geon.op_graph import arrayaxes
+from nervanagraph.util.utils import ExecutorFactory
+import nervanagraph as ng
+import nervanagraph.frontends.base.axis as ax
+from nervanagraph.op_graph import arrayaxes
 
 
 delta = 1e-3
@@ -60,9 +60,9 @@ def test_expand_dims():
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = be.placeholder(axes=be.Axes(tensor_axes))
+                tensor = ng.placeholder(axes=ng.Axes(tensor_axes))
 
-                expanded = be.ExpandDims(tensor, new_axis, dim)
+                expanded = ng.ExpandDims(tensor, new_axis, dim)
                 expander_fun = ex.executor(expanded, tensor)
 
                 num_deriv_fun = ex.numeric_derivative(expanded, tensor, delta)
@@ -152,13 +152,13 @@ def test_slice():
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = be.placeholder(axes=be.Axes(tensor_axes))
+        tensor = ng.placeholder(axes=ng.Axes(tensor_axes))
         expected = np.array(test['expected'], dtype='float32')
 
         s = test['slice']
         s_axes = test['sliced_axes']
 
-        sliced = be.Slice(tensor, s, s_axes)
+        sliced = ng.Slice(tensor, s, s_axes)
         sliced_val_fun = ex.executor(sliced, tensor)
 
         num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
@@ -203,10 +203,10 @@ def test_padding():
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = be.placeholder(axes=be.Axes(tensor_axes))
+        tensor = ng.placeholder(axes=ng.Axes(tensor_axes))
         padding = test['padding']
         padded_axes = test['padded_axes']
-        padded = be.pad(tensor, padding, padded_axes)
+        padded = ng.pad(tensor, padding, padded_axes)
         computed_val_fun = ex.executor(padded, tensor)
 
         # Test backpropagation
@@ -244,7 +244,7 @@ def test_axes_cast():
     ax.C.length = 2
     ax.D.length = 3
 
-    x = be.placeholder(axes=(ax.C, ax.D))
+    x = ng.placeholder(axes=(ax.C, ax.D))
 
     x_slice = x[1, :]
     # Cast back to known axes

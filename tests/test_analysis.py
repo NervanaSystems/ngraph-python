@@ -20,9 +20,9 @@ from __future__ import print_function
 
 from builtins import range, zip
 
-import geon.analysis as an
-import geon.frontends.base.axis as ax
-import geon as be
+import nervanagraph.analysis as an
+import nervanagraph.frontends.base.axis as ax
+import nervanagraph as ng
 
 
 def build_graphs(L, BS):
@@ -41,18 +41,18 @@ def build_graphs(L, BS):
     BS = ax.Axis(length=BS, name='BS')
 
     # Builds Network
-    activations = [be.tanh for i in range(len(L) - 2)] + [be.softmax]
-    X = be.placeholder(axes=(L[0], BS), name='X')
-    Y = be.placeholder(axes=(L[-1],), name='Y')
-    W = [be.Variable(axes=(L_np1, L_n), name='W%d' % i)
+    activations = [ng.tanh for i in range(len(L) - 2)] + [ng.softmax]
+    X = ng.placeholder(axes=(L[0], BS), name='X')
+    Y = ng.placeholder(axes=(L[-1],), name='Y')
+    W = [ng.Variable(axes=(L_np1, L_n), name='W%d' % i)
          for i, (L_np1, L_n) in enumerate(zip(L[1:], L[:-1]))]
     A = []
     for i, f in enumerate(activations):
         Aim1 = A[i - 1] if i > 0 else X
-        A.append(f(be.dot(W[i], Aim1)))
-    Error = be.cross_entropy_multi(A[-1], Y)
-    dW = [be.deriv(Error, w) for w in W]
-    transformer = be.NumPyTransformer()
+        A.append(f(ng.dot(W[i], Aim1)))
+    Error = ng.cross_entropy_multi(A[-1], Y)
+    dW = [ng.deriv(Error, w) for w in W]
+    transformer = ng.NumPyTransformer()
     dfg = an.DataFlowGraph(transformer, dW)
     ifg = an.InterferenceGraph(dfg.liveness())
     return dfg, ifg

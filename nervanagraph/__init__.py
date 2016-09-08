@@ -15,14 +15,14 @@
 
 from __future__ import print_function
 
-import geon.dataloader.dataloaderbackend
-from geon.op_graph.arrayaxes import *
-from geon.op_graph.convolution import convolution
-from geon.op_graph.op_graph import *
-from geon.transformers.nptransform import NumPyTransformer
-from geon.util.names import *
+import nervanagraph.dataloader.dataloaderbackend
+from nervanagraph.op_graph.arrayaxes import *
+from nervanagraph.op_graph.convolution import convolution
+from nervanagraph.op_graph.op_graph import *
+from nervanagraph.transformers.nptransform import NumPyTransformer
+from nervanagraph.util.names import *
 try:
-    from geon.transformers.argon.artransform import ArgonTransformer
+    from nervanagraph.transformers.argon.artransform import ArgonTransformer
 except ImportError as e:
     if 'argon' in str(e):
         print("Argon backend and tensor are defined in argon package, which is not installed.")
