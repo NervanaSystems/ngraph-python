@@ -1,11 +1,11 @@
 from __future__ import print_function
 
-import geon
+import geon as ng
 
-x = geon.placeholder(axes=geon.Axes())
+x = ng.placeholder(axes=ng.Axes())
 x_plus_one = x + 1
 
-transformer = geon.NumPyTransformer()
+transformer = ng.NumPyTransformer()
 
 plus_one = transformer.computation(x_plus_one, x)
 
