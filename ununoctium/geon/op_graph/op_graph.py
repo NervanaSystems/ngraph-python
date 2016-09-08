@@ -448,6 +448,7 @@ class SetItem(Op):
             raise ValueError("{} is not assignable.".format(tensor))
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
+        self.input = None
 
     @cachetools.cached({})
     def call_info(self):
@@ -1797,18 +1798,35 @@ def assign(lvalue, rvalue, **kwargs):
 
 
 class tensor_size(TensorOp):
-    """TODO."""
-
-    def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
+    """
+    A scalar returning the total size of a tensor.
+    Arguments:
+        x: The tensor whose axes we are measuring.
+        reduction_axes: if supplied, return the size
+            of these axes instead.
+        kwargs: options, including name
+    """
+    def __init__(self, x, reduction_axes=None, **kwargs):
         if reduction_axes is None:
-            if out_axes is None:
-                reduction_axes = x.axes.sample_axes()
-            else:
-                reduction_axes = x.axes - Axes(out_axes)
-        else:
-            reduction_axes = Axes(reduction_axes)
+            reduction_axes = x.axes
         self.reduction_axes = reduction_axes
         super(tensor_size, self).__init__(axes=Axes())
+
+
+class batch_size(tensor_size):
+    """
+    A scalar returning the total size of the batch axes of
+    a tensor.
+    Arguments:
+        x: The tensor whose axes we are measuring.
+        kwargs: options, including name
+    """
+    def __init__(self, x, **kwargs):
+        super(batch_size, self).__init__(
+            x=x,
+            reduction_axes=x.axes.batch_axes(),
+            **kwargs
+        )
 
 
 def pad(x, paddings, axes=None, **kwargs):

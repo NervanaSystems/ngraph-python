@@ -32,7 +32,7 @@ TODO: infer_node: should determine automatically or receive as arg parameter
 from __future__ import print_function
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
-from util.importer import create_nervana_graph
+from util.importer import TensorFlowImporter
 
 import geon as be
 import numpy as np
@@ -79,24 +79,25 @@ def train_mnist_mlp():
     train_data = mnist_data['train']
     test_data = mnist_data['valid']
 
-    # frontend_model
-    frontend_model = create_nervana_graph(args.pb_file, args.end_node,
-                                          args.loss_node)
+    # tf_importer
+    tf_importer = TensorFlowImporter(args.pb_file,
+                                     end_node_name=args.end_node,
+                                     loss_node_name=args.loss_node)
 
     # init computation
     init_comp = None
     transformer = be.NumPyTransformer()
-    if frontend_model.init is not None:
-        init_comp = transformer.computation([frontend_model.init])
+    if tf_importer.init_op is not None:
+        init_comp = transformer.computation([tf_importer.init_op])
 
     # inference computation
-    pred_op = frontend_model.name_to_op[args.infer_node]
+    pred_op = tf_importer.name_to_op[args.infer_node]
     predict_comp = transformer.computation(pred_op)
 
     # update computation
-    update_comp = transformer.computation([frontend_model.loss,
-                                           frontend_model.update],
-                                          frontend_model.x, frontend_model.y)
+    update_comp = transformer.computation([tf_importer.loss_op,
+                                           tf_importer.update_op],
+                                          tf_importer.x, tf_importer.y)
 
     # initialize transformer
     transformer.transform_computations()
@@ -108,7 +109,7 @@ def train_mnist_mlp():
     # run init computation once
     init_comp()
 
-    for epoch_index in range(10):
+    for epoch_index in range(50):
         print("===============================")
         print("epoch: %s" % epoch_index)
 
@@ -117,7 +118,7 @@ def train_mnist_mlp():
             total_loss += update_comp(x_raw, y_raw)[0]
         average_loss = total_loss / float(mb_idx)
 
-        test_error = eval_test(test_data, frontend_model, predict_comp)
+        test_error = eval_test(test_data, tf_importer, predict_comp)
         print("train_loss: %.2f test_error: %.2f" % (average_loss, test_error))
 
 
