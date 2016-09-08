@@ -1704,7 +1704,7 @@ class sum(ReductionOp):
         Returns:
           TODO
         """
-        x.generate_add_delta(adjoints, delta)
+        x.generate_add_delta(adjoints, Broadcast(delta, axes=x.axes))
 
 
 def assign(lvalue, rvalue, **kwargs):

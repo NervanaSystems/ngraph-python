@@ -105,6 +105,46 @@ def test_l2_norm():
 
 
 @raise_all_numpy_errors
+def test_dot_sum_backprop():
+    delta = 1e-3
+    rtol = atol = 1e-2
+
+    ax.C.length = 2
+    ax.N.length = 3
+    ax.N.batch = True
+    x_axes, y_axes = be.Axes((ax.C, ax.N)), be.Axes((ax.C,))
+    x_np = np.random.random(x_axes.lengths).astype('float32')
+    y_np = np.random.random(y_axes.lengths).astype('float32')
+    expected_output = np.sum(x_np.T.dot(y_np))
+
+    x = be.placeholder(axes=x_axes)
+    y = be.placeholder(axes=y_axes)
+    d = be.dot(x, y)
+    s = be.sum(d, out_axes=())
+
+    ex = ExecutorFactory()
+    evaluated_fun = ex.executor(s, x, y)
+    numeric_deriv_fun1 = ex.numeric_derivative(s, x, delta, y)
+    numeric_deriv_fun2 = ex.numeric_derivative(s, y, delta, x)
+    sym_deriv_fun1 = ex.derivative(s, x, y)
+    sym_deriv_fun2 = ex.derivative(s, y, x)
+
+    # assert outputs are equal
+    evaluated = evaluated_fun(x_np, y_np)
+    np.testing.assert_equal(evaluated, expected_output)
+
+    # assert derivative wrt to both tensors is the same when computed
+    # symbolicly by graphiti and numerically
+    numeric_deriv1 = numeric_deriv_fun1(x_np, y_np)
+    sym_deriv1 = sym_deriv_fun1(x_np, y_np)
+    np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)
+
+    numeric_deriv2 = numeric_deriv_fun2(y_np, x_np)
+    sym_deriv2 = sym_deriv_fun2(y_np, x_np)
+    np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=rtol, atol=atol)
+
+
+@raise_all_numpy_errors
 def test_tensor_dot_tensor():
     """TODO."""
     delta = 1e-3
