@@ -15,33 +15,35 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 from geon.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
-    GeneralizedCost, GradientDescentMomentum, ImageLoader, Misclassification, Model,\
+    GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
     NeonArgparser, Rectlin, Softmax, Uniform
+
+from neon.data import CIFAR10
 
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
+parser.set_defaults(backend='dataloader')
 args = parser.parse_args()
 
 # setup data provider
-imgset_options = dict(inner_size=32, scale_range=40, aspect_ratio=110,
-                      repo_dir=args.data_dir, subset_pct=args.subset_pct)
-train = ImageLoader(set_name='train', shuffle=True,
-                    do_transforms=True, **imgset_options)
-test = ImageLoader(set_name='validation', shuffle=False,
-                   do_transforms=False, **imgset_options)
+dataset = CIFAR10(path=args.data_dir,
+                  normalize=True,
+                  contrast_normalize=False,
+                  whiten=False)
+train = dataset.train_iter
+test = dataset.valid_iter
 
-init_uni0 = Uniform(low=-0.002, high=0.002)
-init_uni1 = Uniform(low=-0.1, high=0.1)
+init_uni = Uniform(low=-0.1, high=0.1)
+opt_gdm = GradientDescentMomentum(learning_rate=0.01, momentum_coef=0.9)
 
-opt_gdm = GradientDescentMomentum(learning_rate=0.0001, momentum_coef=0.9)
 
 # set up the model layers
 layers = [
-    Affine(nout=200, init=init_uni0, activation=Rectlin()),
-    Affine(nout=train.nclasses, axes=Axes(ax.Y,), init=init_uni1,
+    Affine(nout=200, init=init_uni, activation=Rectlin()),
+    Affine(nout=10, axes=Axes(ax.Y,), init=init_uni,
            activation=Softmax()),
 ]
 
