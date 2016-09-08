@@ -15,7 +15,7 @@
 from __future__ import division
 from builtins import object, zip
 import geon as be
-from neon.optimizers.optimizer import ExpSchedule
+from neon.optimizers.optimizer import Schedule
 from neon.initializers import Constant
 
 
@@ -120,7 +120,7 @@ class GradientDescentMomentum(Optimizer):
             gradient_clip_norm=None,
             gradient_clip_value=None,
             name=None,
-            schedule=ExpSchedule(1.0),
+            schedule=Schedule(),
             **kwargs):
         super(GradientDescentMomentum, self).__init__(**kwargs)
         self.learning_rate = learning_rate
