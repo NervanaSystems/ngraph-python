@@ -156,7 +156,7 @@ class GradientDescentMomentum(Optimizer):
             scale_factor = clip_gradient_norm(grads)
         if self.gradient_clip_value is not None:
             grads = [clip_gradient_value(
-                variable, self.gradient_clip_value) for grade in grads]
+                grade, self.gradient_clip_value) for grade in grads]
 
         velocity_updates = [
             be.assign(

@@ -18,7 +18,9 @@ from builtins import object
 import math
 import numpy as np
 
-from geon.frontends.neon import *  # noqa
+from geon.op_graph.arrayaxes import Axes
+from geon.op_graph.op_graph import deriv
+from geon.transformers.nptransform import NumPyTransformer
 
 
 class RandomTensorGenerator(object):
@@ -180,14 +182,14 @@ def executor(results, *parameters):
     Returns:
       Function of placeholders in parameters
     """
-    return be.NumPyTransformer().computation(results, *parameters)
+    return NumPyTransformer().computation(results, *parameters)
 
 
 class ExecutorFactory(object):
     """TODO."""
 
     def __init__(self):
-        self.transformer = be.NumPyTransformer()
+        self.transformer = NumPyTransformer()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
@@ -218,7 +220,7 @@ class ExecutorFactory(object):
         fshape = f.axes.lengths
         xshape = px.axes.lengths
 
-        dfdx = be.deriv(f, px)
+        dfdx = deriv(f, px)
 
         if len(fshape) is 0:
             return self.transformer.computation(dfdx, px, *parameters)

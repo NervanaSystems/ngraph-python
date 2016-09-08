@@ -14,7 +14,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from geon.frontends.neon import *  # noqa
+from geon.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
+    GeneralizedCost, GradientDescentMomentum, ImageLoader, Misclassification, Model,\
+    NeonArgparser, Rectlin, Softmax, Uniform
 
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
