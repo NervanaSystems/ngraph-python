@@ -796,7 +796,7 @@ def test_empty_finalize():
     be.NumPyTransformer().initialize()
 
 
-def test_elementwise_broadcast_with_1_numeric():
+def test_elementwise_broadcast_with_one_numeric():
     delta = .001
     C = be.NumericAxis(2)
     H = be.NumericAxis(3)
