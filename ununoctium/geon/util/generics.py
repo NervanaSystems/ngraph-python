@@ -193,3 +193,38 @@ def generic_method(base_method):
     generic.on_type = on_type
 
     return generic
+
+
+class OpTypeMethods(TypeMethods):
+    def __init__(self, base_method, **kwargs):
+        super(OpTypeMethods, self).__init__(base_method, **kwargs)
+
+    def on_type_wrapper(self, generic_function, dispatch_type):
+        def add_method(method):
+            if isinstance(dispatch_type, (list, tuple)):
+                for type in dispatch_type:
+                    self.methods[type] = method
+            else:
+                self.methods[dispatch_type] = method
+            return generic_function
+
+        return add_method
+
+    def get_method(self, tf_node):
+        method = self.methods.get(tf_node.op)
+        return method if method is not None else self.base_method
+
+
+def op_generic_method(base_method):
+    type_methods = OpTypeMethods(base_method)
+
+    @wraps(base_method)
+    def generic(s, dispatch_arg, *args, **kwargs):
+        return type_methods.get_method(dispatch_arg)(s, dispatch_arg, *args,
+                                                     **kwargs)
+
+    def on_op(op_str):
+        return type_methods.on_type_wrapper(generic, op_str)
+
+    generic.on_op = on_op
+    return generic

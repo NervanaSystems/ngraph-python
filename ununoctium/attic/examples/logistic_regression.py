@@ -97,7 +97,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     transformer = be.NumPyTransformer()
 
     # return [grad, loss] and also compute update
-    train_eval_func = transformer.computation([grad, loss, thetas], update)
+    train_eval_func = transformer.computation([grad, loss, thetas, update])
     transformer.initialize()
 
     # copy data into device
@@ -110,7 +110,7 @@ def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
     # evaluate
     loss_val, thetas_val = (None, None)  # for return safety
     for i in range(max_iter):
-        grad_val, loss_val, thetas_val = train_eval_func()
+        grad_val, loss_val, thetas_val, update_val = train_eval_func()
         print("grad: %s, loss %s" % (grad_val, loss_val))
 
     return loss_val, thetas_val
