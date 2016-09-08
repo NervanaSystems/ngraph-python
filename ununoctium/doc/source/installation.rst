@@ -30,7 +30,7 @@ Examples
 
 Several useful example scripts demonstate how to use graphiti:
 
-* ``ununoctium/examples/walk_through/log_res.py`` is a simple example of using graph operations.
+* ``ununoctium/examples/walk_through/logres.py`` is a simple example of using graph operations.
 * ``ununoctium/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
 * ``ununoctium/examples/cifar10_mlp.py`` uses the neon front-end to define and train the model.
 

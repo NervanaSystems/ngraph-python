@@ -80,13 +80,14 @@ class Optimizer(object):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
 
-    def configure(self, transformer, cost):
+    def configure(self, transformer, cost, batch_size):
         """
         TODO.
 
         Arguments:
           transformer: TODO
           cost: TODO
+          batch_size: TODO
 
         Returns:
 
@@ -131,13 +132,14 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
         self.transformer = None
 
-    def configure(self, transformer, cost):
+    def configure(self, transformer, cost, batch_size):
         """
         TODO.
 
         Arguments:
           transformer: TODO
           cost: TODO
+          batch_size: TODO
 
         Returns:
 
@@ -146,8 +148,10 @@ class GradientDescentMomentum(Optimizer):
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
-        # TODO Get bsz from placeholder
-        grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
+        grads = [
+            be.deriv(cost, variable) / batch_size
+            for variable in variables
+        ]
         velocities = [be.temporary(
             axes=variable.axes, init=Constant(0)) for variable in variables]
 

@@ -48,8 +48,8 @@ def gpu_fusible(transformer, op1, op2):
       Boolean
     """
 
-    # Only computations can be merged
-    if not isinstance(op1, be.ComputationOp) or not isinstance(op2, be.ComputationOp):
+    # Only TensorOps can be merged
+    if not isinstance(op1, be.TensorOp) or not isinstance(op2, be.TensorOp):
         return False
 
     shapes1 = op1.tensor_description().shape
@@ -111,8 +111,7 @@ class KernelFlowGraph(DataFlowGraph):
             (a, b & R) for a, b in list(dataflow.successors.items()) if a in R)
         clusters = {x: extract_subgraph(y) for x, y in list(clusters.items())}
         # Creates final adjacency list
-        clusters = {x: be.Function(y) if isinstance(
-            x, be.ComputationOp) else x for x, y in list(clusters.items())}
+        clusters = {x: be.Function(y) if x.device_op else x for x, y in list(clusters.items())}
         self.successors = {
             clusters[a]: {clusters[b] for b in lst} for a, lst in list(
                 successors.items())}
