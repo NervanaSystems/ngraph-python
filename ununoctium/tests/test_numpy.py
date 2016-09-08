@@ -857,6 +857,3 @@ def test_elementwise_broadcast_with_1_numeric():
             dvudvnum = dvudvnum_fun(v, u)
             dvudvt = dvudvt_fun(v, u)
             np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
-
-if __name__ == '__main__':
-    test_elementwise_broadcast_with_1_numeric()
