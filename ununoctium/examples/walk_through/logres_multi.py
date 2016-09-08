@@ -1,28 +1,28 @@
 from __future__ import division, print_function
 
-import geon
+import geon as ng
 import gendata
 
-ax = geon.NameScope(name="ax")
+ax = ng.NameScope(name="ax")
 
-ax.W = geon.Axis()
-ax.H = geon.Axis()
-ax.N = geon.Axis()
+ax.W = ng.Axis()
+ax.H = ng.Axis()
+ax.N = ng.Axis()
 
-X = geon.placeholder(axes=geon.Axes([ax.W, ax.H, ax.N]))
-Y = geon.placeholder(axes=geon.Axes([ax.N]))
-alpha = geon.placeholder(axes=geon.Axes())
+X = ng.placeholder(axes=ng.Axes([ax.W, ax.H, ax.N]))
+Y = ng.placeholder(axes=ng.Axes([ax.N]))
+alpha = ng.placeholder(axes=ng.Axes())
 
-W = geon.Variable(axes=geon.Axes([ax.W, ax.H]), initial_value=0)
-b = geon.Variable(axes=geon.Axes(), initial_value=0)
+W = ng.Variable(axes=ng.Axes([ax.W, ax.H]), initial_value=0)
+b = ng.Variable(axes=ng.Axes(), initial_value=0)
 
-Y_hat = geon.sigmoid(geon.dot(W, X) + b)
-L = geon.cross_entropy_binary(Y_hat, Y) / geon.tensor_size(Y_hat)
+Y_hat = ng.sigmoid(ng.dot(W, X) + b)
+L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
-updates = [geon.assign(v, v - alpha * geon.deriv(L, v) / geon.tensor_size(Y_hat))
+updates = [ng.assign(v, v - alpha * ng.deriv(L, v) / ng.tensor_size(Y_hat))
            for v in L.variables()]
 
-all_updates = geon.doall(updates)
+all_updates = ng.doall(updates)
 
 ax.W.length = 4
 ax.H.length = 1
@@ -32,7 +32,7 @@ g = gendata.MixtureGenerator([.5, .5], (ax.W.length, ax.H.length))
 XS, YS = g.gen_data(ax.N.length, 10)
 EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
 
-transformer = geon.NumPyTransformer()
+transformer = ng.NumPyTransformer()
 update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)
 
