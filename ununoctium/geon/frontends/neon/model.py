@@ -124,7 +124,7 @@ class Model(object):
         self.cost = cost
         self.cost.initialize(self.output, self.target)
         self.transformer = be.NumPyTransformer()
-        updates = self.optimizer.configure(self.transformer, self.cost.total_cost)
+        updates = self.optimizer.configure(self.transformer, self.cost.total_cost, self.input)
 
         self.train_comp = self.transformer.computation([self.cost.mean_cost, updates], self.input,
                                                        self.target)

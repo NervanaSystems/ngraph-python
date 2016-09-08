@@ -131,7 +131,7 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
         self.transformer = None
 
-    def configure(self, transformer, cost):
+    def configure(self, transformer, cost, input_placeholder):
         """
         TODO.
 
@@ -146,8 +146,10 @@ class GradientDescentMomentum(Optimizer):
         self.learning_rate_placeholder = be.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
-        # TODO Get bsz from placeholder
-        grads = [be.deriv(cost, variable) / 128.0 for variable in variables]
+        grads = [
+            be.deriv(cost, variable) / be.batch_size(input_placeholder)
+            for variable in variables
+        ]
         velocities = [be.temporary(
             axes=variable.axes, init=Constant(0)) for variable in variables]
 
