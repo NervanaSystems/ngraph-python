@@ -35,14 +35,12 @@ def test_import_constant_graph():
 
     # write to protobuf
     graph_name = "constant_graph"
-    pb_path = graph_name + ".pb"
     pb_txt_path = graph_name + ".pb.txt"
 
     tf.train.write_graph(sess.graph_def, "./", pb_txt_path, True)
-    tf.train.write_graph(sess.graph_def, "./", pb_path, False)
 
     # init importer, transformer
-    importer = TensorFlowImporter(pb_path)
+    importer = TensorFlowImporter(pb_txt_path)
     transformer = be.NumPyTransformer()
 
     # now, assumes last op is the result we want to get
