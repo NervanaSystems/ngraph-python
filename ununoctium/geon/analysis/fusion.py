@@ -16,7 +16,11 @@
 from geon.analysis.dataflow import DataFlowGraph
 from geon.util.graph import Digraph
 import geon as be
-import graphviz
+
+try:
+    import graphviz
+except:
+    pass
 
 
 # Fusion Policies

@@ -1556,6 +1556,11 @@ class dot(TensorOp):
         a_axes, b_axes = a.axes, b.axes
         o = self.tensor_description().reaxe(a_axes[:-1].concat(b_axes[1:]))
 
+        # We ensure that the axes of the output view given to the transformer
+        # (o.axes) are in the same order as the underlying tensor (self.axes)
+        if o.axes != self.axes:
+            o, a, b = o.transpose(), b.transpose(), a.transpose()
+
         return [o, a, b]
 
     def generate_adjoints(self, adjoints, delta, x, y):
