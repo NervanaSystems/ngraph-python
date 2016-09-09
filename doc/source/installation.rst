@@ -48,4 +48,4 @@ Documentation can be generated via::
 
 
 The latest html documentation is also built by Jenkins and can be viewed
-`here <http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.
+`here <http://jenkins.localdomain:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.
