@@ -28,7 +28,7 @@ TODO: infer_node: should determine automatically or receive as arg parameter
 from __future__ import print_function, division
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
-from util.importer import TensorFlowImporter
+from importer import TensorFlowImporter
 
 import ngraph as ng
 import numpy as np

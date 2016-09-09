@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import geon as be
-from util.importer import TensorFlowImporter
+import ngraph as ng
+from tensorflow_import.importer import TensorFlowImporter
 
 
 def test_import_constant_graph():
@@ -40,7 +40,7 @@ def test_import_constant_graph():
 
     # init importer, transformer
     importer = TensorFlowImporter(pb_txt_path)
-    transformer = be.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
 
     # now, assumes last op is the result we want to get
     ng_result_comp = transformer.computation([importer.last_op])

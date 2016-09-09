@@ -26,7 +26,7 @@ from neon.util.argparser import NeonArgparser
 
 import numpy as np
 import ngraph as ng
-from util.importer import TensorFlowImporter
+from importer import TensorFlowImporter
 import ngraph.analysis as an
 
 # args and environment
