@@ -21,14 +21,14 @@ TODO: load meta info from TF's MetaGraph including details about dataset,
       training epochs and etc
 """
 
-from __future__ import print_function
+from __future__ import division, print_function
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import numpy as np
-import geon as be
+import ngraph as be
 from util.importer import TensorFlowImporter
-import geon.analysis as an
+import ngraph.analysis as an
 
 # args and environment
 parser = NeonArgparser(__doc__)

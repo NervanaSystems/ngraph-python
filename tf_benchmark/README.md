@@ -2,10 +2,10 @@
 
 ## Setup
 
-Tensorflow is currently installed as part of ununoctium:
+Tensorflow is currently installed as part of Nervana Graph:
 
 ```
-$ cd ununoctium
+$ cd ..
 $ make install
 ```
 

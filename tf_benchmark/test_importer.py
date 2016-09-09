@@ -26,14 +26,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import geon as be
+import ngraph as ng
 from util.importer import create_nervana_graph
 
 
 def test_create_nervana_graph(pb_file, execute=False):
     graph = create_nervana_graph(pb_file, None)
 
-    trans = be.NumPyTransformer()
+    trans = ng.NumPyTransformer()
     comp = trans.computation(graph.last_op)
     trans.transform_computations()
     trans.dataflow.view()
