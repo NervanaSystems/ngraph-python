@@ -34,8 +34,7 @@ def test_import_constant_graph():
         tf_result = sess.run(d)
 
     # write to protobuf
-    graph_name = "constant_graph"
-    pb_txt_path = graph_name + ".pb.txt"
+    pb_txt_path = "constant_graph.txt"
 
     tf.train.write_graph(sess.graph_def, "./", pb_txt_path, True)
 
