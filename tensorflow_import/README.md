@@ -14,7 +14,7 @@
       `--output_node_names` option is the name of the last operation for
       inference, which is currently manually identified on TensorBoard.
 2. Inference. Now we can import the TensorFlow-trained weights and perform
-   inference using ngraph`.  Notes that we need to manually identify the last op
+   inference using `ngraph`.  Notes that we need to manually identify the last op
    used in inference, which is `softmax_linear/add` for this example.
 
     ```sh
