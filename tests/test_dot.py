@@ -72,7 +72,7 @@ def get_random_np_array(
     return arr
 
 
-def graphiti_l2_norm(np_array):
+def ngraph_l2_norm(np_array):
     """
     TODO.
 
@@ -101,7 +101,7 @@ def test_l2_norm():
     ]
     tests = [np.array(_, dtype=np.float32) for _ in tests_]
     for test in tests:
-        assert np.array_equal(np.linalg.norm(test), graphiti_l2_norm(test))
+        assert np.array_equal(np.linalg.norm(test), ngraph_l2_norm(test))
 
 
 @raise_all_numpy_errors
@@ -134,7 +134,7 @@ def test_dot_sum_backprop():
     np.testing.assert_equal(evaluated, expected_output)
 
     # assert derivative wrt to both tensors is the same when computed
-    # symbolicly by graphiti and numerically
+    # symbolicly by ngraph and numerically
     numeric_deriv1 = numeric_deriv_fun1(x_np, y_np)
     sym_deriv1 = sym_deriv_fun1(x_np, y_np)
     np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)
@@ -237,7 +237,7 @@ def test_tensor_dot_tensor():
         np.testing.assert_equal(evaluated, expected_output)
 
         # assert derivative wrt to both tensors is the same when computed
-        # symbolicly by graphiti and numerically
+        # symbolicly by ngraph and numerically
         numeric_deriv1 = numeric_deriv_fun1(value1, value2)
         sym_deriv1 = sym_deriv_fun1(value1, value2)
         np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)

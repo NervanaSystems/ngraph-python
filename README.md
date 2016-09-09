@@ -16,7 +16,7 @@ cd ../graphiti/
 make install
 ```
 
-To uninstall NervanaGraph from your virtual env:
+To uninstall Nervana Graph from your virtual env:
 ```
 make uninstall
 ```
@@ -42,7 +42,7 @@ make doc
 ```
 
 The latest html documentation is also built by Jenkins and can be viewed
-[here](http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/ununoctium/doc/build/html/index.html)
+[here](http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html)
 
 
 ## Examples

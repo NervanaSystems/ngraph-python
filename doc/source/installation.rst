@@ -28,7 +28,7 @@ Activate the virtualenv with ``. .venv/bin/activate``, then run:
 Examples
 ========
 
-Several useful example scripts demonstate how to use graphiti:
+Several useful example scripts demonstate how to use Nervana Graph:
 
 * ``ngraph/examples/walk_through/logres.py`` is a simple example of using graph operations.
 * ``ngraph/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
@@ -48,4 +48,4 @@ Documentation can be generated via::
 
 
 The latest html documentation is also built by Jenkins and can be viewed
-`here <http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/ununoctium/doc/build/html/index.html>`_.
+`here <http://jenkins.localdomain:8080/job/NEON_Graphiti_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.
