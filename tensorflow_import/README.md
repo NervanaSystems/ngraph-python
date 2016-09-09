@@ -13,9 +13,9 @@
     - Freeze the model checkpoints to protobuf using [this tool]. The
       `--output_node_names` option is the name of the last operation for
       inference, which is currently manually identified on TensorBoard.
-2. Now we can import the TensorFlow-trained eights and mlp inference using
-   `ngraph`. Notes that we need to manually identify the last op used in
-   inference, which is `softmax_linear/add` for this example.
+2. Inference. Now we can import the TensorFlow-trained weights and perform
+   inference using ngraph`.  Notes that we need to manually identify the last op
+   used in inference, which is `softmax_linear/add` for this example.
 
     ```sh
     $ python mnist_mlp_inference.py
