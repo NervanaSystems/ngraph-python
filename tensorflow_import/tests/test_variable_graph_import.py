@@ -14,10 +14,12 @@
 # ----------------------------------------------------------------------------
 
 
-'''
+# TODO: Make this an test or example
+
+"""
 Create a TensorFlow graph with variables.
 Test exporting and importing meta graph and checkpoints.
-'''
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -33,10 +35,10 @@ hidden_dim = 5
 
 
 def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
-    '''
-      Create a sample graph with two variables.
-      Save the graph in metagraph, checkpoint and
-    '''
+    """
+    Create a sample graph with two variables. Save the graph in metagraph and
+    checkpoint.
+    """
 
     x = tf.placeholder(tf.float32, shape=(batch_size, input_dim))
 
@@ -69,10 +71,10 @@ def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
 
 
 def restore_graph_pb(graph_pb):
-    '''
-      Restore from the graph protobuf file and the checkpoint file.
-      This needs the original graph construction steps.
-    '''
+    """
+    Restore from the graph protobuf file and the checkpoint file.
+    This needs the original graph construction steps.
+    """
 
     biases = tf.Variable(tf.zeros([hidden_dim]), name='biases')
     weight = tf.Variable(tf.random_normal([input_dim, hidden_dim], stddev=0.35),
@@ -97,10 +99,10 @@ def restore_graph_pb(graph_pb):
 
 
 def restore_meta_graph(meta_graph):
-    '''
-      Restore from the metagraph (.meta) file and the checkpoint file.
-      No need for building graph from scratch.
-    '''
+    """
+    Restore from the metagraph (.meta) file and the checkpoint file.
+    No need for building graph from scratch.
+    """
 
     with tf.Session() as sess:
         meta_graph_def = read_meta_graph_file(meta_graph)

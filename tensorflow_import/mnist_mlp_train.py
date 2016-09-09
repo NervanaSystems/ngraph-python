@@ -47,28 +47,39 @@ parser.add_argument('--infer_node', type=str, default="softmax_linear/add",
 args = parser.parse_args()
 
 
-def eval_test(test_data, graph, inference_comp):
+def eval_test(test_data, tf_importer, inference_comp):
     """
-    :param test_data: test input
-    :param inference_comp: the computation graph for inference
-    :param pred_op: the last op for inference
-    :param inference_comp: the transformer.computation
-    :return: error rate (1 - accuracy) on test_data
+    Evaluate on test_data
+
+    Arguments:
+        test_data: test input data
+        tf_importer (TensorFlowImporter): tensorflow importer
+        inference_comp (Computation): computation for inference
+
+    Returns:
+        float: error rate
     """
     test_error = 0
     n_sample = 0
     for mb_idx, (xraw, yraw) in enumerate(test_data):
-        graph.x.value[:] = xraw
+        tf_importer.x.value[:] = xraw
         result = inference_comp()
         pred = np.argmax(result, axis=1)
         gt = np.argmax(yraw, axis=0)
         test_error += np.sum(np.not_equal(pred, gt))
         n_sample += pred.shape[0]
 
-    return test_error / float(n_sample) * 100
+    return test_error / float(n_sample)
 
 
 def train_mnist_mlp():
+    """
+    Runs mnist mlp train example
+
+    Returns:
+        None
+    """
+
     # dataset
     mnist_data = MNIST(path=args.data_dir).gen_iterators()
     train_data = mnist_data['train']
@@ -114,7 +125,8 @@ def train_mnist_mlp():
         average_loss = total_loss / float(mb_idx)
 
         test_error = eval_test(test_data, tf_importer, predict_comp)
-        print("train_loss: %.2f test_error: %.2f" % (average_loss, test_error))
+        print("train_loss: %.2f test_error: %.2f" % (average_loss,
+                                                     test_error * 100.))
 
 
 if __name__ == '__main__':

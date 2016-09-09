@@ -38,6 +38,13 @@ args = parser.parse_args()
 
 
 def inference_mnist_mlp():
+    """
+    Runs mnist mlp inference example
+
+    Returns:
+        None
+    """
+
     # data loader
     mnist_data = MNIST(path=args.data_dir).gen_iterators()
     test_data = mnist_data['valid']
