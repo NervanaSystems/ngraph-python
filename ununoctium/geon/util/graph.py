@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import graphviz
+
+try:
+    import graphviz
+except:
+    graphviz = None
 
 
 class Digraph(object):
@@ -174,7 +178,10 @@ class UndirectedGraph(object):
         Returns:
 
         """
-        from graphviz import Graph
+        try:
+            from graphviz import Graph
+        except:
+            pass
         dot = Graph()
         processed = set()
         for na, _ in list(self.neighbors.items()):
