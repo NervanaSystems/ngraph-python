@@ -27,7 +27,7 @@
     $ python mnist_mlp_train.py
     ```
 
-4. A tool to clean up the mnist data is also provided
+4. A tool to clean up the mnist data is also provided.
 
     ```sh
     $ python mnist_clean.py
@@ -45,7 +45,7 @@
     tf.train.write_graph(sess.graph_def, "./", "graph.pb", False)  # binary proto
     ```
 
-- Save trainable parameters to checkpoints
+- Save trainable parameters to checkpoints.
 
     ```python
     saver = tf.train.Saver()
@@ -54,12 +54,12 @@
 
   We made a copy of `3rd_party/mnist/fully_connected_feed.py` and modified it by
   adding code for saving `GraphDef` and trained parameters.
-- Visualize using TensorBoard (default on <http://0.0.0.0:6006>)
+- Visualize using TensorBoard (default on <http://0.0.0.0:6006>).
 
     ```sh
     $ tensorboard --logdir=.
     ```
-    
+
 - The GraphDef contains several sub-graphs for different purpose:
     - Variable initialization: executed only once before training
     - Fprop and bprop: executed for each mini-batch optimization
