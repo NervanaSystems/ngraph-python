@@ -20,9 +20,9 @@ from __future__ import print_function
 
 from builtins import range, zip
 
-import nervanagraph.analysis as an
-import nervanagraph.frontends.base.axis as ax
-import nervanagraph as ng
+import ngraph.analysis as an
+import ngraph.frontends.base.axis as ax
+import ngraph as ng
 
 
 def build_graphs(L, BS):

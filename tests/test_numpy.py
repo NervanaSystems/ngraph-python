@@ -17,11 +17,11 @@ from __future__ import division
 import numpy as np
 from builtins import range
 
-import nervanagraph.frontends.base.axis as ax
-import nervanagraph as ng
-from nervanagraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from nervanagraph.util.utils import numeric_derivative, executor
-from nervanagraph.util.derivative_check import check_derivative
+import ngraph.frontends.base.axis as ax
+import ngraph as ng
+from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
+from ngraph.util.utils import numeric_derivative, executor
+from ngraph.util.derivative_check import check_derivative
 
 rng = RandomTensorGenerator(0, np.float32)
 

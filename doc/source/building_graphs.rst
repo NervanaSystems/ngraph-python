@@ -37,10 +37,10 @@ Graph evaluation
 
 During computation, the input and output values must be stored somehwere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``::
 
-    import geon as be
-    import geon.frontends.base.axis as ax
+    import ngraph as ng
+    import ngraph.frontends.base.axis as ax
 
-    x = be.placeholder(axes=be.Axes(ax.C, ax.W, ax.H, ax.N))
+    x = ng.placeholder(axes=ng.Axes(ax.C, ax.W, ax.H, ax.N))
 
 This will create an ``AllocationOp`` for a ``placeholder`` with the provided list of axes and assign the op to the python variable ``x``.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
 
@@ -52,7 +52,7 @@ does not directly double the value of the tensor in the ``placeholder``. Instead
 both arguments pointing to the same ``placeholder`` object. This returns a new ``Op`` that is now stored as the python variable ``x``.
 On the other hand, to directly modify the value of the ``placeholder``, use::
 
-    be.SetItem(x, x + x)
+    ng.SetItem(x, x + x)
 
 Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` is rarely used, except for updating variables at the end of a minibatch. Consider::
 
@@ -68,14 +68,14 @@ Derivatives
 Because the ops describe computations, we have enough information to compute derivatives, using the ``deriv``
 function::
 
-    import geon as be
-    import geon.frontends.base.axis as ax
+    import ngraph as ng
+    import ngraph.frontends.base.axis as ax
 
-    x = be.placeholder(axes=be.Axes((ax.C, ax.W, ax.H, ax.N)))
-    y0 = be.placeholder(axes=be.Axes((ax.Y, ax.N))
-    w = be.Variable(axes=(be.Axes((ax.C, ax.W, ax.H, ax.Y))))
-    b = be.Variable(axes=(be.Axes((ax.Y,)))
-    y = be.tanh(dot(w, x) + b)
+    x = ng.placeholder(axes=ng.Axes((ax.C, ax.W, ax.H, ax.N)))
+    y0 = ng.placeholder(axes=ng.Axes((ax.Y, ax.N))
+    w = ng.Variable(axes=(ng.Axes((ax.C, ax.W, ax.H, ax.Y))))
+    b = ng.Variable(axes=(ng.Axes((ax.Y,)))
+    y = ng.tanh(dot(w, x) + b)
     c = dot((y - y0), (y - y0))
     d = deriv(c, w)
 
@@ -109,9 +109,9 @@ will define four additional procedures:
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`geon.op_graph.op_graph.Op`, which is a subclass of
-the class :py:class:`geon.op_graph.nodes.Node`, which is itself a subclass of the classes
-:py:class:`geon.op_graph.names.NameableValue` and :py:class:`geon.op_graph.nodes.DebugInfo`.
+All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which is a subclass of
+the class :py:class:`ngraph.op_graph.nodes.Node`, which is itself a subclass of the classes
+:py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`.
 
 The constructor's required arguments are the subexpressions.  All ops also have key initializers for:
 

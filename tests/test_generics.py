@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from nervanagraph.util.generics import generic_function, generic_method
+from ngraph.util.generics import generic_function, generic_method
 
 
 class A(object):

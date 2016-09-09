@@ -15,90 +15,90 @@
 
 This API documentation covers each module within Graphiti.
 
-geon.analysis
+ngraph.analysis
 =============
-.. py:module: geon.analysis
+.. py:module: ngraph.analysis
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.analysis.dataflow.py
-   geon.analysis.fusion.py
-   geon.analysis.memory.py
+   ngraph.analysis.dataflow.py
+   ngraph.analysis.fusion.py
+   ngraph.analysis.memory.py
 
-geon.dataloader
+ngraph.dataloader
 ===============
-.. py:module: geon.dataloader
+.. py:module: ngraph.dataloader
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.dataloader.dataloaderbackend
+   ngraph.dataloader.dataloaderbackend
 
-geon.frontends
+ngraph.frontends
 ==============
-.. py:module: geon.frontends
+.. py:module: ngraph.frontends
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.frontends.base.axis
+   ngraph.frontends.base.axis
 
-geon.frontends.neon
+ngraph.frontends.neon
 ===================
-.. py:module: geon.frontends.neon
+.. py:module: ngraph.frontends.neon
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.frontends.neon.activation
-   geon.frontends.neon.callbacks
-   geon.frontends.neon.container
-   geon.frontends.neon.cost
-   geon.frontends.neon.layer
-   geon.frontends.neon.model
-   geon.frontends.neon.optimizer
+   ngraph.frontends.neon.activation
+   ngraph.frontends.neon.callbacks
+   ngraph.frontends.neon.container
+   ngraph.frontends.neon.cost
+   ngraph.frontends.neon.layer
+   ngraph.frontends.neon.model
+   ngraph.frontends.neon.optimizer
 
-geon.op_graph
+ngraph.op_graph
 =============
-.. py:module: geon.op_graph
+.. py:module: ngraph.op_graph
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.op_graph.arrayaxes
-   geon.op_graph.convolution
-   geon.op_graph.op_graph
+   ngraph.op_graph.arrayaxes
+   ngraph.op_graph.convolution
+   ngraph.op_graph.op_graph
 
-geon.transformers
+ngraph.transformers
 =================
-.. py:module: geon.transformers
+.. py:module: ngraph.transformers
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.transformers.base
-   geon.transformers.nptransform
+   ngraph.transformers.base
+   ngraph.transformers.nptransform
 
-geon.util
+ngraph.util
 =========
-.. py:module: geon.util
+.. py:module: ngraph.util
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   geon.util.generics
-   geon.util.graph
-   geon.util.names
-   geon.util.nodes
-   geon.util.pygen
-   geon.util.threadstate
-   geon.util.utils
+   ngraph.util.generics
+   ngraph.util.graph
+   ngraph.util.names
+   ngraph.util.nodes
+   ngraph.util.pygen
+   ngraph.util.threadstate
+   ngraph.util.utils
 

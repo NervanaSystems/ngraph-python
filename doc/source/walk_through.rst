@@ -33,20 +33,19 @@ The complete program is
 
 .. code-block:: python
 
-    import ng
+    import ngraph as ng
 
     x = ng.placeholder(axes=ng.Axes())
     x_plus_one = x + 1
 
     transformer = ng.NumPyTransformer()
-
     plus_one = transformer.computation(x_plus_one, x)
 
     for i in range(5):
         print(plus_one(i))
 
 
-We begin by importing ``ng``, the Python module for the front end API.
+We begin by importing ``ngraph``, the Python module for the front end API.
 
 Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we call the
 parameter that receives the value of :math:`x` a ``placeholder``.  A placeholder has a tensor value, so we need
@@ -243,7 +242,7 @@ When implementing front ends, the length of tensor axes, or even their dimension
 by converting the logistic regression example to using axes rather than specific lengths::
 
     import numpy as np
-    import ng
+    import ngraph as ng
     import gendata
 
     C = ng.Axis("C")
@@ -343,13 +342,13 @@ In this example, we begin by introducing a class, ``NameScope``, than can be use
     ax.H = ng.Axis()
     ax.N = ng.Axis()
 
-Many |geon| objects are ``NameableValue``s, which means they have a ``name`` attribute.  When a ``NameableValue``
+Many |ngraph| objects are ``NameableValue``s, which means they have a ``name`` attribute.  When a ``NameableValue``
 is assigned to a ``NameScope``'s attribute, the name of the ``NameableValue`` will be set.  Here, we give
 ``ax`` the name ``ax``.  Then the axis ``ax.W`` will have the name ``ax.W``.  Referring to the axes with
 ``ax.`` prefixes makes it easier to identify axes in programs, and keeps them from using up the desirable
 short variable names.
 
-Also notice the ``batch`` parameter to ``ax.N``.  This tells |geon| that ``ax.N`` is used as the axis for
+Also notice the ``batch`` parameter to ``ax.N``.  This tells |ngraph| that ``ax.N`` is used as the axis for
 samples within a batch.
 
 We are switching from a flat :math:`C`-dimensional featurespace to an :math:`W\times H` feature space.  The
@@ -387,4 +386,4 @@ The data generator is able to generate multi-dimensional data; it just reshapes:
     XS, YS = g.gen_data(ax.N.length, 10)
     EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
 
-Note: Some bugs in ng.dot and its derivative were discovered while making this example.  They are not fixed yet.
+Note: Some bugs in ngraph.dot and its derivative were discovered while making this example.  They are not fixed yet.

@@ -1,6 +1,6 @@
 import pytest
 
-import nervanagraph as ng
+import ngraph as ng
 
 
 def test_deriv_missing_connection():

@@ -15,10 +15,10 @@
 import pytest
 import numpy as np
 
-from nervanagraph.util.utils import ExecutorFactory
-import nervanagraph as ng
-import nervanagraph.frontends.base.axis as ax
-from nervanagraph.op_graph import arrayaxes
+from ngraph.util.utils import ExecutorFactory
+import ngraph as ng
+import ngraph.frontends.base.axis as ax
+from ngraph.op_graph import arrayaxes
 
 
 delta = 1e-3

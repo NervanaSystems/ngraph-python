@@ -1,6 +1,6 @@
 from __future__ import division, print_function
 
-import geon as ng
+import ngraph as ng
 import gendata
 
 ax = ng.NameScope(name="ax")
@@ -33,6 +33,7 @@ XS, YS = g.gen_data(ax.N.length, 10)
 EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
 
 transformer = ng.NumPyTransformer()
+
 update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)
 

@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 
-import nervanagraph as ng
-from nervanagraph.util.utils import executor
+import ngraph as ng
+from ngraph.util.utils import executor
 
 
 def test_dot_with_numerics():

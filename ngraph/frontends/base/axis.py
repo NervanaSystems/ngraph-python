@@ -12,13 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from setuptools import setup, find_packages
-setup(
-    name="ngraph",
-    version="0.1",
-    packages=find_packages(exclude=["tests"]),
-    author='Nervana Systems',
-    author_email='info@nervanasys.com',
-    url='http://www.nervanasys.com',
-    license='License :: Proprietary License',
-)
+from ngraph import Axis
+
+# Define the standard Neon axes
+#: The batch axis
+N = Axis(name='N', batch=True)
+C = Axis(name='C')
+D = Axis(name='D')
+H = Axis(name='H')
+W = Axis(name='W')
+T = Axis(name='T', recurrent=True)
+R = Axis(name='R')
+S = Axis(name='S')
+K = Axis(name='K')
+M = Axis(name='M')
+P = Axis(name='P')
+Q = Axis(name='Q')
+
+# Target
+Y = Axis(name='Y')

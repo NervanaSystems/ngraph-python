@@ -17,9 +17,9 @@ Test the usage of ng.Constant
 """
 from __future__ import print_function
 
-import nervanagraph as ng
-import nervanagraph.frontends.base.axis as ax
-from nervanagraph.util.utils import executor
+import ngraph as ng
+import ngraph.frontends.base.axis as ax
+from ngraph.util.utils import executor
 import numpy as np
 
 

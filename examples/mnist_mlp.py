@@ -42,14 +42,14 @@ Examples:
 
 """
 import numpy as np
-from geon.frontends.neon import ax, Axes, Affine, Rectlin, Logistic, GeneralizedCost,\
+from ngraph.frontends.neon import ax, Axes, Affine, Rectlin, Logistic, GeneralizedCost,\
     CrossEntropyBinary, Misclassification, GradientDescentMomentum, Model, Callbacks
 from neon.data import MNIST
 from neon.initializers import Gaussian
 from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
-# from geon.util.analysis import DataFlowGraph
+# from ngraph.util.analysis import DataFlowGraph
 
 
 # parse the command line arguments

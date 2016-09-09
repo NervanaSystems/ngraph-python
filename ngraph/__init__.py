@@ -12,13 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from setuptools import setup, find_packages
-setup(
-    name="ngraph",
-    version="0.1",
-    packages=find_packages(exclude=["tests"]),
-    author='Nervana Systems',
-    author_email='info@nervanasys.com',
-    url='http://www.nervanasys.com',
-    license='License :: Proprietary License',
-)
+
+from __future__ import print_function
+
+import ngraph.dataloader.dataloaderbackend
+from ngraph.op_graph.arrayaxes import *
+from ngraph.op_graph.convolution import convolution
+from ngraph.op_graph.op_graph import *
+from ngraph.transformers.nptransform import NumPyTransformer
+from ngraph.util.names import *
+try:
+    from ngraph.transformers.argon.artransform import ArgonTransformer
+except ImportError as e:
+    if 'argon' in str(e):
+        print("Argon backend and tensor are defined in argon package, which is not installed.")
+    elif 'mpi4py' in str(e):
+        print(
+            "Argon backend currently depends on the package mpi4py, which is not installed."
+        )
+    else:
+        raise

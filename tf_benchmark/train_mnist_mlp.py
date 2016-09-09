@@ -34,7 +34,7 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 from util.importer import TensorFlowImporter
 
-import geon as be
+import ngraph as ng
 import numpy as np
 import sys
 
@@ -86,7 +86,7 @@ def train_mnist_mlp():
 
     # init computation
     init_comp = None
-    transformer = be.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
     if tf_importer.init_op is not None:
         init_comp = transformer.computation([tf_importer.init_op])
 

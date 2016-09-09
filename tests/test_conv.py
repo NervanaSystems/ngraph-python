@@ -16,10 +16,10 @@
 import numpy as np
 # import pytest
 
-import nervanagraph as ng
-from nervanagraph.op_graph import arrayaxes
-import nervanagraph.frontends.base.axis as ax
-from nervanagraph.util.utils import executor
+import ngraph as ng
+from ngraph.op_graph import arrayaxes
+import ngraph.frontends.base.axis as ax
+from ngraph.util.utils import executor
 
 
 def test_constant_tensor_convolution_fprop():

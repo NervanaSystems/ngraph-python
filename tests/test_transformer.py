@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 import pytest
 
-import nervanagraph as ng
+import ngraph as ng
 import numpy as np
 from geon.util.utils import executor
 

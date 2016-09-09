@@ -26,9 +26,9 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import numpy as np
-import geon as be
+import ngraph as be
 from util.importer import TensorFlowImporter
-import geon.analysis as an
+import ngraph.analysis as an
 
 # args and environment
 parser = NeonArgparser(__doc__)

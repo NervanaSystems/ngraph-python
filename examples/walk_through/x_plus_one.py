@@ -1,6 +1,5 @@
 from __future__ import print_function
-
-import geon as ng
+import ngraph as ng
 
 x = ng.placeholder(axes=ng.Axes())
 x_plus_one = x + 1

@@ -15,10 +15,10 @@
 from builtins import range
 import numpy as np
 import random
-import nervanagraph as ng
-import nervanagraph.frontends.base.axis as ax
-from nervanagraph.util.utils import raise_all_numpy_errors
-from nervanagraph.util.utils import ExecutorFactory, executor
+import ngraph as ng
+import ngraph.frontends.base.axis as ax
+from ngraph.util.utils import raise_all_numpy_errors
+from ngraph.util.utils import ExecutorFactory, executor
 
 """
 Test graphiti's implementation of the dot product.

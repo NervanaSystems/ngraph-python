@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from geon.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
+from ngraph.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
     GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
     NeonArgparser, Rectlin, Softmax, Uniform
 

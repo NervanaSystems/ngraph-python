@@ -1,5 +1,6 @@
 from __future__ import division, print_function
-import geon as ng
+
+import ngraph as ng
 import gendata
 
 N = 128
