@@ -30,12 +30,12 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 from util.importer import TensorFlowImporter
 
-import geon as be
+import ngraph as ng
 import numpy as np
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
-parser.add_argument('--pb_file', type=str, default="mnist/graph.pb",
+parser.add_argument('--pb_file', type=str, default="graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",
                     help='the last node to execute, mainly used for debugging')
@@ -81,7 +81,7 @@ def train_mnist_mlp():
 
     # init computation
     init_comp = None
-    transformer = be.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
     if tf_importer.init_op is not None:
         init_comp = transformer.computation([tf_importer.init_op])
 

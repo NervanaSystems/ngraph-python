@@ -37,10 +37,10 @@ import scipy.stats as stats
 from builtins import range, str
 from functools import wraps
 
-import geon as be
-from geon.op_graph.op_graph import (TensorOp, softmax, is_constant,
+import ngraph as ng
+from ngraph.op_graph.op_graph import (TensorOp, softmax, is_constant,
                                     constant_value)
-from geon.util.generics import op_generic_method
+from ngraph.util.generics import op_generic_method
 
 import tensorflow as tf
 from tensorflow.python.framework import tensor_util
@@ -81,28 +81,28 @@ def _scan_axes(graph_def):
             shape = [int(d.size) for d in dims.dim]
 
             if batch_axis is None:
-                batch_axis = be.NumericAxis(shape[0])
+                batch_axis = ng.NumericAxis(shape[0])
 
             if len(shape) == 2:
-                x_axis = be.NumericAxis(shape[1])
-                name_to_axes[node.name] = be.Axes([x_axis, batch_axis])
+                x_axis = ng.NumericAxis(shape[1])
+                name_to_axes[node.name] = ng.Axes([x_axis, batch_axis])
             elif len(shape) == 1:
-                name_to_axes[node.name] = (be.NumericAxis(10), batch_axis)
+                name_to_axes[node.name] = (ng.NumericAxis(10), batch_axis)
                 y_name = node.name
 
         elif node.op == 'Variable':
             dims = node.attr['shape'].shape
             shape = [int(d.size) for d in dims.dim]
-            name_to_axes[node.name] = be.Axes(shape)
+            name_to_axes[node.name] = ng.Axes(shape)
             if len(shape) == 2:
-                y_axis = be.NumericAxis(shape[1])
+                y_axis = ng.NumericAxis(shape[1])
 
         elif node.op == 'Const':
             # in the frozen graph, all variables are converted to constant
             const_tensor = node.attr['value'].tensor
             shape = [int(d.size) for d in const_tensor.tensor_shape.dim]
             if 'biases' in node.name or 'weights' in node.name:
-                name_to_axes[node.name] = be.Axes(shape)
+                name_to_axes[node.name] = ng.Axes(shape)
 
     name_to_axes[y_name] = (y_axis, batch_axis)
 
@@ -119,8 +119,8 @@ def _shape_to_numeric_axis(shape):
     """
     if len(shape) == 0:
         return None
-    axis_list = [be.NumericAxis(s) for s in shape]
-    return be.Axes(tuple(axis_list))
+    axis_list = [ng.NumericAxis(s) for s in shape]
+    return ng.Axes(tuple(axis_list))
 
 
 class TensorFlowImporter:
@@ -235,8 +235,8 @@ class TensorFlowImporter:
     def _convert(self, tf_node):
         # unary ops
         unary_ops = {
-            'Tanh': be.tanh,
-            'Sigmoid': be.sigmoid,
+            'Tanh': ng.tanh,
+            'Sigmoid': ng.sigmoid,
             # TODO: 'Relu': be.relu,
         }
         self.name_to_op[tf_node.name] = unary_ops[tf_node.op](
@@ -245,11 +245,11 @@ class TensorFlowImporter:
     @_convert.on_op(['Add', 'Div', 'MatMul', 'Maximum', 'Mul'])
     def _convert(self, tf_node):
         binary_ops = {
-            'Add': be.add,
-            'Div': be.divide,
-            'MatMul': be.dot,
-            'Maximum': be.maximum,
-            'Mul': be.multiply,
+            'Add': ng.add,
+            'Div': ng.divide,
+            'MatMul': ng.dot,
+            'Maximum': ng.maximum,
+            'Mul': ng.multiply,
             # TODO: 'Mod', be.mod,
         }
         # TODO: remove this hardcoded branch after ExpandDims op is implemented
@@ -257,7 +257,7 @@ class TensorFlowImporter:
             # use be.Constant(1. / self.bastch_axis.length) as temporal result
             # to replace the output of ExpandDims  (self.name_to_op[tf_node.input[0]])
             self.name_to_op[tf_node.name] = binary_ops[tf_node.op](
-                be.Constant(1. / self.batch_axis.length),
+                ng.Constant(1. / self.batch_axis.length),
                 self.name_to_op[tf_node.input[1]], name=tf_node.name)
         else:
             self.name_to_op[tf_node.name] = binary_ops[tf_node.op](
@@ -267,8 +267,8 @@ class TensorFlowImporter:
     @_convert.on_op(['Mean', 'Sum'])
     def _convert(self, tf_node):
         reduction_ops = {
-            'Mean': be.mean,
-            'Sum': be.sum,
+            'Mean': ng.mean,
+            'Sum': ng.sum,
             # TODO: 'Prod': be.prod,
         }
 
@@ -287,12 +287,12 @@ class TensorFlowImporter:
 
         self.name_to_op[tf_node.name] = reduction_ops[tf_node.op](
             input_tensor,
-            reduction_axes=be.Axes(reduction_axes),
+            reduction_axes=ng.Axes(reduction_axes),
             name=tf_node.name)
 
     @_convert.on_op('Relu')
     def _convert(self, tf_node):
-        self.name_to_op[tf_node.name] = be.maximum(
+        self.name_to_op[tf_node.name] = ng.maximum(
             self.name_to_op[tf_node.input[0]], 0)
 
     @_convert.on_op('Identity')
@@ -303,7 +303,7 @@ class TensorFlowImporter:
     def _convert(self, tf_node):
         dims = tf_node.attr['shape'].shape
         shape = [d.size for d in dims.dim]
-        self.name_to_op[tf_node.name] = be.placeholder(
+        self.name_to_op[tf_node.name] = ng.placeholder(
             axes=self.name_to_axes[tf_node.name], name=tf_node.name)
         # TODO: handle other placeholders
         if len(shape) == 2:
@@ -325,12 +325,12 @@ class TensorFlowImporter:
             axes = self.name_to_axes[tf_node.name]
         else:
             axes = _shape_to_numeric_axis(shape)
-        self.name_to_op[tf_node.name] = be.Constant(np_val, axes=axes,
+        self.name_to_op[tf_node.name] = ng.Constant(np_val, axes=axes,
                                                     name=tf_node.name)
 
     @_convert.on_op('Variable')
     def _convert(self, tf_node):
-        self.name_to_op[tf_node.name] = be.Variable(
+        self.name_to_op[tf_node.name] = ng.Variable(
             axes=self.name_to_axes[tf_node.name], name=tf_node.name)
         self.variables[tf_node.name] = self.name_to_op[tf_node.name]
 
@@ -338,7 +338,7 @@ class TensorFlowImporter:
     def _convert(self, tf_node):
         var = self.name_to_op[tf_node.input[0]]
         init_value = self.name_to_op[tf_node.input[1]]
-        self.name_to_op[tf_node.name] = be.assign(var, init_value)
+        self.name_to_op[tf_node.name] = ng.assign(var, init_value)
         var.initializers.append(self.name_to_op[tf_node.name])
 
     @_convert.on_op('AssignAdd')
@@ -351,7 +351,7 @@ class TensorFlowImporter:
 
         var = self.name_to_op[tf_node.input[0]]
         tensor_to_add = self.name_to_op[tf_node.input[1]]
-        self.name_to_op[tf_node.name] = be.assign(var, var + tensor_to_add)
+        self.name_to_op[tf_node.name] = ng.assign(var, var + tensor_to_add)
 
     @_convert.on_op('Fill')
     def _convert(self, tf_node):
@@ -361,14 +361,14 @@ class TensorFlowImporter:
         assert is_constant(init_val)
 
         if len(shape_tensor.shape) == 0:
-            self.name_to_op[tf_node.name] = be.Constant(
+            self.name_to_op[tf_node.name] = ng.Constant(
                 constant_value(init_val), name=tf_node.name)
         else:
             shape = tuple([int(s) for s in shape_tensor])
             array = np.zeros(shape)
             array.fill(constant_value(init_val))
             axes = _shape_to_numeric_axis(shape)
-            self.name_to_op[tf_node.name] = be.Constant(array,
+            self.name_to_op[tf_node.name] = ng.Constant(array,
                                                         axes=axes,
                                                         name=tf_node.name)
 
@@ -391,7 +391,7 @@ class TensorFlowImporter:
                 np.float32)
 
         axes = _shape_to_numeric_axis(shape)
-        self.name_to_op[tf_node.name] = be.Constant(val, axes=axes,
+        self.name_to_op[tf_node.name] = ng.Constant(val, axes=axes,
                                                     name=tf_node.name)
 
     @_convert.on_op('Cast')
@@ -408,25 +408,25 @@ class TensorFlowImporter:
         # https://goo.gl/z5T2my
 
         pred = softmax(self.name_to_op[tf_node.input[0]],
-                       be.Axes(self.y_axis, ))
+                       ng.Axes(self.y_axis, ))
         label = self.name_to_op[tf_node.input[1]]
 
-        self.name_to_op[tf_node.name] = be.cross_entropy_multi(pred, label,
+        self.name_to_op[tf_node.name] = ng.cross_entropy_multi(pred, label,
                                                                out_axes=(
                                                                    self.batch_axis,))
         # equivalent: op = -be.sum(safelog(pred) * label * np.float(1. / np.log(2.0)),
         #                             out_axes=(self.bastch_axis,))
 
         # this op also calculates gradients and saved in the second output
-        sum_exp_logits = be.sum(pred, out_axes=(self.batch_axis,))
-        grad = be.divide(pred, sum_exp_logits) - label
+        sum_exp_logits = ng.sum(pred, out_axes=(self.batch_axis,))
+        grad = ng.divide(pred, sum_exp_logits) - label
         self.name_to_op[tf_node.name + ":1"] = grad
 
     @_convert.on_op('Prod')
     def _convert(self, tf_node):
         # TODO: implement tf.reduce_prod and merge with reduction_ops
         prod_val = np.prod(self.name_to_op[tf_node.input[0]].const)
-        self.name_to_op[tf_node.name] = be.Constant(prod_val,
+        self.name_to_op[tf_node.name] = ng.Constant(prod_val,
                                                     name=tf_node.name)
 
     @_convert.on_op('Shape')
@@ -435,11 +435,11 @@ class TensorFlowImporter:
         shape = [axis.length for axis in axes]
 
         if len(shape) == 0:
-            self.name_to_op[tf_node.name] = be.Constant(0,
+            self.name_to_op[tf_node.name] = ng.Constant(0,
                                                         name=tf_node.name)
         else:
-            axes = be.Axes(be.NumericAxis(len(shape)), )
-            self.name_to_op[tf_node.name] = be.Constant(np.array(shape),
+            axes = ng.Axes(ng.NumericAxis(len(shape)), )
+            self.name_to_op[tf_node.name] = ng.Constant(np.array(shape),
                                                         axes=axes,
                                                         name=tf_node.name)
 
@@ -447,14 +447,14 @@ class TensorFlowImporter:
     def _convert(self, tf_node):
         # The rank of a tensor is the number of axis
         shape = self.name_to_op[tf_node.input[0]].shape
-        self.name_to_op[tf_node.name] = be.Constant(len(shape),
+        self.name_to_op[tf_node.name] = ng.Constant(len(shape),
                                                     name=tf_node.name)
 
     @_convert.on_op('Size')
     def _convert(self, tf_node):
         axes = self.name_to_op[tf_node.input[0]].axes
         shape = [axis.length for axis in axes]
-        self.name_to_op[tf_node.name] = be.Constant(np.prod(shape),
+        self.name_to_op[tf_node.name] = ng.Constant(np.prod(shape),
                                                     name=tf_node.name)
 
     @_convert.on_op('Range')
@@ -464,8 +464,8 @@ class TensorFlowImporter:
         delta = self.name_to_op[tf_node.input[2]]
         nums = np.arange(start.const, limit.const, delta.const).astype(
             np.float32)
-        self.name_to_op[tf_node.name] = be.Constant(nums, axes=be.Axes(
-            be.NumericAxis(len(nums)), ), name=tf_node.name)
+        self.name_to_op[tf_node.name] = ng.Constant(nums, axes=ng.Axes(
+            ng.NumericAxis(len(nums)), ), name=tf_node.name)
 
     @_convert.on_op('Mod')
     def _convert(self, tf_node):
@@ -475,7 +475,7 @@ class TensorFlowImporter:
     @_convert.on_op('DynamicStitch')
     def _convert(self, tf_node):
         # TODO: implement tf.dynamic_stich, currently just use a constant
-        self.name_to_op[tf_node.name] = be.Constant(1)
+        self.name_to_op[tf_node.name] = ng.Constant(1)
 
     @_convert.on_op('Reshape')
     def _convert(self, tf_node):
@@ -502,8 +502,8 @@ class TensorFlowImporter:
         val = np.tile(array, self.batch_axis.length)
         shape = val.shape
         if len(shape) == 1:
-            self.name_to_op[tf_node.name] = be.Constant(val, axes=be.Axes(
-                be.NumericAxis(shape[0]), ), name=tf_node.name)
+            self.name_to_op[tf_node.name] = ng.Constant(val, axes=ng.Axes(
+                ng.NumericAxis(shape[0]), ), name=tf_node.name)
         else:
             assert False
 
@@ -543,15 +543,15 @@ class TensorFlowImporter:
 
         if grad_x_reduce_:
             val_x = np.array(grad_x_reduce_)
-            axes = be.Axes(be.NumericAxis(len(grad_x_reduce_)), )
-            self.name_to_op[tf_node.name] = be.Constant(val_x, axes=axes,
+            axes = ng.Axes(ng.NumericAxis(len(grad_x_reduce_)), )
+            self.name_to_op[tf_node.name] = ng.Constant(val_x, axes=axes,
                                                         name=tf_node.name)
 
         self.name_to_op[tf_node.name + ":1"] = None
         if grad_y_reduce_:
             val_y = np.array(grad_y_reduce_)
-            axes = be.Axes(be.NumericAxis(len(grad_y_reduce_)), )
-            self.name_to_op[tf_node.name + ":1"] = be.Constant(val_y, axes=axes,
+            axes = ng.Axes(ng.NumericAxis(len(grad_y_reduce_)), )
+            self.name_to_op[tf_node.name + ":1"] = ng.Constant(val_y, axes=axes,
                                                                name=tf_node.name)
 
     @_convert.on_op('ReluGrad')
@@ -566,20 +566,20 @@ class TensorFlowImporter:
         lr = self.name_to_op[tf_node.input[1]]
         grad = self.name_to_op[tf_node.input[2]]
         updated_var = var - lr * grad
-        self.name_to_op[tf_node.name] = be.assign(var, updated_var)
+        self.name_to_op[tf_node.name] = ng.assign(var, updated_var)
 
     @_convert.on_op('NoOp')
     def _convert(self, tf_node):
         # NoOp adds '^' before each original input name
         if tf_node.name == "GradientDescent/update":
             # gradient descent ops
-            self.name_to_op[tf_node.name] = be.doall(
+            self.name_to_op[tf_node.name] = ng.doall(
                 all=[self.name_to_op[input[1:]] for input in tf_node.input])
             self.update_op = self.name_to_op[tf_node.name]
 
         elif tf_node.name == "init":
             # variable initialization graph, used only once
-            self.name_to_op[tf_node.name] = be.doall(
+            self.name_to_op[tf_node.name] = ng.doall(
                 all=[self.name_to_op[input[1:]] for input in
                      tf_node.input[:-1]])
             self.init_op = self.name_to_op[tf_node.name]

@@ -25,14 +25,14 @@ from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 
 import numpy as np
-import geon as be
+import ngraph as ng
 from util.importer import TensorFlowImporter
-import geon.analysis as an
+import ngraph.analysis as an
 
 # args and environment
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
-parser.add_argument('--pb_file', type=str, default="mnist/graph_froze.pb",
+parser.add_argument('--pb_file', type=str, default="graph_froze.pb",
                     help='GraphDef protobuf')
 args = parser.parse_args()
 
@@ -46,7 +46,7 @@ def inference_mnist_mlp():
     tf_importer = TensorFlowImporter(args.pb_file)
 
     # init transformer
-    transformer = be.NumPyTransformer()
+    transformer = ng.NumPyTransformer()
     infer_computation = transformer.computation(tf_importer.last_op,
                                                 tf_importer.x)
 
