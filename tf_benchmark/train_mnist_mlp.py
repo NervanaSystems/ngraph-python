@@ -29,7 +29,7 @@ TODO: infer_node: should determine automatically or receive as arg parameter
 
 """
 
-from __future__ import print_function
+from __future__ import division, print_function
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
 from util.importer import TensorFlowImporter
