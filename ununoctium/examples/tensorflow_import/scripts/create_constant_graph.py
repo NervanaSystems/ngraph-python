@@ -20,15 +20,10 @@ def create_tf_graph():
 
     graph_name = "constant_graph"
 
-    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb.txt",
-                         True)  # The graph is written as a text proto
-    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb",
-                         False)  # The graph is written as a binary proto
-
-
-def main(_):
-    create_tf_graph()
-
+    # write text proto and binary proto
+    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb.txt", True)
+    tf.train.write_graph(sess.graph_def, "./", graph_name + ".pb", False)
+    
 
 if __name__ == '__main__':
-    tf.app.run()
+    create_tf_graph()
