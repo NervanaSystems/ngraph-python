@@ -1266,7 +1266,7 @@ class ElementWise(TensorOp):
 
     def __init__(self, args, **kwargs):
         args = Op.as_ops(args)
-        arg_axess = [arg.axes.drop_ones() for arg in args]
+        arg_axess = [arg.axes.squeeze() for arg in args]
 
         # We do this to have the same output shape as numpy
         if len(args) == 2\
@@ -1295,7 +1295,7 @@ class ElementWise(TensorOp):
           TODO
         """
         return [
-            arg.drop_ones().reaxe(self.axes)
+            arg.squeeze().reaxe(self.axes)
             for arg in tensor_descriptions(self.args)
         ]
 

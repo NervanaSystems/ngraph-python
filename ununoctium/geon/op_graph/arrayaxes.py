@@ -547,7 +547,7 @@ class Axes(object):
         """
         return self._axes.index(axis)
 
-    def drop_ones(self):
+    def squeeze(self):
         """
         Removes numeric axes with length 1 from this sequence.
 
@@ -1003,7 +1003,7 @@ class TensorDescription(NameableValue):
             )
         return self.reaxe_with_positions(new_axes, old_poss)
 
-    def drop_ones(self):
+    def squeeze(self):
         """
         Removes 1-length numeric axes from the tensor description,
         allowing us to broadcast the remaining axes onto any superset.
