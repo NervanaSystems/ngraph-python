@@ -455,6 +455,13 @@ class Axes(object):
         """
         return tuple(x.length for x in self)
 
+    def are_numeric(self):
+        """
+        Returns:
+            bool: Whether all the axes in this sequence are NumericAxis objects.
+        """
+        return all(isinstance(axis, NumericAxis) for axis in self)
+
     def batch_axes(self):
         """
         Returns:
@@ -539,6 +546,15 @@ class Axes(object):
             The index.
         """
         return self._axes.index(axis)
+
+    def squeeze(self):
+        """
+        Removes numeric axes with length 1 from this sequence.
+
+        Returns:
+            Axes: The sequence with length-1 numeric axes removed.
+        """
+        return Axes((x for x in self if x is not NumericAxis(1)))
 
     # TODO: delete this method, the size should come from the tensor
     @property
@@ -987,6 +1003,35 @@ class TensorDescription(NameableValue):
             )
         return self.reaxe_with_positions(new_axes, old_poss)
 
+    def squeeze(self):
+        """
+        Removes 1-length numeric axes from the tensor description,
+        allowing us to broadcast the remaining axes onto any superset.
+
+        Returns:
+            The tensor description containing no 1-length numerics in its
+            axes.
+        """
+        new_axes = []
+        full_strides = []
+        full_sizes = []
+
+        one_num = NumericAxis(1)
+        for axis, fst, fsz in zip(
+            self.axes, self.full_strides, self.full_sizes
+        ):
+            if axis is not one_num:
+                new_axes.append(axis)
+                full_strides.append(fst)
+                full_sizes.append(fsz)
+
+        return TensorDescription(new_axes,
+                                 base=self.base,
+                                 dtype=self.dtype,
+                                 full_strides=tuple(full_strides),
+                                 full_sizes=tuple(full_sizes),
+                                 offset=self.offset)
+
     def dot_reaxe_left(self, red_axis_ids):
         """
         Reshapes a tensor so that it can be used in a two-dimensional
@@ -1202,23 +1247,11 @@ class TensorDescription(NameableValue):
             axes, full-strides, full-sizes with flattened numeric axes having
             been evaluated.
         """
-        def all_numeric(axes):
-            """
-            Checks whether a set of axes contains only numeric axes
-
-            Arguments:
-                axes: The axes to be checked.
-
-            Returns:
-                True if there are only numeric axes, False otherwise
-            """
-            return all([isinstance(axis, NumericAxis) for axis in axes])
-
         new_axes = []
         new_strides = []
         new_sizes = []
         for axis, st, si in zip(axes, full_strides, full_sizes):
-            if isinstance(axis, FlattenedAxis) and all_numeric(axis.axes):
+            if isinstance(axis, FlattenedAxis) and axis.axes.are_numeric():
                 new_axes.append(NumericAxis(reduce_nested(
                     axis.axes.lengths, 1, operator.mul
                 )))

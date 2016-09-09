@@ -1266,9 +1266,17 @@ class ElementWise(TensorOp):
 
     def __init__(self, args, **kwargs):
         args = Op.as_ops(args)
+        arg_axess = [arg.axes.squeeze() for arg in args]
+
+        # We do this to have the same output shape as numpy
+        if len(args) == 2\
+                and args[0].axes.are_numeric()\
+                and args[1].axes.are_numeric():
+            arg_axess = sorted(arg_axess, key=len, reverse=True)
+
         axis_ids = AxisIDTuple()
-        for arg in args:
-            axis_ids += arg.axes.as_axis_ids()
+        for arg_axes in arg_axess:
+            axis_ids += arg_axes.as_axis_ids()
         axes = axis_ids.as_axes()
         super(ElementWise, self).__init__(
             args=args,
@@ -1286,7 +1294,10 @@ class ElementWise(TensorOp):
         Returns:
           TODO
         """
-        return [arg.reaxe(self.axes) for arg in tensor_descriptions(self.args)]
+        return [
+            arg.squeeze().reaxe(self.axes)
+            for arg in tensor_descriptions(self.args)
+        ]
 
 
 class AllReduce(Op):
