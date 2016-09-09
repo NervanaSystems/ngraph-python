@@ -10,5 +10,4 @@ scipy
 # autopep8 (temporary add)
 autopep8==1.2.4
 # other requirements
-graphviz
 cachetools
