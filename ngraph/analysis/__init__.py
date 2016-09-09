@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from geon.analysis.dataflow import *
-from geon.analysis.fusion import *
-from geon.analysis.memory import *
+from ngraph.analysis.dataflow import *
+from ngraph.analysis.fusion import *
+from ngraph.analysis.memory import *

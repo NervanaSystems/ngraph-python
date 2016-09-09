@@ -25,7 +25,7 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := geon tests examples
+STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
 TEST_OPTS :=
@@ -60,7 +60,7 @@ style:
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
-	pylint --output-format=colorized geon
+	pylint --output-format=colorized ngraph
 
 lint3k:
 	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
@@ -72,7 +72,7 @@ check:
 	@echo
 	@echo "Number of missing docstrings is..."
 	-@pylint --disable=all --enable=missing-docstring -r n \
-	  geon | grep "^C" | wc -l
+	  ngraph | grep "^C" | wc -l
 	@echo
 	@echo "Running unit tests..."
 	-@py.test $(TEST_DIRS) | tail -1 | cut -f 2,3 -d ' '

@@ -22,7 +22,7 @@ Activate the virtualenv with ``. .venv/bin/activate``, then run:
 
 .. code-block:: bash
     git clone git@github.com:NervanaSystems/graphiti.git
-    cd graphiti/ununoctium
+    cd graphiti
     make install
 
 Examples
@@ -30,9 +30,9 @@ Examples
 
 Several useful example scripts demonstate how to use graphiti:
 
-* ``ununoctium/examples/walk_through/logres.py`` is a simple example of using graph operations.
-* ``ununoctium/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
-* ``ununoctium/examples/cifar10_mlp.py`` uses the neon front-end to define and train the model.
+* ``ngraph/examples/walk_through/logres.py`` is a simple example of using graph operations.
+* ``ngraph/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
+* ``ngraph/examples/cifar10_mlp.py`` uses the neon front-end to define and train the model.
 
 Developer Guide
 ===============

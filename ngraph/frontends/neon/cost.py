@@ -281,7 +281,7 @@ class TopKMisclassification(Metric):
             numpy array : Returns the metrics in a numpy array:
                           [LogLoss, Top 1 misclass, Top k misclass]
         """
-        be = self.be
+        ng = self.ng
         self.correctProbs[:] = ng.sum(y * t, axis=0)
         nSlots = self.k - ng.sum((y > self.correctProbs), axis=0)
         nEq = ng.sum(y == self.correctProbs, axis=0)

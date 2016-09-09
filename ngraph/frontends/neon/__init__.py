@@ -14,24 +14,24 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-import geon as be
+import ngraph as ng
 # TODO Use an ax namescope, but also move this into neon front end.
-import geon.frontends.base.axis as ax
+import ngraph.frontends.base.axis as ax
 
 # neon frontend modules
-from geon.frontends.neon.callbacks import *
-from geon.frontends.neon.layer import *
-from geon.frontends.neon.optimizer import *
-from geon.frontends.neon.model import Model
-from geon.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, SumSquared, \
+from ngraph.frontends.neon.callbacks import *
+from ngraph.frontends.neon.layer import *
+from ngraph.frontends.neon.optimizer import *
+from ngraph.frontends.neon.model import Model
+from ngraph.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, SumSquared, \
     Misclassification
-from geon.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
+from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic
 
 # include Axes here because old 2.0 code needs to be updated to include Axes
 # annotations in the call to model.fit.
 # TODO: deprecate this Axes, you should just use be.Axes instead
-from geon import Axes
+from ngraph import Axes
 
 # old neon code which hasn't changed but should be available in this namespace
 # TODO: there are a lot of classes which are similar to the ones listed here,

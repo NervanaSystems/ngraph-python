@@ -3,7 +3,7 @@
 import os
 import sys
 
-# from geon import __version__ as geon_version
+# from ngraph import __version__ as ngraph_version
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -63,7 +63,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'graphiti'
+project = u'ngraph'
 copyright = u'2016, Nervana Systems Inc'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -118,7 +118,7 @@ pygments_style = 'murphy'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'geon_theme'
+html_theme = 'ngraph_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -137,17 +137,17 @@ html_theme_path = ["."]
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = 'geon_theme/static/favicon.ico'
+html_logo = 'ngraph_theme/static/favicon.ico'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-html_favicon = 'geon_theme/static/favicon.ico'
+html_favicon = 'ngraph_theme/static/favicon.ico'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['geon_theme/static']
+html_static_path = ['ngraph_theme/static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -196,7 +196,7 @@ html_show_sphinx = False
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'geondoc'
+htmlhelp_basename = 'ngraphdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -215,7 +215,7 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
-latex_documents = [('index', 'geon.tex', u'Nervana Graphiti Documentation',
+latex_documents = [('index', 'ngraph.tex', u'Nervana Graph Documentation',
                     u'Nervana Systems Inc', 'manual'), ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -244,7 +244,7 @@ latex_documents = [('index', 'geon.tex', u'Nervana Graphiti Documentation',
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'geon', u'Nervana Graphiti Documentation',
+    ('index', 'ngraph', u'Nervana Graph Documentation',
      [u'Nervana Systems Inc'], 1)
 ]
 
@@ -257,7 +257,7 @@ man_pages = [
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [('index', 'geon', u'Nervana Graphiti Documentation',
+texinfo_documents = [('index', 'ngraph', u'Nervana Graph Documentation',
                       u'Nervana Systems Inc', 'cloud',
                       'One line description of project.', 'Miscellaneous'), ]
 
@@ -283,7 +283,7 @@ intersphinx_mapping = {
 # These go in every file
 rst_epilog = """
 .. include :: <isonum.txt>
-.. |geon| replace:: nervana graph
+.. |ngraph| replace:: nervana graph
 .. |Geon| replace:: Nervana graph
 .. |TF| replace:: TensorFlow\ |trade|
 """

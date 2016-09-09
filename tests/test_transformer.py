@@ -16,7 +16,7 @@ import pytest
 
 import ngraph as ng
 import numpy as np
-from geon.util.utils import executor
+from ngraph.util.utils import executor
 
 
 def test_evalutaion_twice():
