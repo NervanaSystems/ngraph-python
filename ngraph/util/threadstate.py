@@ -20,6 +20,6 @@ __thread_state = threading.local()
 def get_thread_state():
     """
     Returns:
-        Thread state specific to |geon|.
+        Thread state specific to ngraph.
     """
     return __thread_state

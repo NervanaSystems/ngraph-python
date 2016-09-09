@@ -21,7 +21,7 @@ from ngraph.util.utils import raise_all_numpy_errors
 from ngraph.util.utils import ExecutorFactory, executor
 
 """
-Test graphiti's implementation of the dot product.
+Test ngraph's implementation of the dot product.
 """
 
 

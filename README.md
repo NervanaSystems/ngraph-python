@@ -1,12 +1,12 @@
-# NervanaGraph
+# Nervana Graph
 
-NervanaGraph is Nervana's computational graph.
+Nervana Graph is Nervana's computational graph.
 
 ## Installation
 
 First ensure you have [private-neon](https://github.com/NervanaSystems/private-neon) checked out and built.
 
-To install NervanaGraph into your private-neon virtual env:
+To install Nervana Graph into your private-neon virtual env:
 
 ```
 cd private-neon
