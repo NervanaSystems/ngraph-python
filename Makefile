@@ -48,7 +48,7 @@ install:
 	@pip install -e .
 
 uninstall:
-	@pip uninstall -y Graphiti
+	@pip uninstall -y ngraph
 	@pip uninstall -r requirements.txt
 
 test:

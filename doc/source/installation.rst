@@ -21,8 +21,8 @@ To install |geon|, be sure to first install neon in a virtual environment.
 Activate the virtualenv with ``. .venv/bin/activate``, then run:
 
 .. code-block:: bash
-    git clone git@github.com:NervanaSystems/graphiti.git
-    cd graphiti
+    git clone git@github.com:NervanaSystems/ngraph.git
+    cd ngraph
     make install
 
 Examples
