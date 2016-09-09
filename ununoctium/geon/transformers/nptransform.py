@@ -285,10 +285,7 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(dot)
     def generate_op(self, op, out, o, x, y):
-        if o.tensor_description.c_contiguous:
-            self.append("np.dot({}, {}, out={})", x, y, o)
-        else:
-            self.append("np.dot({}.T, {}.T, out={}.T)", y, x, o)
+        self.append("np.dot({}, {}, out={})", x, y, o)
 
     @generate_op.on_type(equal)
     def generate_op(self, op, out, x, y):

@@ -1003,6 +1003,23 @@ class TensorDescription(NameableValue):
             )
         return self.reaxe_with_positions(new_axes, old_poss)
 
+    def transpose(self):
+        """
+        Reverses the axes of the tensor description.
+
+        Retuns:
+            A tensor description with the axes reversed.
+        """
+        new_axes = reversed(self.axes)
+        full_sizes = reversed(self.full_sizes)
+        full_strides = reversed(self.full_strides)
+        return TensorDescription(Axes(new_axes),
+                                 base=self.base,
+                                 dtype=self.dtype,
+                                 full_strides=tuple(full_strides),
+                                 full_sizes=tuple(full_sizes),
+                                 offset=self.offset)
+
     def squeeze(self):
         """
         Removes 1-length numeric axes from the tensor description,
