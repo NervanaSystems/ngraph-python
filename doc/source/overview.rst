@@ -19,7 +19,7 @@ Overview
 |Geon| is a Python library for implementing programs that convert descriptions of neural networks into programs
 that run efficiently on a variety of platforms. The library has three layers: frontends, the operational graph (or op-graph), and transformers. The workflow is shown below:
 
-.. image :: assets/graphiti_workflow.png
+.. image :: assets/ngraph_workflow.png
 
 Frontends in |geon| such as neon or |TF| provide methods for defining models in terms of the operational graph API. The op-graph is a flow of operations, with nodes called ``Ops`` linked by edges, that is hardware-independant. Front ends are responsible for translating model descriptions into an op-graph.
 
