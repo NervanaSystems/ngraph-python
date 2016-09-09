@@ -13,22 +13,22 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-This API documentation covers each module within Graphiti.
+This API documentation covers each module within Nervana Graph.
 
 ngraph.analysis
-=============
+===============
 .. py:module: ngraph.analysis
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   ngraph.analysis.dataflow.py
-   ngraph.analysis.fusion.py
-   ngraph.analysis.memory.py
+   ngraph.analysis.dataflow
+   ngraph.analysis.fusion
+   ngraph.analysis.memory
 
 ngraph.dataloader
-===============
+=================
 .. py:module: ngraph.dataloader
 
 .. autosummary::
@@ -38,7 +38,7 @@ ngraph.dataloader
    ngraph.dataloader.dataloaderbackend
 
 ngraph.frontends
-==============
+================
 .. py:module: ngraph.frontends
 
 .. autosummary::
@@ -48,7 +48,7 @@ ngraph.frontends
    ngraph.frontends.base.axis
 
 ngraph.frontends.neon
-===================
+=====================
 .. py:module: ngraph.frontends.neon
 
 .. autosummary::
@@ -64,7 +64,7 @@ ngraph.frontends.neon
    ngraph.frontends.neon.optimizer
 
 ngraph.op_graph
-=============
+===============
 .. py:module: ngraph.op_graph
 
 .. autosummary::
@@ -76,7 +76,7 @@ ngraph.op_graph
    ngraph.op_graph.op_graph
 
 ngraph.transformers
-=================
+===================
 .. py:module: ngraph.transformers
 
 .. autosummary::
@@ -87,7 +87,7 @@ ngraph.transformers
    ngraph.transformers.nptransform
 
 ngraph.util
-=========
+===========
 .. py:module: ngraph.util
 
 .. autosummary::
