@@ -1,5 +1,3 @@
-# flake8: noqa
-
 '''
 A Reccurent Neural Network (LSTM) implementation example using TensorFlow library.
 This example is using the MNIST database of handwritten digits (http://yann.lecun.com/exdb/mnist/)
@@ -8,6 +6,8 @@ Long Short Term Memory paper: http://deeplearning.cs.cmu.edu/pdfs/Hochreiter97_l
 Author: Aymeric Damien
 Project: https://github.com/aymericdamien/TensorFlow-Examples/
 '''
+
+# flake8: noqa
 
 import tensorflow as tf
 from tensorflow.python.ops import rnn, rnn_cell

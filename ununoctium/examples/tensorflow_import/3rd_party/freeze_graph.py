@@ -1,5 +1,3 @@
-# flake8: noqa
-
 #  Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
+# flake8: noqa
+
 """Converts checkpoint variables into Const ops in a standalone GraphDef file.
 
 This script is designed to take a GraphDef proto, a SaverDef proto, and a set of
