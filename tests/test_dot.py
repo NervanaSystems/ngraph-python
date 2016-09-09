@@ -84,10 +84,10 @@ def graphiti_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes +=  ng.Axis(name='axis%s' % i, length=l),)
+        axes += (ng.Axis(name='axis%s' % i, length=l),)
     np_tensor = ng.Constant(np_array, axes=axes)
     var = ng.Variable(axes=axes, initial_value=np_tensor)
-    return executor ng.sqrt ng.dot(var, var)))()
+    return executor(ng.sqrt(ng.dot(var, var)))()
 
 
 @raise_all_numpy_errors

@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-<<<<<<< HEAD:nervanagraph/analysis/fusion.py
 from ngraph.analysis.dataflow import DataFlowGraph
 from ngraph.util.graph import Digraph
 import ngraph as ng
