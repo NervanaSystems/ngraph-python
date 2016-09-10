@@ -140,8 +140,7 @@ class MeanSquared(Cost):
         """
         Define the cost function and its gradient as lambda functions.
         """
-        self.func = lambda y, t: self.ng.mean(
-            self.ng.square(y - t), axis=0) / 2.
+        self.func = lambda y, t: ng.mean(ng.square(y - t), axis=0) / 2.
         self.funcgrad = lambda y, t: (y - t) / y.shape[0]
 
 
