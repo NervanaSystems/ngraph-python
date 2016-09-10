@@ -877,9 +877,6 @@ class Slice(TensorOp):
     """
 
     def __init__(self, x, slices, axes=None, **kwargs):
-        """
-        TODO.
-        """
         if len(slices) != len(x.shape):
             raise ValueError((
                 'There should be one slice in slices for each dimension in '
@@ -1032,10 +1029,13 @@ class AllocationOp(TensorOp):
 
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
     """
-    Makes a constant scalar/tensor.
+    Makes a constant scalar/tensor.  For a tensor, Constant provides the opportunity
+        to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
+        tensors, but Constant may be used to supply axes or in the rare cases where Constant
+        is not automatically provided.
 
     Args:
-        const: The constant.
+        const: The constant, a scalar or a NumPy array.
         axes: The axes for the constant.
         constant (:obj:`bool`, optional): True; this value should not be writable.
         trainable (:obj:`bool`, optional): False; this value should not be trained.
@@ -1043,7 +1043,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
         **kwargs: Other parameters for the op.
 
     Returns:
-
+        An AllocationOp for the constant.
     """
     if graph_label_type is None:
         graph_label_type = "<Const({})>".format(const)
