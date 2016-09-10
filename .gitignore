@@ -48,6 +48,6 @@ neon/backends/kernels/dump
 *.pb
 *.ckpt
 *.ckpt.meta
-tf_benchmark/mnist/data
-tf_benchmark/mnist/checkpoint
+**/tensorflow_import/data
+**/tensorflow_import/checkpoint
 
