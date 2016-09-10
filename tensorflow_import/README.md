@@ -1,5 +1,32 @@
 # Run TensorFlow Graph with Neon
 
+## Minimal Example
+
+```python
+import tensorflow as tf
+import ngraph as ng
+from tensorflow_import.importer import TensorFlowImporter
+
+# build TensorFlow graph
+a = tf.constant(10)
+b = tf.constant(20)
+c = a + b
+d = c * a
+
+# write to protobuf
+with tf.Session() as sess:
+    tf.train.write_graph(sess.graph_def, "./", "my_graph.pb.txt", True)
+
+# import from protobuf
+importer = TensorFlowImporter("my_graph.pb.txt")
+
+# run imported graph
+transformer = ng.NumPyTransformer()
+result_comp = transformer.computation([importer.last_op])
+result_val = result_comp()[0]
+print(result_val)  # prints 300
+```
+
 ## Example Usage
 1. Preparation.
 
@@ -30,7 +57,7 @@
 4. A tool to clean up the mnist data is also provided.
 
     ```sh
-    $ python mnist_clean.py
+    $ ./mnist_clean.sh
     ```
 
 [this tool]: https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/tools/freeze_graph.py
