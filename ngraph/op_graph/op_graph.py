@@ -742,7 +742,14 @@ class TensorOp(Op):
 
 
 class AxesCastOp(TensorOp):
-    """Used to label a tensor with known axes, without altering its value"""
+    """
+    Used to label a tensor with known axes, without altering its value
+
+    Arguments:
+        x: A tensor.
+        axes: The new axes.
+
+    """
     def __init__(self, x, axes, **kwargs):
         super(AxesCastOp, self).__init__(args=(x,), axes=axes, **kwargs)
 
@@ -767,7 +774,13 @@ class AxesCastOp(TensorOp):
 
 
 class Broadcast(TensorOp):
-    """Used to add additional axes for a returned derivative."""
+    """
+    Used to add additional axes for a returned derivative.
+
+    Arguments:
+        x: The tensor to broadcast.
+        axes: The new axes.
+    """
 
     def __init__(self, x, **kwargs):
         super(Broadcast, self).__init__(args=(x,), **kwargs)
@@ -797,7 +810,14 @@ class Broadcast(TensorOp):
 
 
 class ExpandDims(TensorOp):
-    """TODO."""
+    """
+    Adds additional axes into a tensor.
+
+    Arguments:
+        x: The tensor.
+        axis: The additional axis.
+        dim: The position to add the axes.
+    """
 
     def __init__(self, x, axis, dim, **kwargs):
         axes = x.axes[:dim].concat(Axes(axis,)).concat(x.axes[dim:])
@@ -847,12 +867,16 @@ class ExpandDims(TensorOp):
 
 
 class Slice(TensorOp):
-    """TODO."""
+    """
+    Creates a sliced version of a tensor.
+
+    Arguments:
+        x: The tensor.
+        slices: One slice for each dimension in x.
+        axes: Axes for the result.  If not specified, axes will be generated.
+    """
 
     def __init__(self, x, slices, axes=None, **kwargs):
-        """
-        TODO.
-        """
         if len(slices) != len(x.shape):
             raise ValueError((
                 'There should be one slice in slices for each dimension in '
@@ -1004,6 +1028,23 @@ class AllocationOp(TensorOp):
 
 
 def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
+    """
+    Makes a constant scalar/tensor.  For a tensor, Constant provides the opportunity
+        to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
+        tensors, but Constant may be used to supply axes or in the rare cases where Constant
+        is not automatically provided.
+
+    Args:
+        const: The constant, a scalar or a NumPy array.
+        axes: The axes for the constant.
+        constant (:obj:`bool`, optional): True; this value should not be writable.
+        trainable (:obj:`bool`, optional): False; this value should not be trained.
+        graph_label_type (:obj:`str`, optional): Label for drawn graphs, defaults to <Const...>
+        **kwargs: Other parameters for the op.
+
+    Returns:
+        An AllocationOp for the constant.
+    """
     if graph_label_type is None:
         graph_label_type = "<Const({})>".format(const)
     val = AllocationOp(axes=axes, constant=constant, trainable=trainable,
@@ -1094,20 +1135,17 @@ def constant_storage(graph_label_type="Constant", **kwargs):
                         trainable=False, **kwargs)
 
 
-def NumPyTensor(*args, **kwargs):
-    return Constant(*args, **kwargs)
-
-
 def placeholder(constant=False, trainable=False, input=True, graph_label_type="placeholder",
                 **kwargs):
     """
     A persistent tensor to be initialized from the CPU.
 
     Args:
-        constant (bool): False.
-        trainable (bool): False.
-        input (bool): Allow value to be passed in computation args.  Default True.
-        graph_label_type (str): Used for drawing graphs.
+        constant (:obj:`bool`, optional): False.
+        trainable (:obj:`bool`, optional): False.
+        input (:obj:`bool`, optional): Allow value to be passed in computation args.  Default True.
+        graph_label_type (:obj:`str`, optional): Label used for drawing graphs.
+            Defaults to placeholder.
         **kwargs: Other args for AllocationOp.
 
     Returns: An AllocationOp.
@@ -1123,7 +1161,7 @@ def temporary(graph_label_type="Temp", **kwargs):
     Temporary storage.
 
     Args:
-        graph_label_type (str): Used for drawing graphs.
+        graph_label_type (:obj:`str`, optional): Used for drawing graphs.
         **kwargs: Other args for AllocationOp.
 
     Returns: An AllocationOp.
@@ -1139,8 +1177,8 @@ def Variable(trainable=True, graph_label_type="Variable", **kwargs):
     A trainable tensor.
 
     Args:
-        trainable (bool): Is in lists of trainable variables.  Default True.
-        graph_label_type: Used for drawing graphs.
+        trainable (:obj:`bool`, optional): Is in lists of trainable variables.  Default True.
+        graph_label_type: Used for drawing graphs, defaults to Variable.
         **kwargs: Other args for AllocationOp.
 
     Returns: An AllocationOp.
@@ -1152,6 +1190,7 @@ def Variable(trainable=True, graph_label_type="Variable", **kwargs):
 
 
 class Stack(TensorOp):
+    """ TODO."""
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
@@ -1176,6 +1215,15 @@ class Unslice(TensorOp):
     such as the derivative of a slice and a padding function.
     However, there is no reason why this operation should not be used
     by a higher-level module or the end user.
+
+    Arguments:
+        x: The tensor.
+        slices: slices to be unsliced.
+        axes: axes of result.
+
+    Attributes:
+        slices: The slices.
+        input_axes: The axes of the input x.
     """
 
     def __init__(self, x, slices, **kwargs):
@@ -1329,23 +1377,30 @@ class absolute(ElementWise):
 
 
 class add(ElementWise):
-    """TODO."""
+    """
+    Computation :math:`x+y`, element-wise addition.
+
+    Arguments:
+        x: First argument.
+        y: Second argument.
+        axes (optional): Axes for the result.
+
+    Returns:
+        The computation.
+    """
 
     def __init__(self, x, y, **kwargs):
         super(add, self).__init__(args=(x, y), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
-        TODO.
+        Contributes to the backprop computation:
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
+        | :math:`z = x + y`
+        | :math:`dz = dx + dy`
+        | so
+        | :math:`\overline{x} \leftarrow \overline{x} + \overline{z}`
+        | :math:`\overline{y} \leftarrow \overline{y} + \overline{z}`.
         """
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, delta)
@@ -1408,24 +1463,25 @@ class argmin(TensorOp):
 
 
 class cos(ElementWise):
-    """TODO."""
+    """
+    Element wise :math:`cos(x)`.
+
+    Arguments:
+        x: The input.
+        **kwargs: Related class arguments.
+    """
 
     def __init__(self, x, **kwargs):
         super(cos, self).__init__(args=(x,), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
+        | :math:`z = \cos(x)`
+        | :math:`dz = -\sin(x) dx`
+        | so
+        | :math:`\overline{x} \leftarrow \overline{x} - \overline{z}\sin(x)`
         """
-        x.generate_add_delta(adjoints, delta * sin(x))
+        x.generate_add_delta(adjoints, -delta * sin(x))
 
 
 class divide(ElementWise):
