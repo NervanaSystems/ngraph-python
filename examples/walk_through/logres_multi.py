@@ -37,13 +37,16 @@ transformer = ng.NumPyTransformer()
 update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)
 
+
+def avg_loss():
+    total_loss = 0
+    for xs, ys in zip(EVAL_XS, EVAL_YS):
+        loss_val = eval_fun(xs, ys)
+        total_loss += loss_val
+    return total_loss / len(xs)
+
+print("Starting avg loss: {}".format(avg_loss()))
 for i in range(10):
     for xs, ys in zip(XS, YS):
         loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-        print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
-
-total_loss = 0
-for xs, ys in zip(EVAL_XS, EVAL_YS):
-    loss_val = eval_fun(xs, ys)
-    total_loss += loss_val
-print("Loss: {}".format(total_loss / len(xs)))
+    print("After epoch %d: W: %s, b: %s, avg loss %s" % (i, w_val.T, b_val, avg_loss()))

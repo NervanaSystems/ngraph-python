@@ -224,13 +224,34 @@ We need to add a second computation, which just computes the average batch loss,
 
     eval_fun = transformer.computation(L, X, Y)
 
-Finally, after training, we evaluate the model::
+Finally, we use this computation to evaluate the model's performance on the test set during the course of training::
 
-    total_loss = 0
-    for xs, ys in zip(EVAL_XS, EVAL_YS):
-        loss_val = eval_fun(xs, ys)
-        total_loss += loss_val
-    print("Loss: {}".format(total_loss / len(xs)))
+    def avg_loss():
+        total_loss = 0
+        for xs, ys in zip(EVAL_XS, EVAL_YS):
+            loss_val = eval_fun(xs, ys)
+            total_loss += loss_val
+        return total_loss/len(xs)
+
+    print("Starting avg loss: {}".format(avg_loss()))
+    for i in range(10):
+        for xs, ys in zip(XS, YS):
+            loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+        print("After epoch %d: W: %s, avg loss %s" % (i, w_val, avg_loss()))
+
+Which demonstrates reasonable learning behavior::
+
+    Starting avg loss: 0.693147301674
+    After epoch 0: W: [ 1.31084263  3.54553676  0.83918822  0.47578019], avg loss 0.210895072669
+    After epoch 1: W: [ 1.61401999  4.14274025  0.80241382  0.70635045], avg loss 0.188071470708
+    After epoch 2: W: [ 1.78632712  4.44820547  0.75676179  0.8398425 ], avg loss 0.17810350284
+    After epoch 3: W: [ 1.90496778  4.6451354   0.71686864  0.93109995], avg loss 0.17216200754
+    After epoch 4: W: [ 1.9946698   4.78712606  0.68277711  0.99926096], avg loss 0.168086335063
+    After epoch 5: W: [ 2.06639457  4.89654636  0.65336621  1.05305564], avg loss 0.165055405349
+    After epoch 6: W: [ 2.12592459  4.98467636  0.62764722  1.09714031], avg loss 0.162679858506
+    After epoch 7: W: [ 2.17666841  5.05792665  0.60486782  1.1342684 ], avg loss 0.160748042166
+    After epoch 8: W: [ 2.2207973   5.12026215  0.58446652  1.1661936 ], avg loss 0.15913354978
+    After epoch 9: W: [ 2.25977612  5.17428732  0.56602061  1.19409537], avg loss 0.157755594701
 
 Logistic Regression with Axes
 =============================
@@ -278,16 +299,18 @@ When we are ready to use our model, we specify the lengths for the axes we are u
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
     eval_fun = transformer.computation(L, X, Y)
 
+    def avg_loss():
+        total_loss = 0
+        for xs, ys in zip(EVAL_XS, EVAL_YS):
+            loss_val = eval_fun(xs, ys)
+            total_loss += loss_val
+        return total_loss/len(xs)
+
+    print("Starting avg loss: {}".format(avg_loss()))
     for i in range(10):
         for xs, ys in zip(XS, YS):
             loss_val, w_val, _ = update_fun(5.0 / (1 + i), xs, ys)
-            print("W: %s, loss %s" % (w_val, loss_val))
-
-    total_loss = 0
-    for xs, ys in zip(EVAL_XS, EVAL_YS):
-        loss_val = eval_fun(xs, ys)
-        total_loss += loss_val
-    print("Loss: {}".format(total_loss / len(xs)))
+        print("After epoch %d: W: %s, avg loss %s" % (i, w_val, avg_loss()))
 
 Rather than setting ``C`` and ``N`` to the components of the shape of ``xs``, we use the axis lengths.
 
@@ -307,7 +330,7 @@ Now we have two variables to update, ``W`` and ``b``.  However, all the updates 
 we know that everything to be updated is a variable.  We can use the ``variables`` method to find all the
 trainable variables used in an ``Op``'s computation::
 
-    updates = [ng.assign(v, v - alpha * ng.deriv(L, v) / ng.tensor_size(Y_hat))
+    updates = [ng.assign(v, v - alpha * ng.deriv(L, v))
                for v in L.variables()]
 
     all_updates = ng.doall(updates)
@@ -323,11 +346,18 @@ and printing of results to::
             loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
             print("W: %s, b: %s, loss %s" % (w_val, b_val, loss_val))
 
-    total_loss = 0
-    for xs, ys in zip(EVAL_XS, EVAL_YS):
-        loss_val = eval_fun(xs, ys)
-        total_loss += loss_val
-    print("Loss: {}".format(total_loss / len(xs)))
+    def avg_loss():
+        total_loss = 0
+        for xs, ys in zip(EVAL_XS, EVAL_YS):
+            loss_val = eval_fun(xs, ys)
+            total_loss += loss_val
+        return total_loss/len(xs)
+
+    print("Starting avg loss: {}".format(avg_loss()))
+    for i in range(10):
+        for xs, ys in zip(XS, YS):
+            loss_val, w_val, b_val, _ = update_fun(5.0 / (1 + i), xs, ys)
+        print("After epoch %d: W: %s, b: %s, avg loss %s" % (i, w_val, b_val, avg_loss()))
 
 Multi-dimensional Logistic Regression
 =====================================
