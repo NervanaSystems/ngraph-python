@@ -42,7 +42,7 @@ class MixtureGenerator(object):
 
     def fill_mixture(self, xs, ys):
         self.multinomial(ys)
-        xs[...] = self.__rng.normal(0, 1, xs.shape)
+        xs[...] = self.__rng.normal(0, 0.3, xs.shape)
         for i in range(ys.size):
             y = ys[i]
             x = xs[..., i].reshape(self.size)
