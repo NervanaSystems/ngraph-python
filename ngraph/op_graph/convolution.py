@@ -5,7 +5,7 @@ from ngraph.op_graph import op_graph
 from ngraph.op_graph import arrayaxes
 
 
-def _output_dim(X, S, padding, strides, pooling=False):
+def _output_dim(X, S, padding, stride, pooling=False):
     """
     Compute along 1 dimension, with these sizes, what will be the output dimension.
 
@@ -13,19 +13,19 @@ def _output_dim(X, S, padding, strides, pooling=False):
         X (int): input data dimension
         S (int): filter dimension
         padding (int): padding on each side
-        strides (int): striding
+        stride (int): striding
         pooling (bool): flag for setting pooling layer size
     """
 
     # caffe compat disabled for now
     if False and pooling:
-        size = int(math.ceil((float(X - S + 2 * padding) / strides))) + 1
-        if padding > 0 and (size - 1) * strides >= X + padding:
+        size = int(math.ceil((float(X - S + 2 * padding) / stride))) + 1
+        if padding > 0 and (size - 1) * stride >= X + padding:
             # decrement size if last pooling op is completely in padding
             size -= 1
     else:
         # normal neon output size determination
-        size = ((X - S + 2 * padding) // strides) + 1
+        size = ((X - S + 2 * padding) // stride) + 1
 
     if pooling and padding >= S:
         raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
