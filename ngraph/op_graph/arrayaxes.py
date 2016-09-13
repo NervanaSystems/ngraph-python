@@ -989,7 +989,6 @@ class TensorDescription(NameableValue):
 
         return positions
 
-
     def reaxe_positions(self, new_axes):
         """
         Returns the index of each axis in new_axes as it is found in self.axes.
