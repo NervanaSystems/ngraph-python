@@ -26,6 +26,7 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
+from ngraph.op_graph.axes_ops import dimshuffle
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
@@ -440,6 +441,16 @@ class NumPyCodeGenerator(PyGen):
         for i, arg in enumerate(args):
             slices[op.pos] = i
             self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
+
+    @generate_op.on_type(dimshuffle)
+    def generate_op(self, op, out, x):
+        # self.append("{out}[()] = {x}", out=out, x=x)
+        self.append(
+            "{out}[()] = np.transpose({x}, {axes})",
+            out=out,
+            x=x,
+            axes=op.axes_order
+        )
 
 
 class NumPyTransformer(Transformer):
