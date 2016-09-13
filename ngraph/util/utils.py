@@ -250,18 +250,15 @@ def numeric_derivative(f, x, dx):
 
     def shape(x):
         """
-        Shape of a tensor/scalar
-
-        Arguments:
-          x: TODO
-
-        Returns:
-          TODO
+        Returns the shape of the tensor/scalar x
         """
         if isinstance(x, np.ndarray):
             return x.shape
         else:
             return ()
+
+    if isinstance(x, np.ndarray) and x.dtype == int:
+        raise ValueError('x shouldnt be of type int, should be a float')
 
     xshape = shape(x)
     # Copy because we always compute into the same place
