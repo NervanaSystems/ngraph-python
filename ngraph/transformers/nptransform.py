@@ -27,12 +27,12 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.axes_ops import dimshuffle
+from ngraph.op_graph.convolution import convolution1d
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
     sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack
-from ngraph.op_graph.convolution import convolution
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -225,7 +225,14 @@ class NumPyCodeGenerator(PyGen):
     @generic_method
     def generate_op(self, op, *args):
         if op.device_op:
-            raise ValueError("Unhandled op: {}".format(op))
+            raise ValueError((
+                "{class_name} doesn't have a generate_op method for op: {op}. "
+                "In order to fix this, add a method generate_op decorated with "
+                "@generate_op.on_type({op}) to class {class_name}."
+            ).format(
+                class_name=self.__class__.__name__,
+                op=op.__class__.__name__,
+            ))
 
     @generate_op.on_type(absolute)
     def generate_op(self, op, out, x):
@@ -243,39 +250,64 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution)
+    @generate_op.on_type(Broadcast)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(AxesCastOp)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
-        input_shape = op._input_shape
-        filter_shape = op._filter_shape
-        padding = op._padding
-        strides = op._strides
-        self.append("""
-        neon_conv_layer = ConvLayer(
-            proxy_backend(), {output}.dtype,
-            N={bsz},
-            C={input_shape}[0],
-            D={input_shape}[1],
-            H={input_shape}[2],
-            W={input_shape}[3],
+        self.append(
+            """
+            input = {input}
+            input = input.reshape((
+                # from: channels, width, batch_size
+                # to: channels, depth, height, width, batch_size
+                input.shape[0], 1, 1, input.shape[1], input.shape[2]
+            ))
 
-            K={filter_shape}[0],
-            T={filter_shape}[1],
-            R={filter_shape}[2],
-            S={filter_shape}[3],
+            filter = {filter}
 
-            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
-            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
+            filter = filter.reshape((
+                # from: channels_in, width, channels_out
+                # to: channels_in, depth, height, width, channels_out
+                filter.shape[0], 1, 1, filter.shape[1], filter.shape[2]
+            ))
+
+            neon_conv_layer = ConvLayer(
+                proxy_backend(), {output}.dtype,
+                N={bsz},
+                C={input_shape}[0],
+                D=1,
+                H=1,
+                W={input_shape}[1],
+
+                K={filter_shape}[2],
+                T=1,
+                R=1,
+                S={filter_shape}[1],
+
+                pad_d=0, pad_h=0, pad_w=0,
+                str_d=1, str_h=1, str_w=1,
+            )
+
+            # neon_conv_layer...
+            neon_conv_layer.xprop_conv(
+                proxy_tensor(input),
+                proxy_tensor(filter),
+                proxy_tensor({output}),
+            )
+            """,
+            output=output,
+            input=input,
+            filter=filter,
+            input_shape=[a.length for a in op._input_shape],
+            filter_shape=[a.length for a in op._filter_shape],
+            bsz=op.batch_axis.length
         )
-
-        # neon_conv_layer...
-        neon_conv_layer.xprop_conv(
-            proxy_tensor({input}),
-            proxy_tensor({filter}),
-            proxy_tensor({output}),
-        )
-        """, output=output, input=input, filter=filter,
-                    input_shape=input_shape, filter_shape=filter_shape,
-                    padding=padding, strides=strides, bsz=op.batch_axis.length)
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
@@ -515,6 +547,7 @@ class NumPyTransformer(Transformer):
             for op in ordered_ops:
                 out = tensor_description_value(op.tensor_description())
                 call_info = (tensor_description_value(_) for _ in op.call_info())
+                # TODO: handle case where TensorDescription has None value
                 self.compute_code.generate_op(op, out, *call_info)
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
@@ -538,8 +571,6 @@ class NumPyTransformer(Transformer):
             self.code.append(self.allocate_code.code)
             self.code.endl(2)
             self.code.append(self.compute_code.code)
-
-            # print(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()

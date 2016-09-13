@@ -13,8 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from builtins import range
+
+import pytest
 import numpy as np
 import random
+
 import ngraph as ng
 import ngraph.frontends.base.axis as ax
 from ngraph.util.utils import raise_all_numpy_errors
@@ -85,23 +88,10 @@ def ngraph_l2_norm(np_array):
     axes = ()
     for i, l in enumerate(np_array.shape):
         axes += (ng.Axis(name='axis%s' % i, length=l),)
+
     np_tensor = ng.Constant(np_array, axes=axes)
     var = ng.Variable(axes=axes, initial_value=np_tensor)
     return executor(ng.sqrt(ng.dot(var, var)))()
-
-
-@raise_all_numpy_errors
-def test_l2_norm():
-    """TODO."""
-    tests_ = [
-        [],
-        [1],
-        [1, 4, 5, 6],
-        [[1, 3, 5], [4, 2, 5]]
-    ]
-    tests = [np.array(_, dtype=np.float32) for _ in tests_]
-    for test in tests:
-        assert np.array_equal(np.linalg.norm(test), ngraph_l2_norm(test))
 
 
 @raise_all_numpy_errors
@@ -147,9 +137,6 @@ def test_dot_sum_backprop():
 @raise_all_numpy_errors
 def test_tensor_dot_tensor():
     """TODO."""
-    delta = 1e-3
-    rtol = atol = 1e-2
-
     tests = [
         {
             'tensor1': [[1, 2], [4, 5], [3, 4]],
@@ -207,9 +194,7 @@ def test_tensor_dot_tensor():
 
         # set up tensors
         tensor1 = ng.placeholder(axes=test['tensor1_axes'])
-        value1 = np.array(
-            test['tensor1'], dtype=np.float32
-        )
+        value1 = np.array(test['tensor1'], dtype=np.float32)
 
         if 'tensor2' in test:
             tensor2 = ng.placeholder(axes=test['tensor2_axes'])
@@ -227,8 +212,8 @@ def test_tensor_dot_tensor():
         dot = ng.dot(tensor1, tensor2)
         evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
-        numeric_deriv_fun1 = ex.numeric_derivative(dot, tensor1, delta, tensor2)
-        numeric_deriv_fun2 = ex.numeric_derivative(dot, tensor2, delta, tensor1)
+        numeric_deriv_fun1 = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
+        numeric_deriv_fun2 = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
         sym_deriv_fun1 = ex.derivative(dot, tensor1, tensor2)
         sym_deriv_fun2 = ex.derivative(dot, tensor2, tensor1)
 
@@ -240,8 +225,8 @@ def test_tensor_dot_tensor():
         # symbolicly by ngraph and numerically
         numeric_deriv1 = numeric_deriv_fun1(value1, value2)
         sym_deriv1 = sym_deriv_fun1(value1, value2)
-        np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)
+        np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=1e-2, atol=1e-2)
 
         numeric_deriv2 = numeric_deriv_fun2(value2, value1)
         sym_deriv2 = sym_deriv_fun2(value2, value1)
-        np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=rtol, atol=atol)
+        np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=1e-2, atol=1e-2)
