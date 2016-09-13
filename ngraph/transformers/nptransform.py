@@ -26,6 +26,7 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
+from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
@@ -366,6 +367,19 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(power)
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={}", x, y, out)
+
+    @generate_op.on_type(PrintOp)
+    def generate_op(self, op, out, x):
+        if op.prefix is not None:
+            self.append("""
+                print {prefix} + ':', {x}
+                {out}[()] = {x}
+            """, out=out, x=x, prefix=repr(op.prefix))
+        else:
+            self.append("""
+                print {x}
+                {out}[()] = {x}
+            """, out=out, x=x)
 
     @generate_op.on_type(reciprocal)
     def generate_op(self, op, out, x):
