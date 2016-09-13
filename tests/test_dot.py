@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from builtins import range
 
-import pytest
 import numpy as np
 import random
 
