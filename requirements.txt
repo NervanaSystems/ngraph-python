@@ -11,3 +11,4 @@ scipy
 autopep8==1.2.4
 # other requirements
 cachetools
+decorator

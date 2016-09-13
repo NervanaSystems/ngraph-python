@@ -21,6 +21,7 @@ import numpy as np
 from ngraph.op_graph.arrayaxes import Axes
 from ngraph.op_graph.op_graph import deriv
 from ngraph.transformers.nptransform import NumPyTransformer
+import decorator
 
 
 class RandomTensorGenerator(object):
@@ -122,39 +123,18 @@ def with_error_settings(**new_settings):
     Returns:
 
     """
-    def decorator(f):
-        """
-        TODO.
+    @decorator.decorator
+    def dec(f, *args, **kwargs):
+        old_settings = np.geterr()
 
-        Arguments:
-          f: TODO
+        np.seterr(**new_settings)
+        ret = f(*args, **kwargs)
 
-        Returns:
+        np.seterr(**old_settings)
 
-        """
-        def wrapper(*args, **kwargs):
-            """
-            TODO.
+        return ret
 
-            Arguments:
-              *args: TODO
-              **kwargs: TODO
-
-            Returns:
-
-            """
-            old_settings = np.geterr()
-
-            np.seterr(**new_settings)
-            ret = f(*args, **kwargs)
-
-            np.seterr(**old_settings)
-
-            return ret
-
-        return wrapper
-
-    return decorator
+    return dec
 
 
 def raise_all_numpy_errors(f):
