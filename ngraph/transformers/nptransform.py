@@ -29,6 +29,8 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.axes_ops import dimshuffle
 from ngraph.op_graph.convolution import convolution1d
 from ngraph.op_graph.debug import PrintOp
+from ngraph.op_graph.op_graph import AxesCastOp
+from ngraph.op_graph.op_graph import Broadcast
 from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
