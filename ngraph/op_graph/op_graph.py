@@ -21,7 +21,7 @@ import numpy as np
 from builtins import object
 
 from ngraph.op_graph.arrayaxes import TensorDescription, \
-    AxisIDTuple, Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
+    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
 from ngraph.util.generics import generic_method
 from ngraph.util.nodes import Node
 from ngraph.util.threadstate import get_thread_state
@@ -1373,20 +1373,15 @@ class ElementWise(TensorOp):
 
     def __init__(self, args, **kwargs):
         args = Op.as_ops(args)
-        arg_axess = [arg.axes.squeeze() for arg in args]
+        axes = Axes()
+        for axes in arg_axess:
+            axes += arg_axes
 
-        # We do this to have the same output shape as numpy
-        if len(args) == 2\
-                and args[0].axes.are_numeric()\
-                and args[1].axes.are_numeric():
-            arg_axess = sorted(arg_axess, key=len, reverse=True)
-
-        axis_ids = AxisIDTuple()
-        for arg_axes in arg_axess:
-            axis_ids += arg_axes.as_axis_ids()
-        axes = axis_ids.as_axes()
-
-        super(ElementWise, self).__init__(args=args, axes=axes, **kwargs)
+        super(ElementWise, self).__init__(
+            args=args,
+            axes=axes,
+            **kwargs
+        )
 
     @cachetools.cached({})
     def call_info(self):
@@ -1568,12 +1563,9 @@ class dot(TensorOp):
 
     def __init__(self, x, y,
                  reduction_axes=None, out_axes=None,
-                 numpy_matching=False,
-                 forward_dot=None,
                  **kwargs):
         self.axis_id_info = self.compute_axis_id_info(
-            x, y, reduction_axes, out_axes,
-            forward_dot, numpy_matching
+            x, y, reduction_axes, out_axes
         )
         self.out_axes = out_axes
         self.reduction_axes = reduction_axes
@@ -1583,8 +1575,7 @@ class dot(TensorOp):
         )
 
     def compute_axis_id_info(self, x, y,
-                             reduction_axes, out_axes,
-                             forward_dot, use_numpy_matching):
+                             reduction_axes, out_axes):
         """
         TODO.
 
@@ -1593,54 +1584,29 @@ class dot(TensorOp):
           y: TODO
           reduction_axes: TODO
           out_axes: TODO
-          forward_dot: TODO
-          use_numpy_matching: TODO
 
         Returns:
           TODO
         """
-        x_axis_ids = x.axes.as_axis_ids()
-        y_axis_ids = y.axes.as_axis_ids()
+        x_axes = x.axes
+        y_axes = y.axes
 
-        if forward_dot is not None:
-            y_axis_ids = forward_dot.axis_id_info[0]
-            forward_axis_ids = forward_dot.axis_id_info[0]
-        else:
-            forward_axis_ids = None
+        if reduction_axes is None:
+            reduction_axes = Axes.intersect(x_axes, y_axes)
+        if out_axes is None:
+            out_axes = (
+                (x_axes - reduction_axes) +
+                (y_axes - reduction_axes)
+            )
+        reduction_axes -= out_axes
 
-        if use_numpy_matching:
-            out_axis_ids = x_axis_ids[:-1]\
-                + y_axis_ids[:-2]\
-                + AxisIDTuple(y_axis_ids[-1],)
-            x_red_axis_ids = AxisIDTuple(x_axis_ids[-1])
-            y_red_axis_ids = AxisIDTuple(y_axis_ids[-2])
-            return (out_axis_ids, x_red_axis_ids, y_red_axis_ids,
-                    None, forward_axis_ids)
+        if len(reduction_axes) == 0:
+            dummy = Axis(1)
+            reduction_axes = Axes((dummy,))
         else:
             dummy = None
-            if reduction_axes is None:
-                red_axis_ids = AxisIDTuple.intersect(
-                    x_axis_ids,
-                    y_axis_ids
-                )
-            else:
-                red_axis_ids = reduction_axes.as_axis_ids()
 
-            if out_axes is not None:
-                out_axis_ids = out_axes.as_axis_ids()
-            else:
-                out_axis_ids = (
-                    (x_axis_ids - red_axis_ids) +
-                    (y_axis_ids - red_axis_ids)
-                )
-            red_axis_ids -= out_axis_ids
-
-            if len(red_axis_ids) == 0:
-                dummy = Axis(1)
-                red_axis_ids = AxisIDTuple(dummy.axis_id(0),)
-
-            return (out_axis_ids, red_axis_ids, red_axis_ids,
-                    dummy, forward_axis_ids)
+        return (out_axes, reduction_axes, dummy)
 
     @cachetools.cached({})
     def call_info(self):
@@ -1653,20 +1619,18 @@ class dot(TensorOp):
           TODO
         """
         x, y = tensor_descriptions(self.args)
-        out_axis_ids, x_red_axis_ids, y_red_axis_ids, dummy, forward_axis_ids\
-            = self.axis_id_info
+        out_axes, reduction_axes, dummy = self.axis_id_info
 
         if dummy is not None:
             x = x.reaxe_with_dummy_axis(dummy)
             y = y.reaxe_with_dummy_axis(dummy)
 
-        a = x.dot_reaxe_left(x_red_axis_ids)
-        b = y.dot_reaxe_right(
-            y_red_axis_ids,
-            forward_axis_ids=forward_axis_ids
-        )
+        a = x.dot_reaxe_left(reduction_axes)
+        b = y.dot_reaxe_right(reduction_axes)
         a_axes, b_axes = a.axes, b.axes
-        o = self.tensor_description().reaxe(a_axes[:-1].concat(b_axes[1:]))
+
+        o = self.tensor_description()
+        o = o.reaxe(a_axes[:-1].concat(b_axes[1:]))
 
         # We ensure that the axes of the output view given to the transformer
         # (o.axes) are in the same order as the underlying tensor (self.axes)
@@ -1688,15 +1652,13 @@ class dot(TensorOp):
         Returns:
           TODO
         """
-        # The delta must be passed in as the second argument
-        # to preserve the forward axes mapping.
         x.generate_add_delta(
             adjoints,
-            dot(y, delta, out_axes=x.axes, forward_dot=self)
+            dot(y, delta)
         )
         y.generate_add_delta(
             adjoints,
-            dot(x, delta, out_axes=y.axes, forward_dot=self)
+            dot(x, delta)
         )
 
 
