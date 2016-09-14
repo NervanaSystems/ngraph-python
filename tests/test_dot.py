@@ -154,15 +154,6 @@ def test_tensor_dot_tensor():
             'axes_lengths': {ax.C: 3, ax.D: 2}
         },
         {
-            # Resembles hidden state to hidden state transformation
-            'tensor1': [[1, 4], [2, 5]],
-            'tensor1_axes': (ax.H, ax.H),
-            'tensor2': [2, 5],
-            'tensor2_axes': (ax.H,),
-            'expected_output': [12, 33],
-            'axes_lengths': {ax.H: 2}
-        },
-        {
             'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
             'tensor1_axes': (ax.N, ax.D, ax.C),
             'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
@@ -186,7 +177,8 @@ def test_tensor_dot_tensor():
         }
     ]
 
-    for test in tests:
+    for i, test in enumerate(tests):
+        print(i)
         # set up axis
         for axis, length in test['axes_lengths'].items():
             axis.length = length

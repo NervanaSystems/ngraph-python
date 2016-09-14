@@ -97,12 +97,7 @@ def test_axes_ops():
         Returns:
 
         """
-        result = arrayaxes.AxisIDTuple.sub(
-            axes1.as_axis_ids(),
-            axes2.as_axis_ids()
-        ).as_axes()
-
-        assert result == target
+        assert axes1 - axes2 == target
 
     test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.A]), arrayaxes.Axes([ax.B]))
     test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.B]), arrayaxes.Axes([ax.A]))
@@ -197,9 +192,6 @@ def test_simple_tensors():
     td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
     e2 = random(td2)
 
-    td3 = arrayaxes.TensorDescription(axes=(ax.D, ax.D))
-    e3 = random(td3)
-
     # Reaxes
     e1_1 = tensorview(td1.reaxe([ax.A, ax.B]), e1)
     e1_2 = tensorview(td1.reaxe([ax.B, ax.A]), e1)
@@ -208,12 +200,6 @@ def test_simple_tensors():
     e2_1 = tensorview(td2.reaxe(arrayaxes.Axes([ax.B, ax.A])), e2)
     e2_2 = tensorview(td2.reaxe(arrayaxes.Axes([ax.A, ax.B])), e2)
     e2_3 = tensorview(td2.reaxe(arrayaxes.Axes([arrayaxes.FlattenedAxis(td2.axes)])), e2)
-
-    td3_1 = td3.reaxe_with_axis_ids(arrayaxes.AxisIDTuple(
-        arrayaxes.AxisID(ax.D, 1),
-        arrayaxes.AxisID(ax.D, 0)
-    ))
-    e3_1 = tensorview(td3_1, e3)
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
     assert e1_2.shape == (ax.B.length, ax.A.length)
@@ -241,14 +227,6 @@ def test_simple_tensors():
             assert e2_1[j, i] == val2(i, j)
             assert e2_2[i, j] == val2(i, j)
             assert e2_3[i * ax.B.length + j] == val2(i, j)
-
-    for i in range(ax.D.length):
-        for j in range(ax.D.length):
-            e3[i, j] = val2(i, j)
-
-    for i in range(ax.D.length):
-        for j in range(ax.D.length):
-            assert e3[i, j] == e3_1[j, i]
 
 
 def test_sliced_axis():

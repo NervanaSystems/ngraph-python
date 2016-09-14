@@ -237,6 +237,33 @@ def no_duplicates(arr):
     return True
 
 
+def with_args_as_axes(f):
+    """
+    A decorator to cast arguments to axes.
+
+    Arguments:
+        f: The function to be decorated.
+
+    Returns:
+        The decorated function.
+    """
+    @wraps(f)
+    def wrapper(*args):
+        """
+        The decorated function. Performs the conversion
+        to Axes.
+
+        Arguments:
+          *args: Arguments intended for the original function.
+
+        Returns:
+            Return value of the original function.
+        """
+        args = [Axes(arg) for arg in args]
+        return f(*args)
+    return wrapper
+
+
 class Axes(object):
     """
     An Axes is a tuple of Axis objects used as a label for a tensor's
@@ -387,6 +414,7 @@ class Axes(object):
         return bool(self._axes)
 
     @staticmethod
+    @with_args_as_axes
     def append(axes1, axes2):
         """
         Returns the union of the elements, leaving out duplicate Axes.
@@ -401,10 +429,11 @@ class Axes(object):
         assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
         return Axes(
             tuple(axes1) +
-            tuple(axis in axes2 if axis not in axes1)
+            tuple(axis for axis in axes2 if axis not in axes1)
         )
 
     @staticmethod
+    @with_args_as_axes
     def subtract(axes1, axes2):
         """
         Returns the difference of the two Axes.
@@ -420,6 +449,7 @@ class Axes(object):
         return Axes((axis for axis in axes1 if axis not in axes2))
 
     @staticmethod
+    @with_args_as_axes
     def intersect(axes1, axes2):
         """
         Returns the intersection of the elements, leaving out duplicate Axes.
@@ -432,9 +462,10 @@ class Axes(object):
             The ordered intersection
         """
         assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes((axis for axis in axes1 if axis not in axes2))
+        return Axes((axis for axis in axes1 if axis in axes2))
 
     @staticmethod
+    @with_args_as_axes
     def linear_map_axes(in_axes, out_axes):
         """
         For tensors ``out = dot(T, in)`` used in linear transformations
@@ -453,6 +484,7 @@ class Axes(object):
         )
 
     @staticmethod
+    @with_args_as_axes
     def find(axes, sub_axes):
         """
         Attempts to locate a subsequence of Axes (subaxes) in axes.
@@ -465,9 +497,9 @@ class Axes(object):
             int: The index at which the subsequence subaxes occurs in
             axes.
         """
-        assert isinstance(axes, Axes) and isinstance(subaxes, Axes)
+        assert isinstance(axes, Axes) and isinstance(sub_axes, Axes)
         for i in range(len(axes) - len(sub_axes) + 1):
-            if axes[i:i + len(subaxes)] == sub_axes:
+            if axes[i:i + len(sub_axes)] == sub_axes:
                 return i
         raise ValueError('Could not find subaxes')
 
@@ -876,9 +908,9 @@ class TensorDescription(NameableValue):
         Returns:
             The tensor description to be used in the dot product.
         """
-        idx = Axes.find(red_axes)
+        idx = Axes.find(self.axes, red_axes)
         axes = self.axes[:idx]\
-            + self.axes[idx + len(red_axes):]
+            + self.axes[idx + len(red_axes):]\
             + red_axes
         div_point = len(self.axes) - len(red_axes)
         return self.reaxe(axes).split_reduce_at(div_point)
@@ -893,7 +925,7 @@ class TensorDescription(NameableValue):
         Returns:
             The tensor description to be used in the dot product.
         """
-        idx = Axes.find(red_axes)
+        idx = Axes.find(self.axes, red_axes)
         axes = red_axes\
             + self.axes[:idx]\
             + self.axes[idx + len(red_axes):]
@@ -931,7 +963,7 @@ class TensorDescription(NameableValue):
         """
         if dim == -1:
             dim = len(self.axes)
-        axes = self.axes[:dim] + Axes((dummy_axis,)) + self.axes[dim:]
+        new_axes = self.axes[:dim] + Axes((dummy_axis,)) + self.axes[dim:]
         old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
         return self.reaxe_with_positions(new_axes=new_axes,
                                          old_poss=old_poss)

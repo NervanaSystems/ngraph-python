@@ -780,7 +780,7 @@ class Linear(ParameterLayer):
         in_obj = super(Linear, self).configure(in_obj)
 
         v = ng.Variable(
-            axes=ng.linear_map_axes(
+            axes=ng.Axes.linear_map_axes(
                 in_obj.axes.sample_axes(),
                 self.axes or [ng.Axis(self.nout, name='Hidden')]
             ),

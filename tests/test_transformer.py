@@ -17,23 +17,28 @@ import pytest
 import ngraph as ng
 import numpy as np
 from ngraph.util.utils import executor
+import ngraph.frontends.base.axis as ax
 
 
 def test_evalutaion_twice():
     """Test executing a computation graph twice on a one layer MLP."""
+    ax.C.length = 2
+    ax.D.length = 2
+    ax.W.length = 1
+
     x = ng.Constant(
         np.array([[1, 2], [3, 4]], dtype='float32'),
-        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(2)])
+        axes=ng.Axes([ax.C, ax.D])
     )
 
     hidden1_weights = ng.Constant(
         np.array([[1], [1]], dtype='float32'),
-        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(1)])
+        axes=ng.Axes([ax.C, ax.W])
     )
 
     hidden1_biases = ng.Constant(
         np.array([[2], [2]], dtype='float32'),
-        axes=ng.Axes([ng.NumericAxis(2), ng.NumericAxis(1)])
+        axes=ng.Axes([ax.D, ax.W])
     )
 
     hidden1 = ng.dot(x, hidden1_weights) + hidden1_biases

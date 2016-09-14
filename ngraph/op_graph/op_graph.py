@@ -856,7 +856,7 @@ class ExpandDims(TensorOp):
     """
 
     def __init__(self, x, axis, dim, **kwargs):
-        axes = x.axes[:dim].concat(Axes(axis,)).concat(x.axes[dim:])
+        axes = x.axes[:dim] + Axes(axis,) + x.axes[dim:]
         super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
         self.axis = axis
         self.dim = dim
@@ -1374,8 +1374,8 @@ class ElementWise(TensorOp):
     def __init__(self, args, **kwargs):
         args = Op.as_ops(args)
         axes = Axes()
-        for axes in arg_axess:
-            axes += arg_axes
+        for arg in args:
+            axes += arg.axes
 
         super(ElementWise, self).__init__(
             args=args,
@@ -1394,7 +1394,7 @@ class ElementWise(TensorOp):
           TODO
         """
         return [
-            arg.squeeze().reaxe(self.axes)
+            arg.reaxe(self.axes)
             for arg in tensor_descriptions(self.args)
         ]
 
@@ -1564,12 +1564,13 @@ class dot(TensorOp):
     def __init__(self, x, y,
                  reduction_axes=None, out_axes=None,
                  **kwargs):
-        self.axis_id_info = self.compute_axis_id_info(
+        axis_id_info = self.compute_axis_id_info(
             x, y, reduction_axes, out_axes
         )
-        self.out_axes = out_axes
-        self.reduction_axes = reduction_axes
-        axes = self.axis_id_info[0].as_axes()
+        axes = axis_id_info[0]
+        self.reduction_axes = axis_id_info[1]
+        self.dummy = axis_id_info[2]
+
         super(dot, self).__init__(
             args=(x, y), axes=axes, **kwargs
         )
@@ -1619,22 +1620,21 @@ class dot(TensorOp):
           TODO
         """
         x, y = tensor_descriptions(self.args)
-        out_axes, reduction_axes, dummy = self.axis_id_info
 
-        if dummy is not None:
-            x = x.reaxe_with_dummy_axis(dummy)
-            y = y.reaxe_with_dummy_axis(dummy)
+        if self.dummy is not None:
+            x = x.reaxe_with_dummy_axis(self.dummy)
+            y = y.reaxe_with_dummy_axis(self.dummy)
 
-        a = x.dot_reaxe_left(reduction_axes)
-        b = y.dot_reaxe_right(reduction_axes)
+        a = x.dot_reaxe_left(self.reduction_axes)
+        b = y.dot_reaxe_right(self.reduction_axes)
         a_axes, b_axes = a.axes, b.axes
 
         o = self.tensor_description()
-        o = o.reaxe(a_axes[:-1].concat(b_axes[1:]))
+        o = o.reaxe(a_axes[:-1] + b_axes[1:])
 
         # We ensure that the axes of the output view given to the transformer
-        # (o.axes) are in the same order as the underlying tensor (self.axes)
-        if o.axes != self.axes:
+        # is c-contiguous.
+        if not o.c_contiguous:
             o, a, b = o.transpose(), b.transpose(), a.transpose()
 
         return [o, a, b]
@@ -1654,11 +1654,11 @@ class dot(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            dot(y, delta)
+            dot(y, delta, out_axes=x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            dot(x, delta)
+            dot(x, delta, out_axes=y.axes)
         )
 
 
@@ -2165,7 +2165,7 @@ class onehot(TensorOp):
         """
         x, = tensor_descriptions(self.args)
         axis, axes = self.axis, self.axes
-        reaxes = Axes([axis, AxisIDTuple.sub(axes, Axes(axis,)).as_axes()])
+        reaxes = Axes([axis, axes - axis])
         return [
             self.tensor_description().reaxe(reaxes),
             x.reaxe(Axes(FlattenedAxis(x.axes)))
