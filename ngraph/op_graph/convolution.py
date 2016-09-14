@@ -59,7 +59,11 @@ class ConvolutionAxis(arrayaxes.FunctionAxis):
                 if length == parent.parent.parent.length:
                     return parent.parent.parent
 
-        return super(ConvolutionAxis, cls).__new__(cls, parent, width, stride, **kwargs)
+        # handle case in py3 where object.__new__ doesn't accept parameters
+        if super(ConvolutionAxis, cls).__new__ is not object.__new__:
+            return super(ConvolutionAxis, cls).__new__(cls, parent, width, stride, **kwargs)
+        else:
+            return super(ConvolutionAxis, cls).__new__(cls)
 
     def __init__(self, parent, width, stride, **kwargs):
         self.parent = parent
