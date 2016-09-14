@@ -27,15 +27,11 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.convolution import convolution1d
-from ngraph.op_graph.debug import PrintOp
-from ngraph.op_graph.op_graph import AxesCastOp
-from ngraph.op_graph.op_graph import Broadcast
-from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
+from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, Dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
-    sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack
+    sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
+from ngraph.op_graph.convolution import convolution
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -255,13 +251,36 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(Broadcast)
+    @generate_op.on_type(Dimshuffle)
     def generate_op(self, op, out, x):
-        pass
+        self.append(
+            "{}[()] = np.transpose({}, {})",
+            out, x, op.old_poss
+        )
 
-    @generate_op.on_type(AxesCastOp)
-    def generate_op(self, op, out, x):
-        pass
+    @generate_op.on_type(convolution)
+    def generate_op(self, op, output, input, filter):
+        input_shape = op._input_shape
+        filter_shape = op._filter_shape
+        padding = op._padding
+        strides = op._strides
+        self.append("""
+        neon_conv_layer = ConvLayer(
+            proxy_backend(), {output}.dtype,
+            N={bsz},
+            C={input_shape}[0],
+            D={input_shape}[1],
+            H={input_shape}[2],
+            W={input_shape}[3],
+
+            K={filter_shape}[0],
+            T={filter_shape}[1],
+            R={filter_shape}[2],
+            S={filter_shape}[3],
+
+            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
+            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
+        )
 
     @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
@@ -322,9 +341,9 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(dot)
-    def generate_op(self, op, out, o, x, y):
-        self.append("np.dot({}, {}, out={})", x, y, o)
+    @generate_op.on_type(Dot)
+    def generate_op(self, op, out, x, y):
+        self.append("np.dot({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(equal)
     def generate_op(self, op, out, x, y):

@@ -60,7 +60,6 @@ class Computation(NameableValue):
             self.ops.update(returns)
         elif isinstance(returns, collections.Sequence):
             returns = wrap_ops(returns)
-            print returns
             self.ops.update(returns)
         elif isinstance(returns, Op):
             returns = wrap_op(returns)
