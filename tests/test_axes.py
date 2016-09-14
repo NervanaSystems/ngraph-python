@@ -28,13 +28,6 @@ ax.C = arrayaxes.Axis(20)
 ax.D = arrayaxes.Axis(25)
 
 
-def test_axes_constructor_canonicalization():
-    """ Test canonicalization of Axes constructor """
-    a1 = arrayaxes.Axes(ax.A)
-    a2 = arrayaxes.Axes([[ax.A]])
-    assert a1 == a2
-
-
 def test_axes_equal():
     """ Test axes == operator """
     a1 = arrayaxes.Axes([ax.A, ax.B, ax.C])
@@ -57,29 +50,6 @@ def to_nested_tuple(axes):
         to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.FlattenedAxis) else axis
         for axis in axes
     )
-
-
-def test_canonicalize_axes():
-    """ """
-    def test(l, r):
-        """
-        TODO.
-
-        Arguments:
-          l: TODO
-          r: TODO
-        """
-        a = arrayaxes.Axes(l)
-        assert to_nested_tuple(a) == r, (
-            'Failed. Original collection: {l}, axes: {a},'
-            ' generated tuple: {t}, target: {r}'
-        ).format(l=l, a=a, t=to_nested_tuple(a), r=r)
-
-    test((), ())
-    test([], ())
-    test([ax.A], (ax.A,))
-    test([ax.A, (ax.B,)], (ax.A, ax.B))
-    test([ax.A, (ax.B, ax.C)], (ax.A, (ax.B, ax.C)))
 
 
 def test_axes_ops():

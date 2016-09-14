@@ -144,7 +144,7 @@ def test_reduction():
                                [ax.C, ax.W],
                                [ax.W, ax.H]]:
             p_u = ng.placeholder(axes=axes)
-            dims = tuple(axes.index(axis) for axis in reduction_axes)
+            dims = tuple(ng.Axes.index(axes, axis) for axis in reduction_axes)
             npval = npred(u, dims)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             graph_val = executor(graph_reduce, p_u)(u)

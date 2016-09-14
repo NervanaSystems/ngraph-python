@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, doall
+    Function, doall, Broadcast, SimplePrune, RequiredSimplify
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
@@ -44,18 +44,32 @@ class Computation(NameableValue):
     def __init__(self, transformer, returns, *args, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
-        self.returns = returns
+
+        def wrap_op(op):
+            if isinstance(op, TensorOp):
+                return Broadcast(op, axes=op.axes)
+            else:
+                return op
+
+        def wrap_ops(ops):
+            return [wrap_op(op) for op in ops]
+
         self.ops = set()
         if isinstance(returns, collections.Set):
+            returns = set(wrap_ops(returns))
             self.ops.update(returns)
         elif isinstance(returns, collections.Sequence):
+            returns = wrap_ops(returns)
+            print returns
             self.ops.update(returns)
         elif isinstance(returns, Op):
+            returns = wrap_op(returns)
             self.ops.add(returns)
         elif returns is None:
             pass
         else:
             raise ValueError()
+        self.returns = returns
 
         self.parameters = []
         for arg in args:
@@ -340,6 +354,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Transform computation graphs to a form that can be run.
         """
         Op.simple_prune(self.all_results)
+        RequiredSimplify(self.all_results).run()
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)

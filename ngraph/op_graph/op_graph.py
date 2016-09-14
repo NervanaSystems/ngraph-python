@@ -197,6 +197,17 @@ class Op(Node):
         """
         return True
 
+    @staticmethod
+    def simple_prune(results):
+        """
+        TODO.
+        Arguments:
+          results: TODO
+        Returns:
+          TODO
+        """
+        SimplePrune(results).run()
+
     @persistent.setter
     def persistent(self, value):
         self.__persistent = value
@@ -399,19 +410,6 @@ class Op(Node):
           TODO
         """
         return tuple(Op.as_op(x) for x in xs)
-
-    @staticmethod
-    def simple_prune(results):
-        """
-        TODO.
-
-        Arguments:
-          results: TODO
-
-        Returns:
-          TODO
-        """
-        SimplePrune(results)
 
     def tensor_description(self):
         return None
@@ -707,6 +705,10 @@ class TensorOp(Op):
         return TensorDescription(self.axes, dtype=self.dtype)
 
     @property
+    def base_axes(self):
+        return self.axes
+
+    @property
     def axes(self):
         """
 
@@ -809,7 +811,68 @@ class AxesCastOp(TensorOp):
         return False
 
 
-class Broadcast(TensorOp):
+class ReshapeOp(TensorOp):
+
+    @property
+    def base_axes(self):
+        return self.args[0].axes
+
+    @property
+    def device_op(self):
+        """
+        Returns:
+            False, because this is handled by the transformer.
+        """
+        return False
+
+
+class ExpandDims(ReshapeOp):
+    """
+    Adds additional axes into a tensor.
+    Arguments:
+        x: The tensor.
+        axis: The additional axis.
+        dim: The position to add the axes.
+    """
+
+    def __init__(self, x, axis, dim, **kwargs):
+        axes = []
+        axes.extend(x.axes[:dim])
+        axes.append(axis)
+        axes.extend(x.axes[dim:])
+        axes = Axes(axes)
+        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
+        self.axis = axis
+        self.dim = dim
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        """
+        TODO.
+        Arguments:
+        Returns:
+          TODO
+        """
+        x, = tensor_descriptions(self.args)
+        return x.reaxe_with_dummy_axis(self.axis, self.dim)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        """
+        TODO.
+        Arguments:
+          adjoints: TODO
+          delta: TODO
+          x: TODO
+        Returns:
+          TODO
+        """
+        x.generate_add_delta(
+            adjoints,
+            sum(delta, reduction_axes=Axes(self.axis,))
+        )
+
+
+class Broadcast(ReshapeOp):
     """
     Used to add additional axes for a returned derivative.
 
@@ -818,8 +881,10 @@ class Broadcast(TensorOp):
         axes: The new axes.
     """
 
-    def __init__(self, x, **kwargs):
-        super(Broadcast, self).__init__(args=(x,), **kwargs)
+    def __init__(self, x, axes, **kwargs):
+        super(Broadcast, self).__init__(
+            args=(x,),axes=axes, **kwargs
+        )
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -834,75 +899,8 @@ class Broadcast(TensorOp):
         td, = tensor_descriptions(self.args)
         return td.reaxe(self.axes)
 
-    @property
-    def device_op(self):
-        """
 
-        Returns:
-            False, because this is handled by the transformer.
-
-        """
-        return False
-
-
-class ExpandDims(TensorOp):
-    """
-    Adds additional axes into a tensor.
-
-    Arguments:
-        x: The tensor.
-        axis: The additional axis.
-        dim: The position to add the axes.
-    """
-
-    def __init__(self, x, axis, dim, **kwargs):
-        axes = x.axes[:dim] + Axes(axis,) + x.axes[dim:]
-        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
-        self.axis = axis
-        self.dim = dim
-
-    @cachetools.cached({})
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.reaxe_with_dummy_axis(self.axis, self.dim)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(
-            adjoints,
-            sum(delta, reduction_axes=Axes(self.axis,))
-        )
-
-    @property
-    def device_op(self):
-        """
-
-        Returns:
-            False, because this is handled by the transformer.
-
-        """
-        return False
-
-
-class Slice(TensorOp):
+class Slice(ReshapeOp):
     """
     Creates a sliced version of a tensor.
 
@@ -975,16 +973,6 @@ class Slice(TensorOp):
             Unslice(delta, self.slices, axes=x.axes)
         )
 
-    @property
-    def device_op(self):
-        """
-
-        Returns:
-            False, because this is handled by the transformer.
-
-        """
-        return False
-
 
 def slice_along_axis(x, axis, idx):
     """
@@ -999,7 +987,7 @@ def slice_along_axis(x, axis, idx):
     Returns:
         y: a slice of x
     """
-    pos = x.axes.index(axis)
+    pos = Axes.index(x.axes, axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
     axes = x.axes[:pos].concat(x.axes[pos + 1:])
     return Slice(x, ss, axes=axes)
@@ -1558,86 +1546,123 @@ class divide(ElementWise):
         y.generate_add_delta(adjoints, -delta * self / y)
 
 
-class dot(TensorOp):
-    """TODO."""
+class Dimshuffle(TensorOp):
+    def __init__(self, x, axes, **kwargs):
+        old_poss = []
+        for axis in axes:
+            old_pos = Axes.find_axis(x.axes, axis)
+            old_poss.append(old_pos)
+        self.old_poss = tuple(old_poss)
 
-    def __init__(self, x, y,
-                 reduction_axes=None, out_axes=None,
-                 **kwargs):
-        axis_id_info = self.compute_axis_id_info(
-            x, y, reduction_axes, out_axes
-        )
-        axes = axis_id_info[0]
-        self.reduction_axes = axis_id_info[1]
-        self.dummy = axis_id_info[2]
-
-        super(dot, self).__init__(
-            args=(x, y), axes=axes, **kwargs
+        super(Dimshuffle, self).__init__(
+            args=(x,),
+            axes=axes
         )
 
-    def compute_axis_id_info(self, x, y,
-                             reduction_axes, out_axes):
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(
+            adjoints,
+            Broadcast(delta, x.axes)
+        )
+
+
+class Flatten(TensorOp):
+    def __init__(self, x, idx=None, axes=None, **kwargs):
+        if x.axes != x.base_axes:
+            x = Dimshuffle(x, x.axes)
+        assert idx is None or axes is None
+        assert idx is not None or axes is not None
+
+        if idx is None:
+            assert len(axes) == 2
+            assert axes.unflatten() == x.axes
+            self.idx = axes[:1].unflatten()
+        else:
+            assert idx >= 0 and idx <= len(x.axes)
+            self.idx = idx
+
+            if self.idx == 0 or self.idx == len(x.axes):
+                axes = Axes(FlattenedAxis(x.axes))
+            else:
+                axes = Axes((
+                    FlattenedAxis(x.axes[:idx]),
+                    FlattenedAxis(x.axes[idx:])
+                ))
+
+        super(Flatten, self).__init__(
+            args=(x,),
+            axes=axes
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        x, = tensor_descriptions(self.args)
+        return x.split_reduce_at(self.idx)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(
+            adjoints,
+            Unflatten(Broadcast(
+                delta, axes=self.axes
+            ))
+        )
+
+    @property
+    def device_op(self):
         """
-        TODO.
-
-        Arguments:
-          x: TODO
-          y: TODO
-          reduction_axes: TODO
-          out_axes: TODO
-
         Returns:
-          TODO
+            False, because this is run from the CPU.
         """
-        x_axes = x.axes
-        y_axes = y.axes
+        return False
 
+
+class Unflatten(TensorOp):
+    def __init__(self, x, **kwargs):
+        axes = []
+        super(Unflatten, self).__init__(
+            args=(x,),
+            axes=Axes.unflatten(x.axes)
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        x, = tensor_descriptions(self.args)
+        return x.unflatten()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, Flatten(
+            Broadcast(delta, axes=self.axes),
+            axes=x.axes
+        ))
+
+    @property
+    def device_op(self):
+        """
+        Returns:
+            False, because this is run from the CPU.
+        """
+        return False
+
+
+class Dot(TensorOp):
+    def __init__(self, x, y,
+                 reduction_axes=None,
+                 out_axes=None,
+                 **kwargs):
         if reduction_axes is None:
-            reduction_axes = Axes.intersect(x_axes, y_axes)
+            reduction_axes = Axes.intersect(x.axes, y.axes)
+
         if out_axes is None:
             out_axes = (
-                (x_axes - reduction_axes) +
-                (y_axes - reduction_axes)
+                (x.axes - reduction_axes) +
+                (y.axes - reduction_axes)
             )
         reduction_axes -= out_axes
 
-        if len(reduction_axes) == 0:
-            dummy = Axis(1)
-            reduction_axes = Axes((dummy,))
-        else:
-            dummy = None
-
-        return (out_axes, reduction_axes, dummy)
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, y = tensor_descriptions(self.args)
-
-        if self.dummy is not None:
-            x = x.reaxe_with_dummy_axis(self.dummy)
-            y = y.reaxe_with_dummy_axis(self.dummy)
-
-        a = x.dot_reaxe_left(self.reduction_axes)
-        b = y.dot_reaxe_right(self.reduction_axes)
-        a_axes, b_axes = a.axes, b.axes
-
-        o = self.tensor_description()
-        o = o.reaxe(a_axes[:-1] + b_axes[1:])
-
-        # We ensure that the axes of the output view given to the transformer
-        # is c-contiguous.
-        if not o.c_contiguous:
-            o, a, b = o.transpose(), b.transpose(), a.transpose()
-
-        return [o, a, b]
+        self.reduction_axes = reduction_axes
+        super(Dot, self).__init__(
+            args=(x, y), axes=out_axes, **kwargs
+        )
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -1654,11 +1679,74 @@ class dot(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            dot(y, delta, out_axes=x.axes)
+            Dot(y, delta, out_axes=x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            dot(x, delta, out_axes=y.axes)
+            Dot(x, delta, out_axes=y.axes)
+        )
+
+
+def dot(*args, **kwargs):
+    return Dot(*args, **kwargs)
+
+
+class DotOneDimensional(Dot):
+    def __init__(self, x, y, **kwargs):
+        assert len(x.axes) == 1 and len(y.axes) == 1
+        super(DotOneDimensional, self).__init__(
+            x, y,
+            reduction_axes=x.axes,
+            out_axes=Axes(()),
+            **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * y)
+        y.generate_add_delta(adjoints, delta * x)
+
+
+class DotTwoDimensional(Dot):
+    def __init__(self, x, y, **kwargs):
+        assert len(x.axes) == 2 and len(y.axes) == 2
+        assert x.axes[-1] == y.axes[0]
+        super(DotTwoDimensional, self).__init__(
+            x, y,
+            reduction_axes=Axes(x.axes[-1]),
+            out_axes=Axes((x.axes[0], y.axes[1])),
+            **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(
+            adjoints,
+            DotTwoDimensional(delta, Transpose(y))
+        )
+        y.generate_add_delta(
+            adjoints,
+            DotTwoDimensional(Transpose(x), delta)
+        )
+
+
+class DotTwoByOne(Dot):
+    def __init__(self, x, y, **kwargs):
+        assert len(x.axes) == 2 and len(y.axes) == 1
+        assert x.axes[-1] == y.axes[0]
+        super(DotTwoByOne, self).__init__(
+            x, y,
+            reduction_axes=Axes((x.axes[-1],)),
+            out_axes=Axes((x.axes[0],)),
+            **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(
+            adjoints,
+            Dot(delta, y)
+        )
+        y.generate_add_delta(
+            adjoints,
+            DotTwoByOne(Transpose(x), delta)
         )
 
 
@@ -2588,24 +2676,22 @@ def cross_entropy_binary(y, t, out_axes=None):
     """
     return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
 
-
-class SimplePrune(object):
-    """TODO."""
-
+class SplicingAnalysis(object):
     def __init__(self, results):
         self.results = results
         self.reps = []
 
+    def init(self):
+        """TODO."""
+        self.reps = []
+
+    def run(self):
         has_work = True
         while has_work:
             self.init()
             for op in Op.ordered_ops(self.results):
                 self.visit(op)
             has_work = self.do_replacements()
-
-    def init(self):
-        """TODO."""
-        self.reps = []
 
     def add_rep(self, op, replacement):
         """
@@ -2630,6 +2716,68 @@ class SimplePrune(object):
                 user.replace_arg(old, rep)
         return len(self.reps) > 0
 
+
+class RequiredSimplify(SplicingAnalysis):
+    @generic_method
+    def visit(self, op):
+        """
+        TODO.
+
+        Arguments:
+          op: TODO
+        """
+        pass
+
+    @visit.on_type(Dot)
+    def visit(self, op):
+        x, y = op.args
+        reduction_axes = op.reduction_axes
+        out_axes = op.axes
+        if len(reduction_axes) == 0:
+            d = Axis(1)
+            reduction_axes = Axes((d,))
+            x = Broadcast(x, axes=x.axes + reduction_axes)
+            y = Broadcast(y, axes=reduction_axes + y.axes)
+
+        x_rem_axes = x.axes - reduction_axes
+        x = Broadcast(x, x_rem_axes + reduction_axes)
+
+        y_rem_axes = y.axes - reduction_axes
+        y = Broadcast(y, reduction_axes + y_rem_axes)
+
+        x = Flatten(x, len(x.axes) - len(reduction_axes))
+        y = Flatten(y, len(reduction_axes))
+        reduction_axes = Axes((FlattenedAxis(reduction_axes),))
+
+        if len(out_axes) == 0:
+            out = DotOneDimensional(x, y)
+        elif len(x.axes) == 1:
+            out = DotTwoByOne(y, x)
+        elif len(y.axes) == 1:
+            out = DotTwoByOne(x, y)
+        else:
+            out = DotTwoDimensional(x, y)
+
+        out = Unflatten(out)
+        out = Broadcast(out, out_axes)
+
+        self.add_rep(op, out)
+
+    @visit.on_type(DotOneDimensional)
+    def visit(self, op):
+        pass
+
+    @visit.on_type(DotTwoDimensional)
+    def visit(self, op):
+        pass
+
+    @visit.on_type(DotTwoByOne)
+    def visit(self, op):
+        pass
+
+
+class SimplePrune(SplicingAnalysis):
+    """TODO."""
     @generic_method
     def visit(self, op):
         """
