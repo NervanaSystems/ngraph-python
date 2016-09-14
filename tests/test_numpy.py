@@ -310,6 +310,8 @@ def test_elementwise_ops_unmatched_args():
     broadcast_dims = (ax.W.length, ax.H.length, 1)
 
     for np_op, be_op in ELEMENTWISE_BINARY_OPS:
+        if np_op is not np.divide:
+            continue
         # Matched sizes
         p_u = ng.placeholder(axes=sample_axes)
         p_v = ng.placeholder(axes=batch_axes)
@@ -794,3 +796,6 @@ def test_onehot():
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     ng.NumPyTransformer().initialize()
+
+if __name__ == '__main__':
+    test_elementwise_ops_unmatched_args()

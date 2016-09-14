@@ -27,7 +27,7 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, Dot, equal, exp, \
+from ngraph.op_graph.op_graph import absolute, Add, argmax, argmin, cos, Divide, Dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
     sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
@@ -239,7 +239,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
 
-    @generate_op.on_type(add)
+    @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
@@ -337,7 +337,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
-    @generate_op.on_type(divide)
+    @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 

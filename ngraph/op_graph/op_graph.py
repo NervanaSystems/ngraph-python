@@ -901,6 +901,13 @@ class Broadcast(ReshapeOp):
         td, = tensor_descriptions(self.args)
         return td.reaxe(self.axes)
 
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, sum(
+            delta,
+            reduction_axes=delta.axes-x.axes,
+            out_axes=x.axes
+        ))
+
 
 class Slice(ReshapeOp):
     """
@@ -993,6 +1000,63 @@ def slice_along_axis(x, axis, idx):
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
     axes = x.axes[:pos].concat(x.axes[pos + 1:])
     return Slice(x, ss, axes=axes)
+
+
+class Flatten(ReshapeOp):
+    def __init__(self, x, idx=0, axes=None, **kwargs):
+        if x.axes != x.base_axes:
+            x = Dimshuffle(x, x.axes)
+
+        if axes is not None:
+            assert len(axes) == 2
+            assert axes.unflatten() == x.axes
+            self.idx = axes[:1].unflatten()
+        else:
+            assert idx >= 0 and idx <= len(x.axes)
+            self.idx = idx
+
+            if self.idx == 0 or self.idx == len(x.axes):
+                axes = Axes(FlattenedAxis(x.axes))
+            else:
+                axes = Axes((
+                    FlattenedAxis(x.axes[:idx]),
+                    FlattenedAxis(x.axes[idx:])
+                ))
+
+        super(Flatten, self).__init__(
+            args=(x,),
+            axes=axes
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        x, = tensor_descriptions(self.args)
+        return x.split_reduce_at(self.idx)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(
+            adjoints,
+            Unflatten(delta)
+        )
+
+
+class Unflatten(ReshapeOp):
+    def __init__(self, x, **kwargs):
+        super(Unflatten, self).__init__(
+            args=(x,),
+            axes=Axes.unflatten(x.axes)
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        x, = tensor_descriptions(self.args)
+        return x.unflatten()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, Flatten(
+            delta,
+            axes=x.axes
+        ))
 
 
 class AllocationOp(TensorOp):
@@ -1417,34 +1481,75 @@ class absolute(ElementWise):
         x.generate_add_delta(adjoints, sign(x) * delta)
 
 
-class add(ElementWise):
-    """
-    Computation :math:`x+y`, element-wise addition.
-
-    Arguments:
-        x: First argument.
-        y: Second argument.
-        axes (optional): Axes for the result.
-
-    Returns:
-        The computation.
-    """
-
+class BinaryElementWiseOp(TensorOp):
     def __init__(self, x, y, **kwargs):
-        super(add, self).__init__(args=(x, y), **kwargs)
+        self.kwargs = kwargs
+        x, y = Op.as_ops((x, y))
+        axes = x.axes + y.axes
+        x, y = Broadcast(x, axes), Broadcast(y, axes)
 
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        Contributes to the backprop computation:
+        super(BinaryElementWiseOp, self).__init__(
+            args=(x, y),
+            axes=axes,
+            **kwargs
+        )
 
-        | :math:`z = x + y`
-        | :math:`dz = dx + dy`
-        | so
-        | :math:`\overline{x} \leftarrow \overline{x} + \overline{z}`
-        | :math:`\overline{y} \leftarrow \overline{y} + \overline{z}`.
-        """
-        x.generate_add_delta(adjoints, delta)
-        y.generate_add_delta(adjoints, delta)
+    @property
+    def one_dimensional(self):
+        x, y = self.args
+        return len(x.axes) == 1 and len(y.axes) == 1
+
+
+def create_binary_elementwise(name, one_dim_name,
+                              func_name=None,
+                              generate_adjoints=None,
+                              one_dim_generate_adjoints=None):
+    d = {}
+    if generate_adjoints is not None:
+        d['generate_adjoints'] = generate_adjoints
+    BinClass = type(name, (BinaryElementWiseOp,), d)
+
+    d = {}
+    if one_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = one_dim_generate_adjoints
+    OneDimBinClass = type(one_dim_name, (BinClass,), d)
+
+    def reduce_to_oned(self):
+        x, y = self.args
+        if len(x.axes) == 0 and len(y.axes) == 0:
+            d = Axes((Axis(1),))
+            x, y = Broadcast(x, d), Broadcast(y, d)
+        x, y = Flatten(x), Flatten(y)
+        return Unflatten(OneDimBinClass(x, y, **self.kwargs))
+    BinClass.reduce_to_oned = reduce_to_oned
+
+    if func_name is None:
+        return BinClass, OneDimBinClass
+    else:
+        def func(*args, **kwargs):
+            return BinClass(*args, **kwargs)
+        func.__name__ = func_name
+        return BinClass, OneDimBinClass, func
+
+
+def add_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta)
+    y.generate_add_delta(adjoints, delta)
+
+
+Add, AddOneDimensional, add = create_binary_elementwise(
+    'Add', 'AddOneDimensional', 'add', add_adjoints
+)
+
+
+def divide_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * self / x)
+    y.generate_add_delta(adjoints, -delta * self / y)
+
+
+Divide, DivideOneDimensional, divide = create_binary_elementwise(
+    'Divide', 'DivideOneDimensional', 'divide', divide_adjoints
+)
 
 
 class argmax(TensorOp):
@@ -1525,29 +1630,6 @@ class cos(ElementWise):
         x.generate_add_delta(adjoints, -delta * sin(x))
 
 
-class divide(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(divide, self).__init__(args=(x, y), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * self / x)
-        y.generate_add_delta(adjoints, -delta * self / y)
-
-
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
         old_poss = []
@@ -1566,84 +1648,6 @@ class Dimshuffle(TensorOp):
             adjoints,
             Broadcast(delta, x.axes)
         )
-
-
-class Flatten(TensorOp):
-    def __init__(self, x, idx=None, axes=None, **kwargs):
-        if x.axes != x.base_axes:
-            x = Dimshuffle(x, x.axes)
-        assert idx is None or axes is None
-        assert idx is not None or axes is not None
-
-        if idx is None:
-            assert len(axes) == 2
-            assert axes.unflatten() == x.axes
-            self.idx = axes[:1].unflatten()
-        else:
-            assert idx >= 0 and idx <= len(x.axes)
-            self.idx = idx
-
-            if self.idx == 0 or self.idx == len(x.axes):
-                axes = Axes(FlattenedAxis(x.axes))
-            else:
-                axes = Axes((
-                    FlattenedAxis(x.axes[:idx]),
-                    FlattenedAxis(x.axes[idx:])
-                ))
-
-        super(Flatten, self).__init__(
-            args=(x,),
-            axes=axes
-        )
-
-    @cachetools.cached({})
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.split_reduce_at(self.idx)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            Unflatten(Broadcast(
-                delta, axes=self.axes
-            ))
-        )
-
-    @property
-    def device_op(self):
-        """
-        Returns:
-            False, because this is run from the CPU.
-        """
-        return False
-
-
-class Unflatten(TensorOp):
-    def __init__(self, x, **kwargs):
-        axes = []
-        super(Unflatten, self).__init__(
-            args=(x,),
-            axes=Axes.unflatten(x.axes)
-        )
-
-    @cachetools.cached({})
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.unflatten()
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, Flatten(
-            Broadcast(delta, axes=self.axes),
-            axes=x.axes
-        ))
-
-    @property
-    def device_op(self):
-        """
-        Returns:
-            False, because this is run from the CPU.
-        """
-        return False
 
 
 class Dot(TensorOp):
@@ -2119,7 +2123,7 @@ class log(ElementWise):
             if False and isinstance(x, softmax):
                 x, = x.args
 
-            if isinstance(x, divide):
+            if isinstance(x, Divide):
                 a, b = x.args
                 do_adjoints(delta, a)
                 do_adjoints(-delta, b)
@@ -2777,6 +2781,10 @@ class RequiredSimplify(SplicingAnalysis):
     def visit(self, op):
         pass
 
+    @visit.on_type(BinaryElementWiseOp)
+    def visit(self, op):
+        pass
+
 
 class SimplePrune(SplicingAnalysis):
     """TODO."""
@@ -2835,7 +2843,7 @@ class SimplePrune(SplicingAnalysis):
         if rep is not None:
             self.add_rep(op, rep)
 
-    @visit.on_type(add)
+    @visit.on_type(Add)
     def visit(self, op):
         """
         TODO.
@@ -2885,7 +2893,7 @@ class SimplePrune(SplicingAnalysis):
           TODO
         """
         x, = op.args
-        if isinstance(x, divide):
+        if isinstance(x, Divide):
             num, denom = x.args
             if isinstance(num, exp):
                 exp_x, = num.args
