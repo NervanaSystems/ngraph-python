@@ -779,38 +779,6 @@ class TensorOp(Op):
         return self.tensor_description().value
 
 
-class AxesCastOp(TensorOp):
-    """
-    Used to label a tensor with known axes, without altering its value
-
-    Arguments:
-        x: A tensor.
-        axes: The new axes.
-
-    """
-    def __init__(self, x, axes, **kwargs):
-        super(AxesCastOp, self).__init__(args=(x,), axes=axes, **kwargs)
-
-    @cachetools.cached({})
-    def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, AxesCastOp(
-            Broadcast(delta, axes=self.axes),
-            axes=x.axes
-        ))
-
-    @property
-    def device_op(self):
-        """
-
-        Returns:
-            False, because this is handled by the transformer.
-        """
-        return False
-
-
 class ReshapeOp(TensorOp):
 
     @property
@@ -824,6 +792,40 @@ class ReshapeOp(TensorOp):
             False, because this is handled by the transformer.
         """
         return False
+
+
+class AxesCastOp(ReshapeOp):
+    """
+    Used to label a tensor with known axes, without altering its value
+
+    Arguments:
+        x: A tensor.
+        axes: The new axes.
+
+    """
+    def __init__(self, x, axes, **kwargs):
+        super(AxesCastOp, self).__init__(args=(x,), axes=axes, **kwargs)
+
+    @property
+    def base_axes(self):
+        # Since the cast op is only a renaming of a tensor's axes and not
+        # a restriding, we do not want ops to unnecessarily copy the tensor
+        x, = self.args
+        if isinstance(x, ReshapeOp)\
+                and x.axes != x.base_axes:
+            return x.base_axes
+        else:
+            return self.axes
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        return self.args[0].tensor_description().cast(self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, AxesCastOp(
+            Broadcast(delta, axes=self.axes),
+            axes=x.axes
+        ))
 
 
 class ExpandDims(ReshapeOp):
