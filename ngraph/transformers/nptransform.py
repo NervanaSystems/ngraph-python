@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import division
+from __future__ import print_function
 
 import math
 from functools import wraps
@@ -407,12 +408,12 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         if op.prefix is not None:
             self.append("""
-                print {prefix} + ':', {x}
+                print({prefix} + ':', {x})
                 {out}[()] = {x}
             """, out=out, x=x, prefix=repr(op.prefix))
         else:
             self.append("""
-                print {x}
+                print({x})
                 {out}[()] = {x}
             """, out=out, x=x)
 
