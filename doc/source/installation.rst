@@ -18,9 +18,8 @@ Installation
 ************
 
 To install |geon|, be sure to first install neon in a virtual environment.
-Activate the virtualenv with ``. .venv/bin/activate``, then run:
+Activate the virtualenv with ``. .venv/bin/activate``, then run::
 
-.. code-block:: bash
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
     make install
@@ -48,4 +47,4 @@ Documentation can be generated via::
 
 
 The latest html documentation is also built by Jenkins and can be viewed
-`here <http://jenkins.localdomain:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.
+`here <http://jenkins.sd.nervana.ai:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.

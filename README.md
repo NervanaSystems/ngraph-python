@@ -56,7 +56,7 @@ make doc
 ```
 
 The latest html documentation is also built by Jenkins and can be viewed
-[here](http://jenkins.localdomain:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html)
+[here](http://jenkins.sd.nervana.ai:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html)
 
 
 ## Examples
