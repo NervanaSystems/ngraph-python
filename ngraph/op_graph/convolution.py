@@ -48,6 +48,12 @@ class ConvolutionAxis(arrayaxes.FunctionAxis):
         kwargs: Arguments for related classes.
     """
     def __new__(cls, parent, width, stride, **kwargs):
+        """
+        This method acts like a factory for ConvolutionAxis.
+
+        Detect cases when this ConvolutionAxis is a nop and return the parent
+        or great grandparent instead
+        """
         if width == 1 and stride == 1:
             return parent
 
