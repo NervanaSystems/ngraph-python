@@ -771,7 +771,7 @@ class ReshapeOp(TensorOp):
 
     @property
     def base_axes(self):
-        return self.args[0].axes
+        return self.args[0].base_axes
 
     @property
     def device_op(self):
@@ -989,8 +989,7 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, idx=0, axes=None, **kwargs):
-        if x.axes != x.base_axes:
-            x = Dimshuffle(x, x.axes)
+        x = Dimshuffle(x, x.axes)
 
         if axes is not None:
             assert len(axes) == 2

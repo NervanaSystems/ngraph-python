@@ -19,7 +19,7 @@ import math
 import numpy as np
 
 from ngraph.op_graph.arrayaxes import Axes
-from ngraph.op_graph.op_graph import deriv
+from ngraph.op_graph.op_graph import deriv, Op
 from ngraph.transformers.nptransform import NumPyTransformer
 import decorator
 
@@ -201,6 +201,13 @@ class ExecutorFactory(object):
         xshape = px.axes.lengths
 
         dfdx = deriv(f, px)
+        # print "============="
+        # for op in Op.ordered_ops([dfdx]):
+        #     print '-----'
+        #     print op, op.axes
+        #     print op.args
+        #     print '------'
+        # print "============="
 
         if len(fshape) is 0:
             return self.transformer.computation(dfdx, px, *parameters)
