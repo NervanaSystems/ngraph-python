@@ -150,7 +150,7 @@ def test_reduction():
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             graph_val = executor(graph_reduce, p_u)(u)
             np.testing.assert_allclose(
-                npval, graph_val), 'red:{red}, axes:{axes}'.format(
+                npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
                 red=red, axes=reduction_axes)
 
 
