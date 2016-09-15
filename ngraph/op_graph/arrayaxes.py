@@ -230,7 +230,7 @@ def no_duplicates(arr):
         bool: True if there are no duplicates, False if there are.
     """
     s = set()
-    for x in enumerate(arr):
+    for x in arr:
         if x in s:
             return False
         s.add(x)
@@ -661,6 +661,7 @@ def _make_stride(inner_size, axis, fsz):
         inner_size *= fsz
         return inner_size, stride
 
+
 def _make_strides(inner_size, axes, full_sizes):
     full_strides = []
     for axis, fsz in reversed(list(zip(axes, full_sizes))):
@@ -707,7 +708,7 @@ class TensorDescription(NameableValue):
         self.offset = offset
         self.ndim = len(self.axes)
         self.__read_only = False
-        self.full_sizes = full_sizes if full_sizes is not None \
+        self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
         self.style = {}
 
@@ -727,7 +728,7 @@ class TensorDescription(NameableValue):
             )
             self.full_strides = full_strides
         else:
-            self.full_strides = full_strides
+            self.full_strides = tuple(full_strides)
 
         assert len(self.full_sizes) == self.ndim, \
             "Sizes must have same number of dimensions as axes"
@@ -741,123 +742,7 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
-    def dimshuffle_positions(self, axes):
-        """
-        Returns the index of each axis in new_axes as it is found in self.axes.
-        Only returns each index once.
-
-        If the same axis appears twice in either new_axes or self.axes, the
-        first occurrences will be paired, the second occurences will form a
-        pair, etc.
-
-        This is different than reaxe_positions which tried to handle cases like
-        FlattenedAxis and also adding new axis.  This only allows re-ordering
-        the Axes.
-
-        Example:
-
-            if self.axes is (A, B1, B2, C) and axes is (C, A, B, B) then the
-            returned axes will be (3, 0, 1, 2) to signify that C is found in
-            the 3rd position of self.axes, A is found in the 0th position, the
-            first B is in the 1st position and the second B is in the 2nd
-            position.
-
-        Arguments:
-            new_axes: The axes labelling the reshaped tensor.
-        Returns:
-            list of integers representing the position in the existing axes
-            each new axis is located.
-        """
-        used_positions = set()
-
-        def position(new_axis):
-            """
-            given an Axis returns the position in self.axes that matches and
-            add the index it occurs in to used_positions.
-            """
-            for i, axis in enumerate(self.axes):
-                if i not in used_positions and axis == new_axis:
-                    used_positions.add(i)
-                    return i
-
-            raise ValueError((
-                'couldnt find {new_axis} in existing Axes object {axes}'
-            ).format(
-                new_axis=new_axis,
-                axes=self.axes,
-            ))
-
-        positions = [
-            position(axis) for axis in axes
-        ]
-
-        unused_positions = set(range(len(self.axes))) - used_positions
-        if unused_positions:
-            raise ValueError((
-                'Some Axis objects were unused in dimshuffle.  Existing axes: '
-                '{old_axes}. New axes: {new_axes}. Axes that were missing in '
-                'new: {missing_axes}'
-            ).format(
-                new_axes=axes,
-                old_axes=self.axes,
-                missing_axes=', '.join(map(str, (
-                    self.axes[i] for i in unused_positions
-                )))
-            ))
-
-        return positions
-
-    def reaxe_positions(self, new_axes):
-        """
-        Returns the index of each axis in new_axes as it is found in self.axes.
-        Only returns each index once.
-
-        If the same axis appears twice in either new_axes or self.axes, the
-        first occurrences will be paired, the second occurences will form a
-        pair, etc.
-
-        If one of the Axis objects in new_axes is a FlattenedAxis, also check
-        to see if each of its sub-axis are in the existing axes.
-
-        -1 represents ???
-
-        WARNING:
-        zach: so the function may do the wrong thing in some cases, but we
-            haven't figured out exactly which cases those are yet?
-        varun: Yes, it's computing by faith.
-
-        Arguments:
-            new_axes: The axes labelling the reshaped tensor.
-        Returns:
-            list of integers representing the position in the existing axes
-            each new axis is located.
-
-        TODO: move to axes?
-        """
-        used_positions = set()
-
-        def position(new_axis):
-            """
-            given an Axis returns the position in self.axes that matches
-            """
-            for i, axis in enumerate(self.axes):
-                if i not in used_positions and axis == new_axis:
-                    used_positions.add(i)
-                    return i
-
-            # if we couldn't find an exact match and the axis we're looking for
-            # is a FlattenedAxis, look for the sub_axes of the FlattenedAxis
-            # instead.
-            if isinstance(new_axis, FlattenedAxis):
-                return tuple(map(position, new_axis.axes))
-
-            return -1
-
-        return [
-            position(axis) for axis in new_axes
-        ]
-
-    def collapse_2d(self, div_point):
+    def split_reduce_at(self, div_point):
         """
         Collapses a tensor description into two dimensions, flattening
         the axes before and after the index div_point.
@@ -874,32 +759,34 @@ class TensorDescription(NameableValue):
         Returns:
             The reshaped tensor description.
         """
-
-        def position_tuple(lower, upper):
-            t = tuple(range(lower, upper))
-
-            if len(t) == 1:
-                return t[0]
-            else:
-                return t
-
         if div_point == 0 or div_point == self.ndim:
             # if div_point has us putting all of the axes into one Axes, just
             # make one FlattenedAxis instead.
             # raise ValueError(div_point)
             new_axes = Axes([FlattenedAxis(self.axes)])
-            old_poss = (position_tuple(0, self.ndim),)
+            new_strides = (self.full_strides,)
+            new_sizes = (self.full_sizes,)
         else:
-            new_axes = Axes([
+            new_axes = Axes((
                 FlattenedAxis(self.axes[:div_point]),
                 FlattenedAxis(self.axes[div_point:])
-            ])
-            old_poss = (
-                position_tuple(0, div_point),
-                position_tuple(div_point, self.ndim)
+            ))
+            new_strides = (
+                self.full_strides[:div_point],
+                self.full_strides[div_point:]
+            )
+            new_sizes = (
+                self.full_sizes[:div_point],
+                self.full_sizes[div_point:]
             )
 
-        return self.reaxe_with_positions(new_axes, old_poss)
+        return TensorDescription(
+            new_axes,
+            base=self.base,
+            full_strides=new_strides,
+            full_sizes=new_sizes,
+            offset=self.offset
+        )
 
     def transpose(self):
         """
@@ -924,12 +811,10 @@ class TensorDescription(NameableValue):
         for axis, fst, fsz in\
                 zip(self.axes, self.full_strides, self.full_sizes):
             if isinstance(axis, FlattenedAxis):
-                if isinstance(fst, tuple) and isinstance(fsz, tuple):
-                    new_strides.extend(fst)
-                    new_sizes.extend(fsz)
-                else:
-                    new_strides.extend(axis.axes.lengths)
-                    new_sizes.extend(axis.axes.lengths)
+                assert isinstance(fst, tuple)\
+                    and isinstance(fsz, tuple)
+                new_strides.extend(fst)
+                new_sizes.extend(fsz)
             else:
                 new_strides.append(fst)
                 new_sizes.append(fsz)
@@ -943,91 +828,39 @@ class TensorDescription(NameableValue):
             offset=self.offset
         )
 
-    def reaxe(self, new_axes):
-        """
-        Returns a new tensor description labelled by the axes in
-        new_axes. Ambiguities in the transposition are resolved by preserving
-        the order in the existing axes.
-
-        Arguments:
-            new_axes: The new axes of the tensor.
-
-        Returns:
-            A tensor description with the new axes.
-        """
-        new_axes = Axes(new_axes)
-        old_poss = self.reaxe_positions(new_axes)
-        return self.reaxe_with_positions(new_axes, old_poss)
-
-    def reaxe_with_dummy_axis(self, dummy_axis, dim=-1):
-        """
-        Returns a new tensor description in which this tensor is broadcasted
-        over a new dimension. The added axis has stride 0 and does not range
-        over any data.
-        Arguments:
-            dummy_axis: The Axis object to be added.
-            dim: The position at which the axis should be added.
-        Returns:
-            The new tensor description.
-        """
-        if dim == -1:
-            dim = len(self.axes)
-        new_axes = []
-        new_axes.extend(self.axes[:dim])
-        new_axes.append(dummy_axis)
-        new_axes.extend(self.axes[dim:])
-        new_axes = Axes(new_axes)
-        old_poss = list(range(dim)) + [-1] + list(range(dim, len(self.axes)))
-        return self.reaxe_with_positions(new_axes=new_axes,
-                                         old_poss=old_poss)
-
-    def reaxe_with_positions(self, new_axes, old_poss):
-        """
-        change axes to new_axes.  Use old_poss as hints to where in the
-        existing axes each new axis exists.
-
-        Arguments:
-            new_axes Axes: The new axes for self.
-            old_poss: A list of integers representing the position of each axis
-                new_axes in the current axes.  Should be the same length as
-                new_axes.
-        """
-        assert len(new_axes) == len(old_poss)
-
-        full_sizes = []
-        full_strides = []
-
-        def old_info(axis, old_pos):
-            if old_pos == -1:
-                full_length = axis.axes.full_lengths\
-                    if isinstance(axis, FlattenedAxis) else axis.length
-                return full_length, 0
+    def broadcast(self, new_axes):
+        def zero_in_shape(tup):
+            if isinstance(tup, collections.Iterable):
+                return tuple(
+                    zero_in_shape(t) for t in tup
+                )
             else:
-                return self.full_sizes[old_pos], self.full_strides[old_pos]
+                return 0
 
-        for axis, old_pos in zip(new_axes, old_poss):
-            if isinstance(axis, FlattenedAxis)\
-                    and isinstance(old_pos, tuple):
-                sub_sizes = []
-                sub_strides = []
-                for sub, sub_pos in zip(axis.axes, old_pos):
-                    assert not isinstance(sub, FlattenedAxis)
-                    fsi, fst = old_info(sub, sub_pos)
-                    sub_sizes.append(fsi)
-                    sub_strides.append(fst)
-                full_sizes.append(tuple(sub_sizes))
-                full_strides.append(tuple(sub_strides))
+        new_axes = Axes(new_axes)
+        new_strides = []
+        new_sizes = []
+        for axis in new_axes:
+            if axis in self.axes:
+                idx = Axes.find_axis(self.axes, axis)
+                new_strides.append(self.full_strides[idx])
+                new_sizes.append(self.full_sizes[idx])
+            elif isinstance(axis, FlattenedAxis):
+                lengths = axis.axes.full_lengths
+                new_strides.append(zero_in_shape(lengths))
+                new_sizes.append(lengths)
             else:
-                fsi, fst = old_info(axis, old_pos)
-                full_sizes.append(fsi)
-                full_strides.append(fst)
+                new_strides.append(0)
+                new_sizes.append(axis.length)
 
-        return TensorDescription(new_axes,
-                                 base=self.base,
-                                 dtype=self.dtype,
-                                 full_strides=tuple(full_strides),
-                                 full_sizes=tuple(full_sizes),
-                                 offset=self.offset)
+        return TensorDescription(
+            new_axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=new_strides,
+            full_sizes=new_sizes,
+            offset=self.offset
+        )
 
     def cast(self, new_axes):
         """

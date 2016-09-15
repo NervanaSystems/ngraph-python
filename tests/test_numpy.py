@@ -43,9 +43,10 @@ def test_constant_multiply():
 
 def test_constant_tensor_multiply():
     ax.Y.length = 2
+    ax.N.length = 2
 
-    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
-    b = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.N])
+    b = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.N])
 
     c = ng.multiply(a, b)
 
@@ -310,8 +311,6 @@ def test_elementwise_ops_unmatched_args():
     broadcast_dims = (ax.W.length, ax.H.length, 1)
 
     for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        if np_op is not np.divide:
-            continue
         # Matched sizes
         p_u = ng.placeholder(axes=sample_axes)
         p_v = ng.placeholder(axes=batch_axes)
@@ -341,6 +340,7 @@ def test_elementwise_ops_unmatched_args():
         dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, .001, p_u)
         dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
+        # u op v
         result_be = uv_fun(u, v)
         np.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
         duvdunum = duvdunum_fun(u, v)

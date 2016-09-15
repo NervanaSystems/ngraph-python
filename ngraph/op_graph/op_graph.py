@@ -479,23 +479,11 @@ class SetItem(Op):
     def __init__(self, tensor, item, val, force=False, **kwargs):
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
+        val = Broadcast(val, axes=tensor.axes)
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
         self.input = None
         tensor.user_deps = {self}
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        tensor, val = tensor_descriptions(self.args)
-        return [tensor, val.reaxe(tensor.axes)]
 
     @property
     def defs(self):
@@ -591,7 +579,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        delta = sum(delta, reduction_axes=delta.axes - self.axes)
+        assert delta.axes == self.axes
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -811,8 +799,7 @@ class AxesCastOp(ReshapeOp):
         # Since the cast op is only a renaming of a tensor's axes and not
         # a restriding, we do not want ops to unnecessarily copy the tensor
         x, = self.args
-        if isinstance(x, ReshapeOp)\
-                and x.axes != x.base_axes:
+        if x.axes != x.base_axes:
             return x.base_axes
         else:
             return self.axes
@@ -823,7 +810,7 @@ class AxesCastOp(ReshapeOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, AxesCastOp(
-            Broadcast(delta, axes=self.axes),
+            delta,
             axes=x.axes
         ))
 
@@ -844,8 +831,6 @@ class ExpandDims(ReshapeOp):
         axes.extend(x.axes[dim:])
         axes = Axes(axes)
         super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
-        self.axis = axis
-        self.dim = dim
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -856,7 +841,7 @@ class ExpandDims(ReshapeOp):
           TODO
         """
         x, = tensor_descriptions(self.args)
-        return x.reaxe_with_dummy_axis(self.axis, self.dim)
+        return x.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -870,7 +855,7 @@ class ExpandDims(ReshapeOp):
         """
         x.generate_add_delta(
             adjoints,
-            sum(delta, reduction_axes=Axes(self.axis,))
+            sum(delta, reduction_axes=delta.axes - x.axes)
         )
 
 
@@ -899,7 +884,7 @@ class Broadcast(ReshapeOp):
           TODO
         """
         td, = tensor_descriptions(self.args)
-        return td.reaxe(self.axes)
+        return td.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sum(
@@ -1311,7 +1296,6 @@ class Stack(TensorOp):
         super(Stack, self).__init__(args=tuple(x_list), axes=axes)
 
     def generate_adjoints(self, adjoints, delta, *x_list):
-        delta = Broadcast(delta, axes=self.axes)
         s = [slice(None)] * len(self.axes)
         for i, x in enumerate(x_list):
             s[self.pos] = i
@@ -1422,37 +1406,6 @@ class RNG(object):
         return val
 
 
-class ElementWise(TensorOp):
-    """TODO."""
-
-    def __init__(self, args, **kwargs):
-        args = Op.as_ops(args)
-        axes = Axes()
-        for arg in args:
-            axes += arg.axes
-
-        super(ElementWise, self).__init__(
-            args=args,
-            axes=axes,
-            **kwargs
-        )
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        return [
-            arg.reaxe(self.axes)
-            for arg in tensor_descriptions(self.args)
-        ]
-
-
 class AllReduce(Op):
     """TODO."""
 
@@ -1460,25 +1413,105 @@ class AllReduce(Op):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
 
 
-class absolute(ElementWise):
-    """TODO."""
-
+class UnaryElementwiseOp(TensorOp):
     def __init__(self, x, **kwargs):
-        super(absolute, self).__init__(args=(x,), **kwargs)
+        super(UnaryElementwiseOp, self).__init__(
+            args=(x,),
+            axes=x.axes,
+            **kwargs
+        )
 
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
+def create_unary_elementwise(cls_name, generate_adjoints=None):
+    d = {}
+    if generate_adjoints is not None:
+        d['generate_adjoints'] = generate_adjoints
+    return type(cls_name, (UnaryElementwiseOp,), d)
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
 
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, sign(x) * delta)
+def neg_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, -delta)
+
+
+negative = create_unary_elementwise('negative', neg_adjoints)
+
+
+def abs_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, sign(x) * delta)
+
+
+absolute = create_unary_elementwise('absolute', abs_adjoints)
+
+
+def sin_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, delta * cos(x))
+
+
+sin = create_unary_elementwise('sin', sin_adjoints)
+
+
+def cos_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, -delta * sin(x))
+
+
+cos = create_unary_elementwise('cos', cos_adjoints)
+
+
+def tanh_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, delta * (1.0 - self * self))
+
+
+tanh = create_unary_elementwise('tanh', tanh_adjoints)
+
+
+def exp_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, delta * self)
+
+
+exp = create_unary_elementwise('exp', exp_adjoints)
+
+
+def log_adjoints(self, adjoints, delta, x):
+    def do_adjoints(delta, x):
+        if isinstance(x, Divide):
+            a, b = x.args
+            do_adjoints(delta, a)
+            do_adjoints(-delta, b)
+        elif isinstance(x, exp):
+            x.args[0].generate_add_delta(adjoints, delta)
+        else:
+            x.generate_add_delta(adjoints, delta / x)
+    do_adjoints(delta, x)
+
+
+log = create_unary_elementwise('log', log_adjoints)
+
+
+def safelog(x, limit=np.exp(-50)):
+    return log(maximum(x, limit))
+
+
+def reci_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, -self * self * delta)
+
+
+reciprocal = create_unary_elementwise('reciprocal', reci_adjoints)
+
+
+sign = create_unary_elementwise('sign')
+
+
+def square_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, 2.0 * delta * x)
+
+
+square = create_unary_elementwise('square', square_adjoints)
+
+
+def sqrt_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, .5 * delta * self)
+
+
+sqrt = create_unary_elementwise('sqrt', sqrt_adjoints)
 
 
 class BinaryElementWiseOp(TensorOp):
@@ -1486,7 +1519,9 @@ class BinaryElementWiseOp(TensorOp):
         self.kwargs = kwargs
         x, y = Op.as_ops((x, y))
         axes = x.axes + y.axes
-        x, y = Broadcast(x, axes), Broadcast(y, axes)
+
+        x = Broadcast(x, axes)
+        y = Broadcast(y, axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
@@ -1499,11 +1534,19 @@ class BinaryElementWiseOp(TensorOp):
         x, y = self.args
         return len(x.axes) == 1 and len(y.axes) == 1
 
+    @property
+    def zero_dimensional(self):
+        x, y = self.args
+        return len(x.axes) == 0 and len(y.axes) == 0
 
-def create_binary_elementwise(name, one_dim_name,
+
+def create_binary_elementwise(name,
+                              one_dim_name,
+                              zero_dim_name,
                               func_name=None,
                               generate_adjoints=None,
-                              one_dim_generate_adjoints=None):
+                              one_dim_generate_adjoints=None,
+                              zero_dim_generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
@@ -1514,22 +1557,27 @@ def create_binary_elementwise(name, one_dim_name,
         d['generate_adjoints'] = one_dim_generate_adjoints
     OneDimBinClass = type(one_dim_name, (BinClass,), d)
 
+    d = {}
+    if zero_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = zero_dim_generate_adjoints
+    ZeroDimBinClass = type(zero_dim_name, (BinClass,), d)
+
     def reduce_to_oned(self):
         x, y = self.args
         if len(x.axes) == 0 and len(y.axes) == 0:
-            d = Axes((Axis(1),))
-            x, y = Broadcast(x, d), Broadcast(y, d)
-        x, y = Flatten(x), Flatten(y)
-        return Unflatten(OneDimBinClass(x, y, **self.kwargs))
+            return ZeroDimBinClass(x, y, **self.kwargs)
+        else:
+            x, y = Flatten(x), Flatten(y)
+            return Unflatten(OneDimBinClass(x, y, **self.kwargs))
     BinClass.reduce_to_oned = reduce_to_oned
 
     if func_name is None:
-        return BinClass, OneDimBinClass
+        return BinClass, OneDimBinClass, ZeroDimBinClass
     else:
         def func(*args, **kwargs):
             return BinClass(*args, **kwargs)
         func.__name__ = func_name
-        return BinClass, OneDimBinClass, func
+        return BinClass, OneDimBinClass, ZeroDimBinClass, func
 
 
 def add_adjoints(self, adjoints, delta, x, y):
@@ -1537,8 +1585,32 @@ def add_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta)
 
 
-Add, AddOneDimensional, add = create_binary_elementwise(
-    'Add', 'AddOneDimensional', 'add', add_adjoints
+Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
+    'Add', 'AddOneDim', 'AddZeroDim', 'add', add_adjoints
+)
+
+
+def subtract_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta)
+    y.generate_add_delta(adjoints, -delta)
+
+
+Subtract, SubtractOneDim, SubtractZeroDim, subtract\
+        = create_binary_elementwise(
+    'Subtract', 'SubtractOneDim', 'SubtractZeroDim',
+    'subtract', subtract_adjoints
+)
+
+
+def multiply_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * y)
+    y.generate_add_delta(adjoints, x * delta)
+
+
+Multiply, MultiplyOneDim, MultiplyZeroDim, multiply\
+        = create_binary_elementwise(
+    'Multiply', 'MultiplyOneDim', 'MultiplyZeroDim',
+    'multiply', multiply_adjoints
 )
 
 
@@ -1547,87 +1619,65 @@ def divide_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta * self / y)
 
 
-Divide, DivideOneDimensional, divide = create_binary_elementwise(
-    'Divide', 'DivideOneDimensional', 'divide', divide_adjoints
+Divide, DivideOneDim, DivideZeroDim, divide\
+        = create_binary_elementwise(
+    'Divide', 'DivideOneDim', 'DivideZeroDim',
+    'divide', divide_adjoints
 )
 
 
-class argmax(TensorOp):
-    """TODO."""
-
-    def __init__(self, x, max_axes=None, **kwargs):
-        if max_axes is None:
-            max_axes = x.axes.sample_axes()
-            axes = x.axes.batch_axes()
-        else:
-            axes = x.axes - max_axes
-        self.max_axes = max_axes
-        super(argmax, self).__init__(
-            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
-        )
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return [x.reaxe(self.max_axes + self.axes)]
+def maximum_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, equal(self, x) * delta)
+    y.generate_add_delta(adjoints, equal(self, y) * delta)
 
 
-class argmin(TensorOp):
-    """TODO."""
-
-    def __init__(self, x, min_axes=None, **kwargs):
-        if min_axes is None:
-            min_axes = x.axes.sample_axes()
-            axes = x.axes.batch_axes()
-        else:
-            axes = x.axes - min_axes
-        self.min_axes = min_axes
-        super(argmax, self).__init__(
-            args=(x,), axes=axes, dtype=np.dtype(np.int64), **kwargs
-        )
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return [x.reaxe(self.min_axes + self.axes)]
+Maximum, MaximumOneDim, MaximumZeroDim, maximum = create_binary_elementwise(
+    'Maximum', 'MaximumOneDim', 'MaximumZeroDim', 'maximum', maximum_adjoints
+)
 
 
-class cos(ElementWise):
-    """
-    Element wise :math:`cos(x)`.
+def minimum_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, equal(self, x) * delta)
+    y.generate_add_delta(adjoints, equal(self, y) * delta)
 
-    Arguments:
-        x: The input.
-        **kwargs: Related class arguments.
-    """
 
-    def __init__(self, x, **kwargs):
-        super(cos, self).__init__(args=(x,), **kwargs)
+Minimum, MinimumOneDim, MinimumZeroDim, minimum = create_binary_elementwise(
+    'Minimum', 'MinimumOneDim', 'MinimumZeroDim', 'minimum', minimum_adjoints
+)
 
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        | :math:`z = \cos(x)`
-        | :math:`dz = -\sin(x) dx`
-        | so
-        | :math:`\overline{x} \leftarrow \overline{x} - \overline{z}\sin(x)`
-        """
-        x.generate_add_delta(adjoints, -delta * sin(x))
+
+def power_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * y * self / x)
+    y.generate_add_delta(adjoints, delta * self * log(x))
+
+
+Power, PowerOneDim, PowerZeroDim, power = create_binary_elementwise(
+    'Power', 'PowerOneDim', 'PowerZeroDim', 'power', power_adjoints
+)
+
+
+Equal, EqualOneDim, EqualZeroDim, equal\
+    = create_binary_elementwise('Equal', 'EqualOneDim', 'EqualZeroDim', 'equal')
+
+
+NotEqual, NotEqualOneDim, NotEqualZeroDim, not_equal\
+    = create_binary_elementwise('NotEqual', 'NotEqualOneDim', 'NotEqualZeroDim', 'not_equal')
+
+
+Greater, GreaterOneDim, GreaterZeroDim, greater\
+    = create_binary_elementwise('Greater', 'GreaterOneDim', 'GreaterZeroDim', 'greater')
+
+
+Less, LessOneDim, LessZeroDim, less\
+    = create_binary_elementwise('Less', 'LessOneDim', 'LessZeroDim', 'less')
+
+
+GreaterEqual, GreaterEqualOneDim, GreaterEqualZeroDim, greater_equal\
+    = create_binary_elementwise('GreaterEqual', 'GreaterEqualOneDim', 'GreaterEqualZeroDim', 'greater_equal')
+
+
+LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
+    = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
 
 
 class Dimshuffle(TensorOp):
@@ -1646,7 +1696,7 @@ class Dimshuffle(TensorOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(
             adjoints,
-            Broadcast(delta, x.axes)
+            delta
         )
 
 
@@ -1756,38 +1806,6 @@ class DotTwoByOne(Dot):
         )
 
 
-class ElementWiseBoolean(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, dtype=np.dtype(bool), **kwargs):
-        super(ElementWiseBoolean, self).__init__(
-            args=(x, y), dtype=dtype, **kwargs)
-
-
-class equal(ElementWiseBoolean):
-    """TODO."""
-
-
-class not_equal(ElementWiseBoolean):
-    """TODO."""
-
-
-class greater(ElementWiseBoolean):
-    """TODO."""
-
-
-class less(ElementWiseBoolean):
-    """TODO."""
-
-
-class greater_equal(ElementWiseBoolean):
-    """TODO."""
-
-
-class less_equal(ElementWiseBoolean):
-    """TODO."""
-
-
 class Softmax(object):
     """
     A schema to use to shortcut formula for the softmax derivative.
@@ -1839,134 +1857,154 @@ def softmax(x, normalization_axes=None, **kwargs):
 
 
 class ReductionOp(TensorOp):
-    """
-    Handles shared behaviour of computations that aggregate their inputs
-    over some dimensions, e.g. sum, max.
-    """
+    must_reduce = True
 
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
-        self.out_axes, self.reduction_axes\
-            = self._compute_axes(x, reduction_axes, out_axes)
-        self.mode = None
-        super(ReductionOp, self).__init__(
-            args=(x,), axes=self.out_axes, **kwargs
-        )
-
-    def _compute_axes(self, x, reduction_axes, out_axes):
-        """
-        A helper function to choose compatible reduction and output
-        axes from the arguments and defaults.
-
-        Arguments:
-          x: input
-          reduction_axes: may contain reduction axes specified by the user
-          out_axes: may contain output axes specified by ther user
-
-        Returns:
-            (reduction_axes, output_axes): computed axes
-        """
-        if reduction_axes is None:
-            if out_axes is None:
-                reduction_axes = x.axes.sample_axes()\
-                    - x.axes.recurrent_axes()
-            else:
-                reduction_axes = x.axes - Axes(out_axes)
-        else:
+        if reduction_axes is None and out_axes is None:
+            reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
+            out_axes = x.axes - out_axes
+        elif reduction_axes is None:
+            out_axes = Axes(out_axes)
+            reduction_axes = x.axes - out_axes
+        elif out_axes is None:
             reduction_axes = Axes(reduction_axes)
-
-        if out_axes is None:
             out_axes = x.axes - reduction_axes
         else:
             out_axes = Axes(out_axes)
+            reduction_axes = Axes(reduction_axes)
+            for axis in out_axes:
+                assert axis not in reduction_axes
 
-        return out_axes, reduction_axes
+        self.reduction_axes = reduction_axes
+        self.kwargs = kwargs
 
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
+        super(ReductionOp, self).__init__(
+            args=(x,),
+            axes=out_axes
+        )
+        assert self.valid
 
-        Arguments:
+    @property
+    def valid(self):
+        return True
 
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
 
-        if len(self.reduction_axes) == 0:
-            # TODO do this as a reaxe to 1d or something
-            xr = x.reaxe(self.axes)
-            self.mode = 'copy'
-            return [xr]
+def create_reduction_op(name,
+                        two_dim_name,
+                        one_dim_name,
+                        func_name=None,
+                        generate_adjoints=None,
+                        two_dim_generate_adjoints=None,
+                        one_dim_generate_adjoints=None):
+    d = {}
+    if generate_adjoints is not None:
+        d['generate_adjoints'] = generate_adjoints
+    RedClass = type(name, (ReductionOp,), d)
+
+    def valid_two(self):
+        x, = self.args
+        return len(x.axes) == 2\
+            and self.reduction_axes == x.axes[:1]
+    d = {'valid' : valid_two, 'must_reduce': False}
+    if two_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = two_dim_generate_adjoints
+    RedTwoDimClass = type(two_dim_name, (RedClass,), d)
+
+    def valid_one(self):
+        x, = self.args
+        return len(x.axes) == 1\
+            and self.reduction_axes == x.axes
+    d = {'valid' : valid_one, 'must_reduce': False}
+    if one_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = one_dim_generate_adjoints
+    RedOneDimClass = type(one_dim_name, (RedClass,), d)
+
+    def reduce_to_twod(self):
+        x, = self.args
+        reduction_axes = self.reduction_axes
+        out_axes = self.axes
+
+        if len(reduction_axes) == 0:
+            return x
+        elif len(x.axes) == 0:
+            return x
+
+        if len(out_axes) == 0:
+            x = Flatten(x)
+            return RedOneDimClass(
+                x,
+                reduction_axes=x.axes, out_axes=Axes(()),
+                **self.kwargs
+            )
         else:
-            red_axes = [FlattenedAxis(self.reduction_axes)]
-            red_axes.extend(self.axes)
-            red_axes = Axes(red_axes)
-            self.mode = 0
-            return [x.reaxe(red_axes)]
+            x = Broadcast(x, axes=reduction_axes + out_axes)
+            x = Flatten(x, len(reduction_axes))
+
+            out = RedTwoDimClass(
+                x,
+                reduction_axes=Axes((x.axes[0],)),
+                out_axes=Axes((x.axes[1],)),
+                **self.kwargs
+            )
+            out = Unflatten(out)
+            return Broadcast(out, axes=out_axes)
+    RedClass.reduce_to_twod = reduce_to_twod
+
+    if func_name is None:
+        return RedClass, RedTwoDimClass, RedOneDimClass
+    else:
+        def func(*args, **kwargs):
+            return RedClass(*args, **kwargs)
+        func.__name__ = func_name
+        return RedClass, RedTwoDimClass, RedOneDimClass, func
 
 
-class max(ReductionOp):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(max, self).__init__(x, **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, equal(x, self) * delta)
+def max_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
-class min(ReductionOp):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(min, self).__init__(x, **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, equal(x, self) * delta)
+Max, MaxTwoDim, MaxOneDim, max = create_reduction_op(
+    'Max', 'MaxTwoDim', 'MaxOneDim', 'max', max_adjoints
+)
 
 
-class sum(ReductionOp):
-    """TODO."""
+def min_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(adjoints, equal(x, self) * delta)
 
-    def __init__(self, x, **kwargs):
-        super(sum, self).__init__(x, **kwargs)
 
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
+Min, MinTwoDim, MinOneDim, min = create_reduction_op(
+    'Min', 'MinTwoDim', 'MinOneDim', 'min', min_adjoints
+)
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
 
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, Broadcast(delta, axes=x.axes))
+def sum_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(
+        adjoints,
+        Broadcast(delta, axes=x.axes)
+    )
+
+
+Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
+    'Sum', 'SumTwoDim', 'SumOneDim', 'sum', sum_adjoints
+)
+
+
+Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
+    'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
+)
+
+
+def argmax(dtype=np.dtype(np.int64), *arg, **kwargs):
+    return Argmax(dtype=dtype, *arg, **kwargs)
+
+
+Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
+    'Argmin', 'ArgminTwoDim', 'ArgminOneDim'
+)
+
+
+def argmin(dtype=np.dtype(np.int64), *arg, **kwargs):
+    return Argmin(dtype=dtype, *arg, **kwargs)
 
 
 def assign(lvalue, rvalue, **kwargs):
@@ -2069,168 +2107,6 @@ def pad(x, paddings, axes=None, **kwargs):
     return Unslice(x, axes=axes, slices=slices, **kwargs)
 
 
-class exp(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(exp, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * self)
-
-
-class log(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(log, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        def do_adjoints(delta, x):
-            """
-            TODO.
-
-            Arguments:
-              delta: TODO
-              x: TODO
-
-            Returns:
-              TODO
-            """
-
-            if False and isinstance(x, softmax):
-                x, = x.args
-
-            if isinstance(x, Divide):
-                a, b = x.args
-                do_adjoints(delta, a)
-                do_adjoints(-delta, b)
-
-            elif isinstance(x, exp):
-                x.args[0].generate_add_delta(adjoints, delta)
-
-            else:
-                x.generate_add_delta(adjoints, delta / x)
-
-        do_adjoints(delta, x)
-
-
-def safelog(x, limit=np.exp(-50)):
-    return log(maximum(x, limit))
-
-
-class maximum(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(maximum, self).__init__(args=(x, y), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, equal(self, x) * delta)
-        y.generate_add_delta(adjoints, equal(self, y) * delta)
-
-
-class minimum(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(minimum, self).__init__(args=(x, y), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, equal(self, x) * delta)
-        y.generate_add_delta(adjoints, equal(self, y) * delta)
-
-
-class multiply(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(multiply, self).__init__(args=(x, y), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * y)
-        y.generate_add_delta(adjoints, x * delta)
-
-
-class negative(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(negative, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, -delta)
-
-
 class onehot(TensorOp):
     """TODO."""
 
@@ -2249,72 +2125,22 @@ class onehot(TensorOp):
 
     @cachetools.cached({})
     def call_info(self):
-        """
-        TODO.
+        raise NotImplementedError
+        # """
+        # TODO.
 
-        Arguments:
+        # Arguments:
 
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        axis, axes = self.axis, self.axes
-        reaxes = Axes([axis, axes - axis])
-        return [
-            self.tensor_description().reaxe(reaxes),
-            x.reaxe(Axes(FlattenedAxis(x.axes)))
-        ]
-
-
-class power(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(power, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * y * self / x)
-        y.generate_add_delta(adjoints, delta * self * log(x))
-
-
-class reciprocal(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(reciprocal, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, -self * self * delta)
-
-
-class sign(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(sign, self).__init__(args=(x,), **kwargs)
+        # Returns:
+        #   TODO
+        # """
+        # x, = tensor_descriptions(self.args)
+        # axis, axes = self.axis, self.axes
+        # reaxes = Axes([axis, axes - axis])
+        # return [
+        #     self.tensor_description().reaxe(reaxes),
+        #     x.reaxe(Axes(FlattenedAxis(x.axes)))
+        # ]
 
 
 class Sigmoid(object):
@@ -2352,113 +2178,6 @@ def sigmoid(x, **kwargs):
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))
     return result
-
-
-class sin(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(sin, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * cos(x))
-
-
-class sqrt(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(sqrt, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, .5 * delta * self)
-
-
-class square(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(square, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, 2.0 * delta * x)
-
-
-class subtract(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, y, **kwargs):
-        super(subtract, self).__init__(args=(x, y), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta)
-        y.generate_add_delta(adjoints, -delta)
-
-
-class tanh(ElementWise):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(tanh, self).__init__(args=(x,), **kwargs)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
 
 class Function(Op):
@@ -2734,6 +2453,11 @@ class RequiredSimplify(SplicingAnalysis):
         """
         pass
 
+    @visit.on_type(ReductionOp)
+    def visit(self, op):
+        if op.must_reduce:
+            self.add_rep(op, op.reduce_to_twod())
+
     @visit.on_type(Dot)
     def visit(self, op):
         x, y = op.args
@@ -2783,7 +2507,8 @@ class RequiredSimplify(SplicingAnalysis):
 
     @visit.on_type(BinaryElementWiseOp)
     def visit(self, op):
-        pass
+        if not op.one_dimensional and not op.zero_dimensional:
+            self.add_rep(op, op.reduce_to_oned())
 
 
 class SimplePrune(SplicingAnalysis):
@@ -2813,7 +2538,7 @@ class SimplePrune(SplicingAnalysis):
         if x.scalar and x.constant:
             self.add_rep(op, Constant(-x.const))
 
-    @visit.on_type(multiply)
+    @visit.on_type(Multiply)
     def visit(self, op):
         """
         TODO.
@@ -2865,7 +2590,7 @@ class SimplePrune(SplicingAnalysis):
         if rep is not None:
             self.add_rep(op, rep)
 
-    @visit.on_type(sum)
+    @visit.on_type(Sum)
     def visit(self, op):
         """
         TODO.
