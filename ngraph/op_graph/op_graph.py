@@ -477,6 +477,7 @@ class SetItem(Op):
     """
 
     def __init__(self, tensor, item, val, force=False, **kwargs):
+        tensor, val = Op.as_ops((tensor, val))
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         val = Broadcast(val, axes=tensor.axes)

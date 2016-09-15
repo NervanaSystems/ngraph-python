@@ -29,7 +29,7 @@ from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Dot, Equal, exp, \
     Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
-    negative, NotEqual, onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
+    negative, NotEqual, Onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import convolution
 
@@ -411,15 +411,15 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(onehot)
-    def generate_op(self, op, out, o, x):
+    @generate_op.on_type(Onehot)
+    def generate_op(self, op, out, x):
         self.append("""
         o = {o}
         x = {x}
         o[:] = 0
         for i in range(len(x)):
             o[x[i], i] = 1
-        """, x=x, o=o)
+        """, x=x, o=out)
 
     @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
