@@ -693,10 +693,6 @@ class TensorOp(Op):
         return TensorDescription(self.axes, dtype=self.dtype)
 
     @property
-    def base_axes(self):
-        return self.axes
-
-    @property
     def axes(self):
         """
 
@@ -768,10 +764,12 @@ class TensorOp(Op):
 
 
 class ReshapeOp(TensorOp):
-
-    @property
-    def base_axes(self):
-        return self.args[0].base_axes
+    def __init__(self, x, **kwargs):
+        super(ReshapeOp, self).__init__(
+            args=(x,),
+            dtype=x.dtype,
+            **kwargs
+        )
 
     @property
     def device_op(self):
@@ -780,6 +778,28 @@ class ReshapeOp(TensorOp):
             False, because this is handled by the transformer.
         """
         return False
+
+
+class Transpose(ReshapeOp):
+    """
+    Used to reverse the axes of a tensor.
+
+    Arguments:
+        x: A tensor.
+    """
+    def __init__(self, x, **kwargs):
+        super(Transpose, self).__init__(
+            x,
+            axes=Axes(reversed(x.axes)),
+            **kwargs
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        return self.args[0].tensor_description().transpose()
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, Transpose(delta))
 
 
 class AxesCastOp(ReshapeOp):
@@ -792,17 +812,7 @@ class AxesCastOp(ReshapeOp):
 
     """
     def __init__(self, x, axes, **kwargs):
-        super(AxesCastOp, self).__init__(args=(x,), axes=axes, **kwargs)
-
-    @property
-    def base_axes(self):
-        # Since the cast op is only a renaming of a tensor's axes and not
-        # a restriding, we do not want ops to unnecessarily copy the tensor
-        x, = self.args
-        if x.axes != x.base_axes:
-            return x.base_axes
-        else:
-            return self.axes
+        super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -830,7 +840,7 @@ class ExpandDims(ReshapeOp):
         axes.append(axis)
         axes.extend(x.axes[dim:])
         axes = Axes(axes)
-        super(ExpandDims, self).__init__(args=(x,), axes=axes, **kwargs)
+        super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -870,7 +880,7 @@ class Broadcast(ReshapeOp):
 
     def __init__(self, x, axes, **kwargs):
         super(Broadcast, self).__init__(
-            args=(x,),axes=axes, **kwargs
+            x, axes=axes, **kwargs
         )
 
     @cachetools.cached({})
@@ -930,7 +940,7 @@ class Slice(ReshapeOp):
             axes = Axes(axes)
 
         super(Slice, self).__init__(
-            args=(x,),
+            x,
             axes=axes,
             **kwargs
         )
@@ -988,58 +998,82 @@ def slice_along_axis(x, axis, idx):
 
 
 class Flatten(ReshapeOp):
-    def __init__(self, x, idx=0, axes=None, **kwargs):
-        x = Dimshuffle(x, x.axes)
+    def __init__(self, x, positions=None, **kwargs):
+        if isinstance(x, ReshapeOp):
+            x = Dimshuffle(x, axes=x.axes)
 
-        if axes is not None:
-            assert len(axes) == 2
-            assert axes.unflatten() == x.axes
-            self.idx = axes[:1].unflatten()
-        else:
-            assert idx >= 0 and idx <= len(x.axes)
-            self.idx = idx
+        if positions is None:
+            positions = [(0, len(x.axes))]
+        self.positions = positions
 
-            if self.idx == 0 or self.idx == len(x.axes):
-                axes = Axes(FlattenedAxis(x.axes))
-            else:
-                axes = Axes((
-                    FlattenedAxis(x.axes[:idx]),
-                    FlattenedAxis(x.axes[idx:])
-                ))
+        # Invert positions for the adjoint
+        unflatten_pos = []
+        for i, pos in enumerate(positions):
+            if isinstance(pos, tuple):
+                unflatten_pos.append(i)
+        self.unflatten_pos = unflatten_pos
 
         super(Flatten, self).__init__(
-            args=(x,),
-            axes=axes
+            x,
+            axes=Axes.flatten(x.axes, positions)
         )
 
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.split_reduce_at(self.idx)
+        return x.flatten(self.positions)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            Unflatten(delta)
+        x.generate_add_delta(adjoints, Unflatten(
+            delta,
+            positions=self.unflatten_pos
+        ))
+
+
+def split_reduce_at(x, idx):
+    if idx == 0 or idx == len(x.axes):
+        return Flatten(x)
+    else:
+        return Flatten(
+            x, positions=[(0, idx), (idx, len(x.axes))]
         )
 
 
 class Unflatten(ReshapeOp):
-    def __init__(self, x, **kwargs):
+    def __init__(self, x, positions=None, **kwargs):
+        if positions is None:
+            positions = set(range(len(x.axes)))
+        else:
+            positions = set(positions)
+        self.positions = positions
+
+        # Invert positions for the adjoint
+        flatten_pos = []
+        idx = 0
+        for i, axis in enumerate(x.axes):
+            if i in positions:
+                new_idx = idx + len(axis.axes)
+                flatten_pos.append((idx, new_idx))
+                idx = new_idx
+            else:
+                flatten_pos.append(idx)
+                idx += 1
+        self.flatten_pos = flatten_pos
+
         super(Unflatten, self).__init__(
-            args=(x,),
-            axes=Axes.unflatten(x.axes)
+            x,
+            axes=Axes.unflatten(x.axes, positions)
         )
 
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.unflatten()
+        return x.unflatten(positions=self.positions)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Flatten(
             delta,
-            axes=x.axes
+            positions=self.flatten_pos
         ))
 
 
@@ -1937,7 +1971,7 @@ def create_reduction_op(name,
             )
         else:
             x = Broadcast(x, axes=reduction_axes + out_axes)
-            x = Flatten(x, len(reduction_axes))
+            x = split_reduce_at(x, len(reduction_axes))
 
             out = RedTwoDimClass(
                 x,
@@ -2106,40 +2140,27 @@ def pad(x, paddings, axes=None, **kwargs):
     return Unslice(x, axes=axes, slices=slices, **kwargs)
 
 
-class onehot(TensorOp):
+class Onehot(TensorOp):
     """TODO."""
+    def __init__(self, x, axis, **kwargs):
+        assert len(x.axes) == 1
+        super(Onehot, self).__init__(
+            args=(x,),
+            axes=Axes((axis,)) + x.axes,
+            **kwargs
+        )
 
-    def __init__(self, x, axis=None, axes=None, **kwargs):
-        if axis is None:
-            if axes is None:
-                raise ValueError('Cannot determine one-hot axis.')
-            axis = (axes - x.axes)[0]
-        else:
-            if axes is None:
-                x_sample = x.axes.sample_axes()
-                x_batch = x.axes.batch_axes()
-                axes = Axes(axis) + x_sample + x_batch
-        self.axis = axis
-        super(onehot, self).__init__(args=(x,), axes=axes, **kwargs)
 
-    @cachetools.cached({})
-    def call_info(self):
-        raise NotImplementedError
-        # """
-        # TODO.
+def onehot(x, axis, **kwargs):
+    to_flatten = len(x.axes) > 1
 
-        # Arguments:
+    if to_flatten:
+        x = Flatten(x)
 
-        # Returns:
-        #   TODO
-        # """
-        # x, = tensor_descriptions(self.args)
-        # axis, axes = self.axis, self.axes
-        # reaxes = Axes([axis, axes - axis])
-        # return [
-        #     self.tensor_description().reaxe(reaxes),
-        #     x.reaxe(Axes(FlattenedAxis(x.axes)))
-        # ]
+    out = Onehot(x, axis)
+    if to_flatten:
+        out = Unflatten(out, positions=[1])
+    return out
 
 
 class Sigmoid(object):
@@ -2474,14 +2495,14 @@ class RequiredSimplify(SplicingAnalysis):
         y_rem_axes = y.axes - reduction_axes
         y = Broadcast(y, reduction_axes + y_rem_axes)
 
-        x = Flatten(x, len(x.axes) - len(reduction_axes))
-        y = Flatten(y, len(reduction_axes))
+        x = split_reduce_at(x, len(x.axes) - len(reduction_axes))
+        y = split_reduce_at(y, len(reduction_axes))
         reduction_axes = Axes((FlattenedAxis(reduction_axes),))
 
         if len(out_axes) == 0:
             out = DotOneDimensional(x, y)
         elif len(x.axes) == 1:
-            out = DotTwoByOne(y, x)
+            out = DotTwoByOne(Transpose(y), x)
         elif len(y.axes) == 1:
             out = DotTwoByOne(x, y)
         else:

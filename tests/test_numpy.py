@@ -796,6 +796,3 @@ def test_onehot():
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     ng.NumPyTransformer().initialize()
-
-if __name__ == '__main__':
-    test_elementwise_ops_unmatched_args()

@@ -121,7 +121,7 @@ def test_reaxe_0d_to_1d():
     x = random(td)
 
     # create view of x
-    x_view = tensorview(td.reaxe([ax.A]), x)
+    x_view = tensorview(td.broadcast([ax.A]), x)
 
     # set x
     x[()] = 3
@@ -135,7 +135,7 @@ def test_reaxe_0d_to_2d():
     td = arrayaxes.TensorDescription(axes=())
     x = random(td)
 
-    x_view = tensorview(td.reaxe([ax.A, ax.B]), x)
+    x_view = tensorview(td.broadcast([ax.A, ax.B]), x)
 
     # set x
     x[()] = 3
@@ -163,13 +163,13 @@ def test_simple_tensors():
     e2 = random(td2)
 
     # Reaxes
-    e1_1 = tensorview(td1.reaxe([ax.A, ax.B]), e1)
-    e1_2 = tensorview(td1.reaxe([ax.B, ax.A]), e1)
-    e1_3 = tensorview(td1.reaxe([(ax.B, ax.C), ax.A]), e1)
+    e1_1 = tensorview(td1.broadcast([ax.A, ax.B]), e1)
+    e1_2 = tensorview(td1.broadcast([ax.B, ax.A]), e1)
+    e1_3 = tensorview(td1.broadcast([(ax.B, ax.C), ax.A]), e1)
 
-    e2_1 = tensorview(td2.reaxe(arrayaxes.Axes([ax.B, ax.A])), e2)
-    e2_2 = tensorview(td2.reaxe(arrayaxes.Axes([ax.A, ax.B])), e2)
-    e2_3 = tensorview(td2.reaxe(arrayaxes.Axes([arrayaxes.FlattenedAxis(td2.axes)])), e2)
+    e2_1 = tensorview(td2.broadcast(arrayaxes.Axes([ax.B, ax.A])), e2)
+    e2_2 = tensorview(td2.broadcast(arrayaxes.Axes([ax.A, ax.B])), e2)
+    e2_3 = tensorview(td2.flatten(positions=[(0, 2)]), e2)
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
     assert e1_2.shape == (ax.B.length, ax.A.length)
