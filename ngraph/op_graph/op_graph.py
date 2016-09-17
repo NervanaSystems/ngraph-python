@@ -61,11 +61,13 @@ class Op(Node):
         constant (bool): The value is constant.
         graph_label_type: A label that should be used when drawing the graph.
         initializers (list): Additional Ops to run before this Op is run the first time.
+        other_deps (set): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
         trainable: The value is trainable.
         schemas: Information about how the Op was generated.
+        user_deps (set): Ops that must run before using this op.  Set SetItem.
     """
 
     # Default is to not collect Ops as they are created
@@ -108,6 +110,11 @@ class Op(Node):
         if graph_label_type is None:
             graph_label_type = self.__class__.__name__
         self.graph_label_type = graph_label_type
+
+        self.other_deps = set()
+        self.user_deps = set()
+        for arg in self.args:
+            self.other_deps.update(arg.user_deps)
 
         self.schemas = []
         self._adjoints = None
@@ -449,6 +456,7 @@ class SetItem(Op):
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
         self.input = None
+        tensor.user_deps = {self}
 
     @cachetools.cached({})
     def call_info(self):

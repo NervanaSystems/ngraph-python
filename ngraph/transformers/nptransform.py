@@ -475,8 +475,9 @@ class NumPyTransformer(Transformer):
     def finish_transform_allocate(self):
         pass
 
-    def transform_ordered_ops(self, ordered_ops):
-        name = "c_" + str(self.n_computations)
+    def transform_ordered_ops(self, ordered_ops, name):
+        if name is None:
+            name = "c_" + str(self.n_computations)
         self.n_computations += 1
         self.compute_code.append("def {}(self):", name)
         code = self.compute_code.code
@@ -514,7 +515,7 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-            # print(self.code.code)
+            print(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()

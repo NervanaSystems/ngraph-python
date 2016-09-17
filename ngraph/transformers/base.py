@@ -28,7 +28,7 @@ from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
 
-class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
+class Computation(NameableValue):
     """
     A handle for a computation function.
 
@@ -37,10 +37,12 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
         returns: If an Op, return the value
             of the Op, if sequence of Ops, return the sequence of values, if
             a set return a map, if None, return None.
-        args: AllocationOps marked input will be arguments to the function.
+        *args: AllocationOps marked input will be arguments to the function.
+        **kwargs: Args for related classes.
     """
 
-    def __init__(self, transformer, returns, *args):
+    def __init__(self, transformer, returns, *args, **kwargs):
+        super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
         self.returns = returns
         self.ops = set()
@@ -77,14 +79,13 @@ class Computation(with_metaclass(abc.ABCMeta, NameableValue)):
 
         self.transformer.all_results.update(self.ops)
         self.executor = None
-        self.name = None
 
     def transform(self):
         """
         Transforms the computation so that it can be run.
         """
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-        self.name = self.transformer.transform_ordered_ops(ordered_ops)
+        self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
         """
@@ -346,7 +347,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # create computation which initializes values (called once per
         # session)
-        self.init_computation = self.computation(doall(self.inits))
+        self.init_computation = self.computation(doall(self.inits), name="init")
 
         all_ops = ops + self.inits
         # Give ids
@@ -463,6 +464,11 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         """
         todo = set(ordered_ops)
+
+        #  Reset variables to their pre-used state
+        for op in todo:
+            op.user_deps = set()
+
         initializers = set()
         while todo:
             these_ops = todo
@@ -529,13 +535,14 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
 
     # User API follows
-    def computation(self, results, *parameters):
+    def computation(self, results, *parameters, **kwargs):
         """
         Adds a computation to the transformer.
 
         Arguments:
             results: Values to be computed
-            parameters: Values to be set as arguments to evaluate
+            *parameters: Values to be set as arguments to evaluate
+            name: Name for function.  Defaults to None.
 
         Returns:
             Dictionary from results to their values
@@ -545,7 +552,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
                 'Cannot create computations from a finalized transformer'
             )
 
-        result = Computation(self, results, *parameters)
+        result = Computation(self, results, *parameters, **kwargs)
         self.computations.add(result)
         return result
 
