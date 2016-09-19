@@ -773,22 +773,6 @@ class ReshapeOp(TensorOp):
         )
 
     @property
-    def sliced(self):
-        x, = self.args
-        if isinstance(x, ReshapeOp):
-            return x.sliced
-        else:
-            return False
-
-    @property
-    def base_axes(self):
-        x, = self.args
-        if isinstance(x, ReshapeOp):
-            return x.base_axes
-        else:
-            return x.axes
-
-    @property
     def device_op(self):
         """
         Returns:
@@ -830,17 +814,6 @@ class AxesCastOp(ReshapeOp):
     """
     def __init__(self, x, axes, **kwargs):
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
-
-    @property
-    def base_axes(self):
-        x, = self.args
-        if isinstance(x, ReshapeOp)\
-                and x.axes != x.base_axes:
-            # In this case, the axes of this op do not reflect the
-            # underlying order.
-            return x.base_axes
-        else:
-            return x.axes
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -975,10 +948,6 @@ class Slice(ReshapeOp):
 
         self.slices = slices
 
-    @property
-    def sliced(self):
-        return True
-
     @cachetools.cached({})
     def tensor_description(self):
         """
@@ -1032,9 +1001,7 @@ def slice_along_axis(x, axis, idx):
 class Flatten(ReshapeOp):
     def __init__(self, x, axes=None, **kwargs):
         if isinstance(x, ReshapeOp):
-            if x.sliced or x.base_axes != x.axes:
-                x = Dimshuffle(x, axes=x.axes)
-
+            x = Dimshuffle(x, axes=x.axes)
         if axes is None:
             axes = FlattenedAxis(x.axes)
         assert check_flatten(x.axes, axes)
