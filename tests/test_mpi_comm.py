@@ -13,18 +13,27 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-
-from subprocess import Popen, PIPE
-
 import numpy as np
 import os
+import pytest
+from subprocess import Popen, PIPE
 
 """
 Test the usage of transformer.allreduce
 """
-from ngraph.transformers.argon.mpihandle import MPIHandle
+try:
+    from ngraph.transformers.argon.mpihandle import MPIHandle
+except ImportError as e:
+    if 'argon' in str(e):
+        print("Argon backend and tensor are defined in argon package, which is not installed.")
+    elif 'mpi4py' in str(e):
+        print(
+            "Argon backend currently depends on the package mpi4py, which is not installed."
+        )
+    else:
+        raise
 
-
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_allreduce():
     """TODO."""
     a = np.array([[4, 1, 2, -3, 4],
@@ -38,26 +47,31 @@ def test_mpi_allreduce():
     print("pass mpi allreduce test")
 
 
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_reduce():
     """TODO."""
     pass
 
 
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_reduce_avg():
     """TODO."""
     pass
 
 
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_scatter():
     """TODO."""
     pass
 
 
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_scatterv():
     """TODO."""
     pass
 
 
+@pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_gattherv():
     """TODO."""
     pass
