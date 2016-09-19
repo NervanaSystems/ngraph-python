@@ -19,7 +19,7 @@ import math
 import numpy as np
 
 from ngraph.op_graph.arrayaxes import Axes
-from ngraph.op_graph.op_graph import deriv, Op
+from ngraph.op_graph.op_graph import deriv
 from ngraph.transformers.nptransform import NumPyTransformer
 import decorator
 
