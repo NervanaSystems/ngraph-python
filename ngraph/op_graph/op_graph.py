@@ -1068,7 +1068,7 @@ class Unflatten(ReshapeOp):
             axes = []
             for axis in x.axes:
                 axes.extend(axis.axes)
-            axes = Axes(axes)
+        axes = Axes(axes)
         assert check_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
@@ -2193,7 +2193,8 @@ def onehot(x, axis, **kwargs):
 
     out = Onehot(x, axis)
     if to_flatten:
-        out = Unflatten(out, positions=[1])
+        out_axes = [out.axes[0]] + list(out.axes[1].axes)
+        out = Unflatten(out, axes=out_axes)
     return out
 
 
