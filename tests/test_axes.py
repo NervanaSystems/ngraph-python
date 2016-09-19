@@ -169,7 +169,9 @@ def test_simple_tensors():
 
     e2_1 = tensorview(td2.broadcast(arrayaxes.Axes([ax.B, ax.A])), e2)
     e2_2 = tensorview(td2.broadcast(arrayaxes.Axes([ax.A, ax.B])), e2)
-    e2_3 = tensorview(td2.flatten(positions=[(0, 2)]), e2)
+    e2_3 = tensorview(td2.flatten(arrayaxes.Axes((
+        arrayaxes.FlattenedAxis((ax.A, ax.B)),
+    ))), e2_2)
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
     assert e1_2.shape == (ax.B.length, ax.A.length)

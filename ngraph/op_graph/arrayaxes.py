@@ -560,7 +560,7 @@ class FlattenedAxis(Axis):
     """
 
     def __init__(self, axes, **kwargs):
-        assert isinstance(axes, Axes)
+        axes = Axes(axes)
         length = reduce(operator.mul, axes.lengths, 1)
         super(FlattenedAxis, self).__init__(length=length, **kwargs)
         self.__axes = axes
