@@ -371,7 +371,7 @@ class Axes(object):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes.append(self, Axes(other))
+        return Axes.concatenate(self, Axes(other))
 
     def __sub__(self, other):
         return Axes.subtract(self, Axes(other))
@@ -396,13 +396,13 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def append(axes1, axes2):
+    def concatenate(axes1, axes2):
         """
         Returns the union of the elements, leaving out duplicate Axes.
 
         Arguments:
-            axes1: first axes to append
-            axes2: second axes to append
+            axes1: first axes to concatenate
+            axes2: second axes to concatenate
 
         Returns:
             The ordered union
@@ -515,6 +515,72 @@ class Axes(object):
         axes = Axes(axes)
         return axes._axes.index(axis)
 
+    @staticmethod
+    @with_args_as_axes
+    def same_elems(axes1, axes2):
+        """
+        Checks whether two Axes have the same elements.
+
+        Arguments:
+            axes1: First axes.
+            axes2: Second axes.
+
+        Returns:
+            True if axes1 and axes2 have the same elements,
+            False otherwise.
+        """
+        return set(axes1) == set(axes2)
+
+    @staticmethod
+    @with_args_as_axes
+    def check_flatten(axes, new_axes):
+        """
+        Checks whther axes can safely be flattened to produce new_axes.
+        The requirements are that the components of axes should all be
+        present in new_axes and that they should be laid out in the same
+        order.
+
+        Arguments:
+            axes: The original axes.
+            new_axes: The flattened axes.
+
+        Returns:
+            True if axes can be safely flattened to new_axes, False otherwise.
+        """
+        return Axes.check_unflatten(new_axes, axes)
+
+    @staticmethod
+    @with_args_as_axes
+    def check_unflatten(axes, new_axes):
+        """
+        Checks whther axes can safely be unflattened to produce new_axes.
+        The requirements are that the components of axes should all be
+        present in new_axes and that they should be laid out in the same
+        order.
+
+        Arguments:
+            axes: The original axes.
+            new_axes: The unflattened axes.
+
+        Returns:
+            True if axes can be safely unflattened to new_axes, False otherwise.
+        """
+        def check(condition):
+            if not condition:
+                return False
+
+        idx = 0
+        for axis in axes:
+            if axis == new_axes[idx]:
+                idx += 1
+            else:
+                check(isinstance(axis, FlattenedAxis))
+                new_idx = idx + len(axis.axes)
+                check(axis.axes == new_axes[idx:new_idx])
+                idx = new_idx
+        check(idx == len(new_axes))
+        return True
+
     # TODO: delete this method, the size should come from the tensor
     @property
     def size(self):
@@ -530,7 +596,7 @@ class Axes(object):
         )
 
 
-def reduce_nested(elem, agg, func):
+def _reduce_nested(elem, agg, func):
     """
     Reduces a nested sequence by applying a function to each
     of its elements and returns an aggregation.
@@ -548,7 +614,7 @@ def reduce_nested(elem, agg, func):
     """
     if isinstance(elem, collections.Iterable):
         for sub in elem:
-            agg = reduce_nested(sub, agg, func)
+            agg = _reduce_nested(sub, agg, func)
         return agg
     else:
         return func(agg, elem)
@@ -607,28 +673,6 @@ class FlattenedAxis(Axis):
         return s
 
 
-def check_flatten(axes, new_axes):
-    return check_unflatten(new_axes, axes)
-
-
-def check_unflatten(axes, new_axes):
-    def check(condition):
-        if not condition:
-            return False
-
-    idx = 0
-    for axis in axes:
-        if axis == new_axes[idx]:
-            idx += 1
-        else:
-            check(isinstance(axis, FlattenedAxis))
-            new_idx = idx + len(axis.axes)
-            check(axis.axes == new_axes[idx:new_idx])
-            idx = new_idx
-    check(idx == len(new_axes))
-    return True
-
-
 def reduce_strides(strides):
     """
     Reduces a nested tuple describing the strides of a tensor
@@ -640,7 +684,7 @@ def reduce_strides(strides):
     Returns:
         strides: The tuple of strides.
     """
-    return tuple(int(reduce_nested(elem, float('inf'), min))
+    return tuple(int(_reduce_nested(elem, float('inf'), min))
                  for elem in strides)
 
 
@@ -761,7 +805,7 @@ class TensorDescription(NameableValue):
     def flatten(self, new_axes):
         """
         Flattens a tensor description to give it the Axes in new_axes.
-        See check_flatten for a description of permitted values of new_axes.
+        See Axes.check_flatten for a description of permitted values of new_axes.
 
         Arguments:
             new_axes: The Axes of the flattened tensor description.
@@ -770,7 +814,7 @@ class TensorDescription(NameableValue):
             The reshaped tensor description.
         """
         new_axes = Axes(new_axes)
-        assert check_flatten(self.axes, new_axes)
+        assert Axes.check_flatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -801,17 +845,17 @@ class TensorDescription(NameableValue):
     def unflatten(self, new_axes):
         """
         Unflattens a tensor description to give it the Axes in new_axes.
-        See check_unflatten for a description of the permitted values of
+        See Axes.check_unflatten for a description of the permitted values of
         new_axes
 
         Arguments:
-            new_axes: The Axes of the unfalttened TensorDescription.
+            new_axes: The Axes of the unflattened TensorDescription.
 
         Returns:
             The unflattened tensor description.
         """
         new_axes = Axes(new_axes)
-        assert check_unflatten(self.axes, new_axes)
+        assert Axes.check_unflatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -1013,7 +1057,7 @@ class TensorDescription(NameableValue):
     @property
     def sizes(self):
         """The allocated sizes for each axis."""
-        return tuple(reduce_nested(_, 1, operator.mul)
+        return tuple(_reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
 
     @property

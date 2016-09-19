@@ -1003,8 +1003,8 @@ class Flatten(ReshapeOp):
         if isinstance(x, ReshapeOp):
             x = Dimshuffle(x, axes=x.axes)
         if axes is None:
-            axes = FlattenedAxis(x.axes)
-        assert check_flatten(x.axes, axes)
+            axes = Axes(FlattenedAxis(x.axes),)
+        assert Axes.check_flatten(x.axes, axes)
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
@@ -1036,7 +1036,7 @@ class Unflatten(ReshapeOp):
             for axis in x.axes:
                 axes.extend(axis.axes)
         axes = Axes(axes)
-        assert check_unflatten(x.axes, axes)
+        assert Axes.check_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
@@ -1694,7 +1694,7 @@ class Dimshuffle(TensorOp):
         for axis in axes:
             old_pos = Axes.find_axis(x.axes, axis)
             old_poss.append(old_pos)
-        self.old_poss = tuple(old_poss)
+        self.old_axis_positions = tuple(old_poss)
 
         super(Dimshuffle, self).__init__(
             args=(x,),
@@ -1721,7 +1721,8 @@ class Dot(TensorOp):
                 (x.axes - reduction_axes) +
                 (y.axes - reduction_axes)
             )
-        reduction_axes -= out_axes
+        else:
+            assert len(Axes.intersect(reduction_axes, out_axes)) == 0
 
         self.reduction_axes = reduction_axes
         super(Dot, self).__init__(

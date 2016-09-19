@@ -255,7 +255,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append(
             "{}[()] = np.transpose({}, {})",
-            out, x, op.old_poss
+            out, x, op.old_axis_positions
         )
 
     @generate_op.on_type(convolution)
