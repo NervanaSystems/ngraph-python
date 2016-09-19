@@ -15,7 +15,6 @@
 from __future__ import division
 
 import collections
-import numbers
 import operator
 import weakref
 from functools import reduce, wraps

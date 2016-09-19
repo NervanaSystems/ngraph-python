@@ -900,7 +900,7 @@ class Broadcast(ReshapeOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sum(
             delta,
-            reduction_axes=delta.axes-x.axes,
+            reduction_axes=delta.axes - x.axes,
             out_axes=x.axes
         ))
 
@@ -1428,6 +1428,7 @@ class UnaryElementwiseOp(TensorOp):
             **kwargs
         )
 
+
 def create_unary_elementwise(cls_name, generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
@@ -1602,8 +1603,7 @@ def subtract_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta)
 
 
-Subtract, SubtractOneDim, SubtractZeroDim, subtract\
-        = create_binary_elementwise(
+Subtract, SubtractOneDim, SubtractZeroDim, subtract = create_binary_elementwise(
     'Subtract', 'SubtractOneDim', 'SubtractZeroDim',
     'subtract', subtract_adjoints
 )
@@ -1614,8 +1614,7 @@ def multiply_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, x * delta)
 
 
-Multiply, MultiplyOneDim, MultiplyZeroDim, multiply\
-        = create_binary_elementwise(
+Multiply, MultiplyOneDim, MultiplyZeroDim, multiply = create_binary_elementwise(
     'Multiply', 'MultiplyOneDim', 'MultiplyZeroDim',
     'multiply', multiply_adjoints
 )
@@ -1626,8 +1625,7 @@ def divide_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta * self / y)
 
 
-Divide, DivideOneDim, DivideZeroDim, divide\
-        = create_binary_elementwise(
+Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
     'Divide', 'DivideOneDim', 'DivideZeroDim',
     'divide', divide_adjoints
 )
@@ -1680,7 +1678,10 @@ Less, LessOneDim, LessZeroDim, less\
 
 
 GreaterEqual, GreaterEqualOneDim, GreaterEqualZeroDim, greater_equal\
-    = create_binary_elementwise('GreaterEqual', 'GreaterEqualOneDim', 'GreaterEqualZeroDim', 'greater_equal')
+    = create_binary_elementwise(
+        'GreaterEqual', 'GreaterEqualOneDim',
+        'GreaterEqualZeroDim', 'greater_equal'
+    )
 
 
 LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
@@ -1904,7 +1905,7 @@ def create_twod_reduction_op(name,
         return len(x.axes) == 2\
             and self.reduction_axes == x.axes[:1]\
             and self.out_axes == x.axes[1:]
-    d = {'valid' : valid_two, 'must_reduce': False}
+    d = {'valid': valid_two, 'must_reduce': False}
 
     if two_dim_generate_adjoints is not None:
         d['generate_adjoints'] = two_dim_generate_adjoints
@@ -1921,7 +1922,7 @@ def create_oned_reduction_op(name,
         return len(x.axes) == 1\
             and self.reduction_axes == x.axes
 
-    d = {'valid' : valid_one, 'must_reduce': False}
+    d = {'valid': valid_one, 'must_reduce': False}
     if one_dim_generate_adjoints is not None:
         d['generate_adjoints'] = one_dim_generate_adjoints
 
@@ -2422,6 +2423,7 @@ def cross_entropy_binary(y, t, out_axes=None):
       TODO
     """
     return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
+
 
 class SplicingAnalysis(object):
     def __init__(self, results):

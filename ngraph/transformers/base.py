@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, doall, Broadcast, SimplePrune, RequiredSimplify
+    Function, doall, Broadcast, RequiredSimplify
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
