@@ -219,7 +219,8 @@ class PaddedAxis(FunctionAxis):
 
 def no_duplicates(arr):
     """
-    Returns whether there are duplicates in a list
+    Returns whether there are duplicates in a list. The elements in the array
+    should be hashable.
 
     Arguments:
         arr: The list to check.
@@ -227,22 +228,12 @@ def no_duplicates(arr):
     Returns:
         bool: True if there are no duplicates, False if there are.
     """
-    if len(arr) == 0:
-        return True
-
-    if isinstance(arr[0], collections.Hashable):
-        s = set()
-        for x in arr:
-            if x in s:
-                return False
-            s.add(x)
-        return True
-    else:
-        for i in range(len(arr)):
-            for j in range(i + 1, len(arr)):
-                if arr[i] == arr[j]:
-                    return False
-        return True
+    s = set()
+    for x in arr:
+        if x in s:
+            return False
+        s.add(x)
+    return True
 
 
 def with_args_as_axes(f):
@@ -600,6 +591,9 @@ class FlattenedAxis(Axis):
     def __eq__(self, other):
         return isinstance(other, FlattenedAxis)\
             and all(l == r for l, r in zip(self.axes, other.axes))
+
+    def __hash__(self):
+        return hash(self.axes)
 
     def __repr__(self):
         s = 'FlattenedAxis('
