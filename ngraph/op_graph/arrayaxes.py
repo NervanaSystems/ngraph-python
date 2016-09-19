@@ -310,7 +310,7 @@ class Axes(object):
                 ))
 
         assert no_duplicates(axes)
-        self._axes = axes
+        self._axes = tuple(axes)
 
     @property
     def full_lengths(self):
@@ -390,6 +390,9 @@ class Axes(object):
     def __nonzero__(self):
         """ Axes considered nonzero if axes are nonzero. """
         return bool(self._axes)
+
+    def __hash__(self):
+        return hash(self._axes)
 
     @staticmethod
     @with_args_as_axes
