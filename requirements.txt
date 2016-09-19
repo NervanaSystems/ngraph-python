@@ -1,4 +1,4 @@
-mpi4py==2.0.0; sys_platform == 'linux2' or sys_platform == 'linux'
+mpi4py==2.0.0; sys_platform != 'darwin'
 # tensorflow & protobuf
 https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-0.9.0-cp27-none-linux_x86_64.whl; sys_platform == 'linux2' and python_version <= '2.7'
 https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-0.9.0-cp34-cp34m-linux_x86_64.whl; sys_platform == 'linux' and python_version == '3.4'
