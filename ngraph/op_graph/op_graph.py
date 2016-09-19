@@ -1031,10 +1031,14 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes=None, **kwargs):
+        if isinstance(x, ReshapeOp):
+            if x.sliced or x.base_axes != x.axes:
+                x = Dimshuffle(x, axes=x.axes)
+
         if axes is None:
             axes = FlattenedAxis(x.axes)
         assert check_flatten(x.axes, axes)
-    super(Flatten, self).__init__(x, axes=axes, **kwargs)
+        super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
