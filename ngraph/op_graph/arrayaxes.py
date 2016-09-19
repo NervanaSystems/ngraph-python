@@ -466,21 +466,21 @@ class Axes(object):
     @with_args_as_axes
     def find(axes, sub_axes):
         """
-        Attempts to locate a subsequence of Axes (subaxes) in axes.
+        Attempts to locate a subsequence of Axes (sub_axes) in axes.
 
         Arguments:
             axes: The superset of Axes.
-            subaxes: Axes to search for.
+            sub_axes: Axes to search for.
 
         Returns:
-            int: The index at which the subsequence subaxes occurs in
+            int: The index at which the subsequence sub_axes occurs in
             axes.
         """
         assert isinstance(axes, Axes) and isinstance(sub_axes, Axes)
         for i in range(len(axes) - len(sub_axes) + 1):
             if axes[i:i + len(sub_axes)] == sub_axes:
                 return i
-        raise ValueError('Could not find subaxes')
+        raise ValueError('Could not find sub_axes')
 
     @staticmethod
     def find_axis(axes, axis):
@@ -497,17 +497,6 @@ class Axes(object):
         axes = Axes(axes)
         assert isinstance(axis, Axis)
         return axes._axes.index(axis)
-
-    @staticmethod
-    @with_args_as_axes
-    def unflatten(axes):
-        new_axes = []
-        for axis in axes:
-            if isinstance(axis, FlattenedAxis):
-                new_axes.extend(axis.axes)
-            else:
-                new_axes.append(axis)
-        return Axes(new_axes)
 
     @staticmethod
     def index(axes, axis):
@@ -611,6 +600,28 @@ class FlattenedAxis(Axis):
             s += ', '
         s += ')'
         return s
+
+
+def check_flatten(axes, new_axes):
+    return check_unflatten(new_axes, axes)
+
+
+def check_unflatten(axes, new_axes):
+    def check(condition):
+        if not condition:
+            return False
+
+    idx = 0
+    for axis in axes:
+        if axis == new_axes[idx]:
+            idx += 1
+        else:
+            check(isinstance(axis, FlattenedAxis))
+            new_idx = idx + len(axis.axes)
+            check(axis.axes == new_axes[idx:new_idx])
+            idx = new_idx
+    check(idx == len(new_axes))
+    return True
 
 
 def reduce_strides(strides):
@@ -742,43 +753,75 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
-    def split_reduce_at(self, div_point):
+    def flatten(self, new_axes):
         """
-        Collapses a tensor description into two dimensions, flattening
-        the axes before and after the index div_point.
-
-        E.g. (C, D, E, F) with div_point 2 becomes ((C, D), (E, F)),
-        that is two flattened axes.
-
-        If div_point is such that one dimension has no axis in it, an Axes with
-        only 1 Axis will be returned.
+        Flattens a tensor description to give it the Axes in new_axes.
+        See check_flatten for a description of permitted values of new_axes.
 
         Arguments:
-          div_point: The index at which we separate the axes.
+            new_axes: The Axes of the flattened tensor description.
 
         Returns:
             The reshaped tensor description.
         """
-        if div_point == 0 or div_point == self.ndim:
-            # if div_point has us putting all of the axes into one Axes, just
-            # make one FlattenedAxis instead.
-            # raise ValueError(div_point)
-            new_axes = Axes([FlattenedAxis(self.axes)])
-            new_strides = (self.full_strides,)
-            new_sizes = (self.full_sizes,)
-        else:
-            new_axes = Axes((
-                FlattenedAxis(self.axes[:div_point]),
-                FlattenedAxis(self.axes[div_point:])
-            ))
-            new_strides = (
-                self.full_strides[:div_point],
-                self.full_strides[div_point:]
-            )
-            new_sizes = (
-                self.full_sizes[:div_point],
-                self.full_sizes[div_point:]
-            )
+        new_axes = Axes(new_axes)
+        assert check_flatten(self.axes, new_axes)
+
+        new_strides = []
+        new_sizes = []
+        idx = 0
+        for new_axis in new_axes:
+            if new_axis == self.axes[idx]:
+                new_stride = self.full_strides[idx]
+                new_size = self.full_sizes[idx]
+                idx += 1
+            else:
+                l = len(new_axis.axes)
+                new_stride = self.full_strides[idx:idx + l]
+                new_size = self.full_sizes[idx:idx + l]
+                idx += l
+
+            new_strides.append(new_stride)
+            new_sizes.append(new_size)
+
+        return TensorDescription(
+            new_axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=new_strides,
+            full_sizes=new_sizes,
+            offset=self.offset
+        )
+
+    def unflatten(self, new_axes):
+        """
+        Unflattens a tensor description to give it the Axes in new_axes.
+        See check_unflatten for a description of the permitted values of
+        new_axes
+
+        Arguments:
+            new_axes: The Axes of the unfalttened TensorDescription.
+
+        Returns:
+            The unflattened tensor description.
+        """
+        new_axes = Axes(new_axes)
+        assert check_unflatten(self.axes, new_axes)
+
+        new_strides = []
+        new_sizes = []
+        idx = 0
+        for axis, fst, fst in zip(
+            self.axes, self.full_strides, self.full_sizes
+        ):
+            if axis == new_axes[idx]:
+                new_strides.append(fst)
+                new_sizes.append(fsz)
+                idx += 1
+            else:
+                new_strides.extend(fst)
+                new_sizes.extend(fsz)
+                idx += len(axis.axes)
 
         return TensorDescription(
             new_axes,

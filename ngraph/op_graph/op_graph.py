@@ -773,6 +773,22 @@ class ReshapeOp(TensorOp):
         )
 
     @property
+    def sliced(self):
+        x, = self.args
+        if isinstance(x, ReshapeOp):
+            return x.sliced
+        else:
+            return False
+
+    @property
+    def base_axes(self):
+        x, = self.args
+        if isinstance(x, ReshapeOp):
+            return x.base_axes
+        else:
+            return x.axes
+
+    @property
     def device_op(self):
         """
         Returns:
@@ -814,6 +830,17 @@ class AxesCastOp(ReshapeOp):
     """
     def __init__(self, x, axes, **kwargs):
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
+
+    @property
+    def base_axes(self):
+        x, = self.args
+        if isinstance(x, ReshapeOp)\
+                and x.axes != x.base_axes:
+            # In this case, the axes of this op do not reflect the
+            # underlying order.
+            return x.base_axes
+        else:
+            return x.axes
 
     @cachetools.cached({})
     def tensor_description(self):
@@ -948,6 +975,10 @@ class Slice(ReshapeOp):
 
         self.slices = slices
 
+    @property
+    def sliced(self):
+        return True
+
     @cachetools.cached({})
     def tensor_description(self):
         """
@@ -999,82 +1030,53 @@ def slice_along_axis(x, axis, idx):
 
 
 class Flatten(ReshapeOp):
-    def __init__(self, x, positions=None, **kwargs):
-        if isinstance(x, ReshapeOp):
-            x = Dimshuffle(x, axes=x.axes)
-
-        if positions is None:
-            positions = [(0, len(x.axes))]
-        self.positions = positions
-
-        # Invert positions for the adjoint
-        unflatten_pos = []
-        for i, pos in enumerate(positions):
-            if isinstance(pos, tuple):
-                unflatten_pos.append(i)
-        self.unflatten_pos = unflatten_pos
-
-        super(Flatten, self).__init__(
-            x,
-            axes=Axes.flatten(x.axes, positions)
-        )
+    def __init__(self, x, axes=None, **kwargs):
+        if axes is None:
+            axes = FlattenedAxis(x.axes)
+        assert check_flatten(x.axes, axes)
+    super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.flatten(self.positions)
+        return x.flatten(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Unflatten(
             delta,
-            positions=self.unflatten_pos
+            axes=x.axes
         ))
 
 
-def split_reduce_at(x, idx):
+def flatten_at(x, idx):
     if idx == 0 or idx == len(x.axes):
         return Flatten(x)
     else:
-        return Flatten(
-            x, positions=[(0, idx), (idx, len(x.axes))]
-        )
+        return Flatten(x, Axes((
+            FlattenedAxis(x.axes[:idx]),
+            FlattenedAxis(x.axes[idx:])
+        )))
 
 
 class Unflatten(ReshapeOp):
-    def __init__(self, x, positions=None, **kwargs):
-        if positions is None:
-            positions = set(range(len(x.axes)))
-        else:
-            positions = set(positions)
-        self.positions = positions
-
-        # Invert positions for the adjoint
-        flatten_pos = []
-        idx = 0
-        for i, axis in enumerate(x.axes):
-            if i in positions:
-                new_idx = idx + len(axis.axes)
-                flatten_pos.append((idx, new_idx))
-                idx = new_idx
-            else:
-                flatten_pos.append(idx)
-                idx += 1
-        self.flatten_pos = flatten_pos
-
-        super(Unflatten, self).__init__(
-            x,
-            axes=Axes.unflatten(x.axes, positions)
-        )
+    def __init__(self, x, axes=None, **kwargs):
+        if axes is None:
+            axes = []
+            for axis in x.axes:
+                axes.extend(axis.axes)
+            axes = Axes(axes)
+        assert check_unflatten(x.axes, axes)
+        super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.unflatten(positions=self.positions)
+        return x.unflatten(axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Flatten(
             delta,
-            positions=self.flatten_pos
+            axes=x.axes
         ))
 
 
@@ -1923,6 +1925,39 @@ class ReductionOp(TensorOp):
         return True
 
 
+def create_twod_reduction_op(name,
+                             red_cls,
+                             two_dim_generate_adjoints=None):
+    def valid_two(self):
+        x, = self.args
+        return len(x.axes) == 2\
+            and self.reduction_axes == x.axes[:1]\
+            and self.out_axes == x.axes[1:]
+    d = {'valid' : valid_two, 'must_reduce': False}
+
+    if two_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = two_dim_generate_adjoints
+
+    RedTwoDimClass = type(name, (red_cls,), d)
+    return RedTwoDimClass
+
+
+def create_oned_reduction_op(name,
+                             red_cls,
+                             one_dim_generate_adjoints=None):
+    def valid_one(self):
+        x, = self.args
+        return len(x.axes) == 1\
+            and self.reduction_axes == x.axes
+
+    d = {'valid' : valid_one, 'must_reduce': False}
+    if one_dim_generate_adjoints is not None:
+        d['generate_adjoints'] = one_dim_generate_adjoints
+
+    RedOneDimClass = type(name, (red_cls,), d)
+    return RedOneDimClass
+
+
 def create_reduction_op(name,
                         two_dim_name,
                         one_dim_name,
@@ -1935,23 +1970,17 @@ def create_reduction_op(name,
         d['generate_adjoints'] = generate_adjoints
     RedClass = type(name, (ReductionOp,), d)
 
-    def valid_two(self):
-        x, = self.args
-        return len(x.axes) == 2\
-            and self.reduction_axes == x.axes[:1]
-    d = {'valid' : valid_two, 'must_reduce': False}
-    if two_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = two_dim_generate_adjoints
-    RedTwoDimClass = type(two_dim_name, (RedClass,), d)
+    RedTwoDimClass = create_twod_reduction_op(
+        two_dim_name,
+        RedClass,
+        two_dim_generate_adjoints
+    )
 
-    def valid_one(self):
-        x, = self.args
-        return len(x.axes) == 1\
-            and self.reduction_axes == x.axes
-    d = {'valid' : valid_one, 'must_reduce': False}
-    if one_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = one_dim_generate_adjoints
-    RedOneDimClass = type(one_dim_name, (RedClass,), d)
+    RedOneDimClass = create_oned_reduction_op(
+        one_dim_name,
+        RedClass,
+        one_dim_generate_adjoints
+    )
 
     def reduce_to_twod(self):
         x, = self.args
@@ -1959,9 +1988,9 @@ def create_reduction_op(name,
         out_axes = self.axes
 
         if len(reduction_axes) == 0:
-            return x
+            return Broadcast(x, axes=out_axes)
         elif len(x.axes) == 0:
-            return x
+            return Broadcast(x, axes=out_axes)
 
         if len(out_axes) == 0:
             x = Flatten(x)
@@ -1972,7 +2001,7 @@ def create_reduction_op(name,
             )
         else:
             x = Broadcast(x, axes=reduction_axes + out_axes)
-            x = split_reduce_at(x, len(reduction_axes))
+            x = flatten_at(x, len(reduction_axes))
 
             out = RedTwoDimClass(
                 x,
@@ -2496,8 +2525,8 @@ class RequiredSimplify(SplicingAnalysis):
         y_rem_axes = y.axes - reduction_axes
         y = Broadcast(y, reduction_axes + y_rem_axes)
 
-        x = split_reduce_at(x, len(x.axes) - len(reduction_axes))
-        y = split_reduce_at(y, len(reduction_axes))
+        x = flatten_at(x, len(x.axes) - len(reduction_axes))
+        y = flatten_at(y, len(reduction_axes))
         reduction_axes = Axes((FlattenedAxis(reduction_axes),))
 
         if len(out_axes) == 0:
