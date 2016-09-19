@@ -33,6 +33,7 @@ except ImportError as e:
     else:
         raise
 
+
 @pytest.mark.skipif("sys.platform.startswith('linux') == False")
 def test_mpi_allreduce():
     """TODO."""
