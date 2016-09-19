@@ -34,7 +34,7 @@ except ImportError as e:
         raise
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_allreduce():
     """TODO."""
     a = np.array([[4, 1, 2, -3, 4],
@@ -48,31 +48,31 @@ def test_mpi_allreduce():
     print("pass mpi allreduce test")
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_reduce():
     """TODO."""
     pass
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_reduce_avg():
     """TODO."""
     pass
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_scatter():
     """TODO."""
     pass
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_scatterv():
     """TODO."""
     pass
 
 
-@pytest.mark.skipif("sys.platform.startswith('linux') == False")
+@pytest.mark.skipif("sys.platform.startswith('darwin') == True")
 def test_mpi_gattherv():
     """TODO."""
     pass
