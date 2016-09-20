@@ -2166,25 +2166,35 @@ def pad(x, paddings, axes=None, **kwargs):
 class Onehot(TensorOp):
     """TODO."""
     def __init__(self, x, axis, **kwargs):
-        assert len(x.axes) == 1
+        self.axis = axis
         super(Onehot, self).__init__(
             args=(x,),
             axes=Axes((axis,)) + x.axes,
             **kwargs
         )
 
+    def as_two_dim(self):
+        x, = self.args
+        if len(x.axes) > 1:
+            x = Flatten(x)
+            out = OnehotTwoDim(x, self.axis)
+            out = Unflatten(
+                out,
+                [out.axes[0]] + list(out.axes[1].axes)
+            )
+            return out
+        else:
+            return OnehotTwoDim(x, self.axis)
 
-def onehot(x, axis, **kwargs):
-    to_flatten = len(x.axes) > 1
 
-    if to_flatten:
-        x = Flatten(x)
+def onehot(*args, **kwargs):
+    return Onehot(*args, **kwargs)
 
-    out = Onehot(x, axis)
-    if to_flatten:
-        out_axes = [out.axes[0]] + list(out.axes[1].axes)
-        out = Unflatten(out, axes=out_axes)
-    return out
+
+class OnehotTwoDim(Onehot):
+    def __init__(self, x, axis, **kwargs):
+        assert len(x.axes) == 1
+        super(OnehotTwoDim, self).__init__(x, axis, **kwargs)
 
 
 class Sigmoid(object):
@@ -2547,6 +2557,14 @@ class RequiredSimplify(SplicingAnalysis):
         pass
 
     @visit.on_type(DotTwoByOne)
+    def visit(self, op):
+        pass
+
+    @visit.on_type(Onehot)
+    def visit(self, op):
+        self.add_rep(op, op.as_two_dim())
+
+    @visit.on_type(OnehotTwoDim)
     def visit(self, op):
         pass
 
