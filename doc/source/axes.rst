@@ -36,7 +36,7 @@ In this documentation, let's assume we predefine ``Axis`` objects as follows.
   C_ = ng.Axis(length=3)
   D_ = ng.Axis(length=4)
 
-Sepecially, we let ``X`` and ``X_`` to be two axes of the same length but under
+Specifically, we let ``X`` and ``X_`` to be two axes of the same length but under
 different labels.
 
 
@@ -121,8 +121,8 @@ Dot Products
 Axes Reduction
 --------------
 
-- Reduction operations can have arbitary number of reduction axis, which, alternatively we specify them as ``out_axis``.
-- The ``out_axis`` order can be arbitary, as long as all axes in ``out_axis`` is in the original tensor's axes.
+- Reduction operations can have arbitrary number of reduction axis, which, alternatively we specify them as ``out_axis``.
+- The ``out_axis`` order can be arbitrary, as long as all axes in ``out_axis`` is in the original tensor's axes.
 - When ``out_axis`` is empty list or tuple, reduction is performed on all axes.
 
 Examples: ::
