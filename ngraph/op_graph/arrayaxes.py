@@ -963,7 +963,8 @@ class TensorDescription(NameableValue):
 
         def position(new_axis):
             """
-            given an Axis returns the position in self.axes that matches
+            given an Axis returns the position in self.axes that matches and
+            add the index it occurs in to used_positions.
             """
             for i, axis in enumerate(self.axes):
                 if i not in used_positions and axis == new_axis:
