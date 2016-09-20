@@ -26,7 +26,7 @@ Standard Operations
 The standard operations are partitioned into groups of operations:
 
 Semi-primitive
-    Semi-primitive operations simple to implement. In some cases, a semi-primitive operation can be transformed into more primitive semi-primitive operations.  A transformer specifies a base subset of the semi-primitive opertions; no semi-primitive operations in the base set will be transformed by standard transformations.  However, a transformer may add transforms that transform operations in the base set. For example, it may add transforms that convert base set operations into transformer-specific operations, or into other semi-primitive operations in a manner better suited to its backend.  Semi-primitive operations work with low-dimensional row-major tensors.
+    Semi-primitive operations are simple to implement. In some cases, a semi-primitive operation can be transformed into more primitive semi-primitive operations.  A transformer specifies a base subset of the semi-primitive opertions; no semi-primitive operations in the base set will be transformed by standard transformations.  However, a transformer may add transforms that transform operations in the base set. For example, it may add transforms that convert base set operations into transformer-specific operations, or into other semi-primitive operations in a manner better suited to its backend.  Semi-primitive operations work with low-dimensional row-major tensors.
 
     Not all operations take place on the device. For example, storage allocation and view creation occurs on the CPU during transformation. Thus, some semi-primitive operations are for indicating where CPU operations are needed. There are also semi-primitive operations for transferring data to/from the device.
 
