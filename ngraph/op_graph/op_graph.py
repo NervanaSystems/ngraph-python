@@ -580,7 +580,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        assert delta.axes == self.axes
+        assert Axes.same_elems(delta.axes, self.axes)
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -880,6 +880,7 @@ class Broadcast(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
+        assert Axes.check_broadcast(x.axes, axes)
         super(Broadcast, self).__init__(
             x, axes=axes, **kwargs
         )
@@ -902,6 +903,40 @@ class Broadcast(ReshapeOp):
             delta,
             reduction_axes=delta.axes - x.axes,
             out_axes=x.axes
+        ))
+
+
+class ReorderAxes(ReshapeOp):
+    """
+    Reorders the axes of a tensor, without making a copy.
+
+    Arguments:
+        x: The tensor whose axes to reorder.
+        axes: The new axes.
+    """
+    def __init__(self, x, axes, **kwargs):
+        assert Axes.same_elems(x.axes, axes)
+        super(ReorderAxes, self).__init__(
+            x, axes=axes, **kwargs
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        """
+        TODO.
+
+        Arguments:
+
+        Returns:
+          TODO
+        """
+        td, = tensor_descriptions(self.args)
+        return td.reorder(self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, ReorderAxes(
+            delta,
+            x.axes
         ))
 
 
@@ -1003,7 +1038,7 @@ class Flatten(ReshapeOp):
         if isinstance(x, ReshapeOp):
             x = Dimshuffle(x, axes=x.axes)
         if axes is None:
-            axes = Axes(FlattenedAxis(x.axes),)
+            axes = Axes((FlattenedAxis(x.axes),))
         assert Axes.check_flatten(x.axes, axes)
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
@@ -1710,23 +1745,14 @@ class Dimshuffle(TensorOp):
 
 class Dot(TensorOp):
     def __init__(self, x, y,
-                 reduction_axes=None,
-                 out_axes=None,
                  **kwargs):
-        if reduction_axes is None:
-            reduction_axes = Axes.intersect(x.axes, y.axes)
-
-        if out_axes is None:
-            out_axes = (
-                (x.axes - reduction_axes) +
-                (y.axes - reduction_axes)
-            )
-        else:
-            assert len(Axes.intersect(reduction_axes, out_axes)) == 0
-
-        self.reduction_axes = reduction_axes
+        self.reduction_axes = Axes.intersect(x.axes, y.axes)
+        axes = (
+            (x.axes - self.reduction_axes) +
+            (y.axes - self.reduction_axes)
+        )
         super(Dot, self).__init__(
-            args=(x, y), axes=out_axes, **kwargs
+            args=(x, y), axes=axes, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, x, y):
@@ -1760,10 +1786,7 @@ class DotOneDimensional(Dot):
     def __init__(self, x, y, **kwargs):
         assert len(x.axes) == 1 and len(y.axes) == 1
         super(DotOneDimensional, self).__init__(
-            x, y,
-            reduction_axes=x.axes,
-            out_axes=Axes(()),
-            **kwargs
+            x, y, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, x, y):
@@ -1774,12 +1797,11 @@ class DotOneDimensional(Dot):
 class DotTwoDimensional(Dot):
     def __init__(self, x, y, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 2
-        assert x.axes[-1] == y.axes[0]
+        assert x.axes[1] == y.axes[0]\
+            and x.axes[0] != x.axes[1]\
+            and x.axes[0] != y.axes[1]
         super(DotTwoDimensional, self).__init__(
-            x, y,
-            reduction_axes=Axes(x.axes[-1]),
-            out_axes=Axes((x.axes[0], y.axes[1])),
-            **kwargs
+            x, y, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, x, y):
@@ -1796,12 +1818,10 @@ class DotTwoDimensional(Dot):
 class DotTwoByOne(Dot):
     def __init__(self, x, y, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 1
-        assert x.axes[-1] == y.axes[0]
+        assert x.axes[1] == y.axes[0]\
+            and x.axes[0] != x.axes[1]
         super(DotTwoByOne, self).__init__(
-            x, y,
-            reduction_axes=Axes((x.axes[-1],)),
-            out_axes=Axes((x.axes[0],)),
-            **kwargs
+            x, y, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, x, y):
@@ -2495,10 +2515,10 @@ class RequiredSimplify(SplicingAnalysis):
             y = Broadcast(y, axes=reduction_axes + y.axes)
 
         x_rem_axes = x.axes - reduction_axes
-        x = Broadcast(x, x_rem_axes + reduction_axes)
+        x = ReorderAxes(x, x_rem_axes + reduction_axes)
 
         y_rem_axes = y.axes - reduction_axes
-        y = Broadcast(y, reduction_axes + y_rem_axes)
+        y = ReorderAxes(y, reduction_axes + y_rem_axes)
 
         x = flatten_at(x, len(x.axes) - len(reduction_axes))
         y = flatten_at(y, len(reduction_axes))
@@ -2514,7 +2534,7 @@ class RequiredSimplify(SplicingAnalysis):
             out = DotTwoDimensional(x, y)
 
         out = Unflatten(out)
-        out = Broadcast(out, out_axes)
+        out = ReorderAxes(out, out_axes)
 
         self.add_rep(op, out)
 

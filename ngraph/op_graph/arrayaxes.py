@@ -533,6 +533,35 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
+    def check_broadcast(axes, new_axes):
+        """
+        Checks whether axes can be broadcasted to new_axes. We require
+        that the components of axes be laid out in the same order in new_axes.
+
+        Axes:
+            axes: The original axes.
+            new_axes: The broadcasted axes.
+
+        Returns:
+            True if axes can be broadcasted to new_axes, False otherwise.
+        """
+        def check(condition):
+            if not condition:
+                return False
+
+        axes_s = set(axes)
+        idx = 0
+        for new_axis in new_axes:
+            if idx < len(axes) and new_axis == axes[idx]:
+                idx += 1
+            else:
+                check(new_axis not in axes_s)
+
+        check(idx == len(axes))
+        return True
+
+    @staticmethod
+    @with_args_as_axes
     def check_flatten(axes, new_axes):
         """
         Checks whther axes can safely be flattened to produce new_axes.
@@ -714,6 +743,24 @@ def _check_sliced_axis_length(s, axis, new_axis):
 
 
 def _make_stride(inner_size, axis, fsz):
+    """
+    Generates a nested tuple that provides the striding information
+    for an occurrence of axis. If the axis is a FlattenedAxis, the
+    stride will be a tuple containing the strides of each collapsed
+    axis. Otherwise, the stride will be an integer.
+
+    Arguments:
+        inner_size: The total size of all dimensions smaller than this
+        axis, i.e. all axes to the right of this one when they are
+        laid out in c-contiguous order.
+        axis: The axis for which we are generating a stride.
+        fsz: A nested tuple supplying the sizes of each dimension collapsed
+        into the axis. The size may be larger than the length of the axis.
+
+    Returns:
+        inner_size: The total size of this axis and all smaller dimensions.
+        stride: The stride given to the axis.
+    """
     if isinstance(axis, FlattenedAxis):
         return _make_strides(inner_size, axis.axes, fsz)
     else:
@@ -723,6 +770,20 @@ def _make_stride(inner_size, axis, fsz):
 
 
 def _make_strides(inner_size, axes, full_sizes):
+    """
+    Generates a tuple of strides for a set of axes. See _make_stride
+    for a description of the stride given to each axis.
+
+    Arguments:
+        inner_size: The total size of all dimensions smaller than
+        the axes.
+        axes: The axes for which we are generating strides.
+        full_sizes: The size of each axis.
+
+    Returns:
+        inner_size: The total size of these axes and all smaller dimensions.
+        strides: The strides generated for the axes.
+    """
     full_strides = []
     for axis, fsz in reversed(list(zip(axes, full_sizes))):
         inner_size, stride = _make_stride(inner_size, axis, fsz)
@@ -921,6 +982,46 @@ class TensorDescription(NameableValue):
         )
 
     def broadcast(self, new_axes):
+        """
+        Adds axes to a tensor description to give it a new shape.
+        See Axes.check_broadcast for a description of the permitted
+        transformations.
+
+        Arguments:
+            new_axes: The axes of the broadcasted tensor description.
+
+        Returns:
+            TensorDescription: The broadcasted tensor description.
+        """
+        Axes.check_broadcast(self.axes, new_axes)
+        return self.reorder_and_broadcast(new_axes)
+
+    def reorder(self, new_axes):
+        """
+        Shuffles axes of a tensor to give it a new shape. The axes of
+        this tensor description and new_axes must have the same elements.
+
+        Arguments:
+            new_axes: The axes of the reordered tensor.
+
+        Returns:
+            TensorDescription: The reordered tensor description.
+        """
+        Axes.same_elems(self.axes, new_axes)
+        return self.reorder_and_broadcast(new_axes)
+
+    def reorder_and_broadcast(self, new_axes):
+        """
+        Adds or shuffles axes to give a tensor description a new shape.
+        This function is used to implement broadcast and reorder.
+
+        Arguments:
+            new_axes: The axes of the broadcasted or reordered tensor.
+
+        Returns:
+            TensorDescription: A description of the tensor after the
+            transformation.
+        """
         def zero_in_shape(tup):
             if isinstance(tup, collections.Iterable):
                 return tuple(
