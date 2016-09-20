@@ -1888,7 +1888,7 @@ def softmax(x, normalization_axes=None, **kwargs):
 class ReductionOp(TensorOp):
     must_reduce = True
 
-    def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         if reduction_axes is None and out_axes is None:
             reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
             out_axes = x.axes - out_axes
@@ -1909,7 +1909,8 @@ class ReductionOp(TensorOp):
 
         super(ReductionOp, self).__init__(
             args=(x,),
-            axes=out_axes
+            axes=out_axes,
+            dtype=dtype
         )
         assert self.valid
 
@@ -1989,7 +1990,9 @@ def create_reduction_op(name,
             x = Flatten(x)
             return RedOneDimClass(
                 x,
-                reduction_axes=x.axes, out_axes=Axes(()),
+                reduction_axes=x.axes,
+                out_axes=Axes(()),
+                dtype=self.dtype,
                 **self.kwargs
             )
         else:
@@ -2000,6 +2003,7 @@ def create_reduction_op(name,
                 x,
                 reduction_axes=Axes((x.axes[0],)),
                 out_axes=Axes((x.axes[1],)),
+                dtype=self.dtype,
                 **self.kwargs
             )
             out = Unflatten(out)
