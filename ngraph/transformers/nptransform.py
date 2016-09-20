@@ -550,7 +550,6 @@ class NumPyTransformer(Transformer):
             for op in ordered_ops:
                 out = tensor_description_value(op.tensor_description())
                 call_info = (tensor_description_value(_) for _ in op.call_info())
-                # TODO: handle case where TensorDescription has None value
                 self.compute_code.generate_op(op, out, *call_info)
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
@@ -574,6 +573,8 @@ class NumPyTransformer(Transformer):
             self.code.append(self.allocate_code.code)
             self.code.endl(2)
             self.code.append(self.compute_code.code)
+
+            # print(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
