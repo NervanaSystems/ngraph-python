@@ -21,6 +21,7 @@ import numpy as np
 from ngraph.op_graph.arrayaxes import Axes
 from ngraph.op_graph.op_graph import deriv
 from ngraph.transformers.nptransform import NumPyTransformer
+import decorator
 
 
 class RandomTensorGenerator(object):
@@ -122,39 +123,18 @@ def with_error_settings(**new_settings):
     Returns:
 
     """
-    def decorator(f):
-        """
-        TODO.
+    @decorator.decorator
+    def dec(f, *args, **kwargs):
+        old_settings = np.geterr()
 
-        Arguments:
-          f: TODO
+        np.seterr(**new_settings)
+        ret = f(*args, **kwargs)
 
-        Returns:
+        np.seterr(**old_settings)
 
-        """
-        def wrapper(*args, **kwargs):
-            """
-            TODO.
+        return ret
 
-            Arguments:
-              *args: TODO
-              **kwargs: TODO
-
-            Returns:
-
-            """
-            old_settings = np.geterr()
-
-            np.seterr(**new_settings)
-            ret = f(*args, **kwargs)
-
-            np.seterr(**old_settings)
-
-            return ret
-
-        return wrapper
-
-    return decorator
+    return dec
 
 
 def raise_all_numpy_errors(f):
@@ -270,18 +250,15 @@ def numeric_derivative(f, x, dx):
 
     def shape(x):
         """
-        Shape of a tensor/scalar
-
-        Arguments:
-          x: TODO
-
-        Returns:
-          TODO
+        Returns the shape of the tensor/scalar x
         """
         if isinstance(x, np.ndarray):
             return x.shape
         else:
             return ()
+
+    if isinstance(x, np.ndarray) and x.dtype == int:
+        raise ValueError('x shouldnt be of type int, should be a float')
 
     xshape = shape(x)
     # Copy because we always compute into the same place

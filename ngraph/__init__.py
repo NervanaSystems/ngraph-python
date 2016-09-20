@@ -16,11 +16,14 @@
 from __future__ import print_function
 
 import ngraph.dataloader.dataloaderbackend
+from ngraph.op_graph.axes_ops import dimshuffle
 from ngraph.op_graph.arrayaxes import *
-from ngraph.op_graph.convolution import convolution
+from ngraph.op_graph.convolution import convolution1d, ConvolutionAxis
+from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.transformers.nptransform import NumPyTransformer
 from ngraph.util.names import *
+
 try:
     from ngraph.transformers.argon.artransform import ArgonTransformer
 except ImportError as e:

@@ -383,16 +383,15 @@ class Op(Node):
     @cachetools.cached({})
     def call_info(self):
         """
-        Creates the tensor descriptions (of this op or its arguments)
+        Creates the TensorDescriptions (of this op or its arguments)
         required to evaluate it.
-        The list is used to allocate buffers (in the transformers)
-        and supply values to the transform method
-        (in the transform_call_info) method.
 
-        Arguments:
+        The list is used to allocate buffers (in the transformers) and supply
+        values to the transform method (in the transform_call_info) method.
 
-        Returns:
-          TODO
+        Only TensorDescriptions of the arguments are necessary.  A
+        TensorDescription of the output is generate by calling
+        self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
 
@@ -1326,11 +1325,8 @@ class ElementWise(TensorOp):
         for arg_axes in arg_axess:
             axis_ids += arg_axes.as_axis_ids()
         axes = axis_ids.as_axes()
-        super(ElementWise, self).__init__(
-            args=args,
-            axes=axes,
-            **kwargs
-        )
+
+        super(ElementWise, self).__init__(args=args, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def call_info(self):
