@@ -2172,7 +2172,19 @@ def pad(x, paddings, axes=None, **kwargs):
 
 
 class Onehot(TensorOp):
-    """TODO."""
+    """
+    Converts a tensor containing class indices to a onehot representation.
+    For example, if x is a one-dimesnional tensor with value [0, 1], and the
+    number of classes is 2, we convert x to a onehot representation by replacing
+    0 and 1 with vectors: 0 -> [1, 0] and 1 -> [0, 1].
+
+    We add the added dimension in the leftmost place.
+
+    Arguments:
+        x: The tensor to convert to a onehot form.
+        axis: The axis along which to construct the onehot form. It should not be
+        in x and should have length equal to the number of classes.
+    """
     def __init__(self, x, axis, **kwargs):
         self.axis = axis
         super(Onehot, self).__init__(
@@ -2182,6 +2194,13 @@ class Onehot(TensorOp):
         )
 
     def as_two_dim(self):
+        """
+        Constructs a subgraph that is equivalent to this op and can be evaluated
+        by a transformer that only handles two dimensions.
+
+        Returns:
+            A subgraph equivalent to this op.
+        """
         x, = self.args
         if len(x.axes) > 1:
             x = Flatten(x)
@@ -2200,6 +2219,15 @@ def onehot(*args, **kwargs):
 
 
 class OnehotTwoDim(Onehot):
+    """
+    Handles conversion from one-dimensional vector of class labels
+    to a two-dimensional onehot representation.
+
+    Arguments:
+        x: The tensor to convert to a onehot form.
+        axis: The axis along which to construct the onehot form. It should not be
+        in x and should have length equal to the number of classes.
+    """
     def __init__(self, x, axis, **kwargs):
         assert len(x.axes) == 1
         super(OnehotTwoDim, self).__init__(x, axis, **kwargs)
