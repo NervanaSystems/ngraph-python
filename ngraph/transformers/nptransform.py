@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import division
+from __future__ import print_function
 
 import math
 from functools import wraps
@@ -26,11 +27,15 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
+from ngraph.op_graph.axes_ops import dimshuffle
+from ngraph.op_graph.convolution import convolution1d
+from ngraph.op_graph.debug import PrintOp
+from ngraph.op_graph.op_graph import AxesCastOp
+from ngraph.op_graph.op_graph import Broadcast
 from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
     greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
     negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
     sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack
-from ngraph.op_graph.convolution import convolution
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -223,7 +228,14 @@ class NumPyCodeGenerator(PyGen):
     @generic_method
     def generate_op(self, op, *args):
         if op.device_op:
-            raise ValueError("Unhandled op: {}".format(op))
+            raise ValueError((
+                "{class_name} doesn't have a generate_op method for op: {op}. "
+                "In order to fix this, add a method generate_op decorated with "
+                "@generate_op.on_type({op}) to class {class_name}."
+            ).format(
+                class_name=self.__class__.__name__,
+                op=op.__class__.__name__,
+            ))
 
     @generate_op.on_type(absolute)
     def generate_op(self, op, out, x):
@@ -241,39 +253,64 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution)
+    @generate_op.on_type(Broadcast)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(AxesCastOp)
+    def generate_op(self, op, out, x):
+        pass
+
+    @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
-        input_shape = op._input_shape
-        filter_shape = op._filter_shape
-        padding = op._padding
-        strides = op._strides
-        self.append("""
-        neon_conv_layer = ConvLayer(
-            proxy_backend(), {output}.dtype,
-            N={bsz},
-            C={input_shape}[0],
-            D={input_shape}[1],
-            H={input_shape}[2],
-            W={input_shape}[3],
+        self.append(
+            """
+            input = {input}
+            input = input.reshape((
+                # from: channels, width, batch_size
+                # to: channels, depth, height, width, batch_size
+                input.shape[0], 1, 1, input.shape[1], input.shape[2]
+            ))
 
-            K={filter_shape}[0],
-            T={filter_shape}[1],
-            R={filter_shape}[2],
-            S={filter_shape}[3],
+            filter = {filter}
 
-            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
-            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
+            filter = filter.reshape((
+                # from: channels_in, width, channels_out
+                # to: channels_in, depth, height, width, channels_out
+                filter.shape[0], 1, 1, filter.shape[1], filter.shape[2]
+            ))
+
+            neon_conv_layer = ConvLayer(
+                proxy_backend(), {output}.dtype,
+                N={bsz},
+                C={input_shape}[0],
+                D=1,
+                H=1,
+                W={input_shape}[1],
+
+                K={filter_shape}[2],
+                T=1,
+                R=1,
+                S={filter_shape}[1],
+
+                pad_d=0, pad_h=0, pad_w=0,
+                str_d=1, str_h=1, str_w=1,
+            )
+
+            # neon_conv_layer...
+            neon_conv_layer.xprop_conv(
+                proxy_tensor(input),
+                proxy_tensor(filter),
+                proxy_tensor({output}),
+            )
+            """,
+            output=output,
+            input=input,
+            filter=filter,
+            input_shape=[a.length for a in op._input_shape],
+            filter_shape=[a.length for a in op._filter_shape],
+            bsz=op.batch_axis.length
         )
-
-        # neon_conv_layer...
-        neon_conv_layer.xprop_conv(
-            proxy_tensor({input}),
-            proxy_tensor({filter}),
-            proxy_tensor({output}),
-        )
-        """, output=output, input=input, filter=filter,
-                    input_shape=input_shape, filter_shape=filter_shape,
-                    padding=padding, strides=strides, bsz=op.batch_axis.length)
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
@@ -367,6 +404,19 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={}", x, y, out)
 
+    @generate_op.on_type(PrintOp)
+    def generate_op(self, op, out, x):
+        if op.prefix is not None:
+            self.append("""
+                print({prefix} + ':', {x})
+                {out}[()] = {x}
+            """, out=out, x=x, prefix=repr(op.prefix))
+        else:
+            self.append("""
+                print({x})
+                {out}[()] = {x}
+            """, out=out, x=x)
+
     @generate_op.on_type(reciprocal)
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
@@ -426,6 +476,16 @@ class NumPyCodeGenerator(PyGen):
         for i, arg in enumerate(args):
             slices[op.pos] = i
             self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
+
+    @generate_op.on_type(dimshuffle)
+    def generate_op(self, op, out, x):
+        # self.append("{out}[()] = {x}", out=out, x=x)
+        self.append(
+            "{out}[()] = np.transpose({x}, {axes})",
+            out=out,
+            x=x,
+            axes=op.axes_order
+        )
 
 
 class NumPyTransformer(Transformer):

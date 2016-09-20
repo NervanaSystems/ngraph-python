@@ -715,11 +715,13 @@ class AxisIDTuple(tuple):
             AxisIDTuple: The result, ordered union of the operands.
         """
         assert all([isinstance(at, AxisIDTuple) for at in at_list])
+
         elems = []
         for at in at_list:
             for x in at:
                 if x not in elems:
                     elems.append(x)
+
         return AxisIDTuple(*elems)
 
     @staticmethod
@@ -736,11 +738,14 @@ class AxisIDTuple(tuple):
             int: The index at which the subsequence subaxes occurs in
             axes.
         """
-        assert isinstance(subaxes, AxisIDTuple)\
-            and isinstance(axes, AxisIDTuple)
+        # TODO: change to regular method
+        assert isinstance(subaxes, AxisIDTuple)
+        assert isinstance(axes, AxisIDTuple)
+
         for i in range(len(axes)):
             if axes[i:i + len(subaxes)] == subaxes:
                 return i
+
         raise ValueError('Could not find subaxes')
 
     def __getitem__(self, item):
@@ -927,7 +932,7 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
-    def try_guess_positions(self, new_axes):
+    def dimshuffle_positions(self, axes):
         """
         Returns the index of each axis in new_axes as it is found in self.axes.
         Only returns each index once.
@@ -935,6 +940,77 @@ class TensorDescription(NameableValue):
         If the same axis appears twice in either new_axes or self.axes, the
         first occurrences will be paired, the second occurences will form a
         pair, etc.
+
+        This is different than reaxe_positions which tried to handle cases like
+        FlattenedAxis and also adding new axis.  This only allows re-ordering
+        the Axes.
+
+        Example:
+
+            if self.axes is (A, B1, B2, C) and axes is (C, A, B, B) then the
+            returned axes will be (3, 0, 1, 2) to signify that C is found in
+            the 3rd position of self.axes, A is found in the 0th position, the
+            first B is in the 1st position and the second B is in the 2nd
+            position.
+
+        Arguments:
+            new_axes: The axes labelling the reshaped tensor.
+        Returns:
+            list of integers representing the position in the existing axes
+            each new axis is located.
+        """
+        used_positions = set()
+
+        def position(new_axis):
+            """
+            given an Axis returns the position in self.axes that matches and
+            add the index it occurs in to used_positions.
+            """
+            for i, axis in enumerate(self.axes):
+                if i not in used_positions and axis == new_axis:
+                    used_positions.add(i)
+                    return i
+
+            raise ValueError((
+                'couldnt find {new_axis} in existing Axes object {axes}'
+            ).format(
+                new_axis=new_axis,
+                axes=self.axes,
+            ))
+
+        positions = [
+            position(axis) for axis in axes
+        ]
+
+        unused_positions = set(range(len(self.axes))) - used_positions
+        if unused_positions:
+            raise ValueError((
+                'Some Axis objects were unused in dimshuffle.  Existing axes: '
+                '{old_axes}. New axes: {new_axes}. Axes that were missing in '
+                'new: {missing_axes}'
+            ).format(
+                new_axes=axes,
+                old_axes=self.axes,
+                missing_axes=', '.join(map(str, (
+                    self.axes[i] for i in unused_positions
+                )))
+            ))
+
+        return positions
+
+    def reaxe_positions(self, new_axes):
+        """
+        Returns the index of each axis in new_axes as it is found in self.axes.
+        Only returns each index once.
+
+        If the same axis appears twice in either new_axes or self.axes, the
+        first occurrences will be paired, the second occurences will form a
+        pair, etc.
+
+        If one of the Axis objects in new_axes is a FlattenedAxis, also check
+        to see if each of its sub-axis are in the existing axes.
+
+        -1 represents ???
 
         WARNING:
         zach: so the function may do the wrong thing in some cases, but we
@@ -944,11 +1020,14 @@ class TensorDescription(NameableValue):
         Arguments:
             new_axes: The axes labelling the reshaped tensor.
         Returns:
-            The reshaped tensor.
+            list of integers representing the position in the existing axes
+            each new axis is located.
+
+        TODO: move to axes?
         """
         used_positions = set()
 
-        def old_position(new_axis):
+        def position(new_axis):
             """
             given an Axis returns the position in self.axes that matches
             """
@@ -961,15 +1040,15 @@ class TensorDescription(NameableValue):
             # is a FlattenedAxis, look for the sub_axes of the FlattenedAxis
             # instead.
             if isinstance(new_axis, FlattenedAxis):
-                return tuple(map(old_position, new_axis.axes))
+                return tuple(map(position, new_axis.axes))
 
             return -1
 
         return [
-            old_position(axis) for axis in new_axes
+            position(axis) for axis in new_axes
         ]
 
-    def split_reduce_at(self, div_point):
+    def collapse_2d(self, div_point):
         """
         Collapses a tensor description into two dimensions, flattening
         the axes before and after the index div_point.
@@ -977,30 +1056,40 @@ class TensorDescription(NameableValue):
         E.g. (C, D, E, F) with div_point 2 becomes ((C, D), (E, F)),
         that is two flattened axes.
 
+        If div_point is such that one dimension has no axis in it, an Axes with
+        only 1 Axis will be returned.
+
         Arguments:
           div_point: The index at which we separate the axes.
 
         Returns:
             The reshaped tensor description.
         """
-        def pos_tup(lower, upper):
-            if lower == upper - 1:
-                return lower
+
+        def position_tuple(lower, upper):
+            t = tuple(range(lower, upper))
+
+            if len(t) == 1:
+                return t[0]
             else:
-                return tuple(range(lower, upper))
+                return t
 
         if div_point == 0 or div_point == self.ndim:
+            # if div_point has us putting all of the axes into one Axes, just
+            # make one FlattenedAxis instead.
+            # raise ValueError(div_point)
             new_axes = Axes([FlattenedAxis(self.axes)])
-            old_poss = (pos_tup(0, self.ndim),)
+            old_poss = (position_tuple(0, self.ndim),)
         else:
             new_axes = Axes([
                 FlattenedAxis(self.axes[:div_point]),
                 FlattenedAxis(self.axes[div_point:])
             ])
             old_poss = (
-                pos_tup(0, div_point),
-                pos_tup(div_point, self.ndim)
+                position_tuple(0, div_point),
+                position_tuple(div_point, self.ndim)
             )
+
         return self.reaxe_with_positions(new_axes, old_poss)
 
     def transpose(self):
@@ -1067,12 +1156,17 @@ class TensorDescription(NameableValue):
             The tensor description to be used in the dot product.
         """
         old_axis_ids = self.axes.as_axis_ids()
+        # create new AxisIDTuple with red_axis_ids removed from the middle of
+        # the list to the end
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
-        axis_ids = old_axis_ids[:idx]\
-            + old_axis_ids[idx + len(red_axis_ids):]\
-            + red_axis_ids
+        axis_ids = (
+            old_axis_ids[:idx] +
+            old_axis_ids[idx + len(red_axis_ids):] +
+            red_axis_ids
+        )
         div_point = len(old_axis_ids) - len(red_axis_ids)
-        return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
+
+        return self.reaxe_with_axis_ids(axis_ids).collapse_2d(div_point)
 
     def dot_reaxe_right(self, red_axis_ids, forward_axis_ids=None):
         """
@@ -1105,10 +1199,13 @@ class TensorDescription(NameableValue):
 
             red_axis_ids = AxisIDTuple(*list(map(trans_func, red_axis_ids)))
         idx = AxisIDTuple.find(red_axis_ids, old_axis_ids)
-        axis_ids = red_axis_ids + old_axis_ids[:idx]\
-            + old_axis_ids[idx + len(red_axis_ids):]
+        axis_ids = (
+            red_axis_ids +
+            old_axis_ids[:idx] +
+            old_axis_ids[idx + len(red_axis_ids):]
+        )
         div_point = len(red_axis_ids)
-        return self.reaxe_with_axis_ids(axis_ids).split_reduce_at(div_point)
+        return self.reaxe_with_axis_ids(axis_ids).collapse_2d(div_point)
 
     def reaxe(self, new_axes):
         """
@@ -1123,7 +1220,7 @@ class TensorDescription(NameableValue):
             A tensor description with the new axes.
         """
         new_axes = Axes(new_axes)
-        old_poss = self.try_guess_positions(new_axes)
+        old_poss = self.reaxe_positions(new_axes)
         return self.reaxe_with_positions(new_axes, old_poss)
 
     def reaxe_with_axis_ids(self, new_axis_id_tuple):
