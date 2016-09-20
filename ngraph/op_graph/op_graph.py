@@ -1455,7 +1455,11 @@ class AllReduce(Op):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
 
 
-class UnaryElementwiseOp(TensorOp):
+class ElementWise(TensorOp):
+    pass
+
+
+class UnaryElementwiseOp(ElementWise):
     def __init__(self, x, **kwargs):
         super(UnaryElementwiseOp, self).__init__(
             args=(x,),
@@ -1557,7 +1561,7 @@ def sqrt_adjoints(self, adjoints, delta, x):
 sqrt = create_unary_elementwise('sqrt', sqrt_adjoints)
 
 
-class BinaryElementWiseOp(TensorOp):
+class BinaryElementWiseOp(ElementWise):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = Op.as_ops((x, y))
