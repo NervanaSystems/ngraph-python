@@ -945,6 +945,14 @@ class TensorDescription(NameableValue):
         FlattenedAxis and also adding new axis.  This only allows re-ordering
         the Axes.
 
+        Example:
+
+            if self.axes is (A, B1, B2, C) and axes is (C, A, B, B) then the
+            returned axes will be (3, 0, 1, 2) to signify that C is found in
+            the 3rd position of self.axes, A is found in the 0th position, the
+            first B is in the 1st position and the second B is in the 2nd
+            position.
+
         Arguments:
             new_axes: The axes labelling the reshaped tensor.
         Returns:
