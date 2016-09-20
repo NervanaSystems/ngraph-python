@@ -309,7 +309,10 @@ class Axes(object):
                     found_type=type(x),
                 ))
 
-        assert no_duplicates(axes)
+        if not no_duplicates(axes):
+            raise ValueError(
+                'The axes labels of a tensor cannot contain duplicates.'
+            )
         self._axes = tuple(axes)
 
     @property
@@ -921,7 +924,7 @@ class TensorDescription(NameableValue):
         new_strides = []
         new_sizes = []
         idx = 0
-        for axis, fst, fst in zip(
+        for axis, fst, fsz in zip(
             self.axes, self.full_strides, self.full_sizes
         ):
             if axis == new_axes[idx]:
@@ -957,29 +960,6 @@ class TensorDescription(NameableValue):
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=self.offset)
-
-    def unflatten(self):
-        new_strides = []
-        new_sizes = []
-        for axis, fst, fsz in\
-                zip(self.axes, self.full_strides, self.full_sizes):
-            if isinstance(axis, FlattenedAxis):
-                assert isinstance(fst, tuple)\
-                    and isinstance(fsz, tuple)
-                new_strides.extend(fst)
-                new_sizes.extend(fsz)
-            else:
-                new_strides.append(fst)
-                new_sizes.append(fsz)
-
-        return TensorDescription(
-            Axes.unflatten(self.axes),
-            base=self.base,
-            dtype=self.dtype,
-            full_strides=new_strides,
-            full_sizes=new_sizes,
-            offset=self.offset
-        )
 
     def broadcast(self, new_axes):
         """

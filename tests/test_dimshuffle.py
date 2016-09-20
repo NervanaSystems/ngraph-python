@@ -19,7 +19,7 @@ def test_dimshuffle_fprop():
     x = ng.placeholder(axes=ng.Axes([A, B]))
 
     # compute convolution with graph
-    output = ng.dimshuffle(x, axes=ng.Axes([B, A]))
+    output = ng.Dimshuffle(x, axes=ng.Axes([B, A]))
 
     assert output.axes == ng.Axes([B, A])
 
@@ -44,7 +44,7 @@ def test_dimshuffle_bprop():
     x_value = rng.uniform(-1, 1, x.axes)
 
     check_derivative(
-        ng.dimshuffle(x, axes=ng.Axes([B, A])),
+        ng.Dimshuffle(x, axes=ng.Axes([B, A])),
         x, 0.001, x_value,
         atol=1e-3, rtol=1e-3
     )
@@ -72,19 +72,19 @@ def x(A, B, C):
 
 def test_fail_on_missing(x, B):
     with pytest.raises(ValueError):
-        ng.dimshuffle(x, axes=ng.Axes([B, B]))
+        ng.Dimshuffle(x, axes=ng.Axes([B, B]))
 
 
 def test_fail_on_extra_axis(x, A, B, C):
     with pytest.raises(ValueError):
-        ng.dimshuffle(x, axes=ng.Axes([A, B, C]))
+        ng.Dimshuffle(x, axes=ng.Axes([A, B, C]))
 
 
 def test_fail_on_missing_and_extra_axis(x, A, C):
     with pytest.raises(ValueError):
-        ng.dimshuffle(x, axes=ng.Axes([A, C]))
+        ng.Dimshuffle(x, axes=ng.Axes([A, C]))
 
 
 def test_fail_on_axis_reuse(x, A, B):
     with pytest.raises(ValueError):
-        ng.dimshuffle(x, axes=ng.Axes([A, B, B]))
+        ng.Dimshuffle(x, axes=ng.Axes([A, B, B]))

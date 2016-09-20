@@ -1,7 +1,6 @@
 from __future__ import division
 import math
 
-from ngraph.op_graph import axes_ops
 from ngraph.op_graph import op_graph
 from ngraph.op_graph import arrayaxes
 
@@ -181,7 +180,7 @@ class convolution1d(op_graph.TensorOp):
             slice(None, None, None),
         ])
 
-        flipped_filter = axes_ops.dimshuffle(flipped_filter, axes=arrayaxes.Axes(
+        flipped_filter = op_graph.Dimshuffle(flipped_filter, axes=arrayaxes.Axes(
             (flipped_filter.axes[2], flipped_filter.axes[1], flipped_filter.axes[0])
         ))
 

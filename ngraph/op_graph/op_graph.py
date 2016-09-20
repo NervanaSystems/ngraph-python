@@ -580,7 +580,10 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        assert Axes.same_elems(delta.axes, self.axes)
+        if not Axes.same_elems(self.axes, delta.axes):
+            raise ValueError(
+                'A tensor and its adjoint must have the same axes.'
+            )
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -915,7 +918,10 @@ class ReorderAxes(ReshapeOp):
         axes: The new axes.
     """
     def __init__(self, x, axes, **kwargs):
-        assert Axes.same_elems(x.axes, axes)
+        if not Axes.same_elems(x.axes, axes):
+            raise ValueError(
+                'The input and output axes must have the same elements.'
+            )
         super(ReorderAxes, self).__init__(
             x, axes=axes, **kwargs
         )
@@ -1077,7 +1083,7 @@ class Unflatten(ReshapeOp):
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.unflatten(axes=self.axes)
+        return x.unflatten(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Flatten(
@@ -1729,6 +1735,10 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
 
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
+        if not Axes.same_elems(x.axes, axes):
+            raise ValueError(
+                'The input and output axes must have the same elements.'
+            )
         old_poss = []
         for axis in axes:
             old_pos = Axes.find_axis(x.axes, axis)

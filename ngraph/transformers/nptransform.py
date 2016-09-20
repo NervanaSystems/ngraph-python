@@ -31,7 +31,8 @@ from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide,
     Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
     negative, NotEqual, Onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import convolution
+from ngraph.op_graph.convolution import convolution1d
+from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -258,30 +259,6 @@ class NumPyCodeGenerator(PyGen):
             out, x, op.old_axis_positions
         )
 
-    @generate_op.on_type(convolution)
-    def generate_op(self, op, output, input, filter):
-        input_shape = op._input_shape
-        filter_shape = op._filter_shape
-        padding = op._padding
-        strides = op._strides
-        self.append("""
-        neon_conv_layer = ConvLayer(
-            proxy_backend(), {output}.dtype,
-            N={bsz},
-            C={input_shape}[0],
-            D={input_shape}[1],
-            H={input_shape}[2],
-            W={input_shape}[3],
-
-            K={filter_shape}[0],
-            T={filter_shape}[1],
-            R={filter_shape}[2],
-            S={filter_shape}[3],
-
-            pad_d={padding}[0], pad_h={padding}[1], pad_w={padding}[2],
-            str_d={strides}[0], str_h={strides}[1], str_w={strides}[2],
-        )
-
     @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
         self.append(
@@ -494,16 +471,6 @@ class NumPyCodeGenerator(PyGen):
         for i, arg in enumerate(args):
             slices[op.pos] = i
             self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
-
-    @generate_op.on_type(dimshuffle)
-    def generate_op(self, op, out, x):
-        # self.append("{out}[()] = {x}", out=out, x=x)
-        self.append(
-            "{out}[()] = np.transpose({x}, {axes})",
-            out=out,
-            x=x,
-            axes=op.axes_order
-        )
 
 
 class NumPyTransformer(Transformer):
