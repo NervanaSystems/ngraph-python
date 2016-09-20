@@ -19,6 +19,7 @@ Axes
 
 Set Ups
 -------
+
 In this documentation, let's assume we predefine ``Axis`` objects as follows.
 ::
 
@@ -110,16 +111,48 @@ Dot Products
   (A, B, C) • (B, C, D) -> (A, D)
   (A, B) • (A,) -> (B,)
 
-- Left & right operands can be swapped, order of axis can be swapped, results are equivalent. ::
+- Left & right operands can be swapped, order of axis can be swapped, results are equivalent, though order can be different. ::
 
   (A, B) • (B, C) -> (A, C)
   (B, A) • (B, C) -> (A, C)
   (B, C) • (A, B) -> (C, A)
 
 
+Axes Reduction
+--------------
+
+- Reduction operations can have arbitary number of reduction axis, which, alternatively we specify them as ``out_axis``.
+- The ``out_axis`` order can be arbitary, as long as all axes in ``out_axis`` is in the original tensor's axes.
+- When ``out_axis`` is empty list or tuple, reduction is performed on all axes.
+
+Examples: ::
+
+    reduce((A, B, C), out_axis=()) -> ()
+    reduce((A, B, C), out_axis=(A,)) -> (A,)
+    reduce((A, B, C), out_axis=(A, B)) -> (A, B)
+    reduce((A, B, C), out_axis=(C, B)) -> (C, B)
+
+
+
 Casting Axis
 ------------
 
+Use ``AxesCastOp`` to cast at tensor to known axes. The user must user that the
+targeting axes has the same length as the origin tensor's axes at all
+coordinates.
 
-Default Axis for neon
----------------------
+- Example 1: adding two tensors of shape ``(2, 3)`` but with differently named axis ::
+
+    x = ng.Constant(np.ones((2, 3)), axes=ng.Axes([B, C]))
+    y = ng.Constant(np.ones((2, 3)), axes=ng.Axes([B_, C_]))
+    # z1 have axes: (B, C, B_, C_)
+    z1 = x + y
+    # z2 have axes: (B, C), which is what we expect
+    z2 = x + ng.AxesCastOp(y, x.axes)
+
+- Example 2: invalid casting::
+
+    y = ng.Constant(np.ones((2, 3)), axes=ng.Axes([B_, C_]))
+    z1 = ng.AxesCastOp(y, axes=ng.Axes([B, C]))  # valid
+    z2 = ng.AxesCastOp(y, axes=ng.Axes([C, B]))  # exception when evaluated
+    z3 = ng.AxesCastOp(y, axes=ng.Axes([B, D]))  # exception when evaluated
