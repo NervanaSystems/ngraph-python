@@ -46,6 +46,7 @@
 
    op_graph.rst
    analysis.rst
+   autodiff.rst
    axes.rst
    frontends.rst
    transformers.rst
