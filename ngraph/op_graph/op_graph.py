@@ -499,6 +499,7 @@ class SetItemOneDim(SetItem):
             tensor, item, val, force=force, **kwargs
         )
 
+
 class doall(Op):
     """
     Compute every Op in all.
@@ -2627,6 +2628,7 @@ class RequiredSimplify(SplicingAnalysis):
     @visit.on_type(SetItemOneDim)
     def visit(self, op):
         pass
+
 
 class SimplePrune(SplicingAnalysis):
     """TODO."""
