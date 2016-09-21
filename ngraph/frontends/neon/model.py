@@ -126,8 +126,7 @@ class Model(object):
         self.transformer = ng.NumPyTransformer()
         updates = self.optimizer.configure(
             self.transformer,
-            self.cost.total_cost,
-            ng.batch_size(self.input)
+            self.cost.mean_cost
         )
 
         self.train_comp = self.transformer.computation([self.cost.mean_cost, updates], self.input,

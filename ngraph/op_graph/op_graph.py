@@ -1905,7 +1905,7 @@ class ReductionOp(TensorOp):
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         if reduction_axes is None and out_axes is None:
             reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
-            out_axes = x.axes - out_axes
+            out_axes = x.axes - reduction_axes
         elif reduction_axes is None:
             out_axes = Axes(out_axes)
             reduction_axes = x.axes - out_axes
@@ -1915,8 +1915,7 @@ class ReductionOp(TensorOp):
         else:
             out_axes = Axes(out_axes)
             reduction_axes = Axes(reduction_axes)
-            for axis in out_axes:
-                assert axis not in reduction_axes
+        assert Axes.intersect(reduction_axes, out_axes) == Axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs

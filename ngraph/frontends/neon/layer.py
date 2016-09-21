@@ -1064,8 +1064,7 @@ class GeneralizedCost(object):
         """
         self.costs = self.costfunc(inputs, targets)
         self.total_cost = ng.sum(self.costs, out_axes=())
-        self.mean_cost = self.total_cost / \
-            ng.tensor_size(self.costs, out_axes=())
+        self.mean_cost = self.total_cost / ng.batch_size(self.costs)
 
 
 class BatchNorm(Layer):
