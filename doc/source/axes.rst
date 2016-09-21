@@ -187,7 +187,7 @@ Axes Reduction
 
 Examples: ::
 
-    x = ng.placeholder(Axes=(C, H, W))
+    x = ng.placeholder(axes=ng.Axes((C, H, W)))
     y0 = ng.sum(x, out_axes=ng.Axes((H, W)))
     y1 = ng.sum(x, out_axes=ng.Axes((W, H)))
     y2 = ng.sum(x, out_axes=ng.Axes((C,)))
