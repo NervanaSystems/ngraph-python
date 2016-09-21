@@ -486,16 +486,18 @@ class SetItem(Op):
         self.input = None
         tensor.user_deps = {self}
 
-    @property
-    def defs(self):
-        """
+    def as_one_dim(self):
+        tensor, val = self.args
+        assert not isinstance(tensor, ReshapeOp)
+        tensor, val = Flatten(tensor), Flatten(val)
+        return SetItemOneDim(tensor, self.item, val)
 
-        Returns:
-            SetItem modifies the variable being set.
 
-        """
-        return [self.args[0]]
-
+class SetItemOneDim(SetItem):
+    def __init__(self, tensor, item, val, force=False, **kwargs):
+        super(SetItemOneDim, self).__init__(
+            tensor, item, val, force=force, **kwargs
+        )
 
 class doall(Op):
     """
@@ -1296,7 +1298,7 @@ def temporary(graph_label_type="Temp", **kwargs):
 
     """
     return AllocationOp(graph_label_type=graph_label_type,
-                        constant=False, persistent=False,
+                        constant=False, persistent=True,
                         trainable=False, **kwargs)
 
 
@@ -2618,6 +2620,13 @@ class RequiredSimplify(SplicingAnalysis):
         if not op.one_dimensional and not op.zero_dimensional:
             self.add_rep(op, op.reduce_to_oned())
 
+    @visit.on_type(SetItem)
+    def visit(self, op):
+        self.add_rep(op, op.as_one_dim())
+
+    @visit.on_type(SetItemOneDim)
+    def visit(self, op):
+        pass
 
 class SimplePrune(SplicingAnalysis):
     """TODO."""
