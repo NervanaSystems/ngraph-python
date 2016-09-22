@@ -110,7 +110,8 @@ class Op(Node):
         computation, they must be isolated from the normal tracking of variable pre-dependencies.
 
         Arguments:
-            user_deps_map:  The new user deps map to use. If not provided, one is created and returned.
+            user_deps_map:  The new user deps map to use. If not provided, one is created
+            and returned.
 
         """
         if user_deps_map is None:
