@@ -91,7 +91,7 @@ class DataFlowGraph(Digraph):
         for current, previous in reversed(list(zip(order[1:], order[:-1]))):
             use = base_tensor_descriptions(current.args)
             defs = base_tensor_descriptions(current.defs)
-            liveness[previous] = use | (liveness[current] - defs)
+            liveness[previous] = use | (liveness[current] - defs) | persistent
         # Inplace not possible
         for op in order:
             if not can_do_inplace(op):
