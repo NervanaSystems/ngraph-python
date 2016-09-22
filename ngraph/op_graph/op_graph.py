@@ -485,12 +485,13 @@ class SetItem(Op):
         self.item = item
         self.input = None
         tensor.user_deps = {self}
+        self.force = force
 
     def as_one_dim(self):
         tensor, val = self.args
         assert not isinstance(tensor, ReshapeOp)
         tensor, val = Flatten(tensor), Flatten(val)
-        return SetItemOneDim(tensor, self.item, val)
+        return SetItemOneDim(tensor, self.item, val, force=self.force)
 
 
 class SetItemOneDim(SetItem):

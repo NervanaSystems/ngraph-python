@@ -357,7 +357,10 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        self.inits = self.ordered_initializers(ops)
+        init_graph = doall(self.ordered_initializers(ops))
+        Op.simple_prune([init_graph])
+        RequiredSimplify([init_graph]).run()
+        self.inits = Op.ordered_ops([init_graph])
 
         # create computation which initializes values (called once per
         # session)
