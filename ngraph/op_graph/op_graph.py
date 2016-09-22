@@ -47,8 +47,6 @@ class Op(Node):
     Arguments:
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
-        graph_label_type: A label that should be used when drawing the graph.  Defaults to
-            the class name.
         initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
@@ -59,8 +57,8 @@ class Op(Node):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
-        graph_label_type: A label that should be used when drawing the graph.
         initializers (list): Additional Ops to run before this Op is run the first time.
+        other_deps (set): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
@@ -94,6 +92,49 @@ class Op(Node):
         finally:
             Op._get_thread_ops().pop()
 
+    # The thread's global user_deps map
+    get_thread_state().user_deps = [dict()]
+
+    @staticmethod
+    def _get_thread_user_deps():
+        return get_thread_state().user_deps
+
+    @staticmethod
+    @contextmanager
+    def saved_user_deps(user_deps_map=None):
+        """
+        Switches the user_deps map within a context.
+
+        The user_deps of an Op are Ops that must run before the Op is used. When Ops are
+        generated outside of the normal stream, such as initializions that run once before any
+        computation, they must be isolated from the normal tracking of variable pre-dependencies.
+
+        Arguments:
+            user_deps_map:  The new user deps map to use. If not provided, one is created
+            and returned.
+
+        """
+        if user_deps_map is None:
+            user_deps_map = dict()
+        try:
+            Op._get_thread_user_deps().append(user_deps_map)
+            yield (user_deps_map)
+        finally:
+            Op._get_thread_user_deps().pop()
+
+    @property
+    def user_deps(self):
+        """
+
+        :return:
+            Set of Ops the must come before this Op is used.  See SetItem.
+        """
+        return Op._get_thread_user_deps()[-1].get(self, {})
+
+    @user_deps.setter
+    def user_deps(self, value):
+        Op._get_thread_user_deps()[-1][self] = value
+
     def __init__(self,
                  const=None,
                  constant=False,
@@ -101,14 +142,14 @@ class Op(Node):
                  persistent=False,
                  reference=False,
                  trainable=False,
-                 graph_label_type=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
 
-        if graph_label_type is None:
-            graph_label_type = self.__class__.__name__
-        self.graph_label_type = graph_label_type
-
+        self.other_deps = set()
+        for arg in self.args:
+            self.other_deps.update(arg.user_deps)
+        if self.other_deps:
+            pass
         self.schemas = []
         self._adjoints = None
         self.const = const
@@ -132,11 +173,6 @@ class Op(Node):
 
         """
         return not self.constant
-
-    @property
-    def graph_label(self):
-        """The label used for drawings of the graph."""
-        return "{}[{}]".format(self.graph_label_type, self.name)
 
     @property
     def scalar(self):
@@ -448,6 +484,7 @@ class SetItem(Op):
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
         self.input = None
+        tensor.user_deps = {self}
 
     @cachetools.cached({})
     def call_info(self):
@@ -996,13 +1033,18 @@ class AllocationOp(TensorOp):
         super(AllocationOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
-        if init is not None:
-            with Op.captured_ops(self.initializers):
-                init.fill(self)
-        elif callable(initial_value):
-            self.initializers.append(assign(self, initial_value()))
-        elif initial_value is not None:
-            self.initializers.append(assign(self, initial_value))
+        with Op.saved_user_deps():
+            # Run initializations in a clean context so their SetItems don't modify user_deps
+            # for the main computations.
+            # TODO Maybe we want to use a single context for all of initialization.  We would
+            # need to do the following in a separate method called during transformation.
+            if init is not None:
+                with Op.captured_ops(self.initializers):
+                    init.fill(self)
+            elif callable(initial_value):
+                self.initializers.append(assign(self, initial_value()))
+            elif initial_value is not None:
+                self.initializers.append(assign(self, initial_value))
 
     @property
     def defs(self):
@@ -1046,7 +1088,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     """
     if graph_label_type is None:
         graph_label_type = "<Const({})>".format(const)
-    val = AllocationOp(axes=axes, constant=constant, trainable=trainable,
+    val = AllocationOp(axes=axes, constant=constant, persistent=True, trainable=trainable,
                        graph_label_type=graph_label_type, **kwargs)
     nptensor = np.asarray(const, dtype=val.dtype)
 
@@ -1168,6 +1210,24 @@ def temporary(graph_label_type="Temp", **kwargs):
     """
     return AllocationOp(graph_label_type=graph_label_type,
                         constant=False, persistent=False,
+                        trainable=False, **kwargs)
+
+
+def persistent_tensor(graph_label_type="Persistent", **kwargs):
+    """
+    Persistent storage.
+
+    Storage that will retain its value from computation to computation.
+
+    Args:
+        graph_label_type (:obj:`str`, optional): Used for drawing graphs.
+        **kwargs: Other args for AllocationOp.
+
+    Returns: An AllocationOp.
+
+    """
+    return AllocationOp(graph_label_type=graph_label_type,
+                        constant=False, persistent=True,
                         trainable=False, **kwargs)
 
 

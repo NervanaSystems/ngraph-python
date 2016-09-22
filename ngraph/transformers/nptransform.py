@@ -97,7 +97,9 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
         return NumPyDeviceTensor(self.transformer, self, tensor_description,
-                                 name="v_" + tensor_description.name + "_" + shape_str)
+                                 name="{}_v_{}_{}".format(self.name,
+                                                          tensor_description.name,
+                                                          shape_str))
 
     @property
     def alloc_name(self):
@@ -535,8 +537,9 @@ class NumPyTransformer(Transformer):
     def finish_transform_allocate(self):
         pass
 
-    def transform_ordered_ops(self, ordered_ops):
-        name = "c_" + str(self.n_computations)
+    def transform_ordered_ops(self, ordered_ops, name):
+        if name is None:
+            name = "c_" + str(self.n_computations)
         self.n_computations += 1
         self.compute_code.append("def {}(self):", name)
         code = self.compute_code.code
