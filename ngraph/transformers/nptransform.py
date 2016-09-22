@@ -97,7 +97,9 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
         return NumPyDeviceTensor(self.transformer, self, tensor_description,
-                                 name="{}_v_{}_{}".format(self.name, tensor_description.name, shape_str))
+                                 name="{}_v_{}_{}".format(self.name,
+                                                          tensor_description.name,
+                                                          shape_str))
 
     @property
     def alloc_name(self):

@@ -136,7 +136,6 @@ class Op(Node):
 
         self.other_deps = set()
         for arg in self.args:
-            udeps = arg.user_deps
             self.other_deps.update(arg.user_deps)
         if self.other_deps:
             pass
