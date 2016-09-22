@@ -136,6 +136,7 @@ class Op(Node):
 
         self.other_deps = set()
         for arg in self.args:
+            udeps = arg.user_deps
             self.other_deps.update(arg.user_deps)
         if self.other_deps:
             pass
@@ -1022,16 +1023,16 @@ class AllocationOp(TensorOp):
         super(AllocationOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
-        if init is not None:
-            with Op.captured_ops(self.initializers):
-                with Op.saved_user_deps():
-                    # Run initializations in a clean context so their SetItems don't modify user_deps
-                    # for the main computations.
+        with Op.saved_user_deps():
+            # Run initializations in a clean context so their SetItems don't modify user_deps
+            # for the main computations.
+            if init is not None:
+                with Op.captured_ops(self.initializers):
                     init.fill(self)
-        elif callable(initial_value):
-            self.initializers.append(assign(self, initial_value()))
-        elif initial_value is not None:
-            self.initializers.append(assign(self, initial_value))
+            elif callable(initial_value):
+                self.initializers.append(assign(self, initial_value()))
+            elif initial_value is not None:
+                self.initializers.append(assign(self, initial_value))
 
     @property
     def defs(self):
