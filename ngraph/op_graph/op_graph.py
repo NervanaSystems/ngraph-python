@@ -92,6 +92,7 @@ class Op(Node):
         finally:
             Op._get_thread_ops().pop()
 
+    # The thread's global user_deps map
     get_thread_state().user_deps = [dict()]
 
     @staticmethod
@@ -100,14 +101,23 @@ class Op(Node):
 
     @staticmethod
     @contextmanager
-    def saved_user_deps():
+    def saved_user_deps(user_deps_map=None):
         """
-        Create a new user_deps map.
+        Switches the user_deps map within a context.
+
+        The user_deps of an Op are Ops that must run before the Op is used. When Ops are
+        generated outside of the normal stream, such as initializions that run once before any
+        computation, they must be isolated from the normal tracking of variable pre-dependencies.
+
+        Arguments:
+            user_deps_map:  The new user deps map to use. If not provided, one is created and returned.
 
         """
+        if user_deps_map is None:
+            user_deps_map = dict()
         try:
-            Op._get_thread_user_deps().append(dict())
-            yield (None)
+            Op._get_thread_user_deps().append(user_deps_map)
+            yield (user_deps_map)
         finally:
             Op._get_thread_user_deps().pop()
 
@@ -1025,6 +1035,8 @@ class AllocationOp(TensorOp):
         with Op.saved_user_deps():
             # Run initializations in a clean context so their SetItems don't modify user_deps
             # for the main computations.
+            # TODO Maybe we want to use a single context for all of initialization.  We would
+            # need to do the following in a separate method called during transformation.
             if init is not None:
                 with Op.captured_ops(self.initializers):
                     init.fill(self)
