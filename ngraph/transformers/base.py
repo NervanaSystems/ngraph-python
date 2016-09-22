@@ -569,7 +569,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         self.allocate_storage()
 
-        for op in self.inits + self.ops:
+        for op in set(self.inits + self.ops):
             self.initialize_constant(op)
 
         self.allocated = True

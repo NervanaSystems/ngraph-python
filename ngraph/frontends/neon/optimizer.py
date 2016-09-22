@@ -152,7 +152,7 @@ class GradientDescentMomentum(Optimizer):
             ng.deriv(cost, variable) / batch_size
             for variable in variables
         ]
-        velocities = [ng.temporary(
+        velocities = [ng.persistent_tensor(
             axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1
