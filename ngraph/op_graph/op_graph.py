@@ -147,15 +147,16 @@ class Op(Node):
 
         self.other_deps = set()
         for arg in self.args:
-            self.other_deps.update(arg.user_deps)
-        if self.other_deps:
-            pass
+            for dep in arg.user_deps:
+                self.add_other_dep(dep)
+        self.other_deps_inv = set()
         self.schemas = []
         self._adjoints = None
         self.const = const
         self.constant = constant
         self.initializers = initializers or []
         self.__persistent = persistent
+        self.__forward = self
         self.reference = reference
         self.trainable = trainable
 
@@ -164,6 +165,26 @@ class Op(Node):
             ops.append(self)
         self.style = {}
         self.ops = []
+
+    def add_other_dep(self, dep):
+        self.other_deps.add(dep)
+        dep.other_deps_inv.add(self)
+
+    def remove_other_dep(self, dep):
+        self.other_deps.remove(dep)
+        dep.other_deps_inv.remove(self)
+
+    def replace_other_dep(self, old, new):
+        self.remove_other_dep(old)
+        self.add_other_dep(new)
+
+    def replace_self(self, rep):
+        old_users = set(self.users)
+        for user in old_users:
+            user.replace_arg(self, rep)
+        old_dependents = set(self.other_deps_inv)
+        for dependent in old_dependents:
+            dependent.replace_other_dep(self, rep)
 
     @property
     def assignable(self):
@@ -2540,9 +2561,7 @@ class SplicingAnalysis(object):
     def do_replacements(self):
         """TODO."""
         for old, rep in self.reps:
-            old_users = set(old.users)
-            for user in old_users:
-                user.replace_arg(old, rep)
+            old.replace_self(rep)
         return len(self.reps) > 0
 
 

@@ -43,21 +43,25 @@ class DataFlowGraph(Digraph):
 
         super(DataFlowGraph, self).__init__(defaultdict(set))
         self.transformer = transformer
-        self._fill_successors(results)
+        self.stack = set()
+        for w in results:
+            self._fill_successors(w)
         self.results = results
 
-    def _fill_successors(self, results):
+    def _fill_successors(self, w):
         """
         Walk through provided results to build the successors map.
 
         Arguments:
           results(dict): Results of the desired computation
         """
-        for w in results:
-            self.successors[w] |= set()
-            for v in w.other_deps.union(w.args):
-                self.successors[v].add(w)
-                self._fill_successors({v})
+        self.stack.add(w)
+        self.successors[w] |= set()
+        for v in w.other_deps.union(w.args):
+            self.successors[v].add(w)
+            if v not in self.stack:
+                self._fill_successors(v)
+        self.stack.remove(w)
 
     @property
     def instructions(self):

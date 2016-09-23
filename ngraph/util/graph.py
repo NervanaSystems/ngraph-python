@@ -112,12 +112,12 @@ class Digraph(object):
               fun: TODO
             """
             if u not in visited:
+                visited.add(u)
                 vs = nexts[u]
                 for v in sorted(vs, key=lambda x: x.id):
                     if v not in visited:
                         visit(v, fun)
                 fun(u)
-                visited.add(u)
 
         # Get output nodes
         for x in sorted(starts, key=lambda x: x.id):
