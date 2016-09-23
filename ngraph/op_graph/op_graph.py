@@ -154,7 +154,11 @@ class Op(Node):
         self._adjoints = None
         self.const = const
         self.constant = constant
-        self.initializers = initializers or []
+        self.initializers = set()
+        self.initializers_inv = set()
+        if initializers is not None:
+            for initializer in initializers:
+                self.add_initializer(initializer)
         self.__persistent = persistent
         self.__forward = self
         self.reference = reference
@@ -178,13 +182,30 @@ class Op(Node):
         self.remove_other_dep(old)
         self.add_other_dep(new)
 
+    def add_initializer(self, init):
+        self.initializers.add(init)
+        init.initializers_inv.add(self)
+
+    def remove_initializer(self, init):
+        self.initializers.remove(init)
+        init.initializers_inv.remove(self)
+
+    def replace_initializer(self, old, new):
+        self.remove_initializer(old)
+        self.add_initializer(new)
+
     def replace_self(self, rep):
         old_users = set(self.users)
         for user in old_users:
             user.replace_arg(self, rep)
+
         old_dependents = set(self.other_deps_inv)
         for dependent in old_dependents:
             dependent.replace_other_dep(self, rep)
+
+        old_init_deps = set(self.initializers_inv)
+        for init_dep in old_init_deps:
+            init_dep.replace_initializer(self, rep)
 
     @property
     def assignable(self):
@@ -898,6 +919,21 @@ class ExpandDims(ReshapeOp):
         )
 
 
+class ResultHandle(ReshapeOp):
+    def __init__(self, x, **kwargs):
+        super(ResultHandle, self).__init__(
+            x, **kwargs
+        )
+
+    @cachetools.cached({})
+    def tensor_description(self):
+        td, = tensor_descriptions(self.args)
+        return td.broadcast(td.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(delta)
+
+
 class Broadcast(ReshapeOp):
     """
     Used to add additional axes for a returned derivative.
@@ -1151,12 +1187,15 @@ class AllocationOp(TensorOp):
             # TODO Maybe we want to use a single context for all of initialization.  We would
             # need to do the following in a separate method called during transformation.
             if init is not None:
-                with Op.captured_ops(self.initializers):
+                capture = []
+                with Op.captured_ops(capture):
                     init.fill(self)
+                for c in capture:
+                    self.add_initializer(c)
             elif callable(initial_value):
-                self.initializers.append(assign(self, initial_value()))
+                self.add_initializer(assign(self, initial_value()))
             elif initial_value is not None:
-                self.initializers.append(assign(self, initial_value))
+                self.add_initializer(assign(self, initial_value))
 
     @property
     def defs(self):
@@ -1225,7 +1264,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     def value_fun(tensor):
         return val_tensor
 
-    val.initializers.append(InitTensor(val, value_fun))
+    val.add_initializer(InitTensor(val, value_fun))
 
     return val
 
@@ -1452,7 +1491,7 @@ class RNG(object):
                 tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
-        val.initializers.append(InitTensor(val, value_fun))
+        val.add_initializer(InitTensor(val, value_fun))
         return val
 
     def normal(self, loc, scale, size, **kwargs):
@@ -1475,7 +1514,7 @@ class RNG(object):
                 tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
-        val.initializers.append(InitTensor(val, value_fun))
+        val.add_initializer(InitTensor(val, value_fun))
         return val
 
 

@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, doall, Broadcast, RequiredSimplify
+    Function, doall, ResultHandle, RequiredSimplify
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
@@ -47,7 +47,7 @@ class Computation(NameableValue):
 
         def wrap_op(op):
             if isinstance(op, TensorOp):
-                return Broadcast(op, axes=op.axes)
+                return ResultHandle(op)
             else:
                 return op
 
