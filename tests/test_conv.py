@@ -154,3 +154,56 @@ def test_convolution_1d_bprop_complex():
     check_constant_tensor_convolution_bprop_input_1d(
         N=3, T=7, FT=5, Cin=4, Cout=6,
     )
+
+
+def np_convolution(inputs, filters, result):
+    """
+    numpy implementation of convolution with stride 1 and no padding
+    """
+    C, D, H, W, N = inputs.shape
+    _, T, R, S, K = filters.shape
+    _, M, P, Q, N = result.shape
+
+    weights = filters.reshape(C*T*R*S, K).T
+    for m, p, q in np.ndindex(M, P, Q):
+        data = inputs[:, m:m+T, p:p+R, q:q+S].reshape((C*T*R*S, N))
+        result[:, m, p, q] = np.dot(weights, data)
+
+
+def test_convolution_fprop():
+    """
+    A simple test running a convolution filter over an input where both filter
+    and input are ones and both are the same size.
+    """
+
+    Nx = ng.Axis(128, batch=True)
+
+    Cx = ng.Axis(3)
+    Dx = ng.Axis(4)
+    Hx = ng.Axis(32)
+    Wx = ng.Axis(32)
+
+    Tx = ng.Axis(2)
+    Rx = ng.Axis(2)
+    Sx = ng.Axis(2)
+    Kx = ng.Axis(8)
+
+    inputs = ng.placeholder(axes=ng.Axes([Cx, Dx, Hx, Wx, Nx]))
+    filters = ng.placeholder(axes=ng.Axes([Cx, Tx, Rx, Sx, Kx]))
+
+    # randomly initialize
+    input_value = rng.uniform(-1, 1, inputs.axes)
+    filter_value = rng.uniform(-1, 1, filters.axes)
+
+    assert input_value.shape == tuple([ax.length for ax in [Cx, Dx, Hx, Wx, Nx]])
+    assert filter_value.shape == tuple([ax.length for ax in [Cx, Tx, Rx, Sx, Kx]])
+
+    # compute convolution with graph
+    output = ng.convolution(inputs, filters)
+    result_og = executor(output, inputs, filters)(input_value, filter_value)
+
+    M, P, Q = [X.length - S.length + 1 for X, S in zip([Dx, Hx, Wx], [Tx, Rx, Sx])]
+    result_value = np.zeros((Kx.length, M, P, Q, Nx.length), dtype=np.float32)
+
+    np_convolution(input_value, filter_value, result_value)
+    np.testing.assert_allclose(result_og, result_value)

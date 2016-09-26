@@ -198,3 +198,71 @@ class convolution1d(op_graph.TensorOp):
         assert conv.axes == input.axes
 
         input.generate_add_delta(adjoints, conv)
+
+
+class convolution(op_graph.TensorOp):
+    def __init__(self, inputs, filters, *args, **kwargs):
+        """
+        Arguments:
+            inputs  : input tensor.
+            filters : filter/kernel tensor.
+
+        Return:
+        """
+        if len(inputs.shape) != 5:
+            raise ValueError((
+                'convolution input shape must be length 5, found {}'
+            ).format(len(inputs.shape)))
+
+        if len(filters.shape) != 5:
+            raise ValueError((
+                'convolution filter shape must be length 5, found {}'
+            ).format(len(filters.shape)))
+
+        if 'axes' in kwargs:
+            raise ValueError(
+                "convolution does not currently support the 'axes' argument.  The "
+                "output axes are entirely determined by the shape of the "
+                "input and filter Ops."
+            )
+
+        if inputs.axes[0] != filters.axes[0]:
+            raise ValueError((
+                'the first axis in input and filter must be the same.  The '
+                'first axis in input is {input} and in filter is {filter}.'
+            ).format(
+                inputs=inputs.axes[0],
+                filters=filters.axes[0],
+            ))
+
+        batch_axes = inputs.axes.batch_axes()
+        if len(batch_axes) != 1:
+            raise ValueError((
+                "Input must have one batch axis.  Found {n_batch_axes} batch "
+                "axes: {batch_axes} and {n_sample_axes} sample axes: "
+                "{sample_axes}."
+            ).format(
+                n_batch_axes=len(batch_axes),
+                batch_axes=batch_axes,
+                n_sample_axes=len(inputs.axes.sample_axes()),
+                sample_axes=inputs.axes.sample_axes(),
+            ))
+        self.batch_axis = batch_axes[0]
+        input_dims = [shape.length for shape in inputs.shape]
+        filter_dims = [shape.length for shape in filters.shape]
+        # TODO: account for padding and stride
+        output_dims = [_output_dim(input_dims[i], filter_dims[i], 0, 1) for i in range(1, 4)]
+        output_dims = [filter_dims[-1]] + output_dims + [input_dims[-1]]
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims])
+        self._input_shape = inputs.shape
+        self._filter_shape = filters.shape
+
+        super(convolution, self).__init__(
+            args=(inputs, filters), *args, axes=axes, **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        """
+        TODO
+        """
+        raise NotImplementedError()

@@ -39,7 +39,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import convolution1d
+from ngraph.op_graph.axes_ops import dimshuffle
+from ngraph.op_graph.convolution import convolution1d, convolution
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -310,6 +311,45 @@ class NumPyCodeGenerator(PyGen):
             output=output,
             input=input,
             filter=filter,
+            input_shape=[a.length for a in op._input_shape],
+            filter_shape=[a.length for a in op._filter_shape],
+            bsz=op.batch_axis.length
+        )
+
+    @generate_op.on_type(convolution)
+    def generate_op(self, op, outputs, inputs, filters):
+        self.append(
+            """
+            inputs = {inputs}
+            filters = {filters}
+
+            neon_conv_layer = ConvLayer(
+                proxy_backend(), {outputs}.dtype,
+                N={bsz},
+                C={input_shape}[0],
+                K={filter_shape}[4],
+
+                D={input_shape}[1],
+                H={input_shape}[2],
+                W={input_shape}[3],
+
+                T={filter_shape}[1],
+                R={filter_shape}[2],
+                S={filter_shape}[3],
+
+                pad_d=0, pad_h=0, pad_w=0,
+                str_d=1, str_h=1, str_w=1,
+            )
+
+            neon_conv_layer.xprop_conv(
+                proxy_tensor(inputs),
+                proxy_tensor(filters),
+                proxy_tensor({outputs}),
+            )
+            """,
+            outputs=outputs,
+            inputs=inputs,
+            filters=filters,
             input_shape=[a.length for a in op._input_shape],
             filter_shape=[a.length for a in op._filter_shape],
             bsz=op.batch_axis.length
