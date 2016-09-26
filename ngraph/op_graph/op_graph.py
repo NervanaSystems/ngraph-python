@@ -230,6 +230,19 @@ class Op(Node):
         """
         return self.__persistent or self.reference
 
+    def update_control_deps(self, ops):
+        """
+        Arguments:
+            ops: Set to be updated with ops that need to be run for this op to run.
+        """
+        if self in ops:
+            return
+        for other in self.other_deps:
+            other.update_control_deps(ops)
+        for arg in self.args:
+            arg.update_control_deps(ops)
+        ops.add(self)
+
     @property
     def device_op(self):
         """
