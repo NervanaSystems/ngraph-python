@@ -64,9 +64,7 @@ class Computation(NameableValue):
         elif isinstance(returns, Op):
             returns = wrap_op(returns)
             self.ops.add(returns)
-        elif returns is None:
-            pass
-        else:
+        elif returns is not None:
             raise ValueError()
         self.returns = returns
 
@@ -90,6 +88,10 @@ class Computation(NameableValue):
             else:
                 raise ValueError()
 
+        control_deps = set()
+        for op in self.ops:
+            op.update_control_deps(control_deps)
+        self.ops.update(control_deps)
         self.transformer.all_results.update(self.ops)
         self.executor = None
 
