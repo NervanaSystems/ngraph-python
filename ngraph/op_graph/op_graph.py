@@ -57,6 +57,7 @@ class Op(Node):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
+        forward: If not None, the node to use instead of this node.
         initializers (list): Additional Ops to run before this Op is run the first time.
         other_deps (set): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
@@ -163,6 +164,7 @@ class Op(Node):
         self.__forward = self
         self.reference = reference
         self.trainable = trainable
+        self.forward = None
 
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
@@ -206,6 +208,7 @@ class Op(Node):
         old_init_deps = set(self.initializers_inv)
         for init_dep in old_init_deps:
             init_dep.replace_initializer(self, rep)
+        self.forward = rep
 
     @property
     def assignable(self):
@@ -468,6 +471,14 @@ class Op(Node):
 
     def tensor_description(self):
         return None
+
+    @property
+    def forwarded(self):
+        result = self
+        while True:
+            if not result.forward:
+                return result
+            result = result.forward
 
     @cachetools.cached({})
     def call_info(self):
@@ -823,7 +834,7 @@ class TensorOp(Op):
 
         :return: A handle to the device tensor.
         """
-        return self.tensor_description().value
+        return self.forwarded.tensor_description().value
 
 
 class ReshapeOp(TensorOp):
@@ -2591,6 +2602,7 @@ class SplicingAnalysis(object):
         has_work = True
         while has_work:
             self.init()
+            self.results = [op.forwarded for op in self.results]
             for op in Op.ordered_ops(self.results):
                 self.visit(op)
             has_work = self.do_replacements()
@@ -2606,15 +2618,14 @@ class SplicingAnalysis(object):
         Returns:
           TODO
         """
-        # Can't replace op if its being returned
-        if op not in self.results:
-            self.reps.append((op, replacement))
+        self.reps.append((op, replacement))
 
     def do_replacements(self):
         """TODO."""
         for old, rep in self.reps:
             old.replace_self(rep)
         return len(self.reps) > 0
+
 
 
 class RequiredSimplify(SplicingAnalysis):

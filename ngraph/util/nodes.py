@@ -178,6 +178,7 @@ class Node(NameableValue, DebugInfo):
             Returns:
                 None
             """
+            node = node.forwarded
             if node not in visited:
                 for n in node.args:
                     visit(n)

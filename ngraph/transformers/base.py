@@ -99,6 +99,7 @@ class Computation(NameableValue):
         """
         Transforms the computation so that it can be run.
         """
+        self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
         self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
@@ -368,7 +369,7 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         # session)
         self.init_computation = self.computation(doall(self.inits), name="init")
 
-        all_ops = ops + self.inits
+        all_ops = [op.forwarded for op in ops + self.inits]
         # Give ids
         for op in all_ops:
             if op not in self.opids:
