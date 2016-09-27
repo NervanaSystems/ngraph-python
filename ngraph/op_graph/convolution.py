@@ -229,7 +229,7 @@ class convolution(op_graph.TensorOp):
         if inputs.axes[0] != filters.axes[0]:
             raise ValueError((
                 'the first axis in input and filter must be the same.  The '
-                'first axis in input is {input} and in filter is {filter}.'
+                'first axis in input is {inputs} and in filter is {filters}.'
             ).format(
                 inputs=inputs.axes[0],
                 filters=filters.axes[0],

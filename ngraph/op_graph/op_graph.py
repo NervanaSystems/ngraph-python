@@ -797,6 +797,11 @@ class TensorOp(Op):
         """
         return self.__axes is not None
 
+    def append_axis(self, axis):
+        if self.__axes is None:
+            raise ValueError()
+        self.__axes.append(axis)
+
     def generate_adjoints(self, adjoints, delta, *args):
         """
         With delta as the computation for the adjoint of this Op, incorporates delta into the
@@ -819,6 +824,12 @@ class TensorOp(Op):
         Returns: self.axes
         """
         return self.axes
+
+    def shape_dict(self):
+        """
+        Retuns: shape of this tensor as a dictionary
+        """
+        return self.axes.shape_dict()
 
     def mean(self, **kwargs):
         """

@@ -73,8 +73,9 @@ class Pooling(Layer):
 class ParameterLayer(Layer):
     """TODO."""
 
-    def __init__(self, init=None, **kwargs):
-        super(ParameterLayer, self).__init__(**kwargs)
+    def __init__(self, init=None, name=None, parallelism='Unknown', **kwargs):
+        super(ParameterLayer, self).__init__(name=name, parallelism=parallelism,
+                                             **kwargs)
         self.has_params = True
         self.init = init
         self.W = None
@@ -161,21 +162,16 @@ class Convolution(ParameterLayer):
 
         """
         super(Convolution, self).configure(in_obj)
-        if self.nglayer is None:
-            assert isinstance(self.in_shape, tuple)
-            ikeys = ('C', 'H', 'W') if len(
-                self.in_shape) == 3 else ('C', 'D', 'H', 'W')
-            shapedict = {k: x for k, x in zip(ikeys, self.in_shape)}
-            shapedict['N'] = self.ng.bsz
-            self.convparams.update(shapedict)
-            self.nglayer = ConvLayer(self.dtype, **self.convparams)
-            (K, M, P, Q, N) = self.nglayer.dimO
-            self.out_shape = (K, P, Q) if M == 1 else (K, M, P, Q)
-        if self.weight_shape is None:
-            self.weight_shape = self.nglayer.dimF2  # (C * R * S, K)
-        if self.bsum:
-            self.batch_sum_shape = (self.nglayer.K, 1)
-        return self
+
+        if 'T' not in in_obj.axes.names:
+            in_obj.append_axis(ng.Axis(1, name='T'))
+        shape_dict = in_obj.shape_dict()
+        self.convparams.update(shape_dict)
+
+        names = ['C', 'T', 'R', 'S', 'K']
+        weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
+        weights = ng.Variable(axes=weights_axes, init=self.init)
+        return ng.convolution(in_obj, weights)
 
     def fprop(self, inputs, inference=False, beta=0.0):
         """

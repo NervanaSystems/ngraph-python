@@ -81,6 +81,13 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.match_on_length = match_on_length
         self.duals = WeakValueDictionary()
 
+    def __eq__(self, other):
+        return isinstance(other, Axis) and (self.name == other.name) and (
+               self.length == other.length)
+
+    def __ne__(self, other):
+        return not self == other
+
     @property
     def batch(self):
         """
@@ -441,6 +448,14 @@ class Axes(object):
                      else x.length for x in self)
 
     @property
+    def names(self):
+        """
+        Returns:
+            tuple: The names of the outer axes.
+        """
+        return tuple(x.name for x in self)
+
+    @property
     def lengths(self):
         """
         Returns:
@@ -473,6 +488,16 @@ class Axes(object):
         if len(self) == 1:
             return self[0]
         return FlattenedAxis(self)
+
+    def shape_dict(self):
+        """
+        Retuns:
+            dict: A dictionary with names of the axes as keys and
+            lengths as values
+        """
+        names = [axis.name for axis in self._axes]
+        vals = [axis.length for axis in self._axes]
+        return dict(zip(names, vals))
 
     def __iter__(self):
         return self._axes.__iter__()
