@@ -2712,6 +2712,31 @@ class RequiredSimplify(SplicingAnalysis):
     def visit(self, op):
         pass
 
+    @visit.on_type(ReorderAxes)
+    def visit(self, op):
+        x = op.args[0]
+        if op.axes == x.axes:
+            self.add_rep(op, x)
+
+    @visit.on_type(Broadcast)
+    def visit(self, op):
+        x = op.args[0]
+        if op.axes == x.axes:
+            self.add_rep(op, x)
+
+    @visit.on_type(Dimshuffle)
+    def visit(self, op):
+        x = op.args[0]
+        if isinstance(x, ReshapeOp):
+            return
+        x_tensor_description = x.tensor_description()
+        x_strides = x_tensor_description.strides
+        shuffle_strides = tuple(x_strides[_] for _ in op.old_axis_positions)
+        if shuffle_strides == x_strides:
+            self.add_rep(op, x)
+        else:
+            pass
+
 
 class SimplePrune(SplicingAnalysis):
     """TODO."""
