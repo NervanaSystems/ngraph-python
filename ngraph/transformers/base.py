@@ -356,7 +356,9 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         Transform computation graphs to a form that can be run.
         """
         Op.simple_prune(self.all_results)
+        self.all_results = set(_.forwarded for _ in self.all_results)
         RequiredSimplify(self.all_results).run()
+        self.all_results = set(_.forwarded for _ in self.all_results)
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
