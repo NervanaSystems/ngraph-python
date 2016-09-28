@@ -108,7 +108,8 @@ class Node(NameableValue, DebugInfo):
             args: New arguments
         """
         for arg in self.__args:
-            arg.users.remove(self)
+            if self in arg.users:
+                arg.users.remove(self)
         self.__args = self.as_nodes(args)
         for arg in self.__args:
             arg.users.add(self)
