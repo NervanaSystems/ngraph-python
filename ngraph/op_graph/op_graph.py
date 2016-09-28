@@ -233,19 +233,6 @@ class Op(Node):
         """
         return self.__persistent or self.reference
 
-    def update_control_deps(self, ops):
-        """
-        Arguments:
-            ops: Set to be updated with ops that need to be run for this op to run.
-        """
-        if self in ops:
-            return
-        for other in self.other_deps:
-            other.update_control_deps(ops)
-        for arg in self.args:
-            arg.update_control_deps(ops)
-        ops.add(self)
-
     @property
     def device_op(self):
         """
@@ -264,7 +251,7 @@ class Op(Node):
         Returns:
           TODO
         """
-        SimplePrune(results).run()
+        return SimplePrune().run(results)
 
     @persistent.setter
     def persistent(self, value):
@@ -2590,22 +2577,22 @@ def cross_entropy_binary(y, t, out_axes=None):
 
 
 class SplicingAnalysis(object):
-    def __init__(self, results):
-        self.results = results
+    def __init__(self):
         self.reps = []
 
     def init(self):
         """TODO."""
         self.reps = []
 
-    def run(self):
+    def run(self, results):
         has_work = True
         while has_work:
             self.init()
-            self.results = [op.forwarded for op in self.results]
-            for op in Op.ordered_ops(self.results):
+            results = set(op.forwarded for op in results)
+            for op in Op.ordered_ops(results):
                 self.visit(op)
             has_work = self.do_replacements()
+        return results
 
     def add_rep(self, op, replacement):
         """
@@ -2625,7 +2612,6 @@ class SplicingAnalysis(object):
         for old, rep in self.reps:
             old.replace_self(rep)
         return len(self.reps) > 0
-
 
 
 class RequiredSimplify(SplicingAnalysis):
