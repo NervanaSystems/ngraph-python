@@ -27,15 +27,12 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.axes_ops import dimshuffle
+from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Dot, Equal, exp, \
+    Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
+    negative, NotEqual, Onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
+    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import convolution1d
 from ngraph.op_graph.debug import PrintOp
-from ngraph.op_graph.op_graph import AxesCastOp
-from ngraph.op_graph.op_graph import Broadcast
-from ngraph.op_graph.op_graph import absolute, add, argmax, argmin, cos, divide, dot, equal, exp, \
-    greater, greater_equal, less, less_equal, log, max, maximum, min, minimum, multiply, \
-    negative, not_equal, onehot, power, reciprocal, SetItem, sign, sin, sqrt, square, subtract, \
-    sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -243,25 +240,24 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
 
-    @generate_op.on_type(add)
+    @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(argmax)
+    @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmax({}, 0, out={})", x, out)
 
-    @generate_op.on_type(argmin)
+    @generate_op.on_type(Argmin)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(Broadcast)
+    @generate_op.on_type(Dimshuffle)
     def generate_op(self, op, out, x):
-        pass
-
-    @generate_op.on_type(AxesCastOp)
-    def generate_op(self, op, out, x):
-        pass
+        self.append(
+            "{}[()] = np.transpose({}, {})",
+            out, x, op.old_axis_positions
+        )
 
     @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
@@ -318,15 +314,21 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
-    @generate_op.on_type(divide)
+    @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(dot)
-    def generate_op(self, op, out, o, x, y):
-        self.append("np.dot({}, {}, out={})", x, y, o)
+    @generate_op.on_type(Dot)
+    def generate_op(self, op, out, x, y):
+        self.append("""
+        x, y, out = {}, {}, {}
+        try:
+            np.dot(x, y, out=out)
+        except ValueError:
+            np.dot(np.copy(x), np.copy(y), out=out)
+        """, x, y, out)
 
-    @generate_op.on_type(equal)
+    @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
         self.append("np.equal({}, {}, out={})", x, y, out)
 
@@ -338,19 +340,19 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", x, op.scalar)
 
-    @generate_op.on_type(greater)
+    @generate_op.on_type(Greater)
     def generate_op(self, op, out, x, y):
         self.append("np.greater({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(greater_equal)
+    @generate_op.on_type(GreaterEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(less)
+    @generate_op.on_type(Less)
     def generate_op(self, op, out, x, y):
         self.append("np.less({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(less_equal)
+    @generate_op.on_type(LessEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.less_equal({}, {}, out={})", x, y, out)
 
@@ -358,29 +360,23 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.log({}, out={})", x, out)
 
-    @generate_op.on_type(max)
+    @generate_op.on_type(Max)
     def generate_op(self, op, out, x):
-        if op.mode is 'copy':
-            self.append("{}.__setitem__((), {})", out, x)
-        else:
-            self.append("np.max({}, {}, out={})", x, op.mode, out)
+        self.append("np.max({}, 0, out={})", x, out)
 
-    @generate_op.on_type(maximum)
+    @generate_op.on_type(Maximum)
     def generate_op(self, op, out, x, y):
         self.append("np.maximum({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(min)
+    @generate_op.on_type(Min)
     def generate_op(self, op, out, x):
-        if op.mode is 'copy':
-            self.append("{}.__setitem__((), {})", out, x)
-        else:
-            self.append("np.min({}, {}, out={})", x, op.mode, out)
+        self.append("np.min({}, 0, out={})", x, out)
 
-    @generate_op.on_type(minimum)
+    @generate_op.on_type(Minimum)
     def generate_op(self, op, out, x, y):
         self.append("np.minimum({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(multiply)
+    @generate_op.on_type(Multiply)
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
@@ -388,21 +384,21 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
 
-    @generate_op.on_type(not_equal)
+    @generate_op.on_type(NotEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(onehot)
-    def generate_op(self, op, out, o, x):
+    @generate_op.on_type(Onehot)
+    def generate_op(self, op, out, x):
         self.append("""
         o = {o}
         x = {x}
         o[:] = 0
         for i in range(len(x)):
             o[x[i], i] = 1
-        """, x=x, o=o)
+        """, x=x, o=out)
 
-    @generate_op.on_type(power)
+    @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={}", x, y, out)
 
@@ -443,16 +439,13 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.square({}, out={})", x, out)
 
-    @generate_op.on_type(subtract)
+    @generate_op.on_type(Subtract)
     def generate_op(self, op, out, x, y):
         self.append("np.subtract({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(sum)
+    @generate_op.on_type(Sum)
     def generate_op(self, op, out, x):
-        if op.mode is 'copy':
-            self.append("{}.__setitem__((), {})", out, x)
-        else:
-            self.append("np.sum({}, axis={}, out={})", x, op.mode, out)
+        self.append("np.sum({}, axis=0, out={})", x, out)
 
     @generate_op.on_type(tanh)
     def generate_op(self, op, out, x):
@@ -478,16 +471,6 @@ class NumPyCodeGenerator(PyGen):
         for i, arg in enumerate(args):
             slices[op.pos] = i
             self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
-
-    @generate_op.on_type(dimshuffle)
-    def generate_op(self, op, out, x):
-        # self.append("{out}[()] = {x}", out=out, x=x)
-        self.append(
-            "{out}[()] = np.transpose({x}, {axes})",
-            out=out,
-            x=x,
-            axes=op.axes_order
-        )
 
 
 class NumPyTransformer(Transformer):

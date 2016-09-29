@@ -285,3 +285,6 @@ def test_tensor_description_init():
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
         arrayaxes.TensorDescription(arrayaxes.Axes(arrayaxes.Axis()))
+
+if __name__ == '__main__':
+    test_axes_cast()

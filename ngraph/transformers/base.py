@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, doall
+    Function, doall, ResultHandle, RequiredSimplify
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
@@ -44,16 +44,29 @@ class Computation(NameableValue):
     def __init__(self, transformer, returns, *args, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
-        self.returns = returns
+
+        def wrap_op(op):
+            if isinstance(op, TensorOp):
+                return ResultHandle(op)
+            else:
+                return op
+
+        def wrap_ops(ops):
+            return [wrap_op(op) for op in ops]
+
         self.ops = set()
         if isinstance(returns, collections.Set):
+            returns = set(wrap_ops(returns))
             self.ops.update(returns)
         elif isinstance(returns, collections.Sequence):
+            returns = wrap_ops(returns)
             self.ops.update(returns)
         elif isinstance(returns, Op):
+            returns = wrap_op(returns)
             self.ops.add(returns)
         elif returns is not None:
             raise ValueError()
+        self.returns = returns
 
         self.parameters = []
         for arg in args:
@@ -75,10 +88,21 @@ class Computation(NameableValue):
             else:
                 raise ValueError()
 
-        control_deps = set()
+        control_ops = set()
         for op in self.ops:
-            op.update_control_deps(control_deps)
-        self.ops.update(control_deps)
+            control_ops.update(op.user_deps)
+        processed_ops = set()
+        pending_ops = set(self.ops)
+        while pending_ops:
+            op = pending_ops.pop()
+            if op in processed_ops:
+                continue
+            control_ops.update(op.other_deps)
+            pending_ops.update(op.other_deps)
+            pending_ops.update(op.args)
+            processed_ops.add(op)
+
+        self.ops.update(control_ops)
         self.transformer.all_results.update(self.ops)
         self.executor = None
 
@@ -86,6 +110,7 @@ class Computation(NameableValue):
         """
         Transforms the computation so that it can be run.
         """
+        self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
         self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
@@ -341,17 +366,21 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Transform computation graphs to a form that can be run.
         """
-        Op.simple_prune(self.all_results)
+        self.all_results = Op.simple_prune(self.all_results)
+        self.all_results = RequiredSimplify().run(self.all_results)
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        self.inits = self.ordered_initializers(ops)
+        init_graph = set([doall(self.ordered_initializers(ops))])
+        init_graph = Op.simple_prune(init_graph)
+        init_graph = RequiredSimplify().run(init_graph)
+        self.inits = Op.ordered_ops(init_graph)
 
         # create computation which initializes values (called once per
         # session)
         self.init_computation = self.computation(doall(self.inits), name="init")
 
-        all_ops = ops + self.inits
+        all_ops = [op.forwarded for op in ops + self.inits]
         # Give ids
         for op in all_ops:
             if op not in self.opids:
