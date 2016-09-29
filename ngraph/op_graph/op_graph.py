@@ -57,7 +57,6 @@ class Op(Node):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
-        forward: If not None, the node to use instead of this node.
         initializers (list): Additional Ops to run before this Op is run the first time.
         other_deps (set): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
@@ -161,10 +160,8 @@ class Op(Node):
             for initializer in initializers:
                 self.add_initializer(initializer)
         self.__persistent = persistent
-        self.__forward = self
         self.reference = reference
         self.trainable = trainable
-        self.forward = None
 
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
@@ -458,14 +455,6 @@ class Op(Node):
 
     def tensor_description(self):
         return None
-
-    @property
-    def forwarded(self):
-        result = self
-        while True:
-            if not result.forward:
-                return result
-            result = result.forward
 
     @cachetools.cached({})
     def call_info(self):

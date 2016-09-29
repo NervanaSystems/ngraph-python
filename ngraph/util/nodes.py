@@ -65,6 +65,7 @@ class Node(NameableValue, DebugInfo):
 
     Arguments:
         args: Values used by this node.
+        forward: If not None, the node to use instead of this node.
         tags: String or a set of strings used for filtering in searches.
         kwargs: Arguments for related classes.
 
@@ -93,6 +94,7 @@ class Node(NameableValue, DebugInfo):
                 self.tags.update(tags)
             else:
                 self.tags.add(tags)
+        self.forward = None
 
     @property
     def args(self):
@@ -123,6 +125,14 @@ class Node(NameableValue, DebugInfo):
             new: Replacement
         """
         self.args = [new if arg is old else arg for arg in self.args]
+
+    @property
+    def forwarded(self):
+        result = self
+        while True:
+            if not result.forward:
+                return result
+            result = result.forward
 
     def as_nodes(self, args):
         """
