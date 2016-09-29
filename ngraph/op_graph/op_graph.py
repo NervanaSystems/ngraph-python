@@ -57,6 +57,7 @@ class Op(Node):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
+        forward: If not None, the node to use instead of this node.
         initializers (list): Additional Ops to run before this Op is run the first time.
         other_deps (set): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
@@ -163,6 +164,7 @@ class Op(Node):
         self.__forward = self
         self.reference = reference
         self.trainable = trainable
+        self.forward = None
 
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
@@ -206,6 +208,7 @@ class Op(Node):
         old_init_deps = set(self.initializers_inv)
         for init_dep in old_init_deps:
             init_dep.replace_initializer(self, rep)
+        self.forward = rep
 
     @property
     def assignable(self):
@@ -230,19 +233,6 @@ class Op(Node):
         """
         return self.__persistent or self.reference
 
-    def update_control_deps(self, ops):
-        """
-        Arguments:
-            ops: Set to be updated with ops that need to be run for this op to run.
-        """
-        if self in ops:
-            return
-        for other in self.other_deps:
-            other.update_control_deps(ops)
-        for arg in self.args:
-            arg.update_control_deps(ops)
-        ops.add(self)
-
     @property
     def device_op(self):
         """
@@ -261,7 +251,7 @@ class Op(Node):
         Returns:
           TODO
         """
-        SimplePrune(results).run()
+        return SimplePrune().run(results)
 
     @persistent.setter
     def persistent(self, value):
@@ -468,6 +458,14 @@ class Op(Node):
 
     def tensor_description(self):
         return None
+
+    @property
+    def forwarded(self):
+        result = self
+        while True:
+            if not result.forward:
+                return result
+            result = result.forward
 
     @cachetools.cached({})
     def call_info(self):
@@ -823,7 +821,7 @@ class TensorOp(Op):
 
         :return: A handle to the device tensor.
         """
-        return self.tensor_description().value
+        return self.forwarded.tensor_description().value
 
 
 class ReshapeOp(TensorOp):
@@ -2579,21 +2577,22 @@ def cross_entropy_binary(y, t, out_axes=None):
 
 
 class SplicingAnalysis(object):
-    def __init__(self, results):
-        self.results = results
+    def __init__(self):
         self.reps = []
 
     def init(self):
         """TODO."""
         self.reps = []
 
-    def run(self):
+    def run(self, results):
         has_work = True
         while has_work:
             self.init()
-            for op in Op.ordered_ops(self.results):
+            results = set(op.forwarded for op in results)
+            for op in Op.ordered_ops(results):
                 self.visit(op)
             has_work = self.do_replacements()
+        return results
 
     def add_rep(self, op, replacement):
         """
@@ -2606,14 +2605,12 @@ class SplicingAnalysis(object):
         Returns:
           TODO
         """
-        # Can't replace op if its being returned
-        if op not in self.results:
-            self.reps.append((op, replacement))
+        self.reps.append((op, replacement))
 
     def do_replacements(self):
         """TODO."""
         for old, rep in self.reps:
-            old.replace_self(rep)
+            old.forwarded.replace_self(rep.forwarded)
         return len(self.reps) > 0
 
 
@@ -2700,6 +2697,35 @@ class RequiredSimplify(SplicingAnalysis):
     @visit.on_type(SetItemOneDim)
     def visit(self, op):
         pass
+
+    @visit.on_type(ReorderAxes)
+    def visit(self, op):
+        if True:
+            return
+        x = op.args[0]
+        if op.axes == x.axes:
+            self.add_rep(op, x)
+
+    @visit.on_type(Broadcast)
+    def visit(self, op):
+        if True:
+            return
+        x = op.args[0]
+        if op.axes == x.axes:
+            self.add_rep(op, x)
+
+    @visit.on_type(Dimshuffle)
+    def visit(self, op):
+        x = op.args[0]
+        if isinstance(x, ReshapeOp):
+            return
+        x_tensor_description = x.tensor_description()
+        x_strides = x_tensor_description.strides
+        shuffle_strides = tuple(x_strides[_] for _ in op.old_axis_positions)
+        if shuffle_strides == x_strides:
+            self.add_rep(op, x)
+        else:
+            pass
 
 
 class SimplePrune(SplicingAnalysis):

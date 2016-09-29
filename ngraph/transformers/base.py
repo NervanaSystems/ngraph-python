@@ -88,10 +88,21 @@ class Computation(NameableValue):
             else:
                 raise ValueError()
 
-        control_deps = set()
+        control_ops = set()
         for op in self.ops:
-            op.update_control_deps(control_deps)
-        self.ops.update(control_deps)
+            control_ops.update(op.user_deps)
+        processed_ops = set()
+        pending_ops = set(self.ops)
+        while pending_ops:
+            op = pending_ops.pop()
+            if op in processed_ops:
+                continue
+            control_ops.update(op.other_deps)
+            pending_ops.update(op.other_deps)
+            pending_ops.update(op.args)
+            processed_ops.add(op)
+
+        self.ops.update(control_ops)
         self.transformer.all_results.update(self.ops)
         self.executor = None
 
@@ -99,6 +110,7 @@ class Computation(NameableValue):
         """
         Transforms the computation so that it can be run.
         """
+        self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
         self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
@@ -354,21 +366,21 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         """
         Transform computation graphs to a form that can be run.
         """
-        Op.simple_prune(self.all_results)
-        RequiredSimplify(self.all_results).run()
+        self.all_results = Op.simple_prune(self.all_results)
+        self.all_results = RequiredSimplify().run(self.all_results)
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        init_graph = doall(self.ordered_initializers(ops))
-        Op.simple_prune([init_graph])
-        RequiredSimplify([init_graph]).run()
-        self.inits = Op.ordered_ops([init_graph])
+        init_graph = set([doall(self.ordered_initializers(ops))])
+        init_graph = Op.simple_prune(init_graph)
+        init_graph = RequiredSimplify().run(init_graph)
+        self.inits = Op.ordered_ops(init_graph)
 
         # create computation which initializes values (called once per
         # session)
         self.init_computation = self.computation(doall(self.inits), name="init")
 
-        all_ops = ops + self.inits
+        all_ops = [op.forwarded for op in ops + self.inits]
         # Give ids
         for op in all_ops:
             if op not in self.opids:

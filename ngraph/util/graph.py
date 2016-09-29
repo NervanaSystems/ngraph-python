@@ -142,7 +142,7 @@ class Digraph(object):
           Ordered dependencies of outs
         """
         result = set()
-        self.dfs(outs, lambda x: result.add(x), reverse=True)
+        self.dfs(outs, lambda x: result.add(x.forwarded), reverse=True)
         if order is not None:
             result = [x for x in order if x in result]
         return result

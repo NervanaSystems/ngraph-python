@@ -1,6 +1,8 @@
 import pytest
 
+import numpy as np
 import ngraph as ng
+from ngraph.util.utils import ExecutorFactory
 
 
 def test_deriv_missing_connection():
@@ -76,3 +78,32 @@ def test_slice_nop():
 
     assert s.axes[0] == x.axes[0]
     assert s.axes[1] != x.axes[1]
+
+
+def test_setting():
+    ex = ExecutorFactory()
+    X = ng.Axis(name='X', length=3)
+    axes = ng.Axes([X])
+
+    np_x = np.array([1, 2, 3], dtype=np.float32)
+    np_y = np.array([1, 3, 5], dtype=np.float32)
+
+    x = ng.Constant(np_x, axes=axes)
+    y = ng.Constant(np_y, axes=axes)
+
+    v = ng.Variable(axes=axes, initial_value=x)
+
+    f_v = ex.executor(v)
+
+    with ng.Op.saved_user_deps():
+        ng.assign(v, v + y)
+        f_v1 = ex.executor(v)
+
+    f_v2 = ex.executor(v)
+
+    e_v = f_v().copy()
+    assert np.allclose(e_v, np_x)
+    e_v1 = f_v1().copy()
+    assert np.allclose(e_v1, np_x + np_y)
+    e_v2 = f_v2().copy()
+    assert np.allclose(e_v2, np_x + np_y)
