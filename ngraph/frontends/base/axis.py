@@ -15,6 +15,17 @@
 from ngraph import Axis
 
 # Define the standard Neon axes
+
+# C = number of input channels
+# R = filter height
+# S = filter width
+# K = number of output channels
+# H = input image height
+# W = input image width
+# N = number of images (minibatch size)
+# P = output image height
+# Q = output image width
+
 #: The batch axis
 N = Axis(name='N', batch=True)
 C = Axis(name='C')

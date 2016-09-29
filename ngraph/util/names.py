@@ -136,10 +136,13 @@ class NameableValue(object):
     An object that can be named.
 
     Arguments:
+        graph_label_type: A label that should be used when drawing the graph.  Defaults to
+            the class name.
         name (str): The name of the object.
         **kwargs: Parameters for related classes.
 
     Attributes:
+        graph_label_type: A label that should be used when drawing the graph.
         id: Unique id for this object.
     """
     __counter = 0
@@ -152,17 +155,19 @@ class NameableValue(object):
 
     """A value with a name and debugging info that can be set."""
 
-    def __init__(self, name=None, **kwargs):
+    def __init__(self, name=None, graph_label_type=None, **kwargs):
         super(NameableValue, self).__init__(**kwargs)
         self.id = NameableValue.__generate_id()
         self.__name = name if name is not None else self.id
 
+        if graph_label_type is None:
+            graph_label_type = self.__class__.__name__
+        self.graph_label_type = graph_label_type
+
     @property
     def graph_label(self):
-        """A label for drawing graphs."""
-        if self.name != self.id:
-            return self.name.split('.')[-1]
-        return self.__class__.__name__ + '[' + self.name + ']'
+        """The label used for drawings of the graph."""
+        return "{}[{}]".format(self.graph_label_type, self.name)
 
     @property
     def name(self):

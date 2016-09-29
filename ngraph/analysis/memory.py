@@ -118,26 +118,6 @@ class InterferenceGraph(UndirectedGraph):
         return total_mem, buffers
 
 
-def bind_initializers(ops):
-    """
-    TODO.
-
-    Arguments:
-      transformer: TODO
-      ops: TODO
-
-    Returns:
-
-    """
-    for op in ops:
-        if isinstance(op, TensorOp):
-            buffer = op.tensor_description().buffer
-            # assign the same buffer to all of the op's initializers
-            for i in op.initializers:
-                if isinstance(i, TensorOp):
-                    i.tensor_description().buffer = buffer
-
-
 def assign_buffers(transformer, results, fusible=None):
     """
     Performs dataflow analysis of the graph defined by the provide results.
@@ -159,8 +139,6 @@ def assign_buffers(transformer, results, fusible=None):
         dfg = KernelFlowGraph(dfg, fusible)
     ifg = InterferenceGraph(dfg.liveness())
     memory, buffers = ifg.color()
-    # Binds initializers
-    bind_initializers(dfg.inputs)
     # set style
     for op in all_ops:
         if isinstance(op, TensorOp):

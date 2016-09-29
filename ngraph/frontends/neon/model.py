@@ -124,14 +124,12 @@ class Model(object):
         self.cost = cost
         self.cost.initialize(self.output, self.target)
         self.transformer = ng.NumPyTransformer()
-        updates = self.optimizer.configure(
-            self.transformer,
-            self.cost.total_cost,
-            ng.batch_size(self.input)
-        )
+        with ng.Op.saved_user_deps():
+            updates = self.optimizer.configure(self.cost.mean_cost)
+            self.train_comp = self.transformer.computation([self.cost.mean_cost, updates],
+                                                           self.input,
+                                                           self.target)
 
-        self.train_comp = self.transformer.computation([self.cost.mean_cost, updates], self.input,
-                                                       self.target)
         self.epoch_eval_comp = self.transformer.computation(self.cost.mean_cost, self.input,
                                                             self.target)
 

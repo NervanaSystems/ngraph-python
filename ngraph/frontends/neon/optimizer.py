@@ -132,7 +132,7 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
         self.transformer = None
 
-    def configure(self, transformer, cost, batch_size):
+    def configure(self, cost):
         """
         TODO.
 
@@ -144,15 +144,14 @@ class GradientDescentMomentum(Optimizer):
         Returns:
 
         """
-        self.transformer = transformer
         self.learning_rate_placeholder = ng.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
         grads = [
-            ng.deriv(cost, variable) / batch_size
+            ng.deriv(cost, variable)
             for variable in variables
         ]
-        velocities = [ng.temporary(
+        velocities = [ng.persistent_tensor(
             axes=variable.axes, init=Constant(0)) for variable in variables]
 
         scale_factor = 1

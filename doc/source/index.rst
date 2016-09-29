@@ -44,10 +44,11 @@
    :maxdepth: 1
    :caption: Basic Concepts
 
+   op_graph.rst
    analysis.rst
+   autodiff.rst
    axes.rst
    frontends.rst
-   op_graph.rst
    transformers.rst
    tensorflow.rst
 

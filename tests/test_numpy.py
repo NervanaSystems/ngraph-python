@@ -43,9 +43,10 @@ def test_constant_multiply():
 
 def test_constant_tensor_multiply():
     ax.Y.length = 2
+    ax.N.length = 2
 
-    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
-    b = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.Y])
+    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.N])
+    b = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[ax.Y, ax.N])
 
     c = ng.multiply(a, b)
 
@@ -144,12 +145,12 @@ def test_reduction():
                                [ax.C, ax.W],
                                [ax.W, ax.H]]:
             p_u = ng.placeholder(axes=axes)
-            dims = tuple(axes.index(axis) for axis in reduction_axes)
+            dims = tuple(ng.Axes.index(axes, axis) for axis in reduction_axes)
             npval = npred(u, dims)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             graph_val = executor(graph_reduce, p_u)(u)
             np.testing.assert_allclose(
-                npval, graph_val), 'red:{red}, axes:{axes}'.format(
+                npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
                 red=red, axes=reduction_axes)
 
 
@@ -339,6 +340,7 @@ def test_elementwise_ops_unmatched_args():
         dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, .001, p_u)
         dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
+        # u op v
         result_be = uv_fun(u, v)
         np.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
         duvdunum = duvdunum_fun(u, v)
@@ -794,67 +796,3 @@ def test_onehot():
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     ng.NumPyTransformer().initialize()
-
-
-def test_elementwise_broadcast_with_one_numeric():
-    delta = .001
-    C = ng.NumericAxis(2)
-    H = ng.NumericAxis(3)
-    W = ng.NumericAxis(4)
-    N = ng.NumericAxis(5)
-    axes = [C, H, W, N]
-    uno = ng.NumericAxis(1)
-
-    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        for i in range(len(axes)):
-            p_u = ng.placeholder(axes=axes)
-            u = rng.uniform(1.0, 2.0, p_u.axes)
-            v_axes = axes[:]
-            # Replace one of the axes with a 1-length numeric axis
-            v_axes[i] = uno
-            p_v = ng.placeholder(axes=v_axes)
-            v = rng.uniform(1.0, 2.0, p_v.axes)
-
-            # u op v
-            uv_np = np_op(u, v)
-            uv_op = be_op(p_u, p_v)
-
-            ex = ExecutorFactory()
-
-            # fun(u, v)
-            uv_fun = ex.executor(uv_op, p_u, p_v)
-            duvdunum_fun = ex.numeric_derivative(uv_op, p_u, delta, p_v)
-            duvdut_fun = ex.derivative(uv_op, p_u, p_v)
-            duvdvnum_fun = ex.numeric_derivative(uv_op, p_v, delta, p_u)
-            duvdvt_fun = ex.derivative(uv_op, p_v, p_u)
-
-            # fun(v, u)
-            vu_np = np_op(v, u)
-            vu_op = be_op(p_v, p_u)
-
-            vu_fun = ex.executor(vu_op, p_u, p_v)
-            dvudunum_fun = ex.numeric_derivative(vu_op, p_u, delta, p_v)
-            dvudut_fun = ex.derivative(vu_op, p_u, p_v)
-            dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, delta, p_u)
-            dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
-
-            result_be = uv_fun(u, v)
-            np.testing.assert_allclose(uv_np, result_be, atol=1e-3, rtol=1e-3)
-            duvdunum = duvdunum_fun(u, v)
-            duvdut = duvdut_fun(u, v)
-            np.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
-
-            duvdvnum = duvdvnum_fun(v, u)
-            duvdvt = duvdvt_fun(v, u)
-            np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
-
-            # v op u
-            result_be = vu_fun(u, v)
-            np.testing.assert_allclose(vu_np, result_be, atol=1e-3, rtol=1e-3)
-            dvudunum = dvudunum_fun(u, v)
-            dvudut = dvudut_fun(u, v)
-            np.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
-
-            dvudvnum = dvudvnum_fun(v, u)
-            dvudvt = dvudvt_fun(v, u)
-            np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
