@@ -2700,12 +2700,16 @@ class RequiredSimplify(SplicingAnalysis):
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):
+        if True:
+            return
         x = op.args[0]
         if op.axes == x.axes:
             self.add_rep(op, x)
 
     @visit.on_type(Broadcast)
     def visit(self, op):
+        if True:
+            return
         x = op.args[0]
         if op.axes == x.axes:
             self.add_rep(op, x)

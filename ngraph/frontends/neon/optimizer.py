@@ -132,7 +132,7 @@ class GradientDescentMomentum(Optimizer):
         self.stochastic_round = stochastic_round
         self.transformer = None
 
-    def configure(self, transformer, cost):
+    def configure(self, cost):
         """
         TODO.
 
@@ -144,7 +144,6 @@ class GradientDescentMomentum(Optimizer):
         Returns:
 
         """
-        self.transformer = transformer
         self.learning_rate_placeholder = ng.placeholder(axes=(), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())

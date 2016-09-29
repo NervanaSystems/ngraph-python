@@ -89,6 +89,8 @@ class Computation(NameableValue):
                 raise ValueError()
 
         control_ops = set()
+        for op in self.ops:
+            control_ops.update(op.user_deps)
         processed_ops = set()
         pending_ops = set(self.ops)
         while pending_ops:
