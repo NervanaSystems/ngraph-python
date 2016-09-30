@@ -2378,11 +2378,6 @@ class Function(Op):
         """TODO."""
         return self.use
 
-    @property
-    def call_info(self):
-        for op in self.instructions:
-            op.call_info
-        return []
 
 class Buffer(object):
     """TODO."""

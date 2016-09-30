@@ -23,6 +23,37 @@ _none_slice = slice(None, None, None)
 
 
 class GPUKernel():
+    """
+    Object which represents a single kernel that will run on the GPU. This can
+    be either a single op or a list of fused ops which corresponds to a
+    Function object in the graph. In the case of regular ops (fused or single)
+    the kernel generator in float_ew2 will be used to generate a CUDA C kernel
+    that executes these ops. As the function is transformed by the transformer,
+    we buffer ops into a list and then compile the kernel at the end.
+
+    Some ops (non regular) are not handled by the kernel generator and instead
+    rely on neon NervanaGPU implementations. These are genrally ops which
+    cannot be fused or done in place such as dot and dimshuffle. In these cases
+    self.compound will be set to False.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+
+    Attributes:
+        ops_buffer (:obj:`list` of :obj:`tuple`): A list of operations to be
+            performed by this kernel
+        params (list): Parameters to pass to the compiled GPU kernel
+        kernel (pycuda.driver.Function): Handle to the compiled GPU kernel
+        shared_size (int): Size of shared memory needed by kernel
+        compound (bool): True if the kernel needs to be pre-compiled using the
+            float_ew2 module
+        buffers_bound (bool): Flag indicates if GPU addresses have been bound
+            to kernel parameters
+        transformer (GPUTransformer): GPU transformer containing NervanaGPU
+            object which is used for ops such as dot, dimshuffle, etc.
+    """
+
     def __init__(self, transformer):
         self.ops_buffer = []
         self.params = None
@@ -215,6 +246,13 @@ class GPUKernel():
         raise ValueError("Unhandled op: {}".format(op))
 
     def bind_buffers(self):
+        """
+        Binds GPU addresses of buffers to the kernel parameters. When kernels
+        and initial parameters are generated, tensors have not yet been
+        allocated so a placeholder is used for the memory addresses. This must
+        be called before the first kernel run to bind the tensor addresses in
+        GPU memory to the kernel parameters.        
+        """
         if self.compound:
             for index in range(len(self.params)):
                 if isinstance(self.params[index], TensorDescription):
@@ -230,9 +268,28 @@ class GPUKernel():
         self.buffers_bound = True
 
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None):
+        """
+        Adds an op to the list of ops to be compiled into a kernel
+
+        Arguments:
+            op (string): Name of the op
+            x (TensorDescription): TensorDescription for input 0
+            y (TensorDescription): TensorDescription for input 1
+            out (TensorDescription): Tensor description for output
+            axis (int): For reduction ops, indicate the axis to reduce
+                along
+        """
+
         self.ops_buffer.append((op, x, y, out, axis))
 
     def compile(self):
+        """
+        Compiles ops buffer into a GPU kernel. First checks if this is a
+        compound kernel which needs to be compiled. In cases where only a
+        single special op are contained (dot, dimshuffle, etc) there is no
+        compounding and the NervanaGPU implementation is called directly at run
+        time.
+        """
         if len(self.ops_buffer) == 0:
             return False
 
@@ -264,6 +321,26 @@ class GPUKernel():
         return True
 
 class GPUKernelGroup():
+    """
+    A group of GPU kernels which corresponds to a Computation object. Since we
+    can't always compound all ops from a Computation into a single GPU kernel,
+    this object provides a container for multiple kernels. The class implements
+    __call__ which is used to execute the kernel group at evaluation time.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        kernels (:obj:`list` of :class:`GPUKernel`): List of compiled GPUKernel
+            objects to run at evaluation time
+
+    Attributes:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        ng (NervanaGPU): Neon backend used to execute special ops
+        kernels (:obj:`list` of :class:`GPUKernel`): List of compiled GPUKernel
+            objects to run at evaluation time
+    """
+
     def __init__(self, transformer, kernels):
         self.transformer = transformer
         self.ng = transformer.ng
@@ -299,21 +376,67 @@ class GPUKernelGroup():
 
 
 class GPUBufferAllocator():
+    """
+    Class responsible for allocating a buffer in GPU memory and calling
+    allocators for tensor views of that buffer. The class implements __call__
+    which is used to perform allocation.
+
+    Arguments:
+        dev_buffer (GPUDeviceBufferStorage): Device storage object to be 
+            allocated
+
+    Attributes:
+        bytes (int): Size of buffer to allocate
+        view_allocators (:obj:`list` of :class:`GPUTensorAllocator`): List of
+            allocators using this buffer for storage
+        _buffer (pycuda.driver.DeviceAllocation): Device memory handle
+    """
+
     def __init__(self, dev_buffer):
         self.bytes = dev_buffer.bytes
         self.view_allocators = []
         self._buffer = None
 
     def __call__(self):
+        """
+        Allocate the device memory buffer then loop over tensors which use the
+        buffer and call their allocators to create views
+        """
         self._buffer = drv.mem_alloc(self.bytes)
         for view_alloc in self.view_allocators:
             view_alloc(self._buffer)
 
     def add_view_allocator(self, view_alloc):
+        """
+        Add reference to an allocator for a tensor view of this buffer
+
+        Arguments:
+            view_alloc (GPUTensorAllocator): Tensor allocator which uses this
+                buffer
+        """
         self.view_allocators.append(view_alloc)
 
 
 class GPUTensorAllocator():
+    """
+    Class responsible for allocating a tensor view of a device memory buffer.
+    The class implements __call__ which creates a neon GPUTensor bound to the
+    specified device allocation
+
+    Arguments:
+        tensor (GPUDeviceTensor): Tensor to allocate
+        transformer (GPUTransformer): GPUTransformer containing a NervanaGPU
+            which is used as the backend for the GPUTensor
+
+    Attributes:
+        transformer (GPUTransformer): GPUTransformer containing a NervanaGPU
+            which is used as the backend for the GPUTensor
+        tensor_name (string): Name of the tensor used in GPUTransformer dict to
+            store the allocated tensor
+        tensor_description (TensorDescription): Description of the view
+        _tensor (GPUTensor): Allocated neon GPUTensor
+    """
+
     def __init__(self, tensor, transformer):
         self.transformer = transformer
         self.tensor_name = tensor.name
@@ -321,6 +444,13 @@ class GPUTensorAllocator():
         self._tensor = None
 
     def __call__(self, buffer_alloc):
+        """
+        Allocates the GPUTensor object as a view of a pre-allocated buffer.
+
+        Arguments:
+            buffer_alloc (DeviceAllocation): Memory handle returned by pycuda
+                allocator
+        """
         tensor_description = self.tensor_description
 
         if tensor_description.shape == ():
@@ -331,6 +461,8 @@ class GPUTensorAllocator():
         if tensor_description.strides == ():
             strides = (1, )
         else:
+            # Note that TensorDescription strides are in units of bytes, but
+            # GPUTensor expects units of elements
             strides = [s // tensor_description.dtype.itemsize for s in tensor_description.strides]
             strides = tuple(strides)
 
@@ -349,12 +481,24 @@ class GPUTensorAllocator():
 
 
 class GPURegister():
+    """
+    Object representing a register in a GPU kernel used to store the result of
+    an intermediate computation which does not need to be written to a buffer
+
+    Arguments:
+        dtype (dtype): Variable type of the register
+        name (string): Name of the register
+    """
+
     def __init__(self, dtype, name):
         self.dtype = dtype
         self.name = name
 
 
 class GPUDeviceBufferStorage(DeviceBufferStorage):
+    """
+    Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
+    """
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(GPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -382,11 +526,17 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
 
 
 class GPUDeviceBufferReference(DeviceBufferReference):
+    """
+    Analogous to NumPyDeviceBufferReference.
+    """
     def __init__(self, transformer, **kwargs):
         super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class GPUDeviceTensor(DeviceTensor):
+    """
+    Used to transform device tensor allocations. Analogous to NumPyDeviceTensor.
+    """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                                 **kwargs)
@@ -450,28 +600,16 @@ class GPUDeviceTensor(DeviceTensor):
         return self.tensor.reshape(shape)
 
 
-def get_tensors(f):
-    def tensor(x):
-        if isinstance(x, GPUDeviceTensor):
-            return x.tensor
-        return x
-
-    @wraps(f)
-    def helper(*args):
-        return f(*(tensor(arg) for arg in args))
-
-    return helper
-
-
 class GPUTransformer(Transformer):
     """
-    Transformer for executing graphs on a CPU, backed by numpy.
+    Transformer for executing graphs on a GPU, backed by pycuda and NervanaGPU.
 
     Given a list of ops you want to compute the results of, this transformer
-    will compile the graph required to compute those results and exposes an
-    evaluate method to execute the compiled graph.
+    will generate allocators and kernels to execute the graph on a GPU.
     """
     def __init__(self, **kwargs):
+        # TODO: Re-enable fusion
+        # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
         self.ng = NervanaGPU()
 

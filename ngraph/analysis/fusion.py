@@ -189,7 +189,7 @@ class KernelFlowGraph(DataFlowGraph):
             path_from[v] = {v}
             bad_path_from[v] = set()
 
-            if isinstance(v, be.ReductionOp):
+            if isinstance(v, ng.ReductionOp):
                 reduction = v.reduction_axes
             else:
                 reduction = None

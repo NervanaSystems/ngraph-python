@@ -121,6 +121,21 @@ def test_numpytensor_add_constant():
     print(result)
     assert np.array_equal(result, np_c)
 
+def test_fusion():
+    """TODO."""
+    np_a = np.array([[1, 2, 3]], dtype=np.float32)
+    np_b = np.array([[3, 2, 1]], dtype=np.float32)
+    np_d = np.multiply(np_b, np.add(np_a, 2))
+
+    ax.M.length = 1
+    ax.N.length = 3
+    a = ng.Constant(np_a, axes=[ax.M, ax.N])
+    b = ng.Constant(np_b, axes=[ax.M, ax.N])
+    c = ng.Constant(2)
+    d = ng.multiply(b, ng.add(a, c))
+    result = executor(d)()
+    print(result)
+    assert np.array_equal(result, np_d)
 
 def test_numpytensor_mlp():
     """TODO."""
