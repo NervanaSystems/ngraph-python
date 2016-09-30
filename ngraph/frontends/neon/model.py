@@ -123,7 +123,7 @@ class Model(object):
 
         self.cost = cost
         self.cost.initialize(self.output, self.target)
-        self.transformer = ng.NumPyTransformer()
+        self.transformer = ng.GPUTransformer()
         with ng.Op.saved_user_deps():
             updates = self.optimizer.configure(self.cost.mean_cost)
             self.train_comp = self.transformer.computation([self.cost.mean_cost, updates],
@@ -193,6 +193,7 @@ class Model(object):
 
             batch_cost, _ = self.train_comp(x.reshape(self.batch_input_shape),
                                             t.reshape(self.batch_target_shape))
+
             self.cost.cost = batch_cost
             self.total_cost += batch_cost
             batch = batch + 1

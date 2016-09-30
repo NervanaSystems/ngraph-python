@@ -827,6 +827,7 @@ class TensorDescription(NameableValue):
         self.__slices = weakref.WeakValueDictionary()
         self.__value = None
         self.__buffer = None
+        self.__register = None
         self.__base = base
         self.dtype = dtype
         self.offset = offset
@@ -1178,6 +1179,14 @@ class TensorDescription(NameableValue):
         self.base.__buffer = value
 
     @property
+    def register(self):
+        return self.base.__register
+
+    @register.setter
+    def register(self, value):
+        self.base.__register = value
+
+    @property
     def value(self):
         """A device handle to the value."""
         return self.__value
@@ -1197,3 +1206,6 @@ class TensorDescription(NameableValue):
                     self.buffer.size, self.dtype, self.name
                 )
             self.__value = self.buffer.data.device_tensor(self)
+        else:
+            self.__value = self.transformer.device_register_storage(self.dtype)
+

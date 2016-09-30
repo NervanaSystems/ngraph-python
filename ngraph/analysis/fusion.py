@@ -64,11 +64,15 @@ def gpu_fusible(transformer, op1, op2):
 
     # Reduction following elementwises can be merged
     if isinstance(op1, ng.ElementWise) and isinstance(op2, ng.ReductionOp):
-        return True
+        pre_reduction_shape = op2.args[0].tensor_description().shape
+        if pre_reduction_shape == shapes1 or shapes1 == shapes2:
+            return True
 
     # Elementwise following reductions can be merged
     if isinstance(op1, ng.ReductionOp) and isinstance(op2, ng.ElementWise):
-        return True
+        pre_reduction_shape = op1.args[0].tensor_description().shape
+        if pre_reduction_shape == shapes2 or shapes1 == shapes2:
+            return True
 
     # Everything else cannot be merged
     return False
@@ -178,13 +182,34 @@ class KernelFlowGraph(DataFlowGraph):
           TODO
         """
         path_from, bad_path_from = dict(), dict()
+        reduction_paths = dict()
+
         order = self.topsort()
         for v in reversed(order):
             path_from[v] = {v}
             bad_path_from[v] = set()
+
+            if isinstance(v, be.ReductionOp):
+                reduction = v.reduction_axes
+            else:
+                reduction = None
+
             for w in self.successors[v]:
                 path_from[v] |= path_from[w]
+
                 if self.fusible(v, w):
+                    for reachable in path_from[w]:
+                        path = (reachable, w)
+                        new_path = (reachable, v)
+
+                        if path in reduction_paths:
+                            if reduction is not None and reduction_paths[path] != reduction:
+                                bad_path_from[v] |= {reachable}
+                            else:
+                                reduction_paths[new_path] = reduction_paths[path]
+                        elif reduction is not None:
+                            reduction_paths[new_path] = reduction
+
                     bad_path_from[v] |= bad_path_from[w]
                 else:
                     bad_path_from[v] |= path_from[w]
