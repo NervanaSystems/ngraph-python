@@ -499,6 +499,22 @@ class Axes(object):
         vals = [axis.length for axis in self._axes]
         return dict(zip(names, vals))
 
+    def set_shape(self, shape):
+        axes = self._axes
+        if len(axes) == len(shape):
+            for axis, length in zip(axes, shape):
+                axis.length = length
+        elif len(axes) > len(shape):
+            axes[0].length = shape[0]
+            for i in range(1, len(axes) - len(shape) + 1):
+                axes[i].length = 1
+            for length in shape[1:]:
+                i += 1
+                axes[i].length = length
+        else:
+            raise ValueError('Number of axes %d too low for shape %s' % (
+                             len(axes), shape))
+
     def __iter__(self):
         return self._axes.__iter__()
 
@@ -775,6 +791,26 @@ class Axes(object):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
+
+    def append(self, axis):
+        """
+        Appends an axis
+
+        Arguments:
+            other: The Axis object to append.
+        """
+        self._axes = Axes(tuple(self) + (axis,))
+
+    def insert(self, index, axis):
+        """
+        Inserts an axis
+        Arguments:
+            index   : Index to insert at
+            axis    : The Axis object to insert
+        """
+        axes = self._axes
+        axes.insert(index, axis)
+        self._axes = Axes(axes)
 
 
 def _reduce_nested(elem, agg, func):

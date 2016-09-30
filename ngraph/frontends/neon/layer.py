@@ -163,10 +163,7 @@ class Convolution(ParameterLayer):
         """
         super(Convolution, self).configure(in_obj)
 
-        if 'T' not in in_obj.axes.names:
-            in_obj.append_axis(ng.Axis(1, name='T'))
-        shape_dict = in_obj.shape_dict()
-        self.convparams.update(shape_dict)
+        self.convparams.update(dict(C=in_obj.axes[0].length))
 
         names = ['C', 'T', 'R', 'S', 'K']
         weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]

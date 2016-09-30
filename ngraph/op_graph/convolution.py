@@ -263,6 +263,9 @@ class convolution(op_graph.TensorOp):
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
         """
-        TODO
+        TODO: Generate true adjoints
         """
-        raise NotImplementedError()
+
+        # Dummy derivatives for now.
+        filters.generate_add_delta(adjoints, filters)
+        inputs.generate_add_delta(adjoints, inputs)

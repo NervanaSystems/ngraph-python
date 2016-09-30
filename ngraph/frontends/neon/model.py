@@ -108,12 +108,9 @@ class Model(object):
         batch_target_axes = target_axes + ng.Axes(ax.N, )
         self.input = ng.placeholder(axes=batch_input_axes)
         self.target = ng.placeholder(axes=batch_target_axes)
-        for axis, length in zip(input_axes, dataset.shape):
-            axis.length = length
-        for axis, length in zip(
-            target_axes, [
-                dataset_nclasses(dataset)]):
-            axis.length = length
+        input_axes.set_shape(dataset.shape)
+        target_axes.set_shape((dataset_nclasses(dataset),))
+
         ax.N.length = dataset_batchsize(dataset)
         self.batch_input_shape = batch_input_axes.lengths
         self.batch_target_shape = batch_target_axes.lengths

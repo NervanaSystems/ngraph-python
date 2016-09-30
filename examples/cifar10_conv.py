@@ -52,7 +52,7 @@ model = Model(layers=layers)
 callbacks = Callbacks(model, eval_set=test, **args.callback_args)
 model.initialize(
     dataset=train,
-    input_axes=Axes((ax.C, ax.H, ax.W)),
+    input_axes=Axes((ax.C, ax.D, ax.H, ax.W)),
     target_axes=Axes((ax.Y,)),
     optimizer=opt_gdm,
     cost=cost,
@@ -60,5 +60,4 @@ model.initialize(
 )
 
 np.seterr(divide='raise', over='raise', invalid='raise')
-model.fit(train, num_epochs=args.epochs, callbacks=callbacks)
-print('Misclassification error = %.2f%%' % (model.eval(test) * 100))
+print('Misclassification error = %.6f%%' % (model.eval(test) * 100))

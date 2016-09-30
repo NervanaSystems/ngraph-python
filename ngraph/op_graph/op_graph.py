@@ -797,6 +797,17 @@ class TensorOp(Op):
         """
         return self.__axes is not None
 
+    def insert_axis(self, index, axis):
+        """
+        Inserts an axis
+        Arguments:
+            index   : Index to insert at
+            axis    : The Axis object to insert
+        """
+        if self.__axes is None:
+            raise ValueError()
+        self.__axes.insert(index, axis)
+
     def append_axis(self, axis):
         if self.__axes is None:
             raise ValueError()
