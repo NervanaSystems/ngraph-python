@@ -1,0 +1,4 @@
+from ngraph.transformers.base import set_transformer_factory, make_transformer
+from ngraph.transformers.nptransform import NumPyTransformerFactory
+
+set_transformer_factory(NumPyTransformerFactory())

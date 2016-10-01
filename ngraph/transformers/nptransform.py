@@ -570,3 +570,11 @@ class NumPyTransformer(Transformer):
 
     def allocate_storage(self):
         self.model.allocate()
+
+
+class NumPyTransformerFactory(object):
+    def __init__(self):
+        pass
+
+    def __call__(self):
+        return NumPyTransformer()

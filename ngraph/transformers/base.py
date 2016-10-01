@@ -28,6 +28,28 @@ from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 
 
+def make_transformer():
+    """
+    Generates a Transformer using the factory in this module which defaults
+    to NumPy
+
+    Returns: Transformer
+    """
+    global transformer_factory
+    return transformer_factory()
+
+
+def set_transformer_factory(factory):
+    """
+    Sets the Transformer factory used by make_transformer
+
+    Arguments:
+        factory (object): Callable object which generates a Transformer
+    """
+    global transformer_factory
+    transformer_factory = factory
+
+
 class Computation(NameableValue):
     """
     A handle for a computation function.
