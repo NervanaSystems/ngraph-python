@@ -5,64 +5,64 @@ from neon.backends.layer_gpu import _get_sm_count
 import numpy as np
 
 _op_templates = {
-    "assign"    : r"%(out)s = %(x)s;",
-    "finite"    : None,
-    "neg"       : r"%(out)s = -%(x)s;",
-    "abs"       : r"%(out)s = abs(%(x)s);",
-    "sqrt"      : r"%(out)s = sqrtf(%(x)s);",
-    "sqr"       : r"%(out)s = %(x)s * %(x)s;",
-    "exp"       : r"%(out)s = expf(%(x)s);",
-    "log"       : r"%(out)s = logf(%(x)s);",
-    "exp2"      : r"%(out)s = exp2f(%(x)s);",
-    "log2"      : r"%(out)s = log2f(%(x)s);",
-    "sig"       : r"%(out)s = 1.0f / (1.0f + expf(-%(x)s));",
-    "sig2"      : r"%(out)s = 1.0f / (1.0f + exp2f(-%(x)s));",
-    "tanh"      : r"%(out)s = tanhf(%(x)s);",
-    "tanh2"     : r"%(out)s = (exp2f(2.0f * %(x)s) - 1.0f) / (exp2f(2.0f * %(x)s) + 1.0f);",
-    "transpose" : None,
-    "safelog"   : r"%(out)s = (%(x)s > 0.0f) ? logf(%(x)s) : -50.0f;",
-    "add"       : r"%(out)s = %(x)s + %(y)s;",
-    "sub"       : r"%(out)s = %(x)s - %(y)s;",
-    "mul"       : r"%(out)s = %(x)s * %(y)s;",
-    "div"       : r"%(out)s = %(x)s / %(y)s;",
-    "eq"        : r"%(out)s = %(x)s == %(y)s;",
-    "ne"        : r"%(out)s = %(x)s != %(y)s;",
-    "lt"        : r"%(out)s = %(x)s < %(y)s;",
-    "le"        : r"%(out)s = %(x)s <= %(y)s;",
-    "gt"        : r"%(out)s = %(x)s > %(y)s;",
-    "ge"        : r"%(out)s = %(x)s >= %(y)s;",
-    "pow"       : r"%(out)s = powf(%(x)s, %(y)s);",
-    "minimum"   : r"%(out)s = fminf(%(x)s, %(y)s);",
-    "maximum"   : r"%(out)s = fmaxf(%(x)s, %(y)s);",
-    "dot"       : None
+    "assign": r"%(out)s = %(x)s;",
+    "finite": None,
+    "neg": r"%(out)s = -%(x)s;",
+    "abs": r"%(out)s = abs(%(x)s);",
+    "sqrt": r"%(out)s = sqrtf(%(x)s);",
+    "sqr": r"%(out)s = %(x)s * %(x)s;",
+    "exp": r"%(out)s = expf(%(x)s);",
+    "log": r"%(out)s = logf(%(x)s);",
+    "exp2": r"%(out)s = exp2f(%(x)s);",
+    "log2": r"%(out)s = log2f(%(x)s);",
+    "sig": r"%(out)s = 1.0f / (1.0f + expf(-%(x)s));",
+    "sig2": r"%(out)s = 1.0f / (1.0f + exp2f(-%(x)s));",
+    "tanh": r"%(out)s = tanhf(%(x)s);",
+    "tanh2": r"%(out)s = (exp2f(2.0f * %(x)s) - 1.0f) / (exp2f(2.0f * %(x)s) + 1.0f);",
+    "transpose": None,
+    "safelog": r"%(out)s = (%(x)s > 0.0f) ? logf(%(x)s) : -50.0f;",
+    "add": r"%(out)s = %(x)s + %(y)s;",
+    "sub": r"%(out)s = %(x)s - %(y)s;",
+    "mul": r"%(out)s = %(x)s * %(y)s;",
+    "div": r"%(out)s = %(x)s / %(y)s;",
+    "eq": r"%(out)s = %(x)s == %(y)s;",
+    "ne": r"%(out)s = %(x)s != %(y)s;",
+    "lt": r"%(out)s = %(x)s < %(y)s;",
+    "le": r"%(out)s = %(x)s <= %(y)s;",
+    "gt": r"%(out)s = %(x)s > %(y)s;",
+    "ge": r"%(out)s = %(x)s >= %(y)s;",
+    "pow": r"%(out)s = powf(%(x)s, %(y)s);",
+    "minimum": r"%(out)s = fminf(%(x)s, %(y)s);",
+    "maximum": r"%(out)s = fmaxf(%(x)s, %(y)s);",
+    "dot": None
 }
 
 _redop_templates = {
-    "sum"    : r"%(out)s = %(out)s + %(x)s;",
-    "max"    : r"%(out)s = fmaxf(%(out)s, %(x)s);",
-    "min"    : r"%(out)s = fminf(%(out)s, %(x)s);",
-    "argmax" : r"if(%(x)s > %(y)s) {%(out)s = %(index)s; %(y)s = %(x)s;}",
-    "argmin" : r"if(%(x)s < %(y)s) {%(out)s = %(index)s; %(y)s = %(x)s;}"
+    "sum": r"%(out)s = %(out)s + %(x)s;",
+    "max": r"%(out)s = fmaxf(%(out)s, %(x)s);",
+    "min": r"%(out)s = fminf(%(out)s, %(x)s);",
+    "argmax": r"if(%(x)s > %(y)s) {%(out)s = %(index)s; %(y)s = %(x)s;}",
+    "argmin": r"if(%(x)s < %(y)s) {%(out)s = %(index)s; %(y)s = %(x)s;}"
 }
 
 _redop32_templates = {
-    "sum"    : r"%(out)s = %(out)s + __shfl_xor(%(out)s, i);",
-    "max"    : r"%(out)s = fmaxf(%(out)s, __shfl_xor(%(out)s, i));",
-    "min"    : r"%(out)s = fminf(%(out)s, __shfl_xor(%(out)s, i));",
-    "argmax" : r"""temp_idx = __shfl_xor(%(out)s, i);
+    "sum": r"%(out)s = %(out)s + __shfl_xor(%(out)s, i);",
+    "max": r"%(out)s = fmaxf(%(out)s, __shfl_xor(%(out)s, i));",
+    "min": r"%(out)s = fminf(%(out)s, __shfl_xor(%(out)s, i));",
+    "argmax": r"""temp_idx = __shfl_xor(%(out)s, i);
 %(indent)stemp_val = __shfl_xor(%(y)s, i);
 %(indent)sif(temp_val > %(y)s) {%(out)s = temp_idx; %(y)s = temp_val;}""",
-    "argmin" : r"""temp_idx = __shfl_xor(%(out)s, i);
+    "argmin": r"""temp_idx = __shfl_xor(%(out)s, i);
 %(indent)stemp_val = __shfl_xor(%(y)s, i);
 %(indent)sif(temp_val < %(y)s) {%(out)s = temp_idx; %(y)s = temp_val;}""",
 }
 
 _redop_inits = {
-    "sum"    : "0.0f",
-    "max"    : "-FLT_MAX",
-    "min"    : "FLT_MAX",
-    "argmax" : "0",
-    "argmin" : "0"
+    "sum": "0.0f",
+    "max": "-FLT_MAX",
+    "min": "FLT_MAX",
+    "argmax": "0",
+    "argmin": "0"
 }
 
 _item_loop_template = "for(int item = idx%(loopidx)s; item < loopmax; item += blockDim.x)"
@@ -70,9 +70,12 @@ _item_loop_template = "for(int item = idx%(loopidx)s; item < loopmax; item += bl
 _index_template1 = r"%(index)s = %(item)s * %(stridea)s;"
 _index_template20 = r"%(index)s = %(item)s * %(stridea)s + idx1 * %(strideb)s;"
 _index_template21 = r"%(index)s = idx0 * %(stridea)s + %(item)s * %(strideb)s;"
-_index_template30 = r"%(index)s = %(item)s * %(stridea)s + idx1 * %(strideb)s + idx2 * %(stridec)s;"
-_index_template31 = r"%(index)s = idx0 * %(stridea)s + %(item)s * %(strideb)s + idx2 * %(stridec)s;"
-_index_template32 = r"%(index)s = idx0 * %(stridea)s + idx1 * %(strideb)s + %(item)s * %(stridec)s;"
+_index_template30 = \
+    r"%(index)s = %(item)s * %(stridea)s + idx1 * %(strideb)s + idx2 * %(stridec)s;"
+_index_template31 = \
+    r"%(index)s = idx0 * %(stridea)s + %(item)s * %(strideb)s + idx2 * %(stridec)s;"
+_index_template32 = \
+    r"%(index)s = idx0 * %(stridea)s + idx1 * %(strideb)s + %(item)s * %(stridec)s;"
 
 _load_template = r"%(out)s = %(buffer)s[%(index)s];"
 
@@ -209,6 +212,7 @@ class TensorDescriptionWrapper:
             self.shape = tuple([1] + list(self.shape))
             self.strides = tuple([0] + list(self.strides))
 
+
 class GenerationContext:
     def __init__(self):
         self.register_mapping = None
@@ -237,6 +241,7 @@ def _is_buffer(value):
 
     return False
 
+
 def _compress_axes(ops):
     """
     Called to homogenize the axes of tensors used in a kernel. Also finds the
@@ -244,7 +249,7 @@ def _compress_axes(ops):
     TODO: If this logic is moved up into the graph, this function may not be
     necessary. Currently with all of the flattening spliced into the graph
     and limited fusion, this function is not expected to do much.
-    
+
     Arguments:
         ops (list): List of tuples describing ops to compile into kernel
 
@@ -288,6 +293,7 @@ def _compress_axes(ops):
 
     return new_ops
 
+
 def _optimize_loop_axis(dim):
     """
     Chooses kernel parameters including CUDA block size, grid size, and
@@ -318,6 +324,7 @@ def _optimize_loop_axis(dim):
     blockdim = warps * 32
 
     return (griddim, blockdim, items_per_thread)
+
 
 def _get_axes_mapping(ops):
     """
@@ -364,7 +371,8 @@ def _get_axes_mapping(ops):
         blockdim = -((-max_shape[reduction_axis]) // 256)
         blockdim = min(THREADS_PER_BLOCK, max(32, blockdim * 32))
         items_per_thread = -((-max_shape[reduction_axis]) // blockdim)
-        axes_mapping[reduction_axis] = ('x', blockdim, 1, items_per_thread, max_shape[reduction_axis])
+        axes_mapping[reduction_axis] = ('x', blockdim, 1, items_per_thread,
+                                        max_shape[reduction_axis])
 
         blocksize = blockdim
         dims.remove('x')
@@ -389,7 +397,8 @@ def _get_axes_mapping(ops):
         else:
             items_per_thread = 1
             blockdim = 1
-            while (blockdim * blocksize * 2) <= THREADS_PER_BLOCK and (blockdim * 2) < max_shape[axis]:
+            while ((blockdim * blocksize * 2) <= THREADS_PER_BLOCK and
+                   (blockdim * 2) < max_shape[axis]):
                 blockdim = blockdim * 2
             blocksize = blocksize * blockdim
             griddim = -((-max_shape[axis]) // (blockdim * items_per_thread))
@@ -402,6 +411,7 @@ def _get_axes_mapping(ops):
         dims = dims - 1
 
     return (axes_mapping, dims)
+
 
 def _preprocess_ops(ops):
     """
@@ -457,6 +467,7 @@ def _preprocess_ops(ops):
 
     return out_ops
 
+
 def _get_register_type(dtype):
     if dtype == np.float32 or dtype == np.float16:
         return "float"
@@ -464,6 +475,7 @@ def _get_register_type(dtype):
         return "int"
     else:
         raise TypeError("Unsupported type")
+
 
 def _wrap_tensor_descriptions(ops):
     new_ops = []
@@ -493,7 +505,7 @@ def _build_register_mapping(stages):
     Returns: GenerationContext containing information about register mapping
     """
     # Build lists of registers for each input/output
-    register_mapping = {None : "None"}
+    register_mapping = {None: "None"}
     reg_count = 0
     register_inits = {}
     register_types = {}
@@ -520,7 +532,8 @@ def _build_register_mapping(stages):
                         register_mapping[inval] = regname
                         register_types[regname] = _get_register_type(inval.dtype)
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
-                            register_inits[regname] = "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
+                            register_inits[regname] = \
+                                "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
                         else:
                             register_inits[regname] = "0.0f"
 
@@ -597,7 +610,7 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
     else:
         # Build item loop
         item_loop_code = _item_loop_template % {
-            "loopidx" : loop_axis
+            "loopidx": loop_axis
         }
         code = code + "\n" + indent_str + item_loop_code + "\n" + indent_str + "{"
 
@@ -645,15 +658,15 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     Returns: String containing entire kernel source code
     """
     defines = _defines_template % {
-        "blksize0" : axes_mapping[0][1] * axes_mapping[0][3],
-        "blksize1" : axes_mapping[1][1] * axes_mapping[1][3],
-        "blksize2" : axes_mapping[2][1] * axes_mapping[2][3]
+        "blksize0": axes_mapping[0][1] * axes_mapping[0][3],
+        "blksize1": axes_mapping[1][1] * axes_mapping[1][3],
+        "blksize2": axes_mapping[2][1] * axes_mapping[2][3]
     }
 
     header = _header_template % {
-        "defines"     : defines,
-        "kernel_name" : kernel_name,
-        "args"        : argstring
+        "defines": defines,
+        "kernel_name": kernel_name,
+        "args": argstring
     }
 
     # Initialization code
@@ -661,9 +674,9 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     for reg in ctx.register_mapping.values():
         if reg != "None" and reg not in ctx.constants:
             reg_decls = reg_decls + _reg_decl_template % {
-                "regname" : reg,
-                "initval" : ctx.register_inits[reg],
-                "type"    : ctx.register_types[reg]
+                "regname": reg,
+                "initval": ctx.register_inits[reg],
+                "type": ctx.register_types[reg]
             }
 
     if ctx.has_argmaxmin:
@@ -672,37 +685,38 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
 
     smem_decls = ""
     smem_inits = ""
-    for sbuf in ctx.shared_buffers :
+    for sbuf in ctx.shared_buffers:
         smem_decls = smem_decls + _smem_decl_template % {
-            "sbuf" : sbuf
+            "sbuf": sbuf
         }
         smem_inits = smem_inits + _smem_init_template % {
-            "sbuf" : sbuf
+            "sbuf": sbuf
         }
 
     loop_axis_letters = ['a', 'b', 'c']
     index_calc = _thread_index_template % {
-        "dim0"      : axes_mapping[0][0],
-        "dim1"      : axes_mapping[1][0],
-        "dim2"      : axes_mapping[2][0],
-        "loop_axis" : loop_axis_letters[loop_axis]
+        "dim0": axes_mapping[0][0],
+        "dim1": axes_mapping[1][0],
+        "dim2": axes_mapping[2][0],
+        "loop_axis": loop_axis_letters[loop_axis]
     }
 
-    if ctx.shared_buffers :
+    if ctx.shared_buffers:
         code = _init_template % {
-            "smem_decl"  : smem_decls,
-            "reg_decl"   : reg_decls,
-            "smem_init"  : smem_inits,
-            "index_calc" : index_calc
+            "smem_decl": smem_decls,
+            "reg_decl": reg_decls,
+            "smem_init": smem_inits,
+            "index_calc": index_calc
         } + code
     else:
         code = _init_template_noshare % {
-            "reg_decl"   : reg_decls,
-            "index_calc" : index_calc
+            "reg_decl": reg_decls,
+            "index_calc": index_calc
         } + code
 
     code = header + code + "\n}"
     return code
+
 
 def _generate_kernel_args(ctx, axes_mapping, dims):
     """
@@ -756,6 +770,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
             params.append(buf.strides[2] // buf.dtype.itemsize)
 
     return (args, arg_desc, params)
+
 
 def _get_compound_kernel(ops, axes_mapping, dims):
     """
@@ -822,28 +837,28 @@ def _get_compound_kernel(ops, axes_mapping, dims):
             for inval in op[1:3]:
                 if _is_buffer(inval) and inval not in buffers_in_reg[stage_index]:
                     load_code = _load_template % {
-                        "index"   : "index",
-                        "out"     : ctx.register_mapping[inval],
-                        "buffer"  : ctx.buffers[inval]
+                        "index": "index",
+                        "out": ctx.register_mapping[inval],
+                        "buffer": ctx.buffers[inval]
                     }
 
                     if inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1:
                         index_code = _index_template % {
-                            "index"   : "index",
-                            "stridea" : "stridea_" + ctx.buffers[inval],
-                            "strideb" : "strideb_" + ctx.buffers[inval],
-                            "stridec" : "stridec_" + ctx.buffers[inval],
-                            "item"    : "idx" + str(loop_axis)
+                            "index": "index",
+                            "stridea": "stridea_" + ctx.buffers[inval],
+                            "strideb": "strideb_" + ctx.buffers[inval],
+                            "stridec": "stridec_" + ctx.buffers[inval],
+                            "item": "idx" + str(loop_axis)
                         }
                         broadcast_loads.append(index_code)
                         broadcast_loads.append(load_code)
                     else:
                         index_code = _index_template % {
-                            "index"   : "index",
-                            "stridea" : "stridea_" + ctx.buffers[inval],
-                            "strideb" : "strideb_" + ctx.buffers[inval],
-                            "stridec" : "stridec_" + ctx.buffers[inval],
-                            "item"    : "item"
+                            "index": "index",
+                            "stridea": "stridea_" + ctx.buffers[inval],
+                            "strideb": "strideb_" + ctx.buffers[inval],
+                            "stridec": "stridec_" + ctx.buffers[inval],
+                            "item": "item"
                         }
                         loop_loads.append(index_code)
                         loop_loads.append(load_code)
@@ -852,33 +867,33 @@ def _get_compound_kernel(ops, axes_mapping, dims):
 
             if op[0] in _op_templates:
                 op_code = _op_templates[op[0]] % {
-                    "x" : ctx.register_mapping[op[1]],
-                    "y" : ctx.register_mapping[op[2]],
-                    "out" : ctx.register_mapping[op[3]]
+                    "x": ctx.register_mapping[op[1]],
+                    "y": ctx.register_mapping[op[2]],
+                    "out": ctx.register_mapping[op[3]]
                 }
             else:
                 op_code = _redop_templates[op[0]] % {
-                    "x"     : ctx.register_mapping[op[1]],
-                    "y"     : ctx.register_mapping[op[2]],
-                    "out"   : ctx.register_mapping[op[3]],
-                    "index" : "item"
+                    "x": ctx.register_mapping[op[1]],
+                    "y": ctx.register_mapping[op[2]],
+                    "out": ctx.register_mapping[op[3]],
+                    "index": "item"
                 }
                 redop_code = _redop32_templates[op[0]] % {
-                    "out"    : ctx.register_mapping[op[3]],
-                    "y"      : ctx.register_mapping[op[2]],
-                    "indent" : (2 * indent_str)
+                    "out": ctx.register_mapping[op[3]],
+                    "y": ctx.register_mapping[op[2]],
+                    "indent": (2 * indent_str)
                 }
                 if axes_mapping[loop_axis][1] <= 32:
                     warp_red_code = _red32_template % {
-                        "statement" : redop_code
+                        "statement": redop_code
                     }
                 else:
                     sbuf = "sbuffer" + str(len(shared_buffers))
                     shared_buffers.append(sbuf)
                     warp_red_code = _red_template % {
-                        "statement"     : redop_code,
-                        "out"           : ctx.register_mapping[op[3]],
-                        "shared_buffer" : sbuf
+                        "statement": redop_code,
+                        "out": ctx.register_mapping[op[3]],
+                        "shared_buffer": sbuf
                     }
 
                 warp_reductions.append(warp_red_code)
@@ -888,38 +903,39 @@ def _get_compound_kernel(ops, axes_mapping, dims):
             if _is_buffer(op[3]):
                 buffers_in_reg[stage_index].add(op[3])
                 if op[0] in _redop_templates:
-                    for subsequent_stage in buffers_in_reg[stage_index+1:]:
+                    for subsequent_stage in buffers_in_reg[stage_index + 1:]:
                         subsequent_stage.add(op[3])
 
                 if ctx.last_write[op[3]] == (stage_index, op_index):
-                    if op[0] in _redop_templates or op[3].strides[loop_axis] == 0 or op[3].shape[loop_axis] == 1:
+                    if (op[0] in _redop_templates or op[3].strides[loop_axis] == 0
+                            or op[3].shape[loop_axis] == 1):
                         store_code = _redstore_template % {
-                            "index"   : "index",
-                            "val"     : ctx.register_mapping[op[3]],
-                            "buffer"  : ctx.buffers[op[3]],
-                            "loopidx" : loop_axis
+                            "index": "index",
+                            "val": ctx.register_mapping[op[3]],
+                            "buffer": ctx.buffers[op[3]],
+                            "loopidx": loop_axis
                         }
                         index_code = _index_template % {
-                            "index"   : "index",
-                            "stridea" : "stridea_" + ctx.buffers[op[3]],
-                            "strideb" : "strideb_" + ctx.buffers[op[3]],
-                            "stridec" : "stridec_" + ctx.buffers[op[3]],
-                            "item"    : "idx" +  str(loop_axis)
+                            "index": "index",
+                            "stridea": "stridea_" + ctx.buffers[op[3]],
+                            "strideb": "strideb_" + ctx.buffers[op[3]],
+                            "stridec": "stridec_" + ctx.buffers[op[3]],
+                            "item": "idx" + str(loop_axis)
                         }
                         reduction_stores.append(index_code)
                         reduction_stores.append(store_code)
                     else:
                         store_code = _store_template % {
-                            "index"   : "index",
-                            "val"     : ctx.register_mapping[op[3]],
-                            "buffer"  : ctx.buffers[op[3]]
+                            "index": "index",
+                            "val": ctx.register_mapping[op[3]],
+                            "buffer": ctx.buffers[op[3]]
                         }
                         index_code = _index_template % {
-                            "index"   : "index",
-                            "stridea" : "stridea_" + ctx.buffers[op[3]],
-                            "strideb" : "strideb_" + ctx.buffers[op[3]],
-                            "stridec" : "stridec_" + ctx.buffers[op[3]],
-                            "item"    : "item"
+                            "index": "index",
+                            "stridea": "stridea_" + ctx.buffers[op[3]],
+                            "strideb": "strideb_" + ctx.buffers[op[3]],
+                            "stridec": "stridec_" + ctx.buffers[op[3]],
+                            "item": "item"
                         }
                         loop_stores.append(index_code)
                         loop_stores.append(store_code)
@@ -954,6 +970,7 @@ def _get_compound_kernel(ops, axes_mapping, dims):
 
     return (kernel, params)
 
+
 def _call_compound_kernel(ops):
     """
     Generate and call a kernel given a set of ops.
@@ -985,6 +1002,7 @@ def _call_compound_kernel(ops):
             griddim[2] = axis[2]
 
     kernel.prepared_async_call(tuple(griddim), tuple(blockdim), None, *params, shared_size=128)
+
 
 def _prepare_compound_kernel(ops):
     """

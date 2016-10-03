@@ -1206,4 +1206,3 @@ class TensorDescription(NameableValue):
                     self.buffer.size, self.dtype, self.name
                 )
             self.__value = self.buffer.data.device_tensor(self)
-

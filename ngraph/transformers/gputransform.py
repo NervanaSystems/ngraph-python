@@ -1,16 +1,14 @@
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor
-from neon import NervanaObject
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Equal, exp, \
     Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
     negative, NotEqual, onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
-    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, ReorderAxes, Dot, \
-    Stack, Dimshuffle, Op, Function, Constant, Buffer
+    Sum, tanh, tensor_size, Fill, Unslice, Stack, Dot, Dimshuffle, Function
 from ngraph.op_graph.convolution import convolution1d
-from ngraph.dataloader.dataloaderbackend import DataloaderBackend
-from ngraph.analysis.fusion import gpu_fusible
+# TODO: re-enable fusion
+# from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.arrayaxes import TensorDescription
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel
@@ -186,7 +184,7 @@ class GPUKernel():
 
     @add_op.on_type(SetItem)
     def add_op(self, op, out, tensor, value):
-        if op.item == None or op.item == _none_slice or op.item == ():
+        if op.item is None or op.item == _none_slice or op.item == ():
             self._buffer_op("assign", x=value, out=tensor)
         else:
             self._buffer_op("set_item", x=value, y=op.item, out=tensor)
@@ -225,11 +223,11 @@ class GPUKernel():
 
     @add_op.on_type(Unslice)
     def add_op(self, op, out, out_sliced, x):
-        #out = self._cast_input(out)
-        #out_sliced = self._cast_input(out_sliced)
-        #x = self._cast_input(x)
-        #self._buffer_op("fill", x=0, out=out)
-        #self._buffer_op("set_item", x=x, out=out_sliced)
+        # out = self._cast_input(out)
+        # out_sliced = self._cast_input(out_sliced)
+        # x = self._cast_input(x)
+        # self._buffer_op("fill", x=0, out=out)
+        # self._buffer_op("set_item", x=x, out=out_sliced)
         raise ValueError("Unhandled op: {}".format(op))
 
     @add_op.on_type(Stack)
@@ -238,9 +236,9 @@ class GPUKernel():
         # preallocated buffer for this op.
         # We cannot use the numpy stack function as it is unavailable in
         # older versions.
-        #self.append("o={}", out)
-        #slices = [slice(None)] * len(op.axes)
-        #for i, arg in enumerate(args):
+        # self.append("o={}", out)
+        # slices = [slice(None)] * len(op.axes)
+        # for i, arg in enumerate(args):
         #    slices[op.pos] = i
         #    self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
         raise ValueError("Unhandled op: {}".format(op))
@@ -251,7 +249,7 @@ class GPUKernel():
         and initial parameters are generated, tensors have not yet been
         allocated so a placeholder is used for the memory addresses. This must
         be called before the first kernel run to bind the tensor addresses in
-        GPU memory to the kernel parameters.        
+        GPU memory to the kernel parameters.
         """
         if self.compound:
             for index in range(len(self.params)):
@@ -295,9 +293,9 @@ class GPUKernel():
 
         if len(self.ops_buffer) == 1:
             if (self.ops_buffer[0][0] == "dot" or
-                self.ops_buffer[0][0] == "fill" or
-                self.ops_buffer[0][0] == "set_item" or
-                self.ops_buffer[0][0] == "dimshuffle"):
+                    self.ops_buffer[0][0] == "fill" or
+                    self.ops_buffer[0][0] == "set_item" or
+                    self.ops_buffer[0][0] == "dimshuffle"):
                 self.compound = False
 
         if self.compound:
@@ -306,7 +304,7 @@ class GPUKernel():
             new_buffer = []
             for op in self.ops_buffer:
                 new_op = list(op)
-                for t in range(1,4):
+                for t in range(1, 4):
                     if isinstance(new_op[t], GPUTensor):
                         signature = (int(new_op[t].gpudata), new_op[t].shape, new_op[t].strides)
                         if signature in tensors.keys():
@@ -319,6 +317,7 @@ class GPUKernel():
             self.kernel, self.params, self.shared_size = _prepare_compound_kernel(new_buffer)
 
         return True
+
 
 class GPUKernelGroup():
     """
@@ -382,7 +381,7 @@ class GPUBufferAllocator():
     which is used to perform allocation.
 
     Arguments:
-        dev_buffer (GPUDeviceBufferStorage): Device storage object to be 
+        dev_buffer (GPUDeviceBufferStorage): Device storage object to be
             allocated
 
     Attributes:
@@ -539,7 +538,7 @@ class GPUDeviceTensor(DeviceTensor):
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
-                                                **kwargs)
+                                              **kwargs)
         self.__tensor = None
 
     @property
@@ -560,8 +559,9 @@ class GPUDeviceTensor(DeviceTensor):
         self.transformer.add_view_allocator(tensor_alloc)
 
     def get(self, tensor):
-        if self.tensor.is_contiguous or (len(self.tensor.shape) == 2 and 
-            (self.tensor.shape[0] == 1 or self.tensor.shape[1] == 1)):
+        if self.tensor.is_contiguous or (len(self.tensor.shape) == 2 and
+                                         (self.tensor.shape[0] == 1 or
+                                          self.tensor.shape[1] == 1)):
             np_ary = self.tensor.get().reshape(self.tensor_description.shape)
         else:
             temp_gpu_tensor = self.transformer.ng.empty(shape=self.tensor.shape,
@@ -591,7 +591,7 @@ class GPUDeviceTensor(DeviceTensor):
                 # TODO: warn?
                 value = self.transformer.ng.array(value)
                 self.__getitem__(key)._assign(value)
-            
+
             self.__getitem__(key)._assign(value)
 
     def reshape(self, shape):
@@ -667,7 +667,7 @@ class GPUTransformer(Transformer):
                 # Generate kernel for single operation
                 out = fun.tensor_description()
                 call_info = (_ for _ in fun.call_info())
-                
+
                 kernel = GPUKernel(self)
                 kernel.add_op(fun, out, *call_info)
                 if kernel.compile():
@@ -692,6 +692,7 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
+
 
 class GPUTransformerFactory(object):
     def __init__(self):

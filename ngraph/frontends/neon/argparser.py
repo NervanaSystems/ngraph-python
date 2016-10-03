@@ -16,16 +16,17 @@ from neon.util.argparser import NeonArgparser
 from ngraph.transformers.gputransform import GPUTransformerFactory
 import ngraph.transformers as ngt
 
+
 class NgraphArgparser(NeonArgparser):
-	def __init__(self, *args, **kwargs):
-		super(NgraphArgparser, self).__init__(*args, **kwargs)
-		self.add_argument('--gb', type=str, default='np',
+    def __init__(self, *args, **kwargs):
+        super(NgraphArgparser, self).__init__(*args, **kwargs)
+        self.add_argument('--gb', type=str, default='np',
                           help='Backend used for transforming and executing graph')
 
-	def parse_args(self, gen_be=True):
-		args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
+    def parse_args(self, gen_be=True):
+        args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
 
-		if args.gb == 'gpu':
-			ngt.set_transformer_factory(GPUTransformerFactory())
+        if args.gb == 'gpu':
+            ngt.set_transformer_factory(GPUTransformerFactory())
 
-		return args
+        return args
