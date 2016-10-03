@@ -1,4 +1,5 @@
 from builtins import object, range
+import atexit
 
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor
 
@@ -620,6 +621,17 @@ class GPUTransformer(Transformer):
         self.tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
+        self.closed = False
+
+        atexit.register(self.close)
+
+    def close(self):
+        if not self.closed:
+            self.ng.cleanup_backend()
+            self.closed = True
+
+    def __del__(self):
+        self.close()
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
