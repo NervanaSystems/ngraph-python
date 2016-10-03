@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from neon.util.argparser import NeonArgparser
 from ngraph.transformers.gputransform import GPUTransformerFactory
-import ngraph.transformers as ngt
+from ngraph.transformers import Transformer
 
 
 class NgraphArgparser(NeonArgparser):
@@ -27,6 +27,6 @@ class NgraphArgparser(NeonArgparser):
         args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
 
         if args.gb == 'gpu':
-            ngt.set_transformer_factory(GPUTransformerFactory())
+            Transformer.set_transformer_factory(GPUTransformerFactory())
 
         return args

@@ -21,7 +21,7 @@ from neon.data import ArrayIterator, DataLoader
 import ngraph.frontends.base.axis as ax
 import ngraph as ng
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
-import ngraph.transformers as ngt
+from ngraph.transformers import Transformer
 
 
 def dataset_nclasses(dataset):
@@ -124,7 +124,7 @@ class Model(object):
 
         self.cost = cost
         self.cost.initialize(self.output, self.target)
-        self.transformer = ngt.make_transformer()
+        self.transformer = Transformer.make_transformer()
         with ng.Op.saved_user_deps():
             updates = self.optimizer.configure(self.cost.mean_cost)
             self.train_comp = self.transformer.computation([self.cost.mean_cost, updates],

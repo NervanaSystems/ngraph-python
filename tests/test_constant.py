@@ -34,7 +34,7 @@ def transformer_factory(request):
     else:
         factory = ngt.NumPyTransformerFactory()
 
-    ngt.set_transformer_factory(factory)
+    ngt.Transformer.set_transformer_factory(factory)
     return factory
 
 
