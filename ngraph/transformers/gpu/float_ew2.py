@@ -1,3 +1,5 @@
+from builtins import range, zip
+
 from ngraph.op_graph.arrayaxes import TensorDescription
 from neon.backends.util.source_module import SourceModule
 from neon.backends.layer_gpu import _get_sm_count

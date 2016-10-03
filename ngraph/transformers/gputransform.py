@@ -1,3 +1,5 @@
+from builtins import object, range
+
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \

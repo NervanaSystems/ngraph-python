@@ -121,6 +121,7 @@ def test_numpytensor_add_constant():
     print(result)
     assert np.array_equal(result, np_c)
 
+
 def test_fusion():
     """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
@@ -136,6 +137,7 @@ def test_fusion():
     result = executor(d)()
     print(result)
     assert np.array_equal(result, np_d)
+
 
 def test_numpytensor_mlp():
     """TODO."""
