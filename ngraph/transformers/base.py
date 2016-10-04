@@ -332,8 +332,8 @@ class Transformer_ABC_Meta(abc.ABCMeta):
         if not hasattr(self, 'transformers'):
             self.transformers = {}
         else:
-            name = getattr(self, 'transformer_name', name)
-            if name not in ['Transformer']:
+            name = getattr(self, 'transformer_name', None)
+            if name and name not in ['Transformer']:
                 self.transformers[name] = self
         super(Transformer_ABC_Meta, self).__init__(name, bases, dict_)
 
