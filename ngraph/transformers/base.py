@@ -323,7 +323,22 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
         """
 
 
-class Transformer(with_metaclass(abc.ABCMeta, object)):
+class Transformer_ABC_Meta(abc.ABCMeta):
+    """
+    metaclass for the backend objects
+    takes care of registering all the backend subclasses
+    """
+    def __init__(self, name, bases, dict_):
+        if not hasattr(self, 'transformers'):
+            self.transformers = {}
+        else:
+            name = getattr(self, 'transformer_name', None)
+            if name and name not in ['Transformer']:
+                self.transformers[name] = self
+        super(Transformer_ABC_Meta, self).__init__(name, bases, dict_)
+
+
+class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     Produce an executable version of op-graphs.
 
@@ -369,6 +384,28 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             factory (object): Callable object which generates a Transformer
         """
         Transformer.transformer_factory = factory
+
+    @staticmethod
+    def transformer_choices():
+        """Return the list of available transformers."""
+        names = sorted(Transformer.transformers.keys())
+        return names
+
+    @staticmethod
+    def allocate_transformer(name, **kargs):
+        """Allocate a named backend."""
+        try:
+            return Transformer.transformers[name](**kargs)
+        except KeyError:
+            names = ', '.join(["'%s'" % (_,) for _ in Transformer.transformer_choices()])
+            raise ValueError("transformer must be one of (%s)" % (names,))
+
+    @staticmethod
+    def make_transformer_factory(name, **kargs):
+        @staticmethod
+        def factory():
+            return Transformer.allocate_transformer(name, **kargs)
+        return factory
 
     def __init__(self, fusion=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)

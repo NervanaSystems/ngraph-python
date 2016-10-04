@@ -481,6 +481,9 @@ class NumPyTransformer(Transformer):
     will compile the graph required to compute those results and exposes an
     evaluate method to execute the compiled graph.
     """
+
+    transformer_name = "numpy"
+
     def __init__(self, **kwargs):
         super(NumPyTransformer, self).__init__(**kwargs)
         self.init_code = NumPyCodeGenerator()
@@ -572,9 +575,5 @@ class NumPyTransformer(Transformer):
         self.model.allocate()
 
 
-class NumPyTransformerFactory(object):
-    def __init__(self):
-        pass
-
-    def __call__(self):
-        return NumPyTransformer()
+Transformer.set_transformer_factory(
+    Transformer.make_transformer_factory(NumPyTransformer.transformer_name))
