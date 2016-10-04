@@ -27,6 +27,7 @@ from ngraph.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, Su
     Misclassification
 from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic
+from ngraph.frontends.neon.argparser import NgraphArgparser
 
 # include Axes here because old 2.0 code needs to be updated to include Axes
 # annotations in the call to model.fit.
@@ -36,7 +37,6 @@ from ngraph import Axes
 # old neon code which hasn't changed but should be available in this namespace
 # TODO: there are a lot of classes which are similar to the ones listed here,
 # but are not listed here and probably should be.
-from neon.util.argparser import NeonArgparser
 from neon.data import ImageLoader
 from neon.initializers import Uniform
 from neon.optimizers.optimizer import Schedule, StepSchedule, PowerSchedule, ExpSchedule, \

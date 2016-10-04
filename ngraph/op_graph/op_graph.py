@@ -2131,7 +2131,7 @@ Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
 )
 
 
-def argmax(x, dtype=np.dtype(np.int64), **kwargs):
+def argmax(x, dtype=np.dtype(np.int32), **kwargs):
     return Argmax(x, dtype=dtype, **kwargs)
 
 
@@ -2140,7 +2140,7 @@ Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
 )
 
 
-def argmin(x, dtype=np.dtype(np.int64), **kwargs):
+def argmin(x, dtype=np.dtype(np.int32), **kwargs):
     return Argmin(x, dtype=dtype, **kwargs)
 
 

@@ -137,7 +137,8 @@ def assign_buffers(transformer, results, fusible=None):
     all_ops = dfg.successors.keys()
     if fusible:
         dfg = KernelFlowGraph(dfg, fusible)
-    ifg = InterferenceGraph(dfg.liveness())
+    liveness = dfg.liveness()
+    ifg = InterferenceGraph(liveness)
     memory, buffers = ifg.color()
     # set style
     for op in all_ops:

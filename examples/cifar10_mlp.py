@@ -16,12 +16,12 @@
 from __future__ import print_function
 from ngraph.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
     GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
-    NeonArgparser, Rectlin, Softmax, Uniform
+    NgraphArgparser, Rectlin, Softmax, Uniform
 
 from neon.data import CIFAR10
 
 # parse the command line arguments (generates the backend)
-parser = NeonArgparser(__doc__)
+parser = NgraphArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')

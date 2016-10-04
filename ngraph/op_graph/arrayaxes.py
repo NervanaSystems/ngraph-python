@@ -827,6 +827,7 @@ class TensorDescription(NameableValue):
         self.__slices = weakref.WeakValueDictionary()
         self.__value = None
         self.__buffer = None
+        self.__register = None
         self.__base = base
         self.dtype = dtype
         self.offset = offset
@@ -1176,6 +1177,14 @@ class TensorDescription(NameableValue):
         Returns:
         """
         self.base.__buffer = value
+
+    @property
+    def register(self):
+        return self.base.__register
+
+    @register.setter
+    def register(self, value):
+        self.base.__register = value
 
     @property
     def value(self):

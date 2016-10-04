@@ -348,6 +348,27 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         init_computation (Computation): The computation that performs initialization
             after allocation.  This happens once per training session, not once per-minibatch.
     """
+    __transformer_factory = None
+
+    @staticmethod
+    def make_transformer():
+        """
+        Generates a Transformer using the factory in this module which defaults
+        to NumPy
+
+        Returns: Transformer
+        """
+        return Transformer.transformer_factory()
+
+    @staticmethod
+    def set_transformer_factory(factory):
+        """
+        Sets the Transformer factory used by make_transformer
+
+        Arguments:
+            factory (object): Callable object which generates a Transformer
+        """
+        Transformer.transformer_factory = factory
 
     def __init__(self, fusion=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)
