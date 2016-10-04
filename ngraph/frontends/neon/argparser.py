@@ -13,20 +13,19 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from neon.util.argparser import NeonArgparser
-from ngraph.transformers.gputransform import GPUTransformerFactory
 from ngraph.transformers import Transformer
 
 
 class NgraphArgparser(NeonArgparser):
     def __init__(self, *args, **kwargs):
         super(NgraphArgparser, self).__init__(*args, **kwargs)
-        self.add_argument('--gb', type=str, default='np',
+        self.add_argument('--gb', type=str, default='numpy',
+                          choices=Transformer.transformer(),
                           help='Backend used for transforming and executing graph')
 
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
-
-        if args.gb == 'gpu':
-            Transformer.set_transformer_factory(GPUTransformerFactory())
+        factory = Transformer.make_transformer_factory(args.gb)
+        Transformer.set_transformer_factory(factory)
 
         return args

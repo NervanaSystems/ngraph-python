@@ -1,4 +1,4 @@
-from builtins import object, range
+from builtins import range
 import atexit
 
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor
@@ -54,6 +54,8 @@ class GPUKernel():
         transformer (GPUTransformer): GPU transformer containing NervanaGPU
             object which is used for ops such as dot, dimshuffle, etc.
     """
+
+    transformer_name = "gpu"
 
     def __init__(self, transformer):
         self.ops_buffer = []
@@ -713,11 +715,3 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
-
-
-class GPUTransformerFactory(object):
-    def __init__(self):
-        pass
-
-    def __call__(self):
-        return GPUTransformer()

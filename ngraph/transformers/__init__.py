@@ -1,7 +1,18 @@
 from ngraph.transformers.base import Transformer
-from ngraph.transformers.nptransform import NumPyTransformerFactory
-from ngraph.transformers.gputransform import GPUTransformerFactory
 
-__all__ = [Transformer, NumPyTransformerFactory, GPUTransformerFactory]
+__all__ = [Transformer]
 
-Transformer.set_transformer_factory(NumPyTransformerFactory())
+try:
+    import ngraph.transformers.nptransform  # noqa
+except ImportError:
+    pass
+
+try:
+    import ngraph.transformers.gputransform  # noqa
+except ImportError:
+    pass
+
+# try:
+#     import ngraph.transformers.argon.artransform
+# except ImportError:
+#     pass
