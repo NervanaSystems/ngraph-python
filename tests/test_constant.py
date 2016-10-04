@@ -27,18 +27,14 @@ import ngraph.transformers as ngt
 
 
 @pytest.fixture(scope="module",
-                params=["numpy", "gpu"])
+                params=ngt.Transformer.transformer_choices())
 def transformer_factory(request):
-    if request.param == "gpu":
-        factory = ngt.GPUTransformerFactory()
-    else:
-        factory = ngt.NumPyTransformerFactory()
-
+    factory = ngt.Transformer.make_transformer_factory(request.param)
     ngt.Transformer.set_transformer_factory(factory)
     yield factory
 
     # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.NumPyTransformerFactory())
+    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
 
 
 def test_constant_init(transformer_factory):
