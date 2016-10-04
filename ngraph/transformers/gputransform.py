@@ -55,6 +55,8 @@ class GPUKernel():
             object which is used for ops such as dot, dimshuffle, etc.
     """
 
+    transformer_name = "gpu"
+
     def __init__(self, transformer):
         self.ops_buffer = []
         self.params = None
@@ -713,11 +715,3 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
-
-
-class GPUTransformerFactory(object):
-    def __init__(self):
-        pass
-
-    def __call__(self):
-        return GPUTransformer()

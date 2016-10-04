@@ -23,6 +23,8 @@ from ngraph.transformers.argon.mpihandle import MPIHandle
 class ArgonTransformer(Transformer):
     """TODO."""
 
+    transformer_name = "argon"
+
     def __init__(self, **kwargs):
         super(ArgonTransformer, self).__init__(**kwargs)
         self.be = NervanaObject.be
