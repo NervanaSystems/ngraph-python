@@ -610,11 +610,18 @@ class GPUTransformer(Transformer):
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
+    __nervanagpu = None
+
+    @staticmethod
+    def close_gpu():
+        if GPUTransformer.__nervanagpu is not None:
+            GPUTransformer.__nervanagpu.cleanup_backend()
+            GPUTransformer.__nervanagpu = None
+
     def __init__(self, **kwargs):
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
-        self.ng = NervanaGPU()
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
@@ -623,15 +630,11 @@ class GPUTransformer(Transformer):
         self.current_buffer = None
         self.closed = False
 
-        atexit.register(self.close)
+        if GPUTransformer.__nervanagpu is None:
+            GPUTransformer.__nervanagpu = NervanaGPU()
+            atexit.register(GPUTransformer.close_gpu)
 
-    def close(self):
-        if not self.closed:
-            self.ng.cleanup_backend()
-            self.closed = True
-
-    def __del__(self):
-        self.close()
+        self.ng = GPUTransformer.__nervanagpu
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)

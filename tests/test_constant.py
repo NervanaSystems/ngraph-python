@@ -35,7 +35,10 @@ def transformer_factory(request):
         factory = ngt.NumPyTransformerFactory()
 
     ngt.Transformer.set_transformer_factory(factory)
-    return factory
+    yield factory
+
+    # Reset transformer factory to default
+    ngt.Transformer.set_transformer_factory(ngt.NumPyTransformerFactory())
 
 
 def test_constant_init(transformer_factory):
