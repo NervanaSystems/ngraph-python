@@ -23,6 +23,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.transformers.nptransform import NumPyTransformer
 from ngraph.util.names import *
+from ngraph.transformers.gputransform import GPUTransformer
 
 try:
     from ngraph.transformers.argon.artransform import ArgonTransformer

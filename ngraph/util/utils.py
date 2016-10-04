@@ -20,7 +20,7 @@ import numpy as np
 
 from ngraph.op_graph.arrayaxes import Axes
 from ngraph.op_graph.op_graph import deriv
-from ngraph.transformers.nptransform import NumPyTransformer
+from ngraph.transformers import Transformer
 import decorator
 
 
@@ -162,14 +162,14 @@ def executor(results, *parameters):
     Returns:
       Function of placeholders in parameters
     """
-    return NumPyTransformer().computation(results, *parameters)
+    return Transformer.make_transformer().computation(results, *parameters)
 
 
 class ExecutorFactory(object):
     """TODO."""
 
     def __init__(self):
-        self.transformer = NumPyTransformer()
+        self.transformer = Transformer.make_transformer()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)

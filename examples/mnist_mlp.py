@@ -43,17 +43,17 @@ Examples:
 """
 import numpy as np
 from ngraph.frontends.neon import ax, Axes, Affine, Rectlin, Logistic, GeneralizedCost,\
-    CrossEntropyBinary, Misclassification, GradientDescentMomentum, Model, Callbacks
+    CrossEntropyBinary, Misclassification, GradientDescentMomentum, Model, Callbacks,\
+    NgraphArgparser
 from neon.data import MNIST
 from neon.initializers import Gaussian
-from neon.util.argparser import NeonArgparser
 from neon import logger as neon_logger
 
 # from ngraph.util.analysis import DataFlowGraph
 
 
 # parse the command line arguments
-parser = NeonArgparser(__doc__)
+parser = NgraphArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
 
 args = parser.parse_args()
