@@ -1,4 +1,4 @@
-from builtins import object, range
+from builtins import range
 import atexit
 
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor

@@ -575,4 +575,5 @@ class NumPyTransformer(Transformer):
         self.model.allocate()
 
 
-Transformer.set_transformer_factory(Transformer.make_transformer_factory(NumPyTransformer.transformer_name))
+Transformer.set_transformer_factory(
+    Transformer.make_transformer_factory(NumPyTransformer.transformer_name))

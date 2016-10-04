@@ -3,16 +3,16 @@ from ngraph.transformers.base import Transformer
 __all__ = [Transformer]
 
 try:
-    import ngraph.transformers.nptransform
+    import ngraph.transformers.nptransform  # noqa
 except ImportError:
     pass
 
 try:
-    import ngraph.transformers.gputransform
+    import ngraph.transformers.gputransform  # noqa
 except ImportError:
     pass
 
-try:
-    import ngraph.transformers.argon.artransform
-except ImportError:
-    pass
+# try:
+#     import ngraph.transformers.argon.artransform
+# except ImportError:
+#     pass

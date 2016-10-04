@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from neon.util.argparser import NeonArgparser
-from ngraph.transformers.gputransform import GPUTransformerFactory
 from ngraph.transformers import Transformer
 
 
