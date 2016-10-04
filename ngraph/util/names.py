@@ -148,16 +148,16 @@ class NameableValue(object):
     __counter = 0
 
     @staticmethod
-    def __generate_id():
+    def __generate_id(o):
         """TODO."""
         NameableValue.__counter += 1
-        return 't{}'.format(NameableValue.__counter)
+        return 't{}_{}'.format(o.__class__.__name__, NameableValue.__counter)
 
     """A value with a name and debugging info that can be set."""
 
     def __init__(self, name=None, graph_label_type=None, **kwargs):
         super(NameableValue, self).__init__(**kwargs)
-        self.id = NameableValue.__generate_id()
+        self.id = NameableValue.__generate_id(self)
         self.__name = name if name is not None else self.id
 
         if graph_label_type is None:

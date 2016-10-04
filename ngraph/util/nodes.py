@@ -28,6 +28,7 @@ class DebugInfo(object):
         # TODO This is a good first cut for debugging info, but it would be nice to
         # TODO be able to reliably walk the stack back to user code rather than just
         # TODO back past this constructor
+        super(DebugInfo, self).__init__(**kwargs)
         frame = None
         try:
             frame = inspect.currentframe()
@@ -80,7 +81,6 @@ class Node(NameableValue, DebugInfo):
 
         """
         super(Node, self).__init__(**kwargs)
-        self.users = weakref.WeakSet()
         self.__args = ()
         self.tags = set()
         self.args = args
@@ -104,35 +104,32 @@ class Node(NameableValue, DebugInfo):
     @args.setter
     def args(self, args):
         """
-        Replace old inputs with new inputs, adjusting backpointers as needed.
+        Replace old inputs with new inputs.
 
         Arguments:
             args: New arguments
         """
-        for arg in self.__args:
-            if self in arg.users:
-                arg.users.remove(self)
-        self.__args = self.as_nodes(args)
-        for arg in self.__args:
-            arg.users.add(self)
-
-    def replace_arg(self, old, new):
-        """
-        Replace all occurrences of an argument node with another node.
-
-        Arguments:
-            old: Node to be replaced
-            new: Replacement
-        """
-        self.args = [new if arg is old else arg for arg in self.args]
+        self.__args = tuple(args)
 
     @property
     def forwarded(self):
+        """
+        Finds the op that handles this op.
+
+        Returns:
+             Follows forwarding to the op that shoud handle this op.
+        """
         result = self
         while True:
             if not result.forward:
                 return result
             result = result.forward
+
+    def update_forwards(self):
+        """
+        Updates internal op references with their forwarded versions.
+        """
+        self.args = tuple(arg.forwarded for arg in self.args)
 
     def as_nodes(self, args):
         """
@@ -190,6 +187,7 @@ class Node(NameableValue, DebugInfo):
                 None
             """
             node = node.forwarded
+            node.update_forwards()
             if node not in visited:
                 for n in node.args:
                     visit(n)
@@ -197,27 +195,6 @@ class Node(NameableValue, DebugInfo):
                 visited.add(node)
 
         for node in roots:
-            visit(node)
-
-    @staticmethod
-    def visit_output_closure(root, fun):
-        """
-        Top-down traversal of root and closure of nodes using root as input.
-
-        Arguments:
-            root: root set of nodes to visit
-            fun: Function to call on each visited node
-        """
-        visited = set()
-
-        def visit(node):
-            if node not in visited:
-                for n in node.users:
-                    visit(n)
-                fun(node)
-                visited.add(node)
-
-        for node in root:
             visit(node)
 
     def _repr_body(self):

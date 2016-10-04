@@ -371,23 +371,25 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        init_graph = set([doall(self.ordered_initializers(ops))])
-        init_graph = Op.simple_prune(init_graph)
+        init_op = doall(self.ordered_initializers(ops))
+        init_graph = Op.simple_prune(set([init_op]))
         init_graph = RequiredSimplify().run(init_graph)
         self.inits = Op.ordered_ops(init_graph)
+        init_op = init_op.forwarded
+        init_op.update_forwards()
 
         # create computation which initializes values (called once per
         # session)
-        self.init_computation = self.computation(doall(self.inits), name="init")
+        self.init_computation = self.computation(init_op, name="init")
 
-        all_ops = [op.forwarded for op in ops + self.inits]
+        all_ops = set(ops).union(self.inits)
         # Give ids
         for op in all_ops:
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
         self.dataflow, self.memory = assign_buffers(
-            self, self.all_results.union(self.inits), self.fusion
+            self, all_ops, self.fusion
         )
 
         # Initialize tensor descriptions
@@ -396,7 +398,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
-        self.initializers = self.ordered_initializers(self.ops)
 
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
@@ -505,6 +506,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             these_ops = todo
             todo = set()
             for op in these_ops:
+                op = op.forwarded
+                op.update_forwards()
                 initializers.update(op.initializers)
                 todo.update(op.initializers)
 
@@ -513,15 +516,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         inits = set()
 
         def visit(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-
-            Returns:
-
-            """
+            node = node.forwarded
+            node.update_forwards()
             if node not in visited:
                 if node.initializers:
                     if node in inits:

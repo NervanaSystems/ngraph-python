@@ -29,7 +29,7 @@ from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Dot, Equal, exp, \
     Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
-    negative, NotEqual, Onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
+    negative, NotEqual, Onehot, Power, reciprocal, SetItemOneDim, sign, sin, sqrt, square, Subtract, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import convolution1d
 from ngraph.op_graph.debug import PrintOp
@@ -321,11 +321,7 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(Dot)
     def generate_op(self, op, out, x, y):
         self.append("""
-        x, y, out = {}, {}, {}
-        try:
-            np.dot(x, y, out=out)
-        except ValueError:
-            np.dot(np.copy(x), np.copy(y), out=out)
+        np.dot({}, {}, out={})
         """, x, y, out)
 
     @generate_op.on_type(Equal)
@@ -334,7 +330,15 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(exp)
     def generate_op(self, op, out, x):
-        self.append("np.exp({}, out={})", x, out)
+        if False:
+            self.append("""
+            try:
+                np.exp({}, out={})
+            except:
+                pdb.set_trace()
+            """, x, out)
+        else:
+            self.append("np.exp({}, out={})", x, out)
 
     @generate_op.on_type(Fill)
     def generate_op(self, op, out, x):
@@ -419,7 +423,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
-    @generate_op.on_type(SetItem)
+    @generate_op.on_type(SetItemOneDim)
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__({}, {})", tensor, op.item, value)
 

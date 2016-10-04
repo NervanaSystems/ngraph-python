@@ -139,7 +139,7 @@ class Op(Node):
                  const=None,
                  constant=False,
                  initializers=None,
-                 persistent=False,
+                 persistent=True,
                  reference=False,
                  trainable=False,
                  **kwargs):
@@ -149,13 +149,11 @@ class Op(Node):
         for arg in self.args:
             for dep in arg.user_deps:
                 self.add_other_dep(dep)
-        self.other_deps_inv = set()
         self.schemas = []
         self._adjoints = None
         self.const = const
         self.constant = constant
         self.initializers = set()
-        self.initializers_inv = set()
         if initializers is not None:
             for initializer in initializers:
                 self.add_initializer(initializer)
@@ -171,40 +169,16 @@ class Op(Node):
 
     def add_other_dep(self, dep):
         self.other_deps.add(dep)
-        dep.other_deps_inv.add(self)
-
-    def remove_other_dep(self, dep):
-        self.other_deps.remove(dep)
-        dep.other_deps_inv.remove(self)
-
-    def replace_other_dep(self, old, new):
-        self.remove_other_dep(old)
-        self.add_other_dep(new)
 
     def add_initializer(self, init):
         self.initializers.add(init)
-        init.initializers_inv.add(self)
 
-    def remove_initializer(self, init):
-        self.initializers.remove(init)
-        init.initializers_inv.remove(self)
-
-    def replace_initializer(self, old, new):
-        self.remove_initializer(old)
-        self.add_initializer(new)
+    def update_forwards(self):
+        super(Op, self).update_forwards()
+        self.other_deps = set(op.forwarded for op in self.other_deps)
+        self.initializers = [op.forwarded for op in self.initializers]
 
     def replace_self(self, rep):
-        old_users = set(self.users)
-        for user in old_users:
-            user.replace_arg(self, rep)
-
-        old_dependents = set(self.other_deps_inv)
-        for dependent in old_dependents:
-            dependent.replace_other_dep(self, rep)
-
-        old_init_deps = set(self.initializers_inv)
-        for init_dep in old_init_deps:
-            init_dep.replace_initializer(self, rep)
         self.forward = rep
 
     @property
@@ -522,25 +496,18 @@ class SetItem(Op):
         tensor, val = Op.as_ops((tensor, val))
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
-        val = Broadcast(val, axes=tensor.axes)
+        val = broadcast(val, axes=tensor.axes)
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
-        self.input = None
         tensor.user_deps = {self}
         self.force = force
 
-    def as_one_dim(self):
-        tensor, val = self.args
-        assert not isinstance(tensor, ReshapeOp)
-        tensor, val = Flatten(tensor), Flatten(val)
-        return SetItemOneDim(tensor, self.item, val, force=self.force)
 
-
-class SetItemOneDim(SetItem):
+class SetItemOneDim(Op):
     def __init__(self, tensor, item, val, force=False, **kwargs):
-        super(SetItemOneDim, self).__init__(
-            tensor, item, val, force=force, **kwargs
-        )
+        super(SetItemOneDim, self).__init__(args=(tensor, val), **kwargs)
+        self.item = item
+        self.force = force
 
 
 class doall(Op):
@@ -626,6 +593,9 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
+        if self.scalar:
+            delta = sum(delta, out_axes=Axes())
+
         if not Axes.same_elems(self.axes, delta.axes):
             raise ValueError(
                 'A tensor and its adjoint must have the same axes.'
@@ -740,7 +710,7 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype)
+        return TensorDescription(self.axes, dtype=self.dtype, name=self.name)
 
     @property
     def axes(self):
@@ -846,7 +816,7 @@ class Transpose(ReshapeOp):
 
     @cachetools.cached({})
     def tensor_description(self):
-        return self.args[0].tensor_description().transpose()
+        return self.args[0].tensor_description().transpose(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Transpose(delta))
@@ -866,7 +836,7 @@ class AxesCastOp(ReshapeOp):
 
     @cachetools.cached({})
     def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes)
+        return self.args[0].tensor_description().cast(self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, AxesCastOp(
@@ -960,7 +930,7 @@ class Broadcast(ReshapeOp):
           TODO
         """
         td, = tensor_descriptions(self.args)
-        return td.broadcast(self.axes)
+        return td.broadcast(self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sum(
@@ -968,6 +938,18 @@ class Broadcast(ReshapeOp):
             reduction_axes=delta.axes - x.axes,
             out_axes=x.axes
         ))
+
+
+def broadcast(x, axes, **kwargs):
+    if x.axes == axes:
+        return x
+    return Broadcast(x, axes, **kwargs)
+
+
+def axes_with_order(x, axes):
+    if x.axes == axes:
+        return x
+    return ReorderAxes(x, axes)
 
 
 class ReorderAxes(ReshapeOp):
@@ -998,10 +980,10 @@ class ReorderAxes(ReshapeOp):
           TODO
         """
         td, = tensor_descriptions(self.args)
-        return td.reorder(self.axes)
+        return td.reorder(self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, ReorderAxes(
+        x.generate_add_delta(adjoints, axes_with_order(
             delta,
             x.axes
         ))
@@ -1061,7 +1043,7 @@ class Slice(ReshapeOp):
           TODO
         """
         x, = tensor_descriptions(self.args)
-        return x.slice(self.slices, self.axes)
+        return x.slice(self.slices, self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1101,31 +1083,43 @@ def slice_along_axis(x, axis, idx):
 
 
 class Flatten(ReshapeOp):
-    def __init__(self, x, axes=None, **kwargs):
+    def __init__(self, x, axes, **kwargs):
         if isinstance(x, ReshapeOp):
             x = Dimshuffle(x, axes=x.axes)
-        if axes is None:
-            axes = Axes((FlattenedAxis(x.axes),))
         assert Axes.check_flatten(x.axes, axes)
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.flatten(self.axes)
+        return x.flatten(self.axes, name=self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, Unflatten(
+        x.generate_add_delta(adjoints, unflatten(
             delta,
             axes=x.axes
         ))
 
 
+def flatten(x, axes=None, **kwargs):
+    if axes is None:
+        if len(x.axes) == 1 and isinstance(x.axes[0], FlattenedAxis):
+            axes = x.axes
+        else:
+            axes = Axes((FlattenedAxis(x.axes),))
+
+    if x.scalar:
+        return x
+    if isinstance(x, Flatten) and x.axes == axes:
+        return x
+    return Flatten(x, axes=axes, **kwargs)
+
+
 def flatten_at(x, idx):
     if idx == 0 or idx == len(x.axes):
-        return Flatten(x)
+        return flatten(x)
     else:
-        return Flatten(x, Axes((
+        return flatten(x, Axes((
             FlattenedAxis(x.axes[:idx]),
             FlattenedAxis(x.axes[idx:])
         )))
@@ -1144,14 +1138,24 @@ class Unflatten(ReshapeOp):
     @cachetools.cached({})
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.unflatten(self.axes)
+        return x.unflatten(self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, Flatten(
+        x.generate_add_delta(adjoints, flatten(
             delta,
             axes=x.axes
         ))
 
+
+def unflatten(x, axes=None, **kwargs):
+    if axes is None:
+        axes = []
+        for axis in x.axes:
+            axes.extend(axis.axes)
+    axes = Axes(axes)
+    if axes == x.axes:
+        return x
+    return Unflatten(x, axes=axes, **kwargs)
 
 class AllocationOp(TensorOp):
     """
@@ -1451,7 +1455,7 @@ class Unslice(TensorOp):
           TODO
         """
         x, = super(Unslice, self).call_info()
-        return [self.tensor_description().slice(self.slices, self.input_axes), x]
+        return [self.tensor_description().slice(self.slices, self.input_axes, self.name), x]
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1637,8 +1641,10 @@ class BinaryElementWiseOp(ElementWise):
         x, y = Op.as_ops((x, y))
         axes = x.axes + y.axes
 
-        x = Broadcast(x, axes)
-        y = Broadcast(y, axes)
+        if not x.scalar:
+            x = broadcast(x, axes)
+        if not y.scalar:
+            y = broadcast(y, axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
@@ -1649,7 +1655,7 @@ class BinaryElementWiseOp(ElementWise):
     @property
     def one_dimensional(self):
         x, y = self.args
-        return len(x.axes) == 1 and len(y.axes) == 1
+        return len(x.axes) <= 1 and len(y.axes) <= 1
 
     @property
     def zero_dimensional(self):
@@ -1684,8 +1690,8 @@ def create_binary_elementwise(name,
         if len(x.axes) == 0 and len(y.axes) == 0:
             return ZeroDimBinClass(x, y, **self.kwargs)
         else:
-            x, y = Flatten(x), Flatten(y)
-            return Unflatten(OneDimBinClass(x, y, **self.kwargs))
+            x, y = flatten(x), flatten(y)
+            return unflatten(OneDimBinClass(x, y, **self.kwargs))
     BinClass.reduce_to_oned = reduce_to_oned
 
     if func_name is None:
@@ -1848,11 +1854,11 @@ class Dot(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            Dot(y, delta, out_axes=x.axes)
+            Dot(y, delta)
         )
         y.generate_add_delta(
             adjoints,
-            Dot(x, delta, out_axes=y.axes)
+            Dot(x, delta)
         )
 
 
@@ -2059,12 +2065,12 @@ def create_reduction_op(name,
         out_axes = self.axes
 
         if len(reduction_axes) == 0:
-            return Broadcast(x, axes=out_axes)
+            return broadcast(x, axes=out_axes)
         elif len(x.axes) == 0:
-            return Broadcast(x, axes=out_axes)
+            return broadcast(x, axes=out_axes)
 
         if len(out_axes) == 0:
-            x = Flatten(x)
+            x = flatten(x)
             return RedOneDimClass(
                 x,
                 reduction_axes=x.axes,
@@ -2073,7 +2079,7 @@ def create_reduction_op(name,
                 **self.kwargs
             )
         else:
-            x = Broadcast(x, axes=reduction_axes + out_axes)
+            x = broadcast(x, axes=reduction_axes + out_axes)
             x = flatten_at(x, len(reduction_axes))
 
             out = RedTwoDimClass(
@@ -2083,8 +2089,8 @@ def create_reduction_op(name,
                 dtype=self.dtype,
                 **self.kwargs
             )
-            out = Unflatten(out)
-            return Broadcast(out, axes=out_axes)
+            out = unflatten(out)
+            return broadcast(out, axes=out_axes)
     RedClass.reduce_to_twod = reduce_to_twod
 
     if func_name is None:
@@ -2117,7 +2123,7 @@ Min, MinTwoDim, MinOneDim, min = create_reduction_op(
 def sum_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(
         adjoints,
-        Broadcast(delta, axes=x.axes)
+        broadcast(delta, axes=x.axes)
     )
 
 
@@ -2276,9 +2282,9 @@ class Onehot(TensorOp):
         """
         x, = self.args
         if len(x.axes) > 1:
-            x = Flatten(x)
+            x = flatten(x)
             out = OnehotTwoDim(x, self.axis)
-            out = Unflatten(
+            out = unflatten(
                 out,
                 [out.axes[0]] + list(out.axes[1].axes)
             )
@@ -2435,7 +2441,7 @@ def deriv(dependent_op, independent_op):
         ))
 
     adjoint = adjoints[independent_op]
-    return Broadcast(adjoint, axes=independent_op.axes)
+    return broadcast(adjoint, axes=independent_op.axes)
 
 
 class CrossEntropyMultiInner(object):
@@ -2464,21 +2470,20 @@ class CrossEntropyMultiInner(object):
 
 def cross_entropy_multi(y, t, usebits=False, out_axes=None,
                         enable_softmax_opt=True,
-                        enable_diff_opt=True, **kwargs):
+                        enable_diff_opt=True):
     """
-    TODO.
+    Computes the cross-entropy of two distributions.
 
     Arguments:
-      y: TODO
-      t: TODO
-      usebits: TODO
-      out_axes: TODO
-      enable_softmax_opt: TODO
-      enable_diff_opt: TODO
-      **kwargs: TODO
+        y: The output of the model; each sample is a PDF.
+        t: The true values; each sample is PDF.
+        usebits: Use binary log.
+        out_axes: Axes in result.  Default batch and reduction axes.
+        enable_softmax_opt: Use optimization when y is softmax. Default True.
+        enable_diff_opt: User derivative optimization when y is softmax.  Default True.
 
     Returns:
-      TODO
+        The cross-entropy.
     """
     if out_axes is None:
         out_axes = y.axes.recurrent_axes() + y.axes.batch_axes()
@@ -2522,20 +2527,18 @@ class CrossEntropyBinaryInner(object):
         self.t.generate_add_delta(adjoints, self.x * delta)
 
 
-def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
-                               enable_diff_opt=True, **kwargs):
+def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True):
     """
-    TODO.
+    Computes cross-entropy of individual samples.
 
     Arguments:
-      y: TODO
-      t: TODO
-      enable_sig_opt: TODO
-      enable_diff_opt: TODO
-      **kwargs: TODO
+        y: Output of model, in range [0, 1].
+        t: True values, in [0, 1].
+        enable_sig_opt: Enable optimization when y is sigmoid.  Default True.
+        enable_diff_opt: Enable optimization of derivative when y is sigmoid.  Default True.
 
     Returns:
-      TODO
+        Cross entropy of individual samples.
     """
     sigy = y.find_schema(Sigmoid)
     if enable_sig_opt and sigy is not None:
@@ -2550,19 +2553,27 @@ def cross_entropy_binary_inner(y, t, enable_sig_opt=True,
     return result
 
 
-def cross_entropy_binary(y, t, out_axes=None):
+def cross_entropy_binary(y, t, usebits=False, out_axes=None, enable_sig_opt=True, enable_diff_opt=True):
     """
-    TODO.
+    Computes cross-entropy.
 
     Arguments:
-      y: TODO
-      t: TODO
-      out_axes: TODO
+        y: Output of model, in range [0, 1]
+        t: True values, in [0, 1].
+        use_bits: Use binary log.
+        out_axes: Axes of result; default is batch and recurrent axis.
+        enable_sig_opt: Enable optimization when y is sigmoid. Default True.
+        enable_diff_opt: Enable optimization of derivative when y is sigmoid. Default True.
 
     Returns:
-      TODO
+        Cross entropy.
     """
-    return sum(cross_entropy_binary_inner(y, t), out_axes=out_axes)
+    result = sum(cross_entropy_binary_inner(y, t), out_axes=out_axes,
+                 enable_sig_opt=enable_sig_opt, enable_diff_opt=enable_diff_opt)
+
+    if usebits:
+        result = result * np.float(1. / np.log(2.0))
+    return result
 
 
 class SplicingAnalysis(object):
@@ -2627,14 +2638,14 @@ class RequiredSimplify(SplicingAnalysis):
         if len(reduction_axes) == 0:
             d = Axis(1)
             reduction_axes = Axes((d,))
-            x = Broadcast(x, axes=x.axes + reduction_axes)
-            y = Broadcast(y, axes=reduction_axes + y.axes)
+            x = broadcast(x, axes=x.axes + reduction_axes)
+            y = broadcast(y, axes=reduction_axes + y.axes)
 
         x_rem_axes = x.axes - reduction_axes
-        x = ReorderAxes(x, x_rem_axes + reduction_axes)
+        x = axes_with_order(x, x_rem_axes + reduction_axes)
 
         y_rem_axes = y.axes - reduction_axes
-        y = ReorderAxes(y, reduction_axes + y_rem_axes)
+        y = axes_with_order(y, reduction_axes + y_rem_axes)
 
         x = flatten_at(x, len(x.axes) - len(reduction_axes))
         y = flatten_at(y, len(reduction_axes))
@@ -2649,7 +2660,7 @@ class RequiredSimplify(SplicingAnalysis):
         else:
             out = DotTwoDimensional(x, y)
 
-        out = Unflatten(out)
+        out = unflatten(out)
         out = ReorderAxes(out, out_axes)
 
         self.add_rep(op, out)
@@ -2681,26 +2692,28 @@ class RequiredSimplify(SplicingAnalysis):
 
     @visit.on_type(SetItem)
     def visit(self, op):
-        self.add_rep(op, op.as_one_dim())
-
-    @visit.on_type(SetItemOneDim)
-    def visit(self, op):
-        pass
+        tensor, val = op.args
+        assert not isinstance(tensor, ReshapeOp)
+        tensor, val = flatten(tensor), flatten(val)
+        self.add_rep(op, SetItemOneDim(tensor, op.item, val, force=op.force))
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):
-        if True:
-            return
         x = op.args[0]
         if op.axes == x.axes:
             self.add_rep(op, x)
 
+    @visit.on_type(Flatten)
+    def visit(self, op):
+        x = op.args[0]
+        if x.scalar:
+            self.add_rep(op, x)
+
     @visit.on_type(Broadcast)
     def visit(self, op):
-        if True:
-            return
         x = op.args[0]
-        if op.axes == x.axes:
+        x_strides = x.tensor_description().strides
+        if op.axes == x.axes or x_strides == (0,) * len(x_strides):
             self.add_rep(op, x)
 
     @visit.on_type(Dimshuffle)
@@ -2710,8 +2723,11 @@ class RequiredSimplify(SplicingAnalysis):
             return
         x_tensor_description = x.tensor_description()
         x_strides = x_tensor_description.strides
+        if x_strides == ():
+            self.add_rep(op, x)
+            return
         shuffle_strides = tuple(x_strides[_] for _ in op.old_axis_positions)
-        if shuffle_strides == x_strides:
+        if shuffle_strides == x_strides or x_strides == (0,) * len(x_strides):
             self.add_rep(op, x)
         else:
             pass
