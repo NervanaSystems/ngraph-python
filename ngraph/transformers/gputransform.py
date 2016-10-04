@@ -468,6 +468,10 @@ class GPUTensorAllocator():
             strides = [s // tensor_description.dtype.itemsize for s in tensor_description.strides]
             strides = tuple(strides)
 
+        if len(shape) == 1 and len(strides) == 1:
+            shape = (shape[0], 1)
+            strides = (strides[0], 0)
+
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUTensor(self.transformer.ng,
                                shape,
