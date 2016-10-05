@@ -63,8 +63,6 @@ class GPUKernel():
             object which is used for ops such as dot, dimshuffle, etc.
     """
 
-    transformer_name = "gpu"
-
     def __init__(self, transformer):
         self.ops_buffer = []
         self.params = None
@@ -681,6 +679,8 @@ class GPUTransformer(Transformer):
     will generate allocators and kernels to execute the graph on a GPU.
     """
     __nervanagpu = None
+
+    transformer_name = "gpu"
 
     @staticmethod
     def close_gpu():
