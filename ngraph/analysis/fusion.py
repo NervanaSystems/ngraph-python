@@ -163,9 +163,9 @@ class KernelFlowGraph(DataFlowGraph):
         for a, b in edges:
             kw = {}
             if isinstance(a, ng.Function):
-                kw['ltail'] = 'cluster_{}'.format(a.id)
+                kw['ltail'] = 'cluster_{}'.format(a.name)
             if isinstance(b, ng.Function):
-                kw['lhead'] = 'cluster_{}'.format(b.id)
+                kw['lhead'] = 'cluster_{}'.format(b.name)
             dot.edge(lasts[a].id, firsts[b].id, **kw)
         return dot
 

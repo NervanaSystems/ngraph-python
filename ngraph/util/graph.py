@@ -51,10 +51,10 @@ class Digraph(object):
         """
         dot = graphviz.Digraph(name)
         for node, nexts in list(self.successors.items()):
-            dot.node(node.id, node.graph_label, node.style)
+            dot.node(node.name, node.graph_label, node.style)
             for next in nexts:
-                dot.node(next.id, next.graph_label, next.style)
-                dot.edge(node.id, next.id)
+                dot.node(next.name, next.graph_label, next.style)
+                dot.edge(node.name, next.name)
         return dot
 
     @staticmethod
@@ -114,13 +114,13 @@ class Digraph(object):
             if u not in visited:
                 visited.add(u)
                 vs = nexts[u]
-                for v in sorted(vs, key=lambda x: x.id):
+                for v in sorted(vs, key=lambda x: x.name):
                     if v not in visited:
                         visit(v, fun)
                 fun(u)
 
         # Get output nodes
-        for x in sorted(starts, key=lambda x: x.id):
+        for x in sorted(starts, key=lambda x: x.name):
             visit(x, fun)
 
     @property
@@ -185,11 +185,11 @@ class UndirectedGraph(object):
         dot = Graph()
         processed = set()
         for na, _ in list(self.neighbors.items()):
-            dot.node(na.id, na.graph_label, na.style)
+            dot.node(na.name, na.graph_label, na.style)
             for nb in _:
-                dot.node(nb.id, nb.graph_label, nb.style)
+                dot.node(nb.name, nb.graph_label, nb.style)
                 if (nb, na) not in processed:
-                    dot.edge(na.id, nb.id)
+                    dot.edge(na.name, nb.name)
                     processed.add((na, nb))
         return dot
 

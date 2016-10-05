@@ -44,6 +44,7 @@ class Computation(NameableValue):
     def __init__(self, transformer, returns, *args, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
+        self.computation_name = None
 
         def wrap_op(op):
             if isinstance(op, TensorOp):
@@ -112,7 +113,7 @@ class Computation(NameableValue):
         """
         self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-        self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
+        self.computation_name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
         """

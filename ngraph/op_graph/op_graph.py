@@ -918,7 +918,7 @@ class ResultHandle(ReshapeOp):
     @cachetools.cached({})
     def tensor_description(self):
         td, = tensor_descriptions(self.args)
-        return td.broadcast(td.axes)
+        return td.broadcast(td.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(delta)
