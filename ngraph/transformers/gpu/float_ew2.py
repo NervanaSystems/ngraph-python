@@ -15,6 +15,7 @@ _op_templates = {
     "sqr": r"%(out)s = %(x)s * %(x)s;",
     "exp": r"%(out)s = expf(%(x)s);",
     "log": r"%(out)s = logf(%(x)s);",
+    "rcp": r"%(out)s = 1.0f / %(x)s;",
     "exp2": r"%(out)s = exp2f(%(x)s);",
     "log2": r"%(out)s = log2f(%(x)s);",
     "sig": r"%(out)s = 1.0f / (1.0f + expf(-%(x)s));",
