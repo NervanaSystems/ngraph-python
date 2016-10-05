@@ -30,10 +30,13 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     EqualOneDim, EqualZeroDim, exp, \
-    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, MinimumOneDim, MinimumZeroDim, \
+    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
+    LessOneDim, LessZeroDim, \
+    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, sign, sin, sqrt, square, \
+    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, \
+    SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import convolution1d
@@ -619,6 +622,7 @@ class NumPyTransformer(Transformer):
             self.code.append(self.compute_code.code)
 
             # print(self.code.code)
+            # print(self.code.filename)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()

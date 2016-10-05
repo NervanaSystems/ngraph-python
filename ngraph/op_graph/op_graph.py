@@ -1178,6 +1178,7 @@ def unflatten(x, axes=None, **kwargs):
         return x
     return Unflatten(x, axes=axes, **kwargs)
 
+
 class AllocationOp(TensorOp):
     """
     Value comes directly from storage.
@@ -2607,7 +2608,8 @@ def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True):
     return result
 
 
-def cross_entropy_binary(y, t, usebits=False, out_axes=None, enable_sig_opt=True, enable_diff_opt=True):
+def cross_entropy_binary(y, t, usebits=False, out_axes=None,
+                         enable_sig_opt=True, enable_diff_opt=True):
     """
     Computes cross-entropy.
 

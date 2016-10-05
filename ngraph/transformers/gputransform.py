@@ -8,10 +8,13 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     EqualOneDim, EqualZeroDim, exp, \
-    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, MinimumOneDim, MinimumZeroDim, \
+    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
+    LessOneDim, LessZeroDim, \
+    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, sign, sin, sqrt, square, \
+    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, \
+    sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
@@ -19,7 +22,6 @@ from ngraph.op_graph.convolution import convolution1d
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.arrayaxes import TensorDescription
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel
 
 import numpy as np

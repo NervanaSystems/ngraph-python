@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 import collections
 import inspect
-import weakref
 
 from builtins import str
 
