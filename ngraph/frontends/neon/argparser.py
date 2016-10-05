@@ -20,7 +20,7 @@ class NgraphArgparser(NeonArgparser):
     def __init__(self, *args, **kwargs):
         super(NgraphArgparser, self).__init__(*args, **kwargs)
         self.add_argument('--gb', type=str, default='numpy',
-                          choices=Transformer.transformer(),
+                          choices=Transformer.transformer_choices(),
                           help='Backend used for transforming and executing graph')
 
     def parse_args(self, gen_be=True):

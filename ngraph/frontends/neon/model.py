@@ -199,7 +199,6 @@ class Model(object):
             self.total_cost += batch_cost
             batch = batch + 1
             callbacks.on_minibatch_end(epoch, mb_idx)
-        print batch
 
         # now we divide total cost by the number of batches,
         # so it was never total cost, but sum of averages
