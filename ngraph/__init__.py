@@ -18,7 +18,7 @@ from __future__ import print_function
 import ngraph.dataloader.dataloaderbackend
 from ngraph.op_graph.axes_ops import dimshuffle
 from ngraph.op_graph.axes import *
-from ngraph.op_graph.convolution import convolution1d, convolution, ConvolutionAxis
+from ngraph.op_graph.convolution import conv_fprop, ConvolutionAxis
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.transformers.nptransform import NumPyTransformer

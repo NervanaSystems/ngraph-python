@@ -40,7 +40,7 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.convolution import convolution1d, convolution
+from ngraph.op_graph.convolution import conv_fprop, conv_update, conv_bprop
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -245,6 +245,10 @@ class NumPyCodeGenerator(PyGen):
                 op=op.__class__.__name__,
             ))
 
+    @generic_method
+    def generate_op_init(self, op, *args):
+        pass
+
     @generate_op.on_type(absolute)
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
@@ -265,66 +269,12 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution1d)
-    def generate_op(self, op, output, input, filter):
+    @generate_op_init.on_type(conv_fprop)
+    def generate_op_init(self, op, outputs, inputs, filters):
         self.append(
             """
-            input = {input}
-            input = input.reshape((
-                # from: channels, width, batch_size
-                # to: channels, depth, height, width, batch_size
-                input.shape[0], 1, 1, input.shape[1], input.shape[2]
-            ))
-
-            filter = {filter}
-
-            filter = filter.reshape((
-                # from: channels_in, width, channels_out
-                # to: channels_in, depth, height, width, channels_out
-                filter.shape[0], 1, 1, filter.shape[1], filter.shape[2]
-            ))
-
-            neon_conv_layer = ConvLayer(
-                proxy_backend(), {output}.dtype,
-                N={bsz},
-                C={input_shape}[0],
-                D=1,
-                H=1,
-                W={input_shape}[1],
-
-                K={filter_shape}[2],
-                T=1,
-                R=1,
-                S={filter_shape}[1],
-
-                pad_d=0, pad_h=0, pad_w=0,
-                str_d=1, str_h=1, str_w=1,
-            )
-
-            # neon_conv_layer...
-            neon_conv_layer.xprop_conv(
-                proxy_tensor(input),
-                proxy_tensor(filter),
-                proxy_tensor({output}),
-            )
-            """,
-            output=output,
-            input=input,
-            filter=filter,
-            input_shape=[a.length for a in op._input_shape],
-            filter_shape=[a.length for a in op._filter_shape],
-            bsz=op.batch_axis.length
-        )
-
-    @generate_op.on_type(convolution)
-    def generate_op(self, op, outputs, inputs, filters):
-        self.append(
-            """
-            inputs = {inputs}
-            filters = {filters}
-
-            neon_conv_layer = ConvLayer(
-                proxy_backend(), {outputs}.dtype,
+            self.conv_layer{index} = ConvLayer(
+                proxy_backend(), float,
                 N={bsz},
                 C={input_shape}[0],
                 K={filter_shape}[4],
@@ -341,18 +291,59 @@ class NumPyCodeGenerator(PyGen):
                 str_d=1, str_h=1, str_w=1,
             )
 
-            neon_conv_layer.xprop_conv(
-                proxy_tensor(inputs),
-                proxy_tensor(filters),
-                proxy_tensor({outputs}),
-            )
             """,
-            outputs=outputs,
-            inputs=inputs,
-            filters=filters,
+            index=op.index,
             input_shape=[a.length for a in op._input_shape],
             filter_shape=[a.length for a in op._filter_shape],
             bsz=op.batch_axis.length
+        )
+
+    @generate_op.on_type(conv_fprop)
+    def generate_op(self, op, outputs, inputs, filters):
+        self.append(
+            """
+            self.conv_layer{index}.xprop_conv(
+                proxy_tensor({inputs}),
+                proxy_tensor({filters}),
+                proxy_tensor({outputs}),
+            )
+            """,
+            index=op.index,
+            outputs=outputs,
+            inputs=inputs,
+            filters=filters,
+        )
+
+    @generate_op.on_type(conv_update)
+    def generate_op(self, op, outputs, delta, inputs, filters):
+        self.append(
+            """
+            self.conv_layer{index}.update_conv(
+                proxy_tensor({inputs}),
+                proxy_tensor({delta}),
+                proxy_tensor({outputs}),
+            )
+            """,
+            index=op.index,
+            outputs=outputs,
+            inputs=inputs,
+            delta=delta,
+        )
+
+    @generate_op.on_type(conv_bprop)
+    def generate_op(self, op, outputs, delta, inputs, filters):
+        self.append(
+            """
+            self.conv_layer{index}.bprop_conv(
+                proxy_tensor({delta}),
+                proxy_tensor({filters}),
+                proxy_tensor({outputs}),
+            )
+            """,
+            index=op.index,
+            outputs=outputs,
+            delta=delta,
+            filters=filters,
         )
 
     @generate_op.on_type(cos)
@@ -636,6 +627,9 @@ class NumPyTransformer(Transformer):
         with indenting(self.compute_code):
             for op in ordered_ops:
                 out = tensor_description_value(op.tensor_description())
+                call_info = (tensor_description_value(_) for _ in op.call_info())
+                self.init_code.generate_op_init(op, out, *call_info)
+                # TODO: avoid duplicate code
                 call_info = (tensor_description_value(_) for _ in op.call_info())
                 self.compute_code.generate_op(op, out, *call_info)
             if code is self.compute_code.code:

@@ -89,118 +89,9 @@ class ConvolutionAxis(FunctionAxis):
         )
 
 
-class convolution1d(op_graph.TensorOp):
-    def __init__(self, input, filter,
-                 *args, **kwargs):
-        """
-        Arguments:
-            input: input tensor.  axes should be (channels, length, batch_size)
-            filter: filter/kernel tensor.  axes should be (input_channels,
-                length, output_channels)
+class conv_fprop(op_graph.TensorOp):
+    _index = 0
 
-        Return:
-            shape will be (filter[2], f(input[1], filter[1]), input[2])
-        """
-        if len(input.shape) != 3:
-            raise ValueError((
-                'convolution1d input shape must be length 3 (channels, '
-                'length, batch_size), found {}'
-            ).format(len(input.shape)))
-
-        if len(filter.shape) != 3:
-            raise ValueError((
-                'convolution1d filter shape must be length 3 '
-                '(input_channels, length, output_channels), found {}'
-            ).format(len(filter.shape)))
-
-        if 'axes' in kwargs:
-            raise ValueError(
-                "convolution1d does not currently support the 'axes' argument.  The "
-                "output axes are entirely determined by the shape of the "
-                "input and filter Ops."
-            )
-
-        if input.axes[0] != filter.axes[0]:
-            raise ValueError((
-                'the first axis in input and filter must be the same.  The '
-                'first axis in input is {input} and in filter is {filter}.'
-            ).format(
-                input=input.axes[0],
-                filter=filter.axes[0],
-            ))
-
-        batch_axes = input.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Input must have one batch axis.  Found {n_batch_axes} batch "
-                "axes: {batch_axes} and {n_sample_axes} sample axes: "
-                "{sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(input.axes.sample_axes()),
-                sample_axes=input.axes.sample_axes(),
-            ))
-        self.batch_axis = batch_axes[0]
-
-        # TODO: support int arguments to Axes?
-        # TODO: make a ConvAxis instead of creating an Axis with computed
-        # values.
-        axes = Axes([
-            filter.shape[2],
-            ConvolutionAxis(input.shape[1], filter.shape[1].length, 1),
-            self.batch_axis,
-        ])
-
-        self._input_shape = input.shape
-        self._filter_shape = filter.shape
-
-        # NOTE: calling constructor without axes because we need args set
-        # before computing axes, and this constructor sets args.
-        super(convolution1d, self).__init__(
-            args=(input, filter), *args, axes=axes, **kwargs
-        )
-
-    def generate_adjoints(self, adjoints, delta, input, filter):
-        """
-        warning: no adjoints computed for filter for now.
-        """
-
-        # TODO: delta has N in the axes, but convolution doesn't allow an N in
-        # the filter's axes.  Should there be a reduce before the convolution
-        # or after?  If after, how to get convolution to run inspite of N.
-
-        # filter.generate_add_delta(adjoints, convolution1d(input, delta))
-
-        # TODO: add flip Op
-        # reverse the order of spatial axes in filter
-        flipped_filter = op_graph.Slice(filter, [
-            slice(None, None, None),
-            slice(None, None, -1),
-            slice(None, None, None),
-        ])
-
-        flipped_filter = op_graph.Dimshuffle(flipped_filter, axes=Axes(
-            (flipped_filter.axes[2], flipped_filter.axes[1], flipped_filter.axes[0])
-        ))
-
-        # TODO: pad operator that acts on just one axis: .pad(x, x.axes[1], 3)
-        if filter.axes[1].length == 1:
-            pad_delta = delta
-        else:
-            pad_delta = op_graph.pad(
-                delta, [0, filter.axes[1].length - 1, 0]
-            )
-
-        conv = convolution1d(pad_delta, flipped_filter)
-
-        # if this fails, there is something wrong with generate_adjoints
-        assert conv.axes == input.axes
-
-        input.generate_add_delta(adjoints, conv)
-
-
-class convolution(op_graph.TensorOp):
     def __init__(self, inputs, filters, *args, **kwargs):
         """
         Arguments:
@@ -226,7 +117,7 @@ class convolution(op_graph.TensorOp):
                 "input and filter Ops."
             )
 
-        if inputs.axes[0] != filters.axes[0]:
+        if inputs.axes[0].length != filters.axes[0].length:
             raise ValueError((
                 'the first axis in input and filter must be the same.  The '
                 'first axis in input is {inputs} and in filter is {filters}.'
@@ -256,16 +147,53 @@ class convolution(op_graph.TensorOp):
         axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims])
         self._input_shape = inputs.shape
         self._filter_shape = filters.shape
+        self._index += 1
+        self.index = self._index
 
-        super(convolution, self).__init__(
+        super(conv_fprop, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
         """
-        TODO: Generate true adjoints
+        TODO
         """
 
-        # Dummy derivatives for now.
-        filters.generate_add_delta(adjoints, filters)
-        inputs.generate_add_delta(adjoints, inputs)
+        filters.generate_add_delta(adjoints, conv_update(delta, inputs, filters, self))
+        inputs.generate_add_delta(adjoints, conv_bprop(delta, inputs, filters, self))
+
+
+class conv_update(op_graph.TensorOp):
+    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
+        """
+        Arguments:
+            inputs  : input tensor.
+            filters : filter/kernel tensor.
+        """
+        filter_dims = [shape.length for shape in filters.shape]
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in filter_dims])
+        self._input_shape = conv._input_shape
+        self._filter_shape = conv._filter_shape
+        self.index = conv.index
+
+        super(conv_update, self).__init__(
+            args=(delta, inputs, filters), *args, axes=axes, **kwargs
+        )
+
+
+class conv_bprop(op_graph.TensorOp):
+    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
+        """
+        Arguments:
+            inputs  : input tensor.
+            filters : filter/kernel tensor.
+        """
+        input_dims = [shape.length for shape in inputs.shape]
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in input_dims])
+        self._input_shape = conv._input_shape
+        self._filter_shape = conv._filter_shape
+        self.index = conv.index
+
+        super(conv_bprop, self).__init__(
+            args=(delta, inputs, filters), *args, axes=axes, **kwargs
+        )
