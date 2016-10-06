@@ -5,15 +5,23 @@ from neon.backends.nervanagpu import NervanaGPU, GPUTensor
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Equal, exp, \
-    Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
-    negative, NotEqual, onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
-    Sum, tanh, tensor_size, Fill, Unslice, Stack, Dot, Dimshuffle, Function
+from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
+    DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    EqualOneDim, EqualZeroDim, exp, \
+    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
+    LessOneDim, LessZeroDim, \
+    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    MinimumOneDim, MinimumZeroDim, \
+    MultiplyOneDim, MultiplyZeroDim, \
+    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, \
+    sign, sin, sqrt, square, \
+    SubtractOneDim, SubtractZeroDim, \
+    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Function
 from ngraph.op_graph.convolution import convolution1d
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.arrayaxes import TensorDescription
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel
 
 import numpy as np
@@ -55,8 +63,6 @@ class GPUKernel():
             object which is used for ops such as dot, dimshuffle, etc.
     """
 
-    transformer_name = "gpu"
-
     def __init__(self, transformer):
         self.ops_buffer = []
         self.params = None
@@ -75,7 +81,11 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("abs", x=x, out=out)
 
-    @add_op.on_type(Add)
+    @add_op.on_type(AddOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("add", x=x, y=y, out=out)
+
+    @add_op.on_type(AddZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("add", x=x, y=y, out=out)
 
@@ -107,15 +117,31 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("dimshuffle", x=x, y=op.old_axis_positions, out=out)
 
-    @add_op.on_type(Divide)
+    @add_op.on_type(DivideOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
 
-    @add_op.on_type(Dot)
+    @add_op.on_type(DivideZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(DotOneDimensional)
     def add_op(self, op, out, x, y):
         self._buffer_op("dot", x=x, y=y, out=out)
 
-    @add_op.on_type(Equal)
+    @add_op.on_type(DotTwoDimensional)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("dot", x=x, y=y, out=out)
+
+    @add_op.on_type(DotTwoByOne)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("dot", x=x, y=y, out=out)
+
+    @add_op.on_type(EqualOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("eq", x=x, y=y, out=out)
+
+    @add_op.on_type(EqualZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("eq", x=x, y=y, out=out)
 
@@ -127,19 +153,35 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("fill", x=op.scalar, out=x)
 
-    @add_op.on_type(Greater)
+    @add_op.on_type(GreaterOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("gt", x=x, y=y, out=out)
 
-    @add_op.on_type(GreaterEqual)
+    @add_op.on_type(GreaterZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("gt", x=x, y=y, out=out)
+
+    @add_op.on_type(GreaterEqualOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("ge", x=x, y=y, out=out)
 
-    @add_op.on_type(Less)
+    @add_op.on_type(GreaterEqualZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("ge", x=x, y=y, out=out)
+
+    @add_op.on_type(LessOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("lt", x=x, y=y, out=out)
 
-    @add_op.on_type(LessEqual)
+    @add_op.on_type(LessZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("lt", x=x, y=y, out=out)
+
+    @add_op.on_type(LessEqualOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("le", x=x, y=y, out=out)
+
+    @add_op.on_type(LessEqualZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
 
@@ -151,7 +193,11 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("max", x=x, axis=0, out=out)
 
-    @add_op.on_type(Maximum)
+    @add_op.on_type(MaximumOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("maximum", x=x, y=y, out=out)
+
+    @add_op.on_type(MaximumZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("maximum", x=x, y=y, out=out)
 
@@ -159,11 +205,19 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("min", x=x, axis=0, out=out)
 
-    @add_op.on_type(Minimum)
+    @add_op.on_type(MinimumOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("minimum", x=x, y=y, out=out)
 
-    @add_op.on_type(Multiply)
+    @add_op.on_type(MinimumZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("minimum", x=x, y=y, out=out)
+
+    @add_op.on_type(MultiplyOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("mul", x=x, y=y, out=out)
+
+    @add_op.on_type(MultiplyZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("mul", x=x, y=y, out=out)
 
@@ -171,11 +225,15 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("neg", x=x, out=out)
 
-    @add_op.on_type(NotEqual)
+    @add_op.on_type(NotEqualOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("ne", x=x, y=y, out=out)
 
-    @add_op.on_type(onehot)
+    @add_op.on_type(NotEqualZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("ne", x=x, y=y, out=out)
+
+    @add_op.on_type(Onehot)
     def add_op(self, op, out, o, x):
         raise ValueError("Unhandled op: {}".format(op))
 
@@ -187,7 +245,7 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(SetItem)
+    @add_op.on_type(SetItemOneDim)
     def add_op(self, op, out, tensor, value):
         if op.item is None or op.item == _none_slice or op.item == ():
             self._buffer_op("assign", x=value, out=tensor)
@@ -210,7 +268,11 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("sqr", x=x, out=out)
 
-    @add_op.on_type(Subtract)
+    @add_op.on_type(SubtractOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("sub", x=x, y=y, out=out)
+
+    @add_op.on_type(SubtractZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("sub", x=x, y=y, out=out)
 
@@ -617,6 +679,8 @@ class GPUTransformer(Transformer):
     will generate allocators and kernels to execute the graph on a GPU.
     """
     __nervanagpu = None
+
+    transformer_name = "gpu"
 
     @staticmethod
     def close_gpu():

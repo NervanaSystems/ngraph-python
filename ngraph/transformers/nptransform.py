@@ -27,9 +27,17 @@ from ngraph.op_graph import arrayaxes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import absolute, Add, Argmax, Argmin, cos, Divide, Dot, Equal, exp, \
-    Greater, GreaterEqual, Less, LessEqual, log, Max, Maximum, Min, Minimum, Multiply, \
-    negative, NotEqual, Onehot, Power, reciprocal, SetItem, sign, sin, sqrt, square, Subtract, \
+from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
+    DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    EqualOneDim, EqualZeroDim, exp, \
+    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
+    LessOneDim, LessZeroDim, \
+    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    MinimumOneDim, MinimumZeroDim, \
+    MultiplyOneDim, MultiplyZeroDim, \
+    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, \
+    SetItemOneDim, sign, sin, sqrt, square, \
+    SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import convolution1d
 from ngraph.op_graph.debug import PrintOp
@@ -240,7 +248,11 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
 
-    @generate_op.on_type(Add)
+    @generate_op.on_type(AddOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.add({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(AddZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
@@ -251,13 +263,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(Argmin)
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
-
-    @generate_op.on_type(Dimshuffle)
-    def generate_op(self, op, out, x):
-        self.append(
-            "{}[()] = np.transpose({}, {})",
-            out, x, op.old_axis_positions
-        )
 
     @generate_op.on_type(convolution1d)
     def generate_op(self, op, output, input, filter):
@@ -314,21 +319,38 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
-    @generate_op.on_type(Divide)
+    @generate_op.on_type(Dimshuffle)
+    def generate_op(self, op, out, x):
+        self.append(
+            "{}[()] = np.transpose({}, {})",
+            out, x, op.old_axis_positions
+        )
+
+    @generate_op.on_type(DivideOneDim)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(Dot)
+    @generate_op.on_type(DivideZeroDim)
     def generate_op(self, op, out, x, y):
-        self.append("""
-        x, y, out = {}, {}, {}
-        try:
-            np.dot(x, y, out=out)
-        except ValueError:
-            np.dot(np.copy(x), np.copy(y), out=out)
-        """, x, y, out)
+        self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(Equal)
+    @generate_op.on_type(DotOneDimensional)
+    def generate_op(self, op, out, x, y):
+        self.append("""np.dot({}, {}, out={})""", x, y, out)
+
+    @generate_op.on_type(DotTwoDimensional)
+    def generate_op(self, op, out, x, y):
+        self.append("""np.dot({}, {}, out={})""", x, y, out)
+
+    @generate_op.on_type(DotTwoByOne)
+    def generate_op(self, op, out, x, y):
+        self.append("""np.dot({}, {}, out={})""", x, y, out)
+
+    @generate_op.on_type(EqualOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(EqualZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.equal({}, {}, out={})", x, y, out)
 
@@ -340,19 +362,35 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", x, op.scalar)
 
-    @generate_op.on_type(Greater)
+    @generate_op.on_type(GreaterOneDim)
     def generate_op(self, op, out, x, y):
         self.append("np.greater({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(GreaterEqual)
+    @generate_op.on_type(GreaterZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(GreaterEqualOneDim)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(Less)
+    @generate_op.on_type(GreaterEqualZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.greater_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(LessOneDim)
     def generate_op(self, op, out, x, y):
         self.append("np.less({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(LessEqual)
+    @generate_op.on_type(LessZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(LessEqualOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.less_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(LessEqualZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.less_equal({}, {}, out={})", x, y, out)
 
@@ -364,7 +402,11 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.max({}, 0, out={})", x, out)
 
-    @generate_op.on_type(Maximum)
+    @generate_op.on_type(MaximumOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.maximum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(MaximumZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.maximum({}, {}, out={})", x, y, out)
 
@@ -372,11 +414,19 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.min({}, 0, out={})", x, out)
 
-    @generate_op.on_type(Minimum)
+    @generate_op.on_type(MinimumOneDim)
     def generate_op(self, op, out, x, y):
         self.append("np.minimum({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(Multiply)
+    @generate_op.on_type(MinimumZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.minimum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(MultiplyOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.multiply({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(MultiplyZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
@@ -384,7 +434,11 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
 
-    @generate_op.on_type(NotEqual)
+    @generate_op.on_type(NotEqualOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.not_equal({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(NotEqualZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
@@ -419,7 +473,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
-    @generate_op.on_type(SetItem)
+    @generate_op.on_type(SetItemOneDim)
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__({}, {})", tensor, op.item, value)
 
@@ -439,7 +493,11 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.square({}, out={})", x, out)
 
-    @generate_op.on_type(Subtract)
+    @generate_op.on_type(SubtractOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.subtract({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(SubtractZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.subtract({}, {}, out={})", x, y, out)
 
@@ -564,6 +622,7 @@ class NumPyTransformer(Transformer):
             self.code.append(self.compute_code.code)
 
             # print(self.code.code)
+            # print(self.code.filename)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()

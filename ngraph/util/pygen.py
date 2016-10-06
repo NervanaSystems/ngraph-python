@@ -35,6 +35,7 @@ class PyGen(object):
         super(PyGen, self).__init__(**kwargs)
         self.indentation = indentation
         self.__code = ""
+        self.filename = None
 
     def indent(self, indentation):
         self.indentation += indentation
@@ -97,13 +98,13 @@ class PyGen(object):
         return self.__code
 
     def compile(self, prefix, globs):
-        file = tempfile.NamedTemporaryFile(mode='w', suffix='py', prefix=prefix, delete=False)
-        filename = file.name
+        file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=prefix, delete=False)
+        self.filename = file.name
         file.write(self.code)
         file.close()
-        atexit.register(lambda: os.unlink(filename))
+        atexit.register(lambda: os.unlink(self.filename))
 
-        code = compile(self.code, filename, "exec")
+        code = compile(self.code, self.filename, "exec")
         r = {}
         exec_(code, globs, r)
         return r

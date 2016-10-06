@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from contextlib import contextmanager
 from functools import wraps
-
+from weakref import WeakValueDictionary
 from builtins import next, object
 
 from ngraph.util.threadstate import get_thread_state
@@ -146,22 +146,17 @@ class NameableValue(object):
         id: Unique id for this object.
     """
     __counter = 0
-
-    @staticmethod
-    def __generate_id():
-        """TODO."""
-        NameableValue.__counter += 1
-        return 't{}'.format(NameableValue.__counter)
-
-    """A value with a name and debugging info that can be set."""
+    __all_names = WeakValueDictionary()
 
     def __init__(self, name=None, graph_label_type=None, **kwargs):
         super(NameableValue, self).__init__(**kwargs)
-        self.id = NameableValue.__generate_id()
-        self.__name = name if name is not None else self.id
+
+        if name is None:
+            name = type(self).__name__
+        self.name = name
 
         if graph_label_type is None:
-            graph_label_type = self.__class__.__name__
+            graph_label_type = self.name
         self.graph_label_type = graph_label_type
 
     @property
@@ -177,14 +172,19 @@ class NameableValue(object):
     @name.setter
     def name(self, name):
         """
-        TODO.
+        Sets the object name to a unique name based on name.
 
         Arguments:
-          name: TODO
-
-        Returns:
-
+            name: Prefix for the name
         """
+        if name in NameableValue.__all_names:
+            while True:
+                c_name = "{}_{}".format(name, type(self).__counter)
+                if c_name not in NameableValue.__all_names:
+                    name = c_name
+                    break
+                type(self).__counter = type(self).__counter + 1
+        NameableValue.__all_names[name] = self
         self.__name = name
 
 
