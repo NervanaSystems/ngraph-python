@@ -71,6 +71,8 @@ class GPUKernel():
         self.compound = True
         self.buffers_bound = False
         self.transformer = transformer
+        self.input0_1d = False
+        self.input1_1d = False
 
     @generic_method
     def add_op(self, op, *args):
@@ -234,8 +236,8 @@ class GPUKernel():
         self._buffer_op("ne", x=x, y=y, out=out)
 
     @add_op.on_type(Onehot)
-    def add_op(self, op, out, o, x):
-        raise ValueError("Unhandled op: {}".format(op))
+    def add_op(self, op, out, x):
+        self._buffer_op("onehot", x=x, out=out)
 
     @add_op.on_type(Power)
     def add_op(self, op, out, x, y):
@@ -290,12 +292,7 @@ class GPUKernel():
 
     @add_op.on_type(Unslice)
     def add_op(self, op, out, out_sliced, x):
-        # out = self._cast_input(out)
-        # out_sliced = self._cast_input(out_sliced)
-        # x = self._cast_input(x)
-        # self._buffer_op("fill", x=0, out=out)
-        # self._buffer_op("set_item", x=x, out=out_sliced)
-        raise ValueError("Unhandled op: {}".format(op))
+        self._buffer_op("unslice", x=x, y=out, out=out_sliced)
 
     @add_op.on_type(Stack)
     def add_op(self, op, out, *args):
@@ -362,8 +359,16 @@ class GPUKernel():
             if (self.ops_buffer[0][0] == "dot" or
                     self.ops_buffer[0][0] == "fill" or
                     self.ops_buffer[0][0] == "set_item" or
-                    self.ops_buffer[0][0] == "dimshuffle"):
+                    self.ops_buffer[0][0] == "dimshuffle" or
+                    self.ops_buffer[0][0] == "unslice"):
                 self.compound = False
+
+                if isinstance(self.ops_buffer[0][1], TensorDescription) and \
+                        len(self.ops_buffer[0][1].shape) == 1:
+                    self.input0_1d = True
+                if isinstance(self.ops_buffer[0][2], TensorDescription) and \
+                        len(self.ops_buffer[0][2].shape) == 1:
+                    self.input1_1d = True
 
         if self.compound:
             # Remove duplicate tensor views
@@ -426,7 +431,13 @@ class GPUKernelGroup():
             else:
                 op = k.ops_buffer[0]
                 if op[0] == "dot":
-                    self.ng.compound_dot(op[1], op[2], op[3])
+                    if k.input0_1d and k.input1_1d:
+                        if np.prod(op[3].shape) == 1:
+                            self.ng.compound_dot(op[1].T, op[2], op[3])
+                        else:
+                            self.ng.compound_dot(op[1], op[2].T, op[3])
+                    else:
+                        self.ng.compound_dot(op[1], op[2], op[3])
                 elif op[0] == "fill":
                     op[3].fill(op[1])
                 elif op[0] == "set_item":
@@ -439,6 +450,9 @@ class GPUKernelGroup():
                             op[3][:] = op[1].T
                     else:
                         self.ng.copy_transpose(op[1], op[3], axes=op[2])
+                elif op[0] == "unslice":
+                    op[2].fill(0)
+                    op[3][:] = op[1]
 
 
 class GPUBufferAllocator():

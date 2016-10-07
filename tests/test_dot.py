@@ -16,11 +16,14 @@ from builtins import range
 
 import numpy as np
 import random
+import pytest
 
 import ngraph as ng
 import ngraph.frontends.base.axis as ax
 from ngraph.util.utils import raise_all_numpy_errors
 from ngraph.util.utils import ExecutorFactory, executor
+
+import ngraph.transformers as ngt
 
 """
 Test ngraph's implementation of the dot product.
@@ -93,8 +96,19 @@ def ngraph_l2_norm(np_array):
     return executor(ng.sqrt(ng.dot(var, var)))()
 
 
+@pytest.fixture(scope="module",
+                params=ngt.Transformer.transformer_choices())
+def transformer_factory(request):
+    factory = ngt.Transformer.make_transformer_factory(request.param)
+    ngt.Transformer.set_transformer_factory(factory)
+    yield factory
+
+    # Reset transformer factory to default
+    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
+
+
 @raise_all_numpy_errors
-def test_dot_sum_backprop():
+def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
@@ -120,7 +134,7 @@ def test_dot_sum_backprop():
 
     # assert outputs are equal
     evaluated = evaluated_fun(x_np, y_np)
-    np.testing.assert_equal(evaluated, expected_output)
+    np.testing.assert_allclose(evaluated, expected_output, rtol=rtol, atol=atol)
 
     # assert derivative wrt to both tensors is the same when computed
     # symbolicly by ngraph and numerically
@@ -134,7 +148,7 @@ def test_dot_sum_backprop():
 
 
 @raise_all_numpy_errors
-def test_tensor_dot_tensor():
+def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
     tests = [
         {
