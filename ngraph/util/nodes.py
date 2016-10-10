@@ -93,7 +93,6 @@ class Node(NameableValue, DebugInfo):
                 self.tags.update(tags)
             else:
                 self.tags.add(tags)
-        self.forward = None
 
     @property
     def args(self):
@@ -109,26 +108,6 @@ class Node(NameableValue, DebugInfo):
             args: New arguments
         """
         self.__args = tuple(args)
-
-    @property
-    def forwarded(self):
-        """
-        Finds the op that handles this op.
-
-        Returns:
-             Follows forwarding to the op that shoud handle this op.
-        """
-        result = self
-        while True:
-            if not result.forward:
-                return result
-            result = result.forward
-
-    def update_forwards(self):
-        """
-        Updates internal op references with their forwarded versions.
-        """
-        self.args = tuple(arg.forwarded for arg in self.args)
 
     def as_nodes(self, args):
         """
