@@ -39,6 +39,7 @@ def tensor_descriptions(args):
     """
     return (arg.tensor_description() for arg in args)
 
+
 def tdcache():
     """
     Decorator to mark tensor description method as cached.
@@ -50,6 +51,7 @@ def tdcache():
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
 tdcache.tensor_description_cache = {}
+
 
 class Op(Node):
     """
@@ -182,7 +184,9 @@ class Op(Node):
     @property
     def forward(self):
         """
-        If not None, self has been replaced with forward. When set, invalidates cached tensor descriptions.
+        If not None, self has been replaced with forward.
+
+        When set, invalidates cached tensor descriptions.
 
         Returns:
              None or the replacement.
