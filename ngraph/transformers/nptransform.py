@@ -23,6 +23,7 @@ from functools import wraps
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
 from ngraph.op_graph import axes  # noqa
+from ngraph.op_graph import BackendWrapper
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
@@ -39,7 +40,6 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.axes_ops import dimshuffle
 from ngraph.op_graph.convolution import conv_fprop, conv_update, conv_bprop
 from ngraph.op_graph.debug import PrintOp
 
@@ -93,6 +93,7 @@ class proxy_tensor(object):
 
     def __init__(self, tensor):
         self._tensor = tensor
+        self.size = np.prod(self._tensor.shape)
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -302,11 +303,8 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, inputs, filters):
         self.append(
             """
-            self.conv_layer{index}.xprop_conv(
-                proxy_tensor({inputs}),
-                proxy_tensor({filters}),
-                proxy_tensor({outputs}),
-            )
+            self.be.fprop_conv(self.conv_layer{index}, proxy_tensor({inputs}),
+                               proxy_tensor({filters}), proxy_tensor({outputs}))
             """,
             index=op.index,
             outputs=outputs,
@@ -318,11 +316,8 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta, inputs, filters):
         self.append(
             """
-            self.conv_layer{index}.update_conv(
-                proxy_tensor({inputs}),
-                proxy_tensor({delta}),
-                proxy_tensor({outputs}),
-            )
+            self.be.update_conv(self.conv_layer{index}, proxy_tensor({inputs}),
+                                proxy_tensor({delta}), proxy_tensor({outputs}))
             """,
             index=op.index,
             outputs=outputs,
@@ -334,11 +329,8 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta, inputs, filters):
         self.append(
             """
-            self.conv_layer{index}.bprop_conv(
-                proxy_tensor({delta}),
-                proxy_tensor({filters}),
-                proxy_tensor({outputs}),
-            )
+            self.be.bprop_conv(self.conv_layer{index}, proxy_tensor({delta}),
+                               proxy_tensor({filters}), proxy_tensor({outputs}))
             """,
             index=op.index,
             outputs=outputs,
@@ -610,7 +602,7 @@ class NumPyTransformer(Transformer):
         self.allocate_code.indent(1)
 
     def finish_transform_allocate(self):
-        pass
+        self.init_code.append("""self.be = BackendWrapper.be""")
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:

@@ -143,12 +143,12 @@ class conv_fprop(op_graph.TensorOp):
         filter_dims = [shape.length for shape in filters.shape]
         # TODO: account for padding and stride
         output_dims = [_output_dim(input_dims[i], filter_dims[i], 0, 1) for i in range(1, 4)]
-        output_dims = [filter_dims[-1]] + output_dims + [input_dims[-1]]
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims])
+        output_dims = [filter_dims[-1]] + output_dims
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims] + [batch_axes[0]])
         self._input_shape = inputs.shape
         self._filter_shape = filters.shape
-        self._index += 1
-        self.index = self._index
+        conv_fprop._index += 1
+        self.index = conv_fprop._index
 
         super(conv_fprop, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
@@ -159,8 +159,9 @@ class conv_fprop(op_graph.TensorOp):
         TODO
         """
 
-        filters.generate_add_delta(adjoints, conv_update(delta, inputs, filters, self))
-        inputs.generate_add_delta(adjoints, conv_bprop(delta, inputs, filters, self))
+        # TODO: call generate_add_delta() instead
+        adjoints[filters] = conv_update(delta, inputs, filters, self)
+        adjoints[inputs] = conv_bprop(delta, inputs, filters, self)
 
 
 class conv_update(op_graph.TensorOp):

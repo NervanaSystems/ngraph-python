@@ -18,6 +18,8 @@ import math
 import numpy as np
 import ngraph as ng
 from functools import reduce
+from neon import NervanaObject
+from ngraph.op_graph import BackendWrapper
 
 
 # TODO These are stubs for implementing Neon's layers
@@ -105,6 +107,8 @@ class Convolution(ParameterLayer):
     def __init__(self, fshape, strides={}, padding={}, init=None, bsum=False,
                  name=None, parallelism="Data", cafe_compat=False, dtype=None):
         super(Convolution, self).__init__(init, name, parallelism)
+        self.be = BackendWrapper.be
+        self.weight_shape = None
         self.nglayer = None
         self.bsum = bsum
         self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
@@ -154,20 +158,25 @@ class Convolution(ParameterLayer):
         or input layer.
 
         Arguments:
-           in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                 information for layer
+            in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                  information for layer
 
         Returns:
             (tuple): shape of output data
-
         """
         super(Convolution, self).configure(in_obj)
-
-        self.convparams.update(dict(C=in_obj.axes[0].length))
-
-        names = ['C', 'T', 'R', 'S', 'K']
-        weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
-        weights = ng.Variable(axes=weights_axes, init=self.init)
+        if self.nglayer is None:
+            self.convparams.update(in_obj.shape_dict())
+            self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
+            (K, M, P, Q, N) = self.nglayer.dimO
+            self.out_shape = (K, P, Q) if M == 1 else (K, M, P, Q)
+        if self.weight_shape is None:
+            names = ['C', 'T', 'R', 'S', 'K']
+            weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
+            weights = ng.Variable(axes=weights_axes, init=self.init)
+            self.weight_shape = self.nglayer.dimF2  # (C * R * S, K)
+        if self.bsum:
+            self.batch_sum_shape = (self.nglayer.K, 1)
         return ng.conv_fprop(in_obj, weights)
 
 

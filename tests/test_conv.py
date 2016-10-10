@@ -172,8 +172,7 @@ def np_convolution(inputs, filters, result):
 
 def test_convolution_fprop():
     """
-    A simple test running a convolution filter over an input where both filter
-    and input are ones and both are the same size.
+    test convolution forward path
     """
 
     Nx = ng.Axis(128, batch=True)

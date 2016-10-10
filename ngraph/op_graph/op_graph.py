@@ -27,6 +27,10 @@ from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
 
 
+class BackendWrapper:
+    be = None
+
+
 def tensor_descriptions(args):
     """
     A list of tensor descriptions for Ops.
