@@ -18,12 +18,12 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import ngraph as ng
 import numpy as np
 import os
 from tf_importer.tf_importer.importer import TFImporter
 import ngraph.transformers as ngt
 import pytest
+
 
 @pytest.mark.usefixtures("transformer_factory")
 class ImporterTester(object):
