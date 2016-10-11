@@ -24,6 +24,7 @@ from tf_importer.tf_importer.utils import tensor_shape_to_tuple
 
 
 class Tester(ImporterTester):
+
     def test_relu_grad(self):
         # random number
         a = tf.constant(np.random.randn(1, 10).astype(np.float32),
@@ -42,5 +43,3 @@ class Tester(ImporterTester):
         f = tf.matmul(tf.nn.relu(a), b)
         a_grad = tf.gradients(f, a)[0]
         self.run(a_grad, tf_feed_dict={})
-
-

@@ -24,6 +24,7 @@ from tf_importer.tf_importer.utils import tensor_shape_to_tuple
 
 
 class Tester(ImporterTester):
+
     def test_binary_ops(self):
         # computation
         a = tf.placeholder(tf.float32, shape=(2, 3))

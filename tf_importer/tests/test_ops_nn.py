@@ -24,6 +24,7 @@ from tf_importer.tf_importer.utils import tensor_shape_to_tuple
 
 
 class Tester(ImporterTester):
+
     def test_sparse_softmax_cross_entropy_with_logits(self):
         # numpy random values
         np_logits = np.random.randn(128, 10).astype(np.float32)

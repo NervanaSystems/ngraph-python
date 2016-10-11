@@ -24,6 +24,7 @@ from tf_importer.tf_importer.utils import tensor_shape_to_tuple
 
 
 class Tester(ImporterTester):
+
     def test_sum_mean(self):
         # test cases
         reduction_indices_list = [None, [], [0, ], [0, 1], [1, 2], [0, 1, 2]]

@@ -181,7 +181,6 @@ class OpsTransform(OpsBase):
         src_type = tf_node.attr['SrcT']
         return inputs[0]
 
-
     def Shape(self, tf_node, inputs):
         """
         [TensorFlow Docs]
@@ -270,7 +269,6 @@ class OpsTransform(OpsBase):
             A `Tensor`. Has the same type as `data`.
         """
         raise NotImplementedError("DynamicStitch not supported in ngraph")
-
 
     def Reshape(self, tf_node, inputs):
         """

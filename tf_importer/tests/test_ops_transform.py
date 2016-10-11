@@ -24,6 +24,7 @@ from tf_importer.tf_importer.utils import tensor_shape_to_tuple
 
 
 class Tester(ImporterTester):
+
     def test_rank(self):
         # shapes to test
         shapes = [(), (0,), (0, 1,), (1, 2), (1, 0, 2), (1, 2, 3, 4)]

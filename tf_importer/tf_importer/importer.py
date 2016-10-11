@@ -74,7 +74,7 @@ class TFImporter:
         for tf_node in graph_def.node:
             if tf_node.op == 'NoOp' and tf_node.name == 'init':
                 assign_op_names = set([_strip_node_name(name) for name in
-                                      tf_node.input])
+                                       tf_node.input])
                 self.ops_bridge.init_assign_op_names |= assign_op_names
 
         # pass 2: process nodes

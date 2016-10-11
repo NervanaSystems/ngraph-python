@@ -23,6 +23,7 @@ from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
+
     def test_variable(self):
         # tf placeholder
         a = tf.Variable(tf.ones([2, 3]), name="a")

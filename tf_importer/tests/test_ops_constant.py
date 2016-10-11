@@ -22,6 +22,7 @@ from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
+
     def test_constant(self):
         # computation
         a = tf.constant(10.)
