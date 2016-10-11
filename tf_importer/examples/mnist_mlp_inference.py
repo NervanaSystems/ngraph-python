@@ -21,13 +21,13 @@ TODO: load meta info from TF's MetaGraph including details about dataset,
 """
 
 from __future__ import print_function, division
+
+import ngraph as ng
+import ngraph.analysis as an
+import numpy as np
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
-
-import numpy as np
-import ngraph as ng
-from importer import TensorFlowImporter
-import ngraph.analysis as an
+from tf_importer.tf_importer.importer import TFImporter
 
 # args and environment
 parser = NeonArgparser(__doc__)
@@ -50,7 +50,7 @@ def inference_mnist_mlp():
     test_data = mnist_data['valid']
 
     # build graph
-    tf_importer = TensorFlowImporter(args.pb_file)
+    tf_importer = TFImporter(args.pb_file)
 
     # init transformer
     transformer = ng.NumPyTransformer()

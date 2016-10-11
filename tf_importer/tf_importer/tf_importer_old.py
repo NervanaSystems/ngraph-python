@@ -39,7 +39,7 @@ from functools import wraps
 
 import ngraph as ng
 from ngraph.op_graph.op_graph import (TensorOp, softmax, is_constant,
-                                    constant_value)
+                                      constant_value)
 from ngraph.util.generics import op_generic_method
 
 import tensorflow as tf
@@ -50,63 +50,6 @@ from google.protobuf import text_format
 ignored_ops = {
     'ScalarSummary', 'ZerosLike', 'InTopK', 'MergeSummary',
 }
-
-
-def _scan_axes(graph_def):
-    """
-    Scan the graph to get the numerical axes for each variable.
-    Variables are defined and initialized in the next round of graph traversal.
-    Args:
-      graph_def (GraphDef): a GraphDef object
-    Returns:
-      names_to_axes: a map from variable name to its axes
-      batch_axis: the batch axis
-      y_axis: axis for labels, not used for inference graph
-    """
-    name_to_axes = {}
-    batch_axis = None
-    y_axis = None
-    y_name = ""
-
-    for node in graph_def.node:
-        inputs = []
-        for i, input_name in enumerate([x for x in node.input]):
-            inputs.append(input_name)
-
-        node.op = node.op
-
-        if node.op == 'Placeholder':
-            # TODO: remove hardcoded axis info
-            dims = node.attr['shape'].shape
-            shape = [int(d.size) for d in dims.dim]
-
-            if batch_axis is None:
-                batch_axis = ng.NumericAxis(shape[0])
-
-            if len(shape) == 2:
-                x_axis = ng.NumericAxis(shape[1])
-                name_to_axes[node.name] = ng.Axes([x_axis, batch_axis])
-            elif len(shape) == 1:
-                name_to_axes[node.name] = (ng.NumericAxis(10), batch_axis)
-                y_name = node.name
-
-        elif node.op == 'Variable':
-            dims = node.attr['shape'].shape
-            shape = [int(d.size) for d in dims.dim]
-            name_to_axes[node.name] = ng.Axes(shape)
-            if len(shape) == 2:
-                y_axis = ng.NumericAxis(shape[1])
-
-        elif node.op == 'Const':
-            # in the frozen graph, all variables are converted to constant
-            const_tensor = node.attr['value'].tensor
-            shape = [int(d.size) for d in const_tensor.tensor_shape.dim]
-            if 'biases' in node.name or 'weights' in node.name:
-                name_to_axes[node.name] = ng.Axes(shape)
-
-    name_to_axes[y_name] = (y_axis, batch_axis)
-
-    return name_to_axes, batch_axis, y_axis
 
 
 def _shape_to_numeric_axis(shape):
@@ -123,7 +66,49 @@ def _shape_to_numeric_axis(shape):
     return ng.Axes(tuple(axis_list))
 
 
-class TensorFlowImporter:
+def tensor_shape_to_tuple(tf_shape):
+    """
+
+    Args:
+        tf_shape: TensorShape object
+
+    Returns:
+        tuple of the shape
+    """
+    return tuple([s.value for s in tf_shape])
+
+
+def shape_to_axes(shape):
+    if not shape:
+        return ng.Axes()
+    axes = [ng.Axis(length=s) for s in shape]
+    return axes
+
+
+def is_compatible_numpy_shape(left_shape, right_shape):
+    if (not left_shape) or (not right_shape):
+        return True
+    for l, r in zip(reversed(left_shape), reversed(right_shape)):
+        if l == 1 or r == 1:
+            continue
+        elif l != r:
+            return False
+    return True
+
+
+def _tf_shape_to_axes(tf_shape):
+    """
+    Arguments:
+        tf_shape: attr_value_pb2.AttrValue, tf node's shape
+    Returns:
+        ng.Axes
+    """
+    shape = [int(d.size) for d in tf_shape.shape.dim]
+    axes = [ng.Axis(s) for s in shape]
+    return tuple(axes)
+
+
+class TFImporter:
     """
     Tensorflow GraphDef object to Neon graph converter
     Arguments:
@@ -132,7 +117,7 @@ class TensorFlowImporter:
         loss_node_name (str, optional): the final node representing loss
                                         computation
         verbose (bool, optional): if True, prints TensorFlow nodes during
-                                  imports
+                                  imports`
     Attributes:
         pb_file (str): path to protobuf file
         end_node_name (str): name of the last node in TensorFlow graph
@@ -147,10 +132,16 @@ class TensorFlowImporter:
         update_op (Op): Op corresponding to weight update
         variables (dict): Trainable variables
         name_to_op (dict): maps TensorFlow node name to Neon Op
+        name_to_placeholders (dict0): maps TF node name to placeholders
         ignored_nodes (set): ignored TensorFlow nodes
         name_to_axes (dict): maps TensorFlow name to NumericAxis
         batch_axis (NumericAxis): the batch axis
         y_axis (NumericAxis): the y axis of result
+
+    TODO:
+        Split this class to multiple files, using dict() to store mapping for
+        functions. The main importer class only does registration, while
+        implementations of each function shall not have stateful information.
     """
 
     def __init__(self, pb_file, end_node_name="", loss_node_name="",
@@ -172,6 +163,7 @@ class TensorFlowImporter:
         # collections
         self.variables = dict()  # trainable variables
         self.name_to_op = dict()  # maps TF node name to Neon op
+        self.name_to_placeholders = dict()  # maps TF node name to placeholders
         self.ignored_nodes = set()
 
         # read graph_def
@@ -185,7 +177,7 @@ class TensorFlowImporter:
                 graph_def.ParseFromString(f.read())
 
         # axis
-        self.name_to_axes, self.batch_axis, self.y_axis = _scan_axes(graph_def)
+        # self.name_to_axes, self.batch_axis, self.y_axis = _scan_axes(graph_def)
 
         # process nodes
         for tf_node in graph_def.node:
@@ -233,36 +225,188 @@ class TensorFlowImporter:
 
     @_convert.on_op(['Tanh', 'Sigmoid'])
     def _convert(self, tf_node):
+        """
+        Tanh: `tf.tanh(x, name=None)`
+            Args:
+                x: A Tensor or SparseTensor with type float, double, int32,
+                   complex64, int64, or qint32.
+                name: A name for the operation (optional).
+            Returns:
+                A Tensor or SparseTensor respectively with the same type as
+                x if x.dtype != qint32 otherwise the return type is quint8.
+
+        Sigmoid: `tf.sigmoid(x, name=None)`
+            Computes sigmoid of x element-wise. Specifically,
+            y = 1 / (1 + exp(-x)).
+
+            Args:
+                x: A Tensor with type float32, float64, int32, complex64, int64,
+                   or qint32.
+                name: A name for the operation (optional).
+            Returns:
+                A Tensor with the same type as x if x.dtype != qint32 otherwise
+                the return type is quint8.
+        """
         # unary ops
         unary_ops = {
             'Tanh': ng.tanh,
             'Sigmoid': ng.sigmoid,
             # TODO: 'Relu': be.relu,
         }
-        self.name_to_op[tf_node.name] = unary_ops[tf_node.op](
-            self.name_to_op[tf_node.input[0]])
+        # get inputs
+        left = self.name_to_op[tf_node.input[0]]
 
-    @_convert.on_op(['Add', 'Div', 'MatMul', 'Maximum', 'Mul'])
+        # result
+        result_op = unary_ops[tf_node.op](left)
+
+        # save to dict
+        self.name_to_op[tf_node.name] = result_op
+
+    @_convert.on_op(['Add', 'Div', 'Maximum', 'Mul'])
     def _convert(self, tf_node):
         binary_ops = {
             'Add': ng.add,
             'Div': ng.divide,
-            'MatMul': ng.dot,
             'Maximum': ng.maximum,
             'Mul': ng.multiply,
             # TODO: 'Mod', be.mod,
         }
-        # TODO: remove this hardcoded branch after ExpandDims op is implemented
-        if tf_node.name == 'gradients/xentropy_grad/mul':
-            # use be.Constant(1. / self.bastch_axis.length) as temporal result
-            # to replace the output of ExpandDims  (self.name_to_op[tf_node.input[0]])
-            self.name_to_op[tf_node.name] = binary_ops[tf_node.op](
-                ng.Constant(1. / self.batch_axis.length),
-                self.name_to_op[tf_node.input[1]], name=tf_node.name)
+        # get inputs
+        left = self.name_to_op[tf_node.input[0]]
+        right = self.name_to_op[tf_node.input[1]]
+
+        # check if shape compatibility
+        left_shape = left.axes.lengths
+        right_shape = right.axes.lengths
+        assert is_compatible_numpy_shape(left_shape, right_shape)
+
+        if left_shape and right_shape:
+            """
+            Cast axes in numpy broadcast mapping rule
+
+            1. introduce dummy length 1 axes to match left / right length
+            2. keep maps for matching left / right / result axes
+            3. slice left / right to remove length 1 axes if not both of them
+               are length 1
+            4. cast right to left by matching axes
+            5. perform binary op
+            6. cast and broadcast result
+            """
+
+            left_dim = len(left.axes)
+            right_dim = len(right.axes)
+
+            # pad left and right axis to be the same length, align right
+            result_dim = max(left_dim, right_dim)
+            left_axes_pad = [ng.Axis(length=1) for _ in
+                             range(result_dim - left_dim)] + list(left.axes)
+            right_axes_pad = [ng.Axis(length=1) for _ in
+                              range(result_dim - right_dim)] + list(right.axes)
+            result_axes = [ng.Axis(length=max(l.length, r.length)) for l, r
+                           in zip(left_axes_pad, right_axes_pad)]
+
+            # broadcast left / right, introducing dummy length 1 axes
+            left = ng.Broadcast(left, axes=left_axes_pad)
+            right = ng.Broadcast(right, axes=right_axes_pad)
+
+            # make two-way map of lr matching axes and map for result axes
+            lr_axes_map = dict()
+            result_axes_map = dict()
+            for l, r, re in zip(left.axes, right.axes, result_axes):
+                lr_axes_map[l] = r
+                lr_axes_map[r] = l
+                result_axes_map[l] = re
+                result_axes_map[r] = re
+
+            # get left / right slice
+            left_slice = []
+            right_slice = []
+            for l, r in zip(left.axes, right.axes):
+                if l.length == 1 and r.length != 1:
+                    left_slice.append(0)
+                else:
+                    left_slice.append(slice(None))
+                if r.length == 1 and l.length != 1:
+                    right_slice.append(0)
+                else:
+                    right_slice.append(slice(None))
+
+            # perform slicing
+            left_sliced = ng.Slice(left, left_slice)
+            right_sliced = ng.Slice(right, right_slice)
+
+            # now cast the right_sliced to left_sliced from the axis map
+            right_casted_axes = []
+            for r in right_sliced.axes:
+                if r in lr_axes_map and lr_axes_map[r] in left_sliced.axes:
+                    right_casted_axes.append(lr_axes_map[r])
+                else:
+                    right_casted_axes.append(r)
+            right_sliced_casted = ng.AxesCastOp(right_sliced,
+                                                axes=right_casted_axes)
+
+            # perform binary op
+            result_op = binary_ops[tf_node.op](left_sliced, right_sliced_casted)
+
+            # cast result axis and broadcast to full result axes
+            trimmed_result_axes = [result_axes_map[re] for re in result_op.axes]
+            result_op = ng.AxesCastOp(result_op, trimmed_result_axes)
+            result_op = ng.Broadcast(result_op, axes=result_axes)
         else:
-            self.name_to_op[tf_node.name] = binary_ops[tf_node.op](
-                self.name_to_op[tf_node.input[0]],
-                self.name_to_op[tf_node.input[1]], name=tf_node.name)
+            # don't need to do any axes casting
+            result_op = binary_ops[tf_node.op](left, right)
+
+        # save to dict
+        self.name_to_op[tf_node.name] = result_op
+
+        # TODO: remove this hardcoded branch after ExpandDims op is implemented
+        # if tf_node.name == 'gradients/xentropy_grad/mul':
+        #     # use be.Constant(1. / self.bastch_axis.length) as temporal result
+        #     # to replace the output of ExpandDims  (self.name_to_op[tf_node.input[0]])
+        #     self.name_to_op[tf_node.name] = binary_ops[tf_node.op](
+        #         ng.Constant(1. / self.batch_axis.length),
+        #         self.name_to_op[tf_node.input[1]], name=tf_node.name)
+
+    @_convert.on_op(['MatMul'])
+    def _convert(self, tf_node):
+        """
+        TF Docs:
+            - The inputs must be two-dimensional matrices, with matching inner
+              dimensions, possibly after transposition.
+            - Both matrices must be of the same type. The supported types are:
+              float32, float64, int32, complex64.
+            - Either matrix can be transposed on the fly by setting the
+              corresponding flag to True. This is False by default.
+            - If one or both of the matrices contain a lot of zeros, a more
+              efficient multiplication algorithm can be used by setting the
+              corresponding a_is_sparse or b_is_sparse flag to True. These are
+              False by default.
+        TF Args:
+            a: Tensor of type float32, float64, int32 or complex64.
+            b: Tensor with same type as a.
+            transpose_a: If True, a is transposed before multiplication.
+            transpose_b: If True, b is transposed before multiplication.
+            a_is_sparse: If True, a is treated as a sparse matrix.
+            b_is_sparse: If True, b is treated as a sparse matrix.
+            name: Name for the operation (optional).
+        """
+        # get inputs
+        left = self.name_to_op[tf_node.input[0]]
+        right = self.name_to_op[tf_node.input[1]]
+
+        # check shape
+        assert len(left.axes) == len(right.axes) == 2
+        assert left.axes[1].length == right.axes[0].length
+
+        # cast axis
+        right_axes = ng.Axes([left.axes[1], right.axes[1]])
+        right_casted = ng.AxesCastOp(right, axes=right_axes)
+
+        # result op
+        result_op = ng.dot(left, right_casted, name=tf_node.name)
+
+        # save to dict
+        self.name_to_op[tf_node.name] = result_op
 
     @_convert.on_op(['Mean', 'Sum'])
     def _convert(self, tf_node):
@@ -301,32 +445,46 @@ class TensorFlowImporter:
 
     @_convert.on_op('Placeholder')
     def _convert(self, tf_node):
-        dims = tf_node.attr['shape'].shape
-        shape = [d.size for d in dims.dim]
-        self.name_to_op[tf_node.name] = ng.placeholder(
-            axes=self.name_to_axes[tf_node.name], name=tf_node.name)
-        # TODO: handle other placeholders
-        if len(shape) == 2:
-            self.x = self.name_to_op[tf_node.name]
-        elif len(shape) == 1:
-            self.y = self.name_to_op[tf_node.name]
+        """
+        TF Docs:
+            - Inserts a placeholder for a tensor that will be always fed.
+            - Important: This tensor will produce an error if evaluated. Its
+              value must be fed using the feed_dict optional argument to
+              Session.run(), Tensor.eval(), or Operation.run().
+        TF Args:
+            dtype: The type of elements in the tensor to be fed.
+            shape: The shape of the tensor to be fed (optional). If the shape
+                   is not specified, you can feed a tensor of any shape.
+            name: A name for the operation (optional).
+        TF Returns:
+            A Tensor that may be used as a handle for feeding a value, but not
+            evaluated directly.
+        """
+        axes = _tf_shape_to_axes(tf_node.attr['shape'])
+        ng_op = ng.placeholder(axes=axes, name=tf_node.name)
+        self.name_to_op[tf_node.name] = ng_op
+        self.name_to_placeholders[tf_node.name] = ng_op
 
     @_convert.on_op('Const')
     def _convert(self, tf_node):
-        const_tensor = tf_node.attr['value'].tensor
-        shape = [d.size for d in const_tensor.tensor_shape.dim]
-        np_val = tensor_util.MakeNdarray(const_tensor)
+        """
+        TF Docs:
+            TensorFlow provides several operations that you can use to generate
+            constants. More specifically,
 
-        if np_val.dtype is np.dtype('O'):
-            self.ignored_nodes.add(tf_node.name)
-            return
+                tf.zeros(shape, dtype=tf.float32, name=None)
+                tf.zeros_like(tensor, dtype=None, name=None)
+                tf.ones(shape, dtype=tf.float32, name=None)
+                tf.ones_like(tensor, dtype=None, name=None)
+                tf.fill(dims, value, name=None)
+                tf.constant(value, dtype=None, shape=None, name=Const)
 
-        if tf_node.name in self.name_to_axes:
-            axes = self.name_to_axes[tf_node.name]
-        else:
-            axes = _shape_to_numeric_axis(shape)
-        self.name_to_op[tf_node.name] = ng.Constant(np_val, axes=axes,
-                                                    name=tf_node.name)
+            They all create op: "Const".
+        """
+        # convert to numpy value
+        np_val = tensor_util.MakeNdarray(tf_node.attr['value'].tensor)
+        ng_node = ng.Constant(np_val, axes=shape_to_axes(np_val.shape))
+        self.name_to_op[tf_node.name] = ng_node
 
     @_convert.on_op('Variable')
     def _convert(self, tf_node):

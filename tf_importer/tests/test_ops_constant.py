@@ -18,37 +18,43 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import ngraph as ng
-from tensorflow_import.importer import TensorFlowImporter
+from tf_importer.tests.importer_tester import ImporterTester
 
 
-def test_import_constant_graph():
-    # build constant graph
-    a = tf.constant(10)
-    b = tf.constant(32)
-    c = a + b
-    d = c * a
+class Tester(ImporterTester):
+    def test_constant(self):
+        # computation
+        a = tf.constant(10.)
+        b = tf.constant(20.)
+        c = a + b
+        d = c * a
 
-    # get tensorflow result
-    with tf.Session() as sess:
-        tf_result = sess.run(d)
+        # test
+        self.run(d)
 
-    # write to protobuf
-    pb_txt_path = "constant_graph.txt"
+    def test_constant_broadcast(self):
+        # computation
+        a = tf.constant([1, 2, 3.])
+        b = tf.constant(20.)
+        c = tf.ones([2, 3])
+        d = tf.ones([10, 2, 3])
+        e = tf.ones([1, 2, 3])
+        f = a + b + c + d + e
 
-    tf.train.write_graph(sess.graph_def, "./", pb_txt_path, True)
+        # test
+        self.run(f)
 
-    # init importer, transformer
-    importer = TensorFlowImporter(pb_txt_path)
-    transformer = ng.NumPyTransformer()
+    def test_fill(self):
+        # computation
+        f = tf.fill([2, 3], 5)
 
-    # now, assumes last op is the result we want to get
-    ng_result_comp = transformer.computation([importer.last_op])
-    ng_result = ng_result_comp()[0]
+        # test
+        self.run(f)
 
-    print(tf_result, ng_result)
-    assert tf_result == ng_result
+    def test_truncated_normal(self):
+        # TODO
+        pass
 
-
-if __name__ == '__main__':
-    test_import_constant_graph()
+    def test_random_normal(self):
+        # TODO
+        pass

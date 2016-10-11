@@ -1,5 +1,28 @@
 # Run TensorFlow Graph with Neon
 
+## Supported ops after refactor
+```python
+Add
+Assign
+Const
+Div
+DummyOp
+Identity
+MatMul
+Maximum
+Mean
+Mul
+NoOp
+Placeholder
+Range
+Rank
+Relu
+Sigmoid
+Sum
+Tanh
+Variable
+```
+
 ## Minimal Example
 
 ```python
@@ -101,3 +124,4 @@ print(result_val)  # prints 300
 
 [MetaGraphDef]: https://www.tensorflow.org/versions/r0.9/how_tos/meta_graph/index.html/
 [here]: http://stackoverflow.com/questions/36195454/what-is-the-tensorflow-checkpoint-meta-file#
+
