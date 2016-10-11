@@ -22,12 +22,18 @@ import ngraph as ng
 import numpy as np
 import os
 from tf_importer.tf_importer.importer import TFImporter
+import ngraph.transformers as ngt
+import pytest
 
-
+@pytest.mark.usefixtures("transformer_factory")
 class ImporterTester(object):
     """
     Tester class for py.test
     """
+
+    @pytest.fixture(autouse=True)
+    def build_transformer(self, transformer_factory):
+        pass
 
     @classmethod
     def setup_class(self):
@@ -81,7 +87,9 @@ class ImporterTester(object):
 
         # init importer, transformer
         importer = TFImporter(self.pb_txt_path, verbose=verbose)
-        transformer = ng.NumPyTransformer()
+        # transformer = ng.NumPyTransformer()
+        # transformer = self.transformer_factory()
+        transformer = ngt.Transformer.make_transformer()
 
         # set target node
         ng_target_node = importer.name_to_op[tf_target_node.name[:-2]]

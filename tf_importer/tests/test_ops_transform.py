@@ -27,7 +27,7 @@ class Tester(ImporterTester):
 
     def test_rank(self):
         # shapes to test
-        shapes = [(), (0,), (0, 1,), (1, 2), (1, 0, 2), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
@@ -55,7 +55,7 @@ class Tester(ImporterTester):
 
     def test_size(self):
         # shapes to test
-        shapes = [(), (0,), (0, 1,), (1, 2), (1, 0, 2), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
@@ -74,7 +74,7 @@ class Tester(ImporterTester):
 
     def test_shape(self):
         # shapes to test
-        shapes = [(), (0,), (0, 1,), (1, 2), (1, 0, 2), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
