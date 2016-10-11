@@ -37,6 +37,7 @@ _op_templates = {
     "pow": r"%(out)s = powf(%(x)s, %(y)s);",
     "minimum": r"%(out)s = fminf(%(x)s, %(y)s);",
     "maximum": r"%(out)s = fmaxf(%(x)s, %(y)s);",
+    "onehot": r"%(out)s = (%(index)s == %(x)s);",
     "dot": None
 }
 
@@ -353,7 +354,7 @@ def _get_axes_mapping(ops):
 
     # Find maximum shape and check for reductions
     for op in ops:
-        if op[0] in _redop_templates:
+        if op[0] in _redop_templates or op[0]:
             assert reduction_axis is None or reduction_axis == op[4]
             reduction_axis = op[4]
 
@@ -416,7 +417,7 @@ def _get_axes_mapping(ops):
     return (axes_mapping, dims)
 
 
-def _preprocess_ops(ops):
+def _preprocess_ops(ops, loop_axis_len):
     """
     Breaks ops into stages, where stages are terminated by reduction ops,
     since reductions must be completed before their results can be used
@@ -445,7 +446,14 @@ def _preprocess_ops(ops):
                 if ops[dep][0] not in _redop_templates:
                     add_dep(dep)
 
-        out_ops[-1].append(ops[dep_index])
+        if ops[dep_index][0] in _redop_templates and loop_axis_len == 1:
+            # Replace no-op reduction with assign
+            new_op = list(ops[dep_index])
+            new_op[0] = "assign"
+            out_ops[-1].append(tuple(new_op))
+        else:
+            out_ops[-1].append(ops[dep_index])
+
         last_evaluated_stage[dep_index] = len(out_ops) - 1
 
     # Find dependencies for each operation
@@ -476,18 +484,27 @@ def _get_register_type(dtype):
         return "float"
     elif dtype == np.int32:
         return "int"
+    elif dtype == np.int16:
+        return "short"
+    elif dtype == np.int8:
+        return "char"
     else:
         raise TypeError("Unsupported type")
 
 
 def _wrap_tensor_descriptions(ops):
-    new_ops = []
     max_dims = 1
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
                 max_dims = max(max_dims, len(new_op[index].shape))
+
+    new_ops = []
+    for op in ops:
+        new_op = list(op)
+        for index in range(1, 4):
+            if isinstance(new_op[index], TensorDescription):
                 new_op[index] = TensorDescriptionWrapper(new_op[index], max_dims)
 
         new_ops.append(tuple(new_op))
@@ -793,6 +810,7 @@ def _get_compound_kernel(ops, axes_mapping, dims):
     for axis in range(len(axes_mapping)):
         if axes_mapping[axis][0] == 'x':
             loop_axis = axis
+            loop_axis_len = axes_mapping[axis][4]
 
     # Choose templates based on number of axes
     if dims == 1:
@@ -819,7 +837,8 @@ def _get_compound_kernel(ops, axes_mapping, dims):
         assert False
 
     # Pre-process ops so that we don't need to store intermediate results in registers
-    stages = _preprocess_ops(ops)
+    # Also remove any no-op reductions
+    stages = _preprocess_ops(ops, loop_axis_len)
 
     # Build lists of registers, buffers, and constants
     ctx = _build_register_mapping(stages)
@@ -869,10 +888,15 @@ def _get_compound_kernel(ops, axes_mapping, dims):
                     buffers_in_reg[stage_index].add(inval)
 
             if op[0] in _op_templates:
+                if op[0] == "onehot" and op[4] != loop_axis:
+                    index = "idx" + str(loop_axis)
+                else:
+                    index = "item"
                 op_code = _op_templates[op[0]] % {
                     "x": ctx.register_mapping[op[1]],
                     "y": ctx.register_mapping[op[2]],
-                    "out": ctx.register_mapping[op[3]]
+                    "out": ctx.register_mapping[op[3]],
+                    "index": index
                 }
             else:
                 op_code = _redop_templates[op[0]] % {

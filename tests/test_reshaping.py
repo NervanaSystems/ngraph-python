@@ -25,7 +25,7 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-def test_expand_dims():
+def test_expand_dims(transformer_factory):
     """TODO."""
     max_new_axis_length = 4
 
@@ -90,7 +90,7 @@ def test_expand_dims():
                 )
 
 
-def test_slice():
+def test_slice(transformer_factory):
     """TODO."""
     tests = [
         {
@@ -176,7 +176,7 @@ def test_slice():
         )
 
 
-def test_padding():
+def test_padding(transformer_factory):
     """TODO."""
     tests = [
         {
@@ -238,7 +238,7 @@ def test_padding():
         )
 
 
-def test_axes_cast():
+def test_axes_cast(transformer_factory):
     ex = ExecutorFactory()
 
     ax.C.length = 2
@@ -270,7 +270,7 @@ def test_axes_cast():
     )
 
 
-def test_slice_tensor_description():
+def test_slice_tensor_description(transformer_factory):
     C = arrayaxes.Axis(2)
 
     td = arrayaxes.TensorDescription(arrayaxes.Axes(C))
@@ -281,7 +281,7 @@ def test_slice_tensor_description():
         )
 
 
-def test_tensor_description_init():
+def test_tensor_description_init(transformer_factory):
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
         arrayaxes.TensorDescription(arrayaxes.Axes(arrayaxes.Axis()))
