@@ -16,14 +16,11 @@ from builtins import range
 
 import numpy as np
 import random
-import pytest
 
 import ngraph as ng
 import ngraph.frontends.base.axis as ax
 from ngraph.util.utils import raise_all_numpy_errors
 from ngraph.util.utils import ExecutorFactory, executor
-
-import ngraph.transformers as ngt
 
 """
 Test ngraph's implementation of the dot product.
@@ -94,17 +91,6 @@ def ngraph_l2_norm(np_array):
     np_tensor = ng.Constant(np_array, axes=axes)
     var = ng.Variable(axes=axes, initial_value=np_tensor)
     return executor(ng.sqrt(ng.dot(var, var)))()
-
-
-@pytest.fixture(scope="module",
-                params=ngt.Transformer.transformer_choices())
-def transformer_factory(request):
-    factory = ngt.Transformer.make_transformer_factory(request.param)
-    ngt.Transformer.set_transformer_factory(factory)
-    yield factory
-
-    # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
 
 
 @raise_all_numpy_errors

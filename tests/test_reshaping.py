@@ -19,22 +19,10 @@ from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
 import ngraph.frontends.base.axis as ax
 from ngraph.op_graph import arrayaxes
-import ngraph.transformers as ngt
 
 
 delta = 1e-3
 rtol = atol = 1e-2
-
-
-@pytest.fixture(scope="module",
-                params=ngt.Transformer.transformer_choices())
-def transformer_factory(request):
-    factory = ngt.Transformer.make_transformer_factory(request.param)
-    ngt.Transformer.set_transformer_factory(factory)
-    yield factory
-
-    # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
 
 
 def test_expand_dims(transformer_factory):

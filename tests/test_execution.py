@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import pytest
 import numpy as np
 from builtins import range
 
@@ -23,21 +22,9 @@ import ngraph as ng
 from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
 from ngraph.util.utils import numeric_derivative, executor
 from ngraph.util.derivative_check import check_derivative
-import ngraph.transformers as ngt
 
 
 rng = RandomTensorGenerator(0, np.float32)
-
-
-@pytest.fixture(scope="module",
-                params=ngt.Transformer.transformer_choices())
-def transformer_factory(request):
-    factory = ngt.Transformer.make_transformer_factory(request.param)
-    ngt.Transformer.set_transformer_factory(factory)
-    yield factory
-
-    # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
 
 
 def test_constant_multiply(transformer_factory):

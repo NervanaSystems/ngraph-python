@@ -19,19 +19,6 @@ import numpy as np
 from ngraph.util.utils import executor
 import ngraph.frontends.base.axis as ax
 
-import ngraph.transformers as ngt
-
-
-@pytest.fixture(scope="module",
-                params=ngt.Transformer.transformer_choices())
-def transformer_factory(request):
-    factory = ngt.Transformer.make_transformer_factory(request.param)
-    ngt.Transformer.set_transformer_factory(factory)
-    yield factory
-
-    # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
-
 
 def test_evalutaion_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
