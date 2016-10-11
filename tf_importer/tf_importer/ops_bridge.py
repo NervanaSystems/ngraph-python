@@ -13,16 +13,16 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ops_binary import OpsBinary
-from ops_constant import OpsConstant
-from ops_placeholder import OpsPlaceholder
-from ops_unary import OpsUnary
-from ops_matmul import OpsMatmul
-from ops_reduction import OpsReduction
-from ops_variable import OpsVariable
-from ops_transform import OpsTransform
-from ops_nn import OpsNN
-from ops_gradient import OpsGradient
+from tf_importer.tf_importer.ops_binary import OpsBinary
+from tf_importer.tf_importer.ops_constant import OpsConstant
+from tf_importer.tf_importer.ops_placeholder import OpsPlaceholder
+from tf_importer.tf_importer.ops_unary import OpsUnary
+from tf_importer.tf_importer.ops_matmul import OpsMatmul
+from tf_importer.tf_importer.ops_reduction import OpsReduction
+from tf_importer.tf_importer.ops_variable import OpsVariable
+from tf_importer.tf_importer.ops_transform import OpsTransform
+from tf_importer.tf_importer.ops_nn import OpsNN
+from tf_importer.tf_importer.ops_gradient import OpsGradient
 
 
 class OpsBridge(OpsConstant,
