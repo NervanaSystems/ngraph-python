@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 
 from tf_importer.tf_importer.ops_base import OpsBase
-from tf_importer.tf_importer.utils import shape_to_axes
 import ngraph as ng
 import numpy as np
 

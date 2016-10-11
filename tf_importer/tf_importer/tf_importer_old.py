@@ -34,8 +34,7 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import scipy.stats as stats
-from builtins import range, str
-from functools import wraps
+from builtins import range
 
 import ngraph as ng
 from ngraph.op_graph.op_graph import (TensorOp, softmax, is_constant,
@@ -555,8 +554,8 @@ class TFImporter:
     @_convert.on_op('Cast')
     def _convert(self, tf_node):
         # TODO: need a real cast, currently just skip this op
-        dst_type = tf_node.attr['DstT']
-        src_type = tf_node.attr['SrcT']
+        # dst_type = tf_node.attr['DstT']
+        # src_type = tf_node.attr['SrcT']
         self.name_to_op[tf_node.name] = self.name_to_op[tf_node.input[0]]
 
     @_convert.on_op('SparseSoftmaxCrossEntropyWithLogits')
@@ -649,8 +648,8 @@ class TFImporter:
         # available
         # TODO: implement tf.reshape and tf.tile
 
-        input = self.name_to_op[tf_node.input[0]]
-        multiples = self.name_to_op[tf_node.input[1]]
+        # input = self.name_to_op[tf_node.input[0]]
+        # multiples = self.name_to_op[tf_node.input[1]]
 
         # should use the result of multiples as the second arg for np.tile
         # but the value is not available when this graph is constructed.
@@ -668,7 +667,7 @@ class TFImporter:
     @_convert.on_op('ExpandDims')
     def _convert(self, tf_node):
         # TODO: implement tf.expand_dims
-        dim = self.name_to_op[tf_node.input[1]]
+        # dim = self.name_to_op[tf_node.input[1]]
         self.name_to_op[tf_node.name] = self.name_to_op[tf_node.input[0]]
 
     @_convert.on_op('BroadcastGradientArgs')

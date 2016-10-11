@@ -13,12 +13,14 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 from tf_importer.tf_importer.utils import shape_to_axes
 from tf_importer.tf_importer.ops_base import OpsBase
 from tensorflow.python.framework import tensor_util
 import ngraph as ng
 import numpy as np
-import scipy as sp
 import scipy.stats
 
 
@@ -29,7 +31,7 @@ class OpsConstant(OpsBase):
 
     def Const(self, tf_node, inputs):
         """
-        [TensorFlow Docs]\
+        [TensorFlow Docs]
         Creates a constant tensor.
 
         The resulting tensor is populated with values of type `dtype`, as
@@ -118,7 +120,7 @@ class OpsConstant(OpsBase):
         shape_op, const_val_op = inputs
 
         # get shape, const_val
-        shape = map(int, shape_op.const)
+        shape = tuple(shape_op.const.astype(int))
         const_val = const_val_op.const
 
         # convert to numpy value
@@ -170,12 +172,12 @@ class OpsConstant(OpsBase):
                     (output)
         """
         # get inputs
-        shape = map(int, inputs[0].const)
+        shape = tuple(inputs[0].const.astype(int))
 
         # generate truncated standard normal
         mu, sigma, lo, up = 0., 1., -2., 2
-        generator = sp.stats.truncnorm((lo - mu) / sigma, (up - mu) / sigma,
-                                       loc=mu, scale=sigma)
+        generator = scipy.stats.truncnorm((lo - mu) / sigma, (up - mu) / sigma,
+                                          loc=mu, scale=sigma)
         np_val = generator.rvs(shape)
         ng_op = ng.Constant(np_val, axes=shape_to_axes(np_val.shape),
                             name=tf_node.name)
@@ -206,7 +208,7 @@ class OpsConstant(OpsBase):
         several ops. The `RandomStandardNormal` op is what we implement here.
         """
         # get inputs
-        shape = map(int, inputs[0].const)
+        shape = tuple(inputs[0].const.astype(int))
 
         # generate standard normal
         np_val = np.random.standard_normal(size=shape)

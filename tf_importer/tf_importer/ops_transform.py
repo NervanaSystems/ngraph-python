@@ -177,8 +177,8 @@ class OpsTransform(OpsBase):
         """
         # TODO: now only a pass through
         # get src and dst datatypes
-        dst_type = tf_node.attr['DstT']
-        src_type = tf_node.attr['SrcT']
+        # dst_type = tf_node.attr['DstT']
+        # src_type = tf_node.attr['SrcT']
         return inputs[0]
 
     def Shape(self, tf_node, inputs):
@@ -262,7 +262,8 @@ class OpsTransform(OpsBase):
 
         Args:
             indices: A list of at least 2 `Tensor` objects of type `int32`.
-            data: A list with the same number of `Tensor` objects as `indices` of `Tensor` objects of the same type.
+            data: A list with the same number of `Tensor` objects as `indices`
+                  of `Tensor` objects of the same type.
             name: A name for the operation (optional).
 
         Returns:
