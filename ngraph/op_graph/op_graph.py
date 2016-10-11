@@ -40,6 +40,19 @@ def tensor_descriptions(args):
     return (arg.tensor_description() for arg in args)
 
 
+def tdcache():
+    """
+    Decorator to mark tensor description method as cached.
+
+    Returns:
+        Cache decorator set to use a particular cache.
+
+    """
+    return cachetools.cached(cache=tdcache.tensor_description_cache)
+
+tdcache.tensor_description_cache = {}
+
+
 class Op(Node):
     """
     Any operation that can be in an AST.
@@ -166,6 +179,38 @@ class Op(Node):
             ops.append(self)
         self.style = {}
         self.ops = []
+        self.__forward = None
+
+    @property
+    def forward(self):
+        """
+        If not None, self has been replaced with forward.
+
+        When set, invalidates cached tensor descriptions.
+
+        Returns:
+             None or the replacement.
+        """
+        return self.__forward
+
+    @forward.setter
+    def forward(self, value):
+        self.__forward = value
+        tdcache.tensor_description_cache.clear()
+
+    @property
+    def forwarded(self):
+        """
+        Finds the op that handles this op.
+
+        Returns:
+             Follows forwarding to the op that shoud handle this op.
+        """
+        result = self
+        while True:
+            if not result.forward:
+                return result
+            result = result.forward
 
     def add_other_dep(self, dep):
         self.other_deps.add(dep)
@@ -174,7 +219,11 @@ class Op(Node):
         self.initializers.add(init)
 
     def update_forwards(self):
-        super(Op, self).update_forwards()
+        """
+        Updates internal op references with their forwarded versions.
+        """
+
+        self.args = tuple(arg.forwarded for arg in self.args)
         self.other_deps = set(op.forwarded for op in self.other_deps)
         self.initializers = [op.forwarded for op in self.initializers]
 
@@ -707,7 +756,7 @@ class TensorOp(Op):
     def __axes__(self):
         return self.axes
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         """
         Returns a TensorDescription describing the output of this TensorOp
@@ -834,7 +883,7 @@ class Transpose(ReshapeOp):
             **kwargs
         )
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         return self.args[0].tensor_description().transpose(self.name)
 
@@ -854,7 +903,7 @@ class AxesCastOp(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         return self.args[0].tensor_description().cast(self.axes, self.name)
 
@@ -882,7 +931,7 @@ class ExpandDims(ReshapeOp):
         axes = Axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         """
         TODO.
@@ -915,7 +964,7 @@ class ResultHandle(ReshapeOp):
             x, **kwargs
         )
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         td, = tensor_descriptions(self.args)
         return td.broadcast(td.axes, self.name)
@@ -939,7 +988,7 @@ class Broadcast(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         """
         TODO.
@@ -989,7 +1038,7 @@ class ReorderAxes(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         """
         TODO.
@@ -1052,7 +1101,7 @@ class Slice(ReshapeOp):
 
         self.slices = slices
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         """
         TODO.
@@ -1109,7 +1158,7 @@ class Flatten(ReshapeOp):
         assert Axes.check_flatten(x.axes, axes)
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
         return x.flatten(self.axes, name=self.name)
@@ -1156,7 +1205,7 @@ class Unflatten(ReshapeOp):
         assert Axes.check_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
-    @cachetools.cached({})
+    @tdcache()
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
         return x.unflatten(self.axes, self.name)
