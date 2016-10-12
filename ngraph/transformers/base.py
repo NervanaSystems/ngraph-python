@@ -44,6 +44,7 @@ class Computation(NameableValue):
     def __init__(self, transformer, returns, *args, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
+        self.computation_name = None
 
         def wrap_op(op):
             if isinstance(op, TensorOp):
@@ -112,7 +113,7 @@ class Computation(NameableValue):
         """
         self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-        self.name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
+        self.computation_name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
         """
@@ -323,7 +324,22 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
         """
 
 
-class Transformer(with_metaclass(abc.ABCMeta, object)):
+class Transformer_ABC_Meta(abc.ABCMeta):
+    """
+    metaclass for the backend objects
+    takes care of registering all the backend subclasses
+    """
+    def __init__(self, name, bases, dict_):
+        if not hasattr(self, 'transformers'):
+            self.transformers = {}
+        else:
+            name = getattr(self, 'transformer_name', None)
+            if name and name not in ['Transformer']:
+                self.transformers[name] = self
+        super(Transformer_ABC_Meta, self).__init__(name, bases, dict_)
+
+
+class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     Produce an executable version of op-graphs.
 
@@ -348,6 +364,49 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         init_computation (Computation): The computation that performs initialization
             after allocation.  This happens once per training session, not once per-minibatch.
     """
+    __transformer_factory = None
+
+    @staticmethod
+    def make_transformer():
+        """
+        Generates a Transformer using the factory in this module which defaults
+        to NumPy
+
+        Returns: Transformer
+        """
+        return Transformer.transformer_factory()
+
+    @staticmethod
+    def set_transformer_factory(factory):
+        """
+        Sets the Transformer factory used by make_transformer
+
+        Arguments:
+            factory (object): Callable object which generates a Transformer
+        """
+        Transformer.transformer_factory = factory
+
+    @staticmethod
+    def transformer_choices():
+        """Return the list of available transformers."""
+        names = sorted(Transformer.transformers.keys())
+        return names
+
+    @staticmethod
+    def allocate_transformer(name, **kargs):
+        """Allocate a named backend."""
+        try:
+            return Transformer.transformers[name](**kargs)
+        except KeyError:
+            names = ', '.join(["'%s'" % (_,) for _ in Transformer.transformer_choices()])
+            raise ValueError("transformer must be one of (%s)" % (names,))
+
+    @staticmethod
+    def make_transformer_factory(name, **kargs):
+        @staticmethod
+        def factory():
+            return Transformer.allocate_transformer(name, **kargs)
+        return factory
 
     def __init__(self, fusion=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)
@@ -371,23 +430,25 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
-        init_graph = set([doall(self.ordered_initializers(ops))])
-        init_graph = Op.simple_prune(init_graph)
+        init_op = doall(self.ordered_initializers(ops))
+        init_graph = Op.simple_prune(set([init_op]))
         init_graph = RequiredSimplify().run(init_graph)
         self.inits = Op.ordered_ops(init_graph)
+        init_op = init_op.forwarded
+        init_op.update_forwards()
 
         # create computation which initializes values (called once per
         # session)
-        self.init_computation = self.computation(doall(self.inits), name="init")
+        self.init_computation = self.computation(init_op, name="init")
 
-        all_ops = [op.forwarded for op in ops + self.inits]
+        all_ops = set(ops).union(self.inits)
         # Give ids
         for op in all_ops:
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
         self.dataflow, self.memory = assign_buffers(
-            self, self.all_results.union(self.inits), self.fusion
+            self, all_ops, self.fusion
         )
 
         # Initialize tensor descriptions
@@ -396,7 +457,6 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
 
         self.ops = self.dataflow.instructions
         self.order = {op: i for i, op in enumerate(self.ops)}
-        self.initializers = self.ordered_initializers(self.ops)
 
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
@@ -505,6 +565,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
             these_ops = todo
             todo = set()
             for op in these_ops:
+                op = op.forwarded
+                op.update_forwards()
                 initializers.update(op.initializers)
                 todo.update(op.initializers)
 
@@ -513,15 +575,8 @@ class Transformer(with_metaclass(abc.ABCMeta, object)):
         inits = set()
 
         def visit(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-
-            Returns:
-
-            """
+            node = node.forwarded
+            node.update_forwards()
             if node not in visited:
                 if node.initializers:
                     if node in inits:

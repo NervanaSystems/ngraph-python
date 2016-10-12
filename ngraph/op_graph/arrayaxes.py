@@ -463,7 +463,7 @@ class Axes(object):
             Axes of the weights used in the transformation.
         """
         return (
-            (in_axes + out_axes) -
+            (out_axes + in_axes) -
             Axes.intersect(in_axes, out_axes)
         )
 
@@ -585,7 +585,7 @@ class Axes(object):
     @with_args_as_axes
     def check_unflatten(axes, new_axes):
         """
-        Checks whther axes can safely be unflattened to produce new_axes.
+        Checks whether axes can safely be unflattened to produce new_axes.
         The requirements are that the components of axes should all be
         present in new_axes and that they should be laid out in the same
         order.
@@ -597,6 +597,9 @@ class Axes(object):
         Returns:
             True if axes can be safely unflattened to new_axes, False otherwise.
         """
+        if len(axes) == 0:
+            return True
+
         def check(condition):
             if not condition:
                 return False
@@ -661,6 +664,8 @@ class FlattenedAxis(Axis):
 
     def __init__(self, axes, **kwargs):
         axes = Axes(axes)
+        if len(axes) == 1 and isinstance(axes[0], FlattenedAxis):
+            pass
         length = reduce(operator.mul, axes.lengths, 1)
         super(FlattenedAxis, self).__init__(length=length, **kwargs)
         self.__axes = axes
@@ -827,6 +832,7 @@ class TensorDescription(NameableValue):
         self.__slices = weakref.WeakValueDictionary()
         self.__value = None
         self.__buffer = None
+        self.__register = None
         self.__base = base
         self.dtype = dtype
         self.offset = offset
@@ -866,7 +872,7 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
-    def flatten(self, new_axes):
+    def flatten(self, new_axes, name=None):
         """
         Flattens a tensor description to give it the Axes in new_axes.
         See Axes.check_flatten for a description of permitted values of new_axes.
@@ -903,10 +909,11 @@ class TensorDescription(NameableValue):
             dtype=self.dtype,
             full_strides=new_strides,
             full_sizes=new_sizes,
-            offset=self.offset
+            offset=self.offset,
+            name=name
         )
 
-    def unflatten(self, new_axes):
+    def unflatten(self, new_axes, name=None):
         """
         Unflattens a tensor description to give it the Axes in new_axes.
         See Axes.check_unflatten for a description of the permitted values of
@@ -941,10 +948,11 @@ class TensorDescription(NameableValue):
             base=self.base,
             full_strides=new_strides,
             full_sizes=new_sizes,
-            offset=self.offset
+            offset=self.offset,
+            name=name
         )
 
-    def transpose(self):
+    def transpose(self, name=None):
         """
         Reverses the axes of the tensor description.
 
@@ -959,9 +967,10 @@ class TensorDescription(NameableValue):
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
-                                 offset=self.offset)
+                                 offset=self.offset,
+                                 name=name)
 
-    def broadcast(self, new_axes):
+    def broadcast(self, new_axes, name=None):
         """
         Adds axes to a tensor description to give it a new shape.
         See Axes.check_broadcast for a description of the permitted
@@ -974,9 +983,9 @@ class TensorDescription(NameableValue):
             TensorDescription: The broadcasted tensor description.
         """
         Axes.check_broadcast(self.axes, new_axes)
-        return self.reorder_and_broadcast(new_axes)
+        return self.reorder_and_broadcast(new_axes, name)
 
-    def reorder(self, new_axes):
+    def reorder(self, new_axes, name=None):
         """
         Shuffles axes of a tensor to give it a new shape. The axes of
         this tensor description and new_axes must have the same elements.
@@ -988,9 +997,9 @@ class TensorDescription(NameableValue):
             TensorDescription: The reordered tensor description.
         """
         Axes.same_elems(self.axes, new_axes)
-        return self.reorder_and_broadcast(new_axes)
+        return self.reorder_and_broadcast(new_axes, name)
 
-    def reorder_and_broadcast(self, new_axes):
+    def reorder_and_broadcast(self, new_axes, name):
         """
         Adds or shuffles axes to give a tensor description a new shape.
         This function is used to implement broadcast and reorder.
@@ -1032,10 +1041,11 @@ class TensorDescription(NameableValue):
             dtype=self.dtype,
             full_strides=new_strides,
             full_sizes=new_sizes,
-            offset=self.offset
+            offset=self.offset,
+            name=name
         )
 
-    def cast(self, new_axes):
+    def cast(self, new_axes, name=None):
         """
         Return a tensor desciption for a view of the tensor.
 
@@ -1052,10 +1062,11 @@ class TensorDescription(NameableValue):
             dtype=self.dtype,
             full_strides=self.full_strides,
             full_sizes=self.full_sizes,
-            offset=self.offset
+            offset=self.offset,
+            name=name
         )
 
-    def slice(self, slices, new_axes):
+    def slice(self, slices, new_axes, name=None):
         """
         Return a tensor description for a slice view of this tensor.
 
@@ -1121,7 +1132,8 @@ class TensorDescription(NameableValue):
                                  dtype=self.dtype,
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
-                                 offset=offset)
+                                 offset=offset,
+                                 name=name)
 
     @property
     def shape(self):
@@ -1176,6 +1188,14 @@ class TensorDescription(NameableValue):
         Returns:
         """
         self.base.__buffer = value
+
+    @property
+    def register(self):
+        return self.base.__register
+
+    @register.setter
+    def register(self, value):
+        self.base.__register = value
 
     @property
     def value(self):

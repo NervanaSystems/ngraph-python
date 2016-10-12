@@ -6,10 +6,11 @@ from ngraph.util.derivative_check import check_derivative
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 
+
 rng = RandomTensorGenerator(0, np.float32)
 
 
-def test_dimshuffle_fprop():
+def test_dimshuffle_fprop(transformer_factory):
     """
     dimshuffle a 2d array and make sure fprop works
     """
@@ -31,7 +32,7 @@ def test_dimshuffle_fprop():
     np.testing.assert_allclose(result, x_value.T)
 
 
-def test_dimshuffle_bprop():
+def test_dimshuffle_bprop(transformer_factory):
     """
     dimshuffle a 2d array and make sure bprop works
     """
@@ -70,21 +71,21 @@ def x(A, B, C):
     return ng.placeholder(axes=ng.Axes([A, B]))
 
 
-def test_fail_on_missing(x, B):
+def test_fail_on_missing(transformer_factory, x, B):
     with pytest.raises(ValueError):
         ng.Dimshuffle(x, axes=ng.Axes([B, B]))
 
 
-def test_fail_on_extra_axis(x, A, B, C):
+def test_fail_on_extra_axis(transformer_factory, x, A, B, C):
     with pytest.raises(ValueError):
         ng.Dimshuffle(x, axes=ng.Axes([A, B, C]))
 
 
-def test_fail_on_missing_and_extra_axis(x, A, C):
+def test_fail_on_missing_and_extra_axis(transformer_factory, x, A, C):
     with pytest.raises(ValueError):
         ng.Dimshuffle(x, axes=ng.Axes([A, C]))
 
 
-def test_fail_on_axis_reuse(x, A, B):
+def test_fail_on_axis_reuse(transformer_factory, x, A, B):
     with pytest.raises(ValueError):
         ng.Dimshuffle(x, axes=ng.Axes([A, B, B]))

@@ -23,10 +23,11 @@ from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
 from ngraph.util.utils import numeric_derivative, executor
 from ngraph.util.derivative_check import check_derivative
 
+
 rng = RandomTensorGenerator(0, np.float32)
 
 
-def test_constant_multiply():
+def test_constant_multiply(transformer_factory):
     # TODO: better error message when missing axes length in cases where it
     # is needed
     ax.Y.length = 1
@@ -41,7 +42,7 @@ def test_constant_multiply():
     np.testing.assert_allclose(result, [8])
 
 
-def test_constant_tensor_multiply():
+def test_constant_tensor_multiply(transformer_factory):
     ax.Y.length = 2
     ax.N.length = 2
 
@@ -54,7 +55,7 @@ def test_constant_tensor_multiply():
     np.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
 
 
-def test_tensor_sum_single_reduction_axes():
+def test_tensor_sum_single_reduction_axes(transformer_factory):
     """TODO."""
     ax.N.length = 2
     ax.Y.length = 2
@@ -67,7 +68,7 @@ def test_tensor_sum_single_reduction_axes():
     np.testing.assert_allclose(result, [2.0, 2.0])
 
 
-def test_scalar():
+def test_scalar(transformer_factory):
     """TODO."""
     # Simple evaluation of a scalar
     val = 5
@@ -78,7 +79,7 @@ def test_scalar():
     np.testing.assert_allclose(cval, val)
 
 
-def test_tensor_constant():
+def test_tensor_constant(transformer_factory):
     # Pass a NumPy array through as a constant
     ax.W.length = 10
     ax.H.length = 20
@@ -92,7 +93,7 @@ def test_tensor_constant():
     np.testing.assert_allclose(cval, aval)
 
 
-def test_placeholder():
+def test_placeholder(transformer_factory):
     # Pass array through a placeholder
     ax.W.length = 10
     ax.H.length = 20
@@ -128,7 +129,7 @@ def test_placeholder():
     np.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-def test_reduction():
+def test_reduction(transformer_factory):
     ax.C.length = 4
     ax.W.length = 4
     ax.H.length = 4
@@ -154,7 +155,7 @@ def test_reduction():
                 red=red, axes=reduction_axes)
 
 
-def test_reduction_deriv():
+def test_reduction_deriv(transformer_factory):
     delta = .001
     ax.C.length = 4
     ax.W.length = 10
@@ -177,7 +178,7 @@ def test_reduction_deriv():
             check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
-def test_reciprocal():
+def test_reciprocal(transformer_factory):
     """TODO."""
     ax.W.length = 20
     ax.N.length = 128
@@ -193,7 +194,7 @@ def test_reciprocal():
     np.testing.assert_allclose(rec_u_np, rec_u_graph)
 
 
-def test_reciprocal_derivative():
+def test_reciprocal_derivative(transformer_factory):
     """TODO."""
     delta = .001
     ax.W.length = 20
@@ -221,7 +222,7 @@ ELEMENTWISE_UNARY_OPS = [
 ]
 
 
-def test_elementwise_binary_ops_matched_args():
+def test_elementwise_binary_ops_matched_args(transformer_factory):
     """TODO."""
     axes = ng.Axes([ng.Axis(20), ng.Axis(20)])
 
@@ -239,7 +240,7 @@ def test_elementwise_binary_ops_matched_args():
         )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_lhs():
+def test_elementwise_binary_ops_matched_args_deriv_lhs(transformer_factory):
     """TODO."""
     axes = ng.Axes([ng.Axis(20), ng.Axis(20)])
 
@@ -258,7 +259,7 @@ def test_elementwise_binary_ops_matched_args_deriv_lhs():
         )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_rhs():
+def test_elementwise_binary_ops_matched_args_deriv_rhs(transformer_factory):
     """TODO."""
     axes = ng.Axes([ng.Axis(20), ng.Axis(20)])
 
@@ -277,7 +278,7 @@ def test_elementwise_binary_ops_matched_args_deriv_rhs():
         )
 
 
-def test_elementwise_unary_ops_matched_args():
+def test_elementwise_unary_ops_matched_args(transformer_factory):
     """TODO."""
     delta = .001
     axes = ng.Axes([ng.Axis(20), ng.Axis(20)])
@@ -300,7 +301,7 @@ def test_elementwise_unary_ops_matched_args():
         np.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
-def test_elementwise_ops_unmatched_args():
+def test_elementwise_ops_unmatched_args(transformer_factory):
     """TODO."""
     # delta = .001
     ax.W.length = 5
@@ -413,7 +414,7 @@ def cross_entropy_binary_logistic_shortcut(x, t):
     return (1.0 - t) * x - np.log(y)
 
 
-def test_cross_entropy_binary_logistic_shortcut():
+def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
     """TODO."""
     ax.W.length = 20
     ax.N.length = 128
@@ -431,7 +432,7 @@ def test_cross_entropy_binary_logistic_shortcut():
     np.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
-def test_cross_entropy_binary():
+def test_cross_entropy_binary(transformer_factory):
     """TODO."""
     delta = .001
     ax.W.length = 20
@@ -493,7 +494,7 @@ def adiff_softmax(x):
     return result
 
 
-def test_np_softmax():
+def test_np_softmax(transformer_factory):
     """TODO."""
     ax.N.length = 128
     ax.C.length = 20
@@ -545,7 +546,7 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
-def test_softmax():
+def test_softmax(transformer_factory):
     """TODO."""
     ax.W.length = 128
     ax.N.length = 10
@@ -577,7 +578,7 @@ def test_softmax():
     np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
-def test_softmax2():
+def test_softmax2(transformer_factory):
     ax.W.length = 3
     ax.N.length = 10
     axes = ng.Axes([ax.W, ax.N])
@@ -585,10 +586,10 @@ def test_softmax2():
     x = rng.uniform(0, 1, axes)
     p_x = ng.placeholder(axes=axes)
 
-    compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x)
+    compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_deriv():
+def test_softmax_deriv(transformer_factory):
     ax.W.length = 3
     ax.N.length = 10
     axes = ng.Axes([ax.W, ax.N])
@@ -599,7 +600,7 @@ def test_softmax_deriv():
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_softmax_rec():
+def test_softmax_rec(transformer_factory):
     ax.W.length = 3
     ax.T.length = 4
     ax.N.length = 10
@@ -607,10 +608,10 @@ def test_softmax_rec():
 
     x = rng.uniform(0, 1, axes)
     p_x = ng.placeholder(axes=axes)
-    compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x)
+    compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_rec_deriv():
+def test_softmax_rec_deriv(transformer_factory):
     ax.W.length = 3
     ax.T.length = 4
     ax.N.length = 10
@@ -621,7 +622,7 @@ def test_softmax_rec_deriv():
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_cross_entropy_softmax():
+def test_cross_entropy_softmax(transformer_factory):
     ax.W.length = 3
     ax.N.length = 10
     axes = ng.Axes([ax.W, ax.N])
@@ -640,7 +641,7 @@ def test_cross_entropy_softmax():
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_deriv():
+def test_cross_entropy_softmax_deriv(transformer_factory):
     ax.W.length = 3
     ax.N.length = 10
     axes = ng.Axes([ax.W, ax.N])
@@ -660,7 +661,7 @@ def test_cross_entropy_softmax_deriv():
     )
 
 
-def test_cross_enropy_rec():
+def test_cross_enropy_rec(transformer_factory):
     ax.W.length = 3
     ax.T.length = 4
     ax.N.length = 10
@@ -680,7 +681,7 @@ def test_cross_enropy_rec():
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_rec_deriv():
+def test_cross_entropy_softmax_rec_deriv(transformer_factory):
     ax.W.length = 3
     ax.T.length = 4
     ax.N.length = 10
@@ -701,7 +702,7 @@ def test_cross_entropy_softmax_rec_deriv():
     )
 
 
-def test_sigmoid_deriv():
+def test_sigmoid_deriv(transformer_factory):
     """TODO."""
     axes = ng.Axes([ng.Axis(20), ng.Axis(128)])
     p_u = ng.placeholder(axes=axes)
@@ -712,7 +713,7 @@ def test_sigmoid_deriv():
     check_derivative(val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
 
 
-def test_log_sigmoid_deriv():
+def test_log_sigmoid_deriv(transformer_factory):
     """TODO."""
     axes = ng.Axes([ng.Axis(20), ng.Axis(128)])
     p_u = ng.placeholder(axes=axes)
@@ -753,13 +754,13 @@ def compare_f_at_x(f_be, x_be, f_np, x, **kwargs):
     np.testing.assert_allclose(val_np, val_be, **kwargs)
 
 
-def test_sigmoid_value():
+def test_sigmoid_value(transformer_factory):
     """ check the output of sigmoid is the same as np """
     axes = ng.Axes([ng.Axis(20), ng.Axis(128)])
     p_x = ng.placeholder(axes=axes)
     x = rng.uniform(-3.0, 3.0, p_x.axes)
 
-    compare_f_at_x(ng.sigmoid(p_x), p_x, lambda x: 1.0 / (1 + np.exp(-x)), x)
+    compare_f_at_x(ng.sigmoid(p_x), p_x, lambda x: 1.0 / (1 + np.exp(-x)), x, rtol=1e-5)
 
 
 def one_hot_comparison(hot_axes, axes):
@@ -783,7 +784,7 @@ def one_hot_comparison(hot_axes, axes):
     np.testing.assert_allclose(v_t, v)
 
 
-def test_onehot():
+def test_onehot(transformer_factory):
     """TODO."""
     ax.C.length = 4
     ax.W.length = 32

@@ -23,7 +23,7 @@ from ngraph.util.utils import executor
 import numpy as np
 
 
-def test_constant_init():
+def test_constant_init(transformer_factory):
     """TODO."""
     a = ng.Constant(5)
     result = executor(a)()
@@ -33,7 +33,7 @@ def test_constant_init():
     print("pass constant initialization")
 
 
-def test_constant_add():
+def test_constant_add(transformer_factory):
     """TODO."""
     a = ng.Constant(1)
     b = ng.Constant(2)
@@ -44,7 +44,7 @@ def test_constant_add():
     assert result == 3
 
 
-def test_constant_multiply():
+def test_constant_multiply(transformer_factory):
     """TODO."""
     a = ng.Constant(4)
     b = ng.Constant(2)
@@ -53,7 +53,7 @@ def test_constant_multiply():
     assert result == 8
 
 
-def test_numpytensor_add():
+def test_numpytensor_add(transformer_factory):
     """TODO."""
     ax.Y.length = 2
     a = ng.Constant(np.array([3, 5], dtype=np.float32), axes=[ax.Y])
@@ -75,7 +75,7 @@ def test_numpytensor_add():
     assert np.array_equal(result, np_c)
 
 
-def test_numpytensor_dot():
+def test_numpytensor_dot(transformer_factory):
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
     np_c = np.dot(np_a, np_b)
@@ -92,7 +92,7 @@ def test_numpytensor_dot():
     assert np.array_equal(result, np_c)
 
 
-def test_numpytensor_multiply_constant():
+def test_numpytensor_multiply_constant(transformer_factory):
     """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.multiply(np_a, 2)
@@ -107,7 +107,7 @@ def test_numpytensor_multiply_constant():
     assert np.array_equal(result, np_c)
 
 
-def test_numpytensor_add_constant():
+def test_numpytensor_add_constant(transformer_factory):
     """TODO."""
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.add(np_a, 2)
@@ -122,7 +122,24 @@ def test_numpytensor_add_constant():
     assert np.array_equal(result, np_c)
 
 
-def test_numpytensor_mlp():
+def test_numpytensor_fusion(transformer_factory):
+    """TODO."""
+    np_a = np.array([[1, 2, 3]], dtype=np.float32)
+    np_b = np.array([[3, 2, 1]], dtype=np.float32)
+    np_d = np.multiply(np_b, np.add(np_a, 2))
+
+    ax.M.length = 1
+    ax.N.length = 3
+    a = ng.Constant(np_a, axes=[ax.M, ax.N])
+    b = ng.Constant(np_b, axes=[ax.M, ax.N])
+    c = ng.Constant(2)
+    d = ng.multiply(b, ng.add(a, c))
+    result = executor(d)()
+    print(result)
+    assert np.array_equal(result, np_d)
+
+
+def test_numpytensor_mlp(transformer_factory):
     """TODO."""
     np_x = np.array([[1, 2, 3]], dtype=np.float32)
     np_w = np.array([[1, 1], [1, 1], [1, 1]], dtype=np.float32)

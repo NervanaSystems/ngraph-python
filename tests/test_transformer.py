@@ -20,7 +20,7 @@ from ngraph.util.utils import executor
 import ngraph.frontends.base.axis as ax
 
 
-def test_evalutaion_twice():
+def test_evalutaion_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
     ax.C.length = 2
     ax.D.length = 2

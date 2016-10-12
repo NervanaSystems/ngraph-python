@@ -25,6 +25,11 @@ from ngraph.transformers.nptransform import NumPyTransformer
 from ngraph.util.names import *
 
 try:
+    from ngraph.transformers.gputransform import GPUTransformer
+except ImportError:
+    pass
+
+try:
     from ngraph.transformers.argon.artransform import ArgonTransformer
 except ImportError as e:
     if 'argon' in str(e):
