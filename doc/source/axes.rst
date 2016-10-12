@@ -180,18 +180,17 @@ Dot Products
 Axes Reduction
 --------------
 
-- Instead of specifying reduction axis, we specify the output axes for
-  as ``out_axes``. Reduction operations can have arbitrary number of reduction
-  axes.
-- When ``out_axis`` is empty, reduction is performed on all axes.
+- We specify the reduction axes in ``reduction_axes``. Reduction operations can
+  have arbitrary number of reduction axes. The order of the reduction axes
+  can be arbitary.
+- When ``reduction_axes`` is empty, reduction is performed on NONE of the axes.
 
 Examples: ::
 
-    x = ng.placeholder(axes=ng.Axes((C, H, W)))
-    y0 = ng.sum(x, out_axes=ng.Axes((H, W)))
-    y1 = ng.sum(x, out_axes=ng.Axes((W, H)))
-    y2 = ng.sum(x, out_axes=ng.Axes((C,)))
-    y3 = ng.sum(x, out_axes=ng.Axes([])
+    reduce((C, H, W), reduction_axes=())     -> (A, B, C)
+    reduce((C, H, W), reduction_axes=(C,))   -> (B, C)
+    reduce((C, H, W), reduction_axes=(C, W)) -> (H,)
+    reduce((C, H, W), reduction_axes=(W, C)) -> (H,)
 
 Axes casting
 ------------
@@ -210,3 +209,14 @@ dimensions but different axes. ::
     # cast before sum
     hidden_2_cast = ng.AxesCastOp(hidden_2_cast, ng.Axes((C1, N)))
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: (C1, N)
+
+Axes broadcasting
+-----------------
+
+Use ``ng.Broadcast`` to broadcast to new axes. The new axes shall be a superset
+of the original axes. The order of the new axes can be arbitary.
+
+Examples: ::
+
+    broadcast((C, H), axes=(C, H, W)) -> (C, H, W)
+    broadcast((C, H), axes=(W, H, C)) -> (W, H, C)
