@@ -5,6 +5,18 @@ import ngraph as ng
 from ngraph.util.utils import ExecutorFactory
 
 
+def test_variable_init(transformer_factory):
+    C = ng.Axis("C")
+    C.length = 200
+
+    w_init = np.random.rand(C.length)
+    W = ng.Variable(axes=ng.Axes([C]), initial_value=w_init)
+
+    ex = ExecutorFactory()
+    result = ex.executor(W)()
+    np.testing.assert_allclose(result, w_init)
+
+
 def test_deriv_missing_connection():
     """
     Taking the derivative of an expression with respect to a variable not

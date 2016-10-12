@@ -1319,7 +1319,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
-        val.axes = Axes(nptensor.shape)
+        val.axes = Axes([Axis(x, match_on_length=True) for x in nptensor.shape])
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((

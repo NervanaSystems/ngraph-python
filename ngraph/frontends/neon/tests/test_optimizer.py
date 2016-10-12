@@ -87,15 +87,15 @@ def test_gdm(args, transformer_factory):
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
     # where (x, y) are nparrays that fill the placeholders X and Y
-    updates = gdm.configure(transformer, cost, N)
+    updates = gdm.configure(cost)
     ngraph_optimize = transformer.computation([W, updates], X, Y)
     transformer.initialize()
     gdm.optimize(epoch=0)
 
     # set up the neon gdm
     neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    dev_v0 = be.zeros((C, 1))  # velocities are zero at the beginning
-    dev_dw = be.zeros((C, 1))  # we fill the gradient info in the below
+    dev_v0 = be.zeros((C.length, 1))  # velocities are zero at the beginning
+    dev_dw = be.zeros((C.length, 1))  # we fill the gradient info in the below
     dev_w_init = be.array(w_init)  # copy w_init to device
     param_list = [((dev_w_init, dev_dw), [dev_v0])]
 

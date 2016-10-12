@@ -80,16 +80,17 @@ class Optimizer(object):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
 
-    def configure(self, transformer, cost, batch_size):
+    def configure(self, cost):
         """
-        TODO.
+        Returns the update and computation subgraph `Op` to optimize a cost
+        function.
 
         Arguments:
-          transformer: TODO
-          cost: TODO
-          batch_size: TODO
+          cost: The cost `Op` that this optimizer is attempting to minimize.
 
         Returns:
+          An `Op` implementing the parameter updates to `Variable`s upstream of
+          `cost`.
 
         """
         raise NotImplementedError()
