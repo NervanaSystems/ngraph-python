@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 
-# TODO: Make this an test or example
+# TODO: This is not done yet. Make this a test or an example.
 
 """
 Create a TensorFlow graph with variables.

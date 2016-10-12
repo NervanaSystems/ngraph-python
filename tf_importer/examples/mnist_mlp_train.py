@@ -26,12 +26,12 @@ TODO: infer_node: should determine automatically or receive as arg parameter
 """
 
 from __future__ import print_function, division
-from neon.data import MNIST
-from neon.util.argparser import NeonArgparser
-from importer import TensorFlowImporter
 
 import ngraph as ng
 import numpy as np
+from neon.data import MNIST
+from neon.util.argparser import NeonArgparser
+from tf_importer.tf_importer.importer import TFImporter
 
 parser = NeonArgparser(__doc__)
 parser.set_defaults(backend='dataloader')
@@ -53,7 +53,7 @@ def eval_test(test_data, tf_importer, inference_comp):
 
     Arguments:
         test_data: test input data
-        tf_importer (TensorFlowImporter): tensorflow importer
+        tf_importer (TFImporter): tensorflow importer
         inference_comp (Computation): computation for inference
 
     Returns:
@@ -86,9 +86,9 @@ def train_mnist_mlp():
     test_data = mnist_data['valid']
 
     # tf_importer
-    tf_importer = TensorFlowImporter(args.pb_file,
-                                     end_node_name=args.end_node,
-                                     loss_node_name=args.loss_node)
+    tf_importer = TFImporter(args.pb_file,
+                             end_node_name=args.end_node,
+                             loss_node_name=args.loss_node)
 
     # init computation
     init_comp = None

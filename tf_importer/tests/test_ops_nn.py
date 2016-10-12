@@ -18,37 +18,27 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import ngraph as ng
-from tensorflow_import.importer import TensorFlowImporter
+import numpy as np
+from tf_importer.tests.importer_tester import ImporterTester
 
 
-def test_import_constant_graph():
-    # build constant graph
-    a = tf.constant(10)
-    b = tf.constant(32)
-    c = a + b
-    d = c * a
+class Tester(ImporterTester):
 
-    # get tensorflow result
-    with tf.Session() as sess:
-        tf_result = sess.run(d)
+    def test_sparse_softmax_cross_entropy_with_logits(self):
+        # numpy random values
+        np_logits = np.random.randn(128, 10).astype(np.float32)
+        np_labels = np.random.randint(10, size=(128,))
 
-    # write to protobuf
-    pb_txt_path = "constant_graph.txt"
+        # tf placeholders
+        tf_logits = tf.placeholder(tf.float32, shape=np_logits.shape)
+        tf_labels = tf.placeholder(tf.int32, shape=np_labels.shape)
 
-    tf.train.write_graph(sess.graph_def, "./", pb_txt_path, True)
+        # tf op
+        tf_result_op = tf.nn.sparse_softmax_cross_entropy_with_logits(tf_logits,
+                                                                      tf_labels)
 
-    # init importer, transformer
-    importer = TensorFlowImporter(pb_txt_path)
-    transformer = ng.NumPyTransformer()
+        # feed_dict
+        feed_dict = {tf_logits: np_logits, tf_labels: np_labels}
 
-    # now, assumes last op is the result we want to get
-    ng_result_comp = transformer.computation([importer.last_op])
-    ng_result = ng_result_comp()[0]
-
-    print(tf_result, ng_result)
-    assert tf_result == ng_result
-
-
-if __name__ == '__main__':
-    test_import_constant_graph()
+        # test
+        self.run(tf_result_op, tf_feed_dict=feed_dict)
