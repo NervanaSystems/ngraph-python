@@ -130,14 +130,12 @@ class GradientDescentMomentum(Optimizer):
         self.wdecay = wdecay
         self.schedule = schedule
         self.stochastic_round = stochastic_round
-        self.transformer = None
 
     def configure(self, cost):
         """
         TODO.
 
         Arguments:
-          transformer: TODO
           cost: TODO
           batch_size: TODO
 

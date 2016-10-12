@@ -177,13 +177,13 @@ class NameableValue(object):
         Arguments:
             name: Prefix for the name
         """
-        if name in NameableValue.__all_names:
+        if name == type(self).__name__ or name in NameableValue.__all_names:
             while True:
                 c_name = "{}_{}".format(name, type(self).__counter)
                 if c_name not in NameableValue.__all_names:
                     name = c_name
                     break
-                type(self).__counter = type(self).__counter + 1
+                type(self).__counter += 1
         NameableValue.__all_names[name] = self
         self.__name = name
 

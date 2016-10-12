@@ -16,7 +16,6 @@ from __future__ import division
 
 import collections
 import operator
-import weakref
 from functools import reduce, wraps
 
 import numpy as np
@@ -840,8 +839,6 @@ class TensorDescription(NameableValue):
         axes = Axes(axes)
         self.axes = axes
         self.transformer = None
-        self.__casts = weakref.WeakValueDictionary()
-        self.__slices = weakref.WeakValueDictionary()
         self.__value = None
         self.__buffer = None
         self.__register = None

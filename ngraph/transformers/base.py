@@ -26,6 +26,7 @@ from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptio
     Function, doall, ResultHandle, RequiredSimplify
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
+from ngraph.util.ordered import OrderedSet
 
 
 class Computation(NameableValue):
@@ -55,7 +56,7 @@ class Computation(NameableValue):
         def wrap_ops(ops):
             return [wrap_op(op) for op in ops]
 
-        self.ops = set()
+        self.ops = OrderedSet()
         if isinstance(returns, collections.Set):
             returns = set(wrap_ops(returns))
             self.ops.update(returns)
@@ -89,11 +90,11 @@ class Computation(NameableValue):
             else:
                 raise ValueError()
 
-        control_ops = set()
+        control_ops = OrderedSet()
         for op in self.ops:
             control_ops.update(op.user_deps)
         processed_ops = set()
-        pending_ops = set(self.ops)
+        pending_ops = OrderedSet(self.ops)
         while pending_ops:
             op = pending_ops.pop()
             if op in processed_ops:
@@ -410,14 +411,14 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
     def __init__(self, fusion=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)
-        self.computations = set()
-        self.all_results = set()
+        self.computations = OrderedSet()
+        self.all_results = OrderedSet()
         self.finalized = False
         self.allocated = False
         self.initialized = False
         self.opids = dict()
         self.fusion = fusion
-        self.device_buffers = set()
+        self.device_buffers = OrderedSet()
         self.cpu_initializations = []
         self.init_computation = None
 
@@ -431,7 +432,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # Create tensor descriptions
         ops = Op.ordered_ops(self.all_results)
         init_op = doall(self.ordered_initializers(ops))
-        init_graph = Op.simple_prune(set([init_op]))
+        init_graph = Op.simple_prune(OrderedSet([init_op]))
         init_graph = RequiredSimplify().run(init_graph)
         self.inits = Op.ordered_ops(init_graph)
         init_op = init_op.forwarded
@@ -441,7 +442,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # session)
         self.init_computation = self.computation(init_op, name="init")
 
-        all_ops = set(ops).union(self.inits)
+        all_ops = OrderedSet(ops)
+        all_ops.update(self.inits)
+
         # Give ids
         for op in all_ops:
             if op not in self.opids:
@@ -452,7 +455,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         )
 
         # Initialize tensor descriptions
-        for op in set(all_ops):
+        for op in all_ops:
             self.initialize_tensor_descriptions(op)
 
         self.ops = self.dataflow.instructions
@@ -554,16 +557,16 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns:
 
         """
-        todo = set(ordered_ops)
+        todo = OrderedSet(ordered_ops)
 
         #  Reset variables to their pre-used state
         for op in todo:
             op.user_deps = set()
 
-        initializers = set()
+        initializers = OrderedSet()
         while todo:
             these_ops = todo
-            todo = set()
+            todo = OrderedSet()
             for op in these_ops:
                 op = op.forwarded
                 op.update_forwards()
@@ -572,7 +575,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         ordered_initializer_ops = []
         visited = set()
-        inits = set()
+        inits = OrderedSet()
 
         def visit(node):
             node = node.forwarded
@@ -655,7 +658,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         self.allocate_storage()
 
-        for op in set(self.inits + self.ops):
+        for op in OrderedSet(self.inits + self.ops):
             self.initialize_constant(op)
 
         self.allocated = True

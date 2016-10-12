@@ -16,7 +16,7 @@
 from __future__ import division
 from collections import defaultdict
 from ngraph.util.graph import Digraph
-from ngraph.op_graph.op_graph import TensorOp
+from ngraph.op_graph.op_graph import TensorOp, OrderedSet
 
 
 def base_tensor_descriptions(ops):
@@ -41,7 +41,7 @@ class DataFlowGraph(Digraph):
           results(dict): Results of the desired computation
         """
 
-        super(DataFlowGraph, self).__init__(defaultdict(set))
+        super(DataFlowGraph, self).__init__(defaultdict(OrderedSet))
         self.transformer = transformer
         self.stack = set()
         for w in results:
@@ -56,8 +56,9 @@ class DataFlowGraph(Digraph):
           results(dict): Results of the desired computation
         """
         self.stack.add(w)
-        self.successors[w] |= set()
-        for v in w.other_deps.union(w.args):
+        if w not in self.successors:
+            self.successors[w] = OrderedSet()
+        for v in w.other_deps + list(w.args):
             self.successors[v].add(w)
             if v not in self.stack:
                 self._fill_successors(v)
