@@ -22,7 +22,7 @@ from functools import wraps
 # These are indirectly used by the generated code
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
-from ngraph.op_graph import arrayaxes  # noqa
+from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method

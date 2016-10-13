@@ -71,7 +71,7 @@ ngraph.op_graph
    :toctree: generated/
    :nosignatures:
 
-   ngraph.op_graph.arrayaxes
+   ngraph.op_graph.axes
    ngraph.op_graph.convolution
    ngraph.op_graph.op_graph
 
