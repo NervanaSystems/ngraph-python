@@ -18,7 +18,7 @@ import numpy as np
 from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
 import ngraph.frontends.base.axis as ax
-from ngraph.op_graph import arrayaxes
+from ngraph.op_graph.axes import Axes, Axis, TensorDescription
 
 
 delta = 1e-3
@@ -271,17 +271,17 @@ def test_axes_cast(transformer_factory):
 
 
 def test_slice_tensor_description(transformer_factory):
-    C = arrayaxes.Axis(2)
+    C = Axis(2)
 
-    td = arrayaxes.TensorDescription(arrayaxes.Axes(C))
+    td = TensorDescription(Axes(C))
     with pytest.raises(ValueError):
         td.slice(
             [slice(None)],
-            arrayaxes.Axes([arrayaxes.Axis(1), arrayaxes.Axis(1)]),
+            Axes([Axis(1), Axis(1)]),
         )
 
 
 def test_tensor_description_init(transformer_factory):
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
-        arrayaxes.TensorDescription(arrayaxes.Axes(arrayaxes.Axis()))
+        TensorDescription(Axes(Axis()))

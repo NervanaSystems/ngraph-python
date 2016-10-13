@@ -18,7 +18,7 @@ from builtins import object
 import math
 import numpy as np
 
-from ngraph.op_graph.arrayaxes import Axes
+from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.op_graph import deriv
 from ngraph.transformers import Transformer
 import decorator

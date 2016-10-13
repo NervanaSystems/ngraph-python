@@ -20,7 +20,7 @@ import cachetools
 import numpy as np
 from builtins import object
 
-from ngraph.op_graph.arrayaxes import TensorDescription, \
+from ngraph.op_graph.axes import TensorDescription, \
     Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
 from ngraph.util.generics import generic_method
 from ngraph.util.nodes import Node
