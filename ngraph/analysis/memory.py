@@ -20,7 +20,7 @@ from itertools import combinations
 from ngraph.util.graph import UndirectedGraph
 from ngraph.analysis.dataflow import DataFlowGraph
 from ngraph.analysis.fusion import KernelFlowGraph
-from ngraph.op_graph.op_graph import Buffer, TensorOp
+from ngraph.op_graph.op_graph import Buffer, TensorOp, OrderedSet
 
 
 def _random_colors(N, alpha=.5):
@@ -72,7 +72,7 @@ class InterferenceGraph(UndirectedGraph):
           lives (op => set(tensor_description)): Live tensors at each point
                                                  Typically the output of dataflow.liveness()
         """
-        neighbors = {x: set() for l in list(lives.values()) for x in l}
+        neighbors = {x: OrderedSet() for l in list(lives.values()) for x in l}
         edges = [(u, v) for l in list(lives.values()) for u, v in combinations(l, 2)]
         for u, v in edges:
             neighbors[u].add(v)
@@ -98,11 +98,11 @@ class InterferenceGraph(UndirectedGraph):
         while queue:
             u = queue.pop(0)
             # Creates a new set and grows it as much as possible
-            S = {u}
+            S = OrderedSet([u])
             N = neighbors[u]
             for x in queue:
                 if x not in N:
-                    S |= {x}
+                    S.add(x)
                     N |= neighbors[x]
             partitions.append(S)
             color = len(partitions) - 1
