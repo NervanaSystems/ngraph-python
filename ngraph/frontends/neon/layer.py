@@ -66,10 +66,83 @@ class SkipNode(Layer):
 
 
 class Pooling(Layer):
-    """TODO."""
 
-    def __init__(self, fshape, op="max", strides={}, padding={}, **kwargs):
-        super(Pooling, self).__init__(**kwargs)
+    """
+    Pooling layer implementation.
+
+    Arguments:
+        fshape (int, tuple(int, int)): one or two dimensional shape
+            of pooling window
+        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
+        strides (int, dict, optional): strides to apply pooling window
+            over. An int applies to both dimensions, or a dict with str_h
+            and str_w applies to h and w dimensions distinctly.  Defaults
+            to str_w = str_h = None
+        padding (int, dict, optional): padding to apply to edges of
+            input. An int applies to both dimensions, or a dict with pad_h
+            and pad_w applies to h and w dimensions distinctly.  Defaults
+            to pad_w = pad_h = None
+        name (str, optional): layer name. Defaults to "PoolingLayer"
+    """
+
+    def __init__(self, fshape, op="max", strides={}, padding={},
+                 name=None):
+        super(Pooling, self).__init__(name)
+        self.be = BackendWrapper.be
+        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
+                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
+                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
+
+        # keep args around in __dict__ for get_description
+        self.op = op
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+        self.owns_delta = True
+        if isinstance(fshape, int):
+            fshape = {'R': fshape, 'S': fshape}
+        elif isinstance(fshape, tuple):
+            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
+            fshape = {k: x for k, x in zip(fkeys, fshape)}
+        elif fshape == 'all':
+            fshape = dict(R=None, S=None)
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding}
+        for d in [fshape, strides, padding]:
+            self.poolparams.update(d)
+        self.nglayer = None
+
+    def __str__(self):
+        return "Pooling Layer '%s': %d x (%dx%d) inputs, %d x (%dx%d) outputs" % (
+               self.name,
+               self.in_shape[0], self.in_shape[1], self.in_shape[2],
+               self.out_shape[0], self.out_shape[1], self.out_shape[2])
+
+    def configure(self, in_obj):
+        """
+        Sets shape based parameters of this layer given an input tuple or int
+        or input layer.
+
+        Arguments:
+            in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                  information for layer
+
+        Returns:
+            (tuple): shape of output data
+        """
+        super(Pooling, self).configure(in_obj)
+        if self.nglayer is None:
+            self.poolparams.update(in_obj.shape_dict())
+            #if self.poolparams['R'] is None:
+            #    self.poolparams['R'] = shapedict['H']
+            #    self.poolparams['S'] = shapedict['W']
+            self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
+            (K, M, P, Q, N) = self.nglayer.dimO
+            self.out_shape = (K, M, P, Q)
+        out_obj = ng.pool_fprop(in_obj, self.poolparams)
+        return out_obj
 
 
 class ParameterLayer(Layer):
@@ -178,117 +251,6 @@ class Convolution(ParameterLayer):
         if self.bsum:
             self.batch_sum_shape = (self.nglayer.K, 1)
         return ng.conv_fprop(in_obj, weights)
-
-
-class PoolLayer(object):
-    """
-    PoolLayer parameter object.
-    This then is passed as an argument to all pooling kernels.
-
-    op: max, avg, l2 pooling
-    N: Number of images in mini-batch
-
-    C: Number of input feature maps
-    D: Depth  of input image
-    H: Height of input image
-    W: Width  of input image
-
-    J: Size of feature map pooling window (maxout n_pieces)
-    T: Depth  of pooling window
-    R: Height of pooling window
-    S: Width  of pooling window
-
-    padding: amount of zero-padding around the given image or feature map edge
-    strides: factor to step the window by in a given direction (overlap allowed)
-
-    Leave spatial dimensions at 1 to allow feature map pooling in the fc layers.
-    """
-
-    def __init__(self, lib, dtype,
-                 op, N, C,
-                 D=1, H=1, W=1,
-                 J=1, T=1, R=1, S=1,
-                 pad_c=0, pad_d=0, pad_h=0, pad_w=0,
-                 str_c=None, str_d=None, str_h=None, str_w=None):
-
-        # default to non-overlapping
-        if str_c is None:
-            str_c = J
-        if str_d is None:
-            str_d = T
-        if str_h is None:
-            str_h = R
-        if str_w is None:
-            str_w = S
-
-        if str_c < J or str_d < T or str_h < R or str_w < S:
-            self.overlap = (math.ceil(float(J) / str_c) *
-                            math.ceil(float(T) / str_d) *
-                            math.ceil(float(R) / str_h) *
-                            math.ceil(float(S) / str_w))
-        else:
-            self.overlap = 0.0
-
-        # Compute the output dimensions
-        K = lib.output_dim(C, J, pad_c, str_c, pooling=True)
-        M = lib.output_dim(D, T, pad_d, str_d, pooling=True)
-        P = lib.output_dim(H, R, pad_h, str_h, pooling=True)
-        Q = lib.output_dim(W, S, pad_w, str_w, pooling=True)
-
-        self.op = op
-        self.C = C
-        self.K = K
-        self.M = M
-        self.P = P
-        self.Q = Q
-        self.N = N
-        self.JTRS = (J, T, R, S)
-        self.DHW = (D, H, W)
-        self.MPQ = (M, P, Q)
-        self.padding = (pad_c, pad_d, pad_h, pad_w)
-        self.strides = (str_c, str_d, str_h, str_w)
-
-        self.dimI = (C, D, H, W, N)
-        self.dimO = (K, M, P, Q, N)
-        self.dimF2 = None
-        self.dimI2 = (C * D * H * W, N)
-        self.dimO2 = (K * M * P * Q, N)
-        self.sizeI = reduce(np.multiply, self.dimI, 1)
-        self.sizeO = reduce(np.multiply, self.dimO, 1)
-        self.nOut = reduce(np.multiply, self.MPQ, 1) * K
-
-        self.kSlice = [self.pool_slice(k, J, C, pad_c, str_c)
-                       for k in range(K)]
-        self.mSlice = [self.pool_slice(m, T, D, pad_d, str_d)
-                       for m in range(M)]
-        self.pSlice = [self.pool_slice(p, R, H, pad_h, str_h)
-                       for p in range(P)]
-        self.qSlice = [self.pool_slice(q, S, W, pad_w, str_w)
-                       for q in range(Q)]
-
-    def pool_slice(self, q, S, X, padding, strides):
-        """
-        TODO.
-
-        Arguments:
-          q: TODO
-          S: TODO
-          X: TODO
-          padding: TODO
-          strides: TODO
-
-        Returns:
-
-        """
-        qs = q * strides - padding
-        firstI = None
-        for s in range(S):
-            x = qs + s
-            if x >= 0 and x < X:
-                if firstI is None:
-                    firstI = x
-                lastI = x
-        return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
 class Deconvolution(ParameterLayer):

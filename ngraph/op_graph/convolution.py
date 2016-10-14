@@ -145,6 +145,11 @@ class conv_fprop(op_graph.TensorOp):
         output_dims = [_output_dim(input_dims[i], filter_dims[i], 0, 1) for i in range(1, 4)]
         output_dims = [filter_dims[-1]] + output_dims
         axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes[0].name = 'C'
+        axes[1].name = 'D'
+        axes[2].name = 'H'
+        axes[3].name = 'W'
+
         self._input_shape = inputs.shape
         self._filter_shape = filters.shape
         conv_fprop._index += 1
@@ -197,4 +202,85 @@ class conv_bprop(op_graph.TensorOp):
 
         super(conv_bprop, self).__init__(
             args=(delta, inputs, filters), *args, axes=axes, **kwargs
+        )
+
+
+class pool_fprop(op_graph.TensorOp):
+    _index = 0
+
+    def __init__(self, inputs, pool_params, *args, **kwargs):
+        """
+        Arguments:
+            inputs  : input tensor.
+            filters : filter/kernel tensor.
+
+        Return:
+        """
+        if len(inputs.shape) != 5:
+            raise ValueError((
+                'pooling input shape must be length 5, found {}'
+            ).format(len(inputs.shape)))
+
+        if 'axes' in kwargs:
+            raise ValueError(
+                "pooling does not currently support the 'axes' argument.  The "
+                "output axes are entirely determined by the shape of the "
+                "input and filter Ops."
+            )
+
+        batch_axes = inputs.axes.batch_axes()
+        if len(batch_axes) != 1:
+            raise ValueError((
+                "Input must have one batch axis.  Found {n_batch_axes} batch "
+                "axes: {batch_axes} and {n_sample_axes} sample axes: "
+                "{sample_axes}."
+            ).format(
+                n_batch_axes=len(batch_axes),
+                batch_axes=batch_axes,
+                n_sample_axes=len(inputs.axes.sample_axes()),
+                sample_axes=inputs.axes.sample_axes(),
+            ))
+        self.batch_axis = batch_axes[0]
+        input_dims = [shape.length for shape in inputs.shape]
+        pool_dims = [pool_params[name] for name in ['C', 'T', 'R', 'S']]
+        # TODO: account for padding and stride
+        output_dims = [_output_dim(input_dims[i], pool_dims[i], 0, 1, pooling=True) for i in range(1, 4)]
+        output_dims = [pool_dims[0]] + output_dims
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes[0].name = 'C'
+        axes[1].name = 'D'
+        axes[2].name = 'H'
+        axes[3].name = 'W'
+
+        self._input_shape = inputs.shape
+        pool_fprop._index += 1
+        self.index = pool_fprop._index
+
+        super(pool_fprop, self).__init__(
+            args=(inputs, pool_params), *args, axes=axes, **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, inputs):
+        """
+        TODO
+        """
+
+        # TODO: call generate_add_delta() instead
+        adjoints[inputs] = pool_bprop(delta, inputs, self)
+
+
+class pool_bprop(op_graph.TensorOp):
+    def __init__(self, delta, inputs, pooling, *args, **kwargs):
+        """
+        Arguments:
+            inputs  : input tensor.
+        """
+        input_dims = [shape.length for shape in inputs.shape]
+        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in input_dims])
+        self._input_shape = pooling._input_shape
+        self._filter_shape = pooling._filter_shape
+        self.index = pooling.index
+
+        super(pool_bprop, self).__init__(
+            args=(delta, inputs), *args, axes=axes, **kwargs
         )

@@ -496,6 +496,8 @@ class Axes(object):
             lengths as values
         """
         names = [axis.name for axis in self._axes]
+        # TODO: get rid of this temporary hack.
+        names = [name.split('_')[0] for name in names]
         vals = [axis.length for axis in self._axes]
         return dict(zip(names, vals))
 

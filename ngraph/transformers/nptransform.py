@@ -40,7 +40,7 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import conv_fprop, conv_update, conv_bprop
+from ngraph.op_graph.convolution import conv_fprop, conv_update, conv_bprop, pool_fprop, pool_bprop
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -336,6 +336,59 @@ class NumPyCodeGenerator(PyGen):
             outputs=outputs,
             delta=delta,
             filters=filters,
+        )
+
+    @generate_op_init.on_type(pool_fprop)
+    def generate_op_init(self, op, outputs, inputs, filters):
+        self.append(
+            """
+            self.pool_layer{index} = PoolLayer(
+                proxy_backend(), float,
+                N={bsz},
+                C={input_shape}[0],
+                K={filter_shape}[4],
+
+                D={input_shape}[1],
+                H={input_shape}[2],
+                W={input_shape}[3],
+
+                T={filter_shape}[1],
+                R={filter_shape}[2],
+                S={filter_shape}[3],
+
+                pad_d=0, pad_h=0, pad_w=0,
+                str_d=1, str_h=1, str_w=1,
+            )
+
+            """,
+            index=op.index,
+            input_shape=[a.length for a in op._input_shape],
+            filter_shape=[a.length for a in op._filter_shape],
+            bsz=op.batch_axis.length
+        )
+
+    @generate_op.on_type(pool_fprop)
+    def generate_op(self, op, outputs, inputs):
+        self.append(
+            """
+            self.be.fprop_pool(self.pool_layer{index}, proxy_tensor({inputs}),
+                               proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            outputs=outputs,
+            inputs=inputs,
+        )
+
+    @generate_op.on_type(pool_bprop)
+    def generate_op(self, op, outputs, delta, inputs):
+        self.append(
+            """
+            self.be.bprop_pool(self.pool_layer{index}, proxy_tensor({delta}),
+                               proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            outputs=outputs,
+            delta=delta,
         )
 
     @generate_op.on_type(cos)
