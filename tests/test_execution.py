@@ -29,8 +29,6 @@ def test_constant_multiply(transformer_factory):
     # TODO: better error message when missing axes length in cases where it
     # is needed
     Y = ng.Axis(name='Y')
-
-
     Y.length = 1
 
     # TODO: don't require axes
@@ -871,7 +869,6 @@ def test_onehot(transformer_factory):
     W = ng.Axis(name='W')
     C = ng.Axis(name='C')
     H = ng.Axis(name='H')
-
 
     C.length = 4
     W.length = 32

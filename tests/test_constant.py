@@ -98,7 +98,6 @@ def test_numpytensor_dot(transformer_factory):
 
 def test_numpytensor_multiply_constant(transformer_factory):
     """TODO."""
-    Y = ng.Axis(name='Y')
     M = ng.Axis(name='M')
     N = ng.Axis(name='N')
 
