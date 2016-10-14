@@ -13,6 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from ngraph.op_graph.op_graph import OrderedSet
+
 try:
     import graphviz
 except:
@@ -68,7 +70,7 @@ class Digraph(object):
         Returns:
           Result
         """
-        result = {x: set() for x in list(adjacency.keys())}
+        result = {x: OrderedSet() for x in list(adjacency.keys())}
         for x, others in list(adjacency.items()):
             for y in others:
                 result[y].add(x)
