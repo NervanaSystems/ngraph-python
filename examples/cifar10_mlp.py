@@ -16,8 +16,9 @@
 from __future__ import print_function
 from ngraph.frontends.neon import ax, np, Affine, Axes, Callbacks, CrossEntropyMulti,\
     GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
-    NgraphArgparser, Rectlin, Softmax, Uniform
+    NgraphArgparser, Rectlin, Softmax
 
+from neon.initializers import Uniform
 from neon.data import CIFAR10
 
 # parse the command line arguments (generates the backend)
