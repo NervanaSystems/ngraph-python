@@ -21,7 +21,7 @@ import numpy as np
 from builtins import object
 
 from ngraph.op_graph.axes import TensorDescription, \
-    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
+    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis, default_dtype, default_int_dtype
 from ngraph.util.generics import generic_method
 from ngraph.util.nodes import Node
 from ngraph.util.threadstate import get_thread_state
@@ -633,9 +633,7 @@ class TensorOp(Op):
 
     def __init__(self, dtype=None, axes=None, scale=None, **kwargs):
         super(TensorOp, self).__init__(**kwargs)
-        if dtype is None:
-            dtype = np.dtype(np.float32)
-        self.dtype = dtype
+        self.dtype = default_dtype(dtype)
         if axes is not None:
             axes = Axes(axes)
         self.__axes = axes
@@ -2241,8 +2239,8 @@ Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
 )
 
 
-def argmax(x, dtype=np.dtype(np.int32), **kwargs):
-    return Argmax(x, dtype=dtype, **kwargs)
+def argmax(x, dtype=None, **kwargs):
+    return Argmax(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
 Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
@@ -2250,8 +2248,8 @@ Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
 )
 
 
-def argmin(x, dtype=np.dtype(np.int32), **kwargs):
-    return Argmin(x, dtype=dtype, **kwargs)
+def argmin(x, dtype=None, **kwargs):
+    return Argmin(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
 def assign(lvalue, rvalue, **kwargs):
