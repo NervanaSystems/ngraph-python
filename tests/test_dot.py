@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import range
-
-import numpy as np
 import random
 
 import ngraph as ng
-import ngraph.frontends.base.axis as ax
-from ngraph.util.utils import raise_all_numpy_errors
+import numpy as np
+from builtins import range
 from ngraph.util.utils import ExecutorFactory, executor
+from ngraph.util.utils import raise_all_numpy_errors
 
 """
 Test ngraph's implementation of the dot product.
@@ -98,10 +96,13 @@ def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
-    ax.C.length = 2
-    ax.N.length = 3
-    ax.N.batch = True
-    x_axes, y_axes = ng.Axes((ax.C, ax.N)), ng.Axes((ax.C,))
+    C = ng.Axis(name='C')
+    N = ng.Axis(name='N')
+
+    C.length = 2
+    N.length = 3
+    N.batch = True
+    x_axes, y_axes = ng.Axes((C, N)), ng.Axes((C,))
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
     expected_output = np.sum(x_np.T.dot(y_np))
@@ -136,44 +137,49 @@ def test_dot_sum_backprop(transformer_factory):
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
+    C = ng.Axis(name='C')
+    D = ng.Axis(name='D')
+    H = ng.Axis(name='H')
+    N = ng.Axis(name='N')
+
     tests = [
         {
             'tensor1': [[1, 2], [4, 5], [3, 4]],
-            'tensor1_axes': (ax.C, ax.D),
+            'tensor1_axes': (C, D),
             'tensor2': [2, 5],
-            'tensor2_axes': (ax.D,),
+            'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
-            'axes_lengths': {ax.C: 3, ax.D: 2}
+            'axes_lengths': {C: 3, D: 2}
         },
         {
             'tensor1': [[1, 4, 3], [2, 5, 4]],
-            'tensor1_axes': (ax.D, ax.C),
+            'tensor1_axes': (D, C),
             'tensor2': [2, 5],
-            'tensor2_axes': (ax.D,),
+            'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
-            'axes_lengths': {ax.C: 3, ax.D: 2}
+            'axes_lengths': {C: 3, D: 2}
         },
         {
             'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
-            'tensor1_axes': (ax.N, ax.D, ax.C),
+            'tensor1_axes': (N, D, C),
             'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
-            'tensor2_axes': (ax.H, ax.D, ax.C),
+            'tensor2_axes': (H, D, C),
             'expected_output': [[51, 81], [188, 297]],
-            'axes_lengths': {ax.N: 2, ax.D: 2, ax.C: 2, ax.H: 2}
+            'axes_lengths': {N: 2, D: 2, C: 2, H: 2}
         },
         {
             'tensor1': [1, 2],
-            'tensor1_axes': (ax.C,),
+            'tensor1_axes': (C,),
             'tensor2': [7, 11, 13],
-            'tensor2_axes': (ax.D,),
+            'tensor2_axes': (D,),
             'expected_output': [[7, 11, 13], [14, 22, 26]],
-            'axes_lengths': {ax.C: 2, ax.D: 3}
+            'axes_lengths': {C: 2, D: 3}
         },
         {
             'tensor1': [[1, 4], [6, 2]],
-            'tensor1_axes': (ax.C, ax.D),
+            'tensor1_axes': (C, D),
             'expected_output': 57,
-            'axes_lengths': {ax.C: 2, ax.D: 2}
+            'axes_lengths': {C: 2, D: 2}
         }
     ]
 

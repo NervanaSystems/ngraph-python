@@ -28,6 +28,18 @@ from future.utils import with_metaclass
 from ngraph.util.names import NameableValue
 
 
+def default_dtype(dtype=None):
+    if dtype is None:
+        dtype = np.dtype(np.float32)
+    return dtype
+
+
+def default_int_dtype(dtype=None):
+    if dtype is None:
+        dtype = np.dtype(np.int32)
+    return dtype
+
+
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
@@ -819,7 +831,7 @@ class TensorDescription(NameableValue):
     """
 
     def __init__(self, axes, base=None,
-                 dtype=np.dtype(np.float32),
+                 dtype=None,
                  full_strides=None, full_sizes=None, offset=0,
                  **kwargs):
         super(TensorDescription, self).__init__(**kwargs)
@@ -834,7 +846,7 @@ class TensorDescription(NameableValue):
         self.__buffer = None
         self.__register = None
         self.__base = base
-        self.dtype = dtype
+        self.dtype = default_dtype(dtype)
         self.offset = offset
         self.ndim = len(self.axes)
         self.__read_only = False

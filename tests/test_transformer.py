@@ -12,33 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
-
 import ngraph as ng
 import numpy as np
+import pytest
 from ngraph.util.utils import executor
-import ngraph.frontends.base.axis as ax
 
 
 def test_evalutaion_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
-    ax.C.length = 2
-    ax.D.length = 2
-    ax.W.length = 1
+    C = ng.Axis(name='C')
+    W = ng.Axis(name='W')
+    D = ng.Axis(name='D')
+
+    C.length = 2
+    D.length = 2
+    W.length = 1
 
     x = ng.Constant(
         np.array([[1, 2], [3, 4]], dtype='float32'),
-        axes=ng.Axes([ax.C, ax.D])
+        axes=ng.Axes([C, D])
     )
 
     hidden1_weights = ng.Constant(
         np.array([[1], [1]], dtype='float32'),
-        axes=ng.Axes([ax.C, ax.W])
+        axes=ng.Axes([C, W])
     )
 
     hidden1_biases = ng.Constant(
         np.array([[2], [2]], dtype='float32'),
-        axes=ng.Axes([ax.D, ax.W])
+        axes=ng.Axes([D, W])
     )
 
     hidden1 = ng.dot(x, hidden1_weights) + hidden1_biases

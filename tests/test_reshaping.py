@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
-import numpy as np
-
-from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
-import ngraph.frontends.base.axis as ax
-from ngraph.op_graph.axes import Axes, Axis, TensorDescription
-
+import numpy as np
+import pytest
+from ngraph.op_graph.axes import TensorDescription
+from ngraph.util.utils import ExecutorFactory
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -27,20 +24,24 @@ rtol = atol = 1e-2
 
 def test_expand_dims(transformer_factory):
     """TODO."""
+    C = ng.Axis(name='C')
+    D = ng.Axis(name='D')
+    N = ng.Axis(name='N')
+
     max_new_axis_length = 4
 
     tests = [
         {
             'tensor': [[2, 5], [13, 5]],
-            'tensor_axes': (ax.N, ax.D),
+            'tensor_axes': (N, D),
             'tensor_axes_lengths': (2, 2),
-            'new_axis': ax.C,
+            'new_axis': C,
         },
         {
             'tensor': 2,
             'tensor_axes': (),
             'tensor_axes_lengths': (),
-            'new_axis': ax.D
+            'new_axis': D
         }
     ]
 
@@ -92,53 +93,56 @@ def test_expand_dims(transformer_factory):
 
 def test_slice(transformer_factory):
     """TODO."""
+    C = ng.Axis(name='C')
+    D = ng.Axis(name='D')
+
     tests = [
         {
             'tensor': [[1, 3], [2, 5]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [0, 1],
             'sliced_axes': (),
-            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'axes_lengths': {C: 2, D: 2},
             'expected': 3
         },
         {
             'tensor': [[1, 3], [2, 5]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [slice(None), 0],
-            'sliced_axes': (ax.C,),
-            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'sliced_axes': (C,),
+            'axes_lengths': {C: 2, D: 2},
             'expected': [1, 2]
         },
         {
             'tensor': [[1, 3], [2, 5]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [1, slice(None)],
-            'sliced_axes': (ax.D,),
-            'axes_lengths': {ax.C: 2, ax.D: 2},
+            'sliced_axes': (D,),
+            'axes_lengths': {C: 2, D: 2},
             'expected': [2, 5]
         },
         {
             'tensor': [[1, 4, 5], [2, 5, 6]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [1, slice(1, 3)],
             'sliced_axes': None,
-            'axes_lengths': {ax.C: 2, ax.D: 3},
+            'axes_lengths': {C: 2, D: 3},
             'expected': [5, 6]
         },
         {
             'tensor': [[1, 4, 5], [2, 5, 6]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [1, slice(None, None, -1)],
             'sliced_axes': None,
-            'axes_lengths': {ax.C: 2, ax.D: 3},
+            'axes_lengths': {C: 2, D: 3},
             'expected': [6, 5, 2]
         },
         {
             'tensor': [[1, 4, 5], [2, 5, 6]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'slice': [slice(None, None, -1), slice(None, None, -1)],
             'sliced_axes': None,
-            'axes_lengths': {ax.C: 2, ax.D: 3},
+            'axes_lengths': {C: 2, D: 3},
             'expected': [[6, 5, 2], [5, 4, 1]]
         }
     ]
@@ -178,20 +182,25 @@ def test_slice(transformer_factory):
 
 def test_padding(transformer_factory):
     """TODO."""
+    C = ng.Axis(name='C')
+    D = ng.Axis(name='D')
+    M = ng.Axis(name='M')
+    N = ng.Axis(name='N')
+
     tests = [
         {
             'tensor': [[1, 3], [2, 5]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'padding': [(0, 1), (1, 0)],
-            'padded_axes': (ax.M, ax.N),
-            'axes_lengths': {ax.C: 2, ax.D: 2, ax.M: 3, ax.N: 3}
+            'padded_axes': (M, N),
+            'axes_lengths': {C: 2, D: 2, M: 3, N: 3}
         },
         {
             'tensor': [[1, 4, 5], [1, 4, 6]],
-            'tensor_axes': (ax.C, ax.D),
+            'tensor_axes': (C, D),
             'padding': [(0, 1), 1],
             'padded_axes': None,
-            'axes_lengths': {ax.C: 2, ax.D: 3}
+            'axes_lengths': {C: 2, D: 3}
         }
     ]
 
@@ -239,16 +248,19 @@ def test_padding(transformer_factory):
 
 
 def test_axes_cast(transformer_factory):
+    C = ng.Axis(name='C')
+    D = ng.Axis(name='D')
+
     ex = ExecutorFactory()
 
-    ax.C.length = 2
-    ax.D.length = 3
+    C.length = 2
+    D.length = 3
 
-    x = ng.placeholder(axes=(ax.C, ax.D))
+    x = ng.placeholder(axes=(C, D))
 
     x_slice = x[1, :]
     # Cast back to known axes
-    x_cast = x_slice.with_axes(ax.D)
+    x_cast = x_slice.with_axes(D)
 
     # Verfiy that the tensor broadcasts along ax.D
     y = x + x_cast
@@ -271,17 +283,17 @@ def test_axes_cast(transformer_factory):
 
 
 def test_slice_tensor_description(transformer_factory):
-    C = Axis(2)
+    C = ng.Axis(2)
 
-    td = TensorDescription(Axes(C))
+    td = TensorDescription(ng.Axes(C))
     with pytest.raises(ValueError):
         td.slice(
             [slice(None)],
-            Axes([Axis(1), Axis(1)]),
+            ng.Axes([ng.Axis(1), ng.Axis(1)]),
         )
 
 
 def test_tensor_description_init(transformer_factory):
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
-        TensorDescription(Axes(Axis()))
+        TensorDescription(ng.Axes(ng.Axis()))

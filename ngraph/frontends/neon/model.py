@@ -14,12 +14,11 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
+import ngraph as ng
+import ngraph.frontends.neon.axis as ax
 import numpy as np
 from builtins import zip
 from neon.data import ArrayIterator, DataLoader
-
-import ngraph.frontends.base.axis as ax
-import ngraph as ng
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
 

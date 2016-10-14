@@ -18,11 +18,9 @@ Test the graph analysis functions.
 
 from __future__ import print_function
 
-from builtins import range, zip
-
-import ngraph.analysis as an
-import ngraph.frontends.base.axis as ax
 import ngraph as ng
+import ngraph.analysis as an
+from builtins import range, zip
 
 
 def build_graphs(L, BS):
@@ -37,8 +35,8 @@ def build_graphs(L, BS):
       TODO
     """
     # Axes
-    L = [ax.Axis(length=N, name='L%d' % i) for i, N in enumerate(L)]
-    BS = ax.Axis(length=BS, name='BS')
+    L = [ng.Axis(length=N, name='L%d' % i) for i, N in enumerate(L)]
+    BS = ng.Axis(length=BS, name='BS')
 
     # Builds Network
     activations = [ng.tanh for i in range(len(L) - 2)] + [ng.softmax]
