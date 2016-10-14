@@ -51,7 +51,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     calculate their lengths.
 
     2) Safety. Axis labels are analogous to types in general-purpose
-    programming langauges, allowing objects to interact only when
+    programming languages, allowing objects to interact only when
     they are permitted to do so in advance. In symbolic computation,
     this prevents interference between axes that happen to have the
     same lengths but are logically distinct, e.g. if the number of
