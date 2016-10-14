@@ -2,7 +2,7 @@ from __future__ import division
 import math
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import FunctionAxis, PaddedAxis, Axes
+from ngraph.op_graph.axes import FunctionAxis, PaddedAxis, Axis, Axes
 
 
 def _output_dim(X, S, padding, stride, pooling=False):
@@ -144,7 +144,7 @@ class conv_fprop(op_graph.TensorOp):
         # TODO: account for padding and stride
         output_dims = [_output_dim(input_dims[i], filter_dims[i], 0, 1) for i in range(1, 4)]
         output_dims = [filter_dims[-1]] + output_dims
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes = Axes([Axis(dim) for dim in output_dims] + [batch_axes[0]])
         axes[0].name = 'C'
         axes[1].name = 'D'
         axes[2].name = 'H'
@@ -177,7 +177,7 @@ class conv_update(op_graph.TensorOp):
             filters : filter/kernel tensor.
         """
         filter_dims = [shape.length for shape in filters.shape]
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in filter_dims])
+        axes = Axes([Axis(dim) for dim in filter_dims])
         self._input_shape = conv._input_shape
         self._filter_shape = conv._filter_shape
         self.index = conv.index
@@ -195,7 +195,7 @@ class conv_bprop(op_graph.TensorOp):
             filters : filter/kernel tensor.
         """
         input_dims = [shape.length for shape in inputs.shape]
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in input_dims])
+        axes = Axes([Axis(dim) for dim in input_dims])
         self._input_shape = conv._input_shape
         self._filter_shape = conv._filter_shape
         self.index = conv.index
@@ -246,7 +246,7 @@ class pool_fprop(op_graph.TensorOp):
         # TODO: account for padding and stride
         output_dims = [_output_dim(input_dims[i], pool_dims[i], 0, 1, pooling=True) for i in range(1, 4)]
         output_dims = [pool_dims[0]] + output_dims
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes = Axes([Axis(dim) for dim in output_dims] + [batch_axes[0]])
         axes[0].name = 'C'
         axes[1].name = 'D'
         axes[2].name = 'H'
@@ -276,7 +276,7 @@ class pool_bprop(op_graph.TensorOp):
             inputs  : input tensor.
         """
         input_dims = [shape.length for shape in inputs.shape]
-        axes = arrayaxes.Axes([arrayaxes.Axis(dim) for dim in input_dims])
+        axes = Axes([Axis(dim) for dim in input_dims])
         self._input_shape = pooling._input_shape
         self._filter_shape = pooling._filter_shape
         self.index = pooling.index
