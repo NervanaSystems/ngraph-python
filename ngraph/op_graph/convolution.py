@@ -2,7 +2,7 @@ from __future__ import division
 import math
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph import arrayaxes
+from ngraph.op_graph.axes import FunctionAxis, PaddedAxis, Axes
 
 
 def _output_dim(X, S, padding, stride, pooling=False):
@@ -33,7 +33,7 @@ def _output_dim(X, S, padding, stride, pooling=False):
     return size
 
 
-class ConvolutionAxis(arrayaxes.FunctionAxis):
+class ConvolutionAxis(FunctionAxis):
     """
     An axis created by taking a convolution of another axis
 
@@ -58,7 +58,7 @@ class ConvolutionAxis(arrayaxes.FunctionAxis):
 
         # if this is a Conv(Pad(Conv(a))) whose length will be the same as a,
         # then just return axis a.
-        if isinstance(parent, arrayaxes.PaddedAxis):
+        if isinstance(parent, PaddedAxis):
             if isinstance(parent.parent, ConvolutionAxis):
                 length = _output_dim(parent.length, width, 0, stride)
                 if length == parent.parent.parent.length:
@@ -146,7 +146,7 @@ class convolution1d(op_graph.TensorOp):
         # TODO: support int arguments to Axes?
         # TODO: make a ConvAxis instead of creating an Axis with computed
         # values.
-        axes = arrayaxes.Axes([
+        axes = Axes([
             filter.shape[2],
             ConvolutionAxis(input.shape[1], filter.shape[1].length, 1),
             self.batch_axis,
@@ -180,7 +180,7 @@ class convolution1d(op_graph.TensorOp):
             slice(None, None, None),
         ])
 
-        flipped_filter = op_graph.Dimshuffle(flipped_filter, axes=arrayaxes.Axes(
+        flipped_filter = op_graph.Dimshuffle(flipped_filter, axes=Axes(
             (flipped_filter.axes[2], flipped_filter.axes[1], flipped_filter.axes[0])
         ))
 

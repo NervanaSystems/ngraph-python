@@ -17,21 +17,21 @@ import pytest
 from builtins import range
 
 import ngraph.util.names as names
-from ngraph.op_graph import arrayaxes
+from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis, TensorDescription, SlicedAxis
 
 # Make some axes
 ax = names.NameScope()
 
-ax.A = arrayaxes.Axis(10)
-ax.B = arrayaxes.Axis(15)
-ax.C = arrayaxes.Axis(20)
-ax.D = arrayaxes.Axis(25)
+ax.A = Axis(10)
+ax.B = Axis(15)
+ax.C = Axis(20)
+ax.D = Axis(25)
 
 
 def test_axes_equal():
     """ Test axes == operator """
-    a1 = arrayaxes.Axes([ax.A, ax.B, ax.C])
-    a2 = arrayaxes.Axes([ax.A, ax.B, ax.C])
+    a1 = Axes([ax.A, ax.B, ax.C])
+    a2 = Axes([ax.A, ax.B, ax.C])
     assert a1 == a2
 
 
@@ -47,7 +47,7 @@ def to_nested_tuple(axes):
         FlattenedAxis are replaced with tuple
     """
     return tuple(
-        to_nested_tuple(axis.axes) if isinstance(axis, arrayaxes.FlattenedAxis) else axis
+        to_nested_tuple(axis.axes) if isinstance(axis, FlattenedAxis) else axis
         for axis in axes
     )
 
@@ -69,15 +69,15 @@ def test_axes_ops():
         """
         assert axes1 - axes2 == target
 
-    test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.A]), arrayaxes.Axes([ax.B]))
-    test_sub(arrayaxes.Axes([ax.A, ax.B]), arrayaxes.Axes([ax.B]), arrayaxes.Axes([ax.A]))
+    test_sub(Axes([ax.A, ax.B]), Axes([ax.A]), Axes([ax.B]))
+    test_sub(Axes([ax.A, ax.B]), Axes([ax.B]), Axes([ax.A]))
 
     # Combined axes length
-    assert arrayaxes.FlattenedAxis(arrayaxes.Axes([ax.A, ax.B])).length \
+    assert FlattenedAxis(Axes([ax.A, ax.B])).length \
         == ax.A.length * ax.B.length
-    assert arrayaxes.Axes([ax.A, (ax.B, ax.C)]).lengths \
+    assert Axes([ax.A, (ax.B, ax.C)]).lengths \
         == (ax.A.length, ax.B.length * ax.C.length)
-    assert arrayaxes.FlattenedAxis(arrayaxes.Axes([ax.A, (ax.B, ax.C)])).length \
+    assert FlattenedAxis(Axes([ax.A, (ax.B, ax.C)])).length \
         == ax.A.length * ax.B.length * ax.C.length
 
 
@@ -117,7 +117,7 @@ def tensorview(td, nparr):
 
 
 def test_reaxe_0d_to_1d():
-    td = arrayaxes.TensorDescription(axes=())
+    td = TensorDescription(axes=())
     x = random(td)
 
     # create view of x
@@ -132,7 +132,7 @@ def test_reaxe_0d_to_1d():
 
 
 def test_reaxe_0d_to_2d():
-    td = arrayaxes.TensorDescription(axes=())
+    td = TensorDescription(axes=())
     x = random(td)
 
     x_view = tensorview(td.broadcast([ax.A, ax.B]), x)
@@ -156,10 +156,10 @@ def test_simple_tensors():
     stopped ...
     """
     # A simple vector
-    td1 = arrayaxes.TensorDescription(axes=[ax.A])
+    td1 = TensorDescription(axes=[ax.A])
     e1 = random(td1)
 
-    td2 = arrayaxes.TensorDescription(axes=[ax.A, ax.B])
+    td2 = TensorDescription(axes=[ax.A, ax.B])
     e2 = random(td2)
 
     # Reaxes
@@ -167,10 +167,10 @@ def test_simple_tensors():
     e1_2 = tensorview(td1.broadcast([ax.B, ax.A]), e1)
     e1_3 = tensorview(td1.broadcast([(ax.B, ax.C), ax.A]), e1)
 
-    e2_1 = tensorview(td2.broadcast(arrayaxes.Axes([ax.B, ax.A])), e2)
-    e2_2 = tensorview(td2.broadcast(arrayaxes.Axes([ax.A, ax.B])), e2)
-    e2_3 = tensorview(td2.flatten(arrayaxes.Axes((
-        arrayaxes.FlattenedAxis((ax.A, ax.B)),
+    e2_1 = tensorview(td2.broadcast(Axes([ax.B, ax.A])), e2)
+    e2_2 = tensorview(td2.broadcast(Axes([ax.A, ax.B])), e2)
+    e2_3 = tensorview(td2.flatten(Axes((
+        FlattenedAxis((ax.A, ax.B)),
     ))), e2_2)
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
@@ -202,49 +202,49 @@ def test_simple_tensors():
 
 
 def test_sliced_axis():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(0, 5))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(0, 5))
     assert s.length == 5
 
 
 def test_sliced_axis_invalid():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(5, 0))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(5, 0))
     assert s.length == 0
 
 
 def test_sliced_axis_none_end():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(0, None))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(0, None))
     assert s.length == 10
 
 
 def test_sliced_axis_negative():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(5, 0, -1))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(5, 0, -1))
     assert s.length == 5
 
 
 def test_sliced_axis_negative_invalid():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(0, 5, -1))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(0, 5, -1))
     assert s.length == 0
 
 
 def test_sliced_axis_flip():
-    a = arrayaxes.Axis(10)
-    s = arrayaxes.SlicedAxis(a, slice(None, None, -1))
+    a = Axis(10)
+    s = SlicedAxis(a, slice(None, None, -1))
     assert s.length == 10
 
 
 def test_sliced_axis_invalid_step():
-    a = arrayaxes.Axis(10)
+    a = Axis(10)
     with pytest.raises(ValueError):
-        arrayaxes.SlicedAxis(a, slice(0, 5, 2))
+        SlicedAxis(a, slice(0, 5, 2))
 
 
 def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
-    a = arrayaxes.Axis(10, batch=True)
-    s = arrayaxes.SlicedAxis(a, slice(0, 5))
+    a = Axis(10, batch=True)
+    s = SlicedAxis(a, slice(0, 5))
     assert s.batch is True

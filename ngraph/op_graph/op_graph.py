@@ -20,11 +20,12 @@ import cachetools
 import numpy as np
 from builtins import object
 
-from ngraph.op_graph.arrayaxes import TensorDescription, \
-    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis
+from ngraph.op_graph.axes import TensorDescription, \
+    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis, default_dtype, default_int_dtype
 from ngraph.util.generics import generic_method
 from ngraph.util.nodes import Node
 from ngraph.util.threadstate import get_thread_state
+from ngraph.util.ordered import OrderedSet
 
 
 def tensor_descriptions(args):
@@ -71,7 +72,7 @@ class Op(Node):
         const: The value of a constant.
         constant (bool): The value is constant.
         initializers (list): Additional Ops to run before this Op is run the first time.
-        other_deps (set): Ops in addtion to args that must run before this op.
+        other_deps (list): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
@@ -142,7 +143,7 @@ class Op(Node):
         :return:
             Set of Ops the must come before this Op is used.  See SetItem.
         """
-        return Op._get_thread_user_deps()[-1].get(self, {})
+        return Op._get_thread_user_deps()[-1].get(self, OrderedSet())
 
     @user_deps.setter
     def user_deps(self, value):
@@ -158,7 +159,8 @@ class Op(Node):
                  **kwargs):
         super(Op, self).__init__(**kwargs)
 
-        self.other_deps = set()
+        # List to keep generation deterministic
+        self.other_deps = []
         for arg in self.args:
             for dep in arg.user_deps:
                 self.add_other_dep(dep)
@@ -166,7 +168,7 @@ class Op(Node):
         self._adjoints = None
         self.const = const
         self.constant = constant
-        self.initializers = set()
+        self.initializers = OrderedSet()
         if initializers is not None:
             for initializer in initializers:
                 self.add_initializer(initializer)
@@ -208,12 +210,12 @@ class Op(Node):
         """
         result = self
         while True:
-            if not result.forward:
+            if not result.__forward:
                 return result
-            result = result.forward
+            result = result.__forward
 
     def add_other_dep(self, dep):
-        self.other_deps.add(dep)
+        self.other_deps.append(dep)
 
     def add_initializer(self, init):
         self.initializers.add(init)
@@ -224,7 +226,7 @@ class Op(Node):
         """
 
         self.args = tuple(arg.forwarded for arg in self.args)
-        self.other_deps = set(op.forwarded for op in self.other_deps)
+        self.other_deps = [op.forwarded for op in self.other_deps]
         self.initializers = [op.forwarded for op in self.initializers]
 
     def replace_self(self, rep):
@@ -353,7 +355,7 @@ class Op(Node):
         Returns:
             Set of trainable Ops.
         """
-        params = set()
+        params = OrderedSet()
 
         if filter is None:
             filter = lambda op: op.trainable
@@ -370,7 +372,7 @@ class Op(Node):
 
         Node.visit_input_closure([self], visitor)
 
-        return set(params)
+        return params
 
     @property
     @cachetools.cached({})
@@ -554,7 +556,7 @@ class SetItem(Op):
         val = broadcast(val, axes=tensor.axes)
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
-        tensor.user_deps = {self}
+        tensor.user_deps = OrderedSet([self])
         self.force = force
 
 
@@ -633,9 +635,7 @@ class TensorOp(Op):
 
     def __init__(self, dtype=None, axes=None, scale=None, **kwargs):
         super(TensorOp, self).__init__(**kwargs)
-        if dtype is None:
-            dtype = np.dtype(np.float32)
-        self.dtype = dtype
+        self.dtype = default_dtype(dtype)
         if axes is not None:
             axes = Axes(axes)
         self.__axes = axes
@@ -2241,8 +2241,8 @@ Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
 )
 
 
-def argmax(x, dtype=np.dtype(np.int32), **kwargs):
-    return Argmax(x, dtype=dtype, **kwargs)
+def argmax(x, dtype=None, **kwargs):
+    return Argmax(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
 Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
@@ -2250,8 +2250,8 @@ Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
 )
 
 
-def argmin(x, dtype=np.dtype(np.int32), **kwargs):
-    return Argmin(x, dtype=dtype, **kwargs)
+def argmin(x, dtype=None, **kwargs):
+    return Argmin(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
 def assign(lvalue, rvalue, **kwargs):
@@ -2496,7 +2496,7 @@ class Buffer(object):
         self.color = color
         self.size = size
         self.data = None
-        self.views = set()
+        self.views = OrderedSet()
 
 
 def mean(x, **kwargs):
@@ -2693,7 +2693,7 @@ class SplicingAnalysis(object):
         has_work = True
         while has_work:
             self.init()
-            results = set(op.forwarded for op in results)
+            results = OrderedSet([op.forwarded for op in results])
             for op in Op.ordered_ops(results):
                 self.visit(op)
             has_work = self.do_replacements()
