@@ -15,7 +15,7 @@
 from __future__ import division
 
 import ngraph as ng
-import ngraph.frontends.neon.axis as ax
+from ngraph.frontends.neon.axis import ax
 import numpy as np
 from builtins import zip
 from neon.data import ArrayIterator, DataLoader

@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-# TODO Use an ax namescope, but also move this into neon front end.
-import ngraph.frontends.neon.axis as ax
+from ngraph.op_graph.axes import Axes
+from ngraph.frontends.neon.axis import ax
 from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic
 from ngraph.frontends.neon.argparser import NgraphArgparser
