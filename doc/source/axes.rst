@@ -18,6 +18,10 @@ Axes
 
 Note: This describes the next revision of tensor descriptions and axes.
 
+
+
+
+
 A |geon| graph describes a computation. In the graph, *tensor descriptions* describe the tensors that take part in the computation. All Ops that supply tensor values have a tensor description that describes the kind of tensor computed. Generally, the tensor description of an Op is determined from a combination of the arguments and other parameters supplied to the Op. In many cases, |geon| can use the tensor descriptions to automatically insert Ops into the graph to adapt the tensor that would be produced by an Op into the format required by another Op.
 
 Tensor Semantics
