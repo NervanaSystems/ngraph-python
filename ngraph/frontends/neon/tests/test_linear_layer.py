@@ -66,6 +66,7 @@ def test_linear_zeros(basic_linargs):
     out = output(x)
     assert np.min(out) == 0.0 and np.max(out) == 0.0
 
+
 def test_linear_ones(basic_linargs):
     be = gen_backend(backend='dataloader')  # noqa
 

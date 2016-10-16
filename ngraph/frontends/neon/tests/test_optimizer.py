@@ -28,6 +28,7 @@ from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMoment
 from neon.backends import gen_backend
 import pytest
 
+
 def pytest_generate_tests(metafunc):
     if 'args' in metafunc.fixturenames:
         fargs = []
@@ -59,6 +60,7 @@ def generate_data(C, N):
     y = np.random.rand(N).astype('float32')
 
     return x, y, w_init
+
 
 # xfail due to initial_value=nparray not working
 # this test was working a previous commit of ngraph

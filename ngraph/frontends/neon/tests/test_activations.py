@@ -21,6 +21,7 @@ from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
 import pytest
 
+
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
     ex = ExecutorFactory()
     C = ng.Axis('C')
@@ -92,15 +93,17 @@ def test_rectlin_derivative_negatives():
     outputs = np.array([[0, 0], [0, 0]])
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
 
-"""
-Marked as xfail because it does not match old neon behavior at x=0,
-even though the derivative is technically undefined
-"""
+
 @pytest.mark.xfail
 def test_rectlin_derivative_mixed():
+    """
+    Marked as xfail because it does not match old neon behavior at x=0,
+    even though the derivative is technically undefined
+    """
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[1, 0], [0, 1]])
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
+
 
 """Leaky Rectified Linear unit
 """
@@ -136,15 +139,17 @@ def test_leaky_rectlin_derivative_positives():
     outputs = np.array([1, 1, 1]).reshape((3, 1))
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True)
 
-"""
-ngraph derivative for negative values is 0, not the slope
-"""
+
 @pytest.mark.xfail
 def test_leaky_rectlin_derivative_negatives():
+    """
+    ngraph derivative for negative values is 0, not the slope
+    """
     slope = 0.2
     inputs = np.array([[-1, -3], [-2, -4]])
     outputs = np.array([[0, 0], [0, 0]]) + slope
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
+
 
 @pytest.mark.xfail
 def test_leaky_rectlin_derivative_mixed():
@@ -152,6 +157,7 @@ def test_leaky_rectlin_derivative_mixed():
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[1, 0], [slope, 1]])
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
+
 
 """Softmax
 """
@@ -166,24 +172,28 @@ def test_softmax():
 def test_softmax_derivative():
     inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
     outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1)))
-    outputs = outputs * (1-outputs)  # shortcut only
+    outputs = outputs * (1 - outputs)  # shortcut only
     compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
 
-"""
-This fails with memory error because the ex.derivative function
-attempts to compute the full derivative.
 
-Keeping this test since it was in original neon.
-"""
 @pytest.mark.xfail
 def test_softmax_big_inputs():
+    """
+    This fails with memory error because the ex.derivative function
+    attempts to compute the full derivative.
+
+    Keeping this test since it was in original neon.
+    """
     inputs = np.random.random((1000, 128))
     outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1)))
-    outputs = outputs * (1-outputs)  # shortcut only
+    outputs = outputs * (1 - outputs)  # shortcut only
     compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
+
 
 """Tanh
 """
+
+
 def test_tanh():
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = np.array(
@@ -200,8 +210,11 @@ def test_tanh_derivative():
                         1 - true_tanh(-2) ** 2]).reshape((3, 1))
     compare_tensors(Tanh(), inputs, outputs, deriv=True, tol=1e-6)
 
+
 """Logistic
 """
+
+
 def test_logistic():
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = 1.0 / (1.0 + np.exp(-inputs)).reshape((3, 1))
@@ -215,6 +228,3 @@ def test_logistic_derivative():
     outputs = f * (1.0 - f)
     compare_tensors(Logistic(shortcut=False),
                     inputs, outputs, deriv=True, tol=1e-7)
-
-
-
