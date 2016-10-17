@@ -94,7 +94,7 @@ def test_rectlin_derivative_negatives():
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_rectlin_derivative_mixed():
     """
     Marked as xfail because it does not match old neon behavior at x=0,
@@ -140,7 +140,7 @@ def test_leaky_rectlin_derivative_positives():
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_leaky_rectlin_derivative_negatives():
     """
     ngraph derivative for negative values is 0, not the slope
@@ -151,7 +151,7 @@ def test_leaky_rectlin_derivative_negatives():
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_leaky_rectlin_derivative_mixed():
     slope = 0.2
     inputs = np.array([[4, 0], [-2, 9]])
@@ -176,7 +176,7 @@ def test_softmax_derivative():
     compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_softmax_big_inputs():
     """
     This fails with memory error because the ex.derivative function

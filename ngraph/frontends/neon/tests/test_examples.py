@@ -71,7 +71,7 @@ def run_model(request, tmpdir_factory):
     return (model_name, out1, out2)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_model_traincost(run_model):
     (model_name, out_path, _) = run_model
     cost = get_last_epoch_cost(out_path)
