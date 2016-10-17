@@ -23,7 +23,8 @@ from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
-    Function, doall, ResultHandle, RequiredSimplify
+    Function, doall, ResultHandle
+from ngraph.op_graph.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 from ngraph.util.ordered import OrderedSet
@@ -421,38 +422,44 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.device_buffers = OrderedSet()
         self.cpu_initializations = []
         self.init_computation = None
+        self.graph_passes = [SimplePrune(), RequiredTensorShaping()]
+
+    def register_graph_pass(self, graph_pass):
+        self.graph_passes.append(graph_pass)
+
+    def run_registered_graph_passes(self, ops):
+        for graph_pass in self.graph_passes:
+            graph_pass.do_pass(ops)
 
     def transform_computations(self):
         """
         Transform computation graphs to a form that can be run.
         """
-        self.all_results = Op.simple_prune(self.all_results)
-        self.all_results = RequiredSimplify().run(self.all_results)
 
-        # Create tensor descriptions
-        ops = Op.ordered_ops(self.all_results)
-        init_op = doall(self.ordered_initializers(ops))
-        init_graph = Op.simple_prune(OrderedSet([init_op]))
-        init_graph = RequiredSimplify().run(init_graph)
-        self.inits = Op.ordered_ops(init_graph)
-        init_op = init_op.forwarded
-        init_op.update_forwards()
+        # Run passes on the computation graphs
+        self.run_registered_graph_passes(self.all_results)
 
-        # create computation which initializes values (called once per
-        # session)
-        self.init_computation = self.computation(init_op, name="init")
+        # Collect up all ops from the graph and obtain the init graph
+        all_ops = OrderedSet(Op.ordered_ops(self.all_results))
+        init_op = doall(self.ordered_initializers(all_ops))
 
-        all_ops = OrderedSet(ops)
+        # Run passes on the initialization graphs
+        self.run_registered_graph_passes([init_op])
+
+        # Union the init and computation graphs
+        self.inits = Op.ordered_ops([init_op])
         all_ops.update(self.inits)
+
+        # create computation which initializes values (called once per session)
+        init_op.update_forwards()
+        self.init_computation = self.computation(init_op, name="init")
 
         # Give ids
         for op in all_ops:
             if op not in self.opids:
                 self.opids[op] = len(self.opids)
 
-        self.dataflow, self.memory = assign_buffers(
-            self, all_ops, self.fusion
-        )
+        self.dataflow, self.memory = assign_buffers(self, all_ops, self.fusion)
 
         # Initialize tensor descriptions
         for op in all_ops:
