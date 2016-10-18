@@ -13,14 +13,33 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-Tensor Types
-============
+Tensor Descriptions
+===================
 
-Abstractly, an n-tensor is a map from an n-rectangle of non-negative integers to values of homogenous type. In programming languages, there are two kinds of values, l-values and r-values. L-values can be assigned to, i.e. they can appear on the left side of an assignment. For example, ``x`` is an l-value, while ``x + y`` is an r-value. R-values can only be used on the right side of an assignment, while l-values can be used on either side of an assignment. Likewise, if a tensor's values are l-values, the tensor is an l-tensor, and if the tensor's values are r-values, the tensors is an r-tensor. The tensor ``x`` is an l-tensor since values can be assigned to it, while the tensor ``x + y`` is an r-tensor because values cannot be assigned to it.
+Abstractly, an n-tensor is a map from an n-rectangle of non-negative integers to values of homogenous type. In programming languages, there are two kinds of values, l-values and r-values. L-values can appear on the left side of an assignment and r-values can appear on the right side of an assignment. For example, ``x`` can be an l-value or an r-value, while ``x + y`` is an r-value. Likewise, if a tensor's values are l-values, the tensor is an l-tensor, and if the tensor's values are r-values, the tensors is an r-tensor. The tensor ``x`` is an l-tensor since values can be assigned to its elements, as in ``x[...] = y``, while the tensor ``x + y`` is an r-tensor because values cannot be assigned to it. An r-tensor only needs to be able to provide values; it does not need to store them. The tensor ``x + y`` could produce the value for an index ``i`` by providing ``x[i] + y[i]`` every time it is needed, and a constant tensor could ignore the index and always produce the value.
 
-Multiple tensors often map to the same values, so we factor the map into two components, a map from an n-rectangle to a non-negative integer, and a map from non-negative integers to values. For example, the index ``(2, 0, 1)`` might map to ``19`` which maps to ``3.51``. Another tensor might map ``(0, 2, 1)`` to ``19`` which again maps to ``3.51``. We call these tensors different views. As the graph is transformed, additional views may be created, and information may be added to the tensor description. Since an l-tensor can serve as an r-tensor, the transformation process may determine that some r-tensors should be l-tensors.
+Tensor ``y`` is a *simple view* of tensor ``x`` if there is some index translation function ``f`` such that ``y[i] == x[f(i)]`` for all valid indices of ``y`` and all values of ``x``. Reshaping and slicing are two tensor operations that create views. A  *complex view* involves multiple tensors and index translation functions. If ``x[]`` is a list of tensors, and ``f[]`` a list of index translation functions, and there is a selection function ``s`` such that after setting ``y[i] == x[s(i)][f[s(i)](i)]`` for all valid indices ``i`` of ``y`` and all values of ``x[...]``. In this case, ``s`` selects a tensor and index translation function for that tensor. Padding is an example of a complex view, in which a region of the values come from some other tensor, and the remaining values come from zero tensors. Transformers introduce views as they rewrite more abstract operations as simpler operations available on backends.
 
-Not all r-tensors should be converted to l-tensors. If  ``a`` and ``b`` are compatible tensors, ``a - b`` is a r-tensor. If we only want to compute the L2 norm of ``a - b``  we can compute it without storing the tensor ``a - b`` by computing ``s = s + (a[i]-b[i])^2`` for each element. If we naively computed the value with a tensor library which executes one operation at a time, ``a - b`` would be computed and stored in a new tensor. Then its transpose would be taken, which would be view of the same elements, and then the dot product of the two tensors would be computed. At this point, nothing references the transpose tensor, so the garbage collector reclaims its storage. The transpose was the only reference to the difference tensor, so once the transpose is reclaimed, the difference can be reclaimed. In the process, memory caches were filled with the elements of ``a - b`` that no longer exist, while values that might still be useful were decached to make room the ``a - b``.
+We can convert an r-tensor to an l-tensor by allocating an l-tensor for it initializing it with the r-values. If the values at particular indices are going to be used multiple times, this can reduce computation. Not all r-tensors should be converted to l-tensors. If  ``x`` and ``y`` are compatible 1-tensors, ``x - y`` is a r-tensor. If we only want to compute the L2 norm of ``x - y`` we could use MumPy to compute
+.. code-block:: python
+
+    def L2(x, y):
+        t = x - y
+        return np.dot(t.T, t)
+
+
+ NumPy will allocate a tensor for ``t``. Every element in ``x``, ``y`` and ``t`` will be touched once, and pages in ``t`` will be modified. As each page is accessed, it moves to the end of the line for pages to be evicted. Furthermore, the accessing all the elements of ``x``, ``y``, and ``t`` will displace many elements from memory caches. Next, a view of ``t`` for ``t.T`` is allocated by NumPy. Views are tiny compared to tensors. Computing the dot product will access every element of ``t`` again. If ``t`` is larger than the memory cache, the recently cached elements near the end of ``t`` will be evicted so the ones near the beginning of ``t`` can be accessed. When the function returns, the garbage collector would see that the view ``t.T`` was no longer referenced and reclaim it. Since ``t.T`` is the only reference to ``t``, the garbage collector can now reclaim ``t``. All the cache locations displaced by ``t`` are now unused. Furthermore, even though ``t`` is unallocated memory according the the heap, paging still sees it as modified pages. The page will need to be written back to paging before the physical memory can be given to other virtual memory. Likewise, the memory caches see the memory as modified and will need to invalidate caches for other cores.
+
+Compare this with the following function,
+.. code-block:: python
+
+    def L2(x, y):
+        s = 0
+        for i in len(x):
+            s = s + (x[i] - y[i])^2
+        return s
+
+As in the previous function, ``x`` and ``y`` will need to enter the cache, but there us no ``t`` to be cached, to ``t.T`` and ``t`` to be freed by the garbage collector, and no dirty pages to evict.
 
 Every tensor-valued ``Op`` corresponds to an r-tensor and has a ``tensor_description`` attribute that describes the tensor, and is computed from the tensor descriptions of the parameters and arguments to the ``Op``. During the transformation process, the tensor description may be augmented with additional information, such as a storage layout and storage assignment. The value of an ``Op`` might be a different view of a tensor, in which case the sharing must be indicated in its ``tensor_description``. An ``AllocationOp`` is a special case of a tensor-valued ``Op`` in that its tensors is an l-tensor. At the end of the transformation process, all tensor descriptions for l-tensors must contain enough information for them to be allocated.
 
