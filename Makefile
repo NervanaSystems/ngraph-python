@@ -29,7 +29,7 @@ STYLE_CHECK_DIRS := ngraph tests examples tf_importer
 
 # pytest options
 TEST_OPTS :=
-TEST_DIRS := tests/ tf_importer/tests/
+TEST_DIRS := tests/ tf_importer/tests/ ngraph/frontends/neon/tests
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc

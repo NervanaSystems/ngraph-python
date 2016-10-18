@@ -2525,7 +2525,7 @@ def deriv(dependent_op, independent_op):
       TODO
     """
     Op.simple_prune([dependent_op, independent_op])
-    adjoints = dependent_op.adjoints()
+    adjoints = dependent_op.forwarded.adjoints()
 
     if independent_op not in adjoints:
         # TODO: check to see if independent_op is even used to compute
@@ -2544,8 +2544,8 @@ def deriv(dependent_op, independent_op):
             independent_op=independent_op,
         ))
 
-    adjoint = adjoints[independent_op]
-    return broadcast(adjoint, axes=independent_op.axes)
+    adjoint = adjoints[independent_op.forwarded]
+    return broadcast(adjoint.forwarded, axes=independent_op.axes)
 
 
 class CrossEntropyMultiInner(object):
