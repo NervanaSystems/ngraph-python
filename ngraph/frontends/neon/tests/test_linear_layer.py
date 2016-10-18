@@ -29,14 +29,13 @@ def pytest_generate_tests(metafunc):
     bsz_rng = [128]
 
     if 'basic_linargs' in metafunc.fixturenames:
-        fargs = []
         nin_rng = [1, 2, 1023, 1024, 1025]
         nout_rng = [1, 4, 1023, 1024, 1025]
         fargs = itt.product(nin_rng, nout_rng, bsz_rng)
         metafunc.parametrize('basic_linargs', fargs)
 
 
-def test_linear_zeros(basic_linargs):
+def test_linear_zeros(basic_linargs, transformer_factory):
     be = gen_backend(backend='dataloader')  # noqa
 
     # basic sanity check with 0 weights random inputs
@@ -67,7 +66,7 @@ def test_linear_zeros(basic_linargs):
     assert np.min(out) == 0.0 and np.max(out) == 0.0
 
 
-def test_linear_ones(basic_linargs):
+def test_linear_ones(basic_linargs, transformer_factory):
     be = gen_backend(backend='dataloader')  # noqa
 
     # basic sanity check with all ones on the inputs
@@ -104,39 +103,7 @@ def test_linear_ones(basic_linargs):
     w = weights()
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 
-    # for larger layers need to estimate numerical precision
-    # atol = est_mm_prec(w, inp.get())
     assert np.allclose(sums, out, atol=0.0, rtol=0.0), \
         '%e' % np.max(np.abs(out - sums))
 
 
-# permute mm indicies to change order of computations
-# to estimate numerical precision
-# this is a rough estimate
-def est_mm_prec(A, B, ntrials=1):
-    A64 = np.float64(A)
-    B64 = np.float64(B)
-    gt = np.dot(A64, B64)
-    max_err = -1.0
-    for trial in range(ntrials):
-        inds = np.random.permutation(A.shape[1])
-        # this method gives better estimate of precision tolerances
-        # but takes too long to run
-        # for i in range(A.shape[0]):
-        #    for j in range(B.shape[1]):
-        #        c = np.sum(np.multiply(A[i,inds], B[inds,j]))
-        #        max_err = max( max_err, np.abs(c-gt[i,j]))
-
-        # need to scale this by 10 for comparison
-        C = np.dot(A[:, inds], B[inds, :])
-        dd = np.float32(gt - C)
-        # just save the worst case from each iteration
-        max_err = max(max_err, np.max(np.abs(dd)))
-    # need to scale the np.dot results by 10 to
-    # match the np.sum(np.multiply()) values
-    max_err *= 10.0
-
-
-if __name__ == '__main__':
-    # test_linear_ones((100, 10, 128))
-    test_linear_zeros((100, 10, 128))

@@ -49,13 +49,13 @@ def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
 """
 
 
-def test_identity():
+def test_identity(transformer_factory):
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = np.array([0, 1, -2]).reshape((3, 1))
     compare_tensors(Identity(), inputs, outputs)
 
 
-def test_identity_derivative():
+def test_identity_derivative(transformer_factory):
     inputs = np.array([[0, 1, -2], [1, 5, 6]]).reshape((3, 2))
     outputs = np.ones(inputs.shape)
     compare_tensors(Identity(), inputs, outputs, deriv=True)
@@ -64,38 +64,38 @@ def test_identity_derivative():
 """
 
 
-def test_rectlin_positives():
+def test_rectlin_positives(transformer_factory):
     inputs = np.array([1, 3, 2]).reshape((3, 1))
     outputs = np.array([1, 3, 2]).reshape((3, 1))
     compare_tensors(Rectlin(), inputs, outputs)
 
 
-def test_rectlin_negatives():
+def test_rectlin_negatives(transformer_factory):
     inputs = np.array([[-1, -3], [-2, -4]])
     outputs = np.array([[0, 0], [0, 0]])
     compare_tensors(Rectlin(), inputs, outputs)
 
 
-def test_rectlin_mixed():
+def test_rectlin_mixed(transformer_factory):
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[4, 0], [0, 9]])
     compare_tensors(Rectlin(), inputs, outputs)
 
 
-def test_rectlin_derivative_positives():
+def test_rectlin_derivative_positives(transformer_factory):
     inputs = np.array([1, 3, 2]).reshape((3, 1))
     outputs = np.array([1, 1, 1]).reshape((3, 1))
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
 
 
-def test_rectlin_derivative_negatives():
+def test_rectlin_derivative_negatives(transformer_factory):
     inputs = np.array([[-1, -3], [-2, -4]])
     outputs = np.array([[0, 0], [0, 0]])
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
 
 
 @pytest.mark.xfail(strict=True)
-def test_rectlin_derivative_mixed():
+def test_rectlin_derivative_mixed(transformer_factory):
     """
     Marked as xfail because it does not match old neon behavior at x=0,
     even though the derivative is technically undefined
@@ -109,31 +109,28 @@ def test_rectlin_derivative_mixed():
 """
 
 
-def test_leaky_rectlin_positives():
+def test_leaky_rectlin_positives(transformer_factory):
     slope = 0.2
-    ax = ng.name_scope("ax")
-    ax.X = ng.Axis(length=3)
-    ax.Y = ng.Axis(length=1)
     inputs = np.array([1, 3, 2]).reshape((3, 1))
     outputs = np.array([1, 3, 2]).reshape((3, 1))
     compare_tensors(Rectlin(slope=slope), inputs, outputs)
 
 
-def test_leaky_rectlin_negatives():
+def test_leaky_rectlin_negatives(transformer_factory):
     slope = 0.2
     inputs = np.array([[-1, -3], [-2, -4]])
     outputs = inputs * slope
     compare_tensors(Rectlin(slope=slope), inputs, outputs, tol=1e-7)
 
 
-def test_leaky_rectlin_mixed():
+def test_leaky_rectlin_mixed(transformer_factory):
     slope = 0.2
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[4, 0], [-2 * slope, 9]])
     compare_tensors(Rectlin(slope=slope), inputs, outputs, tol=1e-7)
 
 
-def test_leaky_rectlin_derivative_positives():
+def test_leaky_rectlin_derivative_positives(transformer_factory):
     slope = 0.2
     inputs = np.array([1, 3, 2]).reshape((3, 1))
     outputs = np.array([1, 1, 1]).reshape((3, 1))
@@ -141,7 +138,7 @@ def test_leaky_rectlin_derivative_positives():
 
 
 @pytest.mark.xfail(strict=True)
-def test_leaky_rectlin_derivative_negatives():
+def test_leaky_rectlin_derivative_negatives(transformer_factory):
     """
     ngraph derivative for negative values is 0, not the slope
     """
@@ -152,7 +149,7 @@ def test_leaky_rectlin_derivative_negatives():
 
 
 @pytest.mark.xfail(strict=True)
-def test_leaky_rectlin_derivative_mixed():
+def test_leaky_rectlin_derivative_mixed(transformer_factory):
     slope = 0.2
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[1, 0], [slope, 1]])
@@ -163,21 +160,21 @@ def test_leaky_rectlin_derivative_mixed():
 """
 
 
-def test_softmax():
+def test_softmax(transformer_factory):
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1))).reshape((3, 1))
     compare_tensors(Softmax(), inputs, outputs, tol=1e-5)
 
 
-def test_softmax_derivative():
+def test_softmax_derivative(transformer_factory):
     inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
     outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1)))
     outputs = outputs * (1 - outputs)  # shortcut only
     compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
 
 
-@pytest.mark.xfail(strict=True)
-def test_softmax_big_inputs():
+@pytest.mark.xfail(reason="runs out of system memory", run=False)
+def test_softmax_big_inputs(transformer_factory):
     """
     This fails with memory error because the ex.derivative function
     attempts to compute the full derivative.
@@ -194,14 +191,14 @@ def test_softmax_big_inputs():
 """
 
 
-def test_tanh():
+def test_tanh(transformer_factory):
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = np.array(
         [true_tanh(0), true_tanh(1), true_tanh(-2)]).reshape((3, 1))
     compare_tensors(Tanh(), inputs, outputs, tol=1e-7)
 
 
-def test_tanh_derivative():
+def test_tanh_derivative(transformer_factory):
     inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
 
     # bprop is on the output
@@ -215,13 +212,13 @@ def test_tanh_derivative():
 """
 
 
-def test_logistic():
+def test_logistic(transformer_factory):
     inputs = np.array([0, 1, -2]).reshape((3, 1))
     outputs = 1.0 / (1.0 + np.exp(-inputs)).reshape((3, 1))
     compare_tensors(Logistic(), inputs, outputs, tol=1e-7)
 
 
-def test_logistic_derivative():
+def test_logistic_derivative(transformer_factory):
     # bprop is on the output
     inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
     f = 1.0 / (1.0 + np.exp(-inputs))

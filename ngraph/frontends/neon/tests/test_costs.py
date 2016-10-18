@@ -21,7 +21,7 @@ def compare_tensors(func, outputs, targets, expected_result, tol=0.):
 """
 
 
-def test_cross_entropy_binary():
+def test_cross_entropy_binary(transformer_factory):
     outputs = np.array([0.5, 0.9, 0.1, 0.0001])
     targets = np.array([0.5, 0.99, 0.01, 0.2])
     eps = np.exp(-50)
@@ -34,7 +34,7 @@ def test_cross_entropy_binary():
                     outputs, targets, expected_result, tol=1e-6)
 
 
-def test_cross_entropy_binary_limits():
+def test_cross_entropy_binary_limits(transformer_factory):
     outputs = np.array([0.5, 1.0, 0.0, 0.0001])
     targets = np.array(([0.5, 0.0, 1.0, 0.2]))
     eps = np.exp(-50)
@@ -52,7 +52,7 @@ def test_cross_entropy_binary_limits():
 """
 
 
-def test_cross_entropy_multi():
+def test_cross_entropy_multi(transformer_factory):
     outputs = np.array([0.5, 0.9, 0.1, 0.0001])
     targets = np.array([0.5, 0.99, 0.01, 0.2])
     eps = np.exp(-50)
@@ -63,7 +63,7 @@ def test_cross_entropy_multi():
                     outputs, targets, expected_result, tol=1e-6)
 
 
-def test_cross_entropy_multi_limits():
+def test_cross_entropy_multi_limits(transformer_factory):
     outputs = np.array([0.5, 1.0, 0.0, 0.0001])
     targets = np.array(([0.5, 0.0, 1.0, 0.2]))
     eps = np.exp(-50)
@@ -79,14 +79,14 @@ def test_cross_entropy_multi_limits():
 """
 
 
-def test_sum_squared():
+def test_sum_squared(transformer_factory):
     outputs = np.array([0.5, 0.9, 0.1, 0.0001])
     targets = np.array(([0.5, 0.99, 0.01, 0.2]))
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
     compare_tensors(SumSquared(), outputs, targets, expected_result, tol=1e-6)
 
 
-def test_sum_squared_limits():
+def test_sum_squared_limits(transformer_factory):
     outputs = np.array([0.5, 1.0, 0.0, 0.0001])
     targets = np.array(([0.5, 0.0, 1.0, 0.2]))
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
@@ -98,26 +98,16 @@ def test_sum_squared_limits():
 """
 
 
-def test_mean_squared():
+def test_mean_squared(transformer_factory):
     outputs = np.array([0.5, 0.9, 0.1, 0.0001])
     targets = np.array([0.5, 0.99, 0.01, 0.2])
     expected_result = np.mean((outputs - targets) ** 2, axis=0, keepdims=True) / 2.
     compare_tensors(MeanSquared(), outputs, targets, expected_result, tol=1e-6)
 
 
-def test_mean_squared_limits():
+def test_mean_squared_limits(transformer_factory):
     outputs = np.array([0.5, 1.0, 0.0, 0.0001])
     targets = np.array(([0.5, 0.0, 1.0, 0.2]))
     expected_result = np.mean((outputs - targets) ** 2, axis=0, keepdims=True) / 2.
     compare_tensors(MeanSquared(), outputs, targets, expected_result, tol=1e-7)
 
-
-if __name__ == '__main__':
-    test_cross_entropy_binary()
-    test_cross_entropy_binary_limits()
-    test_cross_entropy_multi()
-    test_cross_entropy_multi_limits()
-    test_sum_squared()
-    test_sum_squared_limits()
-    test_mean_squared()
-    test_mean_squared_limits()

@@ -39,12 +39,6 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('args', fargs)
 
 
-def wrap(x):
-    be = NervanaObject.be
-    dtypeu = np.float32
-    return be.array(dtypeu(x))
-
-
 class DummyLayer(object):
 
     def __init__(self, p):
@@ -65,12 +59,9 @@ def generate_data(C, N):
 # xfail due to initial_value=nparray not working
 # this test was working a previous commit of ngraph
 @pytest.mark.xfail(strict=True)
-def test_gdm(args):
+def test_gdm(args, transformer_factory):
     """
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
-
-    This test currently fails. Uncommenting one of the lines (marked below) will cause the test
-    to pass on the first minibatch, but it will fail subsequently.
     """
     # set up parameters
     C = ngraph.Axis("C")
@@ -131,7 +122,3 @@ def test_gdm(args):
         # generate dummy data for the next minibatch
         (x, y, _) = generate_data(C, N)
 
-
-if __name__ == '__main__':
-    be = gen_backend(backend='cpu', batch_size=128)
-    test_gdm((1.0, 0.5, 0.0005))

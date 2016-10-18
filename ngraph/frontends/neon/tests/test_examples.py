@@ -51,7 +51,7 @@ def get_cost(filename):
 
 
 @pytest.fixture(scope='module', params=db.keys())
-def run_model(request, tmpdir_factory):
+def run_model(request, tmpdir_factory, transformer_factory):
     model_name = request.param
     out1 = tmpdir_factory.mktemp(model_name).join("out1.hdf5").__str__()
     out2 = tmpdir_factory.mktemp(model_name).join("out2.hdf5").__str__()
@@ -72,13 +72,13 @@ def run_model(request, tmpdir_factory):
 
 
 @pytest.mark.xfail(strict=True)
-def test_model_traincost(run_model):
+def test_model_traincost(run_model, transformer_factory):
     (model_name, out_path, _) = run_model
     cost = get_last_epoch_cost(out_path)
     np.testing.assert_allclose(cost, db[model_name]['cost'], rtol=0.15)
 
 
-def test_model_positivecost(run_model):
+def test_model_positivecost(run_model, transformer_factory):
     """
     When running MNIST or cifar10 in neon, all per-minibatch costs are positive.
     """
@@ -91,14 +91,14 @@ def test_model_positivecost(run_model):
         assert all(cost >= 0.0)
 
 
-def test_model_simple(run_model):
+def test_model_simple(run_model, transformer_factory):
     # simple test that the model runs without error
     (model_name, out_path1, out_path2) = run_model
     assert os.path.exists(out_path1)
     assert os.path.exists(out_path2)
 
 
-def test_model_determinism(run_model):
+def test_model_determinism(run_model, transformer_factory):
     (model_name, out_path1, out_path2) = run_model
     cost1 = get_last_epoch_cost(out_path1)
     cost2 = get_last_epoch_cost(out_path2)
