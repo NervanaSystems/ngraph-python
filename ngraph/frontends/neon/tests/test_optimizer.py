@@ -23,7 +23,6 @@ import copy
 
 from ngraph.frontends.neon import GradientDescentMomentum
 
-from neon import NervanaObject
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 from neon.backends import gen_backend
 import pytest
@@ -121,4 +120,3 @@ def test_gdm(args, transformer_factory):
 
         # generate dummy data for the next minibatch
         (x, y, _) = generate_data(C, N)
-

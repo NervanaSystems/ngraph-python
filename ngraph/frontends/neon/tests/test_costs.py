@@ -110,4 +110,3 @@ def test_mean_squared_limits(transformer_factory):
     targets = np.array(([0.5, 0.0, 1.0, 0.2]))
     expected_result = np.mean((outputs - targets) ** 2, axis=0, keepdims=True) / 2.
     compare_tensors(MeanSquared(), outputs, targets, expected_result, tol=1e-7)
-

@@ -105,5 +105,3 @@ def test_linear_ones(basic_linargs, transformer_factory):
 
     assert np.allclose(sums, out, atol=0.0, rtol=0.0), \
         '%e' % np.max(np.abs(out - sums))
-
-
