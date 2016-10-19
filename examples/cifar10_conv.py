@@ -14,12 +14,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import ax, np, Affine, Conv, Axes, Callbacks, CrossEntropyMulti,\
+from ngraph.frontends.neon import ax, np, Affine, Conv, Pooling, Axes, Callbacks, CrossEntropyMulti,\
     GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
-    NgraphArgparser, Rectlin, Softmax, Uniform
+    NgraphArgparser, Rectlin, Softmax
 
 from neon.data import CIFAR10
-from neon.backends.nervanacpu import NervanaCPU
+from neon.backends.nervanagpu import NervanaGPU
+from neon.initializers import Uniform
 from ngraph.op_graph.op_graph import BackendWrapper
 
 
@@ -29,7 +30,7 @@ parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
 parser.set_defaults(backend='dataloader')
 args = parser.parse_args()
-BackendWrapper.be = NervanaCPU()
+BackendWrapper.be = NervanaGPU()
 
 # setup data provider
 dataset = CIFAR10(path=args.data_dir,

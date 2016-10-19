@@ -3,6 +3,7 @@ import math
 
 from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import FunctionAxis, PaddedAxis, Axis, Axes
+import ngraph as ng
 
 
 def _output_dim(X, S, padding, stride, pooling=False):
@@ -89,10 +90,10 @@ class ConvolutionAxis(FunctionAxis):
         )
 
 
-class conv_fprop(op_graph.TensorOp):
+class fprop_conv(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, inputs, filters, *args, **kwargs):
+    def __init__(self, dims, inputs, filters, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -139,12 +140,7 @@ class conv_fprop(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        input_dims = [shape.length for shape in inputs.shape]
-        filter_dims = [shape.length for shape in filters.shape]
-        # TODO: account for padding and stride
-        output_dims = [_output_dim(input_dims[i], filter_dims[i], 0, 1) for i in range(1, 4)]
-        output_dims = [filter_dims[-1]] + output_dims
-        axes = Axes([Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes = Axes([Axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
         axes[0].name = 'C'
         axes[1].name = 'D'
         axes[2].name = 'H'
@@ -152,10 +148,11 @@ class conv_fprop(op_graph.TensorOp):
 
         self._input_shape = inputs.shape
         self._filter_shape = filters.shape
-        conv_fprop._index += 1
-        self.index = conv_fprop._index
+        fprop_conv._index += 1
+        self.index = fprop_conv._index
+        self.dims = dims
 
-        super(conv_fprop, self).__init__(
+        super(fprop_conv, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
         )
 
@@ -165,11 +162,11 @@ class conv_fprop(op_graph.TensorOp):
         """
 
         # TODO: call generate_add_delta() instead
-        adjoints[filters] = conv_update(delta, inputs, filters, self)
-        adjoints[inputs] = conv_bprop(delta, inputs, filters, self)
+        adjoints[filters] = update_conv(delta, inputs, filters, self)
+        adjoints[inputs] = bprop_conv(delta, inputs, filters, self)
 
 
-class conv_update(op_graph.TensorOp):
+class update_conv(op_graph.TensorOp):
     def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
         """
         Arguments:
@@ -181,13 +178,17 @@ class conv_update(op_graph.TensorOp):
         self._input_shape = conv._input_shape
         self._filter_shape = conv._filter_shape
         self.index = conv.index
+        self.dims = conv.dims
 
-        super(conv_update, self).__init__(
+        super(update_conv, self).__init__(
             args=(delta, inputs, filters), *args, axes=axes, **kwargs
         )
 
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        pass
 
-class conv_bprop(op_graph.TensorOp):
+
+class bprop_conv(op_graph.TensorOp):
     def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
         """
         Arguments:
@@ -199,16 +200,21 @@ class conv_bprop(op_graph.TensorOp):
         self._input_shape = conv._input_shape
         self._filter_shape = conv._filter_shape
         self.index = conv.index
+        self.dims = conv.dims
 
-        super(conv_bprop, self).__init__(
+        super(bprop_conv, self).__init__(
             args=(delta, inputs, filters), *args, axes=axes, **kwargs
         )
 
 
-class pool_fprop(op_graph.TensorOp):
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        pass
+
+
+class fprop_pool(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, inputs, pool_params, *args, **kwargs):
+    def __init__(self, dims, inputs, argmax, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -241,35 +247,28 @@ class pool_fprop(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        input_dims = [shape.length for shape in inputs.shape]
-        pool_dims = [pool_params[name] for name in ['C', 'T', 'R', 'S']]
-        # TODO: account for padding and stride
-        output_dims = [_output_dim(input_dims[i], pool_dims[i], 0, 1, pooling=True) for i in range(1, 4)]
-        output_dims = [pool_dims[0]] + output_dims
-        axes = Axes([Axis(dim) for dim in output_dims] + [batch_axes[0]])
+        axes = Axes([Axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
         axes[0].name = 'C'
         axes[1].name = 'D'
         axes[2].name = 'H'
         axes[3].name = 'W'
 
         self._input_shape = inputs.shape
-        pool_fprop._index += 1
-        self.index = pool_fprop._index
+        fprop_pool._index += 1
+        self.index = fprop_pool._index
+        self.dims = dims
+        self.argmax = argmax
 
-        super(pool_fprop, self).__init__(
-            args=(inputs, pool_params), *args, axes=axes, **kwargs
+        super(fprop_pool, self).__init__(
+            args=(inputs, argmax), *args, axes=axes, **kwargs
         )
 
-    def generate_adjoints(self, adjoints, delta, inputs):
-        """
-        TODO
-        """
-
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
         # TODO: call generate_add_delta() instead
-        adjoints[inputs] = pool_bprop(delta, inputs, self)
+        adjoints[inputs] = bprop_pool(delta, inputs, self)
 
 
-class pool_bprop(op_graph.TensorOp):
+class bprop_pool(op_graph.TensorOp):
     def __init__(self, delta, inputs, pooling, *args, **kwargs):
         """
         Arguments:
@@ -277,10 +276,13 @@ class pool_bprop(op_graph.TensorOp):
         """
         input_dims = [shape.length for shape in inputs.shape]
         axes = Axes([Axis(dim) for dim in input_dims])
-        self._input_shape = pooling._input_shape
-        self._filter_shape = pooling._filter_shape
         self.index = pooling.index
+        self.dims = pooling.dims
+        self.argmax = pooling.argmax
 
-        super(pool_bprop, self).__init__(
-            args=(delta, inputs), *args, axes=axes, **kwargs
+        super(bprop_pool, self).__init__(
+            args=(delta, inputs, self.argmax), *args, axes=axes, **kwargs
         )
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        pass

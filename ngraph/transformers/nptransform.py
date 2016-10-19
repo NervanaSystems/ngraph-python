@@ -40,7 +40,7 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import conv_fprop, conv_update, conv_bprop, pool_fprop, pool_bprop
+from ngraph.op_graph.convolution import fprop_conv, update_conv, bprop_conv, fprop_pool, bprop_pool
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -270,7 +270,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op_init.on_type(conv_fprop)
+    @generate_op_init.on_type(fprop_conv)
     def generate_op_init(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -299,7 +299,7 @@ class NumPyCodeGenerator(PyGen):
             bsz=op.batch_axis.length
         )
 
-    @generate_op.on_type(conv_fprop)
+    @generate_op.on_type(fprop_conv)
     def generate_op(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -312,7 +312,7 @@ class NumPyCodeGenerator(PyGen):
             filters=filters,
         )
 
-    @generate_op.on_type(conv_update)
+    @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs, filters):
         self.append(
             """
@@ -325,7 +325,7 @@ class NumPyCodeGenerator(PyGen):
             delta=delta,
         )
 
-    @generate_op.on_type(conv_bprop)
+    @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, inputs, filters):
         self.append(
             """
@@ -338,7 +338,7 @@ class NumPyCodeGenerator(PyGen):
             filters=filters,
         )
 
-    @generate_op_init.on_type(pool_fprop)
+    @generate_op_init.on_type(fprop_pool)
     def generate_op_init(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -367,7 +367,7 @@ class NumPyCodeGenerator(PyGen):
             bsz=op.batch_axis.length
         )
 
-    @generate_op.on_type(pool_fprop)
+    @generate_op.on_type(fprop_pool)
     def generate_op(self, op, outputs, inputs):
         self.append(
             """
@@ -379,7 +379,7 @@ class NumPyCodeGenerator(PyGen):
             inputs=inputs,
         )
 
-    @generate_op.on_type(pool_bprop)
+    @generate_op.on_type(bprop_pool)
     def generate_op(self, op, outputs, delta, inputs):
         self.append(
             """

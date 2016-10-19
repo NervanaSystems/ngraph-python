@@ -498,8 +498,13 @@ class Axes(object):
         names = [axis.name for axis in self._axes]
         # TODO: get rid of this temporary hack.
         names = [name.split('_')[0] for name in names]
+        short_names = []
+        for name in names:
+            if name.find('.') != -1:
+                name = name.split('.')[1]
+            short_names.append(name)
         vals = [axis.length for axis in self._axes]
-        return dict(zip(names, vals))
+        return dict(zip(short_names, vals))
 
     def set_shape(self, shape):
         axes = self._axes

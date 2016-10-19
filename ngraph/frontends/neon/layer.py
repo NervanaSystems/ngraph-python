@@ -133,15 +133,21 @@ class Pooling(Layer):
             (tuple): shape of output data
         """
         super(Pooling, self).configure(in_obj)
-        if self.nglayer is None:
-            self.poolparams.update(in_obj.shape_dict())
-            #if self.poolparams['R'] is None:
-            #    self.poolparams['R'] = shapedict['H']
-            #    self.poolparams['S'] = shapedict['W']
-            self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
-            (K, M, P, Q, N) = self.nglayer.dimO
-            self.out_shape = (K, M, P, Q)
-        out_obj = ng.pool_fprop(in_obj, self.poolparams)
+        assert self.nglayer is None
+        ikeys = ('C', 'H', 'W') if len(self.in_shape) == 3 else ('C', 'D', 'H', 'W')
+        shapedict = {k: x for k, x in zip(ikeys, self.in_shape)}
+        shapedict['N'] = self.be.bsz
+        self.poolparams.update(in_obj.shape_dict())
+        if self.poolparams['R'] is None:
+            self.poolparams['R'] = shapedict['H']
+            self.poolparams['S'] = shapedict['W']
+        self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
+        (K, M, P, Q, N) = self.nglayer.dimO
+        self.out_shape = (K, M, P, Q)
+        out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
+        argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in out_shape_dict]
+        argmax = ng.Variable(axes=argmax_axes, initial_value=0)
+        out_obj = ng.fprop_pool(self.nglayer, in_obj, argmax)
         return out_obj
 
 
@@ -238,19 +244,17 @@ class Convolution(ParameterLayer):
             (tuple): shape of output data
         """
         super(Convolution, self).configure(in_obj)
-        if self.nglayer is None:
-            self.convparams.update(in_obj.shape_dict())
-            self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
-            (K, M, P, Q, N) = self.nglayer.dimO
-            self.out_shape = (K, P, Q) if M == 1 else (K, M, P, Q)
-        if self.weight_shape is None:
-            names = ['C', 'T', 'R', 'S', 'K']
-            weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
-            weights = ng.Variable(axes=weights_axes, init=self.init)
-            self.weight_shape = self.nglayer.dimF2  # (C * R * S, K)
+        assert self.nglayer is None
+        self.convparams.update(in_obj.shape_dict())
+        self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
+        assert self.weight_shape is None
+        names = ['C', 'T', 'R', 'S', 'K']
+        weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
+        weights = ng.Variable(axes=weights_axes, init=self.init)
+        self.weight_shape = self.nglayer.dimF2
         if self.bsum:
             self.batch_sum_shape = (self.nglayer.K, 1)
-        return ng.conv_fprop(in_obj, weights)
+        return ng.fprop_conv(self.nglayer, in_obj, weights)
 
 
 class Deconvolution(ParameterLayer):
