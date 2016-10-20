@@ -969,6 +969,7 @@ class TensorDescription(NameableValue):
         return TensorDescription(
             new_axes,
             base=self.base,
+            dtype=self.dtype,
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
