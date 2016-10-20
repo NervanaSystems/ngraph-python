@@ -21,7 +21,7 @@ import numpy as np
 from builtins import object
 
 from ngraph.op_graph.axes import TensorDescription, \
-    Axes, FlattenedAxis, PaddedAxis, Axis, SlicedAxis, default_dtype, default_int_dtype
+    Axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
 from ngraph.util.nodes import Node
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet

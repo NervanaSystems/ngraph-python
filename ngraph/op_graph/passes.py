@@ -13,10 +13,18 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import abc
+
 from future.utils import with_metaclass
+from collections import Iterable
+
+from ngraph import Axis
+from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
+    axes_with_order, flatten_at, FlattenedAxis, Transpose, unflatten, ReorderAxes, \
+    OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
+    DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, Constant, \
+    Multiply, Add, Divide, Op, Sum, Dimshuffle
 
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import *
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, object)):
@@ -33,6 +41,7 @@ class PeepholeGraphPass(GraphPass):
         super(PeepholeGraphPass, self).__init__()
 
     def do_pass(self, ops):
+        assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while has_work:
             self.replacement_list = []
