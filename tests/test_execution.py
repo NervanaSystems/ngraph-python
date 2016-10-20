@@ -878,6 +878,40 @@ def test_onehot(transformer_factory):
     one_hot_comparison(ng.Axes([C, W, H, N]), ng.Axes([W, H, N]), C)
 
 
+def test_elementwise_fp16_in(transformer_factory):
+    Y = ng.Axis(name='Y')
+    N = ng.Axis(name='N')
+
+    Y.length = 2
+    N.length = 2
+
+    a = ng.Constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float16'), axes=[Y, N],
+                    dtype=np.dtype(np.float16))
+    b = ng.Constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float16'), axes=[Y, N],
+                    dtype=np.dtype(np.float16))
+
+    c = ng.multiply(a, b)
+
+    result = executor(c)()
+    np.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
+
+
+def test_elementwise_fp16_out(transformer_factory):
+    Y = ng.Axis(name='Y')
+    N = ng.Axis(name='N')
+
+    Y.length = 2
+    N.length = 2
+
+    a = ng.Constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float32'), axes=[Y, N])
+    b = ng.Constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float32'), axes=[Y, N])
+
+    c = ng.multiply(a, b, dtype=np.dtype(np.float16))
+
+    result = executor(c)()
+    np.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
+
+
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     ng.NumPyTransformer().initialize()

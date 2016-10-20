@@ -61,6 +61,13 @@ _redop32_templates = {
 %(indent)sif(temp_val < %(y)s) {%(out)s = temp_idx; %(y)s = temp_val;}""",
 }
 
+# Key for conversion template is (src_fmt, dst_fmt)
+_conversion_templates = {
+    ("half", "float"): r"%(out)s = __half2float(%(in)s);",
+    ("float", "half"): r"%(out)s = __float2half(%(in)s);",
+}
+_default_conversion = r"%(out)s = %(in)s;"
+
 _redop_inits = {
     "sum": "0.0f",
     "max": "-FLT_MAX",
@@ -81,11 +88,11 @@ _index_template31 = \
 _index_template32 = \
     r"%(index)s = idx0 * %(stridea)s + idx1 * %(strideb)s + %(item)s * %(stridec)s;"
 
-_load_template = r"%(out)s = %(buffer)s[%(index)s];"
+_load_template = r"%(buffer)s[%(index)s]"
 
-_store_template = r"%(buffer)s[%(index)s] = %(val)s;"
+_store_template = r"%(buffer)s[%(index)s]"
 
-_redstore_template = r"if(idx%(loopidx)s == 0) {%(buffer)s[%(index)s] = %(val)s;}"
+_redstore_template = r"if(idx%(loopidx)s == 0) {%(store)s}"
 
 _red32_template = r"""
     #pragma unroll
@@ -184,6 +191,7 @@ _defines_template3 = r"""#define ITEMS_PER_BLOCK0 %(blksize0)s
 """
 
 _header_template = r"""#include <float.h>
+#include <cuda_fp16.h>
 
 %(defines)s
 __global__ void %(kernel_name)s(%(args)s)
@@ -479,9 +487,14 @@ def _preprocess_ops(ops, loop_axis_len):
     return out_ops
 
 
-def _get_register_type(dtype):
-    if dtype == np.float32 or dtype == np.float16:
+def _get_register_type(dtype, memory=False):
+    if dtype == np.float32:
         return "float"
+    elif dtype == np.float16:
+        if memory:
+            return "half"
+        else:
+            return "float"
     elif dtype == np.int32:
         return "int"
     elif dtype == np.int16:
@@ -545,12 +558,12 @@ def _build_register_mapping(stages):
                         regname = "constant" + str(len(constants))
                         register_mapping[inval] = regname
                         constants[regname] = inval
-                        register_types[regname] = _get_register_type(type(inval))
+                        register_types[regname] = _get_register_type(type(inval), False)
                     else:
                         regname = "reg" + str(reg_count)
                         reg_count = reg_count + 1
                         register_mapping[inval] = regname
-                        register_types[regname] = _get_register_type(inval.dtype)
+                        register_types[regname] = _get_register_type(inval.dtype, False)
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
                                 "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
@@ -566,7 +579,7 @@ def _build_register_mapping(stages):
                 reg_count = reg_count + 1
                 register_mapping[op[3]] = regname
 
-                register_types[regname] = _get_register_type(op[3].dtype)
+                register_types[regname] = _get_register_type(op[3].dtype, False)
                 if op[0] in _redop_templates:
                     register_inits[regname] = _redop_inits[op[0]]
                 else:
@@ -772,7 +785,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         params.append(ctx.constants[constant])
 
     for buf in ctx.buffers.keys():
-        args.append(_get_register_type(buf.dtype) + "* " + ctx.buffers[buf])
+        args.append(_get_register_type(buf.dtype, True) + "* " + ctx.buffers[buf])
         args.append("unsigned int stridea_" + ctx.buffers[buf])
         arg_desc = arg_desc + "PI"
         params.append(buf.td)
@@ -860,9 +873,24 @@ def _get_compound_kernel(ops, axes_mapping, dims):
                 if _is_buffer(inval) and inval not in buffers_in_reg[stage_index]:
                     load_code = _load_template % {
                         "index": "index",
-                        "out": ctx.register_mapping[inval],
                         "buffer": ctx.buffers[inval]
                     }
+
+                    # Check if explicit type conversion is needed for load because ALU
+                    # doesn't support data format
+                    reg_name = ctx.register_mapping[inval]
+                    type_key = (_get_register_type(inval.dtype, True),
+                                ctx.register_types[reg_name])
+                    if type_key in _conversion_templates:
+                        load_code = _conversion_templates[type_key] % {
+                            "out": reg_name,
+                            "in": load_code
+                        }
+                    else:
+                        load_code = _default_conversion % {
+                            "out": reg_name,
+                            "in": load_code
+                        }
 
                     if inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1:
                         index_code = _index_template % {
@@ -934,12 +962,31 @@ def _get_compound_kernel(ops, axes_mapping, dims):
                         subsequent_stage.add(op[3])
 
                 if ctx.last_write[op[3]] == (stage_index, op_index):
+                    store_code = _store_template % {
+                        "index": "index",
+                        "buffer": ctx.buffers[op[3]]
+                    }
+
+                    # Check if explicit type conversion is needed for store because ALU
+                    # doesn't support data format
+                    reg_name = ctx.register_mapping[op[3]]
+                    type_key = (ctx.register_types[reg_name],
+                                _get_register_type(op[3].dtype, True))
+                    if type_key in _conversion_templates:
+                        store_code = _conversion_templates[type_key] % {
+                            "out": store_code,
+                            "in": reg_name
+                        }
+                    else:
+                        store_code = _default_conversion % {
+                            "out": store_code,
+                            "in": reg_name
+                        }
+
                     if (op[0] in _redop_templates or op[3].strides[loop_axis] == 0
                             or op[3].shape[loop_axis] == 1):
                         store_code = _redstore_template % {
-                            "index": "index",
-                            "val": ctx.register_mapping[op[3]],
-                            "buffer": ctx.buffers[op[3]],
+                            "store": store_code,
                             "loopidx": loop_axis
                         }
                         index_code = _index_template % {
@@ -952,11 +999,6 @@ def _get_compound_kernel(ops, axes_mapping, dims):
                         reduction_stores.append(index_code)
                         reduction_stores.append(store_code)
                     else:
-                        store_code = _store_template % {
-                            "index": "index",
-                            "val": ctx.register_mapping[op[3]],
-                            "buffer": ctx.buffers[op[3]]
-                        }
                         index_code = _index_template % {
                             "index": "index",
                             "stridea": "stridea_" + ctx.buffers[op[3]],
