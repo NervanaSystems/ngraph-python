@@ -954,9 +954,7 @@ class TensorDescription(NameableValue):
         new_strides = []
         new_sizes = []
         idx = 0
-        for axis, fst, fsz in zip(
-            self.axes, self.full_strides, self.full_sizes
-        ):
+        for axis, fst, fsz in zip(self.axes, self.full_strides, self.full_sizes):
             if axis == new_axes[idx]:
                 new_strides.append(fst)
                 new_sizes.append(fsz)
