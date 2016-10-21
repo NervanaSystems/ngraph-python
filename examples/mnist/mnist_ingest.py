@@ -4,6 +4,7 @@ import os, sys, getopt, errno
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
+import argparse
 
 def make_sure_path_exists(path):
     try:
@@ -43,19 +44,9 @@ def ingest_mnist(input_file, output_dir):
         create_manifest(valid_set, output_dir, 'valid')
 
 if __name__ == "__main__":
-    inputfile = ''
-    outputdir = ''
-    try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["input=","output="])
-    except getopt.GetoptError:
-        print 'test.py -i <inputfile> -o <outputfile>'
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print 'mnist_ingest.py -i <inputfile> -o <outputdir>'
-            sys.exit()
-        elif opt in ("-i", "--input"):
-            inputfile = arg
-        elif opt in ("-o", "--output"):
-            outputdir = arg
-    ingest_mnist(inputfile, outputdir)
+
+    parser = argparse.ArgumentParser(description='Ingest MNIST from pkl to pngs')
+    parser.add_argument('-i', '--inputfile', default='', help='MNIST pkl file')
+    parser.add_argument('-o', '--outputdir', default='', help='Output directory')
+    args = parser.parse_args()
+    ingest_mnist(args.inputfile, args.outputdir)

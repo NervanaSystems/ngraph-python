@@ -23,7 +23,7 @@ from ngraph.frontends.neon.callbacks import *
 from ngraph.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, SumSquared, \
     Misclassification
 from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import Model
+from ngraph.frontends.neon.model import SimpleModel, ModelTrainer
 from ngraph.frontends.neon.optimizer import *
 
 # include Axes here because old 2.0 code needs to be updated to include Axes

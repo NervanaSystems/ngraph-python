@@ -19,6 +19,29 @@ from neon.optimizers.optimizer import Schedule
 from neon.initializers import Constant
 
 
+class GDMopt(object):
+    def __init__(self, learn_rate, momentum):
+        self.learn_rate = learn_rate
+        self.momentum = momentum
+
+    def __call__(self, cost_func):
+        with ng.Op.saved_user_deps():
+            velocity_updates, param_updates = [], []
+            batch_cost = ng.sum(cost_func, out_axes=())
+            batch_size = cost_func.axes.batch_axes()[0].length
+
+            for variable in batch_cost.variables():
+                grad = ng.deriv(batch_cost, variable) / batch_size
+                velocity = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+                velocity_updates.append(ng.assign(velocity, velocity * self.momentum - \
+                                        self.learn_rate * grad))
+                param_updates.append(ng.assign(variable, variable + velocity))
+
+            updates = ng.doall(velocity_updates + param_updates)
+
+        return updates
+
+
 # Optimizer support
 def L2(x):
     """

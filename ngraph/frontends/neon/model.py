@@ -17,253 +17,83 @@ from __future__ import division
 import ngraph as ng
 from ngraph.frontends.neon.axis import ax
 import numpy as np
-from neon.data import ArrayIterator, DataLoader
-from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
+import collections
 
 
-def dataset_nclasses(dataset):
+def flatten(item):
     """
     TODO.
 
     Arguments:
-      dataset: TODO
+      item: TODO
 
     Returns:
 
     """
-    if isinstance(dataset, ArrayIterator):
-        return dataset.nclass
-    elif isinstance(dataset, DataLoader):
-        return dataset.nclasses
+    if isinstance(item, collections.Iterable):
+        for i in iter(item):
+            for j in flatten(i):
+                yield j
+    else:
+        yield item
 
 
-def dataset_batchsize(dataset):
-    """
-    TODO.
+class SimpleModel(object):
+    def __init__(self, layers):
+        self.layers = layers
 
-    Arguments:
-      dataset: TODO
+    def initialize(self, in_axes):
+        for l in self.layers:
+            in_axes = l.initialize(in_axes)
 
-    Returns:
-
-    """
-    if isinstance(dataset, ArrayIterator):
-        return dataset.be.bsz
-    elif isinstance(dataset, DataLoader):
-        return dataset.bsz
+    def get_outputs(self, in_obj):
+        for l in self.layers:
+            in_obj = l.get_outputs(in_obj)
+        return in_obj
 
 
-class Model(object):
-    """TODO."""
+class ModelTrainer(object):
 
-    def __init__(self, layers, name=None, optimizer=None, **kwargs):
-        super(Model, self).__init__(**kwargs)
-        self.initialized = False
-        self.name = name
-        self.epoch_index = 0
-        self.finished = False
+    def __init__(self, num_iterations, iter_interval):
+        self.num_iterations = num_iterations
+        self.iter_interval = iter_interval
 
-        # Wrap the list of layers in a Sequential container if a raw list of
-        # layers
-        if type(layers) in (Sequential, Tree, SingleOutputTree):
-            self.layers = layers
-        else:
-            self.layers = Sequential(layers)
+    def make_train_graph(self, model, inputs, targets, cost_func, optimizer):
+        model.initialize(inputs.axes)
+        self.train_cost = cost_func(model.get_outputs(inputs), targets)
+        self.updates = optimizer(self.train_cost)
+        self.mean_cost = ng.mean(self.train_cost, out_axes=())
 
-        self.transformer = None
-        self.train_comp = None
-        self.test_comp = None
-        self.metric = None
-        self.cost = None
+        self.train_args = ([self.mean_cost, self.updates], inputs, targets)
 
-    def initialize(self,
-                   dataset, input_axes, target_axes,
-                   cost, optimizer, metric=None):
-        """
-        Propagate shapes through the layers to configure, then allocate space.
+    def make_inference_graph(self, model, inputs):
+        self.inference_args = (model.get_outputs(inputs), inputs)
 
-        Arguments:
-           dataset (NervanaDataIterator): An iterable of minibatches where each
-               element is a (x, y) tuple where x is the input data and y are the labels.
-               x is of dimension (feature_size, batch_size)
-               y is of dimension (label_size, batch_size)
-               Length of the iterator is num_batches which is num_data / batch_size.
-           cost (Cost): Defines the function which the model is minimizing based
-                        on the output of the last layer and the input labels.
-           optimizer (Optimizer): Defines the learning rule for updating the model parameters.
-           num_epochs: Number of times to iterate over the dataset.
-           callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
+    def bind_transformer(self, transformer):
+        self.train_comp = transformer.computation(*self.train_args)
+        self.predictions = transformer.computation(*self.inference_args)
+        transformer.initialize()
 
-        Returns:
+    def train(self, train_set):
+        batch_costs = []
+        for mb_idx, dtuple in enumerate(train_set, start=1):
+            batch_cost, _ = self.train_comp(dtuple[0]/255., dtuple[1])
+            batch_costs.append(float(batch_cost))
+            if mb_idx % self.iter_interval == 0:
+                print("[Iter %s/%s] Cost = %s" % (mb_idx,
+                                                  self.num_iterations, np.mean(batch_costs)))
+                batch_costs = []
+            if mb_idx >= self.num_iterations:
+                return
 
-        """
-        if self.initialized:
-            return
-
-        self.optimizer = optimizer
-
-        batch_input_axes = input_axes + ng.Axes(ax.N, )
-        batch_target_axes = target_axes + ng.Axes(ax.N, )
-        self.input = ng.placeholder(axes=batch_input_axes)
-        self.target = ng.placeholder(axes=batch_target_axes)
-        input_axes.set_shape(dataset.shape)
-        target_axes.set_shape((dataset_nclasses(dataset),))
-
-        ax.N.length = dataset_batchsize(dataset)
-        self.batch_input_shape = batch_input_axes.lengths
-        self.batch_target_shape = batch_target_axes.lengths
-
-        # Propagate shapes through the layers to configure
-        self.output = self.layers.configure(self.input)
-
-        self.cost = cost
-        self.cost.initialize(self.output, self.target)
-        self.transformer = Transformer.make_transformer()
-        with ng.Op.saved_user_deps():
-            updates = self.optimizer.configure(self.cost.mean_cost)
-            self.train_comp = self.transformer.computation([self.cost.mean_cost, updates],
-                                                           self.input,
-                                                           self.target)
-
-        self.epoch_eval_comp = self.transformer.computation(self.cost.mean_cost, self.input,
-                                                            self.target)
-
-        if metric is not None:
-            self.metric = metric
-            self.error = metric(self.output, self.target)
-            self.test_comp = self.transformer.computation(self.error, self.input, self.target)
-
-        self.transformer.initialize()
-        self.initialized = True
-
-    def fit(self, dataset, num_epochs, callbacks):
-        """
-        Trains the model parameters on a dataset by minimizing the cost function through
-        gradient descent and updates the layer weights according to a learning rule
-        defined in optimizer.
-
-        Arguments:
-           dataset (NervanaDataIterator): An iterable of minibatches where each
-               element is a (x, y) tuple where x is the input data and y are the labels.
-               x is of dimension (feature_size, batch_size)
-               y is of dimension (label_size, batch_size)
-               Length of the iterator is num_batches which is num_data / batch_size.
-           cost (Cost): Defines the function which the model is minimizing based
-                        on the output of the last layer and the input labels.
-           num_epochs: Number of times to iterate over the dataset.
-           callbacks (Callbacks): Defines callbacks to run at the end of each mini-batch / epoch.
-
-        Returns:
-
-        """
-        self.nbatches = dataset.nbatches
-        self.ndata = dataset.ndata
-        callbacks.on_train_begin(num_epochs)
-        while self.epoch_index < num_epochs and not self.finished:
-            self.nbatches = dataset.nbatches
-            callbacks.on_epoch_begin(self.epoch_index)
-            self._epoch_fit(dataset, callbacks)
-            callbacks.on_epoch_end(self.epoch_index)
-            self.epoch_index += 1
-        callbacks.on_train_end()
-
-    def _epoch_fit(self, dataset, callbacks):
-        """
-        Helper function for fit which performs training on a dataset for one epoch.
-
-        Arguments:
-          dataset (NervanaDataIterator): Dataset iterator to perform fit on.
-          callbacks: TODO
-
-        Returns:
-
-        """
-        epoch = self.epoch_index
-        self.total_cost = 0
-        batch = 0
-        # iterate through minibatches of the dataset
-        for mb_idx, (x, t) in enumerate(dataset):
-            callbacks.on_minibatch_begin(epoch, mb_idx)
-            self.optimizer.optimize(self.epoch_index)
-
-            batch_cost, _ = self.train_comp(x.reshape(self.batch_input_shape),
-                                            t.reshape(self.batch_target_shape))
-
-            self.cost.cost = batch_cost
-            self.total_cost += batch_cost
-            batch = batch + 1
-            callbacks.on_minibatch_end(epoch, mb_idx)
-
-        # now we divide total cost by the number of batches,
-        # so it was never total cost, but sum of averages
-        # across all the minibatches we trained on
-        self.total_cost = self.total_cost / dataset.nbatches
-
-    def epoch_eval(self, dataset):
-        """
-        TODO.
-
-        Arguments:
-          dataset: TODO
-
-        Returns:
-
-        """
-        nprocessed = 0
-        self.loss = 0
-        dataset.reset()
-        for x, t in dataset:
-            bsz = min(dataset.ndata - nprocessed, dataset_batchsize(dataset))
-            nsteps = x.shape[1] // dataset_batchsize(dataset)\
-                if not isinstance(x, list)\
-                else x[0].shape[1] // dataset_batchsize(dataset)
-            batch_cost = self.epoch_eval_comp(x.reshape(self.batch_input_shape),
-                                              t.reshape(self.batch_target_shape))
-            nprocessed += bsz
-            self.loss += batch_cost / nsteps
-        return float(self.loss) / nprocessed
-
-    def eval(self, dataset):
-        """
-        Evaluates a model on a dataset according to an input metric.
-
-        Arguments:
-          datasets (NervanaDataIterator): dataset to evaluate on.
-          metric (Cost): what function to evaluate dataset on.
-
-        Returns:
-          Host numpy array: the error of the final layer for the evaluation dataset
-
-        """
-        running_error = np.zeros(
-            (len(self.metric.metric_names)), dtype=np.float32)
-        nprocessed = 0
-        dataset.reset()
-        for x, t in dataset:
-            bsz = min(dataset.ndata - nprocessed,
-                      dataset_batchsize(dataset))
-            nsteps = x.shape[1] // dataset_batchsize(dataset)\
-                if not isinstance(x, list)\
-                else x[0].shape[1] // dataset_batchsize(dataset)
-            # calcrange = slice(0, nsteps * bsz)
-            error_val = self.test_comp(x.reshape(self.batch_input_shape),
-                                       t.reshape(self.batch_target_shape))
-            running_error += error_val * bsz * nsteps
-            nprocessed += bsz * nsteps
-        running_error /= nprocessed
-        return running_error
-
-    def serialize(self, fn=None, keep_states=True):
-        """
-        TODO.
-
-        Arguments:
-          fn: TODO
-          keep_states: TODO
-
-        Returns:
-
-        """
-        # TODO
-        pass
+    def eval(self, eval_set):
+        eval_set.reset()
+        hyps, refs = [], []
+        while len(hyps) < eval_set.ndata:
+            dtuple = next(eval_set)
+            batch_hyps = np.argmax(self.predictions(dtuple[0]/255.), axis=0)
+            bsz = min(eval_set.ndata - len(hyps), len(batch_hyps))
+            hyps.extend(list(batch_hyps[:bsz]))
+            refs.extend(list(dtuple[1][0][:bsz]))
+        return hyps, refs

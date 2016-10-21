@@ -74,6 +74,40 @@ class ParameterLayer(Layer):
         self.batch_sum = None
 
 
+# class nnBatchNorm(object):
+#     def __init__(self, out_axis, eps=1.0e-6):
+#         self.out_axis = out_axis
+#         self.eps = eps
+
+#     def initialize(self, in_obj):
+#         bn_axes = ng.Axes
+#         self.gamma = ng.Variable(axes=bn_axes, initial_value=1.)
+#         self.beta = ng.Variable(axes=bn_axes, initial_value=0.)
+
+#     def __call__(self, in_obj):
+#         xhat = (in_obj - ng.mean(in_obj, reduction_axes=)) / ng.sqrt(ng.var(in_obj + self.eps))
+#         return (xhat - self.beta) * self.gamma
+
+class nnAffine(object):
+    def __init__(self, out_axis, init, activation=(lambda x : x), bias_init=None):
+        self.out_axis = out_axis
+        self.init = init
+        self.activation = activation
+        self.b = 0
+        self.bias_init = None
+
+    def initialize(self, in_axes):
+        # if self.bias_init:
+        #     b_axes = ng.Axes([self.out_axis])
+        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
+        w_axes = ng.Axes.linear_map_axes(in_axes.sample_axes(), [self.out_axis])
+        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        return ng.Axes(in_axes.batch_axes() + [self.out_axis])
+
+    def get_outputs(self, in_obj):
+        return self.activation(ng.dot(self.W, in_obj) + self.b)
+
+
 class Convolution(ParameterLayer):
     """
     Convolutional layer implementation.

@@ -15,68 +15,55 @@
 import numpy as np
 import os
 from tqdm import tqdm
-from aeon import DataLoader, LoaderRuntimeError, gen_backend
+from aeon import DataLoader
 
 
-
-class OneHotter(object):
+def ensure_dirs_exist(path):
     """
-    DataLoaderTransformers are used to transform the output of a DataLoader.
-    DataLoader doesn't have easy access to the device or graph, so any
-    computation that should happen there should use a DataLoaderTransformer.
+    Simple helper that ensures that any directories specified in the path are
+    created prior to use.
+
+    Arguments:
+        path (str): the path (may be to a file or directory).  Any intermediate
+                    directories will be created.
+
+    Returns:
+        str: The unmodified path value.
     """
-    def __init__(self, dataloader, index=None, nclasses=None):
-        self.dataloader = dataloader
-        self.index = index
-        self.be = dataloader.be
-        self.nclasses = nclasses
-        # self.output = self.be.iobuf(nclasses, parallelism='Data')
-        # if self.index is not None:
-        #     # input shape is contiguous
-        #     data_size = np.prod(self.dataloader.shapes()[index])
-        #     self._shape = (data_size, self.be.bsz)
+    outdir = os.path.dirname(path)
+    if outdir != '' and not os.path.isdir(outdir):
+        os.makedirs(outdir)
+    return path
 
-    def __getattr__(self, key):
-        return getattr(self.dataloader, key)
 
-    def __iter__(self):
-        for tup in self.dataloader:
-            if self.index is None:
-                yield self.transform(tup)
-            else:
-                ret = self.transform(tup[self.index])
-                if ret is None:
-                    raise ValueError(
-                        '{} returned None from a transformer'.format(
-                            self.__class__.__name__
-                        )
-                    )
+def get_data_cache_or_nothing(subdir=''):
+    cache_root = os.getenv("NEON_DATA_CACHE_DIR", '')
 
-                out = list(tup)
-                out[self.index] = ret
-                yield out
+    return ensure_dirs_exist(os.path.join(cache_root, subdir))
 
-    def transform(self, target_indices):
-        tmp = target_indices[0]
-        tmp2 = np.eye(self.nclasses)[:, target_indices[0]]
-        return tmp2
 
-# class OneHot(DataLoaderTransformer):
-#     """
-#     OneHot will convert `index` into a onehot vector.
-#     """
-#     def __init__(self, dataloader, index, nclasses, *args, **kwargs):
-#         super(OneHot, self).__init__(dataloader, index, *args, **kwargs)
-#         self.output = self.be.iobuf(nclasses, parallelism='Data')
-#
-#     def transform(self, t):
+class NpyBackend(object):
+    def __init__(self):
+        self.use_pinned_mem = False
+        self.rng_seed = None
+
+    def consume(self, buf_index, hostlist, devlist):
+        assert 0 <= buf_index < 2, 'Can only double buffer'
+        hb = np.rollaxis(hostlist[buf_index], 0, hostlist[buf_index].ndim)
+        if devlist[buf_index] is None:
+            devlist[buf_index] = np.empty_like(hb)
+        devlist[buf_index][:] = hb
+
 
 def common_config(manifest_file, batch_size):
+    cache_root = get_data_cache_or_nothing('mnist-cache/')
+
 
     return {
                'manifest_filename': manifest_file,
                'minibatch_size': batch_size,
-               'macrobatch_size': 5000,
+               'macrobatch_size': 25000,
+               'cache_directory': cache_root,
                'type': 'image,label',
                'image': {'height': 28,
                          'width': 28,
@@ -85,22 +72,17 @@ def common_config(manifest_file, batch_size):
             }
 
 
-def wrap_dataloader(dl):
-    dl = OneHotter(dl, index=1, nclasses=10)
-    # dl = TypeCast(dl, index=0, dtype=np.float32)
-    return dl
+def make_aeon_loaders(train_manifest, valid_manifest, batch_size, random_seed=0):
+    train_config = common_config(train_manifest, batch_size)
+    # train_config['shuffle_manifest'] = True
+    # train_config['shuffle_every_epoch'] = True
+    # train_config['random_seed'] = random_seed
+    # train_config['image']['center'] = False
 
+    valid_config = common_config(valid_manifest, batch_size)
 
-def make_train_loader(manifest_file, backend_obj, batch_size, random_seed=0):
-    aeon_config = common_config(manifest_file, batch_size)
-    aeon_config['shuffle_manifest'] = True
-    aeon_config['shuffle_every_epoch'] = True
-    aeon_config['random_seed'] = random_seed
-    aeon_config['image']['center'] = False
+    backend = NpyBackend()
+    train_loader = DataLoader(train_config, backend)
+    valid_loader = DataLoader(valid_config, backend)
 
-    return wrap_dataloader(DataLoader(aeon_config, backend_obj))
-
-
-def make_validation_loader(manifest_file, backend_obj, batch_size):
-    aeon_config = common_config(manifest_file, batch_size)
-    return wrap_dataloader(DataLoader(aeon_config, backend_obj))
+    return (train_loader, valid_loader)

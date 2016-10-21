@@ -2548,6 +2548,10 @@ def mean(x, **kwargs):
     return sum(x, **kwargs) / tensor_size(x, **kwargs)
 
 
+def variance(x, **kwargs):
+    return mean(square(x - mean(x, **kwargs)), **kwargs)
+
+
 def deriv(dependent_op, independent_op):
     """
     TODO.
