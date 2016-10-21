@@ -1,4 +1,5 @@
-from builtins import range, zip
+from builtins import range, zip, file
+import os.path
 
 from ngraph.op_graph.axes import TensorDescription
 from neon.backends.util.source_module import SourceModule
@@ -147,19 +148,19 @@ _smem_decl_template = r"""
 _smem_init_template = r"""
         %(sbuf)s[threadIdx.x] = 0.0f;"""
 
-_thread_index_template1 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0);
+_thread_index_template1 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
 """
 
-_thread_index_template2 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0;
-    unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0);
+_thread_index_template2 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+    unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
+    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
 """
 
-_thread_index_template3 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0;
-    unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1;
-    unsigned int idx2 = threadIdx.%(dim2)s + blockIdx.%(dim2)s * ITEMS_PER_BLOCK2;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0);
+_thread_index_template3 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+    unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
+    unsigned int idx2 = threadIdx.%(dim2)s + blockIdx.%(dim2)s * ITEMS_PER_BLOCK2_%(id)s;
+    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
 """
 
 _init_template = r"""%(smem_decl)s
@@ -178,24 +179,27 @@ _init_template_noshare = r"""
     %(reg_decl)s
 """
 
-_defines_template1 = r"""#define ITEMS_PER_BLOCK0 %(blksize0)s
+_defines_template1 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
 """
 
-_defines_template2 = r"""#define ITEMS_PER_BLOCK0 %(blksize0)s
-#define ITEMS_PER_BLOCK1 %(blksize1)s
+_defines_template2 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
+#define ITEMS_PER_BLOCK1_%(id)s %(blksize1)s
 """
 
-_defines_template3 = r"""#define ITEMS_PER_BLOCK0 %(blksize0)s
-#define ITEMS_PER_BLOCK1 %(blksize1)s
-#define ITEMS_PER_BLOCK2 %(blksize2)s
+_defines_template3 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
+#define ITEMS_PER_BLOCK1_%(id)s %(blksize1)s
+#define ITEMS_PER_BLOCK2_%(id)s %(blksize2)s
 """
 
-_header_template = r"""#include <float.h>
-#include <cuda_fp16.h>
+_header_template = r"""
 
 %(defines)s
 __global__ void %(kernel_name)s(%(args)s)
 {"""
+
+_includes_template = r"""#include <float.h>
+#include <cuda_fp16.h>
+"""
 
 indent_str = "    "
 
@@ -670,7 +674,8 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
 
 
 def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                          kernel_name, argstring, axes_mapping, loop_axis):
+                          kernel_name, argstring, axes_mapping, loop_axis,
+                          kernel_identifier):
     """
     Generates entire kernel code which can be passed to the CUDA C compiler.
     Takes care of function header, defines, and initialization code.
@@ -693,7 +698,8 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     defines = _defines_template % {
         "blksize0": axes_mapping[0][1] * axes_mapping[0][3],
         "blksize1": axes_mapping[1][1] * axes_mapping[1][3],
-        "blksize2": axes_mapping[2][1] * axes_mapping[2][3]
+        "blksize2": axes_mapping[2][1] * axes_mapping[2][3],
+        "id": kernel_identifier
     }
 
     header = _header_template % {
@@ -731,7 +737,8 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         "dim0": axes_mapping[0][0],
         "dim1": axes_mapping[1][0],
         "dim2": axes_mapping[2][0],
-        "loop_axis": loop_axis_letters[loop_axis]
+        "loop_axis": loop_axis_letters[loop_axis],
+        "id": kernel_identifier
     }
 
     if ctx.shared_buffers:
@@ -805,7 +812,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
     return (args, arg_desc, params)
 
 
-def _get_compound_kernel(ops, axes_mapping, dims):
+def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     """
     Generates a kernel which compounds multiple elementwise and reduction
     operations.
@@ -1015,7 +1022,7 @@ def _get_compound_kernel(ops, axes_mapping, dims):
                                            reduction_stores)
 
     # Construct kernel name
-    kernel_name = "float_ew_"
+    kernel_name = "float_ew" + kernel_identifier + "_"
     if len(ops) > 4:
         op_names = [op[0] for op in ops[:5]]
     else:
@@ -1029,48 +1036,10 @@ def _get_compound_kernel(ops, axes_mapping, dims):
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                                 kernel_name, argstring, axes_mapping, loop_axis)
+                                 kernel_name, argstring, axes_mapping, loop_axis,
+                                 kernel_identifier)
 
-    # import pdb; pdb.set_trace()
-    module = SourceModule(code, options=[])
-    kernel = module.get_function(kernel_name)
-    kernel.name = kernel_name
-    kernel.prepare(arg_desc)
-
-    return (kernel, params)
-
-
-def _call_compound_kernel(ops):
-    """
-    Generate and call a kernel given a set of ops.
-
-    ops (list): List of tuples describing ops to execute in kernel. Each tuple
-        should be of the format (op_name, input0, input1, output, axis)
-    """
-    # Take care of 0d tensors
-    ops = _wrap_tensor_descriptions(ops)
-
-    ops = _compress_axes(ops)
-
-    (axes_mapping, dims) = _get_axes_mapping(ops)
-
-    kernel, params = _get_compound_kernel(ops, axes_mapping, dims)
-
-    # Calculate block and grid dims
-    blockdim = [1, 1, 1]
-    griddim = [1, 1, 1]
-    for axis in axes_mapping:
-        if axis[0] == 'x':
-            blockdim[0] = axis[1]
-            griddim[0] = axis[2]
-        elif axis[0] == 'y':
-            blockdim[1] = axis[1]
-            griddim[1] = axis[2]
-        elif axis[0] == 'z':
-            blockdim[2] = axis[1]
-            griddim[2] = axis[2]
-
-    kernel.prepared_async_call(tuple(griddim), tuple(blockdim), None, *params, shared_size=128)
+    return (code, kernel_name, arg_desc, params)
 
 
 def _prepare_compound_kernel(ops):
@@ -1080,14 +1049,20 @@ def _prepare_compound_kernel(ops):
     ops (list): List of tuples describing ops to execute in kernel. Each tuple
         should be of the format (op_name, input0, input1, output, axis)
     """
-    # Take care of 0d tensors
+    # Take care tensor dimensionality
     ops = _wrap_tensor_descriptions(ops)
-
     ops = _compress_axes(ops)
 
+    # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
+    code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims)
 
-    kernel, params = _get_compound_kernel(ops, axes_mapping, dims)
+    # Compile kernel
+    code = _includes_template + code
+    module = SourceModule(code, options=[])
+    kernel = module.get_function(kernel_name)
+    kernel.name = kernel_name
+    kernel.prepare(arg_desc)
 
     # Calculate block and grid dims
     blockdim = [1, 1, 1]
@@ -1105,3 +1080,100 @@ def _prepare_compound_kernel(ops):
 
     params = [tuple(griddim), tuple(blockdim), None] + params
     return (kernel, params, 128)
+
+
+def _call_compound_kernel(ops):
+    """
+    Generate and call a kernel given a set of ops.
+
+    ops (list): List of tuples describing ops to execute in kernel. Each tuple
+        should be of the format (op_name, input0, input1, output, axis)
+    """
+    kernel, params, shared_size = _prepare_compound_kernel(ops)
+    kernel.prepared_async_call(*params, shared_size=shared_size)
+
+
+class CudaSourceFile:
+    def __init__(self, filename):
+        self.filename = "kernels/" + filename
+        self.num_kernels = 0
+        self.module = None
+        self.functions = dict()
+        self.arg_descs = dict()
+
+        self.compiled = False
+
+        if not os.path.exists("kernels/"):
+            os.makedirs("kernels/")
+
+        # Open file and add header
+        self.f = file(self.filename, 'w')
+        self.f.write(_includes_template)
+        self.f.flush()
+
+    def add_kernel(self, ops):
+        assert not self.compiled
+
+        # Take care tensor dimensionality
+        ops = _wrap_tensor_descriptions(ops)
+        ops = _compress_axes(ops)
+
+        # Generate kernel source code and block/grid mapping
+        (axes_mapping, dims) = _get_axes_mapping(ops)
+        code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims,
+                                                                   str(self.num_kernels))
+
+        # Calculate block and grid dims
+        blockdim = [1, 1, 1]
+        griddim = [1, 1, 1]
+        for axis in axes_mapping:
+            if axis[0] == 'x':
+                blockdim[0] = axis[1]
+                griddim[0] = axis[2]
+            elif axis[0] == 'y':
+                blockdim[1] = axis[1]
+                griddim[1] = axis[2]
+            elif axis[0] == 'z':
+                blockdim[2] = axis[1]
+                griddim[2] = axis[2]
+
+        params = [tuple(griddim), tuple(blockdim), None] + params
+
+        # Add kernel code to source file
+        self.f.write(code)
+
+        # Save arg_desc in dict
+        self.arg_descs[kernel_name] = arg_desc
+
+        # Increment number of kernels
+        self.num_kernels = self.num_kernels + 1
+
+        # Return kernel name and params
+        return (kernel_name, params)
+
+    def compile(self):
+        assert not self.compiled
+        self.f.close()
+
+        # Create source module and compile
+        sourcefile = file(self.filename, 'r')
+        code = sourcefile.read()
+        self.module = SourceModule(code, options=[])
+        sourcefile.close()
+
+        self.compiled = True
+
+    def get_kernel(self, name):
+        assert self.compiled
+        assert name in self.arg_descs
+
+        # Check if kernel is prepared in functions and return if so
+        if name not in self.functions:
+            # Prepare function using arg_desk
+            kernel = self.module.get_function(name)
+            kernel.name = name
+            kernel.prepare(self.arg_descs[name])
+            self.functions[name] = kernel
+
+        # Return kernel function
+        return self.functions[name]
