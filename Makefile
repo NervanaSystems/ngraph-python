@@ -53,7 +53,7 @@ uninstall:
 
 test:
 	@echo Running unit tests...
-	@py.test $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
 
 style:
 	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
