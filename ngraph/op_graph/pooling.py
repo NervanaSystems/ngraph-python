@@ -16,43 +16,29 @@ from __future__ import division
 
 from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import Axis, Axes
+import ngraph as ng
 
 
-class fprop_conv(op_graph.TensorOp):
+class fprop_pool(op_graph.TensorOp):
 
-    def __init__(self, dims, inputs, filters, *args, **kwargs):
+    def __init__(self, dims, inputs, argmax, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
-            filters : filter/kernel tensor.
 
         Return:
         """
         if len(inputs.shape) != 5:
             raise ValueError((
-                'convolution input shape must be length 5, found {}'
+                'pooling input shape must be length 5, found {}'
             ).format(len(inputs.shape)))
-
-        if len(filters.shape) != 5:
-            raise ValueError((
-                'convolution filter shape must be length 5, found {}'
-            ).format(len(filters.shape)))
 
         if 'axes' in kwargs:
             raise ValueError(
-                "convolution does not currently support the 'axes' argument.  The "
+                "pooling does not currently support the 'axes' argument.  The "
                 "output axes are entirely determined by the shape of the "
                 "input and filter Ops."
             )
-
-        if inputs.axes[0].length != filters.axes[0].length:
-            raise ValueError((
-                'the first axis in input and filter must be the same.  The '
-                'first axis in input is {inputs} and in filter is {filters}.'
-            ).format(
-                inputs=inputs.axes[0],
-                filters=filters.axes[0],
-            ))
 
         batch_axes = inputs.axes.batch_axes()
         if len(batch_axes) != 1:
@@ -72,42 +58,27 @@ class fprop_conv(op_graph.TensorOp):
             axes[i].name = name
 
         self.dims = dims
+        self.argmax = argmax
 
-        super(fprop_conv, self).__init__(
-            args=(inputs, filters), *args, axes=axes, **kwargs
+        super(fprop_pool, self).__init__(
+            args=(inputs, argmax), *args, axes=axes, **kwargs
         )
 
-    def generate_adjoints(self, adjoints, delta, inputs, filters):
-        """
-        TODO
-        """
-        filters.generate_add_delta(adjoints, update_conv(delta, inputs, filters, self))
-        inputs.generate_add_delta(adjoints, bprop_conv(delta, inputs, filters, self))
+    def generate_adjoints(self, adjoints, delta, inputs, argmax):
+        inputs.generate_add_delta(adjoints, bprop_pool(delta, inputs, argmax, self))
+        # TODO: get rid of this hack
+        dummy = ng.Variable(axes=argmax.axes, initial_value=0)
+        argmax.generate_add_delta(adjoints, dummy)
 
 
-class update_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
+class bprop_pool(op_graph.TensorOp):
+    def __init__(self, delta, inputs, argmax, pooling, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
-            filters : filter/kernel tensor.
         """
-        self.dims = conv.dims
+        self.dims = pooling.dims
 
-        super(update_conv, self).__init__(
-            args=(delta, inputs), *args, axes=filters.axes, **kwargs
-        )
-
-
-class bprop_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
-        """
-        self.dims = conv.dims
-
-        super(bprop_conv, self).__init__(
-            args=(delta, filters), *args, axes=inputs.axes, **kwargs
+        super(bprop_pool, self).__init__(
+            args=(delta, argmax), *args, axes=inputs.axes, **kwargs
         )

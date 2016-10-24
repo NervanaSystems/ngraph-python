@@ -2,6 +2,7 @@ from builtins import range
 import atexit
 
 from neon.backends.nervanagpu import NervanaGPU, GPUTensor
+from neon import NervanaObject
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -18,12 +19,12 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
-from ngraph.op_graph.convolution import fprop_conv, bprop_conv, update_conv, fprop_pool, bprop_pool
+from ngraph.op_graph.convolution import fprop_conv, bprop_conv, update_conv
+from ngraph.op_graph.pooling import fprop_pool, bprop_pool
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
-from ngraph.op_graph.op_graph import BackendWrapper
 
 import numpy as np
 import pycuda.driver as drv
@@ -113,11 +114,11 @@ class GPUKernel():
         self._buffer_op("fprop_conv", op.dims, inputs, filters, outputs)
 
     @add_op.on_type(bprop_conv)
-    def add_op(self, op, outputs, delta, inputs, filters):
+    def add_op(self, op, outputs, delta, filters):
         self._buffer_op("bprop_conv", op.dims, filters, delta, outputs)
 
     @add_op.on_type(update_conv)
-    def add_op(self, op, outputs, delta, inputs, filters):
+    def add_op(self, op, outputs, delta, inputs):
         self._buffer_op("update_conv", op.dims, inputs, delta, outputs)
 
     @add_op.on_type(fprop_pool)
@@ -125,7 +126,7 @@ class GPUKernel():
         self._buffer_op("fprop_pool", op.dims, inputs, outputs, argmax)
 
     @add_op.on_type(bprop_pool)
-    def add_op(self, op, outputs, delta, inputs, argmax):
+    def add_op(self, op, outputs, delta, argmax):
         self._buffer_op("bprop_pool", op.dims, delta, outputs, argmax)
 
     @add_op.on_type(cos)
@@ -757,7 +758,7 @@ class GPUTransformer(Transformer):
         self.closed = False
 
         if GPUTransformer.__nervanagpu is None:
-            GPUTransformer.__nervanagpu = BackendWrapper.be
+            GPUTransformer.__nervanagpu = NervanaObject.be
             atexit.register(GPUTransformer.close_gpu)
 
         self.ng = GPUTransformer.__nervanagpu

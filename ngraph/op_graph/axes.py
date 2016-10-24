@@ -508,19 +508,23 @@ class Axes(object):
 
     def set_shape(self, shape):
         axes = self._axes
-        if len(axes) == len(shape):
+        diff = len(axes) - len(shape)
+        if diff == 0:
             for axis, length in zip(axes, shape):
                 axis.length = length
-        elif len(axes) > len(shape):
+            return
+
+        if diff > 0:
             axes[0].length = shape[0]
-            for i in range(1, len(axes) - len(shape) + 1):
+            for i in range(1, diff + 1):
+                # Pad missing dimensions with 1.
                 axes[i].length = 1
-            for length in shape[1:]:
+            for length in shape[diff:]:
                 i += 1
                 axes[i].length = length
-        else:
-            raise ValueError('Number of axes %d too low for shape %s' % (
-                             len(axes), shape))
+            return
+        raise ValueError('Number of axes %d too low for shape %s' % (
+                         len(axes), shape))
 
     def __iter__(self):
         return self._axes.__iter__()

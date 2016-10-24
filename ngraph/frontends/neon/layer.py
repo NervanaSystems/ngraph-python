@@ -19,7 +19,6 @@ import numpy as np
 import ngraph as ng
 from functools import reduce
 from neon import NervanaObject
-from ngraph.op_graph import BackendWrapper
 
 
 # TODO These are stubs for implementing Neon's layers
@@ -65,92 +64,6 @@ class SkipNode(Layer):
         super(SkipNode, self).__init__(**kwargs)
 
 
-class Pooling(Layer):
-
-    """
-    Pooling layer implementation.
-
-    Arguments:
-        fshape (int, tuple(int, int)): one or two dimensional shape
-            of pooling window
-        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
-        strides (int, dict, optional): strides to apply pooling window
-            over. An int applies to both dimensions, or a dict with str_h
-            and str_w applies to h and w dimensions distinctly.  Defaults
-            to str_w = str_h = None
-        padding (int, dict, optional): padding to apply to edges of
-            input. An int applies to both dimensions, or a dict with pad_h
-            and pad_w applies to h and w dimensions distinctly.  Defaults
-            to pad_w = pad_h = None
-        name (str, optional): layer name. Defaults to "PoolingLayer"
-    """
-
-    def __init__(self, fshape, op="max", strides={}, padding={},
-                 name=None):
-        super(Pooling, self).__init__(name)
-        self.be = BackendWrapper.be
-        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
-                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
-
-        # keep args around in __dict__ for get_description
-        self.op = op
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-        self.owns_delta = True
-        if isinstance(fshape, int):
-            fshape = {'R': fshape, 'S': fshape}
-        elif isinstance(fshape, tuple):
-            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
-            fshape = {k: x for k, x in zip(fkeys, fshape)}
-        elif fshape == 'all':
-            fshape = dict(R=None, S=None)
-        if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding}
-        for d in [fshape, strides, padding]:
-            self.poolparams.update(d)
-        self.nglayer = None
-
-    def __str__(self):
-        return "Pooling Layer '%s': %d x (%dx%d) inputs, %d x (%dx%d) outputs" % (
-               self.name,
-               self.in_shape[0], self.in_shape[1], self.in_shape[2],
-               self.out_shape[0], self.out_shape[1], self.out_shape[2])
-
-    def configure(self, in_obj):
-        """
-        Sets shape based parameters of this layer given an input tuple or int
-        or input layer.
-
-        Arguments:
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
-
-        Returns:
-            (tuple): shape of output data
-        """
-        super(Pooling, self).configure(in_obj)
-        assert self.nglayer is None
-        ikeys = ('C', 'H', 'W') if len(self.in_shape) == 3 else ('C', 'D', 'H', 'W')
-        shapedict = {k: x for k, x in zip(ikeys, self.in_shape)}
-        shapedict['N'] = self.be.bsz
-        self.poolparams.update(in_obj.shape_dict())
-        if self.poolparams['R'] is None:
-            self.poolparams['R'] = shapedict['H']
-            self.poolparams['S'] = shapedict['W']
-        self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
-        (K, M, P, Q, N) = self.nglayer.dimO
-        self.out_shape = (K, M, P, Q)
-        out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
-        argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in out_shape_dict]
-        argmax = ng.Variable(axes=argmax_axes, initial_value=0)
-        out_obj = ng.fprop_pool(self.nglayer, in_obj, argmax)
-        return out_obj
-
-
 class ParameterLayer(Layer):
     """TODO."""
 
@@ -186,7 +99,7 @@ class Convolution(ParameterLayer):
     def __init__(self, fshape, strides={}, padding={}, init=None, bsum=False,
                  name=None, parallelism="Data", cafe_compat=False, dtype=None):
         super(Convolution, self).__init__(init, name, parallelism)
-        self.be = BackendWrapper.be
+        self.be = NervanaObject.be
         self.weight_shape = None
         self.nglayer = None
         self.bsum = bsum
@@ -262,6 +175,90 @@ class Deconvolution(ParameterLayer):
 
     def __init__(self, fshape, strides={}, padding={}, bsum=False, **kwargs):
         super(Deconvolution, self).__init__(**kwargs)
+
+
+class Pooling(Layer):
+
+    """
+    Pooling layer implementation.
+
+    Arguments:
+        fshape (int, tuple(int, int)): one or two dimensional shape
+            of pooling window
+        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
+        strides (int, dict, optional): strides to apply pooling window
+            over. An int applies to both dimensions, or a dict with str_h
+            and str_w applies to h and w dimensions distinctly.  Defaults
+            to str_w = str_h = None
+        padding (int, dict, optional): padding to apply to edges of
+            input. An int applies to both dimensions, or a dict with pad_h
+            and pad_w applies to h and w dimensions distinctly.  Defaults
+            to pad_w = pad_h = None
+        name (str, optional): layer name. Defaults to "PoolingLayer"
+    """
+
+    def __init__(self, fshape, op="max", strides={}, padding={},
+                 name=None):
+        super(Pooling, self).__init__(name)
+        self.be = NervanaObject.be
+        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
+                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
+                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
+
+        # keep args around in __dict__ for get_description
+        self.op = op
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+        self.owns_delta = True
+        if isinstance(fshape, int):
+            fshape = {'R': fshape, 'S': fshape}
+        elif isinstance(fshape, tuple):
+            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
+            fshape = {k: x for k, x in zip(fkeys, fshape)}
+        elif fshape == 'all':
+            fshape = dict(R=None, S=None)
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding}
+        for d in [fshape, strides, padding]:
+            self.poolparams.update(d)
+        self.nglayer = None
+
+    def __str__(self):
+        return "Pooling Layer '%s': %d x (%dx%d) inputs, %d x (%dx%d) outputs" % (
+               self.name,
+               self.in_shape[0], self.in_shape[1], self.in_shape[2],
+               self.out_shape[0], self.out_shape[1], self.out_shape[2])
+
+    def configure(self, in_obj):
+        """
+        Sets shape based parameters of this layer given an input tuple or int
+        or input layer.
+
+        Arguments:
+            in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                  information for layer
+
+        Returns:
+            (tuple): shape of output data
+        """
+        super(Pooling, self).configure(in_obj)
+        assert self.nglayer is None
+        shapedict = in_obj.shape_dict()
+        shapedict['N'] = self.be.bsz
+        self.poolparams.update(shapedict)
+        if self.poolparams['R'] is None:
+            self.poolparams['R'] = shapedict['H']
+            self.poolparams['S'] = shapedict['W']
+        self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
+        (K, M, P, Q, N) = self.nglayer.dimO
+        self.out_shape = (K, M, P, Q)
+        out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
+        argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in ['C', 'D', 'H', 'W', 'N']]
+        argmax = ng.Variable(axes=argmax_axes, initial_value=0)
+        return ng.fprop_pool(self.nglayer, in_obj, argmax)
 
 
 class Linear(ParameterLayer):

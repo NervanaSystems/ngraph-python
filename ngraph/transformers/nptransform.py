@@ -22,8 +22,8 @@ from functools import wraps
 # These are indirectly used by the generated code
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
+from neon import NervanaObject
 from ngraph.op_graph import axes  # noqa
-from ngraph.op_graph import BackendWrapper
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
@@ -40,7 +40,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import fprop_conv, update_conv, bprop_conv, fprop_pool, bprop_pool
+from ngraph.op_graph.convolution import fprop_conv, update_conv, bprop_conv
+from ngraph.op_graph.pooling import fprop_pool, bprop_pool
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -655,7 +656,7 @@ class NumPyTransformer(Transformer):
         self.allocate_code.indent(1)
 
     def finish_transform_allocate(self):
-        self.init_code.append("""self.be = BackendWrapper.be""")
+        self.init_code.append("""self.be = NervanaObject.be""")
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:

@@ -14,23 +14,20 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import ax, np, Affine, Conv, Pooling, Axes, Callbacks, CrossEntropyMulti,\
-    GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
-    NgraphArgparser, Rectlin, Softmax
+from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, Axes,
+    Callbacks, CrossEntropyMulti, GeneralizedCost, GradientDescentMomentum,
+    Misclassification, Model, NgraphArgparser, Rectlin, Softmax)
 
 from neon.data import CIFAR10
 from neon.backends.nervanagpu import NervanaGPU
 from neon.initializers import Uniform
-from ngraph.op_graph.op_graph import BackendWrapper
 
 
 # parse the command line arguments (generates the backend)
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--subset_pct', type=float, default=100,
                     help='subset of training dataset to use (percentage)')
-parser.set_defaults(backend='dataloader')
 args = parser.parse_args()
-BackendWrapper.be = NervanaGPU()
 
 # setup data provider
 dataset = CIFAR10(path=args.data_dir,
@@ -47,6 +44,9 @@ opt_gdm = GradientDescentMomentum(learning_rate=0.01, momentum_coef=0.9)
 # set up the model layers
 bn = True
 layers = [Conv((5, 5, 16), init=init_uni, activation=Rectlin(), batch_norm=bn),
+          Pooling((2, 2)),
+          Conv((5, 5, 32), init=init_uni, activation=Rectlin(), batch_norm=bn),
+          Pooling((2, 2)),
           Affine(nout=500, init=init_uni, activation=Rectlin(), batch_norm=bn),
           Affine(nout=10, axes=Axes(ax.Y,), init=init_uni, activation=Softmax())]
 

@@ -27,10 +27,6 @@ from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
 
 
-class BackendWrapper:
-    be = None
-
-
 def tensor_descriptions(args):
     """
     A list of tensor descriptions for Ops.
@@ -658,11 +654,10 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        #TODO: uncomment this
-        #if not Axes.same_elems(self.axes, delta.axes):
-            #raise ValueError(
-            #    'A tensor and its adjoint must have the same axes.'
-            #)
+        if not Axes.same_elems(self.axes, delta.axes):
+            raise ValueError(
+                'A tensor and its adjoint must have the same axes.'
+            )
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -1767,15 +1762,7 @@ class BinaryElementWiseAxesOp(ElementWise):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = Op.as_ops((x, y))
-        xlen = [axis.length for axis in x.axes]
-        ylen = [axis.length for axis in y.axes]
-        # TODO: get rid of temporary hack
-        if len(xlen) == len(ylen):
-            assert xlen == ylen
-            axes = x.axes
-        else:
-            axes = x.axes + y.axes
-
+        axes = x.axes + y.axes
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
