@@ -63,16 +63,20 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         length: The length of the axis.
         batch: Whether the axis is a batch axis.
         recurrent: Whether the axis is a recurrent axis.
+        match_on_length: Whether to only use length (and not identity) when comparing
+            equality against other Axis values. This is useful for anonymous Axis of
+            Constant tensors.
 
     Attributes:
         length: The length of the axis.
 
     """
-    def __init__(self, length=None, batch=False, recurrent=False, **kwargs):
+    def __init__(self, length=None, batch=False, recurrent=False, match_on_length=False, **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
         self.batch = batch
         self.recurrent = recurrent
+        self.match_on_length = match_on_length
 
     @property
     def batch(self):
@@ -110,6 +114,16 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
+
+    def __eq__(self, other):
+        if not isinstance(other, Axis):
+            return False
+        elif self.match_on_length or other.match_on_length:
+            return self.length == other.length
+        return self is other
+
+    def __hash__(self):
+        return hash(self.name)
 
 
 class FunctionAxis(Axis):
@@ -940,9 +954,7 @@ class TensorDescription(NameableValue):
         new_strides = []
         new_sizes = []
         idx = 0
-        for axis, fst, fsz in zip(
-            self.axes, self.full_strides, self.full_sizes
-        ):
+        for axis, fst, fsz in zip(self.axes, self.full_strides, self.full_sizes):
             if axis == new_axes[idx]:
                 new_strides.append(fst)
                 new_sizes.append(fsz)
@@ -955,6 +967,7 @@ class TensorDescription(NameableValue):
         return TensorDescription(
             new_axes,
             base=self.base,
+            dtype=self.dtype,
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,

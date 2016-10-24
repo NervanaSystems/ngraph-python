@@ -31,6 +31,11 @@ def test_constant_init(transformer_factory):
     assert (result == 5)
     print("pass constant initialization")
 
+    nparray = np.array(range(5))
+    a = ng.Constant(nparray)
+    result = executor(a)()
+    np.testing.assert_allclose(result, nparray)
+
 
 def test_constant_add(transformer_factory):
     """TODO."""
