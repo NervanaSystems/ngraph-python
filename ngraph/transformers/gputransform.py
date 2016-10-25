@@ -22,7 +22,7 @@ from ngraph.op_graph.convolution import convolution1d
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
-from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel
+from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 
 import numpy as np
 import pycuda.driver as drv
@@ -344,13 +344,17 @@ class GPUKernel():
 
         self.ops_buffer.append((op, x, y, out, axis))
 
-    def compile(self):
+    def generate_source(self, name, sourcefile=None):
         """
-        Compiles ops buffer into a GPU kernel. First checks if this is a
-        compound kernel which needs to be compiled. In cases where only a
-        single special op are contained (dot, dimshuffle, etc) there is no
-        compounding and the NervanaGPU implementation is called directly at run
-        time.
+        Generates source code and adds it to a kernel file to be compiled later.
+        First checks if this is a compound kernel which needs to be compiled.
+        In cases where only a single special op are contained (dot, dimshuffle, etc)
+        there is no compounding and the NervanaGPU implementation is called directly
+        at run time.
+
+        Arguments:
+            name (string): Function name of the kernel to compile
+            sourcefile (CudaSourceFile): Object handling cuda source file generation
         """
         if len(self.ops_buffer) == 0:
             return False
@@ -371,22 +375,28 @@ class GPUKernel():
                     self.input1_1d = True
 
         if self.compound:
-            # Remove duplicate tensor views
-            tensors = dict()
-            new_buffer = []
-            for op in self.ops_buffer:
-                new_op = list(op)
-                for t in range(1, 4):
-                    if isinstance(new_op[t], GPUTensor):
-                        signature = (int(new_op[t].gpudata), new_op[t].shape, new_op[t].strides)
-                        if signature in tensors.keys():
-                            new_op[t] = tensors[signature]
-                        else:
-                            tensors[signature] = new_op[t]
-                new_buffer.append(tuple(new_op))
+            if sourcefile is not None:
+                # Code generation and compilation are only separate when a sourcefile is
+                # provided
+                self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
 
-            # Compile ops in compound buffer into a kernel
-            self.kernel, self.params, self.shared_size = _prepare_compound_kernel(new_buffer)
+        return True
+
+    def compile(self, sourcefile=None):
+        """
+        Compiles ops buffer into a GPU kernel.
+        """
+        if len(self.ops_buffer) == 0:
+            return False
+
+        if self.compound:
+            if sourcefile is None:
+                # Generate and compile single kernel
+                self.kernel, self.params, self.shared_size = \
+                    _prepare_compound_kernel(self.ops_buffer)
+            else:
+                # Get kernel object from compiled sourcefile
+                self.kernel = sourcefile.get_kernel(self.name)
 
         return True
 
@@ -754,6 +764,8 @@ class GPUTransformer(Transformer):
 
     def transform_ordered_ops(self, ordered_ops, name):
         kernels = []
+        sourcefile = CudaSourceFile(name)
+
         for fun in ordered_ops:
             if isinstance(fun, Function):
                 # Iterate over compounded operations and build kernel for them
@@ -762,8 +774,6 @@ class GPUTransformer(Transformer):
                     out = op.tensor_description()
                     call_info = (_ for _ in op.call_info())
                     kernel.add_op(op, out, *call_info)
-                if kernel.compile():
-                    kernels.append(kernel)
             else:
                 # Generate kernel for single operation
                 out = fun.tensor_description()
@@ -771,8 +781,15 @@ class GPUTransformer(Transformer):
 
                 kernel = GPUKernel(self)
                 kernel.add_op(fun, out, *call_info)
-                if kernel.compile():
-                    kernels.append(kernel)
+
+            # Generate source code for kernel
+            if kernel.generate_source(name, sourcefile):
+                kernels.append(kernel)
+
+        # Compile source code in file
+        sourcefile.compile()
+        for kernel in kernels:
+            kernel.compile(sourcefile)
 
         # Create kernel group
         kernel_group = GPUKernelGroup(self, kernels)
