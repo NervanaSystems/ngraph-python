@@ -45,6 +45,7 @@
    :caption: Basic Concepts
 
    op_graph.rst
+   tensors.rst
    analysis.rst
    autodiff.rst
    axes.rst
