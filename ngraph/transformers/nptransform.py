@@ -534,6 +534,8 @@ class NumPyTransformer(Transformer):
         self.code = NumPyCodeGenerator()
         self.model = None
         self.n_computations = 0
+        self.use_pinned_mem = False
+        self.rng_seed = None
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -618,6 +620,16 @@ class NumPyTransformer(Transformer):
     def allocate_storage(self):
         self.model.allocate()
 
+    def consume(self, buf_index, hostlist, devlist):
+        '''
+        This is currently used for Aeon dataloading -- need to set things up to do actual
+        device buffer allocation
+        '''
+        assert 0 <= buf_index < 2, 'Can only double buffer'
+        hb = np.rollaxis(hostlist[buf_index], 0, hostlist[buf_index].ndim)
+        if devlist[buf_index] is None:
+            devlist[buf_index] = np.empty_like(hb)
+        devlist[buf_index][:] = hb
 
 Transformer.set_transformer_factory(
     Transformer.make_transformer_factory(NumPyTransformer.transformer_name))

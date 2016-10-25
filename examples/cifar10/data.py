@@ -12,37 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import os
 import numpy as np
 from aeon import DataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
 
 
-def common_config(manifest_file, batch_size):
-    cache_root = get_data_cache_or_nothing('mnist-cache/')
+def common_config(manifest_file, manifest_root, batch_size):
+    cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
     return {
                'manifest_filename': manifest_file,
+               'manifest_root': manifest_root,
                'minibatch_size': batch_size,
-               'macrobatch_size': 25000,
-               'cache_directory': cache_root,
+               'macrobatch_size': 5000,
                'type': 'image,label',
-               'image': {'height': 28,
-                         'width': 28,
-                         'channels': 1},
+               'cache_directory': cache_root,
+               'image': {'height': 32,
+                         'width': 32,
+                         'scale': [0.8, 0.8]},
                'label': {'binary': False}
             }
 
 
 def make_aeon_loaders(train_manifest, valid_manifest, batch_size, backend, random_seed=0):
-    train_config = common_config(train_manifest, batch_size)
+    manifest_root = os.path.dirname(train_manifest)
+    train_config = common_config(train_manifest, manifest_root, batch_size)
     # train_config['shuffle_manifest'] = True
     # train_config['shuffle_every_epoch'] = True
     # train_config['random_seed'] = random_seed
     # train_config['image']['center'] = False
+    # train_config['image']['flip_enable'] = True
 
-    valid_config = common_config(valid_manifest, batch_size)
+    valid_config = common_config(valid_manifest, manifest_root, batch_size)
 
     train_loader = DataLoader(train_config, backend)
     valid_loader = DataLoader(valid_config, backend)
 
     return (train_loader, valid_loader)
+

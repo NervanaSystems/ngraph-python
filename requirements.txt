@@ -11,3 +11,5 @@ autopep8==1.2.4
 # other requirements
 cachetools
 decorator
+# aeon (for examples using aeon only without neon)
+-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon

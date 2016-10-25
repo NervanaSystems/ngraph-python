@@ -12,53 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.axes import Axis
-from ngraph.util.names import NameScope
+import numpy as np
+from functools import partial
 
 
-ax = NameScope(name="ax")
+class GaussianInit(object):
+    def __init__(self, mean=0.0, var=0.01):
+        self.functor = partial(np.random.normal, mean, var)
 
-# Define the standard Neon axes
+    def __call__(self, out_shape):
+        return self.functor(out_shape)
 
-# N = number of images (minibatch size)
-ax.N = Axis(batch=True)
 
-# C = number of input channels
-ax.C = Axis()
+class UniformInit(object):
+    def __init__(self, low=-0.01, high=0.01):
+        self.functor = partial(np.random.uniform, low, high)
 
-# D = depth
-ax.D = Axis()
+    def __call__(self, out_shape):
+        return self.functor(out_shape)
 
-# H = input image height
-ax.H = Axis()
 
-# W = input image width
-ax.W = Axis()
+class ConstantInit(object):
+    def __init__(self, val=0.0):
+        self.val = val
 
-# TODO This isn't one of the traditional axes
-# Recurrent axis
-# ax.REC = Axis(recurrent=True)
-
-# R = filter height
-ax.R = Axis()
-
-# S = filter width
-ax.S = Axis()
-
-# T = filter depth
-ax.T = Axis()
-
-# K = number of output channels
-ax.K = Axis()
-
-# M = output image depth
-ax.M = Axis()
-
-# P = output image height
-ax.P = Axis()
-
-# Q = output image width
-ax.Q = Axis()
-
-# Target
-ax.Y = Axis()
+    def __call__(self, out_shape):
+        return val

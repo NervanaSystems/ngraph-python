@@ -107,6 +107,15 @@ class nnAffine(object):
     def get_outputs(self, in_obj):
         return self.activation(ng.dot(self.W, in_obj) + self.b)
 
+class nnPreprocess(object):
+    def __init__(self, functor):
+        self.functor = functor
+
+    def initialize(self, in_axes):
+        return in_axes
+
+    def get_outputs(self, in_obj):
+        return self.functor(in_obj)
 
 class Convolution(ParameterLayer):
     """

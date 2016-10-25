@@ -1,5 +1,20 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+#!/usr/bin/env python
+# ----------------------------------------------------------------------------
 # Copyright 2015-2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,17 +45,17 @@ from __future__ import print_function
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import nnAffine, nnPreprocess, Model
-from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
+from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
 import argparse
 from data import make_aeon_loaders
 
 
-parser = argparse.ArgumentParser(description='Ingest MNIST from pkl to pngs')
+parser = argparse.ArgumentParser(description='Train on cifar images')
 parser.add_argument('--train')
 parser.add_argument('--valid')
 parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--num_iterations', type=int, default=2000)
+parser.add_argument('--num_iterations', type=int, default=400)
 parser.add_argument('--iter_interval', type=int, default=200)
 parser.add_argument('--rseed', default=0)
 args = parser.parse_args()
@@ -49,16 +64,17 @@ np.random.seed(args.rseed)
 
 ######################
 # Model specification
-hidden_size, output_size = 100, 10
+hidden_size, output_size = 200, 10
 H1 = ng.Axis(hidden_size, name="H1")
 Y = ng.Axis(output_size, name="Y")
 
-def unit_scale_mnist_pixels(x):
-    return x / 255.
+def cifar_mean_subtract(x):
+    bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
+    return (x - bgr_mean)/255.
 
-my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
-                  nnAffine(out_axis=H1, init=GaussianInit(), activation=Rectlin()),
-                  nnAffine(out_axis=Y, init=GaussianInit(), activation=Logistic())])
+my_model = Model([nnPreprocess(functor=cifar_mean_subtract),
+                        nnAffine(out_axis=H1, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                        nnAffine(out_axis=Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
 
 transformer = ng.NumPyTransformer()
@@ -79,11 +95,11 @@ x = ng.placeholder(axes=ng.Axes([C, H, W, N]))
 t = ng.placeholder(axes=ng.Axes([N]))
 it_idx = ng.placeholder(axes=ng.Axes())  # iteration index, for learning rate evolution
 
-optimizer = GradientDescentMomentum(0.1, 0.9)
+optimizer = GradientDescentMomentum(0.01, 0.9)
 
 pred = my_model.get_outputs(x)
 
-train_cost = ng.cross_entropy_binary(pred, ng.Onehot(t, axis=Y))
+train_cost = ng.cross_entropy_multi(pred, ng.Onehot(t, axis=Y))
 train_graph = ([ng.mean(train_cost, out_axes=()),  # mean cost for display
                 optimizer(train_cost, it_idx)],  # update function for optimization
                x, t, it_idx)  # inputs
@@ -102,3 +118,4 @@ np.savetxt(args.results_file, [(h,r) for h, r in zip(hyps, refs)], fmt='%s,%s')
 a = np.loadtxt(args.results_file, delimiter=',')
 err = np.sum((a[:,0]!= a[:,1]))/float(a.shape[0])
 print("Misclassification: {}".format(err))
+
