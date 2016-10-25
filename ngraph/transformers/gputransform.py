@@ -764,7 +764,7 @@ class GPUTransformer(Transformer):
 
     def transform_ordered_ops(self, ordered_ops, name):
         kernels = []
-        sourcefile = CudaSourceFile(name + ".c")
+        sourcefile = CudaSourceFile(name)
 
         for fun in ordered_ops:
             if isinstance(fun, Function):

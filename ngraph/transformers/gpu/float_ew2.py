@@ -1,5 +1,5 @@
 from builtins import range, zip, file
-import os.path
+import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from neon.backends.util.source_module import SourceModule
@@ -1094,8 +1094,7 @@ def _call_compound_kernel(ops):
 
 
 class CudaSourceFile:
-    def __init__(self, filename):
-        self.filename = "kernels/" + filename
+    def __init__(self, name):
         self.num_kernels = 0
         self.module = None
         self.functions = dict()
@@ -1103,11 +1102,9 @@ class CudaSourceFile:
 
         self.compiled = False
 
-        if not os.path.exists("kernels/"):
-            os.makedirs("kernels/")
-
         # Open file and add header
-        self.f = file(self.filename, 'w')
+        self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
+        self.filename = self.f.name
         self.f.write(_includes_template)
         self.f.flush()
 
