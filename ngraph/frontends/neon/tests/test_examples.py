@@ -74,7 +74,6 @@ def run_model(request, tmpdir_factory, transformer_factory):
 def test_model_traincost(run_model, transformer_factory):
     (model_name, out_path, _) = run_model
     cost = get_last_epoch_cost(out_path)
-    expected_cost = db[model_name]['cost']
     np.testing.assert_allclose(cost, db[model_name]['cost'], rtol=0.15)
 
 

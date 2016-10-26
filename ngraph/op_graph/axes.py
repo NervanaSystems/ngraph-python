@@ -126,7 +126,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         Returns:
             Axis displacement for dot.
 
-            In dot, left axis of level n matches right axis of level n+1. Level n-1 is the dual space of level n.
+            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
+            the dual space of level n.
 
         """
         return 0

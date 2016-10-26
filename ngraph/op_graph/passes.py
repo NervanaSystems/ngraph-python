@@ -19,7 +19,7 @@ from collections import Iterable
 
 from ngraph import Axis
 from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
-    axes_with_order, flatten_at, FlattenedAxis, Transpose, unflatten, ReorderAxes, \
+    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, Constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle
@@ -127,13 +127,14 @@ class RequiredTensorShaping(PeepholeGraphPass):
             elif len(y.axes) == 1:
                 out = DotTwoByOne(x, y, axes=out_axes)
             else:
-                out = DotTwoDimensional(x, y, axes=Axes([op.x_out_axes.flatten(), op.y_out_axes.flatten()]))
+                out = DotTwoDimensional(x, y,
+                                        axes=Axes([op.x_out_axes.flatten(),
+                                                   op.y_out_axes.flatten()]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
 
         self.replace_op(op, out)
-
 
     @visit.on_type(DotOneDimensional)
     def visit(self, op):

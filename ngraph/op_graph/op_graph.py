@@ -1666,6 +1666,8 @@ def log_adjoints(self, adjoints, delta, x):
 log = create_unary_elementwise('log', log_adjoints)
 
 safelog_cutoff = 50.0
+
+
 def safelog(x, limit=np.exp(-safelog_cutoff)):
     return log(maximum(x, limit))
 
@@ -1937,7 +1939,7 @@ class Dot(TensorOp):
         super(Dot, self).__init__(
             args=(x, y), axes=axes, **kwargs
         )
-        self.use_dual=use_dual
+        self.use_dual = use_dual
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
