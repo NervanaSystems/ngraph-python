@@ -2622,7 +2622,7 @@ def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True):
         x = sigy.x
         if enable_sig_opt:
             # Simpler equivalent
-            result = (1 - t) * maximum(minimum(x, safelog_cutoff), -safelog_cutoff) - safelog(y)
+            result = (1 - t) * maximum(x, -safelog_cutoff) - safelog(y)
         if enable_diff_opt:
             result.add_schema(CrossEntropyBinaryInner(x=x, y=y, t=t))
 
