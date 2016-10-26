@@ -123,7 +123,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         return self is other
 
     def __hash__(self):
-        return hash(self.name)
+        return id(self)
 
 
 class FunctionAxis(Axis):
