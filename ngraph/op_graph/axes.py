@@ -126,8 +126,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         Returns:
             Axis displacement for dot.
 
-            In dot, left axis of level n matches right axis of level n+1. Level
-            n-1 is the dual space of level n.
+            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
+            the dual space of level n.
 
         """
         return 0
@@ -169,7 +169,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         return self is other
 
     def __hash__(self):
-        return hash(self.name)
+        return id(self)
 
 
 class DualAxis(Axis):
@@ -358,7 +358,7 @@ def with_args_as_axes(f):
         The decorated function.
     """
     @wraps(f)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args):
         """
         The decorated function. Performs the conversion
         to Axes.
@@ -370,7 +370,7 @@ def with_args_as_axes(f):
             Return value of the original function.
         """
         args = [Axes(arg) for arg in args]
-        return f(*args, **kwargs)
+        return f(*args)
     return wrapper
 
 
@@ -540,7 +540,7 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def subtract(axes1, axes2, dual_offset=0):
+    def subtract(axes1, axes2):
         """
         Returns the difference of the two Axes.
 
@@ -552,7 +552,7 @@ class Axes(object):
             The ordered difference
         """
         assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes((axis for axis in axes1 if axis.get_dual(dual_offset) not in axes2))
+        return Axes((axis for axis in axes1 if axis.get_dual(0) not in axes2))
 
     @staticmethod
     @with_args_as_axes
