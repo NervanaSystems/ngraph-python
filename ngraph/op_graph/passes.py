@@ -19,7 +19,7 @@ from collections import Iterable
 
 from ngraph import Axis
 from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
-    axes_with_order, flatten_at, FlattenedAxis, Transpose, unflatten, ReorderAxes, \
+    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, Constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle
@@ -87,13 +87,15 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(Dot)
     def visit(self, op):
         x, y = op.args
-        reduction_axes = op.reduction_axes
+        x_reduction_axes = op.x_reduction_axes
+        y_reduction_axes = op.y_reduction_axes
         out_axes = op.axes
-        if len(reduction_axes) == 0:
+        if len(x_reduction_axes) == 0:
             d = Axis(1)
-            reduction_axes = Axes((d,))
-            x = broadcast(x, axes=x.axes + reduction_axes)
-            y = broadcast(y, axes=reduction_axes + y.axes)
+            x_reduction_axes = Axes((d,))
+            y_reduction_axes = x_reduction_axes
+            x = broadcast(x, axes=x.axes + x_reduction_axes)
+            y = broadcast(y, axes=y_reduction_axes + y.axes)
 
         if x.is_scalar:
             temp = x
@@ -102,36 +104,36 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if y.is_scalar:
             if x.is_scalar:
                 out = x.scalar_op * y.scalar_op
-                if len(reduction_axes) > 0:
-                    out = out * reduction_axes.size
+                if len(x_reduction_axes) > 0:
+                    out = out * x_reduction_axes.size
                 out = broadcast(out, op.axes)
             else:
-                out = Sum(x, reduction_axes) * y.scalar_op
+                out = Sum(x, x_reduction_axes) * y.scalar_op
             out = broadcast(out, op.axes)
         else:
-            x_rem_axes = x.axes - reduction_axes
-            x = axes_with_order(x, x_rem_axes + reduction_axes)
+            x_rem_axes = x.axes - x_reduction_axes
+            x = axes_with_order(x, x_rem_axes + x_reduction_axes)
 
-            y_rem_axes = y.axes - reduction_axes
-            y = axes_with_order(y, reduction_axes + y_rem_axes)
+            y_rem_axes = y.axes - y_reduction_axes
+            y = axes_with_order(y, y_reduction_axes + y_rem_axes)
 
-            x = flatten_at(x, len(x.axes) - len(reduction_axes))
-            y = flatten_at(y, len(reduction_axes))
-            reduction_axes = Axes((FlattenedAxis(reduction_axes),))
+            x = flatten_at(x, len(x.axes) - len(x_reduction_axes))
+            y = flatten_at(y, len(y_reduction_axes))
 
             if len(out_axes) == 0:
-                out = DotOneDimensional(x, y)
+                out = DotOneDimensional(x, y, axes=Axes())
             elif len(x.axes) == 1:
-                out = DotTwoByOne(Transpose(y), x)
+                out = DotTwoByOne(Transpose(y), x, axes=out_axes)
             elif len(y.axes) == 1:
-                out = DotTwoByOne(x, y)
+                out = DotTwoByOne(x, y, axes=out_axes)
             else:
-                out = DotTwoDimensional(x, y)
+                out = DotTwoDimensional(x, y,
+                                        axes=Axes([op.x_out_axes.flatten(),
+                                                   op.y_out_axes.flatten()]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
 
-        # import pdb; pdb.set_trace()
         self.replace_op(op, out)
 
     @visit.on_type(DotOneDimensional)

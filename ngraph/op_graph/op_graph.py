@@ -1125,7 +1125,6 @@ def slice_along_axis(x, axis, idx):
     Returns a slice of a tensor constructed by indexing into a single axis
     at a single position. If the axis occurs multiple times in the dimensions
     of the input tensor, we select only on the first occurrence.
-
     Arguments:
         x: input tensor
         axis: axis along which to slice
@@ -1135,7 +1134,7 @@ def slice_along_axis(x, axis, idx):
     """
     pos = Axes.index(x.axes, axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
-    axes = x.axes[:pos].concat(x.axes[pos + 1:])
+    axes = Axes.concatenate(x.axes[:pos], x.axes[pos + 1:])
     return Slice(x, ss, axes=axes)
 
 
@@ -1160,8 +1159,8 @@ class Flatten(ReshapeOp):
 
 def flatten(x, axes=None, **kwargs):
     if axes is None:
-        if len(x.axes) == 1 and isinstance(x.axes[0], FlattenedAxis):
-            axes = x.axes
+        if len(x.axes) == 1:
+            return x
         else:
             axes = Axes((FlattenedAxis(x.axes),))
 
@@ -1178,8 +1177,8 @@ def flatten_at(x, idx):
         return flatten(x)
     else:
         return flatten(x, Axes((
-            FlattenedAxis(x.axes[:idx]),
-            FlattenedAxis(x.axes[idx:])
+            Axes(x.axes[:idx]).flatten(),
+            Axes(x.axes[idx:]).flatten()
         )))
 
 
@@ -1910,16 +1909,34 @@ class Dimshuffle(TensorOp):
 
 
 class Dot(TensorOp):
-    def __init__(self, x, y,
+    def __init__(self, x, y, use_dual=False, left_transpose=False, y_reduction_axes=None,
                  **kwargs):
-        self.reduction_axes = Axes.intersect(x.axes, y.axes)
-        axes = (
-            (x.axes - self.reduction_axes) +
-            (y.axes - self.reduction_axes)
-        )
+        x_axes = x.axes
+        if left_transpose:
+            x_axes = x_axes.get_transpose()
+            use_dual = True
+
+        dual_offset = 0
+        if use_dual:
+            dual_offset = 1
+        y_axes = y.axes
+
+        if y_reduction_axes is None:
+            y_reduction_axes = Axes.intersect(x_axes.get_dual(dual_offset), y_axes)
+        self.y_reduction_axes = y_reduction_axes
+        self.x_reduction_axes = self.y_reduction_axes.get_dual(-dual_offset)
+        self.x_out_axes = x_axes - self.x_reduction_axes
+        self.y_out_axes = y_axes - self.y_reduction_axes
+
+        axes = self.x_out_axes + self.y_out_axes
+
+        if left_transpose:
+            self.x_reduction_axes = self.x_reduction_axes.get_transpose()
+
         super(Dot, self).__init__(
             args=(x, y), axes=axes, **kwargs
         )
+        self.use_dual = use_dual
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
@@ -1936,11 +1953,11 @@ class Dot(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            Dot(y, delta)
+            Dot(y, delta, left_transpose=self.use_dual, y_reduction_axes=self.y_out_axes)
         )
         y.generate_add_delta(
             adjoints,
-            Dot(x, delta)
+            Dot(x, delta, left_transpose=self.use_dual, y_reduction_axes=self.x_out_axes)
         )
 
 
@@ -1949,65 +1966,31 @@ def dot(*args, **kwargs):
 
 
 class LowDimensionalDot(TensorOp):
-    def __init__(self, x, y, **kwargs):
-        self.reduction_axes = Axes.intersect(x.axes, y.axes)
-        axes = (
-            (x.axes - self.reduction_axes) +
-            (y.axes - self.reduction_axes)
-        )
+    def __init__(self, x, y, axes, **kwargs):
         super(LowDimensionalDot, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
 class DotOneDimensional(LowDimensionalDot):
-    def __init__(self, x, y, **kwargs):
+    def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 1 and len(y.axes) == 1
         super(DotOneDimensional, self).__init__(
-            x, y, **kwargs
+            x, y, axes, **kwargs
         )
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, delta * y)
-        y.generate_add_delta(adjoints, delta * x)
 
 
 class DotTwoDimensional(LowDimensionalDot):
-    def __init__(self, x, y, **kwargs):
+    def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 2
-        assert x.axes[1] == y.axes[0]\
-            and x.axes[0] != x.axes[1]\
-            and x.axes[0] != y.axes[1]
         super(DotTwoDimensional, self).__init__(
-            x, y, **kwargs
-        )
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(
-            adjoints,
-            DotTwoDimensional(delta, Transpose(y))
-        )
-        y.generate_add_delta(
-            adjoints,
-            DotTwoDimensional(Transpose(x), delta)
+            x, y, axes, **kwargs
         )
 
 
 class DotTwoByOne(LowDimensionalDot):
-    def __init__(self, x, y, **kwargs):
+    def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 1
-        assert x.axes[1] == y.axes[0]\
-            and x.axes[0] != x.axes[1]
         super(DotTwoByOne, self).__init__(
-            x, y, **kwargs
-        )
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(
-            adjoints,
-            Dot(delta, y)
-        )
-        y.generate_add_delta(
-            adjoints,
-            DotTwoByOne(Transpose(x), delta)
+            x, y, axes, **kwargs
         )
 
 
