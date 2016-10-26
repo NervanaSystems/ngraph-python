@@ -50,4 +50,5 @@ neon/backends/kernels/dump
 *.ckpt.meta
 **/tensorflow_import/data
 **/tensorflow_import/checkpoint
+coverage.xml
 
