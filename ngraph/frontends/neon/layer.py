@@ -778,11 +778,14 @@ class Linear(ParameterLayer):
 
         """
         in_obj = super(Linear, self).configure(in_obj)
+        out_axes = ng.Axes(self.axes or [ng.Axis(self.nout, name='Hidden')])
 
-        self.W = ng.Variable(axes=ng.Axes.linear_map_axes(in_obj.axes.sample_axes(),
-                             self.axes or [ng.Axis(self.nout, name='Hidden')]),
+        in_axes = in_obj.axes.sample_axes()
+        in_axes = in_axes - in_axes.recurrent_axes()
+
+        self.W = ng.Variable(axes=out_axes - out_axes.recurrent_axes() + in_axes.get_dual(),
                              init=self.init)
-        return ng.dot(self.W, in_obj)
+        return ng.dot(self.W, in_obj, use_dual=True)
 
 
 class Bias(ParameterLayer):

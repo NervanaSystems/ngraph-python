@@ -20,6 +20,7 @@ from functools import reduce, wraps
 
 import numpy as np
 import types
+from weakref import WeakValueDictionary
 from abc import ABCMeta
 from builtins import object, map, range, zip
 from future.utils import with_metaclass
@@ -66,17 +67,19 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         match_on_length: Whether to only use length (and not identity) when comparing
             equality against other Axis values. This is useful for anonymous Axis of
             Constant tensors.
-
-    Attributes:
-        length: The length of the axis.
-
     """
-    def __init__(self, length=None, batch=False, recurrent=False, match_on_length=False, **kwargs):
+    def __init__(self,
+                 length=None,
+                 batch=False,
+                 recurrent=False,
+                 match_on_length=False,
+                 **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
         self.batch = batch
         self.recurrent = recurrent
         self.match_on_length = match_on_length
+        self.duals = WeakValueDictionary()
 
     @property
     def batch(self):
@@ -112,6 +115,49 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     def length(self, value):
         self.__length = value
 
+    @property
+    def axes(self):
+        return Axes([self])
+
+    @property
+    def dual_level(self):
+        """
+
+        Returns:
+            Axis displacement for dot.
+
+            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
+            the dual space of level n.
+
+        """
+        return 0
+
+    def get_dual(self, offset=-1):
+        """
+        Get the dual of this axis.
+
+        Args:
+            offset: How many duals, default is -1.
+
+        Returns:
+            A dual axis.
+
+        """
+        if offset == 0:
+            return self
+        dual = self.duals.get(offset, None)
+        if dual is None:
+            dual = DualAxis(self, offset)
+            self.duals[offset] = dual
+        return dual
+
+    def get_transpose(self):
+        return self.primary_axis.get_dual(-1 - self.dual_level)
+
+    @property
+    def primary_axis(self):
+        return self
+
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
@@ -123,7 +169,47 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         return self is other
 
     def __hash__(self):
-        return hash(self.name)
+        return id(self)
+
+
+class DualAxis(Axis):
+    """
+    A DualAxis is returned from Axis.get_dual. It shares length with the primary axis.
+
+    This class should only be constructed by Axis.get_dual.
+    """
+    def __init__(self, primary_axis, dual_level):
+        super(DualAxis, self).__init__()
+        self.__primary_axis = primary_axis
+        self.__dual_level = dual_level
+
+    @property
+    def length(self):
+        return self.__primary_axis.length
+
+    @property
+    def primary_axis(self):
+        return self.__primary_axis
+
+    @property
+    def dual_level(self):
+        return self.__dual_level
+
+    def get_dual(self, offset=-1):
+        """
+        Get the dual of this axis.
+
+        Args:
+            offset: How many duals, default is -1.
+
+        Returns:
+            A dual axis.
+
+        """
+        return self.primary_axis.get_dual(self.dual_level + offset)
+
+    def __repr__(self):
+        return 'DualAxis({axis}:{level})'.format(axis=self.primary_axis, level=self.dual_level)
 
 
 class FunctionAxis(Axis):
@@ -318,7 +404,7 @@ class Axes(object):
             elems = []
             for x in seq:
                 if isinstance(x, collections.Iterable):
-                    x = FlattenedAxis(Axes(convert(x)))
+                    x = Axes(convert(x)).flatten()
                 elems.append(x)
             return elems
 
@@ -383,6 +469,11 @@ class Axes(object):
         """
         return Axes(axis for axis in self if axis.recurrent)
 
+    def flatten(self):
+        if len(self) == 1:
+            return self[0]
+        return FlattenedAxis(self)
+
     def __iter__(self):
         return self._axes.__iter__()
 
@@ -422,6 +513,12 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
+    def get_dual(self, dual_offset=-1):
+        return Axes((axis.get_dual(dual_offset) for axis in self))
+
+    def get_transpose(self):
+        return Axes(axis.get_transpose() for axis in self)
+
     @staticmethod
     @with_args_as_axes
     def concatenate(axes1, axes2):
@@ -455,7 +552,7 @@ class Axes(object):
             The ordered difference
         """
         assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes((axis for axis in axes1 if axis not in axes2))
+        return Axes((axis for axis in axes1 if axis.get_dual(0) not in axes2))
 
     @staticmethod
     @with_args_as_axes
@@ -488,8 +585,7 @@ class Axes(object):
             Axes of the weights used in the transformation.
         """
         return (
-            (out_axes + in_axes) -
-            Axes.intersect(in_axes, out_axes)
+            out_axes + in_axes.get_dual()
         )
 
     @staticmethod
