@@ -1125,7 +1125,6 @@ def slice_along_axis(x, axis, idx):
     Returns a slice of a tensor constructed by indexing into a single axis
     at a single position. If the axis occurs multiple times in the dimensions
     of the input tensor, we select only on the first occurrence.
-
     Arguments:
         x: input tensor
         axis: axis along which to slice
