@@ -1,4 +1,4 @@
-from builtins import range, zip, file
+from builtins import range, zip
 import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
@@ -1153,7 +1153,7 @@ class CudaSourceFile:
         self.f.close()
 
         # Create source module and compile
-        sourcefile = file(self.filename, 'r')
+        sourcefile = open(self.filename, 'r')
         code = sourcefile.read()
         self.module = SourceModule(code, options=[])
         sourcefile.close()
