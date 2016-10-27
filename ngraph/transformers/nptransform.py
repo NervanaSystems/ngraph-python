@@ -40,8 +40,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import fprop_conv, update_conv, bprop_conv
-from ngraph.op_graph.pooling import fprop_pool, bprop_pool
+from ngraph.op_graph.convolution import convolution, update_conv, bprop_conv
+from ngraph.op_graph.pooling import pooling, bprop_pool
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
@@ -271,7 +271,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op_init.on_type(fprop_conv)
+    @generate_op_init.on_type(convolution)
     def generate_op_init(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -300,7 +300,7 @@ class NumPyCodeGenerator(PyGen):
             bsz=op.batch_axis.length
         )
 
-    @generate_op.on_type(fprop_conv)
+    @generate_op.on_type(convolution)
     def generate_op(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -339,7 +339,7 @@ class NumPyCodeGenerator(PyGen):
             filters=filters,
         )
 
-    @generate_op_init.on_type(fprop_pool)
+    @generate_op_init.on_type(pooling)
     def generate_op_init(self, op, outputs, inputs, filters):
         self.append(
             """
@@ -368,7 +368,7 @@ class NumPyCodeGenerator(PyGen):
             bsz=op.batch_axis.length
         )
 
-    @generate_op.on_type(fprop_pool)
+    @generate_op.on_type(pooling)
     def generate_op(self, op, outputs, inputs):
         self.append(
             """

@@ -18,7 +18,7 @@ from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import Axis, Axes
 
 
-class fprop_conv(op_graph.TensorOp):
+class convolution(op_graph.TensorOp):
 
     def __init__(self, dims, inputs, filters, *args, **kwargs):
         """
@@ -73,7 +73,7 @@ class fprop_conv(op_graph.TensorOp):
 
         self.dims = dims
 
-        super(fprop_conv, self).__init__(
+        super(convolution, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
         )
 
@@ -86,13 +86,13 @@ class fprop_conv(op_graph.TensorOp):
 
 
 class update_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
+    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = conv.dims
+        self.dims = fprop.dims
 
         super(update_conv, self).__init__(
             args=(delta, inputs), *args, axes=filters.axes, **kwargs
@@ -100,13 +100,13 @@ class update_conv(op_graph.TensorOp):
 
 
 class bprop_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, conv, *args, **kwargs):
+    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = conv.dims
+        self.dims = fprop.dims
 
         super(bprop_conv, self).__init__(
             args=(delta, filters), *args, axes=inputs.axes, **kwargs

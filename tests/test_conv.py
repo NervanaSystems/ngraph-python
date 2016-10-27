@@ -88,7 +88,7 @@ def test_constant_tensor_convolution_fprop_1d():
     assert filter_value.shape == (Cin.length, FT.length, Cout.length)
 
     # compute convolution with graph
-    output = ng.conv_fprop(input, filter)
+    output = ng.convolution(input, filter)
     result_og = executor(output, input, filter)(input_value, filter_value)
 
     result_np = np_convolution1d(input_value, filter_value)
@@ -117,7 +117,7 @@ def check_constant_tensor_convolution_bprop_input_1d(
     filter_value = rng.uniform(-1, 1, filter.axes)
 
     check_derivative(
-        ng.conv_fprop(input, filter),
+        ng.convolution(input, filter),
         input, 0.001, input_value,
         [filter], [filter_value],
         atol=1e-3, rtol=1e-3
@@ -198,7 +198,7 @@ def test_convolution_fprop():
     assert filter_value.shape == tuple([ax.length for ax in [Cx, Tx, Rx, Sx, Kx]])
 
     # compute convolution with graph
-    output = ng.conv_fprop(inputs, filters)
+    output = ng.convolution(inputs, filters)
     result_og = executor(output, inputs, filters)(input_value, filter_value)
 
     M, P, Q = [X.length - S.length + 1 for X, S in zip([Dx, Hx, Wx], [Tx, Rx, Sx])]

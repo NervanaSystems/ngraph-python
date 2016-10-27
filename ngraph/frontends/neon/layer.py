@@ -167,7 +167,7 @@ class Convolution(ParameterLayer):
         self.weight_shape = self.nglayer.dimF2
         if self.bsum:
             self.batch_sum_shape = (self.nglayer.K, 1)
-        return ng.fprop_conv(self.nglayer, in_obj, weights)
+        return ng.convolution(self.nglayer, in_obj, weights)
 
 
 class Deconvolution(ParameterLayer):
@@ -258,7 +258,7 @@ class Pooling(Layer):
         out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
         argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in ['C', 'D', 'H', 'W', 'N']]
         argmax = ng.Variable(axes=argmax_axes, initial_value=0)
-        return ng.fprop_pool(self.nglayer, in_obj, argmax)
+        return ng.pooling(self.nglayer, in_obj, argmax)
 
 
 class Linear(ParameterLayer):

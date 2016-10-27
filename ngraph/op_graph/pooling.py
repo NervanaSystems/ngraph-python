@@ -19,7 +19,7 @@ from ngraph.op_graph.axes import Axis, Axes
 import ngraph as ng
 
 
-class fprop_pool(op_graph.TensorOp):
+class pooling(op_graph.TensorOp):
 
     def __init__(self, dims, inputs, argmax, *args, **kwargs):
         """
@@ -60,7 +60,7 @@ class fprop_pool(op_graph.TensorOp):
         self.dims = dims
         self.argmax = argmax
 
-        super(fprop_pool, self).__init__(
+        super(pooling, self).__init__(
             args=(inputs, argmax), *args, axes=axes, **kwargs
         )
 
@@ -72,12 +72,12 @@ class fprop_pool(op_graph.TensorOp):
 
 
 class bprop_pool(op_graph.TensorOp):
-    def __init__(self, delta, inputs, argmax, pooling, *args, **kwargs):
+    def __init__(self, delta, inputs, argmax, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
         """
-        self.dims = pooling.dims
+        self.dims = fprop.dims
 
         super(bprop_pool, self).__init__(
             args=(delta, argmax), *args, axes=inputs.axes, **kwargs

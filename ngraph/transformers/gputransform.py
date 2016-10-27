@@ -19,8 +19,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
-from ngraph.op_graph.convolution import fprop_conv, bprop_conv, update_conv
-from ngraph.op_graph.pooling import fprop_pool, bprop_pool
+from ngraph.op_graph.convolution import convolution, bprop_conv, update_conv
+from ngraph.op_graph.pooling import pooling, bprop_pool
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
@@ -109,7 +109,7 @@ class GPUKernel():
                         axis=0,
                         out=out)
 
-    @add_op.on_type(fprop_conv)
+    @add_op.on_type(convolution)
     def add_op(self, op, outputs, inputs, filters):
         self._buffer_op("fprop_conv", op.dims, inputs, filters, outputs)
 
@@ -121,7 +121,7 @@ class GPUKernel():
     def add_op(self, op, outputs, delta, inputs):
         self._buffer_op("update_conv", op.dims, inputs, delta, outputs)
 
-    @add_op.on_type(fprop_pool)
+    @add_op.on_type(pooling)
     def add_op(self, op, outputs, inputs, argmax):
         self._buffer_op("fprop_pool", op.dims, inputs, outputs, argmax)
 
