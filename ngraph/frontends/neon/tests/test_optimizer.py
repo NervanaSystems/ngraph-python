@@ -55,8 +55,6 @@ def generate_data(C, N):
     return x, y, w_init
 
 
-# xfail due to initial_value=nparray not working
-# this test was working a previous commit of ngraph
 def test_gdm(args, transformer_factory):
     """
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.

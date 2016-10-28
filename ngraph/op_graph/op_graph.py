@@ -1492,7 +1492,18 @@ def Variable(trainable=True, graph_label_type="Variable", **kwargs):
 
 
 class Stack(TensorOp):
-    """ TODO."""
+    """
+    Joins a list of identically-axed tensors along a new axis.
+
+    Arguments:
+        x_list: A list of identically-axed tensors to join.
+        axis: The axis to select joined tensors.
+        pos: The position within the axes of the x_list tensors to insert axis in the result.
+        **kwargs: Other args for TensorOp.
+
+    Parameters:
+        pos: The position of the join axis.
+    """
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes

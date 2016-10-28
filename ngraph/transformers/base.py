@@ -564,47 +564,45 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns:
 
         """
-        #  Use variables to their initial state
-        with Op.saved_user_deps():
-            initializers = OrderedSet()
-            todo = OrderedSet(ordered_ops)
-            while todo:
-                these_ops = todo
-                todo = OrderedSet()
-                for op in these_ops:
-                    op = op.forwarded
-                    op.update_forwards()
-                    initializers.update(op.initializers)
-                    todo.update(op.initializers)
+        initializers = OrderedSet()
+        todo = OrderedSet(ordered_ops)
+        while todo:
+            these_ops = todo
+            todo = OrderedSet()
+            for op in these_ops:
+                op = op.forwarded
+                op.update_forwards()
+                initializers.update(op.initializers)
+                todo.update(op.initializers)
 
-            ordered_initializer_ops = []
-            visited = set()
-            inits = OrderedSet()
+        ordered_initializer_ops = []
+        visited = set()
+        inits = OrderedSet()
 
-            def visit(node):
-                node = node.forwarded
-                node.update_forwards()
-                if node not in visited:
-                    if node.initializers:
-                        if node in inits:
-                            if node not in visited:
-                                ordered_initializer_ops.append(node)
-                                visited.add(node)
-                        else:
-                            inits.add(node)
-                            for n in node.initializers:
-                                visit(n)
+        def visit(node):
+            node = node.forwarded
+            node.update_forwards()
+            if node not in visited:
+                if node.initializers:
+                    if node in inits:
+                        if node not in visited:
+                            ordered_initializer_ops.append(node)
+                            visited.add(node)
                     else:
-                        for n in node.args:
+                        inits.add(node)
+                        for n in node.initializers:
                             visit(n)
-                    if node not in visited:
-                        ordered_initializer_ops.append(node)
-                        visited.add(node)
+                else:
+                    for n in node.args:
+                        visit(n)
+                if node not in visited:
+                    ordered_initializer_ops.append(node)
+                    visited.add(node)
 
-            for node in initializers:
-                visit(node)
+        for node in initializers:
+            visit(node)
 
-            return ordered_initializer_ops
+        return ordered_initializer_ops
 
     @abc.abstractmethod
     def device_buffer_storage(self, bytes, dtype, name):
