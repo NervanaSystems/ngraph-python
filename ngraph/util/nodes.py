@@ -167,7 +167,7 @@ class Node(NameableValue, DebugInfo):
             node = node.forwarded
             node.update_forwards()
             if node not in visited:
-                for n in node.args:
+                for n in node.other_deps + list(node.args):
                     visit(n)
                 fun(node)
                 visited.add(node)

@@ -119,7 +119,7 @@ class KernelFlowGraph(DataFlowGraph):
             (a, b & R) for a, b in list(dataflow.successors.items()) if a in R)
         clusters = {x: extract_subgraph(y) for x, y in list(clusters.items())}
         # Creates final adjacency list
-        clusters = {x: ng.Function(y) if x.device_op else x for x, y in list(clusters.items())}
+        clusters = {x: ng.Function(y) if x.is_device_op else x for x, y in list(clusters.items())}
         self.successors = {
             clusters[a]: {clusters[b] for b in lst} for a, lst in list(
                 successors.items())}

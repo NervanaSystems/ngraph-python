@@ -47,6 +47,7 @@ class PeepholeGraphPass(GraphPass):
             self.replacement_list = []
             ops = set(op.forwarded for op in ops)
             for op in Op.ordered_ops(ops):
+                op.update_forwards()
                 self.visit(op)
             for old, rep in self.replacement_list:
                 old.forwarded.replace_self(rep.forwarded)

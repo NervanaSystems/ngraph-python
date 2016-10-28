@@ -22,10 +22,10 @@ import numpy as np
 import copy
 
 from ngraph.frontends.neon import GradientDescentMomentum
+from ngraph.util.utils import ExecutorFactory
 
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 from neon.backends import gen_backend
-import pytest
 
 
 def pytest_generate_tests(metafunc):
@@ -48,42 +48,37 @@ class DummyLayer(object):
 
 
 def generate_data(C, N):
-    w_init = np.random.rand(C).astype('float32')
-    x = np.random.rand(C, N).astype('float32')
-    y = np.random.rand(N).astype('float32')
+    w_init = np.random.rand(C.length).astype('float32')
+    x = np.random.rand(C.length, N.length).astype('float32')
+    y = np.random.rand(N.length).astype('float32')
 
     return x, y, w_init
 
 
-# xfail due to initial_value=nparray not working
-# this test was working a previous commit of ngraph
-@pytest.mark.xfail(strict=True)
 def test_gdm(args, transformer_factory):
     """
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ngraph.Axis("C")
-    N = ngraph.Axis("N")
+    C = ngraph.Axis(name="C", length=200)
+    N = ngraph.Axis(name="N", length=128)
 
-    C.length = 200
-    N.length = 128
-
-    be = gen_backend(backend='cpu', batch_size=128)
+    be = gen_backend(backend='cpu', batch_size=N.length)
 
     # generate dummy data (to initialize values)
-    (x, y, w_init) = generate_data(C.length, N.length)
+    (x, y, w_init) = generate_data(C, N)
 
     # set up nervana graph
     X = ngraph.placeholder(axes=ngraph.Axes([C, N]), name='X')
     Y = ngraph.placeholder(axes=ngraph.Axes([N]), name='Y')
-    W = ngraph.Variable(axes=ngraph.Axes([C]), initial_value=w_init)
+    W = ngraph.Variable(axes=ngraph.Axes([C]), name='W', initial_value=w_init)
 
-    transformer = ngraph.NumPyTransformer()
+    ex = ExecutorFactory()
+    transformer = ex.transformer
 
     lrate, mom, wdecay = args
     gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    cost = ngraph.sum(Y - ngraph.dot(W, X), out_axis=())
+    cost = ngraph.sum(Y - ngraph.dot(W, X), out_axes=()) / N.length
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
     # where (x, y) are nparrays that fill the placeholders X and Y
