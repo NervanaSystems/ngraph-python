@@ -203,6 +203,9 @@ class NumPyDeviceTensor(DeviceTensor):
         return self.tensor.__getitem__(key)
 
     def __setitem__(self, key, value):
+        # Temporary hack to interoperate with neon cpu backend.
+        if hasattr(value, '_tensor'):
+            value = value._tensor
         self.tensor.__setitem__(key, value)
 
     def reshape(self, shape):

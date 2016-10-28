@@ -22,7 +22,10 @@ class NgraphArgparser(NeonArgparser):
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
         NervanaObject.be.rng = RNG(NervanaObject.be.rng_seed)
-        factory = Transformer.make_transformer_factory(args.backend)
+        name = args.backend
+        if name == 'cpu' or name == 'dataloader':
+            name = 'numpy'
+        factory = Transformer.make_transformer_factory(name)
         Transformer.set_transformer_factory(factory)
 
         return args
