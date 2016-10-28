@@ -22,10 +22,10 @@ import numpy as np
 import copy
 
 from ngraph.frontends.neon import GradientDescentMomentum
+from ngraph.util.utils import ExecutorFactory
 
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 from neon.backends import gen_backend
-import pytest
 
 
 def pytest_generate_tests(metafunc):
@@ -75,11 +75,12 @@ def test_gdm(args, transformer_factory):
     Y = ngraph.placeholder(axes=ngraph.Axes([N]), name='Y')
     W = ngraph.Variable(axes=ngraph.Axes([C]), name='W', initial_value=w_init)
 
-    transformer = ngraph.NumPyTransformer()
+    ex = ExecutorFactory()
+    transformer = ex.transformer
 
     lrate, mom, wdecay = args
     gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    cost = ngraph.sum(Y - ngraph.dot(W, X), out_axes=())/N.length
+    cost = ngraph.sum(Y - ngraph.dot(W, X), out_axes=()) / N.length
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
     # where (x, y) are nparrays that fill the placeholders X and Y
