@@ -1860,8 +1860,8 @@ Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
 
 
 def maximum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, equal(self, x) * delta)
-    y.generate_add_delta(adjoints, equal(self, y) * delta)
+    x.generate_add_delta(adjoints, greater(x, y) * delta)
+    y.generate_add_delta(adjoints, greater(y, x) * delta)
 
 
 Maximum, MaximumOneDim, MaximumZeroDim, maximum = create_binary_elementwise(
@@ -1870,8 +1870,8 @@ Maximum, MaximumOneDim, MaximumZeroDim, maximum = create_binary_elementwise(
 
 
 def minimum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, equal(self, x) * delta)
-    y.generate_add_delta(adjoints, equal(self, y) * delta)
+    x.generate_add_delta(adjoints, less(x, y) * delta)
+    y.generate_add_delta(adjoints, less(y, x) * delta)
 
 
 Minimum, MinimumOneDim, MinimumZeroDim, minimum = create_binary_elementwise(
