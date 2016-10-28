@@ -66,9 +66,6 @@ class pooling(op_graph.TensorOp):
 
     def generate_adjoints(self, adjoints, delta, inputs, argmax):
         inputs.generate_add_delta(adjoints, bprop_pool(delta, inputs, argmax, self))
-        # TODO: get rid of this hack
-        dummy = ng.Variable(axes=argmax.axes, initial_value=0)
-        argmax.generate_add_delta(adjoints, dummy)
 
 
 class bprop_pool(op_graph.TensorOp):
