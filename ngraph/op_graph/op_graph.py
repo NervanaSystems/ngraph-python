@@ -71,7 +71,7 @@ class Op(Node):
         const: The value of a constant.
         constant (bool): The value is constant.
         initializers (list): Additional Ops to run before this Op is run the first time.
-        other_deps (list): Ops in addtion to args that must run before this op.
+        other_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
@@ -159,7 +159,7 @@ class Op(Node):
         super(Op, self).__init__(**kwargs)
 
         # List to keep generation deterministic
-        self.other_deps = []
+        self.other_deps = OrderedSet()
         for arg in self.args:
             for dep in arg.user_deps:
                 self.add_other_dep(dep)
@@ -197,6 +197,9 @@ class Op(Node):
     @forward.setter
     def forward(self, value):
         self.__forward = value
+        # Transfer the other_deps to value. Initializations have already been captured.
+        for dep in self.other_deps:
+            value.add_other_dep(dep)
         tdcache.tensor_description_cache.clear()
 
     @property
@@ -214,7 +217,8 @@ class Op(Node):
             result = result.__forward
 
     def add_other_dep(self, dep):
-        self.other_deps.append(dep)
+        # Add the dep to the op that actually does the work.
+        self.device_op.other_deps.add(dep.forwarded)
 
     def add_initializer(self, init):
         self.initializers.add(init)
@@ -225,7 +229,10 @@ class Op(Node):
         """
 
         self.args = tuple(arg.forwarded for arg in self.args)
-        self.other_deps = [op.forwarded for op in self.other_deps]
+        other_deps = self.other_deps
+        self.other_deps = OrderedSet()
+        for op in other_deps:
+            self.add_other_dep(op)
         self.initializers = [op.forwarded for op in self.initializers]
 
     def replace_self(self, rep):
@@ -261,13 +268,22 @@ class Op(Node):
         return self.__persistent or self.reference
 
     @property
-    def device_op(self):
+    def is_device_op(self):
         """
 
         Returns:
             True if the Op executes on the device.
         """
         return True
+
+    @property
+    def device_op(self):
+        """
+        Returns the op that performs the operations on the device.
+
+        Returns: self
+        """
+        return self
 
     @persistent.setter
     def persistent(self, value):
@@ -516,7 +532,7 @@ class InitTensor(Op):
         self.valfun = valfun
 
     @property
-    def device_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -573,7 +589,7 @@ class doall(Op):
         return []
 
     @property
-    def device_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -849,12 +865,22 @@ class ReshapeOp(TensorOp):
         return self.args[0].scalar_op
 
     @property
-    def device_op(self):
+    def is_device_op(self):
         """
         Returns:
             False, because this is handled by the transformer.
         """
         return False
+
+    @property
+    def device_op(self):
+        """
+        Returns the op that performs the operations on the device.
+
+        Returns: Argument's device_op
+
+        """
+        return self.args[0].device_op
 
 
 class Transpose(ReshapeOp):
@@ -951,6 +977,10 @@ class ResultHandle(ReshapeOp):
         super(ResultHandle, self).__init__(
             x, **kwargs
         )
+
+    @property
+    def device_op(self):
+        return self
 
     @tdcache()
     def tensor_description(self):
@@ -1271,7 +1301,7 @@ class AllocationOp(TensorOp):
         return []
 
     @property
-    def device_op(self):
+    def is_device_op(self):
         """
 
         Returns:
