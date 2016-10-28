@@ -36,7 +36,7 @@ DOC_DIR := doc
 DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
 
 ifndef VIRTUAL_ENV
-   $(error You must activate private-neon virtual environment before continuing)
+   $(error You must activate the neon virtual environment before continuing)
 endif
 
 .PHONY: env default install uninstall clean test style lint lint3k check doc
@@ -53,7 +53,7 @@ uninstall:
 
 test:
 	@echo Running unit tests...
-	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph --cov=tf_importer $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml
 
 style:

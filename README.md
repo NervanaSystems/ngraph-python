@@ -18,12 +18,12 @@ git remote set-url origin https://github.com/NervanaSystems/ngraph
 
 ## Installation
 
-First ensure you have [private-neon](https://github.com/NervanaSystems/private-neon) checked out and built.
+First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
 
-To install Nervana Graph into your private-neon virtual env:
+To install Nervana Graph into your neon virtual env:
 
 ```
-cd private-neon
+cd neon
 make PY=2 # or "make PY=3" to instead build a Python 3 virtual environment.
 . .venv/bin/activate
 cd ../ngraph/
