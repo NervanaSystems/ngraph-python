@@ -151,7 +151,8 @@ class GradientDescentMomentum(Optimizer):
             for variable in variables
         ]
         velocities = [ng.persistent_tensor(
-            axes=variable.axes, init=Constant(0)) for variable in variables]
+            axes=variable.axes, init=Constant(0),
+            name=variable.name + '_vel') for variable in variables]
 
         scale_factor = 1
         if self.gradient_clip_norm:

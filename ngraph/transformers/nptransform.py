@@ -234,7 +234,7 @@ class NumPyCodeGenerator(PyGen):
 
     @generic_method
     def generate_op(self, op, *args):
-        if op.device_op:
+        if op.is_device_op:
             raise ValueError((
                 "{class_name} doesn't have a generate_op method for op: {op}. "
                 "In order to fix this, add a method generate_op decorated with "

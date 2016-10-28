@@ -94,12 +94,7 @@ def test_rectlin_derivative_negatives(transformer_factory):
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
 
 
-@pytest.mark.xfail(strict=True)
 def test_rectlin_derivative_mixed(transformer_factory):
-    """
-    Marked as xfail because it does not match old neon behavior at x=0,
-    even though the derivative is technically undefined
-    """
     inputs = np.array([[4, 0], [-2, 9]])
     outputs = np.array([[1, 0], [0, 1]])
     compare_tensors(Rectlin(), inputs, outputs, deriv=True)
@@ -137,21 +132,19 @@ def test_leaky_rectlin_derivative_positives(transformer_factory):
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True)
 
 
-@pytest.mark.xfail(strict=True)
 def test_leaky_rectlin_derivative_negatives(transformer_factory):
     """
     ngraph derivative for negative values is 0, not the slope
     """
     slope = 0.2
-    inputs = np.array([[-1, -3], [-2, -4]])
+    inputs = np.array([[-1, -3], [-2, -4]], dtype=np.float32)
     outputs = np.array([[0, 0], [0, 0]]) + slope
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
 
 
-@pytest.mark.xfail(strict=True)
 def test_leaky_rectlin_derivative_mixed(transformer_factory):
     slope = 0.2
-    inputs = np.array([[4, 0], [-2, 9]])
+    inputs = np.array([[4, 0], [-2, 9]], dtype=np.float32)
     outputs = np.array([[1, 0], [slope, 1]])
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
 

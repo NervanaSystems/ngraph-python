@@ -43,6 +43,11 @@ class OrderedSet(set, collections.MutableSequence):
     def __getitem__(self, index):
         return self.elt_list.__getitem__(index)
 
+    def __add__(self, other):
+        result = OrderedSet(self)
+        result.update(other)
+        return result
+
     def add(self, value):
         """
         Add a value to the set.

@@ -106,7 +106,7 @@ def train_mnist_mlp():
                                           tf_importer.x, tf_importer.y)
 
     # initialize transformer
-    transformer.transform_computations()
+    transformer.allocate()
     transformer.initialize()
 
     # visualize

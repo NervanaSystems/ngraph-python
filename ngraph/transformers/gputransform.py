@@ -76,7 +76,7 @@ class GPUKernel():
 
     @generic_method
     def add_op(self, op, *args):
-        if op.device_op:
+        if op.is_device_op:
             raise ValueError("Unhandled op: {}".format(op))
 
     @add_op.on_type(absolute)

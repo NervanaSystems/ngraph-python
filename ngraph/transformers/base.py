@@ -431,11 +431,12 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         for graph_pass in self.graph_passes:
             graph_pass.do_pass(ops)
 
-    def transform_computations(self):
+    def _transform_computations(self):
         """
         Transform computation graphs to a form that can be run.
         """
 
+        # with Op.saved_user_deps():
         # Run passes on the computation graphs
         self.run_registered_graph_passes(self.all_results)
 
@@ -466,7 +467,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             self.initialize_tensor_descriptions(op)
 
         self.ops = self.dataflow.instructions
-        self.order = {op: i for i, op in enumerate(self.ops)}
 
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
@@ -564,13 +564,8 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns:
 
         """
-        todo = OrderedSet(ordered_ops)
-
-        #  Reset variables to their pre-used state
-        for op in todo:
-            op.user_deps = set()
-
         initializers = OrderedSet()
+        todo = OrderedSet(ordered_ops)
         while todo:
             these_ops = todo
             todo = OrderedSet()
@@ -660,13 +655,17 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         if self.allocated:
             return
-        if not self.finalized:
-            self.transform_computations()
 
-        self.allocate_storage()
+        with Op.saved_user_deps():
+            # Disable user_deps during transformations
 
-        for op in OrderedSet(self.inits + self.ops):
-            self.initialize_constant(op)
+            if not self.finalized:
+                self._transform_computations()
+
+            self.allocate_storage()
+
+            for op in OrderedSet(self.inits + self.ops):
+                self.initialize_constant(op)
 
         self.allocated = True
 
