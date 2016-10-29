@@ -19,6 +19,7 @@ from ngraph.op_graph.axes import Axis, Axes
 
 
 class convolution(op_graph.TensorOp):
+    _index = 0
 
     def __init__(self, dims, inputs, filters, *args, **kwargs):
         """
@@ -72,6 +73,8 @@ class convolution(op_graph.TensorOp):
             axes[i].name = name
 
         self.dims = dims
+        self.index = convolution._index
+        convolution._index += 1
 
         super(convolution, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
@@ -93,6 +96,7 @@ class update_conv(op_graph.TensorOp):
             filters : filter/kernel tensor.
         """
         self.dims = fprop.dims
+        self.index = fprop.index
 
         super(update_conv, self).__init__(
             args=(delta, inputs), *args, axes=filters.axes, **kwargs
@@ -107,6 +111,7 @@ class bprop_conv(op_graph.TensorOp):
             filters : filter/kernel tensor.
         """
         self.dims = fprop.dims
+        self.index = fprop.index
 
         super(bprop_conv, self).__init__(
             args=(delta, filters), *args, axes=inputs.axes, **kwargs

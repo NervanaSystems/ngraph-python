@@ -48,46 +48,6 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
     DeviceTensor
 
 
-class proxy_backend(object):
-    """ a fake neon backend to make ConvLayer not raise an exception. """
-    # TODO: refactor away
-
-    def check_caffe_compat(self):
-        """ no caffe compat for now """
-        return False
-
-    def output_dim(self, X, S, padding, strides, pooling=False):
-        """
-        Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-        Arguments:
-            X (int): input data dimension
-            S (int): filter dimension
-            padding (int): padding on each side
-            strides (int): striding
-            pooling (bool): flag for setting pooling layer size
-        """
-        if X < S:
-            raise ValueError((
-                'filter dimension {S} can not be large than input data '
-                'dimension {X}'
-            ).format(S=S, X=X))
-
-        if self.check_caffe_compat() and pooling:
-            size = int(math.ceil((float(X - S + 2 * padding) / strides))) + 1
-            if padding > 0 and (size - 1) * strides >= X + padding:
-                # decrement size if last pooling op is completely in padding
-                size -= 1
-        else:
-            # normal neon output size determination
-            size = ((X - S + 2 * padding) // strides) + 1
-
-        if pooling and padding >= S:
-            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-        return size
-
-
 class proxy_tensor(object):
     """ A fake CPUTensor to make old neon implementation of ConvLayer happy """
     # TODO: refactor away
@@ -208,11 +168,6 @@ class NumPyDeviceTensor(DeviceTensor):
             value = value._tensor
         self.tensor.__setitem__(key, value)
 
-    def reshape(self, shape):
-        """Temporary for conv"""
-        # TODO Remove when CONV is finished
-        return self.tensor.reshape(shape)
-
 
 def get_tensors(f):
     def tensor(x):
@@ -230,6 +185,8 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
+        self.conv_dims = []
+        self.pool_dims = []
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -249,10 +206,6 @@ class NumPyCodeGenerator(PyGen):
                 class_name=self.__class__.__name__,
                 op=op.__class__.__name__,
             ))
-
-    @generic_method
-    def generate_op_init(self, op, *args):
-        pass
 
     @generate_op.on_type(absolute)
     def generate_op(self, op, out, x):
@@ -274,125 +227,72 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op_init.on_type(convolution)
-    def generate_op_init(self, op, outputs, inputs, filters):
-        self.append(
-            """
-            self.conv_layer{index} = ConvLayer(
-                proxy_backend(), float,
-                N={bsz},
-                C={input_shape}[0],
-                K={filter_shape}[4],
-
-                D={input_shape}[1],
-                H={input_shape}[2],
-                W={input_shape}[3],
-
-                T={filter_shape}[1],
-                R={filter_shape}[2],
-                S={filter_shape}[3],
-
-                pad_d=0, pad_h=0, pad_w=0,
-                str_d=1, str_h=1, str_w=1,
-            )
-
-            """,
-            index=op.index,
-            input_shape=[a.length for a in op._input_shape],
-            filter_shape=[a.length for a in op._filter_shape],
-            bsz=op.batch_axis.length
-        )
-
     @generate_op.on_type(convolution)
     def generate_op(self, op, outputs, inputs, filters):
+        self.conv_dims.append(op.dims)
         self.append(
             """
-            self.be.fprop_conv(self.conv_layer{index}, proxy_tensor({inputs}),
+            self.be.fprop_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
                                proxy_tensor({filters}), proxy_tensor({outputs}))
             """,
             index=op.index,
-            outputs=outputs,
             inputs=inputs,
             filters=filters,
+            outputs=outputs
         )
 
     @generate_op.on_type(update_conv)
-    def generate_op(self, op, outputs, delta, inputs, filters):
-        self.append(
-            """
-            self.be.update_conv(self.conv_layer{index}, proxy_tensor({inputs}),
-                                proxy_tensor({delta}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            outputs=outputs,
-            inputs=inputs,
-            delta=delta,
-        )
-
-    @generate_op.on_type(bprop_conv)
-    def generate_op(self, op, outputs, delta, inputs, filters):
-        self.append(
-            """
-            self.be.bprop_conv(self.conv_layer{index}, proxy_tensor({delta}),
-                               proxy_tensor({filters}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            outputs=outputs,
-            delta=delta,
-            filters=filters,
-        )
-
-    @generate_op_init.on_type(pooling)
-    def generate_op_init(self, op, outputs, inputs, filters):
-        self.append(
-            """
-            self.pool_layer{index} = PoolLayer(
-                proxy_backend(), float,
-                N={bsz},
-                C={input_shape}[0],
-                K={filter_shape}[4],
-
-                D={input_shape}[1],
-                H={input_shape}[2],
-                W={input_shape}[3],
-
-                T={filter_shape}[1],
-                R={filter_shape}[2],
-                S={filter_shape}[3],
-
-                pad_d=0, pad_h=0, pad_w=0,
-                str_d=1, str_h=1, str_w=1,
-            )
-
-            """,
-            index=op.index,
-            input_shape=[a.length for a in op._input_shape],
-            filter_shape=[a.length for a in op._filter_shape],
-            bsz=op.batch_axis.length
-        )
-
-    @generate_op.on_type(pooling)
-    def generate_op(self, op, outputs, inputs):
-        self.append(
-            """
-            self.be.fprop_pool(self.pool_layer{index}, proxy_tensor({inputs}),
-                               proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            outputs=outputs,
-            inputs=inputs,
-        )
-
-    @generate_op.on_type(bprop_pool)
     def generate_op(self, op, outputs, delta, inputs):
         self.append(
             """
-            self.be.bprop_pool(self.pool_layer{index}, proxy_tensor({delta}),
-                               proxy_tensor({outputs}))
+            self.be.update_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
+                                proxy_tensor({delta}), proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            inputs=inputs,
+            delta=delta,
+            outputs=outputs
+        )
+
+    @generate_op.on_type(bprop_conv)
+    def generate_op(self, op, outputs, delta, filters):
+        self.append(
+            """
+            self.be.bprop_conv(self.conv_dims[{index}], proxy_tensor({filters}),
+                               proxy_tensor({delta}), proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            filters=filters,
+            delta=delta,
+            outputs=outputs
+        )
+
+    @generate_op.on_type(pooling)
+    def generate_op(self, op, outputs, inputs, argmax):
+        self.pool_dims.append(op.dims)
+        self.append(
+            """
+            self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
+                               proxy_tensor({outputs}), proxy_tensor({argmax}))
+            """,
+            index=op.index,
+            outputs=outputs,
+            inputs=inputs,
+            argmax=argmax
+        )
+
+    @generate_op.on_type(bprop_pool)
+    def generate_op(self, op, outputs, delta, argmax):
+        # TODO: get rid of temporary hack that converts argmax to uint8
+        self.append(
+            """
+            self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
+                               proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
             """,
             index=op.index,
             outputs=outputs,
             delta=delta,
+            argmax=argmax
         )
 
     @generate_op.on_type(cos)
@@ -677,9 +577,6 @@ class NumPyTransformer(Transformer):
             for op in ordered_ops:
                 out = tensor_description_value(op.tensor_description())
                 call_info = (tensor_description_value(_) for _ in op.call_info())
-                self.init_code.generate_op_init(op, out, *call_info)
-                # TODO: avoid duplicate code
-                call_info = (tensor_description_value(_) for _ in op.call_info())
                 self.compute_code.generate_op(op, out, *call_info)
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
@@ -709,6 +606,8 @@ class NumPyTransformer(Transformer):
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
+        self.model.conv_dims = self.compute_code.conv_dims
+        self.model.pool_dims = self.compute_code.pool_dims
         for computation in self.computations:
             executor = getattr(self.model, computation.name)
             computation.executor = executor
