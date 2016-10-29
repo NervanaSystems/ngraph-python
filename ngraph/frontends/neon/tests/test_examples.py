@@ -21,10 +21,10 @@ import pytest
 base_dir = os.path.dirname(__file__)
 example_dir = os.path.join(base_dir, '../../../../examples/')
 
-db = {'mnist': {'filename': os.path.join(example_dir, 'mnist_mlp.py'),
+db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp_direct.py'),
                 'arguments': '-e10 -r0',
                 'cost': 0.0861108228564},
-      'cifar10': {'filename': os.path.join(example_dir, 'cifar10_mlp.py'),
+      'cifar10': {'filename': os.path.join(example_dir, 'cifar10', 'cifar10_mlp.py'),
                   'arguments': '-e10 -r0',
                   'cost': 1.37536168098}
       }
@@ -32,21 +32,13 @@ db = {'mnist': {'filename': os.path.join(example_dir, 'mnist_mlp.py'),
 
 def get_last_epoch_cost(filename):
     with h5py.File(filename, 'r') as f:
-        mb = np.array(f['time_markers']['minibatch'])
         cost = np.array(f['cost']['train'])
-
-        tstart = int(mb[-2])
-        tend = int(mb[-1] - 1)
         return cost[tstart:tend].mean()
 
 
 def get_cost(filename):
     with h5py.File(filename, 'r') as f:
-        mb = np.array(f['time_markers']['minibatch'])
         cost = np.array(f['cost']['train'])
-
-        tstart = 0
-        tend = int(mb[-1] - 1)
         return cost[tstart:tend]
 
 

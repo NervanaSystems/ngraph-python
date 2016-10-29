@@ -29,7 +29,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, Model
+from ngraph.frontends.neon import nnAffine, nnPreprocess, Model, Callbacks
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 import argparse
 from data import make_aeon_loaders
@@ -38,6 +38,7 @@ from data import make_aeon_loaders
 parser = argparse.ArgumentParser(description='Ingest MNIST from pkl to pngs')
 parser.add_argument('--train')
 parser.add_argument('--valid')
+parser.add_argument('--output_file')
 parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_iterations', type=int, default=2000)
@@ -51,6 +52,7 @@ np.random.seed(args.rseed)
 # Model specification
 hidden_size, output_size = 100, 10
 H1 = ng.Axis(hidden_size, name="H1")
+H2 = ng.Axis(hidden_size, name="H2")
 Y = ng.Axis(output_size, name="Y")
 
 def unit_scale_mnist_pixels(x):
@@ -58,6 +60,7 @@ def unit_scale_mnist_pixels(x):
 
 my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
                   nnAffine(out_axis=H1, init=GaussianInit(), activation=Rectlin()),
+                  nnAffine(out_axis=H2, init=GaussianInit(), activation=Rectlin()),
                   nnAffine(out_axis=Y, init=GaussianInit(), activation=Logistic())])
 
 
@@ -94,7 +97,8 @@ inf_graph = (pred, x)
 my_model.bind_transformer(transformer, train_graph, inf_graph)
 
 # train
-my_model.train(train_set, args.num_iterations, args.iter_interval)
+cb = Callbacks(my_model, args.output_file, args.iter_interval)
+my_model.train(train_set, args.num_iterations, cb)
 
 # # validate
 hyps, refs = my_model.eval(valid_set)

@@ -93,6 +93,6 @@ def test_linear_ones(basic_linargs, transformer_factory):
     out = output(x)
     w = weights()
 
-    sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
+    sums = np.sum(w, 0).reshape((1, nout)) * np.ones((batch_size, 1))
 
     assert np.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))

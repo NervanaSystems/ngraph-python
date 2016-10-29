@@ -44,18 +44,19 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, Model
+from ngraph.frontends.neon import nnAffine, nnPreprocess, Model, Callbacks
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
 import argparse
 from data import make_aeon_loaders
 
 
-parser = argparse.ArgumentParser(description='Train on cifar images')
+parser = argparse.ArgumentParser(description='Train a simple mlp on cifar data')
 parser.add_argument('--train')
 parser.add_argument('--valid')
+parser.add_argument('--output_file')
 parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--num_iterations', type=int, default=400)
+parser.add_argument('--num_iterations', type=int, default=2000)
 parser.add_argument('--iter_interval', type=int, default=200)
 parser.add_argument('--rseed', default=0)
 args = parser.parse_args()
@@ -73,8 +74,8 @@ def cifar_mean_subtract(x):
     return (x - bgr_mean)/255.
 
 my_model = Model([nnPreprocess(functor=cifar_mean_subtract),
-                        nnAffine(out_axis=H1, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                        nnAffine(out_axis=Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
+                  nnAffine(out_axis=H1, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                  nnAffine(out_axis=Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
 
 transformer = ng.NumPyTransformer()
@@ -110,7 +111,8 @@ inf_graph = (pred, x)
 my_model.bind_transformer(transformer, train_graph, inf_graph)
 
 # train
-my_model.train(train_set, args.num_iterations, args.iter_interval)
+cb = Callbacks(my_model, args.output_file, args.iter_interval)
+my_model.train(train_set, args.num_iterations, cb)
 
 # # validate
 hyps, refs = my_model.eval(valid_set)

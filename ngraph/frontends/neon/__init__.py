@@ -14,11 +14,10 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
-# from ngraph.frontends.neon.argparser import NgraphArgparser
+from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, \
+        Softmax, Tanh, Logistic
 from ngraph.frontends.neon.callbacks import *
 from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import Model
+from ngraph.frontends.neon.model import *
 from ngraph.frontends.neon.optimizer import *
 from ngraph.frontends.neon.initializer import *

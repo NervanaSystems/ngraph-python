@@ -16,7 +16,7 @@ from __future__ import division
 
 import ngraph as ng
 import numpy as np
-
+from itertools import takewhile
 
 class Model(object):
     def __init__(self, layers):
@@ -40,23 +40,25 @@ class Model(object):
         self.predictions = transformer.computation(*inference_args)
         transformer.initialize()
 
-    def train(self, train_set, num_iterations, iter_interval):
-        batch_costs = []
-        for mb_idx, dtuple in enumerate(train_set, start=1):
+    def train(self, train_set, num_iterations, callbacks):
+        callbacks.on_train_begin(num_iterations)
+
+        for mb_idx, dtuple in takewhile(lambda x: x[0]<num_iterations, enumerate(train_set)):
+            callbacks.on_minibatch_begin(mb_idx)
+
             batch_cost, _ = self.train_comp(dtuple[0], dtuple[1], mb_idx)
-            batch_costs.append(float(batch_cost))
-            if mb_idx % iter_interval == 0:
-                print("[Iter %s/%s] Cost = %s" % (mb_idx, num_iterations, np.mean(batch_costs)))
-                batch_costs = []
-            if mb_idx >= num_iterations:
-                return
+            self.current_batch_cost = float(batch_cost)
+
+            callbacks.on_minibatch_end(mb_idx)
+
+        callbacks.on_train_end()
 
     def eval(self, eval_set):
         eval_set.reset()
         hyps, refs = [], []
         while len(hyps) < eval_set.ndata:
             dtuple = next(eval_set)
-            batch_hyps = np.argmax(self.predictions(dtuple[0]), axis=0)
+            batch_hyps = np.argmax(self.predictions(dtuple[0]), axis=1)
             bsz = min(eval_set.ndata - len(hyps), len(batch_hyps))
             hyps.extend(list(batch_hyps[:bsz]))
             refs.extend(list(dtuple[1][0][:bsz]))

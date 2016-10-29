@@ -100,12 +100,14 @@ class nnAffine(object):
         # if self.bias_init:
         #     b_axes = ng.Axes([self.out_axis])
         #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
-        w_axes = ng.Axes.linear_map_axes(in_axes.sample_axes(), [self.out_axis])
+        # w_axes = ng.Axes.linear_map_axes(in_axes.sample_axes(), [self.out_axis])
+        w_axes = ng.Axes(in_axes.sample_axes() + [self.out_axis])
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         return ng.Axes(in_axes.batch_axes() + [self.out_axis])
 
     def get_outputs(self, in_obj):
-        return self.activation(ng.dot(self.W, in_obj) + self.b)
+        # return self.activation(ng.dot(self.W, in_obj) + self.b)
+        return self.activation(ng.dot(in_obj, self.W) + self.b)
 
 class nnPreprocess(object):
     def __init__(self, functor):
