@@ -22,6 +22,7 @@ from functools import wraps
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
 from neon import NervanaObject  # noqa
+from neon.backends import gen_backend
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
@@ -522,6 +523,9 @@ class NumPyTransformer(Transformer):
     transformer_name = "numpy"
 
     def __init__(self, **kwargs):
+        if NervanaObject.be is None or NervanaObject.be.device_type != 0:
+            # This creates a backend for unit tests.
+            NervanaObject.be = gen_backend('cpu')
         super(NumPyTransformer, self).__init__(**kwargs)
         self.init_code = NumPyCodeGenerator()
         self.allocate_storage_code = NumPyCodeGenerator()

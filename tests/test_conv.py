@@ -18,8 +18,8 @@ import numpy as np
 import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
-from neon.backends.layer_cpu import ConvLayer
-from neon.backends import gen_backend
+from ngraph.transformers import Transformer
+from neon import NervanaObject
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -46,8 +46,8 @@ def test_convolution_fprop():
     D = 4
     H = W = 32
     T = R = S = 2
-    dims = ConvLayer(gen_backend('cpu'), np.float32, N=N, C=3, K=8,
-                     D=D, H=H, W=W, T=T, R=R, S=S)
+    Transformer.make_transformer()
+    dims = NervanaObject.be.conv_layer(np.float32, N=N, C=3, K=8, D=D, H=H, W=W, T=T, R=R, S=S)
     Nx = ng.Axis(N, batch=True)
 
     Cx = ng.Axis(dims.C)
@@ -77,4 +77,4 @@ def test_convolution_fprop():
     result_value = np.zeros((dims.K, dims.M, dims.P, dims.Q, N), dtype=np.float32)
 
     np_convolution(input_value, filter_value, result_value)
-    np.testing.assert_allclose(result_og, result_value)
+    np.testing.assert_allclose(result_og, result_value, rtol=1e-3, atol=1e-6)

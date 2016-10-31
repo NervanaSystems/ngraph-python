@@ -3,6 +3,7 @@ import atexit
 
 from neon.backends.nervanagpu import GPUTensor
 from neon import NervanaObject
+from neon.backends import gen_backend
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -746,6 +747,9 @@ class GPUTransformer(Transformer):
             GPUTransformer.__nervanagpu = None
 
     def __init__(self, **kwargs):
+        if NervanaObject.be is None or NervanaObject.be.device_type != 1:
+            # This creates a backend for unit tests.
+            NervanaObject.be = gen_backend('gpu')
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
