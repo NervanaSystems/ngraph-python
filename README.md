@@ -2,28 +2,14 @@
 
 Nervana Graph is Nervana's computational graph.
 
-## Temporary Notice
-
-Ths repository changed names on 9/10/2016 from "graphiti" to "ngraph"
-
-Although github.com supports the old name, it is recommended to stop using graphiti by
-either cloning anew or changing your checked out origin as follows:
-
-```
-cd ~/code
-mv graphiti ngraph
-cd ngraph
-git remote set-url origin https://github.com/NervanaSystems/ngraph
-```
-
 ## Installation
 
-First ensure you have [private-neon](https://github.com/NervanaSystems/private-neon) checked out and built.
+First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
 
-To install Nervana Graph into your private-neon virtual env:
+To install Nervana Graph into your neon virtual env:
 
 ```
-cd private-neon
+cd neon
 make PY=2 # or "make PY=3" to instead build a Python 3 virtual environment.
 . .venv/bin/activate
 cd ../ngraph/
