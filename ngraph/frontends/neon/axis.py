@@ -37,7 +37,7 @@ ax.W = Axis()
 
 # TODO This isn't one of the traditional axes
 # Recurrent axis
-# ax.REC = Axis(recurrent=True)
+ax.REC = Axis(recurrent=True)
 
 # R = filter height
 ax.R = Axis()

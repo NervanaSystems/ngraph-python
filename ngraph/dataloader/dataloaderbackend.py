@@ -39,6 +39,15 @@ class BackendNDArray(np.ndarray):
     def __bool__(self):
         return True
 
+    def set(self, value):
+        if isinstance(value, np.ndarray):
+            if value.dtype is not self.dtype:
+                value = value.astype(self.dtype)
+            assert value.size == self.size
+            if value.ndim < len(self.shape):
+                value = value.reshape(self.shape)
+        self[:] = value
+
     # Needed for Python 2.x
     def __nonzero__(self):
         return True

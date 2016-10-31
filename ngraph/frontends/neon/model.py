@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.frontends.neon.axis import ax
 import numpy as np
 from builtins import zip
-from neon.data import ArrayIterator, DataLoader
+from neon.data import NervanaDataIterator, DataLoader
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
 
@@ -33,7 +33,7 @@ def dataset_nclasses(dataset):
     Returns:
 
     """
-    if isinstance(dataset, ArrayIterator):
+    if isinstance(dataset, NervanaDataIterator):
         return dataset.nclass
     elif isinstance(dataset, DataLoader):
         return dataset.nclasses
@@ -49,7 +49,7 @@ def dataset_batchsize(dataset):
     Returns:
 
     """
-    if isinstance(dataset, ArrayIterator):
+    if isinstance(dataset, NervanaDataIterator):
         return dataset.be.bsz
     elif isinstance(dataset, DataLoader):
         return dataset.bsz

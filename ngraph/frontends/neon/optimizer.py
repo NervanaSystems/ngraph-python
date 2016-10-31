@@ -189,3 +189,107 @@ class GradientDescentMomentum(Optimizer):
         learning_rate = self.schedule.get_learning_rate(
             self.learning_rate, epoch)
         self.learning_rate_placeholder.value[()] = learning_rate
+
+
+class RMSProp(Optimizer):
+
+    """
+    Root Mean Square propagation.
+    Root Mean Square (RMS) propagation protects against vanishing and
+    exploding gradients. In RMSprop, the gradient is divided by a running
+    average of recent gradients. Given the parameters :math:`\\theta`, gradient :math:`\\nabla J`,
+    we keep a running average :math:`\\mu` of the last :math:`1/\\lambda` gradients squared.
+    The update equations are then given by
+    .. math::
+        \\mu' &= \\lambda\\mu + (1-\\lambda)(\\nabla J)^2
+    .. math::
+        \\theta' &= \\theta - \\frac{\\alpha}{\\sqrt{\\mu + \\epsilon} + \\epsilon}\\nabla J
+    where we use :math:`\\epsilon` as a (small) smoothing factor to prevent from dividing by zero.
+    """
+    def __init__(
+        self,
+        stochastic_round=False,
+        decay_rate=0.95,
+        learning_rate=2e-3,
+        epsilon=1e-6,
+        gradient_clip_norm=None,
+        gradient_clip_value=None,
+        name=None,
+        schedule=Schedule()
+    ):
+        """
+        Class constructor.
+        Arguments:
+            stochastic_round (bool): Set this to True for stochastic rounding.
+                                     If False rounding will be to nearest.
+                                     If True will perform stochastic rounding using default width.
+                                     Only affects the gpu backend.
+            decay_rate (float): decay rate of states
+            learning_rate (float): the multiplication coefficent of updates
+            epsilon (float): smoothing epsilon to avoid divide by zeros
+            gradient_clip_norm (float, optional): Target gradient norm.
+                                                  Defaults to None.
+            gradient_clip_value (float, optional): Value to element-wise clip
+                                                   gradients.
+                                                   Defaults to None.
+            schedule (neon.optimizers.optimizer.Schedule, optional): Learning rate schedule.
+                                                                     Defaults to a constant.
+        Notes:
+            Only constant learning rate is supported currently.
+        """
+        super(RMSProp, self).__init__(name=name)
+        self.state_list = None
+        self.epsilon = epsilon
+        self.decay_rate = decay_rate
+        self.learning_rate = learning_rate
+        self.schedule = schedule
+        self.gradient_clip_norm = gradient_clip_norm
+        self.gradient_clip_value = gradient_clip_value
+        self.stochastic_round = stochastic_round
+    def configure(self, cost):
+        self.lrate = ng.placeholder(axes=(), name='lrate')
+
+        variables = list(cost.variables())
+        grads = [ng.deriv(cost, variable) / 50.0 for variable in variables]
+        scale_factor = 1
+        if self.gradient_clip_norm:
+            scale_factor = clip_gradient_norm(grads)
+        if self.gradient_clip_value is not None:
+            grads = [clip_gradient_value(
+                variable, self.gradient_clip_value) for grade in grads]
+
+        epsilon, decay = (self.epsilon, self.decay_rate)
+        states = [
+            ng.temporary(axes=variable.axes, init=Constant(0))
+            for variable in variables
+        ]
+        state_updates = [
+            ng.assign(
+                lvalue=state,
+                rvalue=decay * state + (1.0 - decay) * ng.square(grad),
+                name='state_u_%s' % i
+            ) for state, grad, i in zip(states, grads, range(len(states)))
+        ]
+        param_updates = [
+            ng.assign(
+                lvalue=param,
+                rvalue=param
+                - (scale_factor * grad * self.lrate)
+                    / (ng.sqrt(state + epsilon) + epsilon),
+                name='param_u_%s' % i
+            ) for state, grad, param, i in zip(states, grads, variables, range(len(states)))
+        ]
+        return ng.doall(state_updates + param_updates)
+
+    def optimize(self, epoch):
+
+        """
+        TODO.
+        Arguments:
+          epoch: TODO
+        Returns:
+        """
+        learning_rate = self.schedule.get_learning_rate(
+            self.learning_rate, epoch)
+        self.lrate.value[()] = learning_rate
+
