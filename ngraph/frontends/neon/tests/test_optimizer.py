@@ -30,12 +30,9 @@ from neon import NervanaObject
 def pytest_generate_tests(metafunc):
     if 'args' in metafunc.fixturenames:
         fargs = []
-        # lr = np.random.random(2)
-        lr = [0.1, 0.2]
-        momentum = [0]
-        wdecay = [0]
-        # momentum = np.random.random(4)
-        # wdecay = [0.0005, 0.000, 0.001, 0.1]
+        lr = np.random.random(2)
+        momentum = np.random.random(4)
+        wdecay = [0.0005, 0.000, 0.001, 0.1]
         fargs = itt.product(lr, momentum, wdecay)
         metafunc.parametrize('args', fargs)
 
@@ -63,10 +60,6 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    # user_deps = ng.Op._get_thread_user_deps()
-    # if len(user_deps)>1:
-    #     import pdb; pdb.set_trace()
-    #     user_deps.pop()
 
     C = ng.Axis(20, name="C")
     N = ng.Axis(32, name="N", batch=True)
@@ -104,9 +97,6 @@ def test_gdm(args, transformer_factory):
     dev_w_init = be.array(w_init)  # copy w_init to device
     param_list = [((dev_w_init, dev_dw), [])]
 
-    print('')
-    print(dev_w_init.get()[:,0])
-    print(wgetter())
     # store the weights with each minibatch for debugging
     ng_Ws = []
     be_Ws = []
