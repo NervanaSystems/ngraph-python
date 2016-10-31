@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.util.utils import ExecutorFactory
+from ngraph.transformers.base import Transformer
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -93,6 +94,14 @@ def test_expand_dims(transformer_factory):
 
 def test_slice(transformer_factory):
     """TODO."""
+
+    try:
+        from ngraph.transformers.gputransform import GPUTransformer
+        if isinstance(Transformer.make_transformer(), GPUTransformer):
+            pytest.xfail("fails on pre-neon 1.7 gpu")
+    except ImportError:
+        pass
+
     C = ng.Axis(name='C')
     D = ng.Axis(name='D')
 
