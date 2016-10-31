@@ -12,16 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import os
 import numpy as np
 from aeon import DataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
-
+from mnist import ingest_mnist
 
 def common_config(manifest_file, batch_size):
     cache_root = get_data_cache_or_nothing('mnist-cache/')
 
     return {
                'manifest_filename': manifest_file,
+               'manifest_root': os.path.dirname(manifest_file),
                'minibatch_size': batch_size,
                'macrobatch_size': 25000,
                'cache_directory': cache_root,
@@ -33,7 +35,9 @@ def common_config(manifest_file, batch_size):
             }
 
 
-def make_aeon_loaders(train_manifest, valid_manifest, batch_size, backend, random_seed=0):
+def make_aeon_loaders(work_dir, batch_size, backend, random_seed=0):
+    train_manifest, valid_manifest = ingest_mnist(work_dir)
+
     train_config = common_config(train_manifest, batch_size)
     # train_config['shuffle_manifest'] = True
     # train_config['shuffle_every_epoch'] = True

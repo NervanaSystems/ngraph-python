@@ -16,14 +16,14 @@ import os
 import numpy as np
 from aeon import DataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
+from cifar10 import ingest_cifar10
 
-
-def common_config(manifest_file, manifest_root, batch_size):
+def common_config(manifest_file, batch_size):
     cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
     return {
                'manifest_filename': manifest_file,
-               'manifest_root': manifest_root,
+               'manifest_root': os.path.dirname(manifest_file),
                'minibatch_size': batch_size,
                'macrobatch_size': 5000,
                'type': 'image,label',
@@ -35,16 +35,16 @@ def common_config(manifest_file, manifest_root, batch_size):
             }
 
 
-def make_aeon_loaders(train_manifest, valid_manifest, batch_size, backend, random_seed=0):
-    manifest_root = os.path.dirname(train_manifest)
-    train_config = common_config(train_manifest, manifest_root, batch_size)
+def make_aeon_loaders(work_dir, batch_size, backend, random_seed=0):
+    train_manifest, valid_manifest = ingest_cifar10(work_dir)
+    train_config = common_config(train_manifest, batch_size)
     # train_config['shuffle_manifest'] = True
     # train_config['shuffle_every_epoch'] = True
     # train_config['random_seed'] = random_seed
     # train_config['image']['center'] = False
     # train_config['image']['flip_enable'] = True
 
-    valid_config = common_config(valid_manifest, manifest_root, batch_size)
+    valid_config = common_config(valid_manifest, batch_size)
 
     train_loader = DataLoader(train_config, backend)
     valid_loader = DataLoader(valid_config, backend)

@@ -15,7 +15,7 @@
 import numpy as np
 import os
 from tqdm import tqdm
-from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append
+from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append, fetch_file
 from PIL import Image
 import tarfile
 
@@ -29,7 +29,9 @@ class CIFAR10(object):
     """
     def __init__(self, path='.'):
         self.path = path
+        self.url = 'http://www.cs.toronto.edu/~kriz'
         self.filename = "cifar-10-python.tar.gz"
+        self.size = 170498071
 
     def load_data(self):
         """
@@ -45,6 +47,9 @@ class CIFAR10(object):
             tuple: Both training and test sets are returned.
         """
         workdir, filepath = valid_path_append(self.path, '', self.filename)
+        if not os.path.exists(filepath):
+            fetch_file(self.url, self.filename, filepath, self.size)
+
         batchdir = os.path.join(workdir, 'cifar-10-batches-py')
         if not os.path.exists(os.path.join(batchdir, 'data_batch_1')):
             assert os.path.exists(filepath), "Must have cifar-10-python.tar.gz"
@@ -72,7 +77,7 @@ class CIFAR10(object):
         return (X_train, y_train), (X_test, y_test)
 
 
-def ingest_cifar10(out_dir, padded_size, overwrite=False):
+def ingest_cifar10(out_dir, padded_size=32, overwrite=False):
     '''x`
     Save CIFAR-10 dataset as PNG files
     '''
@@ -112,16 +117,3 @@ def ingest_cifar10(out_dir, padded_size, overwrite=False):
 
     return manifest_files
 
-
-if __name__ == '__main__':
-    from configargparse import ArgumentParser
-    parser = ArgumentParser()
-    parser.add_argument('--out_dir', required=True, help='path to extract files into')
-    parser.add_argument('--input_dir', default=None, help='unused argument')
-    parser.add_argument('--padded_size', type=int, default=40,
-                        help='Size of image after padding (each side)')
-    args = parser.parse_args()
-
-    generated_files = ingest_cifar10(args.out_dir, args.padded_size)
-
-    print("Manifest files written to:\n" + "\n".join(generated_files))

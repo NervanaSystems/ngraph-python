@@ -16,6 +16,8 @@
 import os
 import sys
 import pickle
+import requests
+from tqdm import tqdm
 
 PY3 = sys.version_info[0] >= 3
 
@@ -98,3 +100,27 @@ def pickle_load(filepath):
         return pickle.load(filepath, encoding='latin1')
     else:
         return pickle.load(filepath)
+
+
+def fetch_file(url, sourcefile, destfile, totalsz):
+    """
+    Download the file specified by the given URL.
+
+    Args:
+        url (str): Base URL of the file to be downloaded.
+        sourcefile (str): Name of the source file.
+        destfile (str): Path to the destination.
+        totalsz (int): Size of the file to be downloaded.
+    """
+    req = requests.get(os.path.join(url, sourcefile),
+                       headers={'User-Agent': 'ngraph'},
+                       stream=True)
+
+    chunksz = 1024**2
+    nchunks = totalsz // chunksz
+
+    print("Downloading file to: {}".format(destfile))
+    with open(destfile, 'wb') as f:
+        for data in tqdm(req.iter_content(chunksz), total=nchunks):
+            f.write(data)
+    print("Download Complete")

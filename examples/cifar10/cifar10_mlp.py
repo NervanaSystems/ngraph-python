@@ -51,8 +51,7 @@ from data import make_aeon_loaders
 
 
 parser = argparse.ArgumentParser(description='Train a simple mlp on cifar data')
-parser.add_argument('--train')
-parser.add_argument('--valid')
+parser.add_argument('--work_dir', required=True)
 parser.add_argument('--output_file')
 parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
@@ -81,7 +80,7 @@ my_model = Model([nnPreprocess(functor=cifar_mean_subtract),
 transformer = ng.NumPyTransformer()
 
 # Create the dataloader
-train_set, valid_set = make_aeon_loaders(args.train, args.valid, args.batch_size, transformer)
+train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
 
 ######################
 # Input specification
