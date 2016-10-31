@@ -20,52 +20,52 @@ import pytest
 
 base_dir = os.path.dirname(__file__)
 example_dir = os.path.join(base_dir, '../../../../examples/')
+work_dir = os.getenv('NGRAPH_WORK_DIR', os.path.join(os.path.expanduser('~'), 'nervana'))
+work_dir = os.path.realpath(work_dir)
 
 db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp_direct.py'),
-                'arguments': '-e10 -r0',
-                'cost': 0.0861108228564},
+                'arguments': '--work_dir {} --num_iterations {} --iter_interval {}'.format(
+                    work_dir, 950, 475),
+                'cost': 0.290034},
       'cifar10': {'filename': os.path.join(example_dir, 'cifar10', 'cifar10_mlp.py'),
-                  'arguments': '-e10 -r0',
-                  'cost': 1.37536168098}
+                  'arguments': '--work_dir {} --num_iterations {} --iter_interval {}'.format(
+                     work_dir, 950, 475),
+                  'cost': 1.5028026}
       }
 
-
-def get_last_epoch_cost(filename):
-    with h5py.File(filename, 'r') as f:
-        cost = np.array(f['cost']['train'])
-        return cost[tstart:tend].mean()
 
 
 def get_cost(filename):
     with h5py.File(filename, 'r') as f:
         cost = np.array(f['cost']['train'])
-        return cost[tstart:tend]
+        return cost
+
+def get_last_interval_cost(filename, interval_size):
+    cost = get_cost(filename)
+    return cost[-interval_size:].mean()
 
 
 @pytest.fixture(scope='module', params=db.keys())
 def run_model(request, tmpdir_factory, transformer_factory):
-    model_name = request.param
-    out1 = tmpdir_factory.mktemp(model_name).join("out1.hdf5").__str__()
-    out2 = tmpdir_factory.mktemp(model_name).join("out2.hdf5").__str__()
+    model = request.param
 
-    cmd1 = ' '.join([db[model_name]['filename'],
-                     db[model_name]['arguments'],
-                     '-o{}'.format(out1)])
+    ofiles, rcs = [], []
 
-    cmd2 = ' '.join([db[model_name]['filename'],
-                     db[model_name]['arguments'],
-                     '-o{}'.format(out2)])
+    for i in range(2):
+        ofile = tmpdir_factory.mktemp(model).join("out{}.hdf5".format(i)).__str__()
+        cmd = '{} {} --out {}'.format(db[model]['filename'], db[model]['arguments'], ofile)
+        rc = subprocess.check_call(cmd, shell=True)
+        ofiles.append(ofile)
+        rcs.append(rc)
 
-    rc1 = subprocess.check_call(cmd1, shell=True)
-    rc2 = subprocess.check_call(cmd2, shell=True)
-
-    assert rc1 == 0 and rc2 == 0
-    return (model_name, out1, out2)
+    assert all([rc == 0 for rc in rcs])
+    return (model, ofiles)
 
 
 def test_model_traincost(run_model, transformer_factory):
-    (model_name, out_path, _) = run_model
-    cost = get_last_epoch_cost(out_path)
+    model_name, (out_path, _) = run_model
+    cost = get_last_interval_cost(out_path, 10)
+    print(cost)
     np.testing.assert_allclose(cost, db[model_name]['cost'], rtol=0.15)
 
 
@@ -73,7 +73,7 @@ def test_model_positivecost(run_model, transformer_factory):
     """
     When running MNIST or cifar10 in neon, all per-minibatch costs are positive.
     """
-    (model_name, out_path, _) = run_model
+    model_name, (out_path, _) = run_model
 
     cost = get_cost(out_path)
     assert all(cost >= 0.0)
@@ -81,13 +81,13 @@ def test_model_positivecost(run_model, transformer_factory):
 
 def test_model_simple(run_model, transformer_factory):
     # simple test that the model runs without error
-    (model_name, out_path1, out_path2) = run_model
+    model_name, (out_path1, out_path2) = run_model
     assert os.path.exists(out_path1)
     assert os.path.exists(out_path2)
 
 
 def test_model_determinism(run_model, transformer_factory):
-    (model_name, out_path1, out_path2) = run_model
-    cost1 = get_last_epoch_cost(out_path1)
-    cost2 = get_last_epoch_cost(out_path2)
+    model_name, (out_path1, out_path2) = run_model
+    cost1 = get_last_interval_cost(out_path1, 10)
+    cost2 = get_last_interval_cost(out_path2, 10)
     np.testing.assert_allclose(cost1, cost2, rtol=1e-5)

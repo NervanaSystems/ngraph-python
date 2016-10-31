@@ -35,14 +35,14 @@ import argparse
 from data import make_aeon_loaders
 
 
-parser = argparse.ArgumentParser(description='Ingest MNIST from pkl to pngs')
+parser = argparse.ArgumentParser(description='Train simple mlp on mnist dataset')
 parser.add_argument('--work_dir', required=True)
 parser.add_argument('--output_file')
 parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_iterations', type=int, default=2000)
 parser.add_argument('--iter_interval', type=int, default=200)
-parser.add_argument('--rseed', default=0)
+parser.add_argument('--rseed', type=int, default=0)
 args = parser.parse_args()
 
 np.random.seed(args.rseed)
@@ -59,7 +59,7 @@ def unit_scale_mnist_pixels(x):
 
 my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
                   nnAffine(out_axis=H1, init=GaussianInit(), activation=Rectlin()),
-                  nnAffine(out_axis=H2, init=GaussianInit(), activation=Rectlin()),
+                  # nnAffine(out_axis=H2, init=GaussianInit(), activation=Rectlin()),
                   nnAffine(out_axis=Y, init=GaussianInit(), activation=Logistic())])
 
 

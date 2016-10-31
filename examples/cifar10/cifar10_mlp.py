@@ -57,7 +57,7 @@ parser.add_argument('--results_file', default='results.csv')
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_iterations', type=int, default=2000)
 parser.add_argument('--iter_interval', type=int, default=200)
-parser.add_argument('--rseed', default=0)
+parser.add_argument('--rseed', type=int, default=0)
 args = parser.parse_args()
 
 np.random.seed(args.rseed)

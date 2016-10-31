@@ -77,10 +77,11 @@ class CIFAR10(object):
         return (X_train, y_train), (X_test, y_test)
 
 
-def ingest_cifar10(out_dir, padded_size=32, overwrite=False):
-    '''x`
+def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
+    '''
     Save CIFAR-10 dataset as PNG files
     '''
+    out_dir = os.path.join(root_dir, 'cifar10')
     set_names = ('train', 'val')
     manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
 

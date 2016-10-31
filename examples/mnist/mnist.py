@@ -9,8 +9,6 @@ import argparse
 
 class MNIST(object):
     """
-    MNIST data set from https://www.cs.toronto.edu/~kriz/cifar.html
-
     Arguments:
         path (str): Local path to copy data files.
     """
@@ -22,7 +20,7 @@ class MNIST(object):
 
     def load_data(self):
         """
-        Fetch the CIFAR-10 dataset and load it into memory.
+        Fetch the MNIST dataset and load it into memory.
 
         Arguments:
             path (str, optional): Local directory in which to cache the raw
@@ -43,10 +41,12 @@ class MNIST(object):
         return train_set, valid_set
 
 
-def ingest_mnist(out_dir, overwrite=False):
+def ingest_mnist(root_dir, overwrite=False):
     '''
     Save MNIST dataset as PNG files
     '''
+    out_dir = os.path.join(root_dir, 'mnist')
+
     set_names = ('train', 'val')
     manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
 
@@ -77,41 +77,3 @@ def ingest_mnist(out_dir, overwrite=False):
         np.savetxt(manifest, records, fmt='%s,%s')
 
     return manifest_files
-
-# def create_manifest(dataset, output_dir, set_name):
-#     manifest_path = os.path.join(output_dir,'manifest_'+set_name+'.csv')
-#     print('processing {0} set').format(output_dir)
-#     output_dir = os.path.join(output_dir, set_name)
-#     ensure_dirs_exist(output_dir)
-#     images = dataset[0]
-#     targets = dataset[1]
-
-#     for idx in range(0,10):
-#         tgt_path = os.path.join(output_dir, 'target_' + str(idx) + '.txt')
-#         file = open(tgt_path, 'w')
-#         file.write(str(idx))
-#         file.close()
-
-#     records = []
-#     for idx, data in enumerate(tqdm(images)):
-#         target = targets[idx]
-#         img_path = os.path.join(output_dir, 'image_' + str(idx) + '.png')
-#         tgt_path = os.path.join(output_dir, 'target_' + str(target) + '.txt')
-#         im = Image.fromarray(data)
-#         im.save(img_path, format='PNG')
-#         records.append((img_path, tgt_path))
-#     np.savetxt(manifest_path, records, fmt='%s,%s')
-#     return manifest_path
-
-# def ingest_mnist(output_dir, overwrite=False):
-#     set_names = ('train', 'val')
-#     manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
-
-#     if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
-#         return manifest_files
-
-
-#     with gzip.open(input_file, 'rb') as f:
-#         train_set, valid_set = pickle_load(f)
-#         create_manifest(train_set, output_dir, 'train')
-#         create_manifest(valid_set, output_dir, 'valid')

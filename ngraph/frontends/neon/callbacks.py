@@ -258,18 +258,11 @@ class TrainCostCallback(Callback):
     def on_train_begin(self, callback_data, model):
         iterations = callback_data['config'].attrs['total_iterations']
         callback_data.create_dataset("cost/train", (iterations,))
-
-        # make sure our window size is less than or equal to total number of minibatches
-        self.window_size = min(iterations, self.interval_freq)
-        self.cost_history = deque([], maxlen=self.window_size)
-
         # clue in the data reader to use the 'minibatch' time_markers
         callback_data['cost/train'].attrs['time_markers'] = 'minibatch'
 
     def on_minibatch_end(self, callback_data, model, iteration_idx):
-        self.cost_history.append(model.current_batch_cost)
-        mean_cost = sum(self.cost_history) / len(self.cost_history)
-        callback_data['cost/train'][iteration_idx] = mean_cost
+        callback_data['cost/train'][iteration_idx] = model.current_batch_cost
 
 
 class LossCallback(Callback):
@@ -344,8 +337,8 @@ class TrainLoggerCallback(Callback):
                                         epoch boundaries.  Defaults to None.
     """
     def on_interval_end(self, callback_data, model, iteration_idx):
-        interval = iteration_idx // self.interval_freq
-        train_cost = callback_data["cost/train"][iteration_idx]
-        print("Iteration {} -- Train cost: {}".format(iteration_idx, train_cost))
+        interval = slice(iteration_idx + 1 - self.interval_freq, iteration_idx)
+        train_cost = callback_data["cost/train"][interval].mean()
+        print("Iteration {} -- Avg Train cost: {}".format(iteration_idx + 1, train_cost))
         # logger.warn("Interval %d Minibatch %d complete. Train cost: %f",
         #             interval, (iteration_idx % self.interval_freq), train_cost)
