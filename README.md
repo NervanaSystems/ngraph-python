@@ -2,20 +2,6 @@
 
 Nervana Graph is Nervana's computational graph.
 
-## Temporary Notice
-
-Ths repository changed names on 9/10/2016 from "graphiti" to "ngraph"
-
-Although github.com supports the old name, it is recommended to stop using graphiti by
-either cloning anew or changing your checked out origin as follows:
-
-```
-cd ~/code
-mv graphiti ngraph
-cd ngraph
-git remote set-url origin https://github.com/NervanaSystems/ngraph
-```
-
 ## Installation
 
 First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
