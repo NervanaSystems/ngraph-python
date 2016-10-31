@@ -13,11 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from builtins import object, range, zip
-import math
-import numpy as np
+from builtins import object
 import ngraph as ng
-from functools import reduce
 from neon import NervanaObject
 
 

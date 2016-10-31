@@ -36,7 +36,7 @@ def pytest_generate_tests(metafunc):
 
 
 def test_linear_zeros(basic_linargs, transformer_factory):
-    be = gen_backend(backend='dataloader')  # noqa
+    be = gen_backend(backend='cpu')  # noqa
 
     # basic sanity check with 0 weights random inputs
     nin, nout, batch_size = basic_linargs
@@ -67,7 +67,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
 
 
 def test_linear_ones(basic_linargs, transformer_factory):
-    be = gen_backend(backend='dataloader')  # noqa
+    be = gen_backend(backend='cpu')  # noqa
 
     # basic sanity check with all ones on the inputs
     # and weights, check that each row in output

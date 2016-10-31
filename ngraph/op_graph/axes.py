@@ -81,13 +81,6 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.match_on_length = match_on_length
         self.duals = WeakValueDictionary()
 
-    def __eq__(self, other):
-        return isinstance(other, Axis) and (self.name == other.name) and (
-               self.length == other.length)
-
-    def __ne__(self, other):
-        return not self == other
-
     @property
     def batch(self):
         """

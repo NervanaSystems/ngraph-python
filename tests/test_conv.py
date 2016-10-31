@@ -16,7 +16,6 @@
 import numpy as np
 
 import ngraph as ng
-from ngraph.util.derivative_check import check_derivative
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from neon.backends.layer_cpu import ConvLayer
@@ -33,9 +32,9 @@ def np_convolution(inputs, filters, result):
     _, T, R, S, K = filters.shape
     _, M, P, Q, N = result.shape
 
-    weights = filters.reshape(C*T*R*S, K).T
+    weights = filters.reshape(C * T * R * S, K).T
     for m, p, q in np.ndindex(M, P, Q):
-        data = inputs[:, m:m+T, p:p+R, q:q+S].reshape((C*T*R*S, N))
+        data = inputs[:, m:m + T, p:p + R, q:q + S].reshape((C * T * R * S, N))
         result[:, m, p, q] = np.dot(weights, data)
 
 

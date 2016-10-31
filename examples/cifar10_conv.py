@@ -14,12 +14,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, Axes,
-    Callbacks, CrossEntropyMulti, GeneralizedCost, GradientDescentMomentum,
-    Misclassification, Model, NgraphArgparser, Rectlin, Softmax)
+from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, Axes, Callbacks,
+                                   CrossEntropyMulti, GeneralizedCost, GradientDescentMomentum,
+                                   Misclassification, Model, NgraphArgparser, Rectlin, Softmax)
 
 from neon.data import CIFAR10
-from neon.backends.nervanagpu import NervanaGPU
 from neon.initializers import Uniform
 
 

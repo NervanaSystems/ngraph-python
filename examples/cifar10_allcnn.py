@@ -28,15 +28,15 @@ Usage:
 """
 
 from __future__ import print_function
-from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, Activation,
-    Axes, Callbacks, CrossEntropyMulti, GeneralizedCost,
-    GradientDescentMomentum, Misclassification, Model,
-    NgraphArgparser, Rectlin, Softmax)
+from ngraph.frontends.neon import (ax, Conv, Pooling, Activation,
+                                   Axes, Callbacks, CrossEntropyMulti, GeneralizedCost,
+                                   GradientDescentMomentum, Misclassification, Model,
+                                   NgraphArgparser, Rectlin, Softmax)
 
 from neon.data import CIFAR10
-from neon.backends.nervanagpu import NervanaGPU
 from neon.initializers import Gaussian
 from neon.optimizers.optimizer import Schedule
+from neon import logger as neon_logger
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
@@ -69,15 +69,16 @@ convp1 = dict(init=init_uni, batch_norm=False, activation=relu, padding=1)
 convp1s2 = dict(init=init_uni, batch_norm=False,
                 activation=relu, padding=1, strides=2)
 
-layers = [#Dropout(keep=.8),
+layers = [
+          #  Dropout(keep=.8),  # noqa
           Conv((3, 3, 96), **convp1),
           Conv((3, 3, 96), **convp1),
           Conv((3, 3, 96), **convp1s2),
-          #Dropout(keep=.5),
+          #  Dropout(keep=.5),
           Conv((3, 3, 192), **convp1),
           Conv((3, 3, 192), **convp1),
           Conv((3, 3, 192), **convp1s2),
-          #Dropout(keep=.5),
+          #  Dropout(keep=.5),
           Conv((3, 3, 192), **convp1),
           Conv((1, 1, 192), **conv),
           Conv((1, 1, 16), **conv),

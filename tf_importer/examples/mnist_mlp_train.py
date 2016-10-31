@@ -34,7 +34,6 @@ from neon.util.argparser import NeonArgparser
 from tf_importer.tf_importer.importer import TFImporter
 
 parser = NeonArgparser(__doc__)
-parser.set_defaults(backend='dataloader')
 parser.add_argument('--pb_file', type=str, default="graph.pb",
                     help='GraphDef protobuf')
 parser.add_argument('--end_node', type=str, default="",

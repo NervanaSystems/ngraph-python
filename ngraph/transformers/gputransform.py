@@ -1,7 +1,7 @@
 from builtins import range
 import atexit
 
-from neon.backends.nervanagpu import NervanaGPU, GPUTensor
+from neon.backends.nervanagpu import GPUTensor
 from neon import NervanaObject
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \

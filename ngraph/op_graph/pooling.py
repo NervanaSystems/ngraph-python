@@ -16,7 +16,6 @@ from __future__ import division
 
 from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import Axis, Axes
-import ngraph as ng
 
 
 class pooling(op_graph.TensorOp):

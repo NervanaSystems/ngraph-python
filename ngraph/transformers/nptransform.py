@@ -16,13 +16,12 @@
 from __future__ import division
 from __future__ import print_function
 
-import math
 from functools import wraps
 
 # These are indirectly used by the generated code
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
-from neon import NervanaObject
+from neon import NervanaObject  # noqa
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
