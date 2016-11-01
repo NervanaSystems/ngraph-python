@@ -460,7 +460,6 @@ class GPUKernelGroup():
                 # Execute prepared kernel
                 kernel = k.kernel
                 params = k.params
-                # import pdb; pdb.set_trace()
                 kernel.prepared_async_call(*params, shared_size=k.shared_size)
             else:
                 op = k.ops_buffer[0]
