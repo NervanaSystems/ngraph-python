@@ -1,7 +1,9 @@
 from builtins import range
 import atexit
 
-from neon.backends.nervanagpu import NervanaGPU, GPUTensor
+from neon.backends.nervanagpu import GPUTensor
+from neon import NervanaObject
+from neon.backends import gen_backend
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -18,7 +20,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
-from ngraph.op_graph.convolution import convolution1d
+from ngraph.op_graph.convolution import convolution, bprop_conv, update_conv
+from ngraph.op_graph.pooling import pooling, bprop_pool
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
@@ -107,9 +110,25 @@ class GPUKernel():
                         axis=0,
                         out=out)
 
-    @add_op.on_type(convolution1d)
-    def add_op(self, op, output, input, filter):
-        raise ValueError("Unhandled op: {}".format(op))
+    @add_op.on_type(convolution)
+    def add_op(self, op, outputs, inputs, filters):
+        self._buffer_op("fprop_conv", op.dims, inputs, filters, outputs)
+
+    @add_op.on_type(bprop_conv)
+    def add_op(self, op, outputs, delta, filters):
+        self._buffer_op("bprop_conv", op.dims, filters, delta, outputs)
+
+    @add_op.on_type(update_conv)
+    def add_op(self, op, outputs, delta, inputs):
+        self._buffer_op("update_conv", op.dims, inputs, delta, outputs)
+
+    @add_op.on_type(pooling)
+    def add_op(self, op, outputs, inputs, argmax):
+        self._buffer_op("fprop_pool", op.dims, inputs, outputs, argmax)
+
+    @add_op.on_type(bprop_pool)
+    def add_op(self, op, outputs, delta, argmax):
+        self._buffer_op("bprop_pool", op.dims, delta, outputs, argmax)
 
     @add_op.on_type(cos)
     def add_op(self, op, out, x):
@@ -329,7 +348,7 @@ class GPUKernel():
             self.ops_buffer[0] = tuple(new_op)
         self.buffers_bound = True
 
-    def _buffer_op(self, op, x=None, y=None, out=None, axis=None):
+    def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
         """
         Adds an op to the list of ops to be compiled into a kernel
 
@@ -342,7 +361,7 @@ class GPUKernel():
                 along
         """
 
-        self.ops_buffer.append((op, x, y, out, axis))
+        self.ops_buffer.append((op, x, y, out, axis, extra))
 
     def generate_source(self, name, sourcefile=None):
         """
@@ -361,6 +380,11 @@ class GPUKernel():
 
         if len(self.ops_buffer) == 1:
             if (self.ops_buffer[0][0] == "dot" or
+                    self.ops_buffer[0][0] == "fprop_conv" or
+                    self.ops_buffer[0][0] == "bprop_conv" or
+                    self.ops_buffer[0][0] == "update_conv" or
+                    self.ops_buffer[0][0] == "fprop_pool" or
+                    self.ops_buffer[0][0] == "bprop_pool" or
                     self.ops_buffer[0][0] == "fill" or
                     self.ops_buffer[0][0] == "set_item" or
                     self.ops_buffer[0][0] == "dimshuffle" or
@@ -448,6 +472,16 @@ class GPUKernelGroup():
                             self.ng.compound_dot(op[1], op[2].T, op[3])
                     else:
                         self.ng.compound_dot(op[1], op[2], op[3])
+                elif op[0] == "fprop_conv":
+                    self.ng.fprop_conv(op[1], op[2], op[3], op[4])
+                elif op[0] == "bprop_conv":
+                    self.ng.bprop_conv(op[1], op[2], op[3], op[4])
+                elif op[0] == "update_conv":
+                    self.ng.update_conv(op[1], op[2], op[3], op[4])
+                elif op[0] == "fprop_pool":
+                    self.ng.fprop_pool(op[1], op[2], op[3], op[4])
+                elif op[0] == "bprop_pool":
+                    self.ng.bprop_pool(op[1], op[2], op[3], op[4])
                 elif op[0] == "fill":
                     op[3].fill(op[1])
                 elif op[0] == "set_item":
@@ -713,6 +747,9 @@ class GPUTransformer(Transformer):
             GPUTransformer.__nervanagpu = None
 
     def __init__(self, **kwargs):
+        if NervanaObject.be is None or NervanaObject.be.device_type != 1:
+            # This creates a backend for unit tests.
+            NervanaObject.be = gen_backend('gpu')
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
@@ -725,7 +762,7 @@ class GPUTransformer(Transformer):
         self.closed = False
 
         if GPUTransformer.__nervanagpu is None:
-            GPUTransformer.__nervanagpu = NervanaGPU()
+            GPUTransformer.__nervanagpu = NervanaObject.be
             atexit.register(GPUTransformer.close_gpu)
 
         self.ng = GPUTransformer.__nervanagpu

@@ -441,6 +441,14 @@ class Axes(object):
                      else x.length for x in self)
 
     @property
+    def names(self):
+        """
+        Returns:
+            tuple: The names of the outer axes.
+        """
+        return tuple(x.name for x in self)
+
+    @property
     def lengths(self):
         """
         Returns:
@@ -473,6 +481,43 @@ class Axes(object):
         if len(self) == 1:
             return self[0]
         return FlattenedAxis(self)
+
+    def shape_dict(self):
+        """
+        Retuns:
+            dict: A dictionary with names of the axes as keys and
+            lengths as values
+        """
+        names = [axis.name for axis in self._axes]
+        # TODO: get rid of this temporary hack.
+        names = [name.split('_')[0] for name in names]
+        short_names = []
+        for name in names:
+            if name.find('.') != -1:
+                name = name.split('.')[1]
+            short_names.append(name)
+        vals = [axis.length for axis in self._axes]
+        return dict(zip(short_names, vals))
+
+    def set_shape(self, shape):
+        axes = self._axes
+        diff = len(axes) - len(shape)
+        if diff == 0:
+            for axis, length in zip(axes, shape):
+                axis.length = length
+            return
+
+        if diff > 0:
+            axes[0].length = shape[0]
+            for i in range(1, diff + 1):
+                # Pad missing dimensions with 1.
+                axes[i].length = 1
+            for length in shape[diff:]:
+                i += 1
+                axes[i].length = length
+            return
+        raise ValueError('Number of axes %d too low for shape %s' % (
+                         len(axes), shape))
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -750,6 +795,26 @@ class Axes(object):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
+
+    def append(self, axis):
+        """
+        Appends an axis
+
+        Arguments:
+            other: The Axis object to append.
+        """
+        self._axes = Axes(tuple(self) + (axis,))
+
+    def insert(self, index, axis):
+        """
+        Inserts an axis
+        Arguments:
+            index   : Index to insert at
+            axis    : The Axis object to insert
+        """
+        axes = self._axes
+        axes.insert(index, axis)
+        self._axes = Axes(axes)
 
 
 def _reduce_nested(elem, agg, func):

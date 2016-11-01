@@ -16,12 +16,13 @@
 from __future__ import division
 from __future__ import print_function
 
-import math
 from functools import wraps
 
 # These are indirectly used by the generated code
 import numpy as np  # noqa
 from neon.backends.layer_cpu import ConvLayer  # noqa
+from neon import NervanaObject  # noqa
+from neon.backends import gen_backend
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
@@ -39,51 +40,12 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import convolution1d
+from ngraph.op_graph.convolution import convolution, update_conv, bprop_conv
+from ngraph.op_graph.pooling import pooling, bprop_pool
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-
-
-class proxy_backend(object):
-    """ a fake neon backend to make ConvLayer not raise an exception. """
-    # TODO: refactor away
-
-    def check_caffe_compat(self):
-        """ no caffe compat for now """
-        return False
-
-    def output_dim(self, X, S, padding, strides, pooling=False):
-        """
-        Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-        Arguments:
-            X (int): input data dimension
-            S (int): filter dimension
-            padding (int): padding on each side
-            strides (int): striding
-            pooling (bool): flag for setting pooling layer size
-        """
-        if X < S:
-            raise ValueError((
-                'filter dimension {S} can not be large than input data '
-                'dimension {X}'
-            ).format(S=S, X=X))
-
-        if self.check_caffe_compat() and pooling:
-            size = int(math.ceil((float(X - S + 2 * padding) / strides))) + 1
-            if padding > 0 and (size - 1) * strides >= X + padding:
-                # decrement size if last pooling op is completely in padding
-                size -= 1
-        else:
-            # normal neon output size determination
-            size = ((X - S + 2 * padding) // strides) + 1
-
-        if pooling and padding >= S:
-            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-        return size
 
 
 class proxy_tensor(object):
@@ -92,6 +54,7 @@ class proxy_tensor(object):
 
     def __init__(self, tensor):
         self._tensor = tensor
+        self.size = np.prod(self._tensor.shape)
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -200,12 +163,10 @@ class NumPyDeviceTensor(DeviceTensor):
         return self.tensor.__getitem__(key)
 
     def __setitem__(self, key, value):
+        # Temporary hack to interoperate with neon cpu backend.
+        if hasattr(value, '_tensor'):
+            value = value._tensor
         self.tensor.__setitem__(key, value)
-
-    def reshape(self, shape):
-        """Temporary for conv"""
-        # TODO Remove when CONV is finished
-        return self.tensor.reshape(shape)
 
 
 def get_tensors(f):
@@ -224,6 +185,8 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
+        self.conv_dims = []
+        self.pool_dims = []
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -264,55 +227,72 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution1d)
-    def generate_op(self, op, output, input, filter):
+    @generate_op.on_type(convolution)
+    def generate_op(self, op, outputs, inputs, filters):
+        self.conv_dims.append(op.dims)
         self.append(
             """
-            input = {input}
-            input = input.reshape((
-                # from: channels, width, batch_size
-                # to: channels, depth, height, width, batch_size
-                input.shape[0], 1, 1, input.shape[1], input.shape[2]
-            ))
-
-            filter = {filter}
-
-            filter = filter.reshape((
-                # from: channels_in, width, channels_out
-                # to: channels_in, depth, height, width, channels_out
-                filter.shape[0], 1, 1, filter.shape[1], filter.shape[2]
-            ))
-
-            neon_conv_layer = ConvLayer(
-                proxy_backend(), {output}.dtype,
-                N={bsz},
-                C={input_shape}[0],
-                D=1,
-                H=1,
-                W={input_shape}[1],
-
-                K={filter_shape}[2],
-                T=1,
-                R=1,
-                S={filter_shape}[1],
-
-                pad_d=0, pad_h=0, pad_w=0,
-                str_d=1, str_h=1, str_w=1,
-            )
-
-            # neon_conv_layer...
-            neon_conv_layer.xprop_conv(
-                proxy_tensor(input),
-                proxy_tensor(filter),
-                proxy_tensor({output}),
-            )
+            self.be.fprop_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
+                               proxy_tensor({filters}), proxy_tensor({outputs}))
             """,
-            output=output,
-            input=input,
-            filter=filter,
-            input_shape=[a.length for a in op._input_shape],
-            filter_shape=[a.length for a in op._filter_shape],
-            bsz=op.batch_axis.length
+            index=op.index,
+            inputs=inputs,
+            filters=filters,
+            outputs=outputs
+        )
+
+    @generate_op.on_type(update_conv)
+    def generate_op(self, op, outputs, delta, inputs):
+        self.append(
+            """
+            self.be.update_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
+                                proxy_tensor({delta}), proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            inputs=inputs,
+            delta=delta,
+            outputs=outputs
+        )
+
+    @generate_op.on_type(bprop_conv)
+    def generate_op(self, op, outputs, delta, filters):
+        self.append(
+            """
+            self.be.bprop_conv(self.conv_dims[{index}], proxy_tensor({filters}),
+                               proxy_tensor({delta}), proxy_tensor({outputs}))
+            """,
+            index=op.index,
+            filters=filters,
+            delta=delta,
+            outputs=outputs
+        )
+
+    @generate_op.on_type(pooling)
+    def generate_op(self, op, outputs, inputs, argmax):
+        self.pool_dims.append(op.dims)
+        self.append(
+            """
+            self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
+                               proxy_tensor({outputs}), proxy_tensor({argmax}))
+            """,
+            index=op.index,
+            outputs=outputs,
+            inputs=inputs,
+            argmax=argmax
+        )
+
+    @generate_op.on_type(bprop_pool)
+    def generate_op(self, op, outputs, delta, argmax):
+        # TODO: get rid of temporary hack that converts argmax to uint8
+        self.append(
+            """
+            self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
+                               proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
+            """,
+            index=op.index,
+            outputs=outputs,
+            delta=delta,
+            argmax=argmax
         )
 
     @generate_op.on_type(cos)
@@ -543,6 +523,9 @@ class NumPyTransformer(Transformer):
     transformer_name = "numpy"
 
     def __init__(self, **kwargs):
+        if NervanaObject.be is None or NervanaObject.be.device_type != 0:
+            # This creates a backend for unit tests.
+            NervanaObject.be = gen_backend('cpu')
         super(NumPyTransformer, self).__init__(**kwargs)
         self.init_code = NumPyCodeGenerator()
         self.allocate_storage_code = NumPyCodeGenerator()
@@ -579,7 +562,7 @@ class NumPyTransformer(Transformer):
         self.allocate_code.indent(1)
 
     def finish_transform_allocate(self):
-        pass
+        self.init_code.append("""self.be = NervanaObject.be""")
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:
@@ -626,6 +609,8 @@ class NumPyTransformer(Transformer):
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
+        self.model.conv_dims = self.compute_code.conv_dims
+        self.model.pool_dims = self.compute_code.pool_dims
         for computation in self.computations:
             executor = getattr(self.model, computation.name)
             computation.executor = executor

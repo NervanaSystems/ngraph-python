@@ -54,7 +54,6 @@ from neon import logger as neon_logger
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.set_defaults(backend='dataloader')
 
 args = parser.parse_args()
 

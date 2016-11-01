@@ -139,10 +139,10 @@ allocation because storage may be allocated in multiple ways.  The ``allocate`` 
 allocator, and each allocator creates the needed views.  The NumPy transformer's ``allocate`` method calls the
 ``allocate`` method.
 
-Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method `c_1` which performs  the one-time device
+Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method ``c_1`` which performs  the one-time device
 initialization is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
 
-The method ``c_1`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
+The method ``c_0`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
 so let's look at a more complex example next.
 
 Logistic Regression

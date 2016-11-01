@@ -797,6 +797,22 @@ class TensorOp(Op):
         """
         return self.__axes is not None
 
+    def insert_axis(self, index, axis):
+        """
+        Inserts an axis
+        Arguments:
+            index   : Index to insert at
+            axis    : The Axis object to insert
+        """
+        if self.__axes is None:
+            raise ValueError()
+        self.__axes.insert(index, axis)
+
+    def append_axis(self, axis):
+        if self.__axes is None:
+            raise ValueError()
+        self.__axes.append(axis)
+
     def generate_adjoints(self, adjoints, delta, *args):
         """
         With delta as the computation for the adjoint of this Op, incorporates delta into the
@@ -819,6 +835,12 @@ class TensorOp(Op):
         Returns: self.axes
         """
         return self.axes
+
+    def shape_dict(self):
+        """
+        Retuns: shape of this tensor as a dictionary
+        """
+        return self.axes.shape_dict()
 
     def mean(self, **kwargs):
         """
@@ -1741,7 +1763,6 @@ class BinaryElementWiseAxesOp(ElementWise):
         self.kwargs = kwargs
         x, y = Op.as_ops((x, y))
         axes = x.axes + y.axes
-
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
