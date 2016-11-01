@@ -16,13 +16,15 @@ from __future__ import division
 
 from contextlib import contextmanager
 
+import collections
+import inspect
 import cachetools
 import numpy as np
-from builtins import object
+from builtins import object, str
 
 from ngraph.op_graph.axes import TensorDescription, \
     Axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
-from ngraph.util.nodes import Node
+from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
 
@@ -53,17 +55,59 @@ def tdcache():
 tdcache.tensor_description_cache = {}
 
 
-class Op(Node):
+class DebugInfo(object):
+    """Mixin that captures file/line location of an object's creation."""
+
+    def __init__(self, **kwargs):
+        # TODO This is a good first cut for debugging info, but it would be nice to
+        # TODO be able to reliably walk the stack back to user code rather than just
+        # TODO back past this constructor
+        super(DebugInfo, self).__init__(**kwargs)
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            while frame.f_locals.get('self', None) is self:
+                frame = frame.f_back
+            while frame:
+                filename, lineno, function, code_context, index = inspect.getframeinfo(
+                    frame)
+                if -1 == filename.find('ngraph/op_graph'):
+                    break
+                frame = frame.f_back
+
+            self.filename = filename
+            self.lineno = lineno
+            self.code_context = code_context
+        finally:
+            del frame
+
+    @property
+    def file_info(self):
+        """
+        Return file location that created the node.
+
+        Returns:
+            String with file location that created the node.
+
+        """
+        return 'File "{filename}", line {lineno}'.format(
+            filename=self.filename, lineno=self.lineno)
+
+
+class Op(NameableValue, DebugInfo):
     """
     Any operation that can be in an AST.
 
     Arguments:
+        args: Values used by this node.
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
+        forward: If not None, the node to use instead of this node.
         initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
         reference (bool): The storage is accessed via a reference.  Default False.
+        tags: String or a set of strings used for filtering in searches.
         trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
@@ -75,8 +119,9 @@ class Op(Node):
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
-        trainable: The value is trainable.
         schemas: Information about how the Op was generated.
+        tags: Set of strings used for filtering in searches.
+        trainable: The value is trainable.
     """
 
     # Default is to not collect Ops as they are created
@@ -149,6 +194,8 @@ class Op(Node):
         Op._get_thread_user_deps()[-1][self] = value
 
     def __init__(self,
+                 args=(),
+                 tags=None,
                  const=None,
                  constant=False,
                  initializers=None,
@@ -157,6 +204,19 @@ class Op(Node):
                  trainable=False,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
+        self.__args = ()
+        self.tags = set()
+        self.args = args
+        # TODO: is this ok?  __repr__ wants a .name
+        if self.name is None:
+            self.name = 'empty_name'
+
+        if tags is not None:
+            if isinstance(tags, collections.Iterable) and \
+                    not isinstance(tags, (bytes, str)):
+                self.tags.update(tags)
+            else:
+                self.tags.add(tags)
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
@@ -181,6 +241,59 @@ class Op(Node):
         self.style = {}
         self.ops = []
         self.__forward = None
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self.__args
+
+    @args.setter
+    def args(self, args):
+        """
+        Replace old inputs with new inputs.
+
+        Arguments:
+            args: New arguments
+        """
+        self.__args = tuple(args)
+
+    @staticmethod
+    def visit_input_closure(roots, fun):
+        """
+        "Bottom-up" post-order traversal of root and their inputs.
+
+        Nodes will only be visited once, even if there are multiple routes to the
+        same Node.
+
+        Arguments:
+            roots: root set of nodes to visit
+            fun: Function to call on each visited node
+
+        Returns:
+            None
+        """
+        visited = set()
+
+        def visit(node):
+            """
+            Recursively visit all nodes used to compute this node.
+
+            Arguments:
+                node: the node to visit
+
+            Returns:
+                None
+            """
+            node = node.forwarded
+            node.update_forwards()
+            if node not in visited:
+                for n in node.other_deps + list(node.args):
+                    visit(n)
+                fun(node)
+                visited.add(node)
+
+        for node in roots:
+            visit(node)
 
     @property
     def forward(self):
@@ -374,7 +487,7 @@ class Op(Node):
             if filter(node):
                 params.add(node)
 
-        Node.visit_input_closure([self], visitor)
+        Op.visit_input_closure([self], visitor)
 
         return params
 
@@ -443,7 +556,7 @@ class Op(Node):
           list of Ops in depth-first, post-order
         """
         ordered_ops = []
-        Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
+        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     def as_node(self, x):
@@ -505,6 +618,9 @@ class Op(Node):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
+
+    def __str__(self):
+        return self.graph_label
 
     def __repr__(self):
         return '<{cl}({gl}):{id}>'.format(
