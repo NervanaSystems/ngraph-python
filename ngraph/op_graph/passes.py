@@ -184,8 +184,13 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(Dimshuffle)
     def visit(self, op):
         x = op.args[0]
-        if isinstance(x, ReshapeOp):
+        # TODO This is almost always a wasted shuffle, but sometimes it isn't
+        if False and op.old_axis_positions == tuple(range(len(op.old_axis_positions))):
+            self.replace_op(op, x)
             return
+        if True or not isinstance(x, Broadcast) and not isinstance(x, ReorderAxes):
+            if isinstance(x, ReshapeOp):
+                return
         x_tensor_description = x.tensor_description()
         x_strides = x_tensor_description.strides
         if x_strides == ():

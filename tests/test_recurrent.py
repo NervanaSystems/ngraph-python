@@ -46,11 +46,15 @@ from neon.initializers.initializer import Uniform, Gaussian
 
 from recurrent_ref import Recurrent as RefRecurrent
 
-from ngraph.util.utils import executor
+from ngraph.util.utils import ExecutorFactory
 from ngraph.util.utils import raise_all_numpy_errors
 from ngraph.util.utils import RandomTensorGenerator
 
 rng = RandomTensorGenerator(0, np.float32)
+
+delta = 1e-3
+rtol = atol = 1e-2
+
 
 def pytest_generate_tests(metafunc):
     bsz_rng = [1]
@@ -115,25 +119,38 @@ def check_rnn(seq_len, input_size, hidden_size,
     out_ng = rnn_ng.configure(inp_ng)
     out_ng.input = True
 
-    # bprop graph
-    dWxh_ng = ng.deriv(out_ng, rnn_ng.W_input)
-    dWhh_ng = ng.deriv(out_ng, rnn_ng.W_recur)
+    ex = ExecutorFactory()
+
+    fprop_neon_fun = ex.executor(out_ng, inp_ng)
+    dWinput_s_fun = ex.derivative(out_ng, rnn_ng.W_input)
+    dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_ng.W_input, delta)
+    dWrecur_s_fun = ex.derivative(out_ng, rnn_ng.W_recur)
+    dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_ng.W_recur, delta)
+    dWb_s_fun = ex.derivative(out_ng, rnn_ng.b)
+    dWb_n_fun = ex.numeric_derivative(out_ng, rnn_ng.b, delta)
 
     # fprop on random inputs
     input_value = rng.uniform(-1, 1, inp_ng.axes)
+    fprop_neon = fprop_neon_fun(input_value)
 
-    fprop_neon = executor(out_ng, inp_ng)(input_value)
+    # after the rnn graph has been executed, can get the W values. Get copies so
+    # shared values don't confuse derivatives
+    Wxh_neon = rnn_ng.W_input.value.get(None).copy()
+    Whh_neon = rnn_ng.W_recur.value.get(None).copy()
+    bh_neon = rnn_ng.b.value.get(None).copy()
 
-    # after the rnn graph has been executed, can get the W values
-    Wxh_neon = rnn_ng.W_input.value.get(None)
-    Whh_neon = rnn_ng.W_recur.value.get(None)
-    bh_neon = rnn_ng.b.value.get(None)
+    # bprop derivs
+    dWinput_s = dWinput_s_fun(Wxh_neon)
+    dWinput_n = dWinput_n_fun(Wxh_neon)
+    np.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
 
-    # bprop on random errors
-    error_value = rng.uniform(-1, 1, out_ng.axes)
+    dWrecur_s = dWrecur_s_fun(Whh_neon)
+    dWrecur_n = dWrecur_n_fun(Whh_neon)
+    np.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
 
-    dWxh_neon = executor(dWxh_ng, out_ng)(error_value)
-    dWhh_neon = executor(dWhh_ng, out_ng)(error_value)
+    dWb_s = dWb_s_fun(bh_neon)
+    dWb_n = dWb_n_fun(bh_neon)
+    np.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
 
     # ========= reference model ==========
     input_shape = (input_size, seq_len * batch_size)

@@ -209,6 +209,8 @@ class ExecutorFactory(object):
         #     print '------'
         # print "============="
 
+        px.input = True
+
         if len(fshape) is 0:
             return self.transformer.computation(dfdx, px, *parameters)
         else:
