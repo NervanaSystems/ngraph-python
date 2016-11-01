@@ -19,9 +19,11 @@ import itertools as itt
 import numpy as np
 import ngraph as ng
 from neon.initializers.initializer import Uniform
-from neon.backends import gen_backend
+from neon import NervanaObject
 from ngraph.frontends.neon.layer import Linear
 from ngraph.util.utils import ExecutorFactory
+from ngraph.transformers import Transformer
+from ngraph import RNG
 
 
 def pytest_generate_tests(metafunc):
@@ -36,8 +38,8 @@ def pytest_generate_tests(metafunc):
 
 
 def test_linear_zeros(basic_linargs, transformer_factory):
-    be = gen_backend(backend='dataloader')  # noqa
-
+    Transformer.make_transformer()
+    NervanaObject.be.rng = RNG(0)
     # basic sanity check with 0 weights random inputs
     nin, nout, batch_size = basic_linargs
     init_unif = Uniform(low=0.0, high=0.0)
@@ -67,7 +69,8 @@ def test_linear_zeros(basic_linargs, transformer_factory):
 
 
 def test_linear_ones(basic_linargs, transformer_factory):
-    be = gen_backend(backend='dataloader')  # noqa
+    Transformer.make_transformer()
+    NervanaObject.be.rng = RNG(0)
 
     # basic sanity check with all ones on the inputs
     # and weights, check that each row in output
