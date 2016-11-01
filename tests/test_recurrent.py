@@ -67,19 +67,6 @@ def pytest_generate_tests(metafunc):
         fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng)
         metafunc.parametrize('refgruargs', fargs)
 
-    if 'gradgruargs' in metafunc.fixturenames:
-        fargs = []
-        if metafunc.config.option.all:
-            seq_rng = [2, 3]
-            inp_rng = [5, 10]
-            out_rng = [3, 5, 10]
-        else:
-            seq_rng = [3]
-            inp_rng = [5]
-            out_rng = [10]
-        fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng)
-        metafunc.parametrize('gradgruargs', fargs)
-
 def test_ref_compare_ones(transformer_factory, refgruargs):
     # run comparison with reference code
     # for all ones init
