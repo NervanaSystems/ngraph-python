@@ -28,15 +28,3 @@ try:
     from ngraph.transformers.gputransform import GPUTransformer
 except ImportError:
     pass
-
-try:
-    from ngraph.transformers.argon.artransform import ArgonTransformer
-except ImportError as e:
-    if 'argon' in str(e):
-        print("Argon backend and tensor are defined in argon package, which is not installed.")
-    elif 'mpi4py' in str(e):
-        print(
-            "Argon backend currently depends on the package mpi4py, which is not installed."
-        )
-    else:
-        raise

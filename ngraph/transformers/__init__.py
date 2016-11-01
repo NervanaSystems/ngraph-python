@@ -11,8 +11,3 @@ try:
     import ngraph.transformers.gputransform  # noqa
 except ImportError:
     pass
-
-# try:
-#     import ngraph.transformers.argon.artransform
-# except ImportError:
-#     pass
