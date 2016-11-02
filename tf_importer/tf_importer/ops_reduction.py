@@ -49,20 +49,20 @@ class OpsReduction(OpsBase):
         # reduction_indices = set([int(ind) for ind in reduction_indices.const])
         # input_shape = input_tensor.axes.lengths
         # input_ndims = len(input_shape)
-        # out_axes = ng.Axes([input_tensor.axes[ind]
+        # out_axes = ng.makeAxes([input_tensor.axes[ind]
         #                     for ind in range(input_ndims)
         #                     if ind not in reduction_indices])
         reduction_indices = [int(ind) for ind in reduction_indices.const]
-        reduction_axes = ng.Axes([input_tensor.axes[ind]
-                                  for ind in reduction_indices])
+        reduction_axes = ng.makeAxes([input_tensor.axes[ind]
+                                      for ind in reduction_indices])
 
         # perform reduction operation
         # result_op = reduction_op(input_tensor, out_axes=out_axes)
         result_op = reduction_op(input_tensor, reduction_axes=reduction_axes)
 
         # broadcast results for safety
-        new_out_axes = [ng.Axis(length=axis.length) for axis in result_op.axes]
-        result_op = ng.AxesCastOp(result_op, new_out_axes, name=tf_node.name)
+        new_out_axes = [ng.makeAxis(length=axis.length) for axis in result_op.axes]
+        result_op = ng.cast_axes(result_op, new_out_axes, name=tf_node.name)
 
         return result_op
 
@@ -178,7 +178,7 @@ class OpsReduction(OpsBase):
             np_result = np.prod(input_np_tensor, axis=tuple(reduction_indices))
 
             # get output axis
-            out_axes = [ng.Axis(input_tensor.axes[i].length)
+            out_axes = [ng.makeAxis(input_tensor.axes[i].length)
                         for i in range(len(input_tensor.axes))
                         if i not in reduction_indices]
 

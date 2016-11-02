@@ -17,7 +17,7 @@ import abc
 from future.utils import with_metaclass
 from collections import Iterable
 
-from ngraph import Axis
+from ngraph import makeAxis
 from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
@@ -92,18 +92,18 @@ class RequiredTensorShaping(PeepholeGraphPass):
         y_reduction_axes = op.y_reduction_axes
         out_axes = op.axes
         if len(x_reduction_axes) == 0:
-            d = Axis(1)
+            d = makeAxis(1)
             x_reduction_axes = Axes((d,))
             y_reduction_axes = x_reduction_axes
             x = broadcast(x, axes=x.axes + x_reduction_axes)
             y = broadcast(y, axes=y_reduction_axes + y.axes)
 
-        if x.is_scalar:
+        if x.isscalar:
             temp = x
             x = y
             y = temp
-        if y.is_scalar:
-            if x.is_scalar:
+        if y.isscalar:
+            if x.isscalar:
                 out = x.scalar_op * y.scalar_op
                 if len(x_reduction_axes) > 0:
                     out = out * x_reduction_axes.size
@@ -222,7 +222,7 @@ class SimplePrune(PeepholeGraphPass):
           TODO
         """
         x, = op.args
-        if x.is_scalar and x.constant:
+        if x.isscalar and x.constant:
             self.replace_op(op, Constant(-x.const))
 
     @visit.on_type(Multiply)
@@ -238,14 +238,14 @@ class SimplePrune(PeepholeGraphPass):
         """
         x, y = op.args
         rep = None
-        if x.is_scalar and x.constant:
+        if x.isscalar and x.constant:
             if x.const == 0:
                 rep = x
             elif x.const == 1:
                 rep = y
             elif x.const == -1:
                 rep = negative(y)
-        elif y.is_scalar and y.constant:
+        elif y.isscalar and y.constant:
             if y.const == 0:
                 rep = y
             elif y.const == 1:
@@ -268,10 +268,10 @@ class SimplePrune(PeepholeGraphPass):
         """
         x, y = op.args
         rep = None
-        if x.is_scalar and x.constant:
+        if x.isscalar and x.constant:
             if x.const == 0:
                 rep = y
-        elif y.is_scalar and y.constant:
+        elif y.isscalar and y.constant:
             if y.const == 0:
                 rep = x
         if rep is not None:
@@ -289,7 +289,7 @@ class SimplePrune(PeepholeGraphPass):
           TODO
         """
         x, = op.args
-        if x.is_scalar and x.constant:
+        if x.isscalar and x.constant:
             val = x.const * op.reduction_axes.size
             self.replace_op(op, Constant(val))
 

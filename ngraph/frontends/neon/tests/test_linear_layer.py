@@ -45,12 +45,12 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     init_unif = Uniform(low=0.0, high=0.0)
 
     # set inputs
-    N = ng.Axis("N", batch=True)
-    F = ng.Axis("F")
+    N = ng.makeAxis("N", batch=True)
+    F = ng.makeAxis("F")
     N.length = batch_size
     F.length = nin
 
-    inp = ng.placeholder(axes=ng.Axes([F, N]))
+    inp = ng.placeholder(axes=ng.makeAxes([F, N]))
     layer = Linear(nout=nout, init=init_unif)
 
     ex = ExecutorFactory()
@@ -81,12 +81,12 @@ def test_linear_ones(basic_linargs, transformer_factory):
     init_unif = Uniform(low=1.0, high=1.0)
 
     # set inputs
-    N = ng.Axis("N", batch=True)
-    F = ng.Axis("F")
+    N = ng.makeAxis("N", batch=True)
+    F = ng.makeAxis("F")
     N.length = batch_size
     F.length = nin
 
-    inp = ng.placeholder(axes=ng.Axes([F, N]))
+    inp = ng.placeholder(axes=ng.makeAxes([F, N]))
 
     layer = Linear(nout=nout, init=init_unif)
     fprop = layer.configure(inp)

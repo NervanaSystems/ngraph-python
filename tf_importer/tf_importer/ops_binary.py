@@ -123,11 +123,11 @@ class OpsBinary(OpsBase):
 
             # pad left and right axis to be the same length, align right
             result_dim = max(left_dim, right_dim)
-            left_axes_pad = [ng.Axis(length=1) for _ in
+            left_axes_pad = [ng.makeAxis(length=1) for _ in
                              range(result_dim - left_dim)] + list(left.axes)
-            right_axes_pad = [ng.Axis(length=1) for _ in
+            right_axes_pad = [ng.makeAxis(length=1) for _ in
                               range(result_dim - right_dim)] + list(right.axes)
-            result_axes = [ng.Axis(length=max(l.length, r.length)) for l, r
+            result_axes = [ng.makeAxis(length=max(l.length, r.length)) for l, r
                            in zip(left_axes_pad, right_axes_pad)]
 
             # broadcast left / right, introducing dummy length 1 axes
@@ -167,15 +167,14 @@ class OpsBinary(OpsBase):
                     right_casted_axes.append(lr_axes_map[r])
                 else:
                     right_casted_axes.append(r)
-            right_sliced_casted = ng.AxesCastOp(right_sliced,
-                                                axes=right_casted_axes)
+            right_sliced_casted = ng.cast_axes(right_sliced, right_casted_axes)
 
             # perform binary op
             result_op = ng_op(left_sliced, right_sliced_casted)
 
             # cast result axis and broadcast to full result axes
             trimmed_result_axes = [result_axes_map[re] for re in result_op.axes]
-            result_op = ng.AxesCastOp(result_op, trimmed_result_axes)
+            result_op = ng.cast_axes(result_op, trimmed_result_axes)
             result_op = ng.Broadcast(result_op, axes=result_axes)
         else:
             # don't need to do any axes casting

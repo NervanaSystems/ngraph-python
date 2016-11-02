@@ -241,7 +241,7 @@ class GenerationContext:
         self.shared_buffers = None
 
 
-def _is_buffer(value):
+def _isbuffer(value):
     """
     When looking at an op in the buffer, there are several fields for inputs
     and outputs which can be either memory buffers, constants, or registers.
@@ -281,7 +281,7 @@ def _compress_axes(ops):
             reduction_axis = op[4]
 
         for t in op[1:4]:
-            if _is_buffer(t):
+            if _isbuffer(t):
                 num_axes = max(num_axes, len(t.shape))
 
     if num_axes <= 3:
@@ -301,7 +301,7 @@ def _compress_axes(ops):
         new_op = list(op)
 
         for index in range(1, 4):
-            if _is_buffer(op[index]):
+            if _isbuffer(op[index]):
                 new_shape = [np.prod([t.shape[d] for d in compress]) for compress in new_axes]
                 new_op[index] = op[index].reshape(tuple(new_shape))
 
@@ -371,7 +371,7 @@ def _get_axes_mapping(ops):
             reduction_axis = op[4]
 
         for t in op[1:4]:
-            if _is_buffer(t):
+            if _isbuffer(t):
                 shape = t.shape
                 assert len(shape) <= MAX_AXES
 
@@ -574,7 +574,7 @@ def _build_register_mapping(stages):
                         else:
                             register_inits[regname] = "0.0f"
 
-                        if _is_buffer(inval):
+                        if _isbuffer(inval):
                             buffername = "buf" + str(len(buffers))
                             buffers[inval] = buffername
 
@@ -589,11 +589,11 @@ def _build_register_mapping(stages):
                 else:
                     register_inits[regname] = "0.0f"
 
-                if _is_buffer(op[3]):
+                if _isbuffer(op[3]):
                     buffername = "buf" + str(len(buffers))
                     buffers[op[3]] = buffername
 
-            if _is_buffer(op[3]):
+            if _isbuffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
 
     ctx = GenerationContext()
@@ -877,7 +877,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         warp_reductions = []
         for op, op_index in zip(stage, range(len(stage))):
             for inval in op[1:3]:
-                if _is_buffer(inval) and inval not in buffers_in_reg[stage_index]:
+                if _isbuffer(inval) and inval not in buffers_in_reg[stage_index]:
                     load_code = _load_template % {
                         "index": "index",
                         "buffer": ctx.buffers[inval]
@@ -962,7 +962,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
             op_statements.append(op_code)
 
-            if _is_buffer(op[3]):
+            if _isbuffer(op[3]):
                 buffers_in_reg[stage_index].add(op[3])
                 if op[0] in _redop_templates:
                     for subsequent_stage in buffers_in_reg[stage_index + 1:]:

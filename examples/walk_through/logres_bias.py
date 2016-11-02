@@ -3,15 +3,15 @@ from __future__ import division, print_function
 import ngraph as ng
 import gendata
 
-C = ng.Axis("C")
-N = ng.Axis("N")
+C = ng.makeAxis("C")
+N = ng.makeAxis("N")
 
-X = ng.placeholder(axes=ng.Axes([C, N]))
-Y = ng.placeholder(axes=ng.Axes([N]))
-alpha = ng.placeholder(axes=ng.Axes())
+X = ng.placeholder(axes=ng.makeAxes([C, N]))
+Y = ng.placeholder(axes=ng.makeAxes([N]))
+alpha = ng.placeholder(axes=ng.makeAxes())
 
-W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
-b = ng.Variable(axes=ng.Axes(), initial_value=0)
+W = ng.Variable(axes=ng.makeAxes([C]), initial_value=0)
+b = ng.Variable(axes=ng.makeAxes(), initial_value=0)
 
 Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)

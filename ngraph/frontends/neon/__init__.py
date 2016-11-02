@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-from ngraph.op_graph.axes import Axes
-from ngraph.frontends.neon.axis import ax
+from ngraph import makeAxes
+from ngraph.frontends.neon.axis import ax, ar
 from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic
 from ngraph.frontends.neon.argparser import NgraphArgparser
@@ -25,11 +25,3 @@ from ngraph.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, Su
 from ngraph.frontends.neon.layer import *
 from ngraph.frontends.neon.model import Model
 from ngraph.frontends.neon.optimizer import *
-
-# include Axes here because old 2.0 code needs to be updated to include Axes
-# annotations in the call to model.fit.
-# TODO: deprecate this Axes, you should just use be.Axes instead
-
-# old neon code which hasn't changed but should be available in this namespace
-# TODO: there are a lot of classes which are similar to the ones listed here,
-# but are not listed here and probably should be.

@@ -48,20 +48,20 @@ def test_convolution_fprop():
     T = R = S = 2
     Transformer.make_transformer()
     dims = NervanaObject.be.conv_layer(np.float32, N=N, C=3, K=8, D=D, H=H, W=W, T=T, R=R, S=S)
-    Nx = ng.Axis(N, batch=True)
+    Nx = ng.makeAxis(N, batch=True)
 
-    Cx = ng.Axis(dims.C)
-    Dx = ng.Axis(D)
-    Hx = ng.Axis(H)
-    Wx = ng.Axis(W)
+    Cx = ng.makeAxis(dims.C)
+    Dx = ng.makeAxis(D)
+    Hx = ng.makeAxis(H)
+    Wx = ng.makeAxis(W)
 
-    Tx = ng.Axis(T)
-    Rx = ng.Axis(R)
-    Sx = ng.Axis(S)
-    Kx = ng.Axis(dims.K)
+    Tx = ng.makeAxis(T)
+    Rx = ng.makeAxis(R)
+    Sx = ng.makeAxis(S)
+    Kx = ng.makeAxis(dims.K)
 
-    inputs = ng.placeholder(axes=ng.Axes([Cx, Dx, Hx, Wx, Nx]))
-    filters = ng.placeholder(axes=ng.Axes([Cx, Tx, Rx, Sx, Kx]))
+    inputs = ng.placeholder(axes=ng.makeAxes([Cx, Dx, Hx, Wx, Nx]))
+    filters = ng.placeholder(axes=ng.makeAxes([Cx, Tx, Rx, Sx, Kx]))
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, inputs.axes)

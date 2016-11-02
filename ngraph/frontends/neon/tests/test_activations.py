@@ -24,10 +24,10 @@ import pytest
 
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
     ex = ExecutorFactory()
-    C = ng.Axis('C')
-    N = ng.Axis('N', batch=True)
+    C = ng.makeAxis('C')
+    N = ng.makeAxis('N', batch=True)
     C.length, N.length = inputs.shape
-    x = ng.placeholder(axes=ng.Axes([C, N]))
+    x = ng.placeholder(axes=ng.makeAxes([C, N]))
 
     if deriv is False:
         costfunc = ex.executor(func.__call__(x), x)

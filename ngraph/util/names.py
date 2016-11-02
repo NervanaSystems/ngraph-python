@@ -148,7 +148,7 @@ class NameableValue(object):
     __counter = 0
     __all_names = WeakValueDictionary()
 
-    def __init__(self, name=None, graph_label_type=None, **kwargs):
+    def __init__(self, name=None, graph_label_type=None, docstring=None, **kwargs):
         super(NameableValue, self).__init__(**kwargs)
 
         if name is None:
@@ -158,6 +158,8 @@ class NameableValue(object):
         if graph_label_type is None:
             graph_label_type = self.name
         self.graph_label_type = graph_label_type
+
+        self.__doc__ = docstring
 
     @property
     def graph_label(self):
@@ -252,6 +254,23 @@ class NameScope(Parented):
         """
         super(NameScope, self).__setattr__(name, value)
         self._set_value_name("." + name, value)
+
+
+def makeNameScope(name):
+    """
+    Creates a NameScope.
+
+    When NameableValue objects are assigned to attributes od a NameScope, the name of the object
+    is set to the attribute.
+
+    Args:
+        name: The name of this namescope.
+
+    Returns:
+        Namescope: A NameScope.
+
+    """
+    return NameScope(name=name)
 
 
 class NameScopeList(Parented, list):

@@ -61,8 +61,8 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ngraph.Axis(name="C", length=200)
-    N = ngraph.Axis(name="N", length=128)
+    C = ngraph.makeAxis(name="C", length=200)
+    N = ngraph.makeAxis(name="N", length=128)
 
     # restrict to numpy transformer for now
     factory = Transformer.make_transformer_factory('numpy')

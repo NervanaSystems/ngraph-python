@@ -79,7 +79,7 @@ class GPUKernel():
 
     @generic_method
     def add_op(self, op, *args):
-        if op.is_device_op:
+        if op.isdevice_op:
             raise ValueError("Unhandled op: {}".format(op))
 
     @add_op.on_type(absolute)
@@ -602,7 +602,7 @@ class GPUTensorAllocator():
                                strides=strides)
 
         if new_tensor.strides[0] < new_tensor.strides[-1]:
-            new_tensor.is_trans = True
+            new_tensor.istrans = True
 
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
@@ -688,9 +688,9 @@ class GPUDeviceTensor(DeviceTensor):
         self.transformer.add_view_allocator(tensor_alloc)
 
     def get(self, tensor):
-        if self.tensor.is_contiguous or (len(self.tensor.shape) == 2 and
-                                         (self.tensor.shape[0] == 1 or
-                                          self.tensor.shape[1] == 1)):
+        if self.tensor.iscontiguous or (len(self.tensor.shape) == 2 and
+                                        (self.tensor.shape[0] == 1 or
+                                         self.tensor.shape[1] == 1)):
             np_ary = self.tensor.get().reshape(self.tensor_description.shape)
         else:
             temp_gpu_tensor = self.transformer.ng.empty(shape=self.tensor.shape,
@@ -713,7 +713,7 @@ class GPUDeviceTensor(DeviceTensor):
         elif type(value) == np.int32 or type(value) == np.int64:
             value = int(value)
 
-        if self.tensor.is_contiguous:
+        if self.tensor.iscontiguous:
             self.tensor.__setitem__(key, value)
         else:
             if type(value) == np.ndarray:

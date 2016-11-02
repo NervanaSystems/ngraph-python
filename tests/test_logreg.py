@@ -60,7 +60,7 @@ def numpy_logreg(xs, ys, max_iter, alpha):
 
 def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     # axis
-    C, N = ng.Axis("C"), ng.Axis("N")
+    C, N = ng.makeAxis("C"), ng.makeAxis("N")
 
     def sigmoid(x):
         return 1. / (1. + ng.exp(-x))

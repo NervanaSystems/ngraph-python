@@ -7,10 +7,10 @@ from ngraph.frontends.neon.cost import (CrossEntropyBinary, CrossEntropyMulti, S
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     ex = ExecutorFactory()
-    N = ng.Axis("N")
+    N = ng.makeAxis("N")
     N.length = outputs.shape[0]
-    y = ng.placeholder(axes=ng.Axes([N]))
-    t = ng.placeholder(axes=ng.Axes([N]))
+    y = ng.placeholder(axes=ng.makeAxes([N]))
+    t = ng.placeholder(axes=ng.makeAxes([N]))
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
     np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)

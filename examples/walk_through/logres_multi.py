@@ -5,16 +5,16 @@ import gendata
 
 ax = ng.NameScope(name="ax")
 
-ax.W = ng.Axis()
-ax.H = ng.Axis()
-ax.N = ng.Axis()
+ax.W = ng.makeAxis()
+ax.H = ng.makeAxis()
+ax.N = ng.makeAxis()
 
-X = ng.placeholder(axes=ng.Axes([ax.W, ax.H, ax.N]))
-Y = ng.placeholder(axes=ng.Axes([ax.N]))
-alpha = ng.placeholder(axes=ng.Axes())
+X = ng.placeholder(axes=ng.makeAxes([ax.W, ax.H, ax.N]))
+Y = ng.placeholder(axes=ng.makeAxes([ax.N]))
+alpha = ng.placeholder(axes=ng.makeAxes())
 
-W = ng.Variable(axes=ng.Axes([ax.W, ax.H]), initial_value=0)
-b = ng.Variable(axes=ng.Axes(), initial_value=0)
+W = ng.Variable(axes=ng.makeAxes([ax.W, ax.H]), initial_value=0)
+b = ng.Variable(axes=ng.makeAxes(), initial_value=0)
 
 Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)

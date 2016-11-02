@@ -247,4 +247,4 @@ def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
     a = Axis(10, batch=True)
     s = SlicedAxis(a, slice(0, 5))
-    assert s.batch is True
+    assert s.isbatch is True

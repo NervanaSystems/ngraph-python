@@ -13,50 +13,12 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
+This documentation covers the Nervana Graph user API.
 
-|Geon|
-================
+ngraph
+======
+.. py:module: ngraph
 
-:Release: |version|
-:Date: |today|
+.. automodule:: ngraph
+   :members:
 
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Introduction
-
-   installation.rst
-   overview.rst
-   walk_through.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Tutorials
-
-   mnist_tutorial.rst
-   building_graphs.rst
-   building_new_layers.rst
-   example_ops.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Basic Concepts
-
-   op_graph.rst
-   tensors.rst
-   analysis.rst
-   autodiff.rst
-   axes.rst
-   frontends.rst
-   transformers.rst
-   tensorflow.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: API
-
-   ngraph.rst
-   api.rst

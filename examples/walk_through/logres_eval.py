@@ -8,11 +8,11 @@ g = gendata.MixtureGenerator([.5, .5], C)
 XS, YS = g.gen_data(N, 10)
 EVAL_XS, EVAL_YS = g.gen_data(N, 4)
 
-X = ng.placeholder(axes=ng.Axes([C, N]))
-Y = ng.placeholder(axes=ng.Axes([N]))
-alpha = ng.placeholder(axes=ng.Axes())
+X = ng.placeholder(axes=ng.makeAxes([C, N]))
+Y = ng.placeholder(axes=ng.makeAxes([N]))
+alpha = ng.placeholder(axes=ng.makeAxes())
 
-W = ng.Variable(axes=ng.Axes([C]), initial_value=0)
+W = ng.Variable(axes=ng.makeAxes([C]), initial_value=0)
 
 Y_hat = ng.sigmoid(ng.dot(W, X))
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)

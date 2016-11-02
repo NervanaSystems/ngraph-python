@@ -12,53 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.axes import Axis
-from ngraph.util.names import NameScope
+import ngraph as ng
 
+# Define axis roles
+ar = ng.makeNameScope(name="ar")
 
-ax = NameScope(name="ax")
+ar.Height = ng.makeAxisRole()
+ar.Width = ng.makeAxisRole()
+ar.Depth = ng.makeAxisRole()
+ar.Channels = ng.makeAxisRole()
 
 # Define the standard Neon axes
+ax = ng.makeNameScope(name="ax")
 
-# N = number of images (minibatch size)
-ax.N = Axis(batch=True)
+ax.N = ng.makeAxis(batch=True, docstring="minibatch size")
 
-# C = number of input channels
-ax.C = Axis()
+ax.C = ng.makeAxis(roles=[ar.Channels], docstring="number of input channels")
+ax.D = ng.makeAxis(roles=[ar.Depth], docstring="input image depth")
+ax.H = ng.makeAxis(roles=[ar.Height], docstring="input image height")
+ax.W = ng.makeAxis(roles=[ar.Width], docstring="input image width")
 
-# D = depth
-ax.D = Axis()
+ax.REC = ng.makeAxis(recurrent=True, docstring="recurrent axis")
 
-# H = input image height
-ax.H = Axis()
+ax.R = ng.makeAxis(roles=[ar.Height], docstring="filter height")
+ax.S = ng.makeAxis(roles=[ar.Width], docstring="filter width")
+ax.T = ng.makeAxis(roles=[ar.Depth], docstring="filter depth")
 
-# W = input image width
-ax.W = Axis()
+ax.K = ng.makeAxis(roles=[ar.Channels], docstring="number of output channels")
+ax.M = ng.makeAxis(roles=[ar.Depth], docstring="output image depth")
+ax.P = ng.makeAxis(roles=[ar.Height], docstring="output image height")
+ax.Q = ng.makeAxis(roles=[ar.Width], docstring="output image width")
 
-# TODO This isn't one of the traditional axes
-# Recurrent axis
-# ax.REC = Axis(recurrent=True)
-
-# R = filter height
-ax.R = Axis()
-
-# S = filter width
-ax.S = Axis()
-
-# T = filter depth
-ax.T = Axis()
-
-# K = number of output channels
-ax.K = Axis()
-
-# M = output image depth
-ax.M = Axis()
-
-# P = output image height
-ax.P = Axis()
-
-# Q = output image width
-ax.Q = Axis()
-
-# Target
-ax.Y = Axis()
+ax.Y = ng.makeAxis(docstring="target")
