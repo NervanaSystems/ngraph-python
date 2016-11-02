@@ -363,7 +363,7 @@ class GPUKernel():
 
         self.ops_buffer.append((op, x, y, out, axis, extra))
 
-    def generate_source(self, name, sourcefile=None):
+    def generate_source(self, sourcefile=None):
         """
         Generates source code and adds it to a kernel file to be compiled later.
         First checks if this is a compound kernel which needs to be compiled.
@@ -372,7 +372,6 @@ class GPUKernel():
         at run time.
 
         Arguments:
-            name (string): Function name of the kernel to compile
             sourcefile (CudaSourceFile): Object handling cuda source file generation
         """
         if len(self.ops_buffer) == 0:
@@ -446,10 +445,41 @@ class GPUKernelGroup():
             objects to run at evaluation time
     """
 
-    def __init__(self, transformer, kernels):
+    def __init__(self, transformer, name):
         self.transformer = transformer
         self.ng = transformer.ng
-        self.kernels = kernels
+        self.kernels = []
+        self.name = name
+        self.sourcefile = CudaSourceFile(name)
+
+    @generic_method
+    def add_kernel(self, op):
+        # Use default kernel generator for single operation
+        out = op.tensor_description()
+        call_info = (_ for _ in op.call_info())
+
+        kernel = GPUKernel(self.transformer)
+        kernel.add_op(op, out, *call_info)
+
+        if kernel.generate_source(self.sourcefile):
+            self.kernels.append(kernel)
+
+    @add_kernel.on_type(Function)
+    def add_kernel(self, op):
+        # Iterate over compounded operations and build kernel for them
+        kernel = GPUKernel(self.transformer)
+        for sub_op in op.instructions:
+            out = sub_op.tensor_description()
+            call_info = (_ for _ in sub_op.call_info())
+            kernel.add_op(sub_op, out, *call_info)
+
+        if kernel.generate_source(self.sourcefile):
+            self.kernels.append(kernel)
+
+    def compile_all(self):
+        self.sourcefile.compile()
+        for kernel in self.kernels:
+            kernel.compile(self.sourcefile)
 
     def __call__(self):
         for k in self.kernels:
@@ -800,36 +830,12 @@ class GPUTransformer(Transformer):
         pass
 
     def transform_ordered_ops(self, ordered_ops, name):
-        kernels = []
-        sourcefile = CudaSourceFile(name)
-
-        for fun in ordered_ops:
-            if isinstance(fun, Function):
-                # Iterate over compounded operations and build kernel for them
-                kernel = GPUKernel(self)
-                for op in fun.instructions:
-                    out = op.tensor_description()
-                    call_info = (_ for _ in op.call_info())
-                    kernel.add_op(op, out, *call_info)
-            else:
-                # Generate kernel for single operation
-                out = fun.tensor_description()
-                call_info = (_ for _ in fun.call_info())
-
-                kernel = GPUKernel(self)
-                kernel.add_op(fun, out, *call_info)
-
-            # Generate source code for kernel
-            if kernel.generate_source(name, sourcefile):
-                kernels.append(kernel)
-
-        # Compile source code in file
-        sourcefile.compile()
-        for kernel in kernels:
-            kernel.compile(sourcefile)
-
         # Create kernel group
-        kernel_group = GPUKernelGroup(self, kernels)
+        kernel_group = GPUKernelGroup(self, name)
+        for fun in ordered_ops:
+            kernel_group.add_kernel(fun)
+
+        kernel_group.compile_all()
         self.kernel_groups[name] = kernel_group
 
         return name
