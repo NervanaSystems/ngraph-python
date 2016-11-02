@@ -59,6 +59,12 @@ def output_dim(X, S, padding, strides, pooling=False):
         return size
 
 
+def spatial_axis(input, filter, padding, stride, role):
+    hh = input.axes.role_axes(role).lengths[0]
+    rr = filter.axes.role_axes(role).lengths[0]
+    return Axis(length=output_dim(hh, rr, padding, stride), name=role[0].upper())
+
+
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
@@ -98,6 +104,18 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         self.batch = batch
         self.recurrent = recurrent
         self.match_on_length = match_on_length
+        short_name = self.name.split('_')[0]
+        if short_name in ('H', 'R', 'P'):
+            self.spatial_role = 'height'
+        elif short_name in ('W', 'S', 'Q'):
+            self.spatial_role = 'width'
+        elif short_name in ('D', 'T', 'M'):
+            self.spatial_role = 'depth'
+        elif short_name in ('C', 'K', 'J'):
+            self.spatial_role = 'channel'
+        else:
+            self.spatial_role = None
+
         self.duals = WeakValueDictionary()
 
     @property
@@ -121,6 +139,14 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     @recurrent.setter
     def recurrent(self, value):
         self.__recurrent = value
+
+    @property
+    def spatial_role(self):
+        return self.__spatial_role
+
+    @spatial_role.setter
+    def spatial_role(self, value):
+        self.__spatial_role = value
 
     @property
     def length(self):
@@ -495,6 +521,13 @@ class Axes(object):
             The Axes subset that are recurrent axes.
         """
         return Axes(axis for axis in self if axis.recurrent)
+
+    def role_axes(self, role):
+        """
+        Returns:
+            The Axes subset that have spatial roles matching role:
+        """
+        return Axes(axis for axis in self if axis.spatial_role == role)
 
     def flatten(self):
         if len(self) == 1:

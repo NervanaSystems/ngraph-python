@@ -15,13 +15,13 @@
 from __future__ import division
 from operator import itemgetter
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import Axis, Axes, output_dim
+from ngraph.op_graph.axes import Axis, Axes, spatial_axis
 
 
 class convolution(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, dims, inputs, filters, *args, **kwargs):
+    def __init__(self, convdict, inputs, filters, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -70,21 +70,14 @@ class convolution(op_graph.TensorOp):
         self.batch_axis = batch_axes[0]
 
         # output axes computation
-        odim_map = dict(P=('H', 'R', 'pad_h', 'str_h'),
-                        Q=('W', 'S', 'pad_w', 'str_w'),
-                        M=('D', 'T', 'pad_d', 'str_d'))
+        axes = Axes(
+            [spatial_axis(inputs, filters, convdict['pad_h'], convdict['str_h'], role='height'),
+             spatial_axis(inputs, filters, convdict['pad_w'], convdict['str_w'], role='width'),
+             spatial_axis(inputs, filters, convdict['pad_d'], convdict['str_d'], role='depth'),
+             Axis(length=convdict['K'], name='C'),
+             self.batch_axis])
 
-        odims = {k: output_dim(*itemgetter(*v)(dims)) for k, v in odim_map.items()}
-        dims.update(odims)
-
-        spatial_axes = Axes([Axis(length=output_dim(*itemgetter(*odim_map[ax])(dims)),
-                                  name=ax) for ax in odim_map.keys()])
-
-        channel_axis = Axis(length=dims['K'], name='C')
-
-        axes = spatial_axes + channel_axis + self.batch_axis
-
-        self.dims = dims
+        self.convdict = convdict
         self.index = convolution._index
         convolution._index += 1
 
@@ -107,7 +100,7 @@ class update_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = fprop.dims
+        self.convdict = fprop.convdict
         self.index = fprop.index
 
         super(update_conv, self).__init__(
@@ -122,7 +115,7 @@ class bprop_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = fprop.dims
+        self.convdict = fprop.convdict
         self.index = fprop.index
 
         super(bprop_conv, self).__init__(

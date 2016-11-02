@@ -151,8 +151,8 @@ class nnConv(nnLayer):
 
         # TODO:  Careful about the conv state that gets tied to op vs. layer
         convparams = self.convparams.copy()
-        convparams.update(in_obj.shape_dict())
-        w_axes = [ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')]
+        convparams['C'] = in_obj.axes.role_axes('channel').lengths[0]
+        w_axes = ng.Axes([ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')])
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
 
