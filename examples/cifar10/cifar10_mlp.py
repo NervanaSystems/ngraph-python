@@ -1,20 +1,5 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ----------------------------------------------------------------------------
-#!/usr/bin/env python
-# ----------------------------------------------------------------------------
 # Copyright 2015-2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,16 +14,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-MNIST MLP with spelled out neon model framework in one file
+CIFAR MLP with spelled out neon model framework in one file
 
 The motivation is to show the flexibility of ngraph and how user can build a
 model without the neon architecture. This may also help with debugging.
 
 Run it using
-python examples/mnist/mnist_mlp_direct.py --train /scratch/alex/MNIST/manifest_train.csv \
-      --valid /scratch/alex/MNIST/manifest_valid.csv
-
-      for examples
+python examples/mnist/mnist_mlp_direct.py --work_dir <localpath> --output_file cfmlp.hdf5
 """
 from __future__ import division
 from __future__ import print_function
@@ -68,9 +50,11 @@ hidden_size, output_size = 200, 10
 H1 = ng.Axis(hidden_size, name="H1")
 Y = ng.Axis(output_size, name="Y")
 
+
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
-    return (x - bgr_mean)/255.
+    return (x - bgr_mean) / 255.
+
 
 my_model = Model([nnPreprocess(functor=cifar_mean_subtract),
                   nnAffine(out_axis=H1, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
@@ -115,8 +99,7 @@ my_model.train(train_set, args.num_iterations, cb)
 
 # # validate
 hyps, refs = my_model.eval(valid_set)
-np.savetxt(args.results_file, [(h,r) for h, r in zip(hyps, refs)], fmt='%s,%s')
+np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
 a = np.loadtxt(args.results_file, delimiter=',')
-err = np.sum((a[:,0]!= a[:,1]))/float(a.shape[0])
+err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
 print("Misclassification: {}".format(err))
-

@@ -21,7 +21,7 @@ from ngraph.op_graph.axes import Axis, Axes
 class pooling(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, dims, inputs, argmax, *args, **kwargs):
+    def __init__(self, dims, inputs, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -58,12 +58,14 @@ class pooling(op_graph.TensorOp):
             axes[i].name = name
 
         self.dims = dims
-        self.argmax = argmax
+
+        # TODO: argmax_axes expand
+        self.argmax = ng.persistent_tensor(axes=argmax_axes, name='pool')
         self.index = pooling._index
         pooling._index += 1
 
         super(pooling, self).__init__(
-            args=(inputs, argmax), *args, axes=axes, **kwargs
+            args=(inputs), *args, axes=axes, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, argmax):

@@ -88,36 +88,127 @@ class ParameterLayer(Layer):
 #         xhat = (in_obj - ng.mean(in_obj, reduction_axes=)) / ng.sqrt(ng.var(in_obj + self.eps))
 #         return (xhat - self.beta) * self.gamma
 
-class nnAffine(object):
+class nnLayer(object):
+    def __init__(self):
+        print("Need to do something about which method to call under which context")
+
+class nnPreprocess(nnLayer):
+    def __init__(self, functor):
+        self.functor = functor
+
+    def _call_train(self, in_obj):
+        return self.functor(in_obj)
+
+
+class nnAffine(nnLayer):
     def __init__(self, out_axis, init, activation=(lambda x : x), bias_init=None):
         self.out_axis = out_axis
         self.init = init
         self.activation = activation
         self.b = 0
-        self.bias_init = None
+        self.bias_init = bias_init
 
-    def initialize(self, in_axes):
+    def _call_train(self, in_obj):
         # if self.bias_init:
         #     b_axes = ng.Axes([self.out_axis])
         #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
-        # w_axes = ng.Axes.linear_map_axes(in_axes.sample_axes(), [self.out_axis])
-        w_axes = ng.Axes(in_axes.sample_axes() + [self.out_axis])
+        # w_axes = ng.Axes.linear_map_axes(in_obj.sample_axes(), [self.out_axis])
+        w_axes = ng.Axes(in_obj.sample_axes() + [self.out_axis])
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
-        return ng.Axes(in_axes.batch_axes() + [self.out_axis])
-
-    def get_outputs(self, in_obj):
-        # return self.activation(ng.dot(self.W, in_obj) + self.b)
         return self.activation(ng.dot(in_obj, self.W) + self.b)
 
-class nnPreprocess(object):
-    def __init__(self, functor):
-        self.functor = functor
 
-    def initialize(self, in_axes):
-        return in_axes
+class nnConv(nnLayer):
+    def __init__(self, fshape, init, activation=(lambda x : x), bias_init=None):
 
-    def get_outputs(self, in_obj):
-        return self.functor(in_obj)
+        self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
+                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
+                           'T': 1, 'D': 1}  # 3D parameters
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+
+        if isinstance(fshape, tuple) or isinstance(fshape, list):
+            fkeys = ('R', 'S', 'K') if len(fshape) == 3 else ('T', 'R', 'S', 'K')
+            fshape = {k: x for k, x in zip(fkeys, fshape)}
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding}
+        for d in [fshape, strides, padding]:
+            self.convparams.update(d)
+
+        self.init = init
+        self.activation = activation
+        self.b = 0
+        self.bias_init = bias_init
+
+
+    def _call_train(self, in_obj):
+        # if self.bias_init:
+        #     b_axes = ng.Axes([ng.Axis(self.convparams['K'], name='K')])
+        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
+
+        # TODO:  Careful about the conv state that gets tied to op vs. layer
+        convparams = self.convparams.copy()
+        convparams.update(in_obj.shape_dict())
+        w_axes = [ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')]
+        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
+
+
+class nnPool(nnLayer):
+
+    """
+    Pooling layer implementation.
+
+    Arguments:
+        fshape (int, tuple(int, int)): one or two dimensional shape
+            of pooling window
+        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
+        strides (int, dict, optional): strides to apply pooling window
+            over. An int applies to both dimensions, or a dict with str_h
+            and str_w applies to h and w dimensions distinctly.  Defaults
+            to str_w = str_h = None
+        padding (int, dict, optional): padding to apply to edges of
+            input. An int applies to both dimensions, or a dict with pad_h
+            and pad_w applies to h and w dimensions distinctly.  Defaults
+            to pad_w = pad_h = None
+        name (str, optional): layer name. Defaults to "PoolingLayer"
+    """
+
+    def __init__(self, fshape, op="max", strides={}, padding={}):
+        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
+                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
+                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
+
+        # keep args around in __dict__ for get_description
+        self.op = op
+        self.fshape = fshape
+        self.strides = strides
+        self.padding = padding
+        if isinstance(fshape, int):
+            fshape = {'R': fshape, 'S': fshape}
+        elif isinstance(fshape, tuple):
+            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
+            fshape = {k: x for k, x in zip(fkeys, fshape)}
+        elif fshape == 'all':
+            fshape = dict(R=None, S=None)
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding}
+        for d in [fshape, strides, padding]:
+            self.poolparams.update(d)
+
+    def _call_train(self, in_obj):
+        shapedict = in_obj.shape_dict()
+        self.poolparams.update(shapedict)
+        if self.poolparams['R'] is None:
+            self.poolparams['R'] = shapedict['H']
+            self.poolparams['S'] = shapedict['W']
+        return ng.pooling(self.poolparams, in_obj)
+
 
 class Convolution(ParameterLayer):
     """

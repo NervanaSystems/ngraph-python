@@ -13,9 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-
+from operator import itemgetter
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import Axis, Axes
+from ngraph.op_graph.axes import Axis, Axes, output_dim
 
 
 class convolution(op_graph.TensorOp):
@@ -68,9 +68,21 @@ class convolution(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        axes = Axes([Axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
-        for i, name in enumerate(['C', 'D', 'H', 'W']):
-            axes[i].name = name
+
+        # output axes computation
+        odim_map = dict(P=('H', 'R', 'pad_h', 'str_h'),
+                        Q=('W', 'S', 'pad_w', 'str_w'),
+                        M=('D', 'T', 'pad_d', 'str_d'))
+
+        odims = {k: output_dim(*itemgetter(*v)(dims)) for k, v in odim_map.items()}
+        dims.update(odims)
+
+        spatial_axes = Axes([Axis(length=output_dim(*itemgetter(*odim_map[ax])(dims)),
+                                  name=ax) for ax in odim_map.keys()])
+
+        channel_axis = Axis(length=dims['K'], name='C')
+
+        axes = spatial_axes + channel_axis + self.batch_axis
 
         self.dims = dims
         self.index = convolution._index

@@ -40,6 +40,25 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
+def output_dim(X, S, padding, strides, pooling=False):
+        """
+        Compute along 1 dimension, with these sizes, what will be the output dimension.
+
+        Arguments:
+            X (int): input data dimension
+            S (int): filter dimension
+            padding (int): padding on each side
+            strides (int): striding
+            pooling (bool): flag for setting pooling layer size
+        """
+        size = ((X - S + 2 * padding) // strides) + 1
+
+        if pooling and padding >= S:
+            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
+
+        return size
+
+
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
