@@ -15,11 +15,12 @@
 
 from __future__ import print_function
 import numpy as np
-import geon as be
-import geon.frontends.base.axis as ax
+import ngraph as ng
+import tensorflow as tf
+import ngraph.frontends.base.axis as ax
 
 
-def numpy_logistic_regression(xs, ys, max_iter, alpha):
+def numpy_logreg(xs, ys, max_iter, alpha):
     def sigmoid(x):
         return 1. / (1. + np.exp(-x))
 
@@ -36,6 +37,9 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
         ys_pred = predict(thetas, xs)
         grad = -np.dot(ys - ys_pred, xs)
         return grad
+
+    # convert to (N, C) layout
+    xs = xs.T.copy()
 
     # init weights
     thetas = np.array([0.0, 0.0, 0.0])
@@ -55,83 +59,112 @@ def numpy_logistic_regression(xs, ys, max_iter, alpha):
     return loss, thetas
 
 
-def geon_logistic_regression(xs_np, ys_np, max_iter, alpha):
+def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     def sigmoid(x):
-        # return 1. / (1. + be.exp(-x))
-        return be.sigmoid(x)
+        # return 1. / (1. + ng.exp(-x))
+        return ng.sigmoid(x)
 
     def predict(thetas, xs):
-        return sigmoid(be.dot(xs, thetas))
+        return sigmoid(ng.dot(xs, thetas))
 
     def get_loss(thetas, xs, ys):
         ys_pred = predict(thetas, xs)
-        log_likelihoods = be.log(ys_pred) * ys + be.log(1 - ys_pred) * (1 - ys)
-        loss = -be.sum(log_likelihoods, reduction_axes=[ax.Y, ax.N])
+        log_likelihoods = ng.log(ys_pred) * ys + ng.log(1 - ys_pred) * (1 - ys)
+        loss = -ng.sum(log_likelihoods, reduction_axes=[ax.Y, ax.N])
         return loss
 
     # axis
     ax.C.length = 3
-    ax.Y.length = 1
     ax.N.length = 4
 
-    # input tensors
-    xs = be.placeholder(axes=(ax.C, ax.N))
-    ys = be.placeholder(axes=(ax.Y, ax.N))
+    # placeholders
+    xs = ng.placeholder(axes=(ax.C, ax.N))
+    ys = ng.placeholder(axes=(ax.N))
 
     # init weights
-    thetas_np = np.array([0., 0., 0.])
-    thetas_numpy_tensor = be.Constant(thetas_np, axes=(ax.C,))
-    thetas = be.Variable(initial_value=thetas_numpy_tensor, axes=(ax.C))
+    thetas = ng.Variable(initial_value=np.array([0., 0., 0.]), axes=(ax.C))
 
-    # computations
+    # define ops
     loss = get_loss(thetas, xs, ys)
-
-    # auto-diff
     variable = list(loss.variables())[0]  # we only have one variable
-    grad = be.deriv(loss, variable)
-
-    # update rule
-    update = be.assign(lvalue=variable, rvalue=variable - alpha * grad)
+    grad = ng.deriv(loss, variable)
+    with ng.Op.saved_user_deps():
+        update = ng.assign(lvalue=variable, rvalue=variable - alpha * grad)
 
     # transformer
-    transformer = be.NumPyTransformer()
-
-    # return [grad, loss] and also compute update
-    train_eval_func = transformer.computation([grad, loss, thetas, update])
-    transformer.initialize()
-
-    # copy data into device
-    # if we were doing batches, we would add xs and ys to train_eval_func
-    # and pass the batch in on each call, but since the data never changes,
-    # we just pass it in once before running
-    xs.value[()] = xs_np.transpose()
-    ys.value[()] = ys_np.reshape((ax.Y.length, ax.N.length))
+    transformer = ng.NumPyTransformer()
+    train_eval_func = transformer.computation([grad, loss, thetas, update],
+                                              xs, ys)
 
     # evaluate
     loss_val, thetas_val = (None, None)  # for return safety
     for i in range(max_iter):
-        grad_val, loss_val, thetas_val, update_val = train_eval_func()
+        grad_val, loss_val, thetas_val, update_val = train_eval_func(xs_np,
+                                                                     ys_np)
         print("grad: %s, loss %s" % (grad_val, loss_val))
 
     return loss_val, thetas_val
 
 
+def tensorflow_logreg(xs_np, ys_np, max_iter, alpha):
+    def predict(thetas, xs):
+        return tf.nn.sigmoid(tf.matmul(xs, thetas))
+
+    def get_loss(thetas, xs, ys):
+        ys_pred = predict(thetas, xs)
+        log_likelihoods = tf.log(ys_pred) * ys + tf.log(1 - ys_pred) * (1 - ys)
+        loss = -tf.reduce_sum(log_likelihoods)
+        return loss
+
+    # placeholders
+    xs = tf.placeholder(tf.float64, shape=(4, 3))
+    ys = tf.placeholder(tf.float64, shape=(4, 1))
+
+    # init weights
+    thetas = tf.Variable(np.array([0.0, 0.0, 0.0]).reshape([3, 1]))
+
+    # gradient descent
+    loss = get_loss(thetas, xs, ys)
+    grad = tf.gradients(loss, thetas)[0]
+    # or update = tf.train.GradientDescentOptimizer(alpha).minimize(loss)
+    update = tf.assign(thetas, tf.sub(thetas, alpha * grad))
+
+    # evaluate
+    loss_val, thetas_val = (None, None)  # for return safety
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        for i in range(max_iter):
+            feed_dict = {xs: xs_np.T.copy(), ys: ys_np.reshape((-1, 1))}
+            grad_val, loss_val, thetas_val, _ = sess.run([grad, loss, thetas,
+                                                          update],
+                                                         feed_dict=feed_dict)
+            grad_val = grad_val.reshape((-1,))
+            print("grad: %s, loss %s" % (grad_val, loss_val))
+
+    thetas_val = thetas_val.reshape((-1,))
+    return loss_val, thetas_val
+
+
 if __name__ == '__main__':
-    # setups
-    xs = np.array([[0.52, 1.12, 0.77],
-                   [0.88, -1.08, 0.15],
-                   [0.52, 0.06, -1.30],
-                   [0.74, -2.49, 1.39]])
+    # xs: (C, N), y: (N,)
+    xs = np.array([[0.52, 0.88, 0.52, 0.74],
+                   [1.12, -1.08, 0.06, -2.49],
+                   [0.77, 0.15, -1.3, 1.39]])
     ys = np.array([1, 1, 0, 1])
     max_iter = 10
     alpha = 0.1
 
     # numpy
     print("# numpy training")
-    loss_np, thetas_np = numpy_logistic_regression(xs, ys, max_iter, alpha)
+    loss_np, thetas_np = numpy_logreg(xs, ys, max_iter, alpha)
     print(loss_np, thetas_np)
 
     # geon
     print("# geon training")
-    loss_ge, thetas_ge = geon_logistic_regression(xs, ys, max_iter, alpha)
+    loss_ge, thetas_ge = ngraph_logreg(xs, ys, max_iter, alpha)
     print(loss_ge, thetas_ge)
+
+    # geon
+    print("# tensorflow training")
+    loss_tf, thetas_tf = tensorflow_logreg(xs, ys, max_iter, alpha)
+    print(loss_tf, thetas_tf)

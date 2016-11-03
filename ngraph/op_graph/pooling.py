@@ -18,42 +18,27 @@ from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import make_axis, Axes
 
 
-class convolution(op_graph.TensorOp):
+class pooling(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, dims, inputs, filters, *args, **kwargs):
+    def __init__(self, dims, inputs, argmax, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
-            filters : filter/kernel tensor.
 
         Return:
         """
         if len(inputs.shape) != 5:
             raise ValueError((
-                'convolution input shape must be length 5, found {}'
+                'pooling input shape must be length 5, found {}'
             ).format(len(inputs.shape)))
-
-        if len(filters.shape) != 5:
-            raise ValueError((
-                'convolution filter shape must be length 5, found {}'
-            ).format(len(filters.shape)))
 
         if 'axes' in kwargs:
             raise ValueError(
-                "convolution does not currently support the 'axes' argument.  The "
+                "pooling does not currently support the 'axes' argument.  The "
                 "output axes are entirely determined by the shape of the "
                 "input and filter Ops."
             )
-
-        if inputs.axes[0].length != filters.axes[0].length:
-            raise ValueError((
-                'the first axis in input and filter must be the same.  The '
-                'first axis in input is {inputs} and in filter is {filters}.'
-            ).format(
-                inputs=inputs.axes[0],
-                filters=filters.axes[0],
-            ))
 
         batch_axes = inputs.axes.batch_axes()
         if len(batch_axes) != 1:
@@ -73,46 +58,27 @@ class convolution(op_graph.TensorOp):
             axes[i].name = name
 
         self.dims = dims
-        self.index = convolution._index
-        convolution._index += 1
+        self.argmax = argmax
+        self.index = pooling._index
+        pooling._index += 1
 
-        super(convolution, self).__init__(
-            args=(inputs, filters), *args, axes=axes, **kwargs
+        super(pooling, self).__init__(
+            args=(inputs, argmax), *args, axes=axes, **kwargs
         )
 
-    def generate_adjoints(self, adjoints, delta, inputs, filters):
-        """
-        TODO
-        """
-        filters.generate_add_delta(adjoints, update_conv(delta, inputs, filters, self))
-        inputs.generate_add_delta(adjoints, bprop_conv(delta, inputs, filters, self))
+    def generate_adjoints(self, adjoints, delta, inputs, argmax):
+        inputs.generate_add_delta(adjoints, bprop_pool(delta, inputs, argmax, self))
 
 
-class update_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
+class bprop_pool(op_graph.TensorOp):
+    def __init__(self, delta, inputs, argmax, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
-            filters : filter/kernel tensor.
         """
         self.dims = fprop.dims
         self.index = fprop.index
 
-        super(update_conv, self).__init__(
-            args=(delta, inputs), *args, axes=filters.axes, **kwargs
-        )
-
-
-class bprop_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
-        """
-        self.dims = fprop.dims
-        self.index = fprop.index
-
-        super(bprop_conv, self).__init__(
-            args=(delta, filters), *args, axes=inputs.axes, **kwargs
+        super(bprop_pool, self).__init__(
+            args=(delta, argmax), *args, axes=inputs.axes, **kwargs
         )

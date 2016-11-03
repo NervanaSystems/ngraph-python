@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.frontends.neon.axis import ax
 import numpy as np
 from builtins import zip
-from neon.data import NervanaDataIterator, DataLoader
+from neon.data import NervanaDataIterator, DataLoader, ArrayIterator
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
 
@@ -104,16 +104,13 @@ class Model(object):
 
         self.optimizer = optimizer
 
-        batch_input_axes = input_axes + ng.Axes(ax.N, )
-        batch_target_axes = target_axes + ng.Axes(ax.N, )
+        batch_input_axes = input_axes + ng.make_axes(ax.N, )
+        batch_target_axes = target_axes + ng.make_axes(ax.N, )
         self.input = ng.placeholder(axes=batch_input_axes)
         self.target = ng.placeholder(axes=batch_target_axes)
-        for axis, length in zip(input_axes, dataset.shape):
-            axis.length = length
-        for axis, length in zip(
-            target_axes, [
-                dataset_nclasses(dataset)]):
-            axis.length = length
+        input_axes.set_shape(dataset.shape)
+        target_axes.set_shape((dataset_nclasses(dataset),))
+
         ax.N.length = dataset_batchsize(dataset)
         self.batch_input_shape = batch_input_axes.lengths
         self.batch_target_shape = batch_target_axes.lengths

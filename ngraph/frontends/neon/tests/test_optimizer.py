@@ -25,7 +25,8 @@ from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.util.utils import ExecutorFactory
 
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
-from neon.backends import gen_backend
+from ngraph.transformers import Transformer
+from neon import NervanaObject
 
 
 def pytest_generate_tests(metafunc):
@@ -60,10 +61,15 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ngraph.Axis(name="C", length=200)
-    N = ngraph.Axis(name="N", length=128)
+    C = ngraph.make_axis(name="C", length=200)
+    N = ngraph.make_axis(name="N", length=128)
 
-    be = gen_backend(backend='cpu', batch_size=N.length)
+    # restrict to numpy transformer for now
+    factory = Transformer.make_transformer_factory('numpy')
+    Transformer.set_transformer_factory(factory)
+    Transformer.make_transformer()
+    be = NervanaObject.be
+    be.bsz = N.length
 
     # generate dummy data (to initialize values)
     (x, y, w_init) = generate_data(C, N)

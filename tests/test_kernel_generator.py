@@ -12,17 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 
-# commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import make_axes
-from ngraph.frontends.neon.axis import ax, ar
-from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
-from ngraph.frontends.neon.argparser import NgraphArgparser
-from ngraph.frontends.neon.callbacks import *
-from ngraph.frontends.neon.cost import CrossEntropyBinary, CrossEntropyMulti, SumSquared, \
-    Misclassification
-from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.recurrent import Recurrent
-from ngraph.frontends.neon.model import Model
-from ngraph.frontends.neon.optimizer import *
+import ngraph as ng
+import ngraph.transformers as ngt
+import numpy as np
+
+
+def test_exit_condition(transformer_factory):
+    bsz = 16
+    class_num = 10
+
+    N, Y = ng.Axis(bsz), ng.Axis(class_num)
+    y_val = np.absolute(np.random.randn(bsz, class_num))
+    y = ng.Constant(y_val, axes=ng.Axes([N, Y]))
+
+    likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
+
+    transformer = ngt.Transformer.make_transformer()
+    comp = transformer.computation(likelihood)
+
+    val1 = comp()
+    val2 = comp()
+    np.testing.assert_allclose(val1, val2, atol=0, rtol=0)

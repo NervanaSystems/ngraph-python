@@ -1,1 +1,0 @@
-The Argon transformer is out of date at this time.

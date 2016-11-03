@@ -14,12 +14,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import ax, np, Affine, make_axes, Callbacks, CrossEntropyMulti,\
-    GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
-    NgraphArgparser, Rectlin, Softmax
-
-from neon.initializers import Uniform
+from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, make_axes, Callbacks,
+                                   CrossEntropyMulti, GeneralizedCost, GradientDescentMomentum,
+                                   Misclassification, Model, NgraphArgparser, Rectlin, Softmax)
 from neon.data import CIFAR10
+from neon.initializers import Uniform
+
 
 # parse the command line arguments (generates the backend)
 parser = NgraphArgparser(__doc__)
@@ -29,9 +29,9 @@ args = parser.parse_args()
 
 # setup data provider
 dataset = CIFAR10(path=args.data_dir,
-                  normalize=True,
-                  contrast_normalize=False,
-                  whiten=False)
+                  normalize=False,
+                  contrast_normalize=True,
+                  whiten=True)
 train = dataset.train_iter
 test = dataset.valid_iter
 
@@ -40,19 +40,21 @@ opt_gdm = GradientDescentMomentum(learning_rate=0.01, momentum_coef=0.9)
 
 
 # set up the model layers
-layers = [
-    Affine(nout=200, init=init_uni, activation=Rectlin()),
-    Affine(nout=10, axes=make_axes(ax.Y,), init=init_uni,
-           activation=Softmax()),
-]
+bn = True
+layers = [Conv((5, 5, 16), init=init_uni, activation=Rectlin(), batch_norm=bn),
+          Pooling((2, 2)),
+          Conv((5, 5, 32), init=init_uni, activation=Rectlin(), batch_norm=bn),
+          Pooling((2, 2)),
+          Affine(nout=500, init=init_uni, activation=Rectlin(), batch_norm=bn),
+          Affine(nout=10, axes=make_axes(ax.Y,), init=init_uni, activation=Softmax())]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
-mlp = Model(layers=layers)
-callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
-mlp.initialize(
+model = Model(layers=layers)
+callbacks = Callbacks(model, eval_set=test, **args.callback_args)
+model.initialize(
     dataset=train,
-    input_axes=make_axes((ax.C, ax.H, ax.W)),
+    input_axes=make_axes((ax.C, ax.D, ax.H, ax.W)),
     target_axes=make_axes((ax.Y,)),
     optimizer=opt_gdm,
     cost=cost,
@@ -60,11 +62,5 @@ mlp.initialize(
 )
 
 np.seterr(divide='raise', over='raise', invalid='raise')
-mlp.fit(
-    train,
-    num_epochs=args.epochs,
-    callbacks=callbacks
-)
-
-print('Misclassification error = %.1f%%' %
-      (mlp.eval(test) * 100))
+model.fit(train, num_epochs=args.epochs, callbacks=callbacks)
+print('Misclassification error = %.6f%%' % (model.eval(test) * 100))

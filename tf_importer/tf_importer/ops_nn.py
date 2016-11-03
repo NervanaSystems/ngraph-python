@@ -80,8 +80,9 @@ class OpsNN(OpsBase):
         predicts = ng.softmax(logits, normalization_axes=axis_y)
 
         # broadcast / cast
-        predicts = ng.Broadcast(predicts, axes=ng.Axes([axis for axis in reversed(predicts.axes)]))
-        labels_one_hot = ng.AxesCastOp(labels_one_hot, axes=predicts.axes)
+        predicts = ng.Broadcast(predicts,
+                                axes=ng.make_axes([axis for axis in reversed(predicts.axes)]))
+        labels_one_hot = ng.cast_axes(labels_one_hot, axes=predicts.axes)
 
         # crossentropy
         cross_entropy = ng.cross_entropy_multi(predicts, labels_one_hot,

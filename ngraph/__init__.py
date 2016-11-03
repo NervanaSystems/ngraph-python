@@ -15,28 +15,32 @@
 
 from __future__ import print_function
 
-import ngraph.dataloader.dataloaderbackend
 from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.axes import *
-from ngraph.op_graph.convolution import convolution1d, ConvolutionAxis
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, Axis, Axes
+from ngraph.op_graph.convolution import convolution
+from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
+from ngraph.op_graph.op_graph import cast_axes
 from ngraph.transformers.nptransform import NumPyTransformer
-from ngraph.util.names import *
+from ngraph.util.names import make_namescope
+
+__all__ = [
+    'cast_axes',
+    'make_axes',
+    'make_axis',
+    'make_axis_role',
+    'make_namescope',
+    'AssignableOp',
+    'Axis',
+    'AxisRole',
+    'Axes',
+    'Op',
+    'TensorOp',
+]
+
 
 try:
     from ngraph.transformers.gputransform import GPUTransformer
 except ImportError:
     pass
-
-try:
-    from ngraph.transformers.argon.artransform import ArgonTransformer
-except ImportError as e:
-    if 'argon' in str(e):
-        print("Argon backend and tensor are defined in argon package, which is not installed.")
-    elif 'mpi4py' in str(e):
-        print(
-            "Argon backend currently depends on the package mpi4py, which is not installed."
-        )
-    else:
-        raise

@@ -14,18 +14,18 @@
 # ----------------------------------------------------------------------------
 from neon.util.argparser import NeonArgparser
 from ngraph.transformers import Transformer
+from neon import NervanaObject
+from ngraph import RNG
 
 
 class NgraphArgparser(NeonArgparser):
-    def __init__(self, *args, **kwargs):
-        super(NgraphArgparser, self).__init__(*args, **kwargs)
-        self.add_argument('--gb', type=str, default='numpy',
-                          choices=Transformer.transformer_choices(),
-                          help='Backend used for transforming and executing graph')
-
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
-        factory = Transformer.make_transformer_factory(args.gb)
+        NervanaObject.be.rng = RNG(NervanaObject.be.rng_seed)
+        name = args.backend
+        if name == 'cpu':
+            name = 'numpy'
+        factory = Transformer.make_transformer_factory(name)
         Transformer.set_transformer_factory(factory)
 
         return args
