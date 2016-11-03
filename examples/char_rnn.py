@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from neon.backends import gen_backend
 from ngraph.frontends.neon import Recurrent, Affine, Softmax, Tanh, GeneralizedCost, \
     Callbacks, CrossEntropyMulti, Model, RMSProp, ax, make_axes
 from ngraph.frontends.neon import NgraphArgparser
-from neon.util.argparser import extract_valid_args
 from neon.data import PTB
 from neon.initializers import Uniform
 

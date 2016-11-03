@@ -17,7 +17,7 @@ from __future__ import division
 import ngraph as ng
 from ngraph.frontends.neon.axis import ax
 import numpy as np
-from neon.data import NervanaDataIterator, DataLoader, ArrayIterator, Text
+from neon.data import NervanaDataIterator, DataLoader, Text
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
 
