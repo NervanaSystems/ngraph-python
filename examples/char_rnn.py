@@ -13,11 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from neon.backends import gen_backend
-from ngraph.frontends.neon import *  # noqa
+from ngraph.frontends.neon import Recurrent, Affine, Softmax, Tanh, GeneralizedCost, \
+    Callbacks, CrossEntropyMulti, Model, RMSProp, ax, make_axes
 from ngraph.frontends.neon import NgraphArgparser
 from neon.util.argparser import extract_valid_args
 from neon.data import PTB
 from neon.initializers import Uniform
+
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
@@ -30,9 +32,6 @@ args.backend = 'dataloader'
 time_steps = 5
 hidden_size = 10
 gradient_clip_value = None
-
-# setup backend
-be = gen_backend(**extract_valid_args(args, gen_backend))
 
 # download penn treebank
 dataset = PTB(time_steps, path=args.data_dir)
@@ -58,8 +57,8 @@ rnn = Model(layers=layers)
 callbacks = Callbacks(rnn, eval_set=valid_set, **args.callback_args)
 rnn.initialize(
     dataset=train_set,
-    input_axes=Axes((ax.C, ax.REC)),
-    target_axes=Axes((ax.Y, ax.REC)),
+    input_axes=make_axes((ax.C, ax.REC)),
+    target_axes=make_axes((ax.Y, ax.REC)),
     optimizer=opt,
     cost=cost
 )

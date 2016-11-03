@@ -38,13 +38,13 @@ from ngraph.frontends.neon.activation import Tanh
 from ngraph.frontends.neon.recurrent import Recurrent
 
 from neon.initializers.initializer import Gaussian, Constant
-
+from neon import NervanaObject
 from recurrent_ref import Recurrent as RefRecurrent
 
-from ngraph.util.utils import ExecutorFactory
-from ngraph.util.utils import RandomTensorGenerator
+from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
+from ngraph import RNG
 
-rng = RandomTensorGenerator(0, np.float32)
+rng = RandomTensorGenerator()
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -54,7 +54,6 @@ def pytest_generate_tests(metafunc):
     bsz_rng = [1]
 
     if 'refgruargs' in metafunc.fixturenames:
-        fargs = []
         seq_rng = [3]
         inp_rng = [5, 10]
         out_rng = [10, 32]
@@ -66,8 +65,6 @@ def test_ref_compare_ones(refgruargs):
     # run comparison with reference code
     # for all ones init
     seq_len, input_size, hidden_size, batch_size = refgruargs
-    from neon.backends import gen_backend
-    be = gen_backend(backend='dataloader')
     check_rnn(seq_len, input_size, hidden_size,
               batch_size, Constant(val=1.0))
 
@@ -76,8 +73,6 @@ def test_ref_compare_rand(refgruargs):
     # run comparison with reference code
     # for Gaussian random init
     seq_len, input_size, hidden_size, batch_size = refgruargs
-    from neon.backends import gen_backend
-    be = gen_backend(backend='dataloader')
     check_rnn(seq_len, input_size, hidden_size, batch_size,
               Gaussian())
 
@@ -93,8 +88,10 @@ def check_rnn(seq_len, input_size, hidden_size,
     REC = ng.Axis(seq_len, recurrent=True)
     N = ng.Axis(batch_size, batch=True)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
+    ex = ExecutorFactory()
+    NervanaObject.be.rng = RNG(0)
 
+    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
     inp_ng = ng.placeholder(axes=ng.Axes([Cin, REC, N]))
 
     # fprop graph
@@ -107,8 +104,6 @@ def check_rnn(seq_len, input_size, hidden_size,
     rnn_W_recur.input = True
     rnn_b = rnn_ng.b
     rnn_b.input = True
-
-    ex = ExecutorFactory()
 
     fprop_neon_fun = ex.executor(out_ng, inp_ng)
     dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
@@ -171,9 +166,6 @@ def check_rnn(seq_len, input_size, hidden_size,
 
 
 if __name__ == '__main__':
-    from neon.backends import gen_backend
-    be = gen_backend(backend='dataloader')
-
-    seq_len, input_size, hidden_size, batch_size = (5, 3, 6, 1)
+    seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
     init = Gaussian(0.1)
     check_rnn(seq_len, input_size, hidden_size, batch_size, init)

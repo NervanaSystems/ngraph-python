@@ -246,6 +246,7 @@ class RMSProp(Optimizer):
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
         self.stochastic_round = stochastic_round
+
     def configure(self, cost):
         self.lrate = ng.placeholder(axes=(), name='lrate')
 
@@ -268,16 +269,15 @@ class RMSProp(Optimizer):
                 lvalue=state,
                 rvalue=decay * state + (1.0 - decay) * ng.square(grad),
                 name='state_u_%s' % i
-            ) for state, grad, i in zip(states, grads, range(len(states)))
+            ) for i, (state, grad) in enumerate(zip(states, grads))
         ]
         param_updates = [
             ng.assign(
                 lvalue=param,
-                rvalue=param
-                - (scale_factor * grad * self.lrate)
-                    / (ng.sqrt(state + epsilon) + epsilon),
+                rvalue=param - ((scale_factor * grad * self.lrate)
+                                / (ng.sqrt(state + epsilon) + epsilon)),
                 name='param_u_%s' % i
-            ) for state, grad, param, i in zip(states, grads, variables, range(len(states)))
+            ) for i, (state, grad, param) in enumerate(zip(states, grads, variables))
         ]
         return ng.doall(state_updates + param_updates)
 
@@ -292,4 +292,3 @@ class RMSProp(Optimizer):
         learning_rate = self.schedule.get_learning_rate(
             self.learning_rate, epoch)
         self.lrate.value[()] = learning_rate
-
