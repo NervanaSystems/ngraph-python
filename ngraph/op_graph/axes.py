@@ -56,9 +56,9 @@ def make_axis_role(name=None, docstring=None):
 
 
 def make_axis(length=None, name=None,
-             batch=False, recurrent=False,
-             match_on_length=False,
-             roles=None, docstring=None):
+              batch=False, recurrent=False,
+              match_on_length=False,
+              roles=None, docstring=None):
     """
     Returns a new Axis.
 
