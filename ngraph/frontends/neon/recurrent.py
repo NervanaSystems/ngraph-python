@@ -79,13 +79,14 @@ class Recurrent(ParameterLayer):
 
         self.W_input = ng.Variable(
             axes=hidden_axes + (in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()).get_dual(),
-            init=self.init
+            init=self.init,
+            name="W_input"
         )
 
         self.W_recur = ng.Variable(
             axes=hidden_axes + hidden_axes.get_dual(),
             init=self.init_inner,
-            name="recur"
+            name="W_recur"
         )
 
         self.b = ng.Variable(
@@ -94,13 +95,15 @@ class Recurrent(ParameterLayer):
             name="bias"
         )
 
-        h_ff_buf = ng.dot(self.W_input, in_obj, use_dual=True)
+        h_ff_buf = ng.dot(self.W_input, in_obj, use_dual=True, name="W_in_dot_in")
         h_ff_s = get_steps(h_ff_buf, self.time_axis)
-        hprev = [ng.Constant(np.zeros(h_ff_s[0].axes.lengths), axes=h_ff_s[0].axes, name="h_init")]
+        self.h_init = ng.Constant(np.zeros(h_ff_s[0].axes.lengths), axes=h_ff_s[0].axes, name="h_init")
+        hprev = [self.h_init]
 
         for i in range(self.time_axis.length):
-            d = ng.dot(self.W_recur, hprev[i], use_dual=True)
+            d = ng.dot(self.W_recur, hprev[i], use_dual=True, name="W_rec_dot_h{}".format(i))
             h = self.activation(d + h_ff_s[i] + self.b)
+            h.name = "activ{}".format(i)
             hprev.append(h)
 
         rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=1)
