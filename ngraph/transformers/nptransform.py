@@ -17,12 +17,10 @@ from __future__ import division
 from __future__ import print_function
 
 from functools import wraps
-
+from operator import itemgetter
 # These are indirectly used by the generated code
 import numpy as np  # noqa
-from neon.backends.layer_cpu import ConvLayer  # noqa
-from neon import NervanaObject  # noqa
-from neon.backends import gen_backend
+import itertools as itt
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
@@ -48,13 +46,116 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
     DeviceTensor
 
 
-class proxy_tensor(object):
-    """ A fake CPUTensor to make old neon implementation of ConvLayer happy """
-    # TODO: refactor away
+class NumPyConvEngine(object):
+    @staticmethod
+    def xprop():
+        return """
+        K, _, _, _, N = O.shape
+        for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                     enumerate(pSlice),
+                                                     enumerate(qSlice)):
+            sliceT, sliceD, _ = mS
+            sliceR, sliceH, _ = pS
+            sliceS, sliceW, _ = qS
+            slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
+            slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+            O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
+        """
 
-    def __init__(self, tensor):
-        self._tensor = tensor
-        self.size = np.prod(self._tensor.shape)
+    @staticmethod
+    def fprop_conv():
+        pycode = """
+        I = {I}
+        F = {F}
+        O = {O}
+        mSlice, pSlice, qSlice, _, _, _ = {slices}
+        """ + NumPyConvEngine.xprop()
+
+        return pycode
+
+    @staticmethod
+    def bprop_conv():
+        pycode = """
+        I = {E}
+        F = {F}
+        O = {gI}
+        _, _, _, mSlice, pSlice, qSlice = {slices}
+        F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
+        """ + NumPyConvEngine.xprop()
+
+        return pycode
+
+    @staticmethod
+    def update_conv():
+        pycode = """
+        I = {I}
+        E = {E}
+        U = {O}
+        mSlice, pSlice, qSlice, _, _, _ = {slices}
+        C, _, _, _, K = U.shape
+
+        for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                     enumerate(pSlice),
+                                                     enumerate(qSlice)):
+            sliceT, sliceD, _ = mS
+            sliceR, sliceH, _ = pS
+            sliceS, sliceW, _ = qS
+            slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+            slicedE = E[:, m, p, q, :]
+            update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+            U[:, sliceT, sliceR, sliceS, :] += update
+        """
+        return pycode
+
+    @staticmethod
+    def get_slices(I, F, O, conv_dims):
+        C, D, H, W, _ = I.tensor_description.axes.lengths
+        C, R, S, T, K = F.tensor_description.axes.lengths
+        K, M, P, Q, _ = O.tensor_description.axes.lengths
+
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
+
+        mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
+        pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
+        qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
+        dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d) for d in range(D)]
+        hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h) for h in range(H)]
+        wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w) for w in range(W)]
+        return (mSlice, pSlice, qSlice, dSlice, hSlice, wSlice)
+
+    @staticmethod
+    def fprop_slice(q, S, X, padding, strides):
+        firstF = 0
+        lastF = S - 1
+        qs = q * strides - padding
+        x2 = qs + lastF
+        if qs < 0:
+            firstF = -qs
+            qs = 0
+        if x2 >= X:
+            dif = x2 - X + 1
+            lastF -= dif
+            x2 -= dif
+        return (slice(firstF, lastF + 1), slice(qs, x2 + 1), lastF - firstF + 1)
+
+    @staticmethod
+    def bprop_slice(x, S, Q, padding, strides):
+        qs = x - (S - padding - 1)
+        firstF = None
+        for s in range(S):  # TODO remove loop logic here.
+            q = qs + s
+            if q % strides == 0:
+                q //= strides
+                if q >= 0 and q < Q:
+                    if firstF is None:
+                        firstF = s
+                        firstE = q
+                    lastF = s
+                    lastE = q
+        if firstF is None:
+            return (slice(0, 0, 1), slice(0, 0, 1), 0)
+        return (slice(firstF, lastF + 1, strides), slice(firstE, lastE + 1, 1), 0)
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -186,6 +287,7 @@ class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
         self.conv_dims = []
+        self.conv_slices = []
         self.pool_dims = []
 
     def name(self, x):
@@ -229,71 +331,65 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(convolution)
     def generate_op(self, op, outputs, inputs, filters):
-        self.conv_dims.append(op.dims)
+        self.conv_dims.append(op.convdict)
+        self.conv_slices.append(NumPyConvEngine.get_slices(inputs, filters, outputs, op.convdict))
+        # import pdb; pdb.set_trace()
         self.append(
-            """
-            self.be.fprop_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
-                               proxy_tensor({filters}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            inputs=inputs,
-            filters=filters,
-            outputs=outputs
-        )
-
-    @generate_op.on_type(update_conv)
-    def generate_op(self, op, outputs, delta, inputs):
-        self.append(
-            """
-            self.be.update_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
-                                proxy_tensor({delta}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            inputs=inputs,
-            delta=delta,
-            outputs=outputs
+            NumPyConvEngine.fprop_conv(),
+            slices=self.conv_slices[op.index],
+            I=inputs,
+            F=filters,
+            O=outputs
         )
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
         self.append(
-            """
-            self.be.bprop_conv(self.conv_dims[{index}], proxy_tensor({filters}),
-                               proxy_tensor({delta}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            filters=filters,
-            delta=delta,
-            outputs=outputs
+            NumPyConvEngine.bprop_conv(),
+            slices=self.conv_slices[op.index],
+            E=delta,
+            F=filters,
+            gI=outputs
         )
 
-    @generate_op.on_type(pooling)
-    def generate_op(self, op, outputs, inputs, argmax):
-        self.pool_dims.append(op.dims)
+    @generate_op.on_type(update_conv)
+    def generate_op(self, op, outputs, delta, inputs):
         self.append(
-            """
-            self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
-                               proxy_tensor({outputs}), proxy_tensor({argmax}))
-            """,
-            index=op.index,
-            outputs=outputs,
-            inputs=inputs,
-            argmax=argmax
+            NumPyConvEngine.update_conv(),
+            slices=self.conv_slices[op.index],
+            I=inputs,
+            E=delta,
+            U=outputs
         )
 
-    @generate_op.on_type(bprop_pool)
-    def generate_op(self, op, outputs, delta, argmax):
-        # TODO: get rid of temporary hack that converts argmax to uint8
-        self.append(
-            """
-            self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
-                               proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
-            """,
-            index=op.index,
-            outputs=outputs,
-            delta=delta,
-            argmax=argmax
-        )
+
+    # @generate_op.on_type(pooling)
+    # def generate_op(self, op, outputs, inputs, argmax):
+    #     self.pool_dims.append(op.dims)
+    #     self.append(
+    #         """
+    #         self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
+    #                            proxy_tensor({outputs}), proxy_tensor({argmax}))
+    #         """,
+    #         index=op.index,
+    #         outputs=outputs,
+    #         inputs=inputs,
+    #         argmax=argmax
+    #     )
+
+    # @generate_op.on_type(bprop_pool)
+    # def generate_op(self, op, outputs, delta, argmax):
+    #     # TODO: get rid of temporary hack that converts argmax to uint8
+    #     self.append(
+    #         """
+    #         self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
+    #                            proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
+    #         """,
+    #         index=op.index,
+    #         outputs=outputs,
+    #         delta=delta,
+    #         argmax=argmax
+    #     )
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
@@ -523,10 +619,8 @@ class NumPyTransformer(Transformer):
     transformer_name = "numpy"
 
     def __init__(self, **kwargs):
-        if NervanaObject.be is None or NervanaObject.be.device_type != 0:
-            # This creates a backend for unit tests.
-            NervanaObject.be = gen_backend('cpu')
         super(NumPyTransformer, self).__init__(**kwargs)
+        self.conv_engine = NumPyConvEngine()
         self.init_code = NumPyCodeGenerator()
         self.allocate_storage_code = NumPyCodeGenerator()
         self.allocate_code = NumPyCodeGenerator()
@@ -564,7 +658,7 @@ class NumPyTransformer(Transformer):
         self.allocate_code.indent(1)
 
     def finish_transform_allocate(self):
-        self.init_code.append("""self.be = NervanaObject.be""")
+        pass
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:

@@ -69,12 +69,13 @@ class convolution(op_graph.TensorOp):
             ))
         self.batch_axis = batch_axes[0]
 
+        channel_out_axis = [ax for ax in filters.axes if ax.name.startswith('K')][0]
         # output axes computation
         axes = Axes(
-            [spatial_axis(inputs, filters, convdict['pad_h'], convdict['str_h'], role='height'),
-             spatial_axis(inputs, filters, convdict['pad_w'], convdict['str_w'], role='width'),
+            [Axis(length=channel_out_axis.length, name='C'),
              spatial_axis(inputs, filters, convdict['pad_d'], convdict['str_d'], role='depth'),
-             Axis(length=convdict['K'], name='C'),
+             spatial_axis(inputs, filters, convdict['pad_h'], convdict['str_h'], role='height'),
+             spatial_axis(inputs, filters, convdict['pad_w'], convdict['str_w'], role='width'),
              self.batch_axis])
 
         self.convdict = convdict
