@@ -13,12 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-This test compares the NEON recurrent layer against a numpy reference recurrent
-implementation and compares the NEON recurrent bprop deltas to the gradients
-estimated by finite differences.
+This test compares the recurrent layer against a numpy reference recurrent
+implementation.
 The numpy reference recurrent layer contains static methods for forward pass
 and backward pass.
-The test runs a SINGLE layer of recurrent layer and compare numerical values
+The test runs a single layer of recurrent layer and compare numerical values
 The reference model handles batch_size as 1 only
 
 The following are made sure to be the same in both recurrent layers
@@ -33,21 +32,16 @@ The following are made sure to be the same in both recurrent layers
 import itertools as itt
 import numpy as np
 
-from neon import NervanaObject
-
 import ngraph as ng
-from ngraph.frontends.neon.axis import ax
 
-from ngraph.frontends.neon import *  # noqa
+from ngraph.frontends.neon.activation import Tanh
 from ngraph.frontends.neon.recurrent import Recurrent
 
-from neon import logger as neon_logger
-from neon.initializers.initializer import Uniform, Gaussian
+from neon.initializers.initializer import Gaussian, Constant
 
 from recurrent_ref import Recurrent as RefRecurrent
 
 from ngraph.util.utils import ExecutorFactory
-from ngraph.util.utils import raise_all_numpy_errors
 from ngraph.util.utils import RandomTensorGenerator
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -62,25 +56,13 @@ def pytest_generate_tests(metafunc):
     if 'refgruargs' in metafunc.fixturenames:
         fargs = []
         seq_rng = [3]
-        inp_rng = [5]
-        out_rng = [10]
+        inp_rng = [5, 10]
+        out_rng = [10, 32]
         fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng)
         metafunc.parametrize('refgruargs', fargs)
 
-    if 'gradgruargs' in metafunc.fixturenames:
-        fargs = []
-        if metafunc.config.option.all:
-            seq_rng = [2, 3]
-            inp_rng = [5, 10]
-            out_rng = [3, 5, 10]
-        else:
-            seq_rng = [3]
-            inp_rng = [5]
-            out_rng = [10]
-        fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng)
-        metafunc.parametrize('gradgruargs', fargs)
 
-def test_ref_compare_ones(transformer_factory, refgruargs):
+def test_ref_compare_ones(refgruargs):
     # run comparison with reference code
     # for all ones init
     seq_len, input_size, hidden_size, batch_size = refgruargs
@@ -89,7 +71,8 @@ def test_ref_compare_ones(transformer_factory, refgruargs):
     check_rnn(seq_len, input_size, hidden_size,
               batch_size, Constant(val=1.0))
 
-def test_ref_compare_rand(transformer_factory, refgruargs):
+
+def test_ref_compare_rand(refgruargs):
     # run comparison with reference code
     # for Gaussian random init
     seq_len, input_size, hidden_size, batch_size = refgruargs
@@ -159,7 +142,6 @@ def check_rnn(seq_len, input_size, hidden_size,
     np.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
 
     # ========= reference model ==========
-    input_shape = (input_size, seq_len * batch_size)
     output_shape = (hidden_size, seq_len * batch_size)
 
     # generate random deltas tensor
@@ -183,9 +165,7 @@ def check_rnn(seq_len, input_size, hidden_size,
      dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref)
 
     # comparing outputs
-    neon_logger.display('====Verifying hidden states====')
-    np.testing.assert_allclose(fprop_neon[:,:,0], h_ref_list, rtol=0.0, atol=1.0e-5)
-    neon_logger.display('fprop is verified')
+    np.testing.assert_allclose(fprop_neon[:, :, 0], h_ref_list, rtol=0.0, atol=1.0e-5)
 
     return
 
@@ -195,5 +175,5 @@ if __name__ == '__main__':
     be = gen_backend(backend='dataloader')
 
     seq_len, input_size, hidden_size, batch_size = (5, 3, 6, 1)
-    init = Uniform(low=-0.08, high=0.08)
+    init = Gaussian(0.1)
     check_rnn(seq_len, input_size, hidden_size, batch_size, init)

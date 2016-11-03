@@ -14,20 +14,21 @@
 # ----------------------------------------------------------------------------
 from neon.backends import gen_backend
 from ngraph.frontends.neon import *  # noqa
-from neon.util.argparser import NeonArgparser, extract_valid_args
+from ngraph.frontends.neon import NgraphArgparser
+from neon.util.argparser import extract_valid_args
 from neon.data import PTB
 from neon.initializers import Uniform
 
-# parse the command line arguments (generates the backend)
-parser = NeonArgparser(__doc__)
+# parse the command line arguments
+parser = NgraphArgparser(__doc__)
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
 args.batch_size = 50
 args.backend = 'dataloader'
-time_steps = 2
-hidden_size = 15
+time_steps = 5
+hidden_size = 10
 gradient_clip_value = None
 
 # setup backend
@@ -46,20 +47,20 @@ layers = [
     Recurrent(hidden_size, init, activation=Tanh(), time_axis=ax.REC),
     Affine(
         len(train_set.vocab), init,
-        activation=Softmax(), bias=init, axes=(ax.C, ax.REC)
+        activation=Softmax(), bias=init, axes=(ax.Y, ax.REC)
     )
 ]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti(usebits=True))
-opt_rms = RMSProp(gradient_clip_value=gradient_clip_value, stochastic_round=args.rounding)
+opt = RMSProp(gradient_clip_value=gradient_clip_value, stochastic_round=args.rounding)
 
 rnn = Model(layers=layers)
 callbacks = Callbacks(rnn, eval_set=valid_set, **args.callback_args)
 rnn.initialize(
     dataset=train_set,
     input_axes=Axes((ax.C, ax.REC)),
-    target_axes=Axes((ax.C, ax.REC)),
-    optimizer=opt_rms,
+    target_axes=Axes((ax.Y, ax.REC)),
+    optimizer=opt,
     cost=cost
 )
 
