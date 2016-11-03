@@ -21,10 +21,10 @@ from ngraph.frontends.neon.cost import (CrossEntropyBinary, CrossEntropyMulti, S
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     ex = ExecutorFactory()
-    N = ng.Axis("N")
+    N = ng.make_axis("N")
     N.length = outputs.shape[0]
-    y = ng.placeholder(axes=ng.Axes([N]))
-    t = ng.placeholder(axes=ng.Axes([N]))
+    y = ng.placeholder(axes=ng.make_axes([N]))
+    t = ng.placeholder(axes=ng.make_axes([N]))
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
     np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)

@@ -47,6 +47,6 @@ class OpsGradient(OpsBase):
 
         # gradient of relu op
         relu_grad = ng.greater(features, 0.)
-        relu_grad = ng.AxesCastOp(relu_grad, gradients.axes)
+        relu_grad = ng.cast_axes(relu_grad, gradients.axes)
 
         return gradients * relu_grad

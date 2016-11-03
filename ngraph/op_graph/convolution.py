@@ -15,7 +15,7 @@
 from __future__ import division
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import Axis, Axes
+from ngraph.op_graph.axes import make_axis, Axes
 
 
 class convolution(op_graph.TensorOp):
@@ -68,7 +68,7 @@ class convolution(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        axes = Axes([Axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
+        axes = Axes([make_axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
         for i, name in enumerate(['C', 'D', 'H', 'W']):
             axes[i].name = name
 
