@@ -110,8 +110,7 @@ def check_rnn(seq_len, input_size, hidden_size,
     REC = ng.Axis(seq_len, recurrent=True)
     N = ng.Axis(batch_size, batch=True)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
-                    time_axis=REC)
+    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
 
     inp_ng = ng.placeholder(axes=ng.Axes([Cin, REC, N]))
 
@@ -119,19 +118,26 @@ def check_rnn(seq_len, input_size, hidden_size,
     out_ng = rnn_ng.configure(inp_ng)
     out_ng.input = True
 
+    rnn_W_input = rnn_ng.W_input
+    rnn_W_input.input = True
+    rnn_W_recur = rnn_ng.W_recur
+    rnn_W_recur.input = True
+    rnn_b = rnn_ng.b
+    rnn_b.input = True
+
     ex = ExecutorFactory()
 
     fprop_neon_fun = ex.executor(out_ng, inp_ng)
-    dWinput_s_fun = ex.derivative(out_ng, rnn_ng.W_input)
-    dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_ng.W_input, delta)
-    dWrecur_s_fun = ex.derivative(out_ng, rnn_ng.W_recur)
-    dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_ng.W_recur, delta)
-    dWb_s_fun = ex.derivative(out_ng, rnn_ng.b)
-    dWb_n_fun = ex.numeric_derivative(out_ng, rnn_ng.b, delta)
+    dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
+    dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
+    dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
+    dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
+    dWb_s_fun = ex.derivative(out_ng, rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
+    dWb_n_fun = ex.numeric_derivative(out_ng, rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
 
     # fprop on random inputs
     input_value = rng.uniform(-1, 1, inp_ng.axes)
-    fprop_neon = fprop_neon_fun(input_value)
+    fprop_neon = fprop_neon_fun(input_value).copy()
 
     # after the rnn graph has been executed, can get the W values. Get copies so
     # shared values don't confuse derivatives
@@ -140,17 +146,17 @@ def check_rnn(seq_len, input_size, hidden_size,
     bh_neon = rnn_ng.b.value.get(None).copy()
 
     # bprop derivs
-    dWinput_s = dWinput_s_fun(Wxh_neon)
-    dWinput_n = dWinput_n_fun(Wxh_neon)
-    np.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
-
-    dWrecur_s = dWrecur_s_fun(Whh_neon)
-    dWrecur_n = dWrecur_n_fun(Whh_neon)
+    dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
+    dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
     np.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
 
-    dWb_s = dWb_s_fun(bh_neon)
-    dWb_n = dWb_n_fun(bh_neon)
+    dWb_s = dWb_s_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
+    dWb_n = dWb_n_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
     np.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
+
+    dWinput_s = dWinput_s_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
+    dWinput_n = dWinput_n_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
+    np.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
 
     # ========= reference model ==========
     input_shape = (input_size, seq_len * batch_size)
