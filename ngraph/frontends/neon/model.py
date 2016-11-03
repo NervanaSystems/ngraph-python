@@ -17,7 +17,7 @@ from __future__ import division
 import ngraph as ng
 from ngraph.frontends.neon.axis import ax
 import numpy as np
-from neon.data import ArrayIterator, DataLoader
+from neon.data import NervanaDataIterator, DataLoader, Text
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
 from ngraph.transformers import Transformer
 
@@ -32,10 +32,12 @@ def dataset_nclasses(dataset):
     Returns:
 
     """
-    if isinstance(dataset, ArrayIterator):
-        return dataset.nclass
+    if isinstance(dataset, Text):
+        return dataset.nclass, dataset.seq_length
+    elif isinstance(dataset, NervanaDataIterator):
+        return (dataset.nclass, )
     elif isinstance(dataset, DataLoader):
-        return dataset.nclasses
+        return (dataset.nclasses, )
 
 
 def dataset_batchsize(dataset):
@@ -48,7 +50,7 @@ def dataset_batchsize(dataset):
     Returns:
 
     """
-    if isinstance(dataset, ArrayIterator):
+    if isinstance(dataset, NervanaDataIterator):
         return dataset.be.bsz
     elif isinstance(dataset, DataLoader):
         return dataset.bsz
@@ -108,7 +110,7 @@ class Model(object):
         self.input = ng.placeholder(axes=batch_input_axes)
         self.target = ng.placeholder(axes=batch_target_axes)
         input_axes.set_shape(dataset.shape)
-        target_axes.set_shape((dataset_nclasses(dataset),))
+        target_axes.set_shape(*(dataset_nclasses(dataset),))
 
         ax.N.length = dataset_batchsize(dataset)
         self.batch_input_shape = batch_input_axes.lengths
