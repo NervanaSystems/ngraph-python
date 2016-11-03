@@ -228,6 +228,10 @@ class TensorDescriptionWrapper:
             self.shape = tuple([1] + list(self.shape))
             self.strides = tuple([0] + list(self.strides))
 
+    @property
+    def is_trans(self):
+        return (len(self.shape) == 2 and self.strides[0] == 1)
+
 
 class GenerationContext:
     def __init__(self):
