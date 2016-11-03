@@ -22,7 +22,7 @@ import numpy as np
 from builtins import object, str
 
 from ngraph.op_graph.axes import TensorDescription, \
-    makeAxis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
+    make_axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -225,7 +225,7 @@ class Op(NameableValue, DebugInfo):
         self.schemas = []
         self._adjoints = None
         self.const = const
-        self.constant = constant
+        self.is_constant = constant
         self.initializers = OrderedSet()
         if initializers is not None:
             for initializer in initializers:
@@ -357,15 +357,15 @@ class Op(NameableValue, DebugInfo):
         Returns: True if the tensor can be assigned to.
 
         """
-        return not self.constant
+        return not self.is_constant
 
     @property
-    def isscalar(self):
+    def is_scalar(self):
         return 0 == len(self.axes)
 
     @property
     def scalar_op(self):
-        if not self.isscalar:
+        if not self.is_scalar:
             raise ValueError()
         return self
 
@@ -380,7 +380,7 @@ class Op(NameableValue, DebugInfo):
         return self.__persistent or self.reference
 
     @property
-    def isdevice_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -647,7 +647,7 @@ class InitTensor(Op):
         self.valfun = valfun
 
     @property
-    def isdevice_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -681,7 +681,7 @@ class SetItem(Op):
 
 class SetItemOneDim(Op):
     def __init__(self, tensor, item, val, force=False, **kwargs):
-        if val.isscalar:
+        if val.is_scalar:
             val = val.scalar_op
         super(SetItemOneDim, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
@@ -704,7 +704,7 @@ class doall(Op):
         return []
 
     @property
-    def isdevice_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -728,7 +728,7 @@ class Fill(Op):
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
-            if scalar.constant:
+            if scalar.is_constant:
                 scalar = scalar.const
             else:
                 raise ValueError("{} is not a scalar constant".format(scalar))
@@ -987,7 +987,7 @@ class ReshapeOp(TensorOp):
         )
 
     @property
-    def isscalar(self):
+    def is_scalar(self):
         """
         Reshape adds shape information, but we retain being a scalar.
 
@@ -995,14 +995,14 @@ class ReshapeOp(TensorOp):
             True if the value comes from a scalar.
 
         """
-        return self.args[0].isscalar
+        return self.args[0].is_scalar
 
     @property
     def scalar_op(self):
         return self.args[0].scalar_op
 
     @property
-    def isdevice_op(self):
+    def is_device_op(self):
         """
         Returns:
             False, because this is handled by the transformer.
@@ -1346,7 +1346,7 @@ def flatten(x, axes=None, **kwargs):
         else:
             axes = Axes((FlattenedAxis(x.axes),))
 
-    if x.isscalar:
+    if x.is_scalar:
         return x
 
     if isinstance(x, Flatten) and x.axes == axes:
@@ -1453,7 +1453,7 @@ class AssignableTensorOp(TensorOp):
         return []
 
     @property
-    def isdevice_op(self):
+    def is_device_op(self):
         """
 
         Returns:
@@ -1488,7 +1488,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
-        val.axes = Axes([makeAxis(x, match_on_length=True) for x in nptensor.shape])
+        val.axes = Axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((
@@ -1513,7 +1513,7 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     return val
 
 
-def isconstant(value):
+def is_constant(value):
     """
     Test an Op to see if it is a constant.
 
@@ -1523,10 +1523,10 @@ def isconstant(value):
     Returns: True if value is a constant.
 
     """
-    return isinstance(value, AssignableTensorOp) and value.constant
+    return isinstance(value, AssignableTensorOp) and value.is_constant
 
 
-def isconstant_scalar(value):
+def is_constant_scalar(value):
     """
     Tests an Op to see if it is a constant scalar.
 
@@ -1536,7 +1536,7 @@ def isconstant_scalar(value):
     Returns: True if value is a constant scalar.
 
     """
-    return value.constant and value.isscalar
+    return value.is_constant and value.is_scalar
 
 
 def constant_value(value):
@@ -1549,7 +1549,7 @@ def constant_value(value):
     Returns: The constant value.
 
     """
-    if not isconstant(value):
+    if not is_constant(value):
         raise ValueError()
     return value.const
 
@@ -1917,9 +1917,9 @@ class BinaryElementWiseLowDOp(ElementWise):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
 
-        if x.isscalar:
+        if x.is_scalar:
             x = x.scalar_op
-        if y.isscalar:
+        if y.is_scalar:
             y = y.scalar_op
 
         super(BinaryElementWiseLowDOp, self).__init__(
@@ -1962,7 +1962,7 @@ def create_binary_elementwise(name,
 
     def reduce_to_oned(self):
         x, y = self.args
-        if x.isscalar and y.isscalar:
+        if x.is_scalar and y.is_scalar:
             return ZeroDimBinClass(x.scalar_op, y.scalar_op, axes=self.axes, **self.kwargs)
         else:
             x, y = flatten(x), flatten(y)

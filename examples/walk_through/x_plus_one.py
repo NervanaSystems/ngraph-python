@@ -1,7 +1,7 @@
 from __future__ import print_function
 import ngraph as ng
 
-x = ng.placeholder(axes=ng.makeAxes())
+x = ng.placeholder(axes=ng.make_axes())
 x_plus_one = x + 1
 
 transformer = ng.NumPyTransformer()

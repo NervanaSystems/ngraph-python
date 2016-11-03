@@ -256,7 +256,7 @@ class NameScope(Parented):
         self._set_value_name("." + name, value)
 
 
-def makeNameScope(name):
+def make_namescope(name):
     """
     Creates a NameScope.
 

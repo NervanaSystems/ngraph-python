@@ -15,32 +15,32 @@
 import ngraph as ng
 
 # Define axis roles
-ar = ng.makeNameScope(name="ar")
+ar = ng.make_namescope(name="ar")
 
-ar.Height = ng.makeAxisRole()
-ar.Width = ng.makeAxisRole()
-ar.Depth = ng.makeAxisRole()
-ar.Channels = ng.makeAxisRole()
+ar.Height = ng.make_axis_role()
+ar.Width = ng.make_axis_role()
+ar.Depth = ng.make_axis_role()
+ar.Channels = ng.make_axis_role()
 
 # Define the standard Neon axes
-ax = ng.makeNameScope(name="ax")
+ax = ng.make_namescope(name="ax")
 
-ax.N = ng.makeAxis(batch=True, docstring="minibatch size")
+ax.N = ng.make_axis(batch=True, docstring="minibatch size")
 
-ax.C = ng.makeAxis(roles=[ar.Channels], docstring="number of input channels")
-ax.D = ng.makeAxis(roles=[ar.Depth], docstring="input image depth")
-ax.H = ng.makeAxis(roles=[ar.Height], docstring="input image height")
-ax.W = ng.makeAxis(roles=[ar.Width], docstring="input image width")
+ax.C = ng.make_axis(roles=[ar.Channels], docstring="number of input channels")
+ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
+ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
+ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
-ax.REC = ng.makeAxis(recurrent=True, docstring="recurrent axis")
+ax.REC = ng.make_axis(recurrent=True, docstring="recurrent axis")
 
-ax.R = ng.makeAxis(roles=[ar.Height], docstring="filter height")
-ax.S = ng.makeAxis(roles=[ar.Width], docstring="filter width")
-ax.T = ng.makeAxis(roles=[ar.Depth], docstring="filter depth")
+ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
+ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
+ax.T = ng.make_axis(roles=[ar.Depth], docstring="filter depth")
 
-ax.K = ng.makeAxis(roles=[ar.Channels], docstring="number of output channels")
-ax.M = ng.makeAxis(roles=[ar.Depth], docstring="output image depth")
-ax.P = ng.makeAxis(roles=[ar.Height], docstring="output image height")
-ax.Q = ng.makeAxis(roles=[ar.Width], docstring="output image width")
+ax.K = ng.make_axis(roles=[ar.Channels], docstring="number of output channels")
+ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")
+ax.P = ng.make_axis(roles=[ar.Height], docstring="output image height")
+ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")
 
-ax.Y = ng.makeAxis(docstring="target")
+ax.Y = ng.make_axis(docstring="target")

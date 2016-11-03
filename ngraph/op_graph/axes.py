@@ -40,7 +40,7 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
-def makeAxisRole(name=None, docstring=None):
+def make_axis_role(name=None, docstring=None):
     """
     Returns a new AxisRole.
 
@@ -55,7 +55,7 @@ def makeAxisRole(name=None, docstring=None):
     return AxisRole(name=name, docstring=docstring)
 
 
-def makeAxis(length=None, name=None,
+def make_axis(length=None, name=None,
              batch=False, recurrent=False,
              match_on_length=False,
              roles=None, docstring=None):
@@ -82,7 +82,7 @@ def makeAxis(length=None, name=None,
                 roles=roles, docstring=docstring)
 
 
-def makeAxes(axes=None):
+def make_axes(axes=None):
     """
     Makes an Axes object.
 
@@ -148,8 +148,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
                  **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
-        self.__isbatch = batch
-        self.__isrecurrent = recurrent
+        self.__is_batch = batch
+        self.__is_recurrent = recurrent
         self.__match_on_length = match_on_length
         self.__duals = WeakValueDictionary()
         self.__roles = set()
@@ -157,7 +157,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             self.roles.update(roles)
 
     @property
-    def isbatch(self):
+    def is_batch(self):
         """
         Tests if an axis is a batch axis.
 
@@ -165,10 +165,10 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             bool: True if the axis is a batch axis.
 
         """
-        return self.__isbatch
+        return self.__is_batch
 
     @property
-    def isrecurrent(self):
+    def is_recurrent(self):
         """
         Tests if an axis is a recurrent axis.
 
@@ -176,7 +176,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.__isrecurrent
+        return self.__is_recurrent
 
     @property
     def match_on_length(self):
@@ -347,8 +347,8 @@ class FunctionAxis(Axis):
 
     def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1,
-                                           batch=parent.isbatch,
-                                           recurrent=parent.isrecurrent,
+                                           batch=parent.is_batch,
+                                           recurrent=parent.is_recurrent,
                                            **kwargs)
         self.length_fun = length_fun
 
@@ -582,21 +582,21 @@ class Axes(object):
         Returns:
             The Axes subset that are batch axes.
         """
-        return Axes(axis for axis in self if axis.isbatch)
+        return Axes(axis for axis in self if axis.is_batch)
 
     def sample_axes(self):
         """
         Returns:
             The Axes subset that are not batch axes.
         """
-        return Axes(axis for axis in self if not axis.isbatch)
+        return Axes(axis for axis in self if not axis.is_batch)
 
     def recurrent_axes(self):
         """
         Returns:
             The Axes subset that are recurrent axes.
         """
-        return Axes(axis for axis in self if axis.isrecurrent)
+        return Axes(axis for axis in self if axis.is_recurrent)
 
     def flatten(self):
         if len(self) == 1:
@@ -1487,7 +1487,7 @@ class TensorDescription(NameableValue):
         """A device handle to the value."""
         return self.__value
 
-    def isbase(self):
+    def is_base(self):
         """This tensor provides its own storage."""
         return self.__base is None
 

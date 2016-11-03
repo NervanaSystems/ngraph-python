@@ -6,11 +6,11 @@ from ngraph.util.utils import ExecutorFactory
 
 
 def test_variable_init(transformer_factory):
-    C = ng.makeAxis("C")
+    C = ng.make_axis("C")
     C.length = 200
 
     w_init = np.random.rand(C.length)
-    W = ng.Variable(axes=ng.makeAxes([C]), initial_value=w_init)
+    W = ng.Variable(axes=ng.make_axes([C]), initial_value=w_init)
 
     ex = ExecutorFactory()
     result = ex.executor(W)()
@@ -23,7 +23,7 @@ def test_deriv_missing_connection():
     used to compute the expression should raise an exception.
     """
 
-    N = ng.makeAxis(1)
+    N = ng.make_axis(1)
 
     x = ng.Variable(axes=[N])
     y = ng.Variable(axes=[N])
@@ -38,7 +38,7 @@ def test_pad_invalid_paddings_length():
     pad should raise an exception if the paddings length is not the same as the
     input dimensionality.
     """
-    N = ng.makeAxis(1)
+    N = ng.make_axis(1)
 
     x = ng.Variable(axes=[N])
     with pytest.raises(ValueError):
@@ -50,7 +50,7 @@ def test_pad_0():
     pad with length 0 should be a nop
     """
 
-    N = ng.makeAxis(1)
+    N = ng.make_axis(1)
 
     x = ng.Variable(axes=[N])
 
@@ -62,8 +62,8 @@ def test_pad_mixed():
     mix 0 padding with non-0 padding
     """
 
-    N = ng.makeAxis(1)
-    M = ng.makeAxis(1)
+    N = ng.make_axis(1)
+    M = ng.make_axis(1)
 
     x = ng.Variable(axes=[N, M])
 
@@ -78,8 +78,8 @@ def test_slice_nop():
     slicing with nop slice should return same axis
     """
 
-    N = ng.makeAxis(1)
-    M = ng.makeAxis(1)
+    N = ng.make_axis(1)
+    M = ng.make_axis(1)
 
     x = ng.Variable(axes=[N, M])
 
@@ -94,8 +94,8 @@ def test_slice_nop():
 
 def test_setting():
     ex = ExecutorFactory()
-    X = ng.makeAxis(name='X', length=3)
-    axes = ng.makeAxes([X])
+    X = ng.make_axis(name='X', length=3)
+    axes = ng.make_axes([X])
 
     np_x = np.array([1, 2, 3], dtype=np.float32)
     np_y = np.array([1, 3, 5], dtype=np.float32)

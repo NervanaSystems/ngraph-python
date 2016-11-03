@@ -25,9 +25,9 @@ rtol = atol = 1e-2
 
 def test_expand_dims(transformer_factory):
     """TODO."""
-    C = ng.makeAxis(name='C')
-    D = ng.makeAxis(name='D')
-    N = ng.makeAxis(name='N')
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
+    N = ng.make_axis(name='N')
 
     max_new_axis_length = 4
 
@@ -62,7 +62,7 @@ def test_expand_dims(transformer_factory):
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = ng.placeholder(axes=ng.makeAxes(tensor_axes))
+                tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
 
                 expanded = ng.ExpandDims(tensor, new_axis, dim)
                 expander_fun = ex.executor(expanded, tensor)
@@ -102,8 +102,8 @@ def test_slice(transformer_factory):
     except ImportError:
         pass
 
-    C = ng.makeAxis(name='C')
-    D = ng.makeAxis(name='D')
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
 
     tests = [
         {
@@ -165,7 +165,7 @@ def test_slice(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(axes=ng.makeAxes(tensor_axes))
+        tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
         expected = np.array(test['expected'], dtype='float32')
 
         s = test['slice']
@@ -191,10 +191,10 @@ def test_slice(transformer_factory):
 
 def test_padding(transformer_factory):
     """TODO."""
-    C = ng.makeAxis(name='C')
-    D = ng.makeAxis(name='D')
-    M = ng.makeAxis(name='M')
-    N = ng.makeAxis(name='N')
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
+    M = ng.make_axis(name='M')
+    N = ng.make_axis(name='N')
 
     tests = [
         {
@@ -221,7 +221,7 @@ def test_padding(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(axes=ng.makeAxes(tensor_axes))
+        tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
         padding = test['padding']
         padded_axes = test['padded_axes']
         padded = ng.pad(tensor, padding, padded_axes)
@@ -257,8 +257,8 @@ def test_padding(transformer_factory):
 
 
 def test_cast_axes(transformer_factory):
-    C = ng.makeAxis(name='C')
-    D = ng.makeAxis(name='D')
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
 
     ex = ExecutorFactory()
 
@@ -292,17 +292,17 @@ def test_cast_axes(transformer_factory):
 
 
 def test_slice_tensor_description(transformer_factory):
-    C = ng.makeAxis(2)
+    C = ng.make_axis(2)
 
-    td = TensorDescription(ng.makeAxes(C))
+    td = TensorDescription(ng.make_axes(C))
     with pytest.raises(ValueError):
         td.slice(
             [slice(None)],
-            ng.makeAxes([ng.makeAxis(1), ng.makeAxis(1)]),
+            ng.make_axes([ng.make_axis(1), ng.make_axis(1)]),
         )
 
 
 def test_tensor_description_init(transformer_factory):
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
-        TensorDescription(ng.makeAxes(ng.makeAxis()))
+        TensorDescription(ng.make_axes(ng.make_axis()))

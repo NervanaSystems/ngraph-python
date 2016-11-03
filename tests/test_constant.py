@@ -59,9 +59,9 @@ def test_constant_multiply(transformer_factory):
 
 def test_numpytensor_add(transformer_factory):
     """TODO."""
-    Y = ng.makeAxis(name='Y', length=2)
-    M = ng.makeAxis(name='M', length=2)
-    N = ng.makeAxis(name='N', length=2)
+    Y = ng.make_axis(name='Y', length=2)
+    M = ng.make_axis(name='M', length=2)
+    N = ng.make_axis(name='N', length=2)
 
     a = ng.Constant(np.array([3, 5], dtype=np.float32), axes=[Y])
     b = ng.Constant(np.array([3, 5], dtype=np.float32), axes=[Y])
@@ -81,9 +81,9 @@ def test_numpytensor_add(transformer_factory):
 
 
 def test_numpytensor_dot(transformer_factory):
-    Y = ng.makeAxis(name='Y')
-    M = ng.makeAxis(name='M')
-    N = ng.makeAxis(name='N')
+    Y = ng.make_axis(name='Y')
+    M = ng.make_axis(name='M')
+    N = ng.make_axis(name='N')
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
@@ -103,8 +103,8 @@ def test_numpytensor_dot(transformer_factory):
 
 def test_numpytensor_multiply_constant(transformer_factory):
     """TODO."""
-    M = ng.makeAxis(name='M')
-    N = ng.makeAxis(name='N')
+    M = ng.make_axis(name='M')
+    N = ng.make_axis(name='N')
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.multiply(np_a, 2)
@@ -121,8 +121,8 @@ def test_numpytensor_multiply_constant(transformer_factory):
 
 def test_numpytensor_add_constant(transformer_factory):
     """TODO."""
-    M = ng.makeAxis(name='M')
-    N = ng.makeAxis(name='N')
+    M = ng.make_axis(name='M')
+    N = ng.make_axis(name='N')
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.add(np_a, 2)
@@ -139,8 +139,8 @@ def test_numpytensor_add_constant(transformer_factory):
 
 def test_numpytensor_fusion(transformer_factory):
     """TODO."""
-    M = ng.makeAxis(name='M')
-    N = ng.makeAxis(name='N')
+    M = ng.make_axis(name='M')
+    N = ng.make_axis(name='N')
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[3, 2, 1]], dtype=np.float32)
@@ -159,9 +159,9 @@ def test_numpytensor_fusion(transformer_factory):
 
 def test_numpytensor_mlp(transformer_factory):
     """TODO."""
-    D = ng.makeAxis(name='D')
-    H = ng.makeAxis(name='H')
-    N = ng.makeAxis(name='N')
+    D = ng.make_axis(name='D')
+    H = ng.make_axis(name='H')
+    N = ng.make_axis(name='N')
 
     np_x = np.array([[1, 2, 3]], dtype=np.float32)
     np_w = np.array([[1, 1], [1, 1], [1, 1]], dtype=np.float32)

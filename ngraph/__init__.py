@@ -16,21 +16,21 @@
 from __future__ import print_function
 
 from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.axes import makeAxisRole, makeAxis, makeAxes, Axis, Axes
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, Axis, Axes
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import cast_axes
 from ngraph.transformers.nptransform import NumPyTransformer
-from ngraph.util.names import makeNameScope
+from ngraph.util.names import make_namescope
 
 __all__ = [
     'cast_axes',
-    'makeAxes',
-    'makeAxis',
-    'makeAxisRole',
-    'makeNameScope',
+    'make_axes',
+    'make_axis',
+    'make_axis_role',
+    'make_namescope',
     'AssignableOp',
     'Axis',
     'AxisRole',

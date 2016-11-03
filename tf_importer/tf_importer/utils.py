@@ -36,10 +36,10 @@ def tf_shape_to_axes(tf_shape):
     Arguments:
         tf_shape: attr_value_pb2.AttrValue, tf node's shape
     Returns:
-        ng.makeAxes
+        Axes: Axes for shape.
     """
     shape = [int(d.size) for d in tf_shape.shape.dim]
-    axes = [ng.makeAxis(s) for s in shape]
+    axes = [ng.make_axis(s) for s in shape]
     return tuple(axes)
 
 
@@ -51,11 +51,11 @@ def shape_to_axes(shape):
         shape: shape of tensor
 
     Returns:
-        ng.makeAxes object
+        Axes: Axes for shape.
     """
     if not shape:
-        return ng.makeAxes()
-    axes = [ng.makeAxis(length=s) for s in shape]
+        return ng.make_axes()
+    axes = [ng.make_axis(length=s) for s in shape]
     return axes
 
 

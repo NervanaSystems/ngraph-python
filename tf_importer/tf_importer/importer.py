@@ -99,7 +99,7 @@ class TFImporter:
 
             # cast to new axes for safety
             if hasattr(output_op, 'axes'):
-                new_axes = [ng.makeAxis(a.length) for a in output_op.axes]
+                new_axes = [ng.make_axis(a.length) for a in output_op.axes]
                 output_op = ng.cast_axes(output_op, axes=new_axes)
 
             # save init node

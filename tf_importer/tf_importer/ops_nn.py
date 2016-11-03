@@ -81,7 +81,7 @@ class OpsNN(OpsBase):
 
         # broadcast / cast
         predicts = ng.Broadcast(predicts,
-                                axes=ng.makeAxes([axis for axis in reversed(predicts.axes)]))
+                                axes=ng.make_axes([axis for axis in reversed(predicts.axes)]))
         labels_one_hot = ng.cast_axes(labels_one_hot, axes=predicts.axes)
 
         # crossentropy

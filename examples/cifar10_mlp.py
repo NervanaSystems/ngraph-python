@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import ax, np, Affine, makeAxes, Callbacks, CrossEntropyMulti,\
+from ngraph.frontends.neon import ax, np, Affine, make_axes, Callbacks, CrossEntropyMulti,\
     GeneralizedCost, GradientDescentMomentum, Misclassification, Model,\
     NgraphArgparser, Rectlin, Softmax
 
@@ -42,7 +42,7 @@ opt_gdm = GradientDescentMomentum(learning_rate=0.01, momentum_coef=0.9)
 # set up the model layers
 layers = [
     Affine(nout=200, init=init_uni, activation=Rectlin()),
-    Affine(nout=10, axes=makeAxes(ax.Y,), init=init_uni,
+    Affine(nout=10, axes=make_axes(ax.Y,), init=init_uni,
            activation=Softmax()),
 ]
 
@@ -52,8 +52,8 @@ mlp = Model(layers=layers)
 callbacks = Callbacks(mlp, eval_set=test, **args.callback_args)
 mlp.initialize(
     dataset=train,
-    input_axes=makeAxes((ax.C, ax.H, ax.W)),
-    target_axes=makeAxes((ax.Y,)),
+    input_axes=make_axes((ax.C, ax.H, ax.W)),
+    target_axes=make_axes((ax.Y,)),
     optimizer=opt_gdm,
     cost=cost,
     metric=Misclassification()

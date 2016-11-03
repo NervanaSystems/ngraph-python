@@ -42,7 +42,7 @@ Examples:
 
 """
 import numpy as np
-from ngraph.frontends.neon import ax, makeAxes, Affine, Rectlin, Logistic, GeneralizedCost,\
+from ngraph.frontends.neon import ax, make_axes, Affine, Rectlin, Logistic, GeneralizedCost,\
     CrossEntropyBinary, Misclassification, GradientDescentMomentum, Model, Callbacks,\
     NgraphArgparser
 from neon.data import MNIST
@@ -82,8 +82,8 @@ mlp = Model(layers=layers)
 callbacks = Callbacks(mlp, eval_set=valid_set, **args.callback_args)
 mlp.initialize(
     dataset=train_set,
-    input_axes=makeAxes([ax.C, ax.H, ax.W]),
-    target_axes=makeAxes([ax.Y]),
+    input_axes=make_axes([ax.C, ax.H, ax.W]),
+    target_axes=make_axes([ax.Y]),
     optimizer=optimizer,
     cost=cost,
     metric=Misclassification()

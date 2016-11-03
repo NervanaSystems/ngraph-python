@@ -123,11 +123,11 @@ class OpsBinary(OpsBase):
 
             # pad left and right axis to be the same length, align right
             result_dim = max(left_dim, right_dim)
-            left_axes_pad = [ng.makeAxis(length=1) for _ in
+            left_axes_pad = [ng.make_axis(length=1) for _ in
                              range(result_dim - left_dim)] + list(left.axes)
-            right_axes_pad = [ng.makeAxis(length=1) for _ in
+            right_axes_pad = [ng.make_axis(length=1) for _ in
                               range(result_dim - right_dim)] + list(right.axes)
-            result_axes = [ng.makeAxis(length=max(l.length, r.length)) for l, r
+            result_axes = [ng.make_axis(length=max(l.length, r.length)) for l, r
                            in zip(left_axes_pad, right_axes_pad)]
 
             # broadcast left / right, introducing dummy length 1 axes

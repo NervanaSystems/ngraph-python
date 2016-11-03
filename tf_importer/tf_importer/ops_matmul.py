@@ -81,7 +81,7 @@ class OpsMatmul(OpsBase):
         assert left.axes[1].length == right.axes[0].length
 
         # cast axis
-        right_axes = ng.makeAxes([left.axes[1], right.axes[1]])
+        right_axes = ng.make_axes([left.axes[1], right.axes[1]])
         right_casted = ng.cast_axes(right, axes=right_axes)
 
         # result op

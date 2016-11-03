@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 # commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import makeAxes
+from ngraph import make_axes
 from ngraph.frontends.neon.axis import ax, ar
 from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic

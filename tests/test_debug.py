@@ -13,9 +13,9 @@ def test_print_op_bprop():
     Ensure bprop of PrintOp is correct (passes through exactly the delta)
     """
 
-    A = ng.makeAxis(10, name='A')
+    A = ng.make_axis(10, name='A')
 
-    x = ng.placeholder(axes=ng.makeAxes([A]))
+    x = ng.placeholder(axes=ng.make_axes([A]))
 
     # randomly initialize
     x_value = rng.uniform(-1, 1, x.axes)
@@ -33,9 +33,9 @@ def test_print_op_fprop(capfd):
     stdout.
     """
 
-    A = ng.makeAxis(1, name='A')
+    A = ng.make_axis(1, name='A')
 
-    x = ng.placeholder(axes=ng.makeAxes([A]))
+    x = ng.placeholder(axes=ng.make_axes([A]))
 
     # hardcode value so there are is no rounding to worry about in str
     # comparison in  final assert
