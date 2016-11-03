@@ -68,7 +68,7 @@ class NumPyConvEngine(object):
         I = {I}
         F = {F}
         O = {O}
-        mSlice, pSlice, qSlice, _, _, _ = {slices}
+        mSlice, pSlice, qSlice, _, _, _ = self.conv_slices[{index}]
         """ + NumPyConvEngine.xprop()
 
         return pycode
@@ -79,7 +79,7 @@ class NumPyConvEngine(object):
         I = {E}
         F = {F}
         O = {gI}
-        _, _, _, mSlice, pSlice, qSlice = {slices}
+        _, _, _, mSlice, pSlice, qSlice = self.conv_slices[{index}]
         F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
         """ + NumPyConvEngine.xprop()
 
@@ -90,16 +90,16 @@ class NumPyConvEngine(object):
         pycode = """
         I = {I}
         E = {E}
-        U = {O}
-        mSlice, pSlice, qSlice, _, _, _ = {slices}
+        U = {U}
+        mSlice, pSlice, qSlice, _, _, _ = self.conv_slices[{index}]
         C, _, _, _, K = U.shape
-
+        U.fill(0.0)
         for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
                                                      enumerate(pSlice),
                                                      enumerate(qSlice)):
-            sliceT, sliceD, _ = mS
-            sliceR, sliceH, _ = pS
-            sliceS, sliceW, _ = qS
+            sliceT, sliceD, tlen = mS
+            sliceR, sliceH, rlen = pS
+            sliceS, sliceW, slen = qS
             slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
             slicedE = E[:, m, p, q, :]
             update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
@@ -110,12 +110,10 @@ class NumPyConvEngine(object):
     @staticmethod
     def get_slices(I, F, O, conv_dims):
         C, D, H, W, _ = I.tensor_description.axes.lengths
-        C, R, S, T, K = F.tensor_description.axes.lengths
+        C, T, R, S, K = F.tensor_description.axes.lengths
         K, M, P, Q, _ = O.tensor_description.axes.lengths
-
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
-
         mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
         pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
         qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
@@ -333,10 +331,9 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, inputs, filters):
         self.conv_dims.append(op.convdict)
         self.conv_slices.append(NumPyConvEngine.get_slices(inputs, filters, outputs, op.convdict))
-        # import pdb; pdb.set_trace()
         self.append(
             NumPyConvEngine.fprop_conv(),
-            slices=self.conv_slices[op.index],
+            index=op.index,
             I=inputs,
             F=filters,
             O=outputs
@@ -346,7 +343,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta, filters):
         self.append(
             NumPyConvEngine.bprop_conv(),
-            slices=self.conv_slices[op.index],
+            index=op.index,
             E=delta,
             F=filters,
             gI=outputs
@@ -356,7 +353,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta, inputs):
         self.append(
             NumPyConvEngine.update_conv(),
-            slices=self.conv_slices[op.index],
+            index=op.index,
             I=inputs,
             E=delta,
             U=outputs
@@ -707,6 +704,7 @@ class NumPyTransformer(Transformer):
         self.model = r['Model']()
         self.model.conv_dims = self.compute_code.conv_dims
         self.model.pool_dims = self.compute_code.pool_dims
+        self.model.conv_slices = self.compute_code.conv_slices
         for computation in self.computations:
             executor = getattr(self.model, computation.name)
             computation.executor = executor

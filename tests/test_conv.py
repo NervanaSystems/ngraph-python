@@ -19,7 +19,6 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
-from conv_ref import ConvLayerRef
 
 from neon import NervanaObject
 from neon.backends import gen_backend
@@ -29,13 +28,22 @@ rng = RandomTensorGenerator(0, np.float32)
 
 NervanaObject.be = gen_backend()
 
-def test_convolution_fprop():
+
+class db(object):
+    """
+    Dummy class for delta buffers needed by neon
+    """
+    def __init__(self):
+        self.buffers = [None]
+
+
+def test_convolution():
     """
     test convolution forward path
     """
-    N = 1
+    N = 128
     C = 3
-    K = 8
+    K = 1
     D, T = 1, 1
     H = W = 32
     R = S = 2
@@ -68,39 +76,36 @@ def test_convolution_fprop():
 
     # compute convolution with graph
     output = ng.convolution(dims, inputs, filters)
-    d_filters = ng.deriv(output, filters)
-    d_inputs = ng.deriv(output, inputs)
+    targets = ng.placeholder(axes=output.axes)
 
-    result_og = executor(output, inputs, filters)(input_value, filter_value)
+    error = output - targets
+    d_inputs = ng.deriv(error, inputs)
+    d_filters = ng.deriv(error, filters)
+
+    targets_value = rng.uniform(-0.1, 0.1, output.axes)
+    conv_executor = executor([output, d_inputs, d_filters], inputs, filters, targets)
+    result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
 
 
+    #### Now compute reference values via NEON
     NervanaObject.be.bsz = N
     neon_layer = Convolution(fshape=(R, S, K), padding=padding, strides=strides)
 
     inp = neon_layer.be.array(input_value.reshape(C * H * W * D, N))
     neon_layer.W = neon_layer.be.array(filter_value.reshape(C * R * S * T, K))
+    neon_layer.dW = neon_layer.be.empty_like(neon_layer.W)
     neon_layer.configure((C, H, W))
     neon_layer.prev_layer = True
     neon_layer.allocate()
+    neon_layer.set_deltas(db())
 
-    result_value = neon_layer.fprop(inp).get().reshape(output.axes.lengths)
+    result_ne = neon_layer.fprop(inp).get().reshape(output.axes.lengths)
+    err = neon_layer.be.array(result_ne - targets_value).reshape(-1, N)
 
-    # neon_layer.allocate_deltas(deltas_buffer)
-    # deltas_buffer.allocate_buffers()
-    # neon_layer.set_deltas(deltas_buffer)
+    gradI_ne = neon_layer.bprop(err).get().reshape(inputs.axes.lengths)
+    gradF_ne = neon_layer.dW.get().reshape(filters.axes.lengths)
+    np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
+    # np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-6)
+    # np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
 
-
-    # ref_layer = ConvLayerRef(Nx.length,
-    #                          C, (H, W), (R, S), K,
-    #                          dtypeu,
-    #                          strides=dims['str_h'],
-    #                          padding=dims['pad_h'])
-    # ref_layer.weights = filter_value.reshape(C * R * S, K).T.astype(dtypeu)
-    # ref_layer.fprop(input_value.reshape(C * H * W, N).T.astype(dtypeu))
-    # result_value = ref_layer.y.copy().T.reshape(output.axes.lengths)
-
-    # result_value = np.zeros(output.axes.lengths, dtype=np.float32)
-
-    # np_convolution(input_value, filter_value, result_value)
-    np.testing.assert_allclose(result_og, result_value, rtol=1e-3, atol=1e-6)
