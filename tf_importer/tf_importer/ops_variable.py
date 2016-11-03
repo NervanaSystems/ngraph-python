@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from tf_importer.tf_importer.utils import tf_shape_to_axes
+from tf_importer.tf_importer.utils import tf_to_shape_axes
 from tf_importer.tf_importer.ops_base import OpsBase
 import ngraph as ng
 
@@ -141,7 +141,7 @@ class OpsVariable(OpsBase):
 
         # get axes
         try:
-            axes = tf_shape_to_axes(tf_node.attr['shape'])
+            axes = tf_to_shape_axes(tf_node.attr['shape'])
         except:
             raise NotImplementedError('Shape must be know prior to execution')
 
@@ -183,8 +183,10 @@ class OpsVariable(OpsBase):
         2. In TF, is the assigned tensor is not used, then it retain the
            original value
         """
-
         ref, value = inputs
+        assert ref.axes.lengths == value.axes.lengths, "shape not the same"
+        value = ng.cast_axes(value, ref.axes)
+
         if tf_node.name in self.init_assign_op_names:
             with ng.Op.saved_user_deps():
                 return ng.assign(ref, value)
@@ -216,6 +218,9 @@ class OpsVariable(OpsBase):
             to use the new value after the variable has been updated.
         """
         ref, value = inputs
+        assert ref.axes.lengths == value.axes.lengths, "shape not the same"
+        value = ng.cast_axes(value, ref.axes)
+
         if tf_node.name in self.init_assign_op_names:
             with ng.Op.saved_user_deps():
                 return ng.assign(ref, ref + value)

@@ -20,11 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from tf_importer.tests.importer_tester import ImporterTester
-from tf_importer.tf_importer.utils import tensor_shape_to_tuple
+from tf_importer.tf_importer.utils import tf_to_shape_tuple
 
 
 class Tester(ImporterTester):
-
     def test_binary_ops(self):
         # computation
         a = tf.placeholder(tf.float32, shape=(2, 3))
@@ -32,11 +31,25 @@ class Tester(ImporterTester):
         c = tf.add(a, b)
         d = tf.mul(c, a)
         e = tf.div(d, b)
-        f = tf.maximum(a, e)
+        f = tf.sub(a, e)
+        g = tf.maximum(a, f)
 
         # value
-        a_val = np.random.rand(*tensor_shape_to_tuple(a._shape))
-        b_val = np.random.rand(*tensor_shape_to_tuple(b._shape))
+        a_val = np.random.rand(*tf_to_shape_tuple(a))
+        b_val = np.random.rand(*tf_to_shape_tuple(b))
+
+        # test
+        self.run(g, tf_feed_dict={a: a_val, b: b_val})
+
+    def test_mod(self):
+        # computation
+        a = tf.placeholder(tf.int32, shape=(6,))
+        b = tf.placeholder(tf.int32, shape=(6,))
+        f = a % b
+
+        # value
+        a_val = np.array([0, 10, 11, 12, 13, 14], dtype=np.int32)
+        b_val = np.array([5, 5, 5, 5, 5, 5], dtype=np.int32)
 
         # test
         self.run(f, tf_feed_dict={a: a_val, b: b_val})
@@ -55,7 +68,7 @@ class Tester(ImporterTester):
         # value
         feed_dict = dict()
         for x in [a, b, c, d]:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         self.run(f, tf_feed_dict=feed_dict)

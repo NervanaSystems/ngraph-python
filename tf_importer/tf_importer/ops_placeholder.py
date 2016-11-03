@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from tf_importer.tf_importer.utils import tf_shape_to_axes
+from tf_importer.tf_importer.utils import tf_to_shape_axes
 from tf_importer.tf_importer.ops_base import OpsBase
 import ngraph as ng
 
@@ -55,6 +55,6 @@ class OpsPlaceholder(OpsBase):
             A `Tensor` that may be used as a handle for feeding a value, but not
             evaluated directly.
         """
-        axes = tf_shape_to_axes(tf_node.attr['shape'])
+        axes = tf_to_shape_axes(tf_node)
         ng_op = ng.placeholder(axes=axes, name=tf_node.name)
         return ng_op

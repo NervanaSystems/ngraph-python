@@ -24,4 +24,5 @@ def transformer_factory(request):
     yield factory
 
     # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(ngt.Transformer.make_transformer_factory("numpy"))
+    ngt.Transformer.set_transformer_factory(
+        ngt.Transformer.make_transformer_factory("numpy"))
