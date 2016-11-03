@@ -47,7 +47,7 @@ layers = [
     Recurrent(hidden_size, init, activation=Tanh(), time_axis=ax.REC),
     Affine(
         len(train_set.vocab), init,
-        activation=Softmax(), bias=init, axes=(ax.C, ax.REC)
+        activation=Softmax(), bias=init, axes=(ax.Y, ax.REC)
     )
 ]
 
@@ -59,7 +59,7 @@ callbacks = Callbacks(rnn, eval_set=valid_set, **args.callback_args)
 rnn.initialize(
     dataset=train_set,
     input_axes=Axes((ax.C, ax.REC)),
-    target_axes=Axes((ax.C, ax.REC)),
+    target_axes=Axes((ax.Y, ax.REC)),
     optimizer=opt,
     cost=cost
 )
