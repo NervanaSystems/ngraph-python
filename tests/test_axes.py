@@ -253,8 +253,11 @@ def test_sliced_batch_axis():
 
 
 def test_idempotent_axes_a():
+    """
+    Test test axes transformations with autodiff, case a, reference test
+    """
     ex = ExecutorFactory()
-    axes = ng.Axes([ng.Axis(3), ng.Axis(1)])
+    axes = Axes([Axis(3), Axis(1)])
 
     w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
     result = w + w
@@ -272,8 +275,12 @@ def test_idempotent_axes_a():
 
 @pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
 def test_idempotent_axes_b():
+    """
+    Test test axes transformations with autodiff, case b, with broadcast applied
+    to the same tensor
+    """
     ex = ExecutorFactory()
-    axes = ng.Axes([ng.Axis(3), ng.Axis(1)])
+    axes = Axes([Axis(3), Axis(1)])
 
     w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
     l = ng.Broadcast(w, axes=axes)
@@ -293,9 +300,13 @@ def test_idempotent_axes_b():
 
 @pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
 def test_idempotent_axes_c():
+    """
+    Test test axes transformations with autodiff, case c, with broadcast,
+    slice, cast and dim-shuffle
+    """
     ex = ExecutorFactory()
-    axes = ng.Axes([ng.Axis(3), ng.Axis(1)])
-    result_axes = [ng.Axis(length=axis.length) for axis in axes]
+    axes = Axes([Axis(3), Axis(1)])
+    result_axes = [Axis(length=axis.length) for axis in axes]
 
     # variable
     w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
@@ -330,4 +341,3 @@ def test_idempotent_axes_c():
 
     assert cost_comp() == 6.0
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
->>>>>>> add axes casting tests
