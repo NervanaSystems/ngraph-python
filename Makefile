@@ -51,6 +51,14 @@ uninstall:
 	@pip uninstall -y ngraph
 	@pip uninstall -r requirements.txt
 
+clean:
+	@find . -name "*.py[co]" -type f -delete
+	@find . -name "__pycache__" -type d -delete
+	@rm -f .coverage coverage.xml
+	@rm -rf ngraph.egg-info
+	@$(MAKE) -C $(DOC_DIR) clean
+	@echo
+
 test:
 	@echo Running unit tests...
 	@py.test --cov=ngraph --cov=tf_importer $(TEST_OPTS) $(TEST_DIRS)
