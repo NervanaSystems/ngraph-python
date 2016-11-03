@@ -20,9 +20,9 @@ from ngraph.util.utils import executor
 
 def test_evalutaion_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
-    C = ng.Axis(name='C')
-    W = ng.Axis(name='W')
-    D = ng.Axis(name='D')
+    C = ng.make_axis(name='C')
+    W = ng.make_axis(name='W')
+    D = ng.make_axis(name='D')
 
     C.length = 2
     D.length = 2
@@ -30,17 +30,17 @@ def test_evalutaion_twice(transformer_factory):
 
     x = ng.Constant(
         np.array([[1, 2], [3, 4]], dtype='float32'),
-        axes=ng.Axes([C, D])
+        axes=ng.make_axes([C, D])
     )
 
     hidden1_weights = ng.Constant(
         np.array([[1], [1]], dtype='float32'),
-        axes=ng.Axes([C, W])
+        axes=ng.make_axes([C, W])
     )
 
     hidden1_biases = ng.Constant(
         np.array([[2], [2]], dtype='float32'),
-        axes=ng.Axes([D, W])
+        axes=ng.make_axes([D, W])
     )
 
     hidden1 = ng.dot(x, hidden1_weights) + hidden1_biases
@@ -57,7 +57,7 @@ def test_missing_arguments_to_execute():
     Expect a failure if the wrong number of arguments are passed to a
     computation.
     """
-    N = ng.Axis(1)
+    N = ng.make_axis(1)
 
     x = ng.placeholder(axes=[N])
     y = ng.placeholder(axes=[N])
@@ -72,7 +72,7 @@ def test_execute_non_placeholder():
     Expect a failure if a non-input (Variable) is used as an argument to
     executor.
     """
-    N = ng.Axis(1)
+    N = ng.make_axis(1)
 
     x = ng.Variable(axes=[N])
     y = ng.Variable(axes=[N])

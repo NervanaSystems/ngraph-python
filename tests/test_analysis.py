@@ -35,8 +35,8 @@ def build_graphs(L, BS):
       TODO
     """
     # Axes
-    L = [ng.Axis(length=N, name='L%d' % i) for i, N in enumerate(L)]
-    BS = ng.Axis(length=BS, name='BS')
+    L = [ng.make_axis(length=N, name='L%d' % i) for i, N in enumerate(L)]
+    BS = ng.make_axis(length=BS, name='BS')
 
     # Builds Network
     activations = [ng.tanh for i in range(len(L) - 2)] + [ng.softmax]

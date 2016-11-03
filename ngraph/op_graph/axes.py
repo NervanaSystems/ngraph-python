@@ -40,6 +40,77 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
+def make_axis_role(name=None, docstring=None):
+    """
+    Returns a new AxisRole.
+
+    Args:
+        name (String, optional): The name for the role.
+        docstring (String, optional): A docstring for the role.
+
+    Returns:
+        AxisRole: A new AxisRole with the given name and docstring.
+
+    """
+    return AxisRole(name=name, docstring=docstring)
+
+
+def make_axis(length=None, name=None,
+              batch=False, recurrent=False,
+              match_on_length=False,
+              roles=None, docstring=None):
+    """
+    Returns a new Axis.
+
+    Args:
+        length (int, optional): Length of the axis.
+        name (String, optional): Name of the axis.
+        batch (bool, optional): This is a batch axis. Defaults to False.
+        recurrent (bool, optional): This is a recurrent axis. Defaults to False.
+        match_on_length (bool, optional): This axis will match an axis with
+            the same length. Defaults to False.
+        roles (set, optional): A set of axis roles for the axis.
+        docstring (String, optional): A docstring for the axis.
+
+    Returns:
+        Axis: A new Axis.
+
+    """
+    return Axis(length=length, name=name,
+                batch=batch, recurrent=recurrent,
+                match_on_length=match_on_length,
+                roles=roles, docstring=docstring)
+
+
+def make_axes(axes=None):
+    """
+    Makes an Axes object.
+
+    Args:
+        axes: A list of Axis.
+
+    Returns:
+        Axes: An Axes.
+
+    """
+    return Axes(axes=axes)
+
+
+class AxisRole(NameableValue):
+    """
+    An AxisRole is like a type for an Axis, such as "Height" or "Channels".
+
+    At different parts of a computation, axes of different length may be used for a role.
+    For example, after a convolution the height axis is usually shortened, and in a
+    convolution filter, the height axis of the filter is related to the height axis of
+    the input and output, but not the height. By matching AxisRoles, operations such as
+    convolution can match the axes in their arguments.
+    """
+
+    def __init__(self, **kwargs):
+        super(AxisRole, self).__init__(**kwargs)
+
+
 class Axis(with_metaclass(ABCMeta, NameableValue)):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
@@ -73,35 +144,48 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
                  batch=False,
                  recurrent=False,
                  match_on_length=False,
+                 roles=None,
                  **kwargs):
         super(Axis, self).__init__(**kwargs)
         self.__length = length
-        self.batch = batch
-        self.recurrent = recurrent
-        self.match_on_length = match_on_length
-        self.duals = WeakValueDictionary()
+        self.__is_batch = batch
+        self.__is_recurrent = recurrent
+        self.__match_on_length = match_on_length
+        self.__duals = WeakValueDictionary()
+        self.__roles = set()
+        if roles is not None:
+            self.roles.update(roles)
 
     @property
-    def batch(self):
+    def is_batch(self):
         """
-        Whether the axis is a batch axis.
-        """
-        return self.__batch
+        Tests if an axis is a batch axis.
 
-    @batch.setter
-    def batch(self, value):
-        self.__batch = value
+        Returns:
+            bool: True if the axis is a batch axis.
+
+        """
+        return self.__is_batch
 
     @property
-    def recurrent(self):
+    def is_recurrent(self):
         """
-        Whether the axis is a recurrent axis.
-        """
-        return self.__recurrent
+        Tests if an axis is a recurrent axis.
 
-    @recurrent.setter
-    def recurrent(self, value):
-        self.__recurrent = value
+        Returns:
+            bool: True if the axis is a recurrent axis.
+
+        """
+        return self.__is_recurrent
+
+    @property
+    def match_on_length(self):
+        """
+
+        Returns:
+            bool: True if this axis matches axes with the same length.
+        """
+        return self.__match_on_length
 
     @property
     def length(self):
@@ -134,21 +218,24 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     def get_dual(self, offset=-1):
         """
-        Get the dual of this axis.
+        Returns a dual for an axis.
+
+        The dual of an axis in the left side of a dot product matches the axis in the right side.
 
         Args:
-            offset: How many duals, default is -1.
+            axis (Axis):
+            offset (int, optional): The dual offset from axis. Defaults to -1.
 
         Returns:
-            A dual axis.
+            (Axis): The dual of the axis.
 
         """
         if offset == 0:
             return self
-        dual = self.duals.get(offset, None)
+        dual = self.__duals.get(offset, None)
         if dual is None:
             dual = DualAxis(self, offset)
-            self.duals[offset] = dual
+            self.__duals[offset] = dual
         return dual
 
     def get_transpose(self):
@@ -157,6 +244,38 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
     @property
     def primary_axis(self):
         return self
+
+    @property
+    def roles(self):
+        """
+
+        Returns: The AxisRoles of this axis.
+
+        """
+        return self.__roles
+
+    def has_role(self, axis_role):
+        """
+
+        Args:
+            axis_role: A role to test.
+
+        Returns:
+            True if this axis has the role.
+
+        """
+        return axis_role in self.axis_roles
+
+    def add_role(self, axis_role):
+        """
+
+        Args:
+            axis_role:
+
+        Returns:
+
+        """
+        self.roles.add(axis_role)
 
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
@@ -225,11 +344,13 @@ class FunctionAxis(Axis):
     restriction, because we expect the parent axis to become immutable once
     the transformation begins.
     """
+
     def __init__(self, parent, length_fun, **kwargs):
-        super(FunctionAxis, self).__init__(length=-1, **kwargs)
+        super(FunctionAxis, self).__init__(length=-1,
+                                           batch=parent.is_batch,
+                                           recurrent=parent.is_recurrent,
+                                           **kwargs)
         self.length_fun = length_fun
-        self.batch = parent.batch
-        # TODO: self.recurrent = parent.recurrent
 
     @property
     def length(self):
@@ -461,21 +582,21 @@ class Axes(object):
         Returns:
             The Axes subset that are batch axes.
         """
-        return Axes(axis for axis in self if axis.batch)
+        return Axes(axis for axis in self if axis.is_batch)
 
     def sample_axes(self):
         """
         Returns:
             The Axes subset that are not batch axes.
         """
-        return Axes(axis for axis in self if not axis.batch)
+        return Axes(axis for axis in self if not axis.is_batch)
 
     def recurrent_axes(self):
         """
         Returns:
             The Axes subset that are recurrent axes.
         """
-        return Axes(axis for axis in self if axis.recurrent)
+        return Axes(axis for axis in self if axis.is_recurrent)
 
     def flatten(self):
         if len(self) == 1:
@@ -535,7 +656,10 @@ class Axes(object):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes.concatenate(self, Axes(other))
+        return Axes(
+            tuple(self) +
+            tuple(axis for axis in Axes(other) if axis not in self)
+        )
 
     def __sub__(self, other):
         return Axes.subtract(self, Axes(other))
@@ -563,25 +687,6 @@ class Axes(object):
 
     def get_transpose(self):
         return Axes(axis.get_transpose() for axis in self)
-
-    @staticmethod
-    @with_args_as_axes
-    def concatenate(axes1, axes2):
-        """
-        Returns the union of the elements, leaving out duplicate Axes.
-
-        Arguments:
-            axes1: first axes to concatenate
-            axes2: second axes to concatenate
-
-        Returns:
-            The ordered union
-        """
-        assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes(
-            tuple(axes1) +
-            tuple(axis for axis in axes2 if axis not in axes1)
-        )
 
     @staticmethod
     @with_args_as_axes
@@ -669,20 +774,17 @@ class Axes(object):
         assert isinstance(axis, Axis)
         return axes._axes.index(axis)
 
-    @staticmethod
-    def index(axes, axis):
+    def index(self, axis):
         """
-        Returns the index of an axis in Axes.
+        Returns the index of an axis.
 
         Arguments:
-            axes: The axes in which to search.
             axis: The axis to search for.
 
         Returns:
             The index.
         """
-        axes = Axes(axes)
-        return axes._axes.index(axis)
+        return self._axes.index(axis)
 
     @staticmethod
     @with_args_as_axes

@@ -159,7 +159,7 @@ class Convolution(ParameterLayer):
         self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
         assert self.weight_shape is None
         names = ['C', 'T', 'R', 'S', 'K']
-        weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
+        weights_axes = [ng.make_axis(self.convparams[key], name=key) for key in names]
         weights = ng.Variable(axes=weights_axes, init=self.init)
         self.weight_shape = self.nglayer.dimF2
         if self.bsum:
@@ -253,7 +253,8 @@ class Pooling(Layer):
         (K, M, P, Q, N) = self.nglayer.dimO
         self.out_shape = (K, M, P, Q)
         out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
-        argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in ['C', 'D', 'H', 'W', 'N']]
+        argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
+                       for key in ['C', 'D', 'H', 'W', 'N']]
         argmax = ng.persistent_tensor(axes=argmax_axes, name='pool')
         return ng.pooling(self.nglayer, in_obj, argmax)
 
@@ -281,7 +282,7 @@ class Linear(ParameterLayer):
 
         """
         in_obj = super(Linear, self).configure(in_obj)
-        out_axes = ng.Axes(self.axes or [ng.Axis(self.nout, name='Hidden')])
+        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
 
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()

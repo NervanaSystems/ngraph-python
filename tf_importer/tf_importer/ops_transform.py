@@ -61,7 +61,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Rank` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(rank, axes=ng.Axes([]), name=tf_node.name)
+        return ng.Constant(rank, axes=ng.make_axes([]), name=tf_node.name)
 
     def Range(self, tf_node, inputs):
         """
@@ -147,7 +147,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(size, axes=ng.Axes([]), name=tf_node.name)
+        return ng.Constant(size, axes=ng.make_axes([]), name=tf_node.name)
 
     def Cast(self, tf_node, inputs):
         """
@@ -212,7 +212,7 @@ class OpsTransform(OpsBase):
         except:
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
-        axes = ng.Axes([ng.Axis(len(left.axes.lengths)), ])
+        axes = ng.make_axes([ng.make_axis(len(left.axes.lengths)), ])
 
         # return
         return ng.Constant(shape, axes=axes, name=tf_node.name)
@@ -455,12 +455,12 @@ class OpsTransform(OpsBase):
             dim = input_ndims + 1 + dim
 
         # create new axis
-        one_axis = ng.Axis(length=1)
+        one_axis = ng.make_axis(length=1)
 
         # get output axis
         pre_axis = [axis for axis in tensor.axes[:dim]]  # avoid FlattenedAxis
         pos_axis = [axis for axis in tensor.axes[dim:]]  # avoid FlattenedAxis
-        out_axis = ng.Axes(pre_axis + [one_axis] + pos_axis)
+        out_axis = ng.make_axes(pre_axis + [one_axis] + pos_axis)
 
         # broadcast
         return ng.Broadcast(tensor, axes=out_axis)
