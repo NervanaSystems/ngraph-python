@@ -15,7 +15,6 @@
 from __future__ import print_function
 from tf_importer.tests.importer_tester import ImporterTester
 import tensorflow as tf
-import numpy as np
 import os
 import re
 import time
@@ -93,18 +92,23 @@ def def_target_feed_dict():
     """
 
     # tf placeholder
-    a = tf.constant(np.random.randn(1, 10).astype(np.float32),
-                    dtype=tf.float32)
-    b = tf.constant(np.ones((10, 1)).astype(np.float32),
-                    dtype=tf.float32)
-    f = tf.matmul(tf.nn.relu(a), b)
-    a_grad = tf.gradients(f, a)[0]
+    from tensorflow.examples.tutorials.mnist import input_data
+    mnist = input_data.read_data_sets('/tmp/data', one_hot=True)
+    x = tf.placeholder(tf.float32, [128, 784])
+    W = tf.Variable(tf.zeros([784, 10]))
+    b = tf.Variable(tf.zeros([10]))
+    y = tf.matmul(x, W) + b
+    y_ = tf.placeholder(tf.float32, [128, 10])
+    cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
+                                                  reduction_indices=[1]))
+    init_op = tf.initialize_all_variables()
+    batch_xs, batch_ys = mnist.train.next_batch(128)
 
-    # value
-    feed_dict = {}
+    # test
+    feed_dict = {x: batch_xs, y_: batch_ys}
 
     # return
-    return a_grad, feed_dict, None
+    return cross_entropy, feed_dict, init_op
 
 
 if __name__ == '__main__':

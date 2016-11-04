@@ -20,11 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from tf_importer.tests.importer_tester import ImporterTester
-from tf_importer.tf_importer.utils import tensor_shape_to_tuple
+from tf_importer.tf_importer.utils import tf_to_shape_tuple
 
 
 class Tester(ImporterTester):
-
     def test_tanh_sigmoid(self):
         # computation
         a = tf.placeholder(tf.float32, shape=(2, 3))
@@ -37,7 +36,7 @@ class Tester(ImporterTester):
         # value
         feed_dict = dict()
         for x in [a, b, c]:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         self.run(f, tf_feed_dict=feed_dict)
@@ -48,7 +47,7 @@ class Tester(ImporterTester):
         f = tf.nn.relu(a)
 
         # value
-        feed_dict = {a: np.random.randn(*tensor_shape_to_tuple(a._shape))}
+        feed_dict = {a: np.random.randn(*tf_to_shape_tuple(a))}
 
         # test
         self.run(f, tf_feed_dict=feed_dict)
@@ -63,7 +62,26 @@ class Tester(ImporterTester):
         # value
         feed_dict = dict()
         for x in [a, b]:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         self.run(f, tf_feed_dict=feed_dict)
+
+    def test_log(self):
+        # computation
+        vals = np.array([[0.5], [1.], [1.5], [10]])
+        x = tf.placeholder(tf.float32, shape=(1,))
+        log_x = tf.log(x)
+
+        # test
+        for val in vals:
+            self.run(log_x, tf_feed_dict={x: val})
+
+    def test_neg(self):
+        # computation
+        a = tf.placeholder(tf.float32, shape=(20, 30))
+        neg_a = tf.neg(a)
+
+        # test
+        feed_dict = {a: np.random.rand(*tf_to_shape_tuple(a))}
+        self.run(neg_a, tf_feed_dict=feed_dict)

@@ -24,11 +24,8 @@ from google.protobuf import text_format
 # importer
 from tf_importer.tf_importer.ops_bridge import OpsBridge
 
-# ngraph
-import ngraph as ng
 
-
-def _strip_node_name(name):
+def _remove_name_prefix(name):
     """
     Strip ^ from TF's node name
     Args:
@@ -45,20 +42,25 @@ class TFImporter:
     Importer for Tensorflow GraphDef
     """
 
-    def __init__(self, pb_file, verbose=False):
-        # input fields
-        self.pb_file = pb_file
-        self.verbose = verbose
+    def __init__(self):
+        self.reset()
 
-        # collections
-        self.name_to_op = dict()  # maps TF node name to Neon op
-
-        # bridge ops
+    def reset(self):
+        """
+        Resets importer states.
+        """
+        self.name_op_map = dict()
         self.ops_bridge = OpsBridge()
-
-        # init comp
         self.init_ops = []
+        self.graph_def = None
 
+    def parse_protobuf(self, pb_file, verbose=False):
+        """
+        Parse graph_def protobuf file.
+
+        Args:
+            pb_file: protobuf file path
+        """
         # read graph_def
         graph_def = tf.GraphDef()
         if mimetypes.guess_type(pb_file)[0] == 'text/plain':
@@ -69,39 +71,123 @@ class TFImporter:
             with open(pb_file, 'rb') as f:
                 graph_def.ParseFromString(f.read())
 
+        self.parse_graph_def(graph_def, verbose=verbose)
+
+    def parse_graph_def(self, graph_def, verbose=False):
+        """
+        Parse graph_def
+
+        Args:
+            graph_def: GraphDef object
+        """
+        self.graph_def = graph_def
+
         # pass 1: identify assigns connected to NoOps (hack around issue #373)
         # TODO: just a temp fix for now
         for tf_node in graph_def.node:
             if tf_node.op == 'NoOp' and tf_node.name == 'init':
-                assign_op_names = set([_strip_node_name(name) for name in
+                assign_op_names = set([_remove_name_prefix(name) for name in
                                        tf_node.input])
                 self.ops_bridge.init_assign_op_names |= assign_op_names
 
         # pass 2: process nodes
         for tf_node in graph_def.node:
             # print node
-            if self.verbose:
+            if verbose:
                 print(tf_node)
 
             # resolve inputs
-            num_inputs = len(tf_node.input)
-            input_ops = [self.name_to_op[_strip_node_name(tf_node.input[i])]
-                         for i in range(num_inputs)]
+            input_ops = [self.get_op_handle_by_name(name) for name in tf_node.input]
 
-            # call bridge op
-            output_op = self.ops_bridge(tf_node, input_ops)
+            # get output op
+            if None in input_ops:
+                # ignored
+                output_op = None
+            else:
+                # call bridge op
+                output_op = self.ops_bridge(tf_node, input_ops)
 
-            # avoid illegal names in generated code
-            output_op.name = output_op.name.replace("/", "_")
+            # convert to list for convenience
+            if isinstance(output_op, tuple):
+                output_op = list(output_op)
+            else:
+                output_op = [output_op]
 
-            # save to collections
-            self.name_to_op[tf_node.name] = output_op
+            # post-process output ops
+            for idx in range(len(output_op)):
+                output_op[idx] = self.post_process_op(output_op[idx])
 
-            # cast to new axes for safety
-            if hasattr(output_op, 'axes'):
-                new_axes = [ng.make_axis(a.length) for a in output_op.axes]
-                output_op = ng.cast_axes(output_op, axes=new_axes)
+            # convert back to tuple or op
+            if len(output_op) > 1:
+                output_op = tuple(output_op)
+            else:
+                output_op = output_op[0]
 
             # save init node
             if tf_node.op == 'NoOp' and tf_node.name == 'init':
                 self.init_ops.append(output_op)
+
+            self.name_op_map[tf_node.name] = output_op
+
+    def post_process_op(self, op):
+        if op is None:
+            return None
+        # avoid illegal names in ngraph generated code
+        op.name = op.name.replace("/", "_")
+
+        # cast to new axes for safety: debugging purpose
+        # import ngraph as ng
+        # if hasattr(op, 'axes'):
+        #     new_axes = [ng.make_axis(a.length) for a in op.axes]
+        #     op = ng.cast_axes(op, axes=new_axes)
+        return op
+
+    def get_op_handle_by_name(self, name):
+        """
+        Get ngraph op from TF Node's name, supports multiple output node.
+
+        Args:
+            name: TF Node's name. For example, `BroadcastGradientArgs:1`
+                  retrieves the index 1 output of the op
+                  `gradients/mul_grad/BroadcastGradientArgs`
+
+        Returns:
+            Op: the corresponding ngraph op
+        """
+        # remove prefix
+        name = _remove_name_prefix(name)
+
+        # remove suffix of ":" for multiple output node
+        name_splits = name.split(":")
+
+        # get node
+        if len(name_splits) > 1:
+            # check
+            assert len(name_splits) == 2
+            # split
+            idx = int(name_splits[1])
+            name_truncated = name_splits[0]
+            # get outputs
+            outputs = self.name_op_map[name_truncated]
+            # get by idx
+            if not isinstance(outputs, tuple):
+                assert idx == 0
+                return self.name_op_map[name_truncated]
+            else:
+                return self.name_op_map[name_truncated][idx]
+        else:
+            return self.name_op_map[name]
+
+    def get_op_handle(self, tf_op):
+        """
+        Get the matching tf op to ngraph op
+        Args:
+            tf_op: TensorFlow graph nodes
+
+        Returns:
+            Op: the corresponding ngraph op
+        """
+        if isinstance(tf_op, list):
+            return [self.get_op_handle_by_name(op.name) for op in tf_op]
+        else:
+            return self.get_op_handle_by_name(tf_op.name)

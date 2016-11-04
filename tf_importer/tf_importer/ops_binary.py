@@ -43,6 +43,23 @@ class OpsBinary(OpsBase):
         """
         return self._element_wise_binary(ng.add, tf_node, inputs)
 
+    def Sub(self, tf_node, inputs):
+        """
+        [TensorFlow Docs]
+        Returns x - y element-wise.
+
+        Args:
+            x: A `Tensor`. Must be one of the following types: `half`,
+               `float32`, `float64`, `int32`, `int64`, `complex64`, `complex128`.
+            y: A `Tensor`. Must have the same type as `x`.
+            name: A name for the operation (optional).
+
+        Returns:
+            A `Tensor`. Has the same type as `x`.
+        """
+        return self._element_wise_binary(ng.add, tf_node,
+                                         [inputs[0], -inputs[1]])
+
     def Div(self, tf_node, inputs):
         """
         [TensorFlow Docs]
@@ -59,6 +76,22 @@ class OpsBinary(OpsBase):
             A `Tensor`. Has the same type as `x`.
         """
         return self._element_wise_binary(ng.divide, tf_node, inputs)
+
+    def Mod(self, tf_node, inputs):
+        """
+        [TensorFlow Docs]
+        Returns element-wise remainder of division.
+
+        Args:
+            x: A `Tensor`. Must be one of the following types: `int32`,
+               `int64`, `float32`, `float64`.
+            y: A `Tensor`. Must have the same type as `x`.
+            name: A name for the operation (optional).
+
+        Returns:
+            A `Tensor`. Has the same type as `x`.
+        """
+        return self._element_wise_binary(ng.mod, tf_node, inputs)
 
     def Maximum(self, tf_node, inputs):
         """
@@ -105,7 +138,7 @@ class OpsBinary(OpsBase):
         right_shape = right.axes.lengths
         assert is_compatible_numpy_shape(left_shape, right_shape)
 
-        if left_shape and right_shape:
+        if left_shape and right_shape and left_shape != right_shape:
             """
             Cast axes in numpy broadcast mapping rule
 
@@ -175,26 +208,16 @@ class OpsBinary(OpsBase):
             # cast result axis and broadcast to full result axes
             trimmed_result_axes = [result_axes_map[re] for re in result_op.axes]
             result_op = ng.cast_axes(result_op, trimmed_result_axes)
-            result_op = ng.Broadcast(result_op, axes=result_axes)
+            result_op = ng.Dimshuffle(result_op, axes=result_axes)
+
+        elif left_shape == right_shape:
+            # cast right axes to be the same as left
+            right = ng.cast_axes(right, axes=left.axes)
+            result_op = ng_op(left, right, name=tf_node.name)
+
         else:
-            # don't need to do any axes casting
+            # no need for casting
             result_op = ng_op(left, right, name=tf_node.name)
 
         # return op
         return result_op
-
-    def Mod(self, tf_node, inputs):
-        """
-        [TensorFlow Docs]
-        Returns element-wise remainder of division.
-
-        Args:
-            x: A `Tensor`. Must be one of the following types: `int32`, `int64`,
-               `float32`, `float64`.
-            y: A `Tensor`. Must have the same type as `x`.
-            name: A name for the operation (optional).
-
-        Returns:
-            A `Tensor`. Has the same type as `x`.
-        """
-        raise NotImplementedError("Mod not supported in ngraph")

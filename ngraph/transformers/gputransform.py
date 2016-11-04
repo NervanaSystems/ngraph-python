@@ -23,6 +23,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
     DeviceTensor
 from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, exp, \
     GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
     LessOneDim, LessZeroDim, \
@@ -159,6 +160,14 @@ class GPUKernel():
     @add_op.on_type(DivideZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(ModOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("mod", x=x, y=y, out=out)
+
+    @add_op.on_type(ModZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("mod", x=x, y=y, out=out)
 
     @add_op.on_type(DotOneDimensional)
     def add_op(self, op, out, x, y):

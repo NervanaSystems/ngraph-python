@@ -43,6 +43,7 @@ _op_templates = {
     "sub": r"%(out)s = %(x)s - %(y)s;",
     "mul": r"%(out)s = %(x)s * %(y)s;",
     "div": r"%(out)s = %(x)s / %(y)s;",
+    "mod": r"%(out)s = int(%(x)s) %% int(%(y)s);",
     "eq": r"%(out)s = %(x)s == %(y)s;",
     "ne": r"%(out)s = %(x)s != %(y)s;",
     "lt": r"%(out)s = %(x)s < %(y)s;",

@@ -60,12 +60,13 @@ class ImporterTester(object):
             print_tf_result=False, print_ng_result=False, verbose=False):
         """
         Performs test with optional feed_dicts, compares result of TF and ngraph
-
         Args:
-            target_op: the targeting TF
-            tf_feed_dict: TF feed dict for tensorflow placeholders
-
-        TODO: standardize naming of op and node
+            tf_target_node: target node in tf
+            tf_init_op: init op in tf
+            tf_feed_dict: feed_dict in tf
+            print_tf_result: prints tf_result if set to True
+            print_ng_result: prints ng_result if set to True
+            verbose: prints tf's node_def if set to True
         """
         # run TF
         tf_result = self.tf_run(tf_target_node=tf_target_node,
@@ -84,22 +85,33 @@ class ImporterTester(object):
 
     def ng_run(self, tf_target_node, tf_feed_dict=None, print_ng_result=False,
                verbose=False):
+        """
+        Run and get ngrpah results
+        Args:
+            tf_target_node: target node in tf
+            tf_feed_dict: feed_dict in tf
+            print_ng_result: prints ng_result if set to True
+            verbose: prints tf's node_def if set to True
 
+        Returns:
+            ng_result
+        """
         # init importer, transformer
-        importer = TFImporter(self.pb_txt_path, verbose=verbose)
+        importer = TFImporter()
+        importer.parse_protobuf(self.pb_txt_path, verbose=verbose)
         # transformer = ng.NumPyTransformer()
         # transformer = self.transformer_factory()
         transformer = ngt.Transformer.make_transformer()
 
         # set target node
-        ng_target_node = importer.name_to_op[tf_target_node.name[:-2]]
+        ng_target_node = importer.get_op_handle_by_name(tf_target_node.name[:-2])
 
         # evaluate ngraph
         if tf_feed_dict is not None:
             # get targeting nodes for ng, convert tf's feed dict to list
             tf_placeholder_nodes = [node for (node, _) in tf_feed_dict.items()]
             tf_placeholder_names = [node.name for node in tf_placeholder_nodes]
-            ng_placeholder_nodes = [importer.name_to_op[name[:-2]]
+            ng_placeholder_nodes = [importer.get_op_handle_by_name(name[:-2])
                                     for name in tf_placeholder_names]
             ng_placeholder_vals = [val for (_, val) in tf_feed_dict.items()]
 
@@ -125,7 +137,15 @@ class ImporterTester(object):
     def tf_run(self, tf_target_node, tf_init_op=None, tf_feed_dict=None,
                print_tf_result=False):
         """
-        Runs TF on graph
+        Run and get tf results
+        Args:
+            tf_target_node: target node in tf
+            tf_init_op: init op in tf
+            tf_feed_dict: feed_dict in tf
+            print_tf_result: prints tf_result if set to True
+
+        Returns:
+            tf_result
         """
         # init
         if tf_init_op:

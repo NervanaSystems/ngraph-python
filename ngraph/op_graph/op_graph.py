@@ -809,6 +809,9 @@ class TensorOp(Op):
     def __div__(self, val):
         return divide(self, val)
 
+    def __mod__(self, val):
+        return mod(self, val)
+
     def __truediv__(self, val):
         return divide(self, val)
 
@@ -2018,6 +2021,11 @@ def divide_adjoints(self, adjoints, delta, x, y):
 Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
     'Divide', 'DivideOneDim', 'DivideZeroDim',
     'divide', divide_adjoints
+)
+
+Mod, ModOneDim, ModZeroDim, mod = create_binary_elementwise(
+    'Mod', 'ModOneDim', 'ModZeroDim',
+    'mod', None
 )
 
 

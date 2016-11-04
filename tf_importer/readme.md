@@ -1,91 +1,35 @@
-# Run TensorFlow Graph with Neon
+# TensorFlow importer for ngraph
 
-## Supported ops after refactor
-```python
-Add
-Assign
-Const
-Div
-DummyOp
-Identity
-MatMul
-Maximum
-Mean
-Mul
-NoOp
-Placeholder
-Range
-Rank
-Relu
-Sigmoid
-Sum
-Tanh
-Variable
-```
-
-## Minimal Example
+## Minimal example
 
 ```python
+from __future__ import print_function
+from tf_importer.tf_importer.importer import TFImporter
 import tensorflow as tf
 import ngraph as ng
-from tensorflow_import.importer import TensorFlowImporter
 
-# build TensorFlow graph
-a = tf.constant(10)
-b = tf.constant(20)
-c = a + b
-d = c * a
+# tensorflow ops
+x = tf.constant(1.)
+y = tf.constant(2.)
+f = x + y
 
-# write to protobuf
-with tf.Session() as sess:
-    tf.train.write_graph(sess.graph_def, "./", "my_graph.pb.txt", True)
+# import
+importer = TFImporter()
+importer.parse_graph_def(tf.Session().graph_def)
 
-# import from protobuf
-importer = TensorFlowImporter("my_graph.pb.txt")
+# get handle
+f_ng = importer.get_op_handle(f)
 
-# run imported graph
-transformer = ng.NumPyTransformer()
-result_comp = transformer.computation([importer.last_op])
-result_val = result_comp()[0]
-print(result_val)  # prints 300
+# execute
+f_result = ng.NumPyTransformer().computation(f_ng)()
+print(f_result)
 ```
 
-## Example Usage
-1. Preparation.
+## Supported models
 
-    ```sh
-    $ ./mnist_prepare.sh
-    ```
+- MNIST MLP
 
-  This will
-    - Fetch TensorFlow fetch data and train for 2 epochs. Dump the training
-      graph and model checkpoints.
-    - Freeze the model checkpoints to protobuf using [this tool]. The
-      `--output_node_names` option is the name of the last operation for
-      inference, which is currently manually identified on TensorBoard.
-2. Inference. Now we can import the TensorFlow-trained weights and perform
-   inference using `ngraph`.  Notes that we need to manually identify the last op
-   used in inference, which is `softmax_linear/add` for this example.
-
-    ```sh
-    $ python mnist_mlp_inference.py
-    ```
-
-3. Or, we can use `ngraph` to train and eval from `GraphDef` directly.
-
-    ```sh
-    $ python mnist_mlp_train.py
-    ```
-
-4. A tool to clean up the mnist data is also provided.
-
-    ```sh
-    $ ./mnist_clean.sh
-    ```
-
-[this tool]: https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/tools/freeze_graph.py
-
-## Some Notes on TensorFlow
+## Some notes on TensorFlow
 - TensorFlow is now automatically installed when `ngraph` installs. We may
   remove this dependency in the future.
 - Save graph definition to protobuf

@@ -96,7 +96,7 @@ def train_mnist_mlp():
         init_comp = transformer.computation([tf_importer.init_op])
 
     # inference computation
-    pred_op = tf_importer.name_to_op[args.infer_node]
+    pred_op = tf_importer.get_op_handle_by_name(args.infer_node)
     predict_comp = transformer.computation(pred_op)
 
     # update computation

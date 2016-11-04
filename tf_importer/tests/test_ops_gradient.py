@@ -23,7 +23,6 @@ from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
-
     def test_relu_grad(self):
         # random number
         a = tf.constant(np.random.randn(1, 10).astype(np.float32),
