@@ -1182,13 +1182,34 @@ class Broadcast(ReshapeOp):
         ))
 
 
-def broadcast(x, axes, **kwargs):
+def broadcast(x, axes):
+    """
+    Broadcast the axes of x.
+
+    Args:
+        x (TensorOp): The tensor.
+        axes: New axes.
+
+    Returns:
+        TensorOp: Tensor with additional axes.
+    """
     if x.axes == axes:
         return x
-    return Broadcast(x, axes, **kwargs)
+    return Broadcast(x, axes)
 
 
 def axes_with_order(x, axes):
+    """
+    Return a tensor with a different axes order.
+
+    Args:
+        x (TensorOp): The tensor.
+        axes (Axes): A permutation of the axes of the tensor.
+
+    Returns:
+        TensorOp: The new tensor.
+
+    """
     if x.axes == axes:
         return x
     return ReorderAxes(x, axes)

@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from neon.util.argparser import NeonArgparser
-from neon import NervanaObject
-import ngraph as ng
-import ngraph.transformers as ngt
 
+from ngraph.op_graph.axes import Axis, AxisRole, Axes
+from ngraph.op_graph.op_graph import AssignableTensorOp, Op, TensorOp
+from ngraph.util.names import NameScope, NameableValue
+from ngraph.transformers.base import Transformer, Computation
 
-class NgraphArgparser(NeonArgparser):
-    def parse_args(self, gen_be=True):
-        args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
-        NervanaObject.be.rng = ng.RNG(NervanaObject.be.rng_seed)
-        name = args.backend
-        if name == 'cpu':
-            name = 'numpy'
-        factory = ngt.make_transformer_factory(name)
-        ngt.set_transformer_factory(factory)
-
-        return args
+__all__ = [
+    'AssignableTensorOp',
+    'Axis',
+    'AxisRole',
+    'Axes',
+    'Computation',
+    'NameableValue',
+    'NameScope',
+    'Op',
+    'TensorOp',
+    'Transformer'
+]

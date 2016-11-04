@@ -18,11 +18,11 @@ Test of the mlp/linear layer
 import itertools as itt
 import numpy as np
 import ngraph as ng
+import ngraph.transformers as ngt
 from neon.initializers.initializer import Uniform
 from neon import NervanaObject
 from ngraph.frontends.neon.layer import Linear
 from ngraph.util.utils import ExecutorFactory
-from ngraph.transformers import Transformer
 from ngraph import RNG
 
 
@@ -38,7 +38,7 @@ def pytest_generate_tests(metafunc):
 
 
 def test_linear_zeros(basic_linargs, transformer_factory):
-    Transformer.make_transformer()
+    ngt.make_transformer()
     NervanaObject.be.rng = RNG(0)
     # basic sanity check with 0 weights random inputs
     nin, nout, batch_size = basic_linargs
@@ -69,7 +69,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
 
 
 def test_linear_ones(basic_linargs, transformer_factory):
-    Transformer.make_transformer()
+    ngt.make_transformer()
     NervanaObject.be.rng = RNG(0)
 
     # basic sanity check with all ones on the inputs
@@ -90,7 +90,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
 
     layer = Linear(nout=nout, init=init_unif)
     fprop = layer.configure(inp)
-    transformer = ng.NumPyTransformer()
+    transformer = ngt.make_transformer()
 
     # set up fprop
     output = transformer.computation(fprop, inp)

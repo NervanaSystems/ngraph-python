@@ -1,5 +1,6 @@
 from __future__ import division, print_function
 import ngraph as ng
+import ngraph.transformers as ngt
 import gendata
 
 N = 128
@@ -21,7 +22,7 @@ grad = ng.deriv(L, W)
 
 update = ng.assign(W, W - alpha * grad)
 
-transformer = ng.NumPyTransformer()
+transformer = ngt.make_transformer()
 
 update_fun = transformer.computation([L, W, update], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)

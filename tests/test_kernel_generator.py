@@ -29,7 +29,7 @@ def test_exit_condition(transformer_factory):
 
     likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
 
-    transformer = ngt.Transformer.make_transformer()
+    transformer = ngt.make_transformer()
     comp = transformer.computation(likelihood)
 
     val1 = comp()

@@ -15,28 +15,39 @@
 
 from __future__ import print_function
 
-from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, Axis, Axes
+import ngraph.transformers as transformers
+
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
-from ngraph.op_graph.op_graph import cast_axes
-from ngraph.transformers.nptransform import NumPyTransformer
-from ngraph.util.names import make_namescope
+from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
+    is_constant, is_constant_scalar, constant_value, constant_storage, \
+    persistent_tensor, placeholder, \
+    slice_along_axis, temporary
+from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
+    'axes_with_order',
+    'broadcast',
     'cast_axes',
+    'constant_storage',
+    'constant_value',
+    'convolution',
+    'is_constant',
+    'is_constant_scalar',
     'make_axes',
     'make_axis',
     'make_axis_role',
-    'make_namescope',
-    'AssignableOp',
-    'Axis',
-    'AxisRole',
-    'Axes',
-    'Op',
-    'TensorOp',
+    'make_name_scope',
+    'name_scope',
+    'persistent_tensor',
+    'placeholder',
+    'pooling',
+    'slice_along_axis',
+    'temporary',
+    'with_name_scope',
 ]
 
 

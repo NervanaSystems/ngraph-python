@@ -1,6 +1,7 @@
 from __future__ import division, print_function
 
 import ngraph as ng
+import ngraph.transformers as ngt
 import gendata
 
 C = ng.make_axis("C")
@@ -28,7 +29,7 @@ g = gendata.MixtureGenerator([.5, .5], C.length)
 XS, YS = g.gen_data(N.length, 10)
 EVAL_XS, EVAL_YS = g.gen_data(N.length, 4)
 
-transformer = ng.NumPyTransformer()
+transformer = ngt.make_transformer()
 
 update_fun = transformer.computation([L, W, b, all_updates], alpha, X, Y)
 eval_fun = transformer.computation(L, X, Y)

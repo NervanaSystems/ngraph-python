@@ -16,7 +16,8 @@
 '''
 Test of the optimizers
 '''
-import ngraph
+import ngraph as ng
+import ngraph.transformers as ngt
 import itertools as itt
 import numpy as np
 import copy
@@ -25,7 +26,6 @@ from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.util.utils import ExecutorFactory
 
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
-from ngraph.transformers import Transformer
 from neon import NervanaObject
 
 
@@ -61,13 +61,13 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ngraph.make_axis(name="C", length=200)
-    N = ngraph.make_axis(name="N", length=128)
+    C = ng.make_axis(name="C", length=200)
+    N = ng.make_axis(name="N", length=128)
 
     # restrict to numpy transformer for now
-    factory = Transformer.make_transformer_factory('numpy')
-    Transformer.set_transformer_factory(factory)
-    Transformer.make_transformer()
+    factory = ngt.make_transformer_factory('numpy')
+    ngt.set_transformer_factory(factory)
+    ngt.make_transformer()
     be = NervanaObject.be
     be.bsz = N.length
 
@@ -75,16 +75,16 @@ def test_gdm(args, transformer_factory):
     (x, y, w_init) = generate_data(C, N)
 
     # set up nervana graph
-    X = ngraph.placeholder(axes=ngraph.Axes([C, N]), name='X')
-    Y = ngraph.placeholder(axes=ngraph.Axes([N]), name='Y')
-    W = ngraph.Variable(axes=ngraph.Axes([C]), name='W', initial_value=w_init)
+    X = ng.placeholder(axes=ng.Axes([C, N]), name='X')
+    Y = ng.placeholder(axes=ng.Axes([N]), name='Y')
+    W = ng.Variable(axes=ng.Axes([C]), name='W', initial_value=w_init)
 
     ex = ExecutorFactory()
     transformer = ex.transformer
 
     lrate, mom, wdecay = args
     gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    cost = ngraph.sum(Y - ngraph.dot(W, X), out_axes=()) / N.length
+    cost = ng.sum(Y - ng.dot(W, X), out_axes=()) / N.length
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
     # where (x, y) are nparrays that fill the placeholders X and Y

@@ -17,7 +17,7 @@ import abc
 from future.utils import with_metaclass
 from collections import Iterable
 
-from ngraph import make_axis
+from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \

@@ -15,10 +15,35 @@
 
 This documentation covers the Nervana Graph user API.
 
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   ngraph
+   ngraph.transformers
+   ngraph.types
+
 ngraph
 ======
 .. py:module: ngraph
 
 .. automodule:: ngraph
    :members:
+
+ngraph.transformers
+===================
+
+.. py:module: ngraph.transformers
+
+.. automodule:: ngraph.transformers
+   :members:
+
+ngraph.types
+============
+
+.. py:module: ngraph.types
+
+.. automodule:: ngraph.types
+   :members:
+
 

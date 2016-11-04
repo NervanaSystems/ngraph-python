@@ -7,7 +7,7 @@ rtol = atol = 1e-2
 
 
 def test_stack():
-    ax = ng.make_namescope(name="ax")
+    ax = ng.make_name_scope(name="ax")
     ax.W = ng.Axis(length=4)
     ax.H = ng.Axis(length=5)
     ax.I = ng.Axis(length=3)

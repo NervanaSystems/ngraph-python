@@ -19,6 +19,7 @@ Test the graph analysis functions.
 from __future__ import print_function
 
 import ngraph as ng
+import ngraph.transformers as ngt
 import ngraph.analysis as an
 from builtins import range, zip
 
@@ -50,7 +51,7 @@ def build_graphs(L, BS):
         A.append(f(ng.dot(W[i], Aim1)))
     Error = ng.cross_entropy_multi(A[-1], Y)
     dW = [ng.deriv(Error, w) for w in W]
-    transformer = ng.NumPyTransformer()
+    transformer = ngt.make_transformer()
     dfg = an.DataFlowGraph(transformer, dW)
     ifg = an.InterferenceGraph(dfg.liveness())
     return dfg, ifg

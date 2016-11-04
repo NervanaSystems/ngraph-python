@@ -18,7 +18,24 @@ from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import make_axis, Axes
 
 
-class convolution(op_graph.TensorOp):
+def convolution(dims, inputs, filters, name=None, docstring=None):
+    """
+
+    Args:
+        dims: Dimensions.
+        inputs (TensorOp): The input tensor.
+        filters (TensorOp): Filter/kernel tensor.
+        name (String, optional): Name for the op.
+        docstring (String, optional): Documentation for the op.
+
+    Returns:
+        TensorOp: The result of the convolution.
+
+    """
+    return ConvolutionOp(dims, inputs, filters, name=name, docstring=docstring)
+
+
+class ConvolutionOp(op_graph.TensorOp):
     _index = 0
 
     def __init__(self, dims, inputs, filters, *args, **kwargs):
@@ -73,10 +90,10 @@ class convolution(op_graph.TensorOp):
             axes[i].name = name
 
         self.dims = dims
-        self.index = convolution._index
-        convolution._index += 1
+        self.index = ConvolutionOp._index
+        ConvolutionOp._index += 1
 
-        super(convolution, self).__init__(
+        super(ConvolutionOp, self).__init__(
             args=(inputs, filters), *args, axes=axes, **kwargs
         )
 

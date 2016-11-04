@@ -15,6 +15,7 @@
 from __future__ import division
 
 import ngraph as ng
+import ngraph.transformers as ngt
 import numpy as np
 from builtins import range
 from ngraph.util.derivative_check import check_derivative
@@ -904,4 +905,4 @@ def test_elementwise_fp16_out(transformer_factory):
 
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
-    ng.NumPyTransformer().initialize()
+    ngt.make_transformer().initialize()

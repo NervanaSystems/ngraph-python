@@ -15,11 +15,11 @@
 from __future__ import division
 
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.frontends.neon.axis import ax
 import numpy as np
 from neon.data import NervanaDataIterator, DataLoader, Text
 from ngraph.frontends.neon.container import Sequential, Tree, SingleOutputTree
-from ngraph.transformers import Transformer
 
 
 def dataset_nclasses(dataset):
@@ -121,7 +121,7 @@ class Model(object):
 
         self.cost = cost
         self.cost.initialize(self.output, self.target)
-        self.transformer = Transformer.make_transformer()
+        self.transformer = ngt.make_transformer()
         with ng.Op.saved_user_deps():
             updates = self.optimizer.configure(self.cost.mean_cost)
             self.train_comp = self.transformer.computation([self.cost.mean_cost, updates],

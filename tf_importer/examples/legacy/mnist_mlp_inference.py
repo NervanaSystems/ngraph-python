@@ -22,7 +22,7 @@ TODO: load meta info from TF's MetaGraph including details about dataset,
 
 from __future__ import print_function, division
 
-import ngraph as ng
+import ngraph.transformers as ngt
 import ngraph.analysis as an
 import numpy as np
 from neon.data import MNIST
@@ -52,7 +52,7 @@ def inference_mnist_mlp():
     tf_importer = TFImporter(args.pb_file)
 
     # init transformer
-    transformer = ng.NumPyTransformer()
+    transformer = ngt.make_transformer()
     infer_computation = transformer.computation(tf_importer.last_op,
                                                 tf_importer.x)
 

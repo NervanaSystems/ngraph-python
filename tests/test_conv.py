@@ -16,9 +16,9 @@
 import numpy as np
 
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
-from ngraph.transformers import Transformer
 from neon import NervanaObject
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -46,7 +46,7 @@ def test_convolution_fprop():
     D = 4
     H = W = 32
     T = R = S = 2
-    Transformer.make_transformer()
+    ngt.make_transformer()
     dims = NervanaObject.be.conv_layer(np.float32, N=N, C=3, K=8, D=D, H=H, W=W, T=T, R=R, S=S)
     Nx = ng.make_axis(N, batch=True)
 

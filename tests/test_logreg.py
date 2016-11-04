@@ -16,7 +16,7 @@
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 
 def numpy_logreg(xs, ys, max_iter, alpha):
@@ -95,7 +95,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
         update = ng.assign(lvalue=variable, rvalue=variable - alpha * grad)
 
     # transformer
-    transformer = Transformer.make_transformer()
+    transformer = ngt.make_transformer()
     train_eval_func = transformer.computation([grad, loss, thetas, update],
                                               xs, ys)
 

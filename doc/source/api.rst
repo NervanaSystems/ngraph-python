@@ -27,16 +27,6 @@ ngraph.analysis
    ngraph.analysis.fusion
    ngraph.analysis.memory
 
-ngraph.dataloader
-=================
-.. py:module: ngraph.dataloader
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-
-   ngraph.dataloader.dataloaderbackend
-
 ngraph.frontends
 ================
 .. py:module: ngraph.frontends
