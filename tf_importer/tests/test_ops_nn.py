@@ -23,7 +23,6 @@ from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
-
     def test_sparse_softmax_cross_entropy_with_logits(self):
         # numpy random values
         np_logits = np.random.randn(128, 10).astype(np.float32)
@@ -42,3 +41,33 @@ class Tester(ImporterTester):
 
         # test
         self.run(tf_result_op, tf_feed_dict=feed_dict)
+
+    def test_softmax(self):
+        # tf ops
+        y = tf.placeholder(tf.float32, [8, 5])
+        f = tf.nn.softmax(y)
+        y_np = np.random.randn(8, 5)
+        feed_dict = {y: y_np}
+
+        # test
+        self.run(f, tf_feed_dict=feed_dict)
+
+    def test_mnist_softmax_forward(self):
+        # tf placeholder
+        from tensorflow.examples.tutorials.mnist import input_data
+        mnist = input_data.read_data_sets('/tmp/data', one_hot=True)
+        x = tf.placeholder(tf.float32, [128, 784])
+        W = tf.Variable(tf.zeros([784, 10]))
+        b = tf.Variable(tf.zeros([10]))
+        y = tf.matmul(x, W) + b
+        y_ = tf.placeholder(tf.float32, [128, 10])
+        cross_entropy = tf.reduce_mean(
+            -tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
+                           reduction_indices=[1]))
+        init_op = tf.initialize_all_variables()
+        batch_xs, batch_ys = mnist.train.next_batch(128)
+
+        # test
+        feed_dict = {x: batch_xs, y_: batch_ys}
+
+        self.run(cross_entropy, tf_init_op=init_op, tf_feed_dict=feed_dict)

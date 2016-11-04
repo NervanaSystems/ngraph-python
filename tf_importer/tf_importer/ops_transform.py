@@ -15,8 +15,19 @@
 
 from tf_importer.tf_importer.ops_base import OpsBase
 from tf_importer.tf_importer.utils import shape_to_axes
+import collections
 import ngraph as ng
 import numpy as np
+
+
+def _flatten(x):
+    """
+    https://goo.gl/yPP8hh
+    """
+    if isinstance(x, collections.Iterable):
+        return [a for i in x for a in _flatten(i)]
+    else:
+        return [x]
 
 
 class OpsTransform(OpsBase):
@@ -61,7 +72,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Rank` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(rank, axes=ng.Axes([]), name=tf_node.name)
+        return ng.Constant(rank, axes=ng.make_axes([]), name=tf_node.name)
 
     def Range(self, tf_node, inputs):
         """
@@ -147,7 +158,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(size, axes=ng.Axes([]), name=tf_node.name)
+        return ng.Constant(size, axes=ng.make_axes([]), name=tf_node.name)
 
     def Cast(self, tf_node, inputs):
         """
@@ -212,64 +223,10 @@ class OpsTransform(OpsBase):
         except:
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
-        axes = ng.Axes([ng.Axis(len(left.axes.lengths)), ])
+        axes = ng.make_axes([ng.make_axis(len(left.axes.lengths)), ])
 
         # return
         return ng.Constant(shape, axes=axes, name=tf_node.name)
-
-    def DynamicStitch(self, tf_node, inputs):
-        """
-        [TensorFlow Docs]
-        Interleave the values from the `data` tensors into a single tensor.
-
-        Builds a merged tensor such that
-
-                merged[indices[m][i, ..., j], ...] = data[m][i, ..., j, ...]
-
-        For example, if each `indices[m]` is scalar or vector, we have
-
-                # Scalar indices
-                merged[indices[m], ...] = data[m][...]
-
-                # Vector indices
-                merged[indices[m][i], ...] = data[m][i, ...]
-
-        Each `data[i].shape` must start with the corresponding `indices[i].shape`,
-        and the rest of `data[i].shape` must be constant w.r.t. `i`. That is, we
-        must have `data[i].shape = indices[i].shape + constant`. In terms of this
-        `constant`, the output shape is
-
-                merged.shape = [max(indices)] + constant
-
-        Values are merged in order, so if an index appears in both `indices[m][i]` and
-        `indices[n][j]` for `(m,i) < (n,j)` the slice `data[n][j]` will appear in the
-        merged result.
-
-        For example:
-
-                indices[0] = 6
-                indices[1] = [4, 1]
-                indices[2] = [[5, 2], [0, 3]]
-                data[0] = [61, 62]
-                data[1] = [[41, 42], [11, 12]]
-                data[2] = [[[51, 52], [21, 22]], [[1, 2], [31, 32]]]
-                merged = [[1, 2], [11, 12], [21, 22], [31, 32], [41, 42],
-                    [51, 52], [61, 62]]
-
-        <div style="width:70%; margin:auto; margin-bottom:10px; margin-top:20px;">
-        <img style="width:100%" src="../../images/DynamicStitch.png" alt>
-        </div>
-
-        Args:
-            indices: A list of at least 2 `Tensor` objects of type `int32`.
-            data: A list with the same number of `Tensor` objects as `indices`
-                  of `Tensor` objects of the same type.
-            name: A name for the operation (optional).
-
-        Returns:
-            A `Tensor`. Has the same type as `data`.
-        """
-        raise NotImplementedError("DynamicStitch not supported in ngraph")
 
     def Reshape(self, tf_node, inputs):
         """
@@ -455,12 +412,12 @@ class OpsTransform(OpsBase):
             dim = input_ndims + 1 + dim
 
         # create new axis
-        one_axis = ng.Axis(length=1)
+        one_axis = ng.make_axis(length=1)
 
         # get output axis
         pre_axis = [axis for axis in tensor.axes[:dim]]  # avoid FlattenedAxis
         pos_axis = [axis for axis in tensor.axes[dim:]]  # avoid FlattenedAxis
-        out_axis = ng.Axes(pre_axis + [one_axis] + pos_axis)
+        out_axis = ng.make_axes(pre_axis + [one_axis] + pos_axis)
 
         # broadcast
         return ng.Broadcast(tensor, axes=out_axis)

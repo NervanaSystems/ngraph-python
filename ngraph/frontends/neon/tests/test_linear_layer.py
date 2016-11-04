@@ -18,8 +18,9 @@ Test of the mlp/linear layer
 import itertools as itt
 import numpy as np
 import ngraph as ng
-from neon.initializers.initializer import Uniform
 from ngraph.frontends.neon import nnAffine, UniformInit
+from ngraph.util.utils import executor
+
 from ngraph.util.utils import ExecutorFactory
 from ngraph.transformers import Transformer
 from ngraph import RNG
@@ -42,24 +43,20 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     nin, nout, batch_size = basic_linargs
 
     # set inputs
-    N = ng.Axis(batch_size, name="N", batch=True)
-    F = ng.Axis(nin, name="F")
-    O = ng.Axis(nout, name="out")
+    N = ng.make_axis(batch_size, name="N", batch=True)
+    F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder(axes=ng.Axes([F, N]))
-    layer = nnAffine(out_axis=O, init=UniformInit(0.0, 0.0))
-    layer.initialize(ng.Axes([F]))
-    fprop = layer.get_outputs(inp)
-
-    ex = ExecutorFactory()
-    transformer = ex.transformer
-    output = transformer.computation(fprop, inp)
-    transformer.initialize()
+    layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
+    fprop = layer.train_outputs(inp)
 
     # create data
     x = np.random.random((nin, batch_size))
 
-    out = output(x)
+    # evaluate
+    Transformer.make_transformer()
+    out = executor(fprop, inp)(x)
+
     assert np.min(out) == 0.0 and np.max(out) == 0.0
 
 
@@ -73,26 +70,19 @@ def test_linear_ones(basic_linargs, transformer_factory):
     nin, nout, batch_size = basic_linargs
 
     # set inputs
-    N = ng.Axis(batch_size, name="N", batch=True)
-    F = ng.Axis(nin, name="F")
-    O = ng.Axis(nout, name="out")
+    N = ng.make_axis(batch_size, name="N", batch=True)
+    F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder(axes=ng.Axes([F, N]))
-    layer = nnAffine(out_axis=O, init=UniformInit(0.0, 0.0))
-    layer.initialize(ng.Axes([F]))
-    fprop = layer.get_outputs(inp)
-
-    ex = ExecutorFactory()
-    transformer = ex.transformer
-    output = transformer.computation(fprop, inp)
-    weights = transformer.computation(layer.W)
-    transformer.initialize()
+    layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
+    fprop = layer.train_outputs(inp)
 
     # create data
     x = np.ones((nin, batch_size))
-    out = output(x)
-    w = weights()
 
-    sums = np.sum(w, 0).reshape((1, nout)) * np.ones((batch_size, 1))
+    # evaluate
+    Transformer.make_transformer()
+    out, w = executor([fprop, layer.W], inp)(x)
+    sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 
     assert np.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))

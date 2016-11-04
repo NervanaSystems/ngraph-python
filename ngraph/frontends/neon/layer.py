@@ -92,6 +92,7 @@ class nnLayer(object):
     def __init__(self):
         print("Need to do something about which method to call under which context")
 
+
 class nnPreprocess(nnLayer):
     def __init__(self, functor):
         self.functor = functor
@@ -100,22 +101,26 @@ class nnPreprocess(nnLayer):
         return self.functor(in_obj)
 
 
-class nnAffine(nnLayer):
-    def __init__(self, out_axis, init, activation=(lambda x : x), bias_init=None):
-        self.out_axis = out_axis
+class nnAffine(object):
+    def __init__(self, nout, init, activation=(lambda x : x), bias_init=None, axes=None):
+        self.nout = nout
         self.init = init
+        self.axes = axes
         self.activation = activation
+
         self.b = 0
         self.bias_init = bias_init
 
-    def _call_train(self, in_obj):
-        # if self.bias_init:
-        #     b_axes = ng.Axes([self.out_axis])
-        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
-        # w_axes = ng.Axes.linear_map_axes(in_obj.sample_axes(), [self.out_axis])
-        w_axes = ng.Axes(in_obj.sample_axes() + [self.out_axis])
+    def train_outputs(self, in_obj):
+        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
+        in_axes = in_obj.axes.sample_axes()
+        in_axes = in_axes - in_axes.recurrent_axes()
+        w_axes = out_axes - out_axes.recurrent_axes() + in_axes.get_dual()
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
-        return self.activation(ng.dot(in_obj, self.W) + self.b)
+        return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
+
+    def inf_outputs(self, in_obj):
+        return self.train_outputs(in_obj)
 
 
 class nnConv(nnLayer):
@@ -295,7 +300,7 @@ class Convolution(ParameterLayer):
         self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
         assert self.weight_shape is None
         names = ['C', 'T', 'R', 'S', 'K']
-        weights_axes = [ng.Axis(self.convparams[key], name=key) for key in names]
+        weights_axes = [ng.make_axis(self.convparams[key], name=key) for key in names]
         weights = ng.Variable(axes=weights_axes, init=self.init)
         self.weight_shape = self.nglayer.dimF2
         if self.bsum:
@@ -389,7 +394,8 @@ class Pooling(Layer):
         (K, M, P, Q, N) = self.nglayer.dimO
         self.out_shape = (K, M, P, Q)
         out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
-        argmax_axes = [ng.Axis(out_shape_dict[key], name=key) for key in ['C', 'D', 'H', 'W', 'N']]
+        argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
+                       for key in ['C', 'D', 'H', 'W', 'N']]
         argmax = ng.persistent_tensor(axes=argmax_axes, name='pool')
         return ng.pooling(self.nglayer, in_obj, argmax)
 
@@ -417,7 +423,7 @@ class Linear(ParameterLayer):
 
         """
         in_obj = super(Linear, self).configure(in_obj)
-        out_axes = ng.Axes(self.axes or [ng.Axis(self.nout, name='Hidden')])
+        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
 
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()

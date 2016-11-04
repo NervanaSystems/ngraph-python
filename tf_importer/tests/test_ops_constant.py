@@ -18,11 +18,11 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np
 from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
-
     def test_constant(self):
         # computation
         a = tf.constant(10.)
@@ -51,6 +51,14 @@ class Tester(ImporterTester):
 
         # test
         self.run(f)
+
+    def test_zeros_like(self):
+        # computation
+        a = tf.constant(np.ones((2, 3)).astype(np.float32))
+        b = tf.zeros_like(a)
+
+        # test
+        self.run(b)
 
     def test_truncated_normal(self):
         # TODO

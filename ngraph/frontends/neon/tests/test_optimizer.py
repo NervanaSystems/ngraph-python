@@ -24,7 +24,7 @@ import copy
 from ngraph.frontends.neon import GradientDescentMomentum
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 from ngraph.transformers import Transformer
-from neon import NervanaObject
+from neon.backends import gen_backend
 
 
 def pytest_generate_tests(metafunc):
@@ -60,9 +60,8 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-
-    C = ng.Axis(20, name="C")
-    N = ng.Axis(32, name="N", batch=True)
+    C = ng.make_axis(20, name="C")
+    N = ng.make_axis(32, name="N", batch=True)
 
     be = gen_backend(backend='cpu', batch_size=N.length)
 

@@ -18,10 +18,12 @@ import ngraph as ng
 import numpy as np
 from itertools import takewhile
 
+
 class Model(object):
     def __init__(self, layers):
         self.layers = layers
         self.initialized = False
+
 
     def initialize(self, in_axes):
         if not self.initialized:

@@ -14,33 +14,57 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
+import numpy as np
+import tensorflow as tf
 
 
-def tensor_shape_to_tuple(tf_shape):
+class SGDOptimizer(object):
+    def __init__(self, lrate=0.1):
+        self.lrate = lrate
+
+    def minimize(self, cost):
+        variables = list(cost.variables())
+        grads = [ng.deriv(cost, variable) for variable in variables]
+        with ng.Op.saved_user_deps():
+            param_updates = [ng.assign(variable, variable - self.lrate * grad)
+                             for variable, grad in zip(variables, grads)]
+            updates = ng.doall(param_updates)
+        return updates
+
+
+def tf_to_shape_tuple(input):
     """
-    Convert tensorflow's tensor shape to tuple
-
+    Convert tf objects to shape tuple
     Args:
-        tf_shape: TensorShape object
+        input: tf.TensorShape, tf.Tensor, tf.AttrValue or tf.NodeDef
+               the corresponding tensorflow object
 
     Returns:
-        tuple of the shape
+        tuple: shape of the tensorflow object
     """
-    return tuple([s.value for s in tf_shape])
+    if isinstance(input, tf.TensorShape):
+        return tuple([int(i.value) for i in input])
+    elif isinstance(input, tf.Tensor):
+        return tf_to_shape_tuple(input.get_shape())
+    elif isinstance(input, tf.AttrValue):
+        return tuple([int(d.size) for d in input.shape.dim])
+    elif isinstance(input, tf.NodeDef):
+        return tf_to_shape_tuple(input.attr['shape'])
+    else:
+        raise TypeError("Input to `tf_to_shape_tuple` has the wrong type.")
 
 
-def tf_shape_to_axes(tf_shape):
+def tf_to_shape_axes(input):
     """
-    Convert tensorflow's tensor shape to ngraph axes
+    Convert tf objects to axes
+    Args:
+        input: tf.TensorShape, tf.Tensor, tf.AttrValue or tf.NodeDef
+               the corresponding tensorflow object
 
-    Arguments:
-        tf_shape: attr_value_pb2.AttrValue, tf node's shape
     Returns:
-        ng.Axes
+        tuple: new axes of the tensorflow object
     """
-    shape = [int(d.size) for d in tf_shape.shape.dim]
-    axes = [ng.Axis(s) for s in shape]
-    return tuple(axes)
+    return shape_to_axes(tf_to_shape_tuple(input))
 
 
 def shape_to_axes(shape):
@@ -51,11 +75,11 @@ def shape_to_axes(shape):
         shape: shape of tensor
 
     Returns:
-        ng.Axes object
+        Axes: Axes for shape.
     """
     if not shape:
-        return ng.Axes()
-    axes = [ng.Axis(length=s) for s in shape]
+        return ng.make_axes()
+    axes = [ng.make_axis(length=s) for s in shape]
     return axes
 
 
@@ -78,3 +102,22 @@ def is_compatible_numpy_shape(left_shape, right_shape):
         elif l != r:
             return False
     return True
+
+
+def to_int(input):
+    """
+    Convert np array, tuple, list or const value to int
+
+    Args:
+        input: tuple, list or const value
+    Return:
+        tuple, list or const of int(s)
+    """
+    if isinstance(input, np.ndarray):
+        return input.astype(int)
+    elif isinstance(input, tuple):
+        return tuple([int(i) for i in input])
+    elif isinstance(input, list):
+        return [int(i) for i in input]
+    else:
+        return int(input)

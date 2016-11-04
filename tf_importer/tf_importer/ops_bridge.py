@@ -71,4 +71,8 @@ class OpsBridge(OpsConstant,
             The resulting ngraph op
         """
         op_name = tf_node.op
-        return getattr(self, op_name)(tf_node, input_ops)
+
+        if hasattr(self, op_name):
+            return getattr(self, op_name)(tf_node, input_ops)
+        else:
+            return None

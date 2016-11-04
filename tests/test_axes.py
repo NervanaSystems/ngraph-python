@@ -18,6 +18,8 @@ from builtins import range
 
 import ngraph.util.names as names
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis, TensorDescription, SlicedAxis
+from ngraph.util.utils import ExecutorFactory
+import ngraph as ng
 
 # Make some axes
 ax = names.NameScope()
@@ -247,4 +249,95 @@ def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
     a = Axis(10, batch=True)
     s = SlicedAxis(a, slice(0, 5))
-    assert s.batch is True
+    assert s.is_batch is True
+
+
+def test_idempotent_axes_a():
+    """
+    Test test axes transformations with autodiff, case a, reference test
+    """
+    ex = ExecutorFactory()
+    axes = Axes([Axis(3), Axis(1)])
+
+    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    result = w + w
+
+    result = ng.AxesCastOp(result, axes=axes)
+    cost = ng.sum(result, reduction_axes=axes)
+    grad = ng.deriv(cost, w)
+
+    grad_comp = ex.executor(grad)
+    cost_comp = ex.executor(cost)
+
+    assert cost_comp() == 6.0
+    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+
+
+@pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
+def test_idempotent_axes_b():
+    """
+    Test test axes transformations with autodiff, case b, with broadcast applied
+    to the same tensor
+    """
+    ex = ExecutorFactory()
+    axes = Axes([Axis(3), Axis(1)])
+
+    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    l = ng.Broadcast(w, axes=axes)
+    r = ng.Broadcast(w, axes=axes)
+    result = ng.add(l, r)
+
+    result = ng.AxesCastOp(result, axes=axes)
+    cost = ng.sum(result, reduction_axes=axes)
+    grad = ng.deriv(cost, w)
+
+    grad_comp = ex.executor(grad)
+    cost_comp = ex.executor(cost)
+
+    assert cost_comp() == 6.0
+    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+
+
+@pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
+def test_idempotent_axes_c():
+    """
+    Test test axes transformations with autodiff, case c, with broadcast,
+    slice, cast and dim-shuffle
+    """
+    ex = ExecutorFactory()
+    axes = Axes([Axis(3), Axis(1)])
+    result_axes = [Axis(length=axis.length) for axis in axes]
+
+    # variable
+    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    l = w
+    r = w
+
+    # broadcast l / r, introducing dummy length 1 axes
+    l = ng.Broadcast(l, axes=axes)
+    r = ng.Broadcast(r, axes=axes)
+
+    # slice
+    axes_slice = [slice(None, None, None), slice(None, None, None)]
+    l_sliced = ng.Slice(l, axes_slice)
+    r_sliced = ng.Slice(r, axes_slice)
+
+    # cast r
+    r_sliced_casted = ng.AxesCastOp(r_sliced, axes=axes)
+
+    # perform add
+    result = ng.add(l_sliced, r_sliced_casted)
+
+    # cast / dimshuffle
+    result = ng.AxesCastOp(result, axes=result_axes)
+    result = ng.Dimshuffle(result, axes=result_axes)
+
+    # cost and grad
+    cost = ng.sum(result, reduction_axes=result.axes)
+    grad = ng.deriv(cost, w)
+
+    grad_comp = ex.executor(grad)
+    cost_comp = ex.executor(cost)
+
+    assert cost_comp() == 6.0
+    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)

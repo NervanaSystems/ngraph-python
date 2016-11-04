@@ -10,19 +10,20 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
 
 from contextlib import contextmanager
 
+import collections
+import inspect
 import cachetools
 import numpy as np
-from builtins import object
+from builtins import object, str
 
 from ngraph.op_graph.axes import TensorDescription, \
-    Axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
-from ngraph.util.nodes import Node
+    make_axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
+from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
 
@@ -53,17 +54,59 @@ def tdcache():
 tdcache.tensor_description_cache = {}
 
 
-class Op(Node):
+class DebugInfo(object):
+    """Mixin that captures file/line location of an object's creation."""
+
+    def __init__(self, **kwargs):
+        # TODO This is a good first cut for debugging info, but it would be nice to
+        # TODO be able to reliably walk the stack back to user code rather than just
+        # TODO back past this constructor
+        super(DebugInfo, self).__init__(**kwargs)
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            while frame.f_locals.get('self', None) is self:
+                frame = frame.f_back
+            while frame:
+                filename, lineno, function, code_context, index = inspect.getframeinfo(
+                    frame)
+                if -1 == filename.find('ngraph/op_graph'):
+                    break
+                frame = frame.f_back
+
+            self.filename = filename
+            self.lineno = lineno
+            self.code_context = code_context
+        finally:
+            del frame
+
+    @property
+    def file_info(self):
+        """
+        Return file location that created the node.
+
+        Returns:
+            String with file location that created the node.
+
+        """
+        return 'File "{filename}", line {lineno}'.format(
+            filename=self.filename, lineno=self.lineno)
+
+
+class Op(NameableValue, DebugInfo):
     """
     Any operation that can be in an AST.
 
     Arguments:
+        args: Values used by this node.
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
+        forward: If not None, the node to use instead of this node.
         initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
         reference (bool): The storage is accessed via a reference.  Default False.
+        tags: String or a set of strings used for filtering in searches.
         trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
@@ -75,8 +118,9 @@ class Op(Node):
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
-        trainable: The value is trainable.
         schemas: Information about how the Op was generated.
+        tags: Set of strings used for filtering in searches.
+        trainable: The value is trainable.
     """
 
     # Default is to not collect Ops as they are created
@@ -149,6 +193,8 @@ class Op(Node):
         Op._get_thread_user_deps()[-1][self] = value
 
     def __init__(self,
+                 args=(),
+                 tags=None,
                  const=None,
                  constant=False,
                  initializers=None,
@@ -157,6 +203,19 @@ class Op(Node):
                  trainable=False,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
+        self.__args = ()
+        self.tags = set()
+        self.args = args
+        # TODO: is this ok?  __repr__ wants a .name
+        if self.name is None:
+            self.name = 'empty_name'
+
+        if tags is not None:
+            if isinstance(tags, collections.Iterable) and \
+                    not isinstance(tags, (bytes, str)):
+                self.tags.update(tags)
+            else:
+                self.tags.add(tags)
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
@@ -166,7 +225,7 @@ class Op(Node):
         self.schemas = []
         self._adjoints = None
         self.const = const
-        self.constant = constant
+        self.is_constant = constant
         self.initializers = OrderedSet()
         if initializers is not None:
             for initializer in initializers:
@@ -181,6 +240,59 @@ class Op(Node):
         self.style = {}
         self.ops = []
         self.__forward = None
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self.__args
+
+    @args.setter
+    def args(self, args):
+        """
+        Replace old inputs with new inputs.
+
+        Arguments:
+            args: New arguments
+        """
+        self.__args = tuple(args)
+
+    @staticmethod
+    def visit_input_closure(roots, fun):
+        """
+        "Bottom-up" post-order traversal of root and their inputs.
+
+        Nodes will only be visited once, even if there are multiple routes to the
+        same Node.
+
+        Arguments:
+            roots: root set of nodes to visit
+            fun: Function to call on each visited node
+
+        Returns:
+            None
+        """
+        visited = set()
+
+        def visit(node):
+            """
+            Recursively visit all nodes used to compute this node.
+
+            Arguments:
+                node: the node to visit
+
+            Returns:
+                None
+            """
+            node = node.forwarded
+            node.update_forwards()
+            if node not in visited:
+                for n in node.other_deps + list(node.args):
+                    visit(n)
+                fun(node)
+                visited.add(node)
+
+        for node in roots:
+            visit(node)
 
     @property
     def forward(self):
@@ -245,7 +357,7 @@ class Op(Node):
         Returns: True if the tensor can be assigned to.
 
         """
-        return not self.constant
+        return not self.is_constant
 
     @property
     def is_scalar(self):
@@ -374,7 +486,7 @@ class Op(Node):
             if filter(node):
                 params.add(node)
 
-        Node.visit_input_closure([self], visitor)
+        Op.visit_input_closure([self], visitor)
 
         return params
 
@@ -443,7 +555,7 @@ class Op(Node):
           list of Ops in depth-first, post-order
         """
         ordered_ops = []
-        Node.visit_input_closure(results, lambda o: ordered_ops.append(o))
+        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
     def as_node(self, x):
@@ -505,6 +617,9 @@ class Op(Node):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
+
+    def __str__(self):
+        return self.graph_label
 
     def __repr__(self):
         return '<{cl}({gl}):{id}>'.format(
@@ -613,7 +728,7 @@ class Fill(Op):
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
-            if scalar.constant:
+            if scalar.is_constant:
                 scalar = scalar.const
             else:
                 raise ValueError("{} is not a scalar constant".format(scalar))
@@ -693,6 +808,9 @@ class TensorOp(Op):
 
     def __div__(self, val):
         return divide(self, val)
+
+    def __mod__(self, val):
+        return mod(self, val)
 
     def __truediv__(self, val):
         return divide(self, val)
@@ -950,6 +1068,21 @@ class AxesCastOp(ReshapeOp):
         ))
 
 
+def cast_axes(tensor, axes, name=None):
+    """
+    Cast the axes of a tensor to new axes.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes (Axes): The new axes.
+        name (String, optional): The name of the result.
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    return AxesCastOp(tensor, axes, name=name)
+
+
 class ExpandDims(ReshapeOp):
     """
     Adds additional axes into a tensor.
@@ -1184,9 +1317,9 @@ def slice_along_axis(x, axis, idx):
     Returns:
         y: a slice of x
     """
-    pos = Axes.index(x.axes, axis)
+    pos = x.axes.index(axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
-    axes = Axes.concatenate(x.axes[:pos], x.axes[pos + 1:])
+    axes = x.axes[:pos] + x.axes[pos + 1:]
     return Slice(x, ss, axes=axes)
 
 
@@ -1267,7 +1400,7 @@ def unflatten(x, axes=None, **kwargs):
     return Unflatten(x, axes=axes, **kwargs)
 
 
-class AllocationOp(TensorOp):
+class AssignableTensorOp(TensorOp):
     """
     Value comes directly from storage.
 
@@ -1292,7 +1425,7 @@ class AllocationOp(TensorOp):
             **kwargs):
         if input:
             persistent = True
-        super(AllocationOp, self).__init__(persistent=persistent, **kwargs)
+        super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
         with Op.saved_user_deps():
@@ -1353,12 +1486,12 @@ def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=
     """
     if graph_label_type is None:
         graph_label_type = "<Const({})>".format(const)
-    val = AllocationOp(axes=axes, constant=constant, persistent=True, trainable=trainable,
-                       graph_label_type=graph_label_type, **kwargs)
+    val = AssignableTensorOp(axes=axes, constant=constant, persistent=True, trainable=trainable,
+                             graph_label_type=graph_label_type, **kwargs)
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
-        val.axes = Axes([Axis(x, match_on_length=True) for x in nptensor.shape])
+        val.axes = Axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((
@@ -1393,7 +1526,7 @@ def is_constant(value):
     Returns: True if value is a constant.
 
     """
-    return isinstance(value, AllocationOp) and value.constant
+    return isinstance(value, AssignableTensorOp) and value.is_constant
 
 
 def is_constant_scalar(value):
@@ -1406,7 +1539,7 @@ def is_constant_scalar(value):
     Returns: True if value is a constant scalar.
 
     """
-    return value.constant and value.is_scalar
+    return value.is_constant and value.is_scalar
 
 
 def constant_value(value):
@@ -1436,9 +1569,9 @@ def constant_storage(graph_label_type="Constant", **kwargs):
 
     """
 
-    return AllocationOp(graph_label_type=graph_label_type,
-                        constant=True, persistent=True,
-                        trainable=False, **kwargs)
+    return AssignableTensorOp(graph_label_type=graph_label_type,
+                              constant=True, persistent=True,
+                              trainable=False, **kwargs)
 
 
 def placeholder(constant=False, trainable=False, input=True, graph_label_type="placeholder",
@@ -1457,9 +1590,9 @@ def placeholder(constant=False, trainable=False, input=True, graph_label_type="p
     Returns: An AllocationOp.
 
     """
-    return AllocationOp(graph_label_type=graph_label_type,
-                        constant=constant, persistent=True, trainable=trainable,
-                        input=input, **kwargs)
+    return AssignableTensorOp(graph_label_type=graph_label_type,
+                              constant=constant, persistent=True, trainable=trainable,
+                              input=input, **kwargs)
 
 
 def temporary(graph_label_type="Temp", **kwargs):
@@ -1473,9 +1606,9 @@ def temporary(graph_label_type="Temp", **kwargs):
     Returns: An AllocationOp.
 
     """
-    return AllocationOp(graph_label_type=graph_label_type,
-                        constant=False, persistent=True,
-                        trainable=False, **kwargs)
+    return AssignableTensorOp(graph_label_type=graph_label_type,
+                              constant=False, persistent=True,
+                              trainable=False, **kwargs)
 
 
 def persistent_tensor(graph_label_type="Persistent", **kwargs):
@@ -1491,9 +1624,9 @@ def persistent_tensor(graph_label_type="Persistent", **kwargs):
     Returns: An AllocationOp.
 
     """
-    return AllocationOp(graph_label_type=graph_label_type,
-                        constant=False, persistent=True,
-                        trainable=False, **kwargs)
+    return AssignableTensorOp(graph_label_type=graph_label_type,
+                              constant=False, persistent=True,
+                              trainable=False, **kwargs)
 
 
 def Variable(trainable=True, graph_label_type="Variable", **kwargs):
@@ -1508,9 +1641,9 @@ def Variable(trainable=True, graph_label_type="Variable", **kwargs):
     Returns: An AllocationOp.
 
     """
-    return AllocationOp(graph_label_type=graph_label_type,
-                        constant=False, persistent=True,
-                        trainable=trainable, **kwargs)
+    return AssignableTensorOp(graph_label_type=graph_label_type,
+                              constant=False, persistent=True,
+                              trainable=trainable, **kwargs)
 
 
 class Stack(TensorOp):
@@ -1888,6 +2021,11 @@ def divide_adjoints(self, adjoints, delta, x, y):
 Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
     'Divide', 'DivideOneDim', 'DivideZeroDim',
     'divide', divide_adjoints
+)
+
+Mod, ModOneDim, ModZeroDim, mod = create_binary_elementwise(
+    'Mod', 'ModOneDim', 'ModZeroDim',
+    'mod', None
 )
 
 

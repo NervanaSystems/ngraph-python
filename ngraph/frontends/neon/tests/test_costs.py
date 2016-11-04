@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 import numpy as np
 import ngraph as ng
 from ngraph.util.utils import ExecutorFactory
@@ -5,10 +19,10 @@ from ngraph.util.utils import ExecutorFactory
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     ex = ExecutorFactory()
-    N = ng.Axis("N")
+    N = ng.make_axis("N")
     N.length = outputs.shape[0]
-    y = ng.placeholder(axes=ng.Axes([N]))
-    t = ng.placeholder(axes=ng.Axes([N]))
+    y = ng.placeholder(axes=ng.make_axes([N]))
+    t = ng.placeholder(axes=ng.make_axes([N]))
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
     np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)

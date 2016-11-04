@@ -20,11 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from tf_importer.tests.importer_tester import ImporterTester
-from tf_importer.tf_importer.utils import tensor_shape_to_tuple
+from tf_importer.tf_importer.utils import tf_to_shape_tuple
 
 
 class Tester(ImporterTester):
-
     def test_rank(self):
         # shapes to test
         shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
@@ -38,7 +37,7 @@ class Tester(ImporterTester):
         # values
         feed_dict = dict()
         for x in placeholders:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         for rank in ranks:
@@ -66,7 +65,7 @@ class Tester(ImporterTester):
         # values
         feed_dict = dict()
         for x in placeholders:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         for size in sizes:
@@ -85,7 +84,7 @@ class Tester(ImporterTester):
         # values
         feed_dict = dict()
         for x in placeholders:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         for op in result_ops:
@@ -112,7 +111,7 @@ class Tester(ImporterTester):
         self.run(tf.tile(x, multiples))
 
     def test_expand_dims(self):
-        x = tf.constant(np.random.randn(2,).astype(np.float32),
+        x = tf.constant(np.random.randn(2, ).astype(np.float32),
                         dtype=tf.float32)
         dims = [-2, -1, 0, 1]
         for dim in dims:

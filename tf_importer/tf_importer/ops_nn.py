@@ -55,9 +55,11 @@ class OpsNN(OpsBase):
         Returns:
             A 1-D `Tensor` of length `batch_size` of the same type as `logits` with the
             softmax cross entropy loss.
-        """
+
         # C++ ref: https://goo.gl/z5T2my
-        # get inputs
+        """
+
+        # logits: (N1, Y1), labels: (N2,)
         logits, labels = inputs
 
         # check input dimension
@@ -73,18 +75,40 @@ class OpsNN(OpsBase):
         # get axis
         axis_y = logits.axes[1]
 
-        # generate one-hot
+        # labels_one_hot: (Y2, N2)
         labels_one_hot = ng.onehot(labels, axis=axis_y)
 
-        # softmax
+        # predicts: (N1, Y1)
         predicts = ng.softmax(logits, normalization_axes=axis_y)
 
-        # broadcast / cast
-        predicts = ng.Broadcast(predicts, axes=ng.Axes([axis for axis in reversed(predicts.axes)]))
-        labels_one_hot = ng.AxesCastOp(labels_one_hot, axes=predicts.axes)
+        # dim-shuffle / cast to (Y1, N1)
+        predicts_axes = ng.make_axes([axis for axis in reversed(predicts.axes)])
+        predicts = ng.Dimshuffle(predicts, axes=predicts_axes)
+        labels_one_hot = ng.cast_axes(labels_one_hot, axes=predicts_axes)
 
-        # crossentropy
+        # cross_entropy: (N1,)
         cross_entropy = ng.cross_entropy_multi(predicts, labels_one_hot,
                                                out_axes=(logits.axes[0],))
 
         return cross_entropy
+
+    def Softmax(self, tf_node, inputs):
+        """
+        [TensorFlow Docs]
+        Computes softmax activations.
+
+        For each batch `i` and class `j` we have
+
+                softmax[i, j] = exp(logits[i, j]) / sum(exp(logits[i]))
+
+        Args:
+            logits: A `Tensor`. Must be one of the following types: `half`,
+                    `float32`, `float64`. 2-D with shape `[batch_size, num_classes]`.
+            name: A name for the operation (optional).
+
+        Returns:
+            A `Tensor`. Has the same type as `logits`. Same shape as `logits`.
+        """
+        # TODO: only support tf.nn.softmax(logits, dim=-1) now
+        logits = inputs[0]
+        return ng.softmax(logits, normalization_axes=logits.axes[1])

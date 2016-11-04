@@ -84,7 +84,7 @@ def ngraph_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (ng.Axis(name='axis%s' % i, length=l),)
+        axes += (ng.make_axis(name='axis%s' % i, length=l),)
 
     np_tensor = ng.Constant(np_array, axes=axes)
     var = ng.Variable(axes=axes, initial_value=np_tensor)
@@ -96,13 +96,13 @@ def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
-    C = ng.Axis(name='C')
-    N = ng.Axis(name='N')
+    C = ng.make_axis(name='C')
+    N = ng.make_axis(name='N')
 
     C.length = 2
     N.length = 3
     N.batch = True
-    x_axes, y_axes = ng.Axes((C, N)), ng.Axes((C,))
+    x_axes, y_axes = ng.make_axes((C, N)), ng.make_axes((C,))
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
     expected_output = np.sum(x_np.T.dot(y_np))
@@ -137,10 +137,10 @@ def test_dot_sum_backprop(transformer_factory):
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
-    C = ng.Axis(name='C')
-    D = ng.Axis(name='D')
-    H = ng.Axis(name='H')
-    N = ng.Axis(name='N')
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
+    H = ng.make_axis(name='H')
+    N = ng.make_axis(name='N')
 
     tests = [
         {

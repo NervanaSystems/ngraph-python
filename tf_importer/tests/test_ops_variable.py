@@ -23,11 +23,10 @@ from tf_importer.tests.importer_tester import ImporterTester
 
 
 class Tester(ImporterTester):
-
     def test_variable(self):
         # tf placeholder
-        a = tf.Variable(tf.ones([2, 3]), name="a")
-        b = tf.Variable(tf.zeros([1, 3]), name="b")
+        a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
+        b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
         init_op = tf.initialize_all_variables()
         result = tf.add(a, b) * 3
 
@@ -38,8 +37,8 @@ class Tester(ImporterTester):
         # TODO: double assignments fails
 
         # tf placeholder
-        a = tf.Variable(tf.ones([2, 3]) * 3, name="a")
-        b = tf.Variable(tf.zeros([2, 3]) + tf.ones([2, 3]) * 2, name="b")
+        a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
+        b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
         init_op = tf.initialize_all_variables()
         a_update = tf.assign(a, b)
 
@@ -52,8 +51,8 @@ class Tester(ImporterTester):
         # TODO: double assignments fails
 
         # tf placeholder
-        a = tf.Variable(tf.ones([2, 3]) * 3, name="a")
-        b = tf.Variable(tf.zeros([2, 3]) + tf.ones([2, 3]) * 2, name="b")
+        a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
+        b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
         init_op = tf.initialize_all_variables()
         a_update = tf.assign_add(a, b)
 

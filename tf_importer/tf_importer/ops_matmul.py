@@ -81,8 +81,8 @@ class OpsMatmul(OpsBase):
         assert left.axes[1].length == right.axes[0].length
 
         # cast axis
-        right_axes = ng.Axes([left.axes[1], right.axes[1]])
-        right_casted = ng.AxesCastOp(right, axes=right_axes)
+        right_axes = ng.make_axes([left.axes[1], right.axes[1]])
+        right_casted = ng.cast_axes(right, axes=right_axes)
 
         # result op
         result_op = ng.dot(left, right_casted, name=tf_node.name)

@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 from builtins import range, zip
 import tempfile
 
@@ -29,6 +43,7 @@ _op_templates = {
     "sub": r"%(out)s = %(x)s - %(y)s;",
     "mul": r"%(out)s = %(x)s * %(y)s;",
     "div": r"%(out)s = %(x)s / %(y)s;",
+    "mod": r"%(out)s = int(%(x)s) %% int(%(y)s);",
     "eq": r"%(out)s = %(x)s == %(y)s;",
     "ne": r"%(out)s = %(x)s != %(y)s;",
     "lt": r"%(out)s = %(x)s < %(y)s;",
@@ -161,6 +176,12 @@ _thread_index_template3 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.
     unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
     unsigned int idx2 = threadIdx.%(dim2)s + blockIdx.%(dim2)s * ITEMS_PER_BLOCK2_%(id)s;
     unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
+"""
+
+_exit_condition_template = r"(idx%(axis)s >= shape%(axis_letter)s)"
+_early_exit_template = r"""
+    if(%(condition)s)
+        return;
 """
 
 _init_template = r"""%(smem_decl)s
@@ -384,7 +405,7 @@ def _get_axes_mapping(ops):
                         max_shape[axis] = shape[axis]
 
     # Determine which axis/axes map to block
-    axes_mapping = [(None, None, None, None, None)] * MAX_AXES
+    axes_mapping = [(None, None, None, None, None, False)] * MAX_AXES
     dims = ['x', 'y', 'z']
     blocksize = 1
     if reduction_axis is not None:
@@ -392,7 +413,7 @@ def _get_axes_mapping(ops):
         blockdim = min(THREADS_PER_BLOCK, max(32, blockdim * 32))
         items_per_thread = -((-max_shape[reduction_axis]) // blockdim)
         axes_mapping[reduction_axis] = ('x', blockdim, 1, items_per_thread,
-                                        max_shape[reduction_axis])
+                                        max_shape[reduction_axis], False)
 
         blocksize = blockdim
         dims.remove('x')
@@ -404,7 +425,8 @@ def _get_axes_mapping(ops):
 
         (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[axis])
         blocksize = blockdim
-        axes_mapping[axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[axis])
+        axes_mapping[axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[axis],
+                              False)
 
     # TODO: consider contiguity in axis mapping
     for axis in axes:
@@ -414,6 +436,7 @@ def _get_axes_mapping(ops):
         if len(dims) == MAX_AXES:
             (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[axis])
             blocksize = blockdim
+            exit_condition = False
         else:
             items_per_thread = 1
             blockdim = 1
@@ -423,7 +446,14 @@ def _get_axes_mapping(ops):
             blocksize = blocksize * blockdim
             griddim = -((-max_shape[axis]) // (blockdim * items_per_thread))
 
-        axes_mapping[axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[axis])
+            # Build exit condition if partial block exists
+            if (blockdim * griddim) != max_shape[axis]:
+                exit_condition = True
+            else:
+                exit_condition = False
+
+        axes_mapping[axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[axis],
+                              exit_condition)
 
     # Prune unused axes
     dims = MAX_AXES
@@ -744,6 +774,22 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         "loop_axis": loop_axis_letters[loop_axis],
         "id": kernel_identifier
     }
+
+    # Build exit conditions of block size does not line up exactly with tensor dimensions
+    exit_conditions = []
+    for axis_mapping, axis_index in zip(axes_mapping, range(3)):
+        if axis_mapping[5]:
+            condition = _exit_condition_template % {
+                "axis": axis_index,
+                "axis_letter": loop_axis_letters[axis_index]
+            }
+            exit_conditions.append(condition)
+
+    if len(exit_conditions) != 0:
+        total_condition = " && ".join(exit_conditions)
+        code = _early_exit_template % {
+            "condition": total_condition
+        } + code
 
     if ctx.shared_buffers:
         code = _init_template % {

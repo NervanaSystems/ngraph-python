@@ -87,7 +87,6 @@ ngraph.util
    ngraph.util.generics
    ngraph.util.graph
    ngraph.util.names
-   ngraph.util.nodes
    ngraph.util.pygen
    ngraph.util.threadstate
    ngraph.util.utils

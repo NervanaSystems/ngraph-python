@@ -14,10 +14,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, Axes, Callbacks,
+from ngraph.frontends.neon import (ax, np, Affine, Conv, Pooling, make_axes, Callbacks,
                                    CrossEntropyMulti, GeneralizedCost, GradientDescentMomentum,
                                    Misclassification, Model, NgraphArgparser, Rectlin, Softmax)
-
 from neon.data import CIFAR10
 from neon.initializers import Uniform
 
@@ -47,7 +46,7 @@ layers = [Conv((5, 5, 16), init=init_uni, activation=Rectlin(), batch_norm=bn),
           Conv((5, 5, 32), init=init_uni, activation=Rectlin(), batch_norm=bn),
           Pooling((2, 2)),
           Affine(nout=500, init=init_uni, activation=Rectlin(), batch_norm=bn),
-          Affine(nout=10, axes=Axes(ax.Y,), init=init_uni, activation=Softmax())]
+          Affine(nout=10, axes=make_axes(ax.Y,), init=init_uni, activation=Softmax())]
 
 cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 
@@ -55,8 +54,8 @@ model = Model(layers=layers)
 callbacks = Callbacks(model, eval_set=test, **args.callback_args)
 model.initialize(
     dataset=train,
-    input_axes=Axes((ax.C, ax.D, ax.H, ax.W)),
-    target_axes=Axes((ax.Y,)),
+    input_axes=make_axes((ax.C, ax.D, ax.H, ax.W)),
+    target_axes=make_axes((ax.Y,)),
     optimizer=opt_gdm,
     cost=cost,
     metric=Misclassification()

@@ -28,6 +28,7 @@ from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, exp, \
     GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
     LessOneDim, LessZeroDim, \
@@ -487,6 +488,14 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(DivideZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(ModOneDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.mod({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(ModZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.mod({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(DotOneDimensional)
     def generate_op(self, op, out, x, y):

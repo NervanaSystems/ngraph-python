@@ -12,3 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from ngraph.op_graph.op_graph import Op
+
+
+def test_bytes_tags():
+    """TODO."""
+    n = Op(tags=b'abc')
+    assert len(n.tags) == 1
+
+
+def test_unicode_tags():
+    """TODO."""
+    n = Op(tags=u'abc')
+    assert len(n.tags) == 1

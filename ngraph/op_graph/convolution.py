@@ -15,7 +15,7 @@
 from __future__ import division
 from operator import itemgetter
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import Axis, Axes, spatial_axis
+from ngraph.op_graph.axes import make_axis, Axes, spatial_axis
 
 
 class convolution(op_graph.TensorOp):
@@ -68,11 +68,10 @@ class convolution(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-
         channel_out_axis = [ax for ax in filters.axes if ax.name.startswith('K')][0]
         # output axes computation
         axes = Axes(
-            [Axis(length=channel_out_axis.length, name='C'),
+            [make_axis(length=channel_out_axis.length, name='C'),
              spatial_axis(inputs, filters, conv_params['pad_d'], conv_params['str_d'],
                           role='depth'),
              spatial_axis(inputs, filters, conv_params['pad_h'], conv_params['str_h'],

@@ -52,20 +52,20 @@ def test_convolution():
     strides = dict(str_d=1, str_h=1, str_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
-    Nx = ng.Axis(N, batch=True)
+    Nx = ng.make_axis(N, batch=True)
 
-    Cx = ng.Axis(C, name='C')
-    Dx = ng.Axis(D, name='D')
-    Hx = ng.Axis(H, name='H')
-    Wx = ng.Axis(W, name='W')
-    Tx = ng.Axis(T, name='T')
-    Rx = ng.Axis(R, name='R')
-    Sx = ng.Axis(S, name='S')
-    Kx = ng.Axis(K, name='K')
+    Cx = ng.make_axis(C, name='C')
+    Dx = ng.make_axis(D, name='D')
+    Hx = ng.make_axis(H, name='H')
+    Wx = ng.make_axis(W, name='W')
+    Tx = ng.make_axis(T, name='T')
+    Rx = ng.make_axis(R, name='R')
+    Sx = ng.make_axis(S, name='S')
+    Kx = ng.make_axis(K, name='K')
     dtypeu = np.float32
 
-    inputs = ng.placeholder(axes=ng.Axes([Cx, Dx, Hx, Wx, Nx]))
-    filters = ng.placeholder(axes=ng.Axes([Cx, Tx, Rx, Sx, Kx]))
+    inputs = ng.placeholder(axes=ng.make_axes([Cx, Dx, Hx, Wx, Nx]))
+    filters = ng.placeholder(axes=ng.make_axes([Cx, Tx, Rx, Sx, Kx]))
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, inputs.axes)

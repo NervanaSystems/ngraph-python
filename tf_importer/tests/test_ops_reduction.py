@@ -20,11 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from tf_importer.tests.importer_tester import ImporterTester
-from tf_importer.tf_importer.utils import tensor_shape_to_tuple
+from tf_importer.tf_importer.utils import tf_to_shape_tuple
 
 
 class Tester(ImporterTester):
-
     def test_sum_mean(self):
         # test cases
         reduction_indices_list = [None, [], [0, ], [0, 1], [1, 2], [0, 1, 2]]
@@ -33,7 +32,7 @@ class Tester(ImporterTester):
         a = tf.placeholder(tf.float32, shape=[3, 4, 5])
 
         # value
-        feed_dict = {a: np.random.rand(*tensor_shape_to_tuple(a._shape))}
+        feed_dict = {a: np.random.rand(*tf_to_shape_tuple(a))}
 
         # test
         for reduction_indices in reduction_indices_list:
@@ -53,7 +52,7 @@ class Tester(ImporterTester):
         # value
         feed_dict = dict()
         for x in [a, b]:
-            feed_dict[x] = np.random.rand(*tensor_shape_to_tuple(x._shape))
+            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
 
         # test
         self.run(f, tf_feed_dict=feed_dict)
