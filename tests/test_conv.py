@@ -29,7 +29,7 @@ rng = RandomTensorGenerator(0, np.float32)
 NervanaObject.be = gen_backend()
 
 
-class db(object):
+class DummyDeltaBuffers(object):
     """
     Dummy class for delta buffers needed by neon
     """
@@ -43,7 +43,7 @@ def test_convolution():
     """
     N = 128
     C = 3
-    K = 1
+    K = 8
     D, T = 1, 1
     H = W = 32
     R = S = 2
@@ -78,13 +78,15 @@ def test_convolution():
     output = ng.convolution(dims, inputs, filters)
     targets = ng.placeholder(axes=output.axes)
 
-    error = output - targets
+    costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
+    error = ng.sum(costs, out_axes=()) / ng.batch_size(costs)
     d_inputs = ng.deriv(error, inputs)
     d_filters = ng.deriv(error, filters)
 
-    targets_value = rng.uniform(-0.1, 0.1, output.axes)
-    conv_executor = executor([output, d_inputs, d_filters], inputs, filters, targets)
-    result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
+    targets_value = rng.uniform(.1, 0.9, output.axes)
+
+    conv_executor = executor([output, error, d_inputs, d_filters], inputs, filters, targets)
+    result_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
 
 
     #### Now compute reference values via NEON
@@ -97,15 +99,22 @@ def test_convolution():
     neon_layer.configure((C, H, W))
     neon_layer.prev_layer = True
     neon_layer.allocate()
-    neon_layer.set_deltas(db())
+    neon_layer.set_deltas(DummyDeltaBuffers())
 
     result_ne = neon_layer.fprop(inp).get().reshape(output.axes.lengths)
-    err = neon_layer.be.array(result_ne - targets_value).reshape(-1, N)
 
+    act_result_ne = 1. / (1.0 + np.exp(-result_ne))
+    err = neon_layer.be.array((act_result_ne - targets_value).reshape(-1, N) / float(N))
     gradI_ne = neon_layer.bprop(err).get().reshape(inputs.axes.lengths)
     gradF_ne = neon_layer.dW.get().reshape(filters.axes.lengths)
+
+    # Compare fprop
     np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
-    # np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-6)
-    # np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    # Compare bprop
+    np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+
+    # Compare update
+    np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-6)
+
 
