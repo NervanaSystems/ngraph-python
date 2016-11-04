@@ -20,7 +20,7 @@ from functools import wraps
 from operator import itemgetter
 # These are indirectly used by the generated code
 import numpy as np  # noqa
-import itertools as itt
+import itertools as itt  # noqa
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting

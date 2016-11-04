@@ -42,8 +42,7 @@ def test_convolution():
     test convolution forward path
     """
     N = 128
-    C = 3
-    K = 8
+    C, K = 3, 8
     D, T = 1, 1
     H = W = 32
     R = S = 2
@@ -62,7 +61,6 @@ def test_convolution():
     Rx = ng.make_axis(R, name='R')
     Sx = ng.make_axis(S, name='S')
     Kx = ng.make_axis(K, name='K')
-    dtypeu = np.float32
 
     inputs = ng.placeholder(axes=ng.make_axes([Cx, Dx, Hx, Wx, Nx]))
     filters = ng.placeholder(axes=ng.make_axes([Cx, Tx, Rx, Sx, Kx]))
@@ -88,8 +86,7 @@ def test_convolution():
     conv_executor = executor([output, error, d_inputs, d_filters], inputs, filters, targets)
     result_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
 
-
-    #### Now compute reference values via NEON
+    # Now compute reference values via NEON
     NervanaObject.be.bsz = N
     neon_layer = Convolution(fshape=(R, S, K), padding=padding, strides=strides)
 
@@ -116,5 +113,3 @@ def test_convolution():
 
     # Compare update
     np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-6)
-
-

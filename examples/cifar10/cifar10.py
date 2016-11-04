@@ -88,13 +88,10 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
         return manifest_files
 
-    dataset = {k:s for k, s in zip(set_names, CIFAR10(path=out_dir).load_data())}
+    dataset = {k: s for k, s in zip(set_names, CIFAR10(path=out_dir).load_data())}
 
     pad_size = (padded_size - 32) // 2 if padded_size > 32 else 0
     pad_width = ((0, 0), (pad_size, pad_size), (pad_size, pad_size))
-
-    manifest_list_cfg = ', '.join([k+':'+v for k, v in zip(set_names, manifest_files)])
-
 
     # Write out label files and setup directory structure
     lbl_paths, img_paths = dict(), dict(train=dict(), val=dict())
@@ -117,4 +114,3 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
         np.savetxt(manifest, records, fmt='%s,%s')
 
     return manifest_files
-

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
+from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
 from neon import NervanaObject
@@ -47,20 +47,6 @@ class Layer(object):
         return in_obj
 
 
-class BranchNode(Layer):
-    """TODO."""
-
-    def __init__(self, **kwargs):
-        super(BranchNode, self).__init__(**kwargs)
-
-
-class SkipNode(Layer):
-    """TODO."""
-
-    def __init__(self, **kwargs):
-        super(SkipNode, self).__init__(**kwargs)
-
-
 class ParameterLayer(Layer):
     """TODO."""
 
@@ -73,20 +59,6 @@ class ParameterLayer(Layer):
         self.dW = None
         self.batch_sum = None
 
-
-# class nnBatchNorm(object):
-#     def __init__(self, out_axis, eps=1.0e-6):
-#         self.out_axis = out_axis
-#         self.eps = eps
-
-#     def initialize(self, in_obj):
-#         bn_axes = ng.Axes
-#         self.gamma = ng.Variable(axes=bn_axes, initial_value=1.)
-#         self.beta = ng.Variable(axes=bn_axes, initial_value=0.)
-
-#     def __call__(self, in_obj):
-#         xhat = (in_obj - ng.mean(in_obj, reduction_axes=)) / ng.sqrt(ng.var(in_obj + self.eps))
-#         return (xhat - self.beta) * self.gamma
 
 class nnLayer(object):
     def __init__(self):
@@ -102,7 +74,7 @@ class nnPreprocess(nnLayer):
 
 
 class nnAffine(object):
-    def __init__(self, nout, init, activation=(lambda x : x), bias_init=None, axes=None):
+    def __init__(self, nout, init, activation=(lambda x: x), bias_init=None, axes=None):
         self.nout = nout
         self.init = init
         self.axes = axes
@@ -124,7 +96,7 @@ class nnAffine(object):
 
 
 class nnConv(nnLayer):
-    def __init__(self, fshape, init, activation=(lambda x : x), bias_init=None):
+    def __init__(self, fshape, strides, padding, init, activation=(lambda x: x), bias_init=None):
 
         self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
                            'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
@@ -147,7 +119,6 @@ class nnConv(nnLayer):
         self.activation = activation
         self.b = 0
         self.bias_init = bias_init
-
 
     def _call_train(self, in_obj):
         # if self.bias_init:
@@ -717,10 +688,3 @@ class BatchNorm(Layer):
 
     def __init__(self, rho=0.9, eps=1e-3, **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
-
-
-class BatchNormAutodiff(BatchNorm):
-    """TODO."""
-
-    def __init__(self, rho=0.99, eps=1e-6, **kwargs):
-        super(BatchNormAutodiff, self).__init__(**kwargs)

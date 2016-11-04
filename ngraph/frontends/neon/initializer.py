@@ -37,4 +37,4 @@ class ConstantInit(object):
         self.val = val
 
     def __call__(self, out_shape):
-        return val
+        return self.val

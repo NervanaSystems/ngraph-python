@@ -43,7 +43,6 @@ def test_pooling():
     """
     N = 128
     C = 3
-    K = 8
     D = 1
     H = W = 32
 
@@ -66,11 +65,6 @@ def test_pooling():
     Dx = ng.Axis(D, name='D')
     Hx = ng.Axis(H, name='H')
     Wx = ng.Axis(W, name='W')
-    Tx = ng.Axis(T, name='T')
-    Rx = ng.Axis(R, name='R')
-    Sx = ng.Axis(S, name='S')
-    Kx = ng.Axis(K, name='K')
-    dtypeu = np.float32
 
     inputs = ng.placeholder(axes=ng.Axes([Cx, Dx, Hx, Wx, Nx]))
 
@@ -92,7 +86,7 @@ def test_pooling():
     conv_executor = executor([output, error, d_inputs], inputs, targets)
     result_ng, err_ng, gradI_ng = conv_executor(input_value, targets_value)
 
-    #### Now compute reference values via NEON
+    # Now compute reference values via NEON
     NervanaObject.be.bsz = N
     neon_layer = Pooling(fshape=fshape, padding=padding, strides=strides, op="max")
 

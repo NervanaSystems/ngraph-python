@@ -54,8 +54,10 @@ H1 = ng.Axis(hidden_size, name="H1")
 H2 = ng.Axis(hidden_size, name="H2")
 Y = ng.Axis(output_size, name="Y")
 
+
 def unit_scale_mnist_pixels(x):
     return x / 255.
+
 
 my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
                   nnAffine(out_axis=H1, init=GaussianInit(), activation=Rectlin()),
@@ -101,7 +103,7 @@ my_model.train(train_set, args.num_iterations, cb)
 
 # # validate
 hyps, refs = my_model.eval(valid_set)
-np.savetxt(args.results_file, [(h,r) for h, r in zip(hyps, refs)], fmt='%s,%s')
+np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
 a = np.loadtxt(args.results_file, delimiter=',')
-err = np.sum((a[:,0]!= a[:,1]))/float(a.shape[0])
+err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
 print("Misclassification: {}".format(err))

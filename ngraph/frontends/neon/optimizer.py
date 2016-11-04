@@ -72,13 +72,6 @@ class Schedule(object):
             assert len(step_config) == len(change), "change and step_config must have the same" \
                 "length after step_config is deduplicated to do epoch-level LR assignment."
 
-            print("This functionality will be removed from Schedule in the future. "
-                        "Please use the StepSchedule class instead.")
-
-        if isinstance(step_config, int):
-            print("This functionality will be removed from Schedule in the future. "
-                        "Please use the PowerSchedule class instead.")
-
         self.step_config = step_config
         self.change = change
         self.steps = 0
@@ -94,22 +87,7 @@ class Schedule(object):
         Returns:
             (float): The adjusted learning rate
         """
-
-        # will be moved to StepSchedule in the future
-        if isinstance(self.step_config, list) and isinstance(self.change, list):
-            if epoch in self.step_config:
-                # steps will store the current lr
-                self.steps = self.change[self.step_config.index(epoch)]
-            if self.steps == 0:
-                return learning_rate
-            else:
-                return self.steps
-
-        # will be moved to PowerSchedule in the future
-        elif isinstance(self.step_config, int):
-            self.steps = np.floor(epoch / self.step_config)
-
-        elif isinstance(self.step_config, list):
+        if isinstance(self.step_config, list):
             self.steps = np.sum(epoch >= np.array(self.step_config))
 
         return learning_rate * self.change ** self.steps
@@ -202,7 +180,7 @@ class GradientDescentMomentum(Optimizer):
                 velocity_updates.append(
                     ng.assign(velocity,
                               velocity * self.momentum_coef - self.learning_rate * (
-                                scale_factor * grad + self.wdecay * variable)))
+                                  scale_factor * grad + self.wdecay * variable)))
 
                 param_updates.append(ng.assign(variable, variable + velocity))
 
@@ -285,7 +263,7 @@ class RMSProp(Optimizer):
 
         epsilon, decay = (self.epsilon, self.decay_rate)
         states = [
-            ng.temporary(axes=variable.axes, init=Constant(0))
+            ng.temporary(axes=variable.axes, initial_value=0.)
             for variable in variables
         ]
         state_updates = [

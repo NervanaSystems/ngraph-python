@@ -20,10 +20,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import nnAffine, UniformInit
 from ngraph.util.utils import executor
-
-from ngraph.util.utils import ExecutorFactory
 from ngraph.transformers import Transformer
-from ngraph import RNG
 
 
 def pytest_generate_tests(metafunc):

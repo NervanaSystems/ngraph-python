@@ -29,16 +29,16 @@ db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp_direct
                 'cost': 0.290034},
       'cifar10': {'filename': os.path.join(example_dir, 'cifar10', 'cifar10_mlp.py'),
                   'arguments': '--work_dir {} --num_iterations {} --iter_interval {}'.format(
-                     work_dir, 950, 475),
+                  work_dir, 950, 475),
                   'cost': 1.5028026}
       }
-
 
 
 def get_cost(filename):
     with h5py.File(filename, 'r') as f:
         cost = np.array(f['cost']['train'])
         return cost
+
 
 def get_last_interval_cost(filename, interval_size):
     cost = get_cost(filename)
@@ -58,7 +58,7 @@ def run_model(request, tmpdir_factory, transformer_factory):
         ofiles.append(ofile)
         rcs.append(rc)
 
-    assert all([rc == 0 for rc in rcs])
+    assert all([result == 0 for result in rcs])
     return (model, ofiles)
 
 

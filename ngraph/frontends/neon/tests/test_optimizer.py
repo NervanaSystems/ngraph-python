@@ -23,7 +23,6 @@ import copy
 
 from ngraph.frontends.neon import GradientDescentMomentum
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
-from ngraph.transformers import Transformer
 from neon.backends import gen_backend
 
 
@@ -52,6 +51,7 @@ def generate_data(C, N):
 
     return x, y
 
+
 # xfail due to initial_value=nparray not working
 # this test was working a previous commit of ngraph
 # @pytest.mark.xfail(strict=True)
@@ -75,7 +75,6 @@ def test_gdm(args, transformer_factory):
 
     W = ng.Variable(axes=ng.Axes([C]), initial_value=w_init)
 
-
     transformer = ng.NumPyTransformer()
 
     lrate, mom, wdecay = args
@@ -86,7 +85,6 @@ def test_gdm(args, transformer_factory):
     # where (x, y) are nparrays that fill the placeholders X and Y
     updates = gdm(cost, I)
     ngraph_optimize = transformer.computation([W, updates], X, Y, I)
-    wgetter = transformer.computation(W)
     transformer.initialize()
 
     # set up the neon gdm
@@ -116,5 +114,3 @@ def test_gdm(args, transformer_factory):
         be_Ws.append(be_W)
 
         np.testing.assert_allclose(be_W, ng_W, rtol=1e-4)
-
-    print('')

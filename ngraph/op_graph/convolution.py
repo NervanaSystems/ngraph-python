@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from operator import itemgetter
 from ngraph.op_graph import op_graph
 from ngraph.op_graph.axes import make_axis, Axes, spatial_axis
 

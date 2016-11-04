@@ -12,16 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
-from builtins import map, range, str, zip
-from future.utils import native
-from collections import deque
+from __future__ import division, print_function
+from builtins import zip
 import h5py
-import inspect
 import logging
-import numpy as np
 import os
-import sys
 import time
 from timeit import default_timer
 import weakref
@@ -322,7 +317,7 @@ class MetricCallback(Callback):
         interval = iteration_idx // self.interval_freq
 
         for name, func in zip(self.metric_names, self.metric_funcs):
-            callback_data["metrics/%s" % met][interval] = func()
+            callback_data["metrics/%s" % name][interval] = func()
 
 
 class TrainLoggerCallback(Callback):

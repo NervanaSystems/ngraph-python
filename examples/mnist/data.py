@@ -13,26 +13,24 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import os
-import numpy as np
 from aeon import DataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
 from mnist import ingest_mnist
 
+
 def common_config(manifest_file, batch_size):
     cache_root = get_data_cache_or_nothing('mnist-cache/')
 
-    return {
-               'manifest_filename': manifest_file,
-               'manifest_root': os.path.dirname(manifest_file),
-               'minibatch_size': batch_size,
-               'macrobatch_size': 25000,
-               'cache_directory': cache_root,
-               'type': 'image,label',
-               'image': {'height': 28,
-                         'width': 28,
-                         'channels': 1},
-               'label': {'binary': False}
-            }
+    return {'manifest_filename': manifest_file,
+            'manifest_root': os.path.dirname(manifest_file),
+            'minibatch_size': batch_size,
+            'macrobatch_size': 25000,
+            'cache_directory': cache_root,
+            'type': 'image,label',
+            'image': {'height': 28,
+                      'width': 28,
+                      'channels': 1},
+            'label': {'binary': False}}
 
 
 def make_aeon_loaders(work_dir, batch_size, backend, random_seed=0):

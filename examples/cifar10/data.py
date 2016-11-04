@@ -13,26 +13,24 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import os
-import numpy as np
 from aeon import DataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
 from cifar10 import ingest_cifar10
 
+
 def common_config(manifest_file, batch_size):
     cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
-    return {
-               'manifest_filename': manifest_file,
-               'manifest_root': os.path.dirname(manifest_file),
-               'minibatch_size': batch_size,
-               'macrobatch_size': 5000,
-               'type': 'image,label',
-               'cache_directory': cache_root,
-               'image': {'height': 32,
-                         'width': 32,
-                         'scale': [0.8, 0.8]},
-               'label': {'binary': False}
-            }
+    return {'manifest_filename': manifest_file,
+            'manifest_root': os.path.dirname(manifest_file),
+            'minibatch_size': batch_size,
+            'macrobatch_size': 5000,
+            'type': 'image,label',
+            'cache_directory': cache_root,
+            'image': {'height': 32,
+                      'width': 32,
+                      'scale': [0.8, 0.8]},
+            'label': {'binary': False}}
 
 
 def make_aeon_loaders(work_dir, batch_size, backend, random_seed=0):
@@ -50,4 +48,3 @@ def make_aeon_loaders(work_dir, batch_size, backend, random_seed=0):
     valid_loader = DataLoader(valid_config, backend)
 
     return (train_loader, valid_loader)
-

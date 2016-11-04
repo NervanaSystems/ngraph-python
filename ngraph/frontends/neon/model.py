@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import ngraph as ng
 import numpy as np
 from itertools import takewhile
 
@@ -23,7 +22,6 @@ class Model(object):
     def __init__(self, layers):
         self.layers = layers
         self.initialized = False
-
 
     def initialize(self, in_axes):
         if not self.initialized:
@@ -45,7 +43,7 @@ class Model(object):
     def train(self, train_set, num_iterations, callbacks):
         callbacks.on_train_begin(num_iterations)
 
-        for mb_idx, dtuple in takewhile(lambda x: x[0]<num_iterations, enumerate(train_set)):
+        for mb_idx, dtuple in takewhile(lambda x: x[0] < num_iterations, enumerate(train_set)):
             callbacks.on_minibatch_begin(mb_idx)
 
             batch_cost, _ = self.train_comp(dtuple[0], dtuple[1], mb_idx)
@@ -65,4 +63,3 @@ class Model(object):
             hyps.extend(list(batch_hyps[:bsz]))
             refs.extend(list(dtuple[1][0][:bsz]))
         return hyps, refs
-

@@ -1,10 +1,9 @@
 import gzip
 from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append, fetch_file
-import os, sys, getopt, errno
+import os
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
-import argparse
 
 
 class MNIST(object):
@@ -53,9 +52,7 @@ def ingest_mnist(root_dir, overwrite=False):
     if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
         return manifest_files
 
-    dataset = {k:s for k, s in zip(set_names, MNIST(path=out_dir).load_data())}
-
-    manifest_list_cfg = ', '.join([k+':'+v for k, v in zip(set_names, manifest_files)])
+    dataset = {k: s for k, s in zip(set_names, MNIST(path=out_dir).load_data())}
 
     # Write out label files and setup directory structure
     lbl_paths, img_paths = dict(), dict(train=dict(), val=dict())

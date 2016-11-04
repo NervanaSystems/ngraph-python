@@ -17,13 +17,12 @@ from __future__ import division
 
 import pytest
 import numpy as np
-from builtins import range
-
-import ngraph.frontends.base.axis as ax
 import ngraph as ng
+
 
 def sequential():
     pass
+
 
 @pytest.mark.skip(reason="why can't we add tests that fail?")
 def test_init_gaussian():

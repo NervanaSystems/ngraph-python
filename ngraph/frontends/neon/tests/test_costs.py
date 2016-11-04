@@ -32,6 +32,7 @@ def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     Cross Entropy Binary
 """
 
+
 def test_cross_entropy_binary(transformer_factory):
     outputs = np.array([0.5, 0.9, 0.1, 0.0001])
     targets = np.array([0.5, 0.99, 0.01, 0.2])
@@ -55,6 +56,7 @@ def test_cross_entropy_binary_limits(transformer_factory):
     expected_mlog = np.log(np.maximum(1 - outputs, eps))
     expected_result = np.sum((-targets * expected_log) - (1 - targets) * expected_mlog,
                              keepdims=True)
+
     def cost(y, t):
         return ng.cross_entropy_binary(y, t)
 
