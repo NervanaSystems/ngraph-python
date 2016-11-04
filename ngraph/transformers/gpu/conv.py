@@ -13,8 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gputransform import GPUKernel
-from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.kernel import GPUKernel
 
 from neon.backends import convolution
 
@@ -26,7 +25,7 @@ class ConvFpropKernel(GPUKernel):
 
         self.O = op.tensor_description()
         self.I, self.F = (_ for _ in op.call_info())
-        conv_dims = op.conv_dict
+        conv_dims = op.conv_params
 
         C, D, H, W, _ = self.I.tensor_description.axes.lengths
         C, R, S, T, K = self.F.tensor_description.axes.lengths
@@ -76,7 +75,7 @@ class ConvFpropKernel(GPUKernel):
         self.fprop_kernels.bind_params(I_data, F_data, O_data, X=None,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
-        super(ElementWiseKernel, self).bind_buffers()
+        super(ConvFpropKernel, self).bind_buffers()
 
     def execute(self):
         self.fprop_kernels.execute(1)
@@ -88,7 +87,7 @@ class ConvBpropKernel(GPUKernel):
 
         self.O = op.tensor_description()
         self.E, self.F = (_ for _ in op.call_info())
-        conv_dims = op.conv_dict
+        conv_dims = op.conv_params
 
         C, D, H, W, _ = self.O.tensor_description.axes.lengths
         C, R, S, T, K = self.F.tensor_description.axes.lengths
@@ -137,7 +136,7 @@ class ConvBpropKernel(GPUKernel):
         self.bprop_kernels.bind_params(E_data, F_data, O_data, X=None,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
-        super(ElementWiseKernel, self).bind_buffers()
+        super(ConvBpropKernel, self).bind_buffers()
 
     def execute(self):
         self.bprop_kernels.execute(1)
@@ -149,7 +148,7 @@ class ConvUpdateKernel(GPUKernel):
 
         self.U = op.tensor_description()
         self.E, self.I = (_ for _ in op.call_info())
-        conv_dims = op.conv_dict
+        conv_dims = op.conv_params
 
         C, D, H, W, _ = self.I.tensor_description.axes.lengths
         C, R, S, T, K = self.U.tensor_description.axes.lengths
@@ -200,7 +199,7 @@ class ConvUpdateKernel(GPUKernel):
         I_data = self.I.value.tensor
         U_data = self.U.value.tensor
         self.updat_kernels.bind_params(I_data, E_data, U_data, alpha=1.0, beta=0.0)
-        super(ElementWiseKernel, self).bind_buffers()
+        super(ConvUpdateKernel, self).bind_buffers()
 
     def execute(self):
         self.updat_kernels.execute(1)

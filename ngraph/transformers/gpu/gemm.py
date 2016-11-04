@@ -13,11 +13,14 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gputransform import GPUKernel
+from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.op_graph.axes import TensorDescription
 
 from neon.backends.layer_gpu import _get_sm_count
 from neon.backends import kernel_specs
+
+import numpy as np
 
 class GEMMKernel(GPUKernel):
     def __init__(self, transformer, op):
@@ -43,9 +46,10 @@ class GEMMKernel(GPUKernel):
         assert len(C.shape) == 2
 
         # one dimention must be contiguous
-        assert min(A.strides) == 1
-        assert min(B.strides) == 1
-        assert min(C.strides) == 1
+        import pdb; pdb.set_trace()
+        assert min(A.strides) == 1 or max(A.strides) == 1
+        assert min(B.strides) == 1 or max(B.strides) == 1
+        assert min(C.strides) == 1 or max(C.strides) == 1
 
         lda = max(A.strides)
         ldb = max(B.strides)
@@ -160,7 +164,7 @@ class GEMMKernel(GPUKernel):
         self.kernel = kernel_specs.get_kernel("_".join((clss, op, size)), vec_opt)
         self.params = [
             (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
-            C.td, A.td, B.td, alpha, beta, flags, int(lda), int(ldb), int(ldc),
+            C.td, A.td, B.td, 1.0, 0.0, 0, int(lda), int(ldb), int(ldc),
             int(m), int(n), int(k),
             0, 0, 0, 0]
 
@@ -174,13 +178,12 @@ class GEMMKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = self.params[index].value.tensor.gpudata
+                self.params[index] = pointer_from_td(self.params[index])
 
-        super(ElementWiseKernel, self).bind_buffers()
+        super(GEMMKernel, self).bind_buffers()
 
     def execute(self):
         if self.use_cublas:
             raise NotImplementedError("Not yet supported")
         else:
-            self.kernel.prepared_async_call(*self.params,
-                                            shared_size=self.shared_size)
+            self.kernel.prepared_async_call(*self.params)

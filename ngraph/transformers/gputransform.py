@@ -42,45 +42,16 @@ from ngraph.op_graph.pooling import pooling, bprop_pool
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
+from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel
 
 import numpy as np
 import pycuda.driver as drv
 
 
 _none_slice = slice(None, None, None)
-
-
-class GPUKernel():
-    """
-    Object which represents a single kernel that will run on the GPU.
-
-    Arguments:
-        transformer (GPUTransformer): GPU transformer containing instance of
-            NervanaGPU
-
-    Attributes:
-        buffers_bound (bool): Flag indicates if GPU addresses have been bound
-            to kernel parameters
-        transformer (GPUTransformer): GPU transformer containing NervanaGPU
-            object which is used for ops such as dot, dimshuffle, etc.
-    """
-    def __init__(self, transformer):
-        self.buffers_bound = False
-        self.transformer = transformer
-
-    def bind_buffers(self):
-        self.buffers_bound = True
-
-    def execute(self):
-        raise NotImplementedError("No execute() implemented")
-
-    def generate_source(self, sourcefile=None):
-        pass
-
-    def compile(self, sourcefile=None):
-        pass
 
 
 class ElementWiseKernel(GPUKernel):
@@ -338,7 +309,7 @@ class ElementWiseKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = self.params[index].value.tensor.gpudata
+                self.params[index] = pointer_from_td(self.params[index])
 
         super(ElementWiseKernel, self).bind_buffers()
 
@@ -419,7 +390,7 @@ class GPUKernelGroup():
         out = op.tensor_description()
         call_info = (_ for _ in op.call_info())
 
-        kernel = GPUKernel(self.transformer)
+        kernel = ElementWiseKernel(self.transformer)
         kernel.add_op(op, out, *call_info)
 
         if kernel.generate_source(self.sourcefile):
@@ -428,7 +399,7 @@ class GPUKernelGroup():
     @add_kernel.on_type(Function)
     def add_kernel(self, op):
         # Iterate over compounded operations and build kernel for them
-        kernel = GPUKernel(self.transformer)
+        kernel = ElementWiseKernel(self.transformer)
         for sub_op in op.instructions:
             out = sub_op.tensor_description()
             call_info = (_ for _ in sub_op.call_info())
@@ -463,7 +434,7 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(Dimshuffle)
     def add_kernel(self, op):
-        raise NotImplementedError("Dimshuffle kernel not implemented")
+        self.kernels.append(DimShuffleKernel(self, op))
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
