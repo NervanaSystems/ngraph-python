@@ -50,8 +50,8 @@ def test_convolution():
     Transformer.make_transformer()
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
-    dims = padding.copy()
-    dims.update(strides)
+    conv_params = padding.copy()
+    conv_params.update(strides)
     Nx = ng.Axis(N, batch=True)
 
     Cx = ng.Axis(C, name='C')
@@ -75,7 +75,7 @@ def test_convolution():
     assert filter_value.shape == tuple([ax.length for ax in [Cx, Tx, Rx, Sx, Kx]])
 
     # compute convolution with graph
-    output = ng.convolution(dims, inputs, filters)
+    output = ng.convolution(conv_params, inputs, filters)
     targets = ng.placeholder(axes=output.axes)
 
     costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)

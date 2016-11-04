@@ -21,7 +21,7 @@ from ngraph.op_graph.axes import Axis, Axes, spatial_axis
 class convolution(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, convdict, inputs, filters, *args, **kwargs):
+    def __init__(self, conv_params, inputs, filters, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -73,12 +73,15 @@ class convolution(op_graph.TensorOp):
         # output axes computation
         axes = Axes(
             [Axis(length=channel_out_axis.length, name='C'),
-             spatial_axis(inputs, filters, convdict['pad_d'], convdict['str_d'], role='depth'),
-             spatial_axis(inputs, filters, convdict['pad_h'], convdict['str_h'], role='height'),
-             spatial_axis(inputs, filters, convdict['pad_w'], convdict['str_w'], role='width'),
+             spatial_axis(inputs, filters, conv_params['pad_d'], conv_params['str_d'],
+                          role='depth'),
+             spatial_axis(inputs, filters, conv_params['pad_h'], conv_params['str_h'],
+                          role='height'),
+             spatial_axis(inputs, filters, conv_params['pad_w'], conv_params['str_w'],
+                          role='width'),
              self.batch_axis])
 
-        self.convdict = convdict
+        self.conv_params = conv_params
         self.index = convolution._index
         convolution._index += 1
 
@@ -101,7 +104,7 @@ class update_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.convdict = fprop.convdict
+        self.conv_params = fprop.conv_params
         self.index = fprop.index
 
         super(update_conv, self).__init__(
@@ -116,7 +119,7 @@ class bprop_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.convdict = fprop.convdict
+        self.conv_params = fprop.conv_params
         self.index = fprop.index
 
         super(bprop_conv, self).__init__(

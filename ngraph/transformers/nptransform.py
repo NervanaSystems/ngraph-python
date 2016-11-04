@@ -108,12 +108,12 @@ class NumPyConvEngine(object):
         return pycode
 
     @staticmethod
-    def get_slices(I, F, O, conv_dims):
+    def get_slices(I, F, O, conv_params):
         C, D, H, W, _ = I.tensor_description.axes.lengths
         C, T, R, S, K = F.tensor_description.axes.lengths
         K, M, P, Q, _ = O.tensor_description.axes.lengths
-        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
-        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_params)
         mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
         pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
         qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
@@ -371,7 +371,7 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
-        self.conv_dims = []
+        self.conv_params = []
         self.conv_slices = []
         self.pool_params = []
         self.pool_slices = []
@@ -417,8 +417,10 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(convolution)
     def generate_op(self, op, outputs, inputs, filters):
-        self.conv_dims.append(op.convdict)
-        self.conv_slices.append(NumPyConvEngine.get_slices(inputs, filters, outputs, op.convdict))
+        self.conv_params.append(op.conv_params)
+        self.conv_slices.append(
+            NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
+        )
         self.append(
             NumPyConvEngine.fprop_conv(),
             index=op.index,
@@ -781,7 +783,7 @@ class NumPyTransformer(Transformer):
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
-        self.model.conv_dims = self.compute_code.conv_dims
+        self.model.conv_params = self.compute_code.conv_params
         self.model.pool_params = self.compute_code.pool_params
         self.model.conv_slices = self.compute_code.conv_slices
         self.model.pool_slices = self.compute_code.pool_slices
