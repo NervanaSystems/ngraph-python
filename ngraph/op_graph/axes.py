@@ -61,7 +61,10 @@ def output_dim(X, S, padding, strides, pooling=False):
 
 def spatial_axis(input, filter, padding, stride, role):
     hh = input.axes.role_axes(role).lengths[0]
-    rr = filter.axes.role_axes(role).lengths[0]
+    if isinstance(filter, int):
+        rr = filter
+    else:
+        rr = filter.axes.role_axes(role).lengths[0]
     return Axis(length=output_dim(hh, rr, padding, stride), name=role[0].upper())
 
 

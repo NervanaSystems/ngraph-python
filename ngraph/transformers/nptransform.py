@@ -120,6 +120,7 @@ class NumPyConvEngine(object):
         dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d) for d in range(D)]
         hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h) for h in range(H)]
         wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w) for w in range(W)]
+
         return (mSlice, pSlice, qSlice, dSlice, hSlice, wSlice)
 
     @staticmethod
@@ -154,6 +155,92 @@ class NumPyConvEngine(object):
         if firstF is None:
             return (slice(0, 0, 1), slice(0, 0, 1), 0)
         return (slice(firstF, lastF + 1, strides), slice(firstE, lastE + 1, 1), 0)
+
+
+class NumPyPoolEngine(object):
+
+    @staticmethod
+    def fprop_pool():
+        pycode = """
+        arrI = {I}
+        arrO = {O}
+        kSlice, mSlice, pSlice, qSlice, arrA = self.pool_slices[{index}]
+        op = self.pool_params[{index}]['op']
+        K, M, P, Q, N = arrO.shape
+        for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                              enumerate(mSlice),
+                                                              enumerate(pSlice),
+                                                              enumerate(qSlice)):
+            sliceI = arrI[kS[0], mS[0], pS[0], qS[0], :].reshape((-1, N))
+            if op == "max":
+                arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
+                arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
+            elif op == "avg":
+                arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
+            elif op == "l2":
+                arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
+        """
+        return pycode
+
+    @staticmethod
+    def bprop_pool():
+        pycode = """
+        arrE = {I}
+        arrD = {O}
+        kSlice, mSlice, pSlice, qSlice, arrA = self.pool_slices[{index}]
+        op = self.pool_params[{index}]['op']
+        K, M, P, Q, N = arrE.shape
+        for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                              enumerate(mSlice),
+                                                              enumerate(pSlice),
+                                                              enumerate(qSlice)):
+            sliceC, clen = kS
+            sliceD, dlen = mS
+            sliceH, hlen = pS
+            sliceW, wlen = qS
+
+            patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
+            patch_out = (k, m, p, q, slice(None))
+            sliceB = arrD[patch_in].reshape((-1, N))
+            if op == "max":
+                max_n = arrA[patch_out]
+                sliceB[max_n, list(range(N))] += arrE[patch_out]
+            elif op == "avg":
+                sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
+            else:
+                raise NotImplementedError
+            arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
+        """
+        return pycode
+
+    @staticmethod
+    def get_slices(I, O, pool_params):
+        C, D, H, W, _ = I.tensor_description.axes.lengths
+        K, M, P, Q, N = O.tensor_description.axes.lengths
+
+        J, T, R, S, op = itemgetter(*('J', 'T', 'R', 'S', 'op'))(pool_params)
+        p_c, p_d, p_h, p_w = itemgetter(*('pad_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
+        s_c, s_d, s_h, s_w = itemgetter(*('str_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
+
+        kSlice = [NumPyPoolEngine.pool_slice(k, J, C, p_c, s_c) for k in range(K)]
+        mSlice = [NumPyPoolEngine.pool_slice(m, T, D, p_d, s_d) for m in range(M)]
+        pSlice = [NumPyPoolEngine.pool_slice(p, R, H, p_h, s_h) for p in range(P)]
+        qSlice = [NumPyPoolEngine.pool_slice(q, S, W, p_w, s_w) for q in range(Q)]
+        array_argmax = np.empty((K, M, P, Q, N), dtype=np.uint8) if op == "max" else None
+
+        return (kSlice, mSlice, pSlice, qSlice, array_argmax)
+
+    @staticmethod
+    def pool_slice(q, S, X, padding, strides):
+        qs = q * strides - padding
+        firstI = None
+        for s in range(S):
+            x = qs + s
+            if x >= 0 and x < X:
+                if firstI is None:
+                    firstI = x
+                lastI = x
+        return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -286,7 +373,8 @@ class NumPyCodeGenerator(PyGen):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
         self.conv_dims = []
         self.conv_slices = []
-        self.pool_dims = []
+        self.pool_params = []
+        self.pool_slices = []
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -359,34 +447,25 @@ class NumPyCodeGenerator(PyGen):
             U=outputs
         )
 
+    @generate_op.on_type(pooling)
+    def generate_op(self, op, outputs, inputs):
+        self.pool_params.append(op.pool_params)
+        self.pool_slices.append(NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params))
+        self.append(
+            NumPyPoolEngine.fprop_pool(),
+            index=op.index,
+            I=inputs,
+            O=outputs
+        )
 
-    # @generate_op.on_type(pooling)
-    # def generate_op(self, op, outputs, inputs, argmax):
-    #     self.pool_dims.append(op.dims)
-    #     self.append(
-    #         """
-    #         self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
-    #                            proxy_tensor({outputs}), proxy_tensor({argmax}))
-    #         """,
-    #         index=op.index,
-    #         outputs=outputs,
-    #         inputs=inputs,
-    #         argmax=argmax
-    #     )
-
-    # @generate_op.on_type(bprop_pool)
-    # def generate_op(self, op, outputs, delta, argmax):
-    #     # TODO: get rid of temporary hack that converts argmax to uint8
-    #     self.append(
-    #         """
-    #         self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
-    #                            proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
-    #         """,
-    #         index=op.index,
-    #         outputs=outputs,
-    #         delta=delta,
-    #         argmax=argmax
-    #     )
+    @generate_op.on_type(bprop_pool)
+    def generate_op(self, op, outputs, delta):
+        self.append(
+            NumPyPoolEngine.bprop_pool(),
+            index=op.index,
+            I=delta,
+            O=outputs
+        )
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
@@ -703,8 +782,10 @@ class NumPyTransformer(Transformer):
         r = self.code.compile("op", globals())
         self.model = r['Model']()
         self.model.conv_dims = self.compute_code.conv_dims
-        self.model.pool_dims = self.compute_code.pool_dims
+        self.model.pool_params = self.compute_code.pool_params
         self.model.conv_slices = self.compute_code.conv_slices
+        self.model.pool_slices = self.compute_code.pool_slices
+
         for computation in self.computations:
             executor = getattr(self.model, computation.name)
             computation.executor = executor
