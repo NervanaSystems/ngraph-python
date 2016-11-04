@@ -16,23 +16,15 @@ from __future__ import division
 
 import numpy as np
 from itertools import takewhile
-
+import functools
 
 class Model(object):
     def __init__(self, layers):
         self.layers = layers
-        self.initialized = False
-
-    def initialize(self, in_axes):
-        if not self.initialized:
-            for l in self.layers:
-                in_axes = l.initialize(in_axes)
-        self.initialized = True
 
     def get_outputs(self, in_obj):
-        self.initialize(in_obj.axes)
         for l in self.layers:
-            in_obj = l.get_outputs(in_obj)
+            in_obj = l.train_outputs(in_obj)
         return in_obj
 
     def bind_transformer(self, transformer, train_args, inference_args):
@@ -63,3 +55,46 @@ class Model(object):
             hyps.extend(list(batch_hyps[:bsz]))
             refs.extend(list(dtuple[1][0][:bsz]))
         return hyps, refs
+
+
+class Container(object):
+    """
+    Two string->`Op` dictionaries representing a container of op_graphs
+    """
+    def __init__(self, inputs=dict(), outputs=dict()):
+        self.inputs = inputs
+        self.outputs = outputs
+
+    def add(self, rhs):
+        new_inputs = self.inputs.copy()
+        new_outputs = self.outputs.copy()
+        # these label -> Op mappings are
+        # still pointing to the same ops
+        new_inputs.update(rhs.inputs)
+        new_outputs.update(rhs.outputs)
+        return Container(new_inputs, new_outputs)
+
+    def subset(self, inputs=None, outputs=None):
+        """
+        Eventually, a user should be able to subset using op_graph `Selectors`
+        similar to XPath or Jquery selectors. Boolean combinations of op type,
+        op name regex, and upstream, downstream from given ops.
+        Here we just have selection by exact name.
+        """
+        return Container({k: v for k,v in self.inputs.items() if k in inputs},
+                         {k: v for k,v in self.outputs.items() if k in outputs})
+
+
+def ne_compose(layer_list, function_name):
+
+    inputs, outputs = dict(), dict()
+
+    out_func = functools.reduce(lambda f, g:
+                         lambda x: f(getattr(g, function_name)(x)),
+                     layer_list,
+                     lambda x: x)
+    outputs[getattr(layer_list[-1], 'outputs')] = out_func
+
+    return Container(inputs=inputs, outputs=outputs)
+
+

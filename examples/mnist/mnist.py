@@ -11,11 +11,12 @@ class MNIST(object):
     Arguments:
         path (str): Local path to copy data files.
     """
-    def __init__(self, path='.'):
+    def __init__(self, path='.', include_channel=True):
         self.path = path
         self.url = 'https://s3.amazonaws.com/img-datasets'
         self.filename = 'mnist.pkl.gz'
         self.size = 15296311
+        self.include_channel = True
 
     def load_data(self):
         """
@@ -35,9 +36,13 @@ class MNIST(object):
             fetch_file(self.url, self.filename, filepath, self.size)
 
         with gzip.open(filepath, 'rb') as f:
-            train_set, valid_set = pickle_load(f)
+            self.train_set, self.valid_set = pickle_load(f)
 
-        return train_set, valid_set
+        if self.include_channel:
+            self.train_set = (self.train_set[0].reshape(60000, 1, 28, 28), self.train_set[1])
+            self.valid_set = (self.valid_set[0].reshape(10000, 1, 28, 28), self.valid_set[1])
+
+        return self.train_set, self.valid_set
 
 
 def ingest_mnist(root_dir, overwrite=False):
@@ -52,7 +57,7 @@ def ingest_mnist(root_dir, overwrite=False):
     if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
         return manifest_files
 
-    dataset = {k: s for k, s in zip(set_names, MNIST(path=out_dir).load_data())}
+    dataset = {k: s for k, s in zip(set_names, MNIST(out_dir, False).load_data())}
 
     # Write out label files and setup directory structure
     lbl_paths, img_paths = dict(), dict(train=dict(), val=dict())

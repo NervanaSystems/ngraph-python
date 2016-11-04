@@ -60,9 +60,9 @@ def unit_scale_mnist_pixels(x):
 
 
 my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
-                  nnAffine(out_axis=H1, init=GaussianInit(), activation=Rectlin()),
+                  nnAffine(nout=hidden_size, init=GaussianInit(), activation=Rectlin()),
                   # nnAffine(out_axis=H2, init=GaussianInit(), activation=Rectlin()),
-                  nnAffine(out_axis=Y, init=GaussianInit(), activation=Logistic())])
+                  nnAffine(nout=None, axes=Y, init=GaussianInit(), activation=Logistic())])
 
 
 transformer = ng.NumPyTransformer()
