@@ -19,6 +19,7 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
+from ngraph.op_graph.axes import make_axis, make_axes, spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
@@ -62,18 +63,30 @@ def test_convolution():
     ax.S.length = S
     ax.K.length = K
 
-    inputs = ng.placeholder(axes=ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N]))
-    filters = ng.placeholder(axes=ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K]))
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+
+    ax_o = ng.make_axes([
+        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
+        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
+        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
+        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ax.N
+    ])
+
+
+    inputs = ng.placeholder(axes=ax_i)
+    filters = ng.placeholder(axes=ax_f)
 
     # randomly initialize
-    input_value = rng.uniform(-1, 1, inputs.axes)
-    filter_value = rng.uniform(-1, 1, filters.axes)
+    input_value = rng.uniform(-1, 1, ax_i)
+    filter_value = rng.uniform(-1, 1, ax_f)
 
-    assert input_value.shape == inputs.axes.lengths
-    assert filter_value.shape == filters.axes.lengths
+    assert input_value.shape == ax_i.lengths
+    assert filter_value.shape == ax_f.lengths
 
     # compute convolution with graph
-    output = ng.convolution(conv_params, inputs, filters)
+    output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
     targets = ng.placeholder(axes=output.axes)
 
     costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
@@ -102,8 +115,8 @@ def test_convolution():
 
     act_result_ne = 1. / (1.0 + np.exp(-result_ne))
     err = neon_layer.be.array((act_result_ne - targets_value).reshape(-1, N) / float(N))
-    gradI_ne = neon_layer.bprop(err).get().reshape(inputs.axes.lengths)
-    gradF_ne = neon_layer.dW.get().reshape(filters.axes.lengths)
+    gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
+    gradF_ne = neon_layer.dW.get().reshape(ax_f.lengths)
 
     # Compare fprop
     np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)

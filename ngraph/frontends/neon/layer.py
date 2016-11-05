@@ -15,9 +15,9 @@
 from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
+import collections
+from ngraph.frontends.neon.axis import ar, ax
 
-
-# TODO These are stubs for implementing Neon's layers
 
 class Layer(object):
     """TODO."""
@@ -101,8 +101,51 @@ class nnAffine(nnLayer):
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
 
+
+class nnConv1d(nnLayer):
+    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), bias_init=None):
+
+        self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
+                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
+                           'S': 1, 'W': 1, 'T': 1, 'D': 1}  # 2D & 3D parameters
+
+        if isinstance(fshape, tuple) or isinstance(fshape, list):
+            fshape = {'R': fshape[0], 'K': fshape[1]}
+        if isinstance(strides, int):
+            strides = {'str_h': strides}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding}
+        for d in [fshape, strides, padding]:
+            self.convparams.update(d)
+
+        self.init = init
+        self.activation = activation
+        self.b = 0
+        self.bias_init = bias_init
+
+    def train_outputs(self, in_obj):
+        # if self.bias_init:
+        #     b_axes = ng.Axes([ng.Axis(self.convparams['K'], name='K')])
+        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
+
+        # Need to expand dims out if we are less than CDHWN
+
+        # if len(in_obj.axes.role_axes(ar.D)):
+        #     ng.ExpandDims(in_obj.
+
+
+        # if
+        # TODO:  Careful about the conv state that gets tied to op vs. layer
+        convparams = self.convparams.copy()
+        convparams['C'] = in_obj.axes.role_axes('channel').lengths[0]
+        w_axes = ng.Axes([ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')])
+        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
+
+
+
 class nnConv(nnLayer):
-    def __init__(self, fshape, strides, padding, init, activation=(lambda x: x), bias_init=None):
+    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), bias_init=None):
 
         self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
                            'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
