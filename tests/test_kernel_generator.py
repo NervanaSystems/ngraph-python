@@ -25,7 +25,7 @@ def test_exit_condition(transformer_factory):
 
     N, Y = ng.make_axis(bsz), ng.make_axis(class_num)
     y_val = np.absolute(np.random.randn(bsz, class_num))
-    y = ng.constant(y_val, axes=ng.make_axes([N, Y]))
+    y = ng.constant(y_val, ng.make_axes([N, Y]))
 
     likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
 

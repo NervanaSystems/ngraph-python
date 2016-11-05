@@ -17,23 +17,23 @@ import pytest
 from builtins import range
 
 import ngraph.util.names as names
-from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis, TensorDescription, SlicedAxis
+from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
 from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
 
 # Make some axes
 ax = names.NameScope()
 
-ax.A = Axis(10)
-ax.B = Axis(15)
-ax.C = Axis(20)
-ax.D = Axis(25)
+ax.A = ng.make_axis(10)
+ax.B = ng.make_axis(15)
+ax.C = ng.make_axis(20)
+ax.D = ng.make_axis(25)
 
 
 def test_axes_equal():
     """ Test axes == operator """
-    a1 = Axes([ax.A, ax.B, ax.C])
-    a2 = Axes([ax.A, ax.B, ax.C])
+    a1 = ng.make_axes([ax.A, ax.B, ax.C])
+    a2 = ng.make_axes([ax.A, ax.B, ax.C])
     assert a1 == a2
 
 
@@ -69,17 +69,17 @@ def test_axes_ops():
         Returns:
 
         """
-        assert axes1 - axes2 == target
+        assert ng.make_axes(axes1) - ng.make_axes(axes2) == ng.make_axes(target)
 
-    test_sub(Axes([ax.A, ax.B]), Axes([ax.A]), Axes([ax.B]))
-    test_sub(Axes([ax.A, ax.B]), Axes([ax.B]), Axes([ax.A]))
+    test_sub([ax.A, ax.B], [ax.A], [ax.B])
+    test_sub([ax.A, ax.B], [ax.B], [ax.A])
 
     # Combined axes length
-    assert FlattenedAxis(Axes([ax.A, ax.B])).length \
+    assert FlattenedAxis([ax.A, ax.B]).length \
         == ax.A.length * ax.B.length
-    assert Axes([ax.A, (ax.B, ax.C)]).lengths \
+    assert ng.make_axes([ax.A, (ax.B, ax.C)]).lengths \
         == (ax.A.length, ax.B.length * ax.C.length)
-    assert FlattenedAxis(Axes([ax.A, (ax.B, ax.C)])).length \
+    assert FlattenedAxis([ax.A, (ax.B, ax.C)]).length \
         == ax.A.length * ax.B.length * ax.C.length
 
 
@@ -119,7 +119,7 @@ def tensorview(td, nparr):
 
 
 def test_reaxe_0d_to_1d():
-    td = TensorDescription(axes=())
+    td = TensorDescription(())
     x = random(td)
 
     # create view of x
@@ -169,11 +169,11 @@ def test_simple_tensors():
     e1_2 = tensorview(td1.broadcast([ax.B, ax.A]), e1)
     e1_3 = tensorview(td1.broadcast([(ax.B, ax.C), ax.A]), e1)
 
-    e2_1 = tensorview(td2.broadcast(Axes([ax.B, ax.A])), e2)
-    e2_2 = tensorview(td2.broadcast(Axes([ax.A, ax.B])), e2)
-    e2_3 = tensorview(td2.flatten(Axes((
+    e2_1 = tensorview(td2.broadcast([ax.B, ax.A]), e2)
+    e2_2 = tensorview(td2.broadcast([ax.A, ax.B]), e2)
+    e2_3 = tensorview(td2.flatten((
         FlattenedAxis((ax.A, ax.B)),
-    ))), e2_2)
+    )), e2_2)
 
     assert e1_1.shape == (ax.A.length, ax.B.length)
     assert e1_2.shape == (ax.B.length, ax.A.length)
@@ -204,50 +204,50 @@ def test_simple_tensors():
 
 
 def test_sliced_axis():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(0, 5))
     assert s.length == 5
 
 
 def test_sliced_axis_invalid():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(5, 0))
     assert s.length == 0
 
 
 def test_sliced_axis_none_end():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(0, None))
     assert s.length == 10
 
 
 def test_sliced_axis_negative():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(5, 0, -1))
     assert s.length == 5
 
 
 def test_sliced_axis_negative_invalid():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(0, 5, -1))
     assert s.length == 0
 
 
 def test_sliced_axis_flip():
-    a = Axis(10)
+    a = ng.make_axis(10)
     s = SlicedAxis(a, slice(None, None, -1))
     assert s.length == 10
 
 
 def test_sliced_axis_invalid_step():
-    a = Axis(10)
+    a = ng.make_axis(10)
     with pytest.raises(ValueError):
         SlicedAxis(a, slice(0, 5, 2))
 
 
 def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
-    a = Axis(10, batch=True)
+    a = ng.make_axis(10, batch=True)
     s = SlicedAxis(a, slice(0, 5))
     assert s.is_batch is True
 
@@ -257,12 +257,12 @@ def test_idempotent_axes_a():
     Test test axes transformations with autodiff, case a, reference test
     """
     ex = ExecutorFactory()
-    axes = Axes([Axis(3), Axis(1)])
+    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
 
-    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
+    w = ng.variable(axes, initial_value=np.ones((3, 1)))
     result = w + w
 
-    result = ng.cast_axes(result, axes=axes)
+    result = ng.cast_axes(result, axes)
     cost = ng.sum(result, reduction_axes=axes)
     grad = ng.deriv(cost, w)
 
@@ -273,21 +273,20 @@ def test_idempotent_axes_a():
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
-@pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
 def test_idempotent_axes_b():
     """
     Test test axes transformations with autodiff, case b, with broadcast applied
     to the same tensor
     """
     ex = ExecutorFactory()
-    axes = Axes([Axis(3), Axis(1)])
+    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
 
-    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
-    l = ng.Broadcast(w, axes=axes)
-    r = ng.Broadcast(w, axes=axes)
+    w = ng.variable(axes, initial_value=np.ones((3, 1)))
+    l = ng.broadcast(w, axes)
+    r = ng.broadcast(w, axes)
     result = ng.add(l, r)
 
-    result = ng.cast_axes(result, axes=axes)
+    result = ng.cast_axes(result, axes)
     cost = ng.sum(result, reduction_axes=axes)
     grad = ng.deriv(cost, w)
 
@@ -298,24 +297,23 @@ def test_idempotent_axes_b():
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
-@pytest.mark.xfail(reason="Sizes must have same number of dimensions as axes", strict=True)
 def test_idempotent_axes_c():
     """
     Test test axes transformations with autodiff, case c, with broadcast,
     slice, cast and dim-shuffle
     """
     ex = ExecutorFactory()
-    axes = Axes([Axis(3), Axis(1)])
-    result_axes = [Axis(length=axis.length) for axis in axes]
+    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+    result_axes = [ng.make_axis(length=axis.length) for axis in axes]
 
     # variable
-    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
+    w = ng.variable(axes, initial_value=np.ones((3, 1)))
     l = w
     r = w
 
     # broadcast l / r, introducing dummy length 1 axes
-    l = ng.Broadcast(l, axes=axes)
-    r = ng.Broadcast(r, axes=axes)
+    l = ng.broadcast(l, axes)
+    r = ng.broadcast(r, axes)
 
     # slice
     axes_slice = [slice(None, None, None), slice(None, None, None)]
@@ -323,13 +321,13 @@ def test_idempotent_axes_c():
     r_sliced = ng.Slice(r, axes_slice)
 
     # cast r
-    r_sliced_casted = ng.cast_axes(r_sliced, axes=axes)
+    r_sliced_casted = ng.cast_axes(r_sliced, axes)
 
     # perform add
     result = ng.add(l_sliced, r_sliced_casted)
 
     # cast / dimshuffle
-    result = ng.cast_axes(result, axes=result_axes)
+    result = ng.cast_axes(result, result_axes)
     result = ng.Dimshuffle(result, axes=result_axes)
 
     # cost and grad

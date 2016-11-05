@@ -60,8 +60,8 @@ def test_convolution_fprop():
     Sx = ng.make_axis(S)
     Kx = ng.make_axis(dims.K)
 
-    inputs = ng.placeholder(axes=ng.make_axes([Cx, Dx, Hx, Wx, Nx]))
-    filters = ng.placeholder(axes=ng.make_axes([Cx, Tx, Rx, Sx, Kx]))
+    inputs = ng.placeholder(ng.make_axes([Cx, Dx, Hx, Wx, Nx]))
+    filters = ng.placeholder(ng.make_axes([Cx, Tx, Rx, Sx, Kx]))
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, inputs.axes)

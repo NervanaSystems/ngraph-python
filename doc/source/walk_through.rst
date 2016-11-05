@@ -42,7 +42,7 @@ The complete program is
     import ngraph.transformers as ngt
 
     # Build the graph
-    x = ng.placeholder(axes=ng.make_axes())
+    x = ng.placeholder(())
     x_plus_one = x + 1
 
     # Select a transformer
@@ -58,11 +58,9 @@ The complete program is
 
 We begin by importing ``ngraph``, the Python module for frontend graph construction, and ``ngraph.transformers``, the module for frontend transformer operations.
 
-Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we use ``placeholder`` to define a port for transferring tensors between the host and the device. We use ``Axes`` to tell nervana graph about these tensors. Axes are like tensor shapes, with some semantics added. In this example, ``x`` is a scalarm so the axes are empty.
+Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we use ``placeholder`` to define a port for transferring tensors between the host and the device. We use ``Axes`` to tell nervana graph about these tensors. Axes are like tensor shapes, with some semantics added. In this example, ``x`` is a scalar so the axes are empty.
 
-The ``ngraph`` graph construction API uses functions to build a graph of ``Op`` objects. Each function may add one or more operations to the graph, and will return an object that represents the computation. Once the computation has been instantiated, the object can also be used as a handle to the tensor when that part of the computation is associated with persistent storage. In this case, an ``AssignableTensorOp`` is returned, which represents a tensor associated with storage.
-
-An ``AssignableTensorOp`` is a kind of ``TensorOp``, which is a kind of ``Op``. The ``TensorOp`` defines the Python "magic methods" for arithmetic, so we can use a ``TensorOp`` in an arithmetic expression, the result is an ``Op`` for the result of that operation. We could less concisely have written
+The ``ngraph`` graph construction API uses functions to build a graph of ``Op`` objects. Each function may add operations to the graph, and will return an ``Op`` that represents the computation. Here, the ``Op`` returned is a ``TensorOp``, which defines the Python "magic methods" for arithmetic. We can use a ``TensorOp`` in an arithmetic expression, the result is an ``Op`` for the result of that operation. We could less concisely have written
 
 .. code-block:: python
 
@@ -76,7 +74,7 @@ Another bit of behind the scenes magic occurs with the Python ``1``, which is no
 
     x_plus_one = ng.add(x, ng.constant(1))
 
-Once the op-graph is set up, we can compile it with a *transformer*.  Here we use ``make_transformer`` to make a defuault transformer.  We tell the transformer the function to compute ``x_plus_one`` and the associated parameter ``x``.
+Once the op-graph is set up, we can compile it with a *transformer*.  Here we use ``make_transformer`` to make a defuult transformer.  We tell the transformer the function to compute ``x_plus_one`` and the associated parameter ``x``. The current default transformer uses NumPy for execution.
 
 The first time the transformer executes a computation, the graph is analyzed and compiled, and the storage is allocated and initialized on the device.  These steps can be performed manually, for example if some device state is to be restored from
 previously saved state.  Once compiled, the computations are callable Python objects.
@@ -188,15 +186,15 @@ Our model has three placeholders, ``X``, ``Y``, and ``alpha``. Each placeholder 
 
 .. code-block:: python
 
-    alpha = ng.placeholder(axes=ng.Axes())
+    alpha = ng.placeholder(())
 
 ``X`` and ``Y`` are tensors and need axes:
 have shape, which we provide to the placeholders. Our convention is to use the last axis for samples.  The placeholders can be specified as:
 
 .. code-block:: python
 
-    X = ng.placeholder(axes=ng.make_axes([ax.C, ax.N]))
-    Y = ng.placeholder(axes=ng.make_axes([ax.N]))
+    X = ng.placeholder([ax.C, ax.N])
+    Y = ng.placeholder([ax.N])
 
 The ``X`` has two axes, the channel axis ``ax.C``, and the batch axis, ``ax.N``, while each ``Y`` is a scalar on the batch axis ``ax.N``.
 
@@ -205,10 +203,11 @@ to computation (for example, across mini-batches of training).  Following |TF|, 
 
 .. code-block:: python
 
-    W = ng.variable(axes=ng.make_axes([ax.C.get_dual()]), initial_value=0)
+    W = ng.variable([ax.C - 1], initial_value=0)
 
-In a ``dot``, an axis in the second argument will pair for multiplication with its dual in the first argument to be multiplied and summed, and remaining axes will appear in the result. We initialize ``W`` to ``0``.
+The ``dot`` operation applies a transformation specified by its first argument to its second argument. If you have vectors :math:`v1`  and :math:`w`, then :math:`v^Tw` will transform :math:`w` to a scalar. We can think of the transpose as converting the vecor :math:`v` into a function that operates on :math:`w`. If we have :math:`A^Tw` we can think of :math:`A^T` as a vector or transformation, with the result being a vector of scalars.
 
+Things are a little more complicated with tensors since there can be many axes, and we want to mark which axes in the first argument of ``dot`` are to act on axes in the second argument. Every axis is a member of a family of axes we call duals of the axis, and each axis in the family has a position. When you create an axis, its dual position is 0. We have defined ``dot`` do pair axes in the first and second arguments that are in the same dual family and have consecutive positions. We want the variable `W` to act on the `ax.C` axis, so we want the axis for `W` to be in the position before `ax.C`, which we can obtain with `ax.C - 1`. We initialize ``W`` to ``0``.
 
 Now we can estimate :math:`y` and compute the average loss:
 
@@ -217,7 +216,7 @@ Now we can estimate :math:`y` and compute the average loss:
     Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True))
     L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
-We use the special argument ``use_dual`` to tell `ng.dot` to use the dual axis match. This will be the default behavior in the future.
+NOTE: The ``dot`` operation previously matched axes by identity, which was problematic for RNNs. We are temporarily using ``use_dual`` to indicate that the axis matching based on dual axes should be used until all previous uses of ``dot`` have been modified.
 
 Gradient descent requires computing the gradient, :math:`dL/dW`:
 
@@ -235,7 +234,9 @@ We are almost done.  The update is the gradient descent operation:
 
 Now we create a transformer and define a computation. We pass the ops from which we want to retrieve the results for, followed by the placeholders:
 
-ngt.make_transformer()
+.. code-block:: python
+
+    ngt.make_transformer()
 
     transformer = ngt.make_transformer()
     update_fun = transformer.computation([L, W, update], alpha, X, Y)
@@ -312,8 +313,8 @@ We can add a bias :math:`b` to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This ch
 
 .. code-block:: python
 
-    W = ng.variable(axes=ng.make_axes([ax.C.get_dual()]), initial_value=0)
-    b = ng.variable(axes=ng.make_axes(), initial_value=0)
+    W = ng.variable([ax.C - 1], initial_value=0)
+    b = ng.variable((), initial_value=0)
 
     Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
 
@@ -357,19 +358,19 @@ and printing of results to:
 Multi-dimensional Logistic Regression
 =====================================
 
-The complete program source can be found in :download:`../../examples/walk_through/logres_multi.py`.
+The complete program source can be found in :download:`../../examples/walk_through/wt_5_logres_multi.py`.
 
 We are switching from a flat :math:`C`-dimensional featurespace to an :math:`W\times H` feature space.  The
 weights are now also a :math:`W\times H` tensor:
 
 .. code-block:: python
 
-    alpha = ng.placeholder(axes=ng.make_axes())
-    X = ng.placeholder(axes=ng.make_axes([ax.W, ax.H, ax.N]))
-    Y = ng.placeholder(axes=ng.make_axes([ax.N]))
+    alpha = ng.placeholder(())
+    X = ng.placeholder([ax.W, ax.H, ax.N])
+    Y = ng.placeholder([ax.N])
 
-    W = ng.variable(axes=ng.make_axes([ax.W.get_dual(), ax.H.get_dual()]), initial_value=0)
-    b = ng.variable(axes=ng.make_axes(), initial_value=0)
+    W = ng.variable([ax.W - 1, ax.H - 1], initial_value=0)
+    b = ng.variable((), initial_value=0)
 
 The calculation remains:
 

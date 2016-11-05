@@ -29,12 +29,12 @@ XS, YS = g.gen_data(ax.N.length, 10)
 
 EVAL_XS, EVAL_YS = g.gen_data(ax.N.length, 4)
 
-alpha = ng.placeholder(axes=ng.make_axes())
-X = ng.placeholder(axes=ng.make_axes([ax.W, ax.H, ax.N]))
-Y = ng.placeholder(axes=ng.make_axes([ax.N]))
+alpha = ng.placeholder(())
+X = ng.placeholder([ax.W, ax.H, ax.N])
+Y = ng.placeholder([ax.N])
 
-W = ng.variable(axes=ng.make_axes([ax.W.get_dual(), ax.H.get_dual()]), initial_value=0)
-b = ng.variable(axes=ng.make_axes(), initial_value=0)
+W = ng.variable([ax.W - 1, ax.H - 1], initial_value=0)
+b = ng.variable((), initial_value=0)
 
 Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)

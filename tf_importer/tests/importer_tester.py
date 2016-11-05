@@ -99,8 +99,6 @@ class ImporterTester(object):
         # init importer, transformer
         importer = TFImporter()
         importer.parse_protobuf(self.pb_txt_path, verbose=verbose)
-        # transformer = ng.make_transformer()
-        # transformer = self.transformer_factory()
         transformer = ngt.make_transformer()
 
         # set target node

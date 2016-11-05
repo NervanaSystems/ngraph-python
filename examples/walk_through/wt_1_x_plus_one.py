@@ -17,7 +17,7 @@ import ngraph as ng
 import ngraph.transformers as ngt
 
 # Build the graph
-x = ng.placeholder(axes=ng.make_axes())
+x = ng.placeholder(())
 x_plus_one = x + 1
 
 # Select a transformer

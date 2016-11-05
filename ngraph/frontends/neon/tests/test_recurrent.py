@@ -92,7 +92,7 @@ def check_rnn(seq_len, input_size, hidden_size,
     NervanaObject.be.rng = RNG(0)
 
     rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
-    inp_ng = ng.placeholder(axes=ng.make_axes([Cin, REC, N]))
+    inp_ng = ng.placeholder([Cin, REC, N])
 
     # fprop graph
     out_ng = rnn_ng.configure(inp_ng)

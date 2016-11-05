@@ -19,7 +19,7 @@ def test_stack():
     a_v = [rng.uniform(0, 1, axes) for i in range(ax.I.length)]
 
     for pos in range(len(axes) + 1):
-        a = [ng.placeholder(axes=axes, initial_value=_) for _ in a_v]
+        a = [ng.placeholder(axes, initial_value=_) for _ in a_v]
 
         s = ng.Stack(a, ax.I, pos)
 

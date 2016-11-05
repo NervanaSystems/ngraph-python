@@ -79,20 +79,19 @@ class Recurrent(ParameterLayer):
             hidden_axes = ng.make_axes([ng.make_axis(self.nout, name='Hidden_in')])
 
         self.W_input = ng.variable(
-            axes=hidden_axes + (in_obj.axes.sample_axes()
-                                - in_obj.axes.recurrent_axes()).get_dual(),
+            hidden_axes + (in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()).get_dual(),
             init=self.init,
             name="W_input"
         )
 
         self.W_recur = ng.variable(
-            axes=hidden_axes + hidden_axes.get_dual(),
+            hidden_axes + [axis - 1 for axis in hidden_axes],
             init=self.init_inner,
             name="W_recur"
         )
 
         self.b = ng.variable(
-            axes=hidden_axes,
+            hidden_axes,
             initial_value=0,
             name="bias"
         )
@@ -100,7 +99,7 @@ class Recurrent(ParameterLayer):
         h_ff_buf = ng.dot(self.W_input, in_obj, use_dual=True, name="W_in_dot_in")
         h_ff_s = get_steps(h_ff_buf, self.time_axis)
         self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
-                                  axes=h_ff_s[0].axes,
+                                  h_ff_s[0].axes,
                                   name="h_init")
         hprev = [self.h_init]
 

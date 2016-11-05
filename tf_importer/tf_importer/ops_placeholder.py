@@ -56,5 +56,5 @@ class OpsPlaceholder(OpsBase):
             evaluated directly.
         """
         axes = tf_to_shape_axes(tf_node)
-        ng_op = ng.placeholder(axes=axes, name=tf_node.name)
+        ng_op = ng.placeholder(axes, name=tf_node.name)
         return ng_op

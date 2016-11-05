@@ -105,10 +105,10 @@ class Model(object):
 
         self.optimizer = optimizer
 
-        batch_input_axes = input_axes + ng.make_axes(ax.N, )
-        batch_target_axes = target_axes + ng.make_axes(ax.N, )
-        self.input = ng.placeholder(axes=batch_input_axes)
-        self.target = ng.placeholder(axes=batch_target_axes)
+        batch_input_axes = input_axes + (ax.N, )
+        batch_target_axes = target_axes + (ax.N, )
+        self.input = ng.placeholder(batch_input_axes)
+        self.target = ng.placeholder(batch_target_axes)
         input_axes.set_shape(dataset.shape)
         target_axes.set_shape(*(dataset_nclasses(dataset),))
 

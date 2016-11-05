@@ -50,7 +50,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     N.length = batch_size
     F.length = nin
 
-    inp = ng.placeholder(axes=ng.make_axes([F, N]))
+    inp = ng.placeholder([F, N])
     layer = Linear(nout=nout, init=init_unif)
 
     ex = ExecutorFactory()
@@ -86,7 +86,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
     N.length = batch_size
     F.length = nin
 
-    inp = ng.placeholder(axes=ng.make_axes([F, N]))
+    inp = ng.placeholder([F, N])
 
     layer = Linear(nout=nout, init=init_unif)
     fprop = layer.configure(inp)

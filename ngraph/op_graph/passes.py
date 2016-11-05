@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
-from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
+from ngraph.op_graph.op_graph import BroadcastOp, broadcast, Dot, ReductionOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, constant, \
@@ -93,10 +93,10 @@ class RequiredTensorShaping(PeepholeGraphPass):
         out_axes = op.axes
         if len(x_reduction_axes) == 0:
             d = make_axis(1)
-            x_reduction_axes = Axes((d,))
+            x_reduction_axes = make_axes((d,))
             y_reduction_axes = x_reduction_axes
-            x = broadcast(x, axes=x.axes + x_reduction_axes)
-            y = broadcast(y, axes=y_reduction_axes + y.axes)
+            x = broadcast(x, x.axes + x_reduction_axes)
+            y = broadcast(y, y_reduction_axes + y.axes)
 
         if x.is_scalar:
             temp = x
@@ -122,15 +122,15 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = flatten_at(y, len(y_reduction_axes))
 
             if len(out_axes) == 0:
-                out = DotOneDimensional(x, y, axes=Axes())
+                out = DotOneDimensional(x, y, axes=make_axes())
             elif len(x.axes) == 1:
                 out = DotTwoByOne(Transpose(y), x, axes=out_axes)
             elif len(y.axes) == 1:
                 out = DotTwoByOne(x, y, axes=out_axes)
             else:
                 out = DotTwoDimensional(x, y,
-                                        axes=Axes([op.x_out_axes.flatten(),
-                                                   op.y_out_axes.flatten()]))
+                                        axes=([op.x_out_axes.flatten(),
+                                            op.y_out_axes.flatten()]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
@@ -174,7 +174,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if op.axes == x.axes:
             self.replace_op(op, x)
 
-    @visit.on_type(Broadcast)
+    @visit.on_type(BroadcastOp)
     def visit(self, op):
         x = op.args[0]
         x_strides = x.tensor_description().strides
@@ -188,7 +188,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if False and op.old_axis_positions == tuple(range(len(op.old_axis_positions))):
             self.replace_op(op, x)
             return
-        if True or not isinstance(x, Broadcast) and not isinstance(x, ReorderAxes):
+        if True or not isinstance(x, BroadcastOp) and not isinstance(x, ReorderAxes):
             if isinstance(x, ReshapeOp):
                 return
         x_tensor_description = x.tensor_description()

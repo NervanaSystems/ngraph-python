@@ -75,9 +75,9 @@ def test_gdm(args, transformer_factory):
     (x, y, w_init) = generate_data(C, N)
 
     # set up nervana graph
-    X = ng.placeholder(axes=ng.make_axes([C, N]), name='X')
-    Y = ng.placeholder(axes=ng.make_axes([N]), name='Y')
-    W = ng.variable(axes=ng.make_axes([C]), name='W', initial_value=w_init)
+    X = ng.placeholder([C, N], name='X')
+    Y = ng.placeholder([N], name='Y')
+    W = ng.variable([C], name='W', initial_value=w_init)
 
     ex = ExecutorFactory()
     transformer = ex.transformer

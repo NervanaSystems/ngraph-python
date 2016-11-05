@@ -86,8 +86,8 @@ def ngraph_l2_norm(np_array):
     for i, l in enumerate(np_array.shape):
         axes += (ng.make_axis(name='axis%s' % i, length=l),)
 
-    np_tensor = ng.constant(np_array, axes=axes)
-    var = ng.variable(axes=axes, initial_value=np_tensor)
+    np_tensor = ng.constant(np_array, axes)
+    var = ng.variable(axes, initial_value=np_tensor)
     return executor(ng.sqrt(ng.dot(var, var)))()
 
 
@@ -107,8 +107,8 @@ def test_dot_sum_backprop(transformer_factory):
     y_np = np.random.random(y_axes.lengths).astype('float32')
     expected_output = np.sum(x_np.T.dot(y_np))
 
-    x = ng.placeholder(axes=x_axes)
-    y = ng.placeholder(axes=y_axes)
+    x = ng.placeholder(x_axes)
+    y = ng.placeholder(y_axes)
     d = ng.dot(x, y)
     s = ng.sum(d, out_axes=())
 
@@ -189,11 +189,11 @@ def test_tensor_dot_tensor(transformer_factory):
             axis.length = length
 
         # set up tensors
-        tensor1 = ng.placeholder(axes=test['tensor1_axes'])
+        tensor1 = ng.placeholder(test['tensor1_axes'])
         value1 = np.array(test['tensor1'], dtype=np.float32)
 
         if 'tensor2' in test:
-            tensor2 = ng.placeholder(axes=test['tensor2_axes'])
+            tensor2 = ng.placeholder(test['tensor2_axes'])
             value2 = np.array(
                 test['tensor2'], dtype=np.float32
             )

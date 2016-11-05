@@ -22,7 +22,8 @@ import numpy as np
 from builtins import object, str
 
 from ngraph.op_graph.axes import TensorDescription, \
-    make_axis, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, default_int_dtype
+    make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
+    default_int_dtype
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -504,7 +505,7 @@ class Op(NameableValue, DebugInfo):
         if len(self.axes) == 0:
             return constant(1)
         else:
-            return placeholder(axes=self.axes)
+            return placeholder(self.axes)
 
     @cachetools.cached({})
     def adjoints(self):
@@ -650,7 +651,7 @@ class SetItem(Op):
     tensor[item] = val.
 
     Arguments:
-        tensor: An assignable TensorOp.
+        tensor (AssignableTensorOp): An assignable TensorOp.
         item: The index.
         val: The value to assign.
         force (bool): Override constant check on tensor.
@@ -661,7 +662,7 @@ class SetItem(Op):
         tensor, val = as_ops((tensor, val))
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
-        val = broadcast(val, axes=tensor.axes)
+        val = broadcast(val, tensor.axes)
         super(SetItem, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
         tensor.user_deps = OrderedSet([self])
@@ -707,7 +708,7 @@ class Fill(Op):
     Fill a tensor with a scalar value.
 
     Arguments:
-        tensor: An assignable TensorOp.
+        tensor (AssignableTensorOp): An assignable TensorOp.
         scalar: A scalar value.
         force (bool): Disable constant check on tensor.
     """
@@ -745,7 +746,7 @@ class TensorOp(Op):
         super(TensorOp, self).__init__(**kwargs)
         self.dtype = default_dtype(dtype)
         if axes is not None:
-            axes = Axes(axes)
+            axes = make_axes(axes)
         self.__axes = axes
 
         self.scale = scale
@@ -860,9 +861,6 @@ class TensorOp(Op):
 
     def __getitem__(self, item):
         return Slice(self, item)
-
-    def with_axes(self, axes):
-        return AxesCastOp(self, axes=axes)
 
     def __axes__(self):
         return self.axes
@@ -1022,7 +1020,7 @@ class Transpose(ReshapeOp):
     def __init__(self, x, **kwargs):
         super(Transpose, self).__init__(
             x,
-            axes=Axes(reversed(x.axes)),
+            axes=reversed(x.axes),
             **kwargs
         )
 
@@ -1051,10 +1049,7 @@ class AxesCastOp(ReshapeOp):
         return self.args[0].tensor_description().cast(self.axes, self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, AxesCastOp(
-            delta,
-            axes=x.axes
-        ))
+        x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
 
 
 def cast_axes(tensor, axes, name=None):
@@ -1086,7 +1081,7 @@ class ExpandDims(ReshapeOp):
         axes.extend(x.axes[:dim])
         axes.append(axis)
         axes.extend(x.axes[dim:])
-        axes = Axes(axes)
+        axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1135,7 +1130,7 @@ class ResultHandle(ReshapeOp):
         x.generate_add_delta(delta)
 
 
-class Broadcast(ReshapeOp):
+class BroadcastOp(ReshapeOp):
     """
     Used to add additional axes for a returned derivative.
 
@@ -1146,7 +1141,7 @@ class Broadcast(ReshapeOp):
 
     def __init__(self, x, axes, **kwargs):
         assert Axes.check_broadcast(x.axes, axes)
-        super(Broadcast, self).__init__(
+        super(BroadcastOp, self).__init__(
             x, axes=axes, **kwargs
         )
 
@@ -1182,9 +1177,10 @@ def broadcast(x, axes):
     Returns:
         TensorOp: Tensor with additional axes.
     """
+    axes = make_axes(axes)
     if x.axes == axes:
         return x
-    return Broadcast(x, axes)
+    return BroadcastOp(x, axes)
 
 
 def axes_with_order(x, axes):
@@ -1274,7 +1270,7 @@ class Slice(ReshapeOp):
                     else:
                         axes.append(SlicedAxis(axis, s))
 
-            axes = Axes(axes)
+            axes = make_axes(axes)
 
         super(Slice, self).__init__(
             x,
@@ -1371,9 +1367,9 @@ def flatten_at(x, idx):
     if idx == 0 or idx == len(x.axes):
         return flatten(x)
     else:
-        return flatten(x, Axes((
-            Axes(x.axes[:idx]).flatten(),
-            Axes(x.axes[idx:]).flatten()
+        return flatten(x, make_axes((
+            make_axes(x.axes[:idx]).flatten(),
+            make_axes(x.axes[idx:]).flatten()
         )))
 
 
@@ -1383,7 +1379,7 @@ class Unflatten(ReshapeOp):
             axes = []
             for axis in x.axes:
                 axes.extend(axis.axes)
-        axes = Axes(axes)
+        axes = make_axes(axes)
         assert Axes.check_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
@@ -1459,7 +1455,7 @@ class AssignableTensorOp(TensorOp):
         """
 
         Returns:
-            AllocationOp is not executed, so its appearance in the instruction stream does
+            AssignableTensorOp is not executed, so its appearance in the instruction stream does
             not affect liveness of its value.
 
         """
@@ -1488,7 +1484,7 @@ def constant(const, axes=None, dtype=None, name=None):
         axes: The axes for the constant.
         dtype (optional): The dtype to use.
     Returns:
-        An AllocationOp for the constant.
+        An AssignableTensorOp for the constant.
     """
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
@@ -1496,7 +1492,7 @@ def constant(const, axes=None, dtype=None, name=None):
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
-        val.axes = Axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
+        val.axes = make_axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((
@@ -1562,7 +1558,7 @@ def constant_value(value):
     return value.const
 
 
-def constant_storage(axes=None, dtype=None, name=None, initial_value=None):
+def constant_storage(axes, dtype=None, name=None, initial_value=None):
     """
     A tensor that is supposed to remain constant.
 
@@ -1585,7 +1581,7 @@ def constant_storage(axes=None, dtype=None, name=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def placeholder(axes=None, dtype=None, initial_value=None, name=None):
+def placeholder(axes, dtype=None, initial_value=None, name=None):
     """
     A persistent tensor to be initialized from the CPU.
 
@@ -1607,7 +1603,7 @@ def placeholder(axes=None, dtype=None, initial_value=None, name=None):
                               initial_value=initial_value)
 
 
-def temporary(axes=None, dtype=None, name=None):
+def temporary(axes, dtype=None, name=None):
     """
     Temporary storage.
 
@@ -1628,7 +1624,7 @@ def temporary(axes=None, dtype=None, name=None):
                               axes=axes, dtype=dtype, name=name)
 
 
-def persistent_tensor(axes=None, dtype=None, initial_value=None, name=None, init=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, name=None, init=None):
     """
     Persistent storage.
 
@@ -1654,7 +1650,7 @@ def persistent_tensor(axes=None, dtype=None, initial_value=None, name=None, init
                               init=init)
 
 
-def variable(axes=None, dtype=None, name=None, initial_value=None, init=None):
+def variable(axes, dtype=None, name=None, initial_value=None, init=None):
     """
     A trainable tensor.
 
@@ -1692,7 +1688,7 @@ class Stack(TensorOp):
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
-        axes = Axes(tuple(x_axes[:pos]) + (axis,) + tuple(x_axes[pos:]))
+        axes = make_axes(tuple(x_axes[:pos]) + (axis,) + tuple(x_axes[pos:]))
         super(Stack, self).__init__(args=tuple(x_list), axes=axes)
 
     def generate_adjoints(self, adjoints, delta, *x_list):
@@ -2161,7 +2157,7 @@ class Dot(TensorOp):
                  **kwargs):
         x_axes = x.axes
         if left_transpose:
-            x_axes = x_axes.get_transpose()
+            x_axes = x_axes.T
             use_dual = True
 
         dual_offset = 0
@@ -2179,7 +2175,7 @@ class Dot(TensorOp):
         axes = self.x_out_axes + self.y_out_axes
 
         if left_transpose:
-            self.x_reduction_axes = self.x_reduction_axes.get_transpose()
+            self.x_reduction_axes = self.x_reduction_axes.T
 
         super(Dot, self).__init__(
             args=(x, y), axes=axes, **kwargs
@@ -2300,15 +2296,15 @@ class ReductionOp(TensorOp):
             reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
             out_axes = x.axes - reduction_axes
         elif reduction_axes is None:
-            out_axes = Axes(out_axes)
+            out_axes = make_axes(out_axes)
             reduction_axes = x.axes - out_axes
         elif out_axes is None:
-            reduction_axes = Axes(reduction_axes)
+            reduction_axes = make_axes(reduction_axes)
             out_axes = x.axes - reduction_axes
         else:
-            out_axes = Axes(out_axes)
-            reduction_axes = Axes(reduction_axes)
-        assert Axes.intersect(reduction_axes, out_axes) == Axes(())
+            out_axes = make_axes(out_axes)
+            reduction_axes = make_axes(reduction_axes)
+        assert Axes.intersect(reduction_axes, out_axes) == make_axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -2397,7 +2393,7 @@ def create_reduction_op(name,
             return RedOneDimClass(
                 x,
                 reduction_axes=x.axes,
-                out_axes=Axes(()),
+                out_axes=make_axes(()),
                 dtype=self.dtype,
                 **self.kwargs
             )
@@ -2407,8 +2403,8 @@ def create_reduction_op(name,
 
             out = RedTwoDimClass(
                 x,
-                reduction_axes=Axes((x.axes[0],)),
-                out_axes=Axes((x.axes[1],)),
+                reduction_axes=make_axes((x.axes[0],)),
+                out_axes=make_axes((x.axes[1],)),
                 dtype=self.dtype,
                 **self.kwargs
             )
@@ -2446,7 +2442,7 @@ Min, MinTwoDim, MinOneDim, min = create_reduction_op(
 def sum_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(
         adjoints,
-        broadcast(delta, axes=x.axes)
+        broadcast(delta, x.axes)
     )
 
 
@@ -2498,7 +2494,7 @@ class tensor_size(TensorOp):
         if reduction_axes is None:
             reduction_axes = x.axes
         self.reduction_axes = reduction_axes
-        super(tensor_size, self).__init__(axes=Axes())
+        super(tensor_size, self).__init__(axes=())
 
 
 class batch_size(tensor_size):
@@ -2551,7 +2547,7 @@ def pad(x, paddings, axes=None, **kwargs):
 
     paddings = tuple(pad_to_tuple(pad) for pad in paddings)
     if axes is None:
-        axes = Axes(
+        axes = make_axes(
             PaddedAxis(axis, pad) if pad != (0, 0) else axis
             for axis, pad in zip(x.axes, paddings)
         )
@@ -2591,7 +2587,7 @@ class Onehot(TensorOp):
         self.axis = axis
         super(Onehot, self).__init__(
             args=(x,),
-            axes=Axes((axis,)) + x.axes,
+            axes=make_axes((axis,)) + x.axes,
             **kwargs
         )
 
