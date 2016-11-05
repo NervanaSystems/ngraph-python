@@ -67,6 +67,7 @@ class convolution(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
+        import pdb; pdb.set_trace()
         channel_out_axis = [ax for ax in filters.axes if ax.name.startswith('K')][0]
         # output axes computation
         axes = Axes(

@@ -19,7 +19,7 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
-
+from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Convolution
@@ -51,26 +51,26 @@ def test_convolution():
     strides = dict(str_d=1, str_h=1, str_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
-    Nx = ng.make_axis(N, batch=True)
 
-    Cx = ng.make_axis(C, name='C')
-    Dx = ng.make_axis(D, name='D')
-    Hx = ng.make_axis(H, name='H')
-    Wx = ng.make_axis(W, name='W')
-    Tx = ng.make_axis(T, name='T')
-    Rx = ng.make_axis(R, name='R')
-    Sx = ng.make_axis(S, name='S')
-    Kx = ng.make_axis(K, name='K')
+    ax.N.length = N
+    ax.C.length = C
+    ax.D.length = D
+    ax.H.length = H
+    ax.W.length = W
+    ax.T.length = T
+    ax.R.length = R
+    ax.S.length = S
+    ax.K.length = K
 
-    inputs = ng.placeholder(axes=ng.make_axes([Cx, Dx, Hx, Wx, Nx]))
-    filters = ng.placeholder(axes=ng.make_axes([Cx, Tx, Rx, Sx, Kx]))
+    inputs = ng.placeholder(axes=ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N]))
+    filters = ng.placeholder(axes=ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K]))
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, inputs.axes)
     filter_value = rng.uniform(-1, 1, filters.axes)
 
-    assert input_value.shape == tuple([ax.length for ax in [Cx, Dx, Hx, Wx, Nx]])
-    assert filter_value.shape == tuple([ax.length for ax in [Cx, Tx, Rx, Sx, Kx]])
+    assert input_value.shape == inputs.axes.lengths
+    assert filter_value.shape == filters.axes.lengths
 
     # compute convolution with graph
     output = ng.convolution(conv_params, inputs, filters)

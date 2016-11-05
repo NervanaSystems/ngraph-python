@@ -20,20 +20,23 @@ The motivation is to show the flexibility of ngraph and how user can build a
 model without the neon architecture. This may also help with debugging.
 
 Run it using
-python examples/mnist/mnist_mlp_direct.py --train /scratch/alex/MNIST/manifest_train.csv \
-      --valid /scratch/alex/MNIST/manifest_valid.csv
 
-      for examples
+python examples/mnist/mnist_mlp.py --work_dir /usr/local/data/MNIST --output_file out.hd5
+
 """
 from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, Model, Callbacks
+from ngraph.frontends.neon import nnAffine, nnPreprocess, Sequential, Callbacks
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
+from ngraph.frontends.neon import ax, make_keyed_computation
 import argparse
 from data import make_aeon_loaders
-
+from aeon import SimpleDataLoader
+from mnist import MNIST
+from ngraph.util.utils import executor
+from ngraph.transformers import Transformer
 
 parser = argparse.ArgumentParser(description='Train simple mlp on mnist dataset')
 parser.add_argument('--work_dir', required=True)
@@ -47,63 +50,58 @@ args = parser.parse_args()
 
 np.random.seed(args.rseed)
 
+# Create the dataloader
+train_data, valid_data = MNIST(args.work_dir).load_data()
+train_set = SimpleDataLoader(train_data, args.batch_size, total_iterations=args.num_iterations)
+# train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
+
+
 ######################
 # Model specification
-hidden_size, output_size = 100, 10
-H1 = ng.Axis(hidden_size, name="H1")
-H2 = ng.Axis(hidden_size, name="H2")
-Y = ng.Axis(output_size, name="Y")
-
-
-def unit_scale_mnist_pixels(x):
-    return x / 255.
-
-
-my_model = Model([nnPreprocess(functor=unit_scale_mnist_pixels),
-                  nnAffine(nout=hidden_size, init=GaussianInit(), activation=Rectlin()),
-                  # nnAffine(out_axis=H2, init=GaussianInit(), activation=Rectlin()),
-                  nnAffine(nout=None, axes=Y, init=GaussianInit(), activation=Logistic())])
-
-
-transformer = ng.NumPyTransformer()
-
-# Create the dataloader
-train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
+seq1 = Sequential([nnPreprocess(functor=lambda x: x / 255.),
+                   nnAffine(nout=100, init=GaussianInit(), activation=Rectlin()),
+                   nnAffine(axes=ax.Y, init=GaussianInit(), activation=Logistic())])
 
 ######################
 # Input specification
-image_channels, image_height, image_width = train_set.shapes()[0]
-C = ng.Axis(image_channels, name="C")
-H = ng.Axis(image_height, name="H")
-W = ng.Axis(image_width, name="W")
-N = ng.Axis(args.batch_size, name="N", batch=True)
+ax.C.length, ax.H.length, ax.W.length = train_set.shapes[0]
+ax.N.length = args.batch_size
+ax.Y.length = 10
 
-# place holder
-x = ng.placeholder(axes=ng.Axes([C, H, W, N]))
-t = ng.placeholder(axes=ng.Axes([N]))
-it_idx = ng.placeholder(axes=ng.Axes())  # iteration index, for learning rate evolution
+
+# placeholders
+inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
+              tgt=ng.placeholder(axes=ng.make_axes([ax.N])),
+              idx=ng.placeholder(axes=ng.make_axes()))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
+pred = seq1.train_outputs(inputs['img'])
+train_cost = ng.cross_entropy_binary(pred, ng.Onehot(inputs['tgt'], axis=ax.Y))
+mean_cost = ng.mean(train_cost, out_axes=())
+updates = optimizer(train_cost, inputs['idx'])
 
-pred = my_model.get_outputs(x)
+Transformer.make_transformer()
 
-train_cost = ng.cross_entropy_binary(pred, ng.Onehot(t, axis=Y))
-train_graph = ([ng.mean(train_cost, out_axes=()),  # mean cost for display
-                optimizer(train_cost, it_idx)],  # update function for optimization
-               x, t, it_idx)  # inputs
+train_computation = make_keyed_computation(executor, [mean_cost, updates], inputs)
 
-inf_graph = (pred, x)
+cb = Callbacks(seq1, args.output_file, args.iter_interval)
 
+######################
+# Train Loop
+cb.on_train_begin(args.num_iterations)
 
-my_model.bind_transformer(transformer, train_graph, inf_graph)
+for mb_idx, data in enumerate(train_set):
+    cb.on_minibatch_begin(mb_idx)
+    batch_cost, _ = train_computation(dict(img=data[0], tgt=data[1], idx=mb_idx))
+    seq1.current_batch_cost = float(batch_cost)
+    cb.on_minibatch_end(mb_idx)
 
-# train
-cb = Callbacks(my_model, args.output_file, args.iter_interval)
-my_model.train(train_set, args.num_iterations, cb)
+cb.on_train_end()
+
 
 # # validate
-hyps, refs = my_model.eval(valid_set)
-np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
-a = np.loadtxt(args.results_file, delimiter=',')
-err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
-print("Misclassification: {}".format(err))
+# hyps, refs = my_model.eval(valid_set)
+# np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
+# a = np.loadtxt(args.results_file, delimiter=',')
+# err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
+# print("Misclassification: {}".format(err))

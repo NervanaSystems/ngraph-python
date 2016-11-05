@@ -37,6 +37,7 @@ ax.REC = ng.make_axis(recurrent=True, docstring="recurrent axis")
 ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
 ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
 ax.T = ng.make_axis(roles=[ar.Depth], docstring="filter depth")
+ax.J = ng.make_axis(roles=[ar.Channels], docstring="filter channel size (for crossmap pooling)")
 
 ax.K = ng.make_axis(roles=[ar.Channels], docstring="number of output channels")
 ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")

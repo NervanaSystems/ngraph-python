@@ -17,33 +17,17 @@ from __future__ import division
 import numpy as np
 from itertools import takewhile
 import functools
+from operator import itemgetter
 
-class Model(object):
+
+class Sequential(object):
     def __init__(self, layers):
         self.layers = layers
 
-    def get_outputs(self, in_obj):
+    def train_outputs(self, in_obj):
         for l in self.layers:
             in_obj = l.train_outputs(in_obj)
         return in_obj
-
-    def bind_transformer(self, transformer, train_args, inference_args):
-        self.train_comp = transformer.computation(*train_args)
-        self.predictions = transformer.computation(*inference_args)
-        transformer.initialize()
-
-    def train(self, train_set, num_iterations, callbacks):
-        callbacks.on_train_begin(num_iterations)
-
-        for mb_idx, dtuple in takewhile(lambda x: x[0] < num_iterations, enumerate(train_set)):
-            callbacks.on_minibatch_begin(mb_idx)
-
-            batch_cost, _ = self.train_comp(dtuple[0], dtuple[1], mb_idx)
-            self.current_batch_cost = float(batch_cost)
-
-            callbacks.on_minibatch_end(mb_idx)
-
-        callbacks.on_train_end()
 
     def eval(self, eval_set):
         eval_set.reset()
@@ -59,6 +43,8 @@ class Model(object):
 
 class Container(object):
     """
+    POC code only
+
     Two string->`Op` dictionaries representing a container of op_graphs
     """
     def __init__(self, inputs=dict(), outputs=dict()):
@@ -85,6 +71,16 @@ class Container(object):
                          {k: v for k,v in self.outputs.items() if k in outputs})
 
 
+def make_keyed_computation(executor, outputs, named_inputs):
+    input_keys = tuple(named_inputs.keys())
+    comp_func = executor(outputs, *itemgetter(*input_keys)(named_inputs))
+
+    def keyed_comp_func(named_buffers):
+        return comp_func(*itemgetter(*input_keys)(named_buffers))
+
+    return keyed_comp_func
+
+
 def ne_compose(layer_list, function_name):
 
     inputs, outputs = dict(), dict()
@@ -93,6 +89,7 @@ def ne_compose(layer_list, function_name):
                          lambda x: f(getattr(g, function_name)(x)),
                      layer_list,
                      lambda x: x)
+
     outputs[getattr(layer_list[-1], 'outputs')] = out_func
 
     return Container(inputs=inputs, outputs=outputs)

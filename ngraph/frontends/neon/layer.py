@@ -15,7 +15,6 @@
 from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
-from neon import NervanaObject
 
 
 # TODO These are stubs for implementing Neon's layers
@@ -84,8 +83,10 @@ class nnPreprocess(nnLayer):
 
 
 class nnAffine(nnLayer):
-    def __init__(self, nout, init, activation=(lambda x: x), bias_init=None, **kwargs):
+    def __init__(self, init, nout=None, activation=(lambda x: x), bias_init=None, **kwargs):
         super(nnAffine, self).__init__(**kwargs)
+        if self.axes is None:
+            assert(nout is not None), "Must provide either axes or nout to Affine"
         self.nout = nout
         self.init = init
         self.activation = activation
@@ -99,7 +100,6 @@ class nnAffine(nnLayer):
         w_axes = out_axes - out_axes.recurrent_axes() + in_axes.get_dual()
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
-
 
 class nnConv(nnLayer):
     def __init__(self, fshape, strides, padding, init, activation=(lambda x: x), bias_init=None):
@@ -137,9 +137,6 @@ class nnConv(nnLayer):
         w_axes = ng.Axes([ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')])
         self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
-
-    def inf_outputs(self, in_obj):
-        return self.train_outputs(in_obj)
 
 
 class nnPool(nnLayer):

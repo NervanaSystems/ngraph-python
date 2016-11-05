@@ -184,18 +184,6 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         if roles is not None:
             self.roles.update(roles)
 
-        short_name = self.name.split('_')[0]
-        if short_name in ('H', 'R', 'P'):
-            self.spatial_role = 'height'
-        elif short_name in ('W', 'S', 'Q'):
-            self.spatial_role = 'width'
-        elif short_name in ('D', 'T', 'M'):
-            self.spatial_role = 'depth'
-        elif short_name in ('C', 'K', 'J'):
-            self.spatial_role = 'channel'
-        else:
-            self.spatial_role = None
-
     @property
     def is_batch(self):
         """
@@ -226,14 +214,6 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             bool: True if this axis matches axes with the same length.
         """
         return self.__match_on_length
-
-    @property
-    def spatial_role(self):
-        return self.__spatial_role
-
-    @spatial_role.setter
-    def spatial_role(self, value):
-        self.__spatial_role = value
 
     @property
     def length(self):
@@ -312,7 +292,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             True if this axis has the role.
 
         """
-        return axis_role in self.axis_roles
+        return axis_role in self.roles
 
     def add_role(self, axis_role):
         """
