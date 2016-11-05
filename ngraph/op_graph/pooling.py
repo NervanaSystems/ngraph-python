@@ -16,7 +16,7 @@ from __future__ import division
 from operator import itemgetter
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import Axes, spatial_axis
+from ngraph.op_graph.axes import make_axes, spatial_axis
 
 
 class pooling(op_graph.TensorOp):
@@ -61,11 +61,15 @@ class pooling(op_graph.TensorOp):
 
         self.batch_axis = batch_axes[0]
         J, T, R, S = itemgetter(*('J', 'T', 'R', 'S'))(pool_params)
-        axes = Axes(
-            [spatial_axis(inputs, J, pool_params['pad_c'], pool_params['str_c'], role='channel'),
-             spatial_axis(inputs, T, pool_params['pad_d'], pool_params['str_d'], role='depth'),
-             spatial_axis(inputs, R, pool_params['pad_h'], pool_params['str_h'], role='height'),
-             spatial_axis(inputs, S, pool_params['pad_w'], pool_params['str_w'], role='width'),
+        axes = make_axes(
+            [spatial_axis(inputs, J, pool_params['pad_c'], pool_params['str_c'],
+                          rolename='Channel'),
+             spatial_axis(inputs, T, pool_params['pad_d'], pool_params['str_d'],
+                          rolename='Depth'),
+             spatial_axis(inputs, R, pool_params['pad_h'], pool_params['str_h'],
+                          rolename='Height'),
+             spatial_axis(inputs, S, pool_params['pad_w'], pool_params['str_w'],
+                          rolename='Width'),
              self.batch_axis])
 
         self.pool_params = pool_params

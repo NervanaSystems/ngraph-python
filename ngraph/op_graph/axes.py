@@ -59,13 +59,28 @@ def output_dim(X, S, padding, strides, pooling=False):
         return size
 
 
-def spatial_axis(input, filter, padding, stride, role):
-    hh = input.axes.role_axes(role).lengths[0]
+def find_axis_with_role(axes, rolename):
+    """
+    Finds the first axis matching rolename
+    """
+    for ax in axes:
+        if len(ax.roles) != 0:
+            if rolename in [r.short_name for r in list(ax.roles)]:
+                return ax
+
+
+def spatial_axis(input, filter, padding, stride, rolename):
+    ax_i = find_axis_with_role(input.axes, rolename)
+    assert ax_i is not None, "Unable to find input axis with role {}".format(rolename)
+    hh = ax_i.length
     if isinstance(filter, int):
         rr = filter
     else:
-        rr = filter.axes.role_axes(role).lengths[0]
-    return Axis(length=output_dim(hh, rr, padding, stride), name=role[0].upper())
+        ax_f = find_axis_with_role(filter.axes, rolename)
+        assert ax_f is not None, "Unable to find filter axis with role {}".format(rolename)
+        rr = ax_f.length
+
+    return make_axis(length=output_dim(hh, rr, padding, stride), name=ax_i.short_name)
 
 
 def make_axis_role(name=None, docstring=None):
@@ -629,9 +644,16 @@ class Axes(object):
     def role_axes(self, role):
         """
         Returns:
-            The Axes subset that have spatial roles matching role:
+            The Axes subset that have the specified role
         """
-        return Axes(axis for axis in self if axis.spatial_role == role)
+        return Axes(axis for axis in self if axis.has_role(role))
+
+    def get_roles(self):
+        """
+        Returns:
+            The Axes subset that have the specified role
+        """
+        return [list(axis.roles)[0] for axis in self if len(axis.roles) != 0]
 
     def flatten(self):
         if len(self) == 1:

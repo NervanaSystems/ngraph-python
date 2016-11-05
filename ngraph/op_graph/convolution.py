@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import make_axis, Axes, spatial_axis
+from ngraph.op_graph.axes import make_axis, make_axes, spatial_axis, find_axis_with_role
 
 
 class convolution(op_graph.TensorOp):
@@ -67,17 +67,19 @@ class convolution(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        import pdb; pdb.set_trace()
-        channel_out_axis = [ax for ax in filters.axes if ax.name.startswith('K')][0]
+
+
+        channel_out_axis = find_axis_with_role(filters.axes, 'Channelout')
+
         # output axes computation
-        axes = Axes(
+        axes = make_axes(
             [make_axis(length=channel_out_axis.length, name='C'),
              spatial_axis(inputs, filters, conv_params['pad_d'], conv_params['str_d'],
-                          role='depth'),
+                          rolename='Depth'),
              spatial_axis(inputs, filters, conv_params['pad_h'], conv_params['str_h'],
-                          role='height'),
+                          rolename='Height'),
              spatial_axis(inputs, filters, conv_params['pad_w'], conv_params['str_w'],
-                          role='width'),
+                          rolename='Width'),
              self.batch_axis])
 
         self.conv_params = conv_params

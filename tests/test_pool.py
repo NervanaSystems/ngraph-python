@@ -19,7 +19,7 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
-
+from ngraph.frontends.neon import ax
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Pooling
@@ -59,19 +59,19 @@ def test_pooling():
     pool_params.update(strides)
     pool_params.update(fshape)
 
-    Nx = ng.Axis(N, batch=True)
+    ax.N.length = N
 
-    Cx = ng.Axis(C, name='C')
-    Dx = ng.Axis(D, name='D')
-    Hx = ng.Axis(H, name='H')
-    Wx = ng.Axis(W, name='W')
+    ax.C.length = C
+    ax.D.length = D
+    ax.H.length = H
+    ax.W.length = W
 
-    inputs = ng.placeholder(axes=ng.Axes([Cx, Dx, Hx, Wx, Nx]))
+    inputs = ng.placeholder(axes=ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N]))
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, inputs.axes)
 
-    assert input_value.shape == tuple([ax.length for ax in [Cx, Dx, Hx, Wx, Nx]])
+    assert input_value.shape == inputs.axes.lengths
 
     # compute convolution with graph
     output = ng.pooling(pool_params, inputs)
