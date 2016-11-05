@@ -2017,8 +2017,9 @@ def add_adjoints(self, adjoints, delta, x, y):
 
 
 Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
-    'AddOp', 'AddOneDim', 'AddZeroDim', 'add', add_adjoints
+    'AddOp', 'AddOneDim', 'AddZeroDim', 'addX', add_adjoints
 )
+
 
 def add(x, y, name=None):
     """

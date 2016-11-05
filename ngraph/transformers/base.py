@@ -641,6 +641,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
 __transformer_factory = None
 
+
 def make_transformer():
     """
     Generates a Transformer using the factory in this module which defaults
