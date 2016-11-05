@@ -19,7 +19,7 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
-from ngraph.op_graph.axes import make_axis, make_axes, spatial_axis
+from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend

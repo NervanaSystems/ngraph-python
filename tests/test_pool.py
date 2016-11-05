@@ -19,7 +19,8 @@ import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.transformers import Transformer
-from ngraph.frontends.neon import ax
+from ngraph.op_graph.axes import spatial_axis
+from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Pooling
@@ -66,16 +67,25 @@ def test_pooling():
     ax.H.length = H
     ax.W.length = W
 
-    inputs = ng.placeholder(axes=ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N]))
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    inputs = ng.placeholder(axes=ax_i)
+
+    ax_o = ng.make_axes([
+        spatial_axis(ax_i, J, padding['pad_c'], strides['str_c'], role=ar.Channel),
+        spatial_axis(ax_i, T, padding['pad_d'], strides['str_d'], role=ar.Depth),
+        spatial_axis(ax_i, R, padding['pad_h'], strides['str_h'], role=ar.Height),
+        spatial_axis(ax_i, S, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ax.N
+    ])
 
     # randomly initialize
-    input_value = rng.uniform(-1, 1, inputs.axes)
+    input_value = rng.uniform(-1, 1, ax_i)
 
-    assert input_value.shape == inputs.axes.lengths
+    assert input_value.shape == ax_i.lengths
 
     # compute convolution with graph
-    output = ng.pooling(pool_params, inputs)
-    targets = ng.placeholder(axes=output.axes)
+    output = ng.pooling(pool_params, inputs, axes=ax_o)
+    targets = ng.placeholder(axes=ax_o)
 
     costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
     error = ng.sum(costs, out_axes=()) / ng.batch_size(costs)
@@ -100,7 +110,7 @@ def test_pooling():
 
     act_result_ne = 1. / (1.0 + np.exp(-result_ne))
     err = neon_layer.be.array((act_result_ne - targets_value).reshape(-1, N) / float(N))
-    gradI_ne = neon_layer.bprop(err).get().reshape(inputs.axes.lengths)
+    gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
 
     # Compare fprop
     np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)

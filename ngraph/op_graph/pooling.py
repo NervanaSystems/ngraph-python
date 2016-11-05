@@ -16,7 +16,6 @@ from __future__ import division
 from operator import itemgetter
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import make_axes, spatial_axis
 
 
 class pooling(op_graph.TensorOp):
@@ -33,13 +32,6 @@ class pooling(op_graph.TensorOp):
             raise ValueError((
                 'pooling input shape must be length 5, found {}'
             ).format(len(inputs.shape)))
-
-        if 'axes' in kwargs:
-            raise ValueError(
-                "pooling does not currently support the 'axes' argument.  The "
-                "output axes are entirely determined by the shape of the "
-                "input and pooling params"
-            )
 
         batch_axes = inputs.axes.batch_axes()
         if len(batch_axes) != 1:
@@ -59,26 +51,13 @@ class pooling(op_graph.TensorOp):
                 "Unsupported pooling type: {pooltype}.  Only max and avg pooling "
                 "currently supported. ").format(pooltype=pooltype))
 
-        self.batch_axis = batch_axes[0]
-        J, T, R, S = itemgetter(*('J', 'T', 'R', 'S'))(pool_params)
-        axes = make_axes(
-            [spatial_axis(inputs, J, pool_params['pad_c'], pool_params['str_c'],
-                          rolename='Channel'),
-             spatial_axis(inputs, T, pool_params['pad_d'], pool_params['str_d'],
-                          rolename='Depth'),
-             spatial_axis(inputs, R, pool_params['pad_h'], pool_params['str_h'],
-                          rolename='Height'),
-             spatial_axis(inputs, S, pool_params['pad_w'], pool_params['str_w'],
-                          rolename='Width'),
-             self.batch_axis])
-
         self.pool_params = pool_params
         self.index = pooling._index
 
         pooling._index += 1
 
         super(pooling, self).__init__(
-            args=(inputs,), *args, axes=axes, **kwargs
+            args=(inputs,), *args, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs):
