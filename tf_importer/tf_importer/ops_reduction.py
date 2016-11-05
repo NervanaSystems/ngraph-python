@@ -183,7 +183,7 @@ class OpsReduction(OpsBase):
                         if i not in reduction_indices]
 
             # broadcast for safety
-            result_op = ng.Constant(np_result, axes=out_axes)
+            result_op = ng.constant(np_result, axes=out_axes)
             return result_op
         except:
             raise NotImplementedError("reduce_prod currently not supported in "

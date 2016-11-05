@@ -84,8 +84,8 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
 
     # init weights
     thetas_np = np.array([0., 0., 0.])
-    thetas_numpy_tensor = ng.Constant(thetas_np, axes=(C))
-    thetas = ng.Variable(initial_value=thetas_numpy_tensor, axes=(C))
+    thetas_numpy_tensor = ng.constant(thetas_np, axes=(C))
+    thetas = ng.variable(initial_value=thetas_numpy_tensor, axes=(C))
 
     # define ops
     loss = get_loss(thetas, xs, ys)

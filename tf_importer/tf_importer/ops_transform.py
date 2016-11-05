@@ -72,7 +72,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Rank` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(rank, axes=ng.make_axes([]), name=tf_node.name)
+        return ng.constant(rank, axes=ng.make_axes([]), name=tf_node.name)
 
     def Range(self, tf_node, inputs):
         """
@@ -121,7 +121,7 @@ class OpsTransform(OpsBase):
                                       "supported.")
 
         # return
-        return ng.Constant(range_val, axes=shape_to_axes(range_val.shape),
+        return ng.constant(range_val, axes=shape_to_axes(range_val.shape),
                            name=tf_node.name)
 
     def Size(self, tf_node, inputs):
@@ -158,7 +158,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.Constant(size, axes=ng.make_axes([]), name=tf_node.name)
+        return ng.constant(size, axes=ng.make_axes([]), name=tf_node.name)
 
     def Cast(self, tf_node, inputs):
         """
@@ -226,7 +226,7 @@ class OpsTransform(OpsBase):
         axes = ng.make_axes([ng.make_axis(len(left.axes.lengths)), ])
 
         # return
-        return ng.Constant(shape, axes=axes, name=tf_node.name)
+        return ng.constant(shape, axes=axes, name=tf_node.name)
 
     def Reshape(self, tf_node, inputs):
         """
@@ -305,7 +305,7 @@ class OpsTransform(OpsBase):
         try:
             # new tensor
             np_val = np.reshape(tensor.const, shape.const.astype(int))
-            return ng.Constant(np_val, axes=shape_to_axes(np_val.shape),
+            return ng.constant(np_val, axes=shape_to_axes(np_val.shape),
                                name=tf_node.name)
         except:
             raise NotImplementedError("Reshape not supported in ngraph, "
@@ -349,7 +349,7 @@ class OpsTransform(OpsBase):
         output_val = np.tile(input_val, multiples_val.astype(int))
 
         # make new constants
-        return ng.Constant(output_val, axes=shape_to_axes(output_val.shape),
+        return ng.constant(output_val, axes=shape_to_axes(output_val.shape),
                            name=tf_node.name)
 
     def ExpandDims(self, tf_node, inputs):

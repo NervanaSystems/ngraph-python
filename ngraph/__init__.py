@@ -25,14 +25,19 @@ from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     is_constant, is_constant_scalar, constant_value, constant_storage, \
     persistent_tensor, placeholder, \
-    slice_along_axis, temporary
+    slice_along_axis, temporary, \
+    add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
+    temporary, constant_value
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
+    'add',
+    'as_op',
+    'as_ops',
     'axes_with_order',
     'broadcast',
     'cast_axes',
-    'constant_storage',
+    'constant',
     'constant_value',
     'convolution',
     'is_constant',
@@ -47,6 +52,7 @@ __all__ = [
     'pooling',
     'slice_along_axis',
     'temporary',
+    'variable',
     'with_name_scope',
 ]
 

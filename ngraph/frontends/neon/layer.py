@@ -160,7 +160,7 @@ class Convolution(ParameterLayer):
         assert self.weight_shape is None
         names = ['C', 'T', 'R', 'S', 'K']
         weights_axes = [ng.make_axis(self.convparams[key], name=key) for key in names]
-        weights = ng.Variable(axes=weights_axes, init=self.init)
+        weights = ng.variable(axes=weights_axes, init=self.init)
         self.weight_shape = self.nglayer.dimF2
         if self.bsum:
             self.batch_sum_shape = (self.nglayer.K, 1)
@@ -287,7 +287,7 @@ class Linear(ParameterLayer):
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
 
-        self.W = ng.Variable(axes=out_axes - out_axes.recurrent_axes() + in_axes.get_dual(),
+        self.W = ng.variable(axes=out_axes - out_axes.recurrent_axes() + in_axes.get_dual(),
                              init=self.init)
         return ng.dot(self.W, in_obj, use_dual=True)
 
@@ -326,7 +326,7 @@ class Bias(ParameterLayer):
 
         """
         in_obj = super(Bias, self).configure(in_obj)
-        return in_obj + ng.Variable(axes=in_obj.axes.sample_axes())
+        return in_obj + ng.variable(axes=in_obj.axes.sample_axes())
 
 
 class Activation(Layer):

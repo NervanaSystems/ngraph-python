@@ -11,7 +11,7 @@ X = ng.placeholder(axes=ng.make_axes([C, N]))
 Y = ng.placeholder(axes=ng.make_axes([N]))
 alpha = ng.placeholder(axes=ng.make_axes())
 
-W = ng.Variable(axes=ng.make_axes([C]), initial_value=0)
+W = ng.variable(axes=ng.make_axes([C]), initial_value=0)
 
 Y_hat = ng.sigmoid(ng.dot(W, X))
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)

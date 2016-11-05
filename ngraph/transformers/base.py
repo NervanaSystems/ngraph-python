@@ -341,48 +341,6 @@ class Transformer_ABC_Meta(abc.ABCMeta):
         super(Transformer_ABC_Meta, self).__init__(name, bases, dict_)
 
 
-def make_transformer():
-    """
-    Generates a Transformer using the factory in this module which defaults
-    to NumPy
-
-    Returns: Transformer
-    """
-    return Transformer.transformer_factory()
-
-
-def set_transformer_factory(factory):
-    """
-    Sets the Transformer factory used by make_transformer
-
-    Arguments:
-        factory (object): Callable object which generates a Transformer
-    """
-    Transformer.transformer_factory = factory
-
-
-def transformer_choices():
-    """Return the list of available transformers."""
-    names = sorted(Transformer.transformers.keys())
-    return names
-
-
-def allocate_transformer(name, **kargs):
-    """Allocate a named backend."""
-    try:
-        return Transformer.transformers[name](**kargs)
-    except KeyError:
-        names = ', '.join(["'%s'" % (_,) for _ in Transformer.transformer_choices()])
-        raise ValueError("transformer must be one of (%s)" % (names,))
-
-
-def make_transformer_factory(name, **kargs):
-    def factory():
-        return allocate_transformer(name, **kargs)
-
-    return factory
-
-
 class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     Produce an executable version of op-graphs.
@@ -408,8 +366,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         init_computation (Computation): The computation that performs initialization
             after allocation.  This happens once per training session, not once per-minibatch.
     """
-    transformer_factory = None
-
     def __init__(self, fusion=None, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.computations = OrderedSet()
@@ -681,3 +637,48 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # try to initialize.
         self.initialized = True
         self.init_computation()
+
+
+__transformer_factory = None
+
+def make_transformer():
+    """
+    Generates a Transformer using the factory in this module which defaults
+    to NumPy
+
+    Returns: Transformer
+    """
+    return __transformer_factory()
+
+
+def set_transformer_factory(factory):
+    """
+    Sets the Transformer factory used by make_transformer
+
+    Arguments:
+        factory (object): Callable object which generates a Transformer
+    """
+    global __transformer_factory
+    __transformer_factory = factory
+
+
+def transformer_choices():
+    """Return the list of available transformers."""
+    names = sorted(Transformer.transformers.keys())
+    return names
+
+
+def allocate_transformer(name, **kargs):
+    """Allocate a named backend."""
+    try:
+        return Transformer.transformers[name](**kargs)
+    except KeyError:
+        names = ', '.join(["'%s'" % (_,) for _ in Transformer.transformer_choices()])
+        raise ValueError("transformer must be one of (%s)" % (names,))
+
+
+def make_transformer_factory(name, **kargs):
+    def factory():
+        return allocate_transformer(name, **kargs)
+
+    return factory

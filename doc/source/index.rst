@@ -58,5 +58,5 @@
    :maxdepth: 1
    :caption: API
 
-   ngraph.rst
    api.rst
+   internal.rst

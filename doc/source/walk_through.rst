@@ -18,46 +18,65 @@
 Walk-through
 ************
 
-Let's begin with a very simple example: computing :math:`x+1` for several values of :math:`x` using the front end
-API.  We should think of the computation as being invoked from our program, *the CPU*, but possibly taking place
+Let's begin with a very simple example: computing `x+1` for several values of `x` using the `ngraph`
+API.  We should think of the computation as being invoked from the *host*, but possibly taking place
 somewhere else, which we will refer to as *the device.*
 
-Our program will provide values for :math:`x` and receive :math:`x+1` for each :math:`x` provided.
+The nervana graph currently uses a compilation model. You define computations you want to run, compile them, and
+then run them. In the future, we plan to make this even more compiler-like, where you produce something like an
+executable that can later be run on various platforms, as well as provide a more interactive version.
+
+Our first program will provide values for :math:`x` and receive :math:`x+1` for each :math:`x` provided.
 
 The x + 1 program
 =================
 
-The source code can be found in :download:`../../examples/walk_through/x_plus_one.py`.
+The source code can be found in :download:`../../examples/walk_through/wt_1_x_plus_one.py`.
 
 The complete program is
 
 .. code-block:: python
 
+    from __future__ import print_function
     import ngraph as ng
+    import ngraph.transformers as ngt
 
-    x = ng.placeholder(axes=ng.Axes())
+    # Build the graph
+    x = ng.placeholder(axes=ng.make_axes())
     x_plus_one = x + 1
 
-    transformer = ng.NumPyTransformer()
+    # Select a transformer
+    transformer = ngt.make_transformer()
+
+    # Define a computation
     plus_one = transformer.computation(x_plus_one, x)
 
+    # Run the computation
     for i in range(5):
         print(plus_one(i))
 
 
-We begin by importing ``ngraph``, the Python module for the front end API.
+We begin by importing ``ngraph``, the Python module for frontend graph construction, and ``ngraph.transformers``, the module for frontend transformer operations.
 
-Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we call the
-parameter that receives the value of :math:`x` a ``placeholder``.  A placeholder has a tensor value, so we need
-to indicate the tensor shape by specifying its axes.  In this simple example, :math:`x` is a scalar,
-so the axes are empty.  We follow this with the computation that adds 1 to the ``placeholder.``  Even though
-this looks like we are adding 1, the op-graph objects overload the arithmetic method, so ``x_plus_one`` is really
-an op-graph object.
+Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we use ``placeholder`` to define a port for transferring tensors between the host and the device. We use `Axes` to tell nervana graph about these tensors. Axes are like tensor shapes, with some semantics added. In this example, `x` is a scalarm so the axes are empty.
 
-Once the op-graph is set up, we can compile it with a *transformer*.  Here the transformer uses NumPy and runs on the CPU, but
-the procedure would be the same for any other transformer.  We tell the transformer the function to compute (``x_plus_one``) and the associated parameter (``x``).
+The `ngraph` graph construction API uses functions to build a graph of ``Op`` objects. Each function may add one or more operations to the graph, and will return an object that represents the computation. Once the computation has been instantiated, the object can also be used as a handle to the tensor when that part of the computation is associated with persistent storage. In this case, an ``AssignableTensorOp`` is returned, which represents a tensor associated with storage.
 
-The first time the transformer executes a computation, the op-graph is analyzed and compiled, and the storage is allocated and initialized on the device.  These steps can be performed manually, for example if some device state is to be restored from
+An ``AssignableTensorOp`` is a kind of ``TensorOp``, which is a kind of ``Op``. The ``TensorOp`` defines the Python "magic methods" for arithmetic, so we can use a ``TensorOp`` in an arithmetic expression, the result is an ``Op`` for the result of that operation. We could less concisely have written
+.. code-block:: python
+
+    x_plus_one = ng.add(x, 1)
+
+which may be more convenient when implementing a frontend.
+
+Another bit of behind the scenes magic occurs with the Python ``1``, which is not an ``Op``. When arguments to graph constructors are not ``Op``s, nervana graph will attempt to convert them to an ``Op`` with ``ng.constant``, the graph function for making a constant. Thus, what is really happening is
+.. code-block:: python
+
+    x_plus_one = ng.add(x, ng.constant(1))
+
+Once the op-graph is set up, we can compile it with a *transformer*.  Here we use ``make_transformer`` to make a defuault transformer.  We tell the transformer the function to compute (``x_plus_one``) and the associated parameter (``x``).
+
+The first time the transformer executes a computation, the graph is analyzed and compiled, and the storage is allocated and initialized on the device.  These steps can be performed manually, for example if some device state is to be restored from
 previously saved state.  Once compiled, the computations are callable Python objects.
 
 On each call to ``plus_one`` the value of ``x`` is copied to the device, 1 is added, and then the result is copied
@@ -72,77 +91,73 @@ We can examine the compiled code (currently located in ``/tmp`` folder) to view 
 
     class Model(object):
         def __init__(self):
-            self.a_t7 = None  # allocated storage for tensor t7
-            self.v_t7_ = None  # a view of tensor t7
-            self.a_t8 = None
-            self.v_t8_ = None
-            self.a_t6 = None
-            self.v_t6_ = None
+            self.a_AssignableTensorOp_0_0 = None
+            self.a_AssignableTensorOp_0_0_v_AssignableTensorOp_0_0_ = None
+            self.a_AssignableTensorOp_1_0 = None
+            self.a_AssignableTensorOp_1_0_v_AssignableTensorOp_1_0_ = None
+            self.a_AddZeroDim_0_0 = None
+            self.a_AddZeroDim_0_0_v_AddZeroDim_0_0_ = None
+            self.be = NervanaObject.be
 
-        # allocate and create the views on tensor t7
-        def alloc_a_t7(self):
-            self.update_a_t7(np.empty(1, dtype=np.dtype('float32')))
+        def alloc_a_AssignableTensorOp_0_0(self):
+            self.update_a_AssignableTensorOp_0_0(np.empty(1, dtype=np.dtype('float32')))
 
-        def update_a_t7(self, buffer):
-            self.a_t7 = buffer
-            self.v_t7_ = np.ndarray(
+        def update_a_AssignableTensorOp_0_0(self, buffer):
+            self.a_AssignableTensorOp_0_0 = buffer
+            self.a_AssignableTensorOp_0_0_v_AssignableTensorOp_0_0_ = np.ndarray(
                 shape=(),
                 dtype=np.float32,
                 buffer=buffer,
                 offset=0,
                 strides=())
 
-        # allocate and create the views on tensor t8
-        def alloc_a_t8(self):
-            self.update_a_t8(np.empty(1, dtype=np.dtype('float32')))
+        def alloc_a_AssignableTensorOp_1_0(self):
+            self.update_a_AssignableTensorOp_1_0(np.empty(1, dtype=np.dtype('float32')))
 
-        def update_a_t8(self, buffer):
-            self.a_t8 = buffer
-            self.v_t8_ = np.ndarray(
+        def update_a_AssignableTensorOp_1_0(self, buffer):
+            self.a_AssignableTensorOp_1_0 = buffer
+            self.a_AssignableTensorOp_1_0_v_AssignableTensorOp_1_0_ = np.ndarray(
                 shape=(),
                 dtype=np.float32,
                 buffer=buffer,
                 offset=0,
                 strides=())
 
-        # allocate and create the views on tensor t6
-        def alloc_a_t6(self):
-            self.update_a_t6(np.empty(1, dtype=np.dtype('float32')))
+        def alloc_a_AddZeroDim_0_0(self):
+            self.update_a_AddZeroDim_0_0(np.empty(1, dtype=np.dtype('float32')))
 
-        def update_a_t6(self, buffer):
-            self.a_t6 = buffer
-            self.v_t6_ = np.ndarray(
+        def update_a_AddZeroDim_0_0(self, buffer):
+            self.a_AddZeroDim_0_0 = buffer
+            self.a_AddZeroDim_0_0_v_AddZeroDim_0_0_ = np.ndarray(
                 shape=(),
                 dtype=np.float32,
                 buffer=buffer,
                 offset=0,
                 strides=())
 
-        # allocate all tensors
         def allocate(self):
-            self.alloc_a_t7()
-            self.alloc_a_t8()
-            self.alloc_a_t6()
+            self.alloc_a_AssignableTensorOp_0_0()
+            self.alloc_a_AssignableTensorOp_1_0()
+            self.alloc_a_AddZeroDim_0_0()
 
-        # perform the addition computation
-        def c_0(self):
-            np.add(self.v_t6_, self.v_t7_, out=self.v_t8_)
 
-        # tensor initialization (not used in this example)
-        def c_1(self):
+        def Computation_0(self):
+            np.add(self.a_AssignableTensorOp_0_0_v_AssignableTensorOp_0_0_, self.a_AssignableTensorOp_1_0_v_AssignableTensorOp_1_0_, out=self.a_AddZeroDim_0_0_v_AddZeroDim_0_0_)
+
+        def init(self):
             pass
 
 
-Tensors have two components, storage for their elements (using the convention ``a_t7`` for the allocated storage of the tensor ``t7``) and views of that storage (denoted as ``v_t7_``).  The ``alloc_`` methods allocate
+Tensors have two components, storage for their elements (using the convention ``a_`` for the allocated storage of a tensor) and views of that storage (denoted as ``a_...v_``).  The ``alloc_`` methods allocate
 storage and then create the views of the storage that will be needed.  The view creation is separated from the
 allocation because storage may be allocated in multiple ways.  The ``allocate`` method calls each
 allocator, and each allocator creates the needed views.  The NumPy transformer's ``allocate`` method calls the
 ``allocate`` method.
 
-Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method ``c_1`` which performs  the one-time device
+Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method ``init`` which performs  the one-time device
 initialization is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
 
-The method ``c_0`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
+The method ``Computation_0`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
 so let's look at a more complex example next.
 
 Logistic Regression

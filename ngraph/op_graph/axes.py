@@ -137,7 +137,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         recurrent: Whether the axis is a recurrent axis.
         match_on_length: Whether to only use length (and not identity) when comparing
             equality against other Axis values. This is useful for anonymous Axis of
-            Constant tensors.
+            constant tensors.
     """
     def __init__(self,
                  length=None,

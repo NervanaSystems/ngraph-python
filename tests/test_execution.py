@@ -33,8 +33,8 @@ def test_constant_multiply(transformer_factory):
     Y.length = 1
 
     # TODO: don't require axes
-    a = ng.Constant(np.array([4.0], dtype='float32'), axes=[Y])
-    b = ng.Constant(np.array([2.0], dtype='float32'), axes=[Y])
+    a = ng.constant(np.array([4.0], dtype='float32'), axes=[Y])
+    b = ng.constant(np.array([2.0], dtype='float32'), axes=[Y])
 
     c = ng.multiply(a, b)
 
@@ -49,8 +49,8 @@ def test_constant_tensor_multiply(transformer_factory):
     Y.length = 2
     N.length = 2
 
-    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[Y, N])
-    b = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[Y, N])
+    a = ng.constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[Y, N])
+    b = ng.constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[Y, N])
 
     c = ng.multiply(a, b)
 
@@ -66,7 +66,7 @@ def test_tensor_sum_single_reduction_axes(transformer_factory):
     N.length = 2
     Y.length = 2
 
-    a = ng.Constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[N, Y])
+    a = ng.constant(np.array([[1.0, 1.0], [1.0, 1.0]], dtype='float32'), axes=[N, Y])
 
     b = ng.sum(a, reduction_axes=Y)
 
@@ -78,7 +78,7 @@ def test_scalar(transformer_factory):
     """TODO."""
     # Simple evaluation of a scalar
     val = 5
-    x = ng.Constant(val)
+    x = ng.constant(val)
 
     cval = executor(x)()
     assert cval.shape == ()
@@ -97,7 +97,7 @@ def test_tensor_constant(transformer_factory):
     asize = aaxes.size
     aval = np.arange(asize, dtype=np.float32).reshape(ashape)
 
-    x = ng.Constant(aval, axes=aaxes)
+    x = ng.constant(aval, axes=aaxes)
     cval = executor(x)()
     np.testing.assert_allclose(cval, aval)
 
@@ -876,9 +876,9 @@ def test_elementwise_fp16_in(transformer_factory):
     Y.length = 2
     N.length = 2
 
-    a = ng.Constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float16'), axes=[Y, N],
+    a = ng.constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float16'), axes=[Y, N],
                     dtype=np.dtype(np.float16))
-    b = ng.Constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float16'), axes=[Y, N],
+    b = ng.constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float16'), axes=[Y, N],
                     dtype=np.dtype(np.float16))
 
     c = ng.multiply(a, b)
@@ -894,8 +894,8 @@ def test_elementwise_fp16_out(transformer_factory):
     Y.length = 2
     N.length = 2
 
-    a = ng.Constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float32'), axes=[Y, N])
-    b = ng.Constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float32'), axes=[Y, N])
+    a = ng.constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float32'), axes=[Y, N])
+    b = ng.constant(np.array([[1.0, 2.0], [6.0, 12.0]], dtype='float32'), axes=[Y, N])
 
     c = ng.multiply(a, b, dtype=np.dtype(np.float16))
 

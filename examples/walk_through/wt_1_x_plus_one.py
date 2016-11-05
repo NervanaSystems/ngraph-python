@@ -12,26 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
-
+from __future__ import print_function
 import ngraph as ng
 import ngraph.transformers as ngt
-import numpy as np
 
+# Build the graph
+x = ng.placeholder(axes=ng.make_axes())
+x_plus_one = x + 1
 
-def test_exit_condition(transformer_factory):
-    bsz = 16
-    class_num = 10
+# Select a transformer
+transformer = ngt.make_transformer()
 
-    N, Y = ng.make_axis(bsz), ng.make_axis(class_num)
-    y_val = np.absolute(np.random.randn(bsz, class_num))
-    y = ng.constant(y_val, axes=ng.make_axes([N, Y]))
+# Define a computation
+plus_one = transformer.computation(x_plus_one, x)
 
-    likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
-
-    transformer = ngt.make_transformer()
-    comp = transformer.computation(likelihood)
-
-    val1 = comp()
-    val2 = comp()
-    np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+# Run the computation
+for i in range(5):
+    print(plus_one(i))

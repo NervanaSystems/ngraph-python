@@ -21,7 +21,7 @@ from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import Broadcast, broadcast, Dot, ReductionOp, Axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, Constant, \
+    DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle
 
 from ngraph.util.generics import generic_method
@@ -228,7 +228,7 @@ class SimplePrune(PeepholeGraphPass):
         """
         x, = op.args
         if x.is_scalar and x.is_constant:
-            self.replace_op(op, Constant(-x.const))
+            self.replace_op(op, constant(-x.const))
 
     @visit.on_type(Multiply)
     def visit(self, op):
@@ -296,7 +296,7 @@ class SimplePrune(PeepholeGraphPass):
         x, = op.args
         if x.is_scalar and x.is_constant:
             val = x.const * op.reduction_axes.size
-            self.replace_op(op, Constant(val))
+            self.replace_op(op, constant(val))
 
     @visit.on_type(log)
     def visit(self, op):

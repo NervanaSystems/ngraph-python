@@ -259,10 +259,10 @@ def test_idempotent_axes_a():
     ex = ExecutorFactory()
     axes = Axes([Axis(3), Axis(1)])
 
-    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
     result = w + w
 
-    result = ng.AxesCastOp(result, axes=axes)
+    result = ng.cast_axes(result, axes=axes)
     cost = ng.sum(result, reduction_axes=axes)
     grad = ng.deriv(cost, w)
 
@@ -282,12 +282,12 @@ def test_idempotent_axes_b():
     ex = ExecutorFactory()
     axes = Axes([Axis(3), Axis(1)])
 
-    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
     l = ng.Broadcast(w, axes=axes)
     r = ng.Broadcast(w, axes=axes)
     result = ng.add(l, r)
 
-    result = ng.AxesCastOp(result, axes=axes)
+    result = ng.cast_axes(result, axes=axes)
     cost = ng.sum(result, reduction_axes=axes)
     grad = ng.deriv(cost, w)
 
@@ -309,7 +309,7 @@ def test_idempotent_axes_c():
     result_axes = [Axis(length=axis.length) for axis in axes]
 
     # variable
-    w = ng.Variable(initial_value=np.ones((3, 1)), axes=axes)
+    w = ng.variable(initial_value=np.ones((3, 1)), axes=axes)
     l = w
     r = w
 
@@ -323,13 +323,13 @@ def test_idempotent_axes_c():
     r_sliced = ng.Slice(r, axes_slice)
 
     # cast r
-    r_sliced_casted = ng.AxesCastOp(r_sliced, axes=axes)
+    r_sliced_casted = ng.cast_axes(r_sliced, axes=axes)
 
     # perform add
     result = ng.add(l_sliced, r_sliced_casted)
 
     # cast / dimshuffle
-    result = ng.AxesCastOp(result, axes=result_axes)
+    result = ng.cast_axes(result, axes=result_axes)
     result = ng.Dimshuffle(result, axes=result_axes)
 
     # cost and grad

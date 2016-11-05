@@ -28,17 +28,17 @@ def test_evalutaion_twice(transformer_factory):
     D.length = 2
     W.length = 1
 
-    x = ng.Constant(
+    x = ng.constant(
         np.array([[1, 2], [3, 4]], dtype='float32'),
         axes=ng.make_axes([C, D])
     )
 
-    hidden1_weights = ng.Constant(
+    hidden1_weights = ng.constant(
         np.array([[1], [1]], dtype='float32'),
         axes=ng.make_axes([C, W])
     )
 
-    hidden1_biases = ng.Constant(
+    hidden1_biases = ng.constant(
         np.array([[2], [2]], dtype='float32'),
         axes=ng.make_axes([D, W])
     )
@@ -74,8 +74,8 @@ def test_execute_non_placeholder():
     """
     N = ng.make_axis(1)
 
-    x = ng.Variable(axes=[N])
-    y = ng.Variable(axes=[N])
+    x = ng.variable(axes=[N])
+    y = ng.variable(axes=[N])
 
     with pytest.raises(ValueError):
         executor(x + y, x, y)

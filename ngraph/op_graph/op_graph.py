@@ -502,7 +502,7 @@ class Op(NameableValue, DebugInfo):
         adjoint and allow it to be accessed by the _initial_adjoint field.
         """
         if len(self.axes) == 0:
-            return Constant(1)
+            return constant(1)
         else:
             return placeholder(axes=self.axes)
 
@@ -558,48 +558,6 @@ class Op(NameableValue, DebugInfo):
         Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
         return ordered_ops
 
-    def as_node(self, x):
-        """
-        Overrides a method of the Node superclass.
-
-        Arguments:
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        return Op.as_op(x)
-
-    @staticmethod
-    def as_op(x):
-        """
-        Used to cast python values that are captured in the op
-        tree so that they can be properly evaluated.
-
-        Arguments:
-          x: TODO
-
-        Returns:
-          TODO
-        """
-        if isinstance(x, Op):
-            return x
-
-        return Constant(x)
-
-    @staticmethod
-    def as_ops(xs):
-        """
-        TODO.
-
-        Arguments:
-          xs: TODO
-
-        Returns:
-          TODO
-        """
-        return tuple(Op.as_op(x) for x in xs)
-
     def tensor_description(self):
         return None
 
@@ -627,6 +585,37 @@ class Op(NameableValue, DebugInfo):
             gl=self.graph_label_type,
             id=id(self)
         )
+
+
+def as_op(x):
+    """
+    Finds an Op appropriate for x.
+
+    If x is an Op, it returns x. Otherwise, constant(x) is returned.
+
+    Arguments:
+      x: Some value.
+
+    Returns:
+      Op:
+    """
+    if isinstance(x, Op):
+        return x
+
+    return constant(x)
+
+
+def as_ops(xs):
+    """
+    Converts an iterable of values to a tuple of Ops using as_op.
+
+    Arguments:
+        xs: An iterable of values.
+
+    Returns:
+        A tuple of Ops.
+    """
+    return tuple(as_op(x) for x in xs)
 
 
 class InitTensor(Op):
@@ -669,7 +658,7 @@ class SetItem(Op):
     """
 
     def __init__(self, tensor, item, val, force=False, **kwargs):
-        tensor, val = Op.as_ops((tensor, val))
+        tensor, val = as_ops((tensor, val))
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         val = broadcast(val, axes=tensor.axes)
@@ -1487,28 +1476,23 @@ class AssignableTensorOp(TensorOp):
         return False
 
 
-def Constant(const, axes=None, constant=True, trainable=False, graph_label_type=None, **kwargs):
+def constant(const, axes=None, dtype=None, name=None):
     """
-    Makes a constant scalar/tensor.  For a tensor, Constant provides the opportunity
+    Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
-        tensors, but Constant may be used to supply axes or in the rare cases where Constant
+        tensors, but constant may be used to supply axes or in the rare cases where constant
         is not automatically provided.
 
     Args:
         const: The constant, a scalar or a NumPy array.
         axes: The axes for the constant.
-        constant (:obj:`bool`, optional): True; this value should not be writable.
-        trainable (:obj:`bool`, optional): False; this value should not be trained.
-        graph_label_type (:obj:`str`, optional): Label for drawn graphs, defaults to <Const...>
-        **kwargs: Other parameters for the op.
-
+        dtype (optional): The dtype to use.
     Returns:
         An AllocationOp for the constant.
     """
-    if graph_label_type is None:
-        graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=axes, constant=constant, persistent=True, trainable=trainable,
-                             graph_label_type=graph_label_type, **kwargs)
+    graph_label_type = "<Const({})>".format(const)
+    val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
+                             graph_label_type=graph_label_type, dtype=dtype, name=name)
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
@@ -1568,7 +1552,7 @@ def constant_value(value):
     Returns the constant value of an Op.
 
     Args:
-        value: A constant op.
+        value (TensorOp): A constant op.
 
     Returns: The constant value.
 
@@ -1578,93 +1562,118 @@ def constant_value(value):
     return value.const
 
 
-def constant_storage(graph_label_type="Constant", **kwargs):
+def constant_storage(axes=None, dtype=None, name=None, initial_value=None):
     """
     A tensor that is supposed to remain constant.
 
     Args:
-        graph_label_type: Label for drawing graphs.
-        **kwargs: Other args for AllocationOp.
+        axes (Axes): The axes of the constant storage.
+        dtype (optional): The dtype of the storage.
+        name (String, optional): A name for the storage.
+        initial_value: A host constant or callable. If a callable, will be called
+            to produce the value.
+
 
     Returns:
-
+        AssignableTensorOp: The constant storage.
     """
 
-    return AssignableTensorOp(graph_label_type=graph_label_type,
+    return AssignableTensorOp(graph_label_type="constant",
                               constant=True, persistent=True,
-                              trainable=False, **kwargs)
+                              trainable=False,
+                              axes=axes, dtype=dtype, name=name,
+                              initial_value=initial_value)
 
 
-def placeholder(constant=False, trainable=False, input=True, graph_label_type="placeholder",
-                **kwargs):
+def placeholder(axes=None, dtype=None, initial_value=None, name=None):
     """
     A persistent tensor to be initialized from the CPU.
 
     Args:
-        constant (:obj:`bool`, optional): False.
-        trainable (:obj:`bool`, optional): False.
-        input (:obj:`bool`, optional): Allow value to be passed in computation args.  Default True.
-        graph_label_type (:obj:`str`, optional): Label used for drawing graphs.
-            Defaults to placeholder.
-        **kwargs: Other args for AllocationOp.
+        axes (Axes): The axes of the placeholder.
+        dtype (optional): The dtype of the placeholder.
+        name (String, optional): The name of the placeholder.
+        initial_value (optional): A host constant or callable. If callable, will
+            be called to generate an initial value.
 
-    Returns: An AllocationOp.
+    Returns:
+        AssignableTensorOp: The placeholder.
 
     """
-    return AssignableTensorOp(graph_label_type=graph_label_type,
-                              constant=constant, persistent=True, trainable=trainable,
-                              input=input, **kwargs)
+    return AssignableTensorOp(graph_label_type="placeholder",
+                              constant=False, persistent=True, trainable=False,
+                              input=True,
+                              axes=axes, dtype=dtype, name=name,
+                              initial_value=initial_value)
 
 
-def temporary(graph_label_type="Temp", **kwargs):
+def temporary(axes=None, dtype=None, name=None):
     """
     Temporary storage.
 
-    Args:
-        graph_label_type (:obj:`str`, optional): Used for drawing graphs.
-        **kwargs: Other args for AllocationOp.
+    Statically allocates storage that may be reused outside of the scope of the values.
 
-    Returns: An AllocationOp.
+    Args:
+        axes (Axes): The axes of the storage.
+        dtype (optional): The dtype of the storage.
+        name (String, optional): A name for the storage.
+
+    Returns:
+        AssignableTensorOp: The placeholder.
 
     """
-    return AssignableTensorOp(graph_label_type=graph_label_type,
+    return AssignableTensorOp(graph_label_type="Temp",
                               constant=False, persistent=True,
-                              trainable=False, **kwargs)
+                              trainable=False,
+                              axes=axes, dtype=dtype, name=name)
 
 
-def persistent_tensor(graph_label_type="Persistent", **kwargs):
+def persistent_tensor(axes=None, dtype=None, initial_value=None, name=None, init=None):
     """
     Persistent storage.
 
     Storage that will retain its value from computation to computation.
 
     Args:
-        graph_label_type (:obj:`str`, optional): Used for drawing graphs.
-        **kwargs: Other args for AllocationOp.
+        axes (Axes): The axes of the persistent storage.
+        dtype (optional): The dtype of the persistent storage.
+        initial_value (optional): A host constant or callable. If callable, will
+            be called to generate an initial value.
+        name (String, optional): The name of the persistent storage.
+        init (optional): Neon init.
 
-    Returns: An AllocationOp.
+    Returns:
+        AssignableTensorOp: The persistent storage.
 
     """
-    return AssignableTensorOp(graph_label_type=graph_label_type,
+    return AssignableTensorOp(graph_label_type="Persistent",
                               constant=False, persistent=True,
-                              trainable=False, **kwargs)
+                              trainable=False,
+                              axes=axes, dtype=dtype, name=name,
+                              initial_value=initial_value,
+                              init=init)
 
 
-def Variable(trainable=True, graph_label_type="Variable", **kwargs):
+def variable(axes=None, dtype=None, name=None, initial_value=None, init=None):
     """
     A trainable tensor.
 
     Args:
-        trainable (:obj:`bool`, optional): Is in lists of trainable variables.  Default True.
-        graph_label_type: Used for drawing graphs, defaults to Variable.
-        **kwargs: Other args for AllocationOp.
+        axes (Axes): Axes for the variable.
+        dtype (optional): The dtype for the tensor.
+        initial_value: A constant or callable. If a callable, the callable
+            will be called to provide an initial value.
+        init: For neon backwards-compatibility.
 
-    Returns: An AllocationOp.
+    Returns:
+        AssignableTensorOp: The variable.
 
     """
-    return AssignableTensorOp(graph_label_type=graph_label_type,
+    return AssignableTensorOp(graph_label_type="Variable",
                               constant=False, persistent=True,
-                              trainable=trainable, **kwargs)
+                              trainable=True, axes=axes, name=name,
+                              dtype=dtype,
+                              initial_value=initial_value, init=init)
 
 
 class Stack(TensorOp):
@@ -1915,7 +1924,7 @@ sqrt = create_unary_elementwise('sqrt', sqrt_adjoints)
 class BinaryElementWiseAxesOp(ElementWise):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
-        x, y = Op.as_ops((x, y))
+        x, y = as_ops((x, y))
         axes = x.axes + y.axes
         x = broadcast(x, axes)
         y = broadcast(y, axes)
@@ -2008,8 +2017,23 @@ def add_adjoints(self, adjoints, delta, x, y):
 
 
 Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
-    'Add', 'AddOneDim', 'AddZeroDim', 'add', add_adjoints
+    'AddOp', 'AddOneDim', 'AddZeroDim', 'add', add_adjoints
 )
+
+def add(x, y, name=None):
+    """
+    Returns a TensorOp for the sum of x and y.
+
+    Args:
+        x (TensorOp): The first input.
+        y (TensorOp):  The second input.
+        name (String, optional): A name for the sum.
+
+    Returns:
+        TensorOp: x + y
+
+    """
+    return Add(x, y)
 
 
 def subtract_adjoints(self, adjoints, delta, x, y):

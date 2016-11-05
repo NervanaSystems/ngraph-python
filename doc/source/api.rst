@@ -13,81 +13,42 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-This API documentation covers each module within Nervana Graph.
-
-ngraph.analysis
-===============
-.. py:module: ngraph.analysis
+This documentation covers the public APIs for nervana graph.
 
 .. autosummary::
    :toctree: generated/
    :nosignatures:
 
-   ngraph.analysis.dataflow
-   ngraph.analysis.fusion
-   ngraph.analysis.memory
+   ngraph
+   ngraph.transformers
+   ngraph.types
 
-ngraph.frontends
-================
-.. py:module: ngraph.frontends
+ngraph
+======
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+Graph construction.
 
-   ngraph.frontends.base.axis
+.. py:module: ngraph
 
-ngraph.frontends.neon
-=====================
-.. py:module: ngraph.frontends.neon
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-
-   ngraph.frontends.neon.activation
-   ngraph.frontends.neon.callbacks
-   ngraph.frontends.neon.container
-   ngraph.frontends.neon.cost
-   ngraph.frontends.neon.layer
-   ngraph.frontends.neon.model
-   ngraph.frontends.neon.optimizer
-
-ngraph.op_graph
-===============
-.. py:module: ngraph.op_graph
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-
-   ngraph.op_graph.axes
-   ngraph.op_graph.convolution
-   ngraph.op_graph.op_graph
+.. automodule:: ngraph
+   :members:
 
 ngraph.transformers
 ===================
+
+Transformer manipulation.
+
 .. py:module: ngraph.transformers
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+.. automodule:: ngraph.transformers
+   :members:
 
-   ngraph.transformers.base
-   ngraph.transformers.nptransform
+ngraph.types
+============
 
-ngraph.util
-===========
-.. py:module: ngraph.util
+.. py:module: ngraph.types
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+.. automodule:: ngraph.types
+   :members:
 
-   ngraph.util.generics
-   ngraph.util.graph
-   ngraph.util.names
-   ngraph.util.pygen
-   ngraph.util.threadstate
-   ngraph.util.utils
 
