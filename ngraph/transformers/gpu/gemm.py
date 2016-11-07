@@ -37,19 +37,31 @@ class GEMMKernel(GPUKernel):
 
     def _build_maxas_kernel(self, op, size=None):
         # Get inputs to gemm
-        C = TensorDescriptionWrapper(op.tensor_description(), 2)
-        A, B = (TensorDescriptionWrapper(_, 2) for _ in op.call_info())
+        C = TensorDescriptionWrapper(op.tensor_description(), 2, gemm=True)
+        A, B = (TensorDescriptionWrapper(_, 2, gemm=True) for _ in op.call_info())
+
+        # If both inputs are 1d, need to transpose one of them
+        if min(A.strides) == 0 and min(B.strides) == 0:
+            A.strides = tuple(reversed(A.strides))
+            A.shape = tuple(reversed(A.shape))
+            vector_dot = True
+        else:
+            vector_dot = False
+
+        self.C = C
+        self.A = A
+        self.B = B
 
         # Kernels only support 2d tensors
         assert len(A.shape) == 2
         assert len(B.shape) == 2
         assert len(C.shape) == 2
 
-        # one dimention must be contiguous
-        import pdb; pdb.set_trace()
+        # one dimension must be contiguous
+        #import pdb; pdb.set_trace()
         assert min(A.strides) == 1 or max(A.strides) == 1
         assert min(B.strides) == 1 or max(B.strides) == 1
-        assert min(C.strides) == 1 or max(C.strides) == 1
+        assert min(C.strides) == 1 or max(C.strides) == 1 or vector_dot
 
         lda = max(A.strides)
         ldb = max(B.strides)

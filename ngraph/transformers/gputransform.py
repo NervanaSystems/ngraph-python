@@ -45,7 +45,7 @@ from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSour
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel
 
 import numpy as np
 import pycuda.driver as drv
@@ -438,7 +438,7 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
-        raise NotImplementedError("Fill kernel not implemented")
+        self.kernels.append(FillKernel(self, op))
 
     @add_kernel.on_type(pooling)
     def add_kernel(self, op):

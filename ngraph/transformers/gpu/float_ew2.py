@@ -233,7 +233,7 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, max_dims):
+    def __init__(self, tensor_description, max_dims, gemm=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
@@ -246,15 +246,19 @@ class TensorDescriptionWrapper:
             self.shape = (1, )
 
         if len(self.shape) < max_dims:
-            self.shape = tuple(list(self.shape) + [1])
-            self.strides = tuple(list(self.strides) + [1])
+            if gemm:
+                self.shape = tuple(list(self.shape) + [1])
+                self.strides = tuple(list(self.strides) + [1])
+            else:
+                self.shape = tuple([1] + list(self.shape))
+                self.strides = tuple([0] + list(self.strides))
 
         self.strides = [s // self.dtype.itemsize for s in self.strides]
         self.strides = tuple(self.strides)
 
     @property
     def is_trans(self):
-        return (len(self.shape) == 2 and self.strides[0] == 1)
+        return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
 
 class GenerationContext:

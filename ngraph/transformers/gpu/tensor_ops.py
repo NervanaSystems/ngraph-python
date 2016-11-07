@@ -52,3 +52,22 @@ class DimShuffleKernel(GPUKernel):
     def execute(self):
         self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                         None, *self.params)
+
+
+class FillKernel(GPUKernel):
+    def __init__(self, transformer, op):
+        super(FillKernel, self).__init__(transformer)
+
+        fill_value = op.scalar
+        self.out = op.tensor_description()
+
+    def bind_buffers(self):
+        self.out = self.out.value.tensor
+        super(FillKernel, self).bind_buffers()
+
+    def execute(self):
+        """
+        Use memset driver functions to fill tensor with scalar
+        """
+        # TODO: remove neon dependency
+        self.out.fill(self.scalar)
