@@ -210,7 +210,6 @@ class RMSProp(Optimizer):
     """
     def __init__(
         self,
-        stochastic_round=False,
         decay_rate=0.95,
         learning_rate=2e-3,
         epsilon=1e-6,
@@ -222,10 +221,6 @@ class RMSProp(Optimizer):
         """
         Class constructor.
         Arguments:
-            stochastic_round (bool): Set this to True for stochastic rounding.
-                                     If False rounding will be to nearest.
-                                     If True will perform stochastic rounding using default width.
-                                     Only affects the gpu backend.
             decay_rate (float): decay rate of states
             learning_rate (float): the multiplication coefficent of updates
             epsilon (float): smoothing epsilon to avoid divide by zeros
@@ -243,54 +238,47 @@ class RMSProp(Optimizer):
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
-        self.learning_rate = learning_rate
         self.schedule = schedule
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.stochastic_round = stochastic_round
+        self.learning_rate = ng.persistent_tensor(axes=(), name='lrate',
+                                                  initial_value=learning_rate)
 
-    def configure(self, cost):
-        self.lrate = ng.placeholder(axes=(), name='lrate')
 
-        variables = list(cost.variables())
-        grads = [ng.deriv(cost, variable) / 50.0 for variable in variables]
-        scale_factor = 1
-        if self.gradient_clip_norm:
-            scale_factor = clip_gradient_norm(grads)
-        if self.gradient_clip_value is not None:
-            grads = [clip_gradient_value(
-                grade, self.gradient_clip_value) for grade in grads]
+    def __call__(self, cost_func, iteration_index):
+        with ng.Op.saved_user_deps():
+            state_updates, param_updates = [], []
+            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_size = cost_func.axes.batch_axes()[0].length
 
-        epsilon, decay = (self.epsilon, self.decay_rate)
-        states = [
-            ng.temporary(axes=variable.axes, initial_value=0.)
-            for variable in variables
-        ]
-        state_updates = [
-            ng.assign(
-                lvalue=state,
-                rvalue=decay * state + (1.0 - decay) * ng.square(grad),
-                name='state_u_%s' % i
-            ) for i, (state, grad) in enumerate(zip(states, grads))
-        ]
-        param_updates = [
-            ng.assign(
-                lvalue=param,
-                rvalue=param - ((scale_factor * grad * self.lrate)
-                                / (ng.sqrt(state + epsilon) + epsilon)),
-                name='param_u_%s' % i
-            ) for i, (state, grad, param) in enumerate(zip(states, grads, variables))
-        ]
-        return ng.doall(state_updates + param_updates)
+            grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+            scale_factor = clip_gradient_norm(grads) if self.gradient_clip_norm else 1
 
-    def optimize(self, epoch):
+            epsilon, decay = (self.epsilon, self.decay_rate)
+            for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
+                grad = clip_gradient_value(grad, self.gradient_clip_value)
 
-        """
-        TODO.
-        Arguments:
-          epoch: TODO
-        Returns:
-        """
-        learning_rate = self.schedule.get_learning_rate(
-            self.learning_rate, epoch)
-        self.lrate.value[()] = learning_rate
+                state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+                state_updates.append(
+                    ng.assign(
+                        lvalue=state,
+                        rvalue=decay * state + (1.0 - decay) * ng.square(grad),
+                        name='state_u_%s' % i)
+                    )
+
+                param_updates.append(
+                    ng.assign(
+                        lvalue=variable,
+                        rvalue=variable - ((scale_factor * grad * self.learning_rate)
+                                          / (ng.sqrt(state + epsilon) + epsilon)),
+                        name='var_u_%s' % i)
+                    )
+
+
+            lr_update = [ng.assign(self.learning_rate,
+                                   self.schedule.get_learning_rate(self.learning_rate,
+                                                                   iteration_index))]
+
+            updates = ng.doall(state_updates + param_updates + lr_update)
+
+        return updates

@@ -17,7 +17,7 @@ from builtins import object
 import ngraph as ng
 import collections
 from ngraph.frontends.neon.axis import ar, ax
-
+import numpy as np
 
 class Layer(object):
     """TODO."""
@@ -83,22 +83,28 @@ class nnPreprocess(nnLayer):
 
 
 class nnAffine(nnLayer):
-    def __init__(self, init, nout=None, activation=(lambda x: x), bias_init=None, **kwargs):
+    def __init__(self, init, nout=None, activation=(lambda x: x), bias=None, **kwargs):
         super(nnAffine, self).__init__(**kwargs)
         if self.axes is None:
             assert(nout is not None), "Must provide either axes or nout to Affine"
         self.nout = nout
         self.init = init
         self.activation = activation
-        self.b = 0
-        self.bias_init = bias_init
+        self.bias = bias
+        self.W = None
+        self.b = 0 if self.bias is None else None
 
     def train_outputs(self, in_obj):
         out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
         w_axes = out_axes - out_axes.recurrent_axes() + in_axes.get_dual()
-        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        b_axes = in_obj.axes.sample_axes()
+        if self.W is None:
+            self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        if self.b is None:
+            self.b = ng.Variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
+
         return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
 
 
@@ -242,3 +248,84 @@ class nnPool2D(nnPoolBase):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
         super(nnPool2D, self).__init__(self, fshape, init, strides, padding, **kwargs)
 
+
+class nnRecurrent(nnLayer):
+    """
+    Basic recurrent layer.
+    Arguments:
+        output_size (int): Number of hidden/output units
+        init (Initializer): Function for initializing the model's input to hidden weights.  By
+                            default, this initializer will also be used for recurrent parameters
+                            unless init_inner is also specified.  Biases will always be
+                            initialized to zero.
+        init_inner (Initializer, optional): Function for initializing the model's recurrent
+                                            parameters.  If absent, will default to using same
+                                            initializer provided to init.
+        activation (Transform): Activation function for the input modulation
+        reset_cells (bool): default to be False to make the layer stateful,
+                            set to True to be stateless
+        name (str, optional): name to refer to this layer as.
+    Attributes:
+        W_input (Tensor): weights from inputs to output units
+            (input_size, output_size)
+        W_recur (Tensor): weights for recurrent connections
+            (output_size, output_size)
+        b (Tensor): Biases on output units (output_size, 1)
+    """
+
+    def __init__(self, output_size, init, init_inner=None, activation=None, **kwargs):
+        super(nnRecurrent, self).__init__(**kwargs)
+        self.nout = output_size
+        self.activation = activation
+        self.init = init
+        self.init_inner = init_inner or init
+
+    def train_outputs(self, in_obj):
+        """
+        Sets shape based parameters of this layer given an input tuple or int
+        or input layer.
+
+        Arguments:
+           in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                 information for layer
+
+        Returns:
+           (Tensor): output
+
+        """
+        in_axes = in_obj.axes
+        self.time_axis = in_axes.recurrent_axes()[0]
+
+        def get_steps(x, time_axis):
+            return [ng.slice_along_axis(x, time_axis, i) for i in range(time_axis.length)]
+
+        if self.axes is not None:
+            hidden_axes = self.axes - self.axes.recurrent_axes()
+        else:
+            hidden_axes = ng.make_axes([ng.make_axis(self.nout, name='Hidden_in')])
+
+        w_in_axes = hidden_axes + (in_axes.sample_axes() - in_axes.recurrent_axes()).get_dual()
+        w_re_axes = hidden_axes + hidden_axes.get_dual()
+        b_axes = hidden_axes
+
+        self.W_input = ng.Variable(axes=w_in_axes,
+                                   initial_value=self.init(w_in_axes.lengths), name="W_in")
+        self.W_recur = ng.Variable(axes=w_re_axes,
+                                   initial_value=self.init_inner(w_re_axes.lengths), name="W_re")
+        self.b = ng.Variable(axes=hidden_axes, initial_value=0, name="bias")
+
+        h_ff_buf = ng.dot(self.W_input, in_obj, use_dual=True, name="W_in_dot_in")
+        h_ff_s = get_steps(h_ff_buf, self.time_axis)
+        self.h_init = ng.Constant(np.zeros(h_ff_s[0].axes.lengths),
+                                  axes=h_ff_s[0].axes,
+                                  name="h_init")
+        hprev = [self.h_init]
+
+        for i in range(self.time_axis.length):
+            d = ng.dot(self.W_recur, hprev[i], use_dual=True, name="W_rec_dot_h{}".format(i))
+            h = self.activation(d + h_ff_s[i] + self.b)
+            h.name = "activ{}".format(i)
+            hprev.append(h)
+
+        rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=1)
+        return rnn_out

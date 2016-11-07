@@ -32,12 +32,10 @@ from ngraph.frontends.neon import nnAffine, nnPreprocess, Sequential, Callbacks
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, make_keyed_computation
 from ngraph.frontends.neon import NgraphArgparser
-# from data import make_aeon_loaders
 from ngraph.frontends.neon import ArrayIterator
 
 from mnist import MNIST
 from ngraph.transformers import Transformer
-# import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
 args = parser.parse_args()

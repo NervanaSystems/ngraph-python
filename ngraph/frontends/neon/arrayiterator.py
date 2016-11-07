@@ -96,12 +96,16 @@ class SequentialArrayIterator(object):
 
         if total_iterations is None:
             self.total_iterations = self.nbatches
+        else:
+            self.total_iterations = total_iterations
 
         self.index = 0
         self.shape = (1, self.time_steps)
 
         self.data_arrays, self.batch_bufs = [], []
         for x in data_arrays:
+            # import pdb; pdb.set_trace()
+            x = x[:(self.ndata * self.time_steps)]
             self.data_arrays.append(x.reshape(self.batch_size, self.nbatches, self.time_steps))
             self.batch_bufs.append(np.empty(self.shape + (self.batch_size, ), dtype=np.int32))
 
@@ -110,7 +114,8 @@ class SequentialArrayIterator(object):
     def __iter__(self):
         while self.index < self.total_iterations:
             for src, dst in zip(self.data_arrays, self.batch_bufs):
-                dst[:] = src[:, self.index % self.nbatches, :].transpose(1, 2, 0)
+                idx = self.index % self.nbatches
+                dst[:] = src[:, idx:(idx+1), :].transpose(1, 2, 0)
             self.index += 1
             yield self.batch_bufs
 

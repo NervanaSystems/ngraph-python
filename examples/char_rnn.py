@@ -15,7 +15,7 @@
 from ngraph.frontends.neon import Recurrent, Affine, Softmax, Tanh, GeneralizedCost, \
     Callbacks, CrossEntropyMulti, Model, RMSProp, ax, make_axes
 from ngraph.frontends.neon import NgraphArgparser
-from neon.data import PTB
+from ptb import PTB
 from neon.initializers import Uniform
 
 

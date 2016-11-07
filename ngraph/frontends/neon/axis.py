@@ -22,6 +22,7 @@ ar.Width = ng.make_axis_role()
 ar.Depth = ng.make_axis_role()
 ar.Channel = ng.make_axis_role()
 ar.Channelout = ng.make_axis_role()
+ar.Time = ng.make_axis_role()
 
 # Define the standard Neon axes
 ax = ng.make_namescope(name="ax")
@@ -33,7 +34,7 @@ ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
 ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
 ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
-ax.REC = ng.make_axis(recurrent=True, docstring="recurrent axis")
+ax.REC = ng.make_axis(roles=[ar.Time], recurrent=True, docstring="recurrent axis")
 
 ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
 ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
