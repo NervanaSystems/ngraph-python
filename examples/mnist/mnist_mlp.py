@@ -21,7 +21,7 @@ model without the neon architecture. This may also help with debugging.
 
 Run it using
 
-python examples/mnist/mnist_mlp.py --work_dir /usr/local/data/MNIST --output_file out.hd5
+python examples/mnist/mnist_mlp.py --data_dir /usr/local/data/MNIST --output_file out.hd5
 
 """
 from __future__ import division
@@ -31,33 +31,23 @@ import ngraph as ng
 from ngraph.frontends.neon import nnAffine, nnPreprocess, Sequential, Callbacks
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, make_keyed_computation
-import argparse
+from ngraph.frontends.neon import NgraphArgparser
 # from data import make_aeon_loaders
-from aeon import SimpleDataLoader
 from ngraph.frontends.neon import ArrayIterator
 
 from mnist import MNIST
-from ngraph.util.utils import executor
 from ngraph.transformers import Transformer
+# import ngraph.transformers as ngt
 
-parser = argparse.ArgumentParser(description='Train simple mlp on mnist dataset')
-parser.add_argument('--work_dir', required=True)
-parser.add_argument('--output_file')
-parser.add_argument('--results_file', default='results.csv')
-parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--num_iterations', type=int, default=2000)
-parser.add_argument('--iter_interval', type=int, default=200)
-parser.add_argument('--rseed', type=int, default=0)
+parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
 args = parser.parse_args()
 
-np.random.seed(args.rseed)
+np.random.seed(args.rng_seed)
 
 # Create the dataloader
-train_data, valid_data = MNIST(args.work_dir).load_data()
-# train_set = SimpleDataLoader(train_data, args.batch_size, total_iterations=args.num_iterations)
+train_data, valid_data = MNIST(args.data_dir).load_data()
 train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
-# train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
-
+valid_set = ArrayIterator(valid_data, args.batch_size)
 
 ######################
 # Model specification
@@ -72,20 +62,23 @@ ax.N.length = args.batch_size
 ax.Y.length = 10
 
 
-# placeholders
+# placeholders with descriptive names
 inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
               tgt=ng.placeholder(axes=ng.make_axes([ax.N])),
               idx=ng.placeholder(axes=ng.make_axes()))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
-pred = seq1.train_outputs(inputs['img'])
-train_cost = ng.cross_entropy_binary(pred, ng.Onehot(inputs['tgt'], axis=ax.Y))
+output_prob = seq1.train_outputs(inputs['img'])
+errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
+train_cost = ng.cross_entropy_binary(output_prob, ng.Onehot(inputs['tgt'], axis=ax.Y))
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])
 
-Transformer.make_transformer()
 
-train_computation = make_keyed_computation(executor, [mean_cost, updates], inputs)
+# Now bind the computations we are interested in
+transformer = Transformer.make_transformer()
+train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
+inference_computation = make_keyed_computation(transformer, errors, inputs)
 
 cb = Callbacks(seq1, args.output_file, args.iter_interval)
 
@@ -101,10 +94,12 @@ for mb_idx, data in enumerate(train_set):
 
 cb.on_train_end()
 
+######################
+# Evaluation
+all_errors = []
+for data in valid_set:
+    batch_errors = inference_computation(dict(img=data[0], tgt=data[1], idx=0))
+    bsz = min(valid_set.ndata - len(batch_errors), len(batch_errors))
+    all_errors.extend(list(batch_errors[:bsz]))
 
-# # validate
-# hyps, refs = my_model.eval(valid_set)
-# np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
-# a = np.loadtxt(args.results_file, delimiter=',')
-# err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
-# print("Misclassification: {}".format(err))
+print("Misclassification: {}".format(np.mean(all_errors)))

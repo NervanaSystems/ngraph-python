@@ -69,7 +69,7 @@ class nnLayer(object):
     def train_outputs(self, in_obj):
         raise NotImplementedError()
 
-    def inf_outputs(self, in_obj):
+    def inference_outputs(self, in_obj):
         return self.train_outputs(in_obj)
 
 

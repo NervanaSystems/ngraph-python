@@ -29,16 +29,10 @@ class Sequential(object):
             in_obj = l.train_outputs(in_obj)
         return in_obj
 
-    def eval(self, eval_set):
-        eval_set.reset()
-        hyps, refs = [], []
-        while len(hyps) < eval_set.ndata:
-            dtuple = next(eval_set)
-            batch_hyps = np.argmax(self.predictions(dtuple[0]), axis=1)
-            bsz = min(eval_set.ndata - len(hyps), len(batch_hyps))
-            hyps.extend(list(batch_hyps[:bsz]))
-            refs.extend(list(dtuple[1][0][:bsz]))
-        return hyps, refs
+    def inference_outputs(self, in_obj):
+        for l in self.layers:
+            in_obj = l.inference_outputs(in_obj)
+        return in_obj
 
 
 class Container(object):
@@ -71,9 +65,9 @@ class Container(object):
                          {k: v for k,v in self.outputs.items() if k in outputs})
 
 
-def make_keyed_computation(executor, outputs, named_inputs):
+def make_keyed_computation(transformer, outputs, named_inputs):
     input_keys = tuple(named_inputs.keys())
-    comp_func = executor(outputs, *itemgetter(*input_keys)(named_inputs))
+    comp_func = transformer.computation(outputs, *itemgetter(*input_keys)(named_inputs))
 
     def keyed_comp_func(named_buffers):
         return comp_func(*itemgetter(*input_keys)(named_buffers))

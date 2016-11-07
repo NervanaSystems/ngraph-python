@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class ArrayIterator(object):
 
     def __init__(self, data_arrays, batch_size, total_iterations=None):
@@ -15,7 +16,6 @@ class ArrayIterator(object):
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
-        self.total_iterations = total_iterations
 
         if isinstance(data_arrays, list) or isinstance(data_arrays, tuple):
             self.data_arrays = data_arrays
@@ -26,10 +26,17 @@ class ArrayIterator(object):
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
 
+        if total_iterations is None:
+            self.total_iterations = -(-self.ndata // self.batch_size)
+        else:
+            self.total_iterations = total_iterations
+
         self.start = 0
         self.index = 0
-        self.shapes = [a.shape[1:] for a in self.data_arrays]
-        self.Xbuf = [np.empty(a.shape[1:] + (self.batch_size,), a.dtype) for a in self.data_arrays]
+        self.shapes, self.batch_bufs = [], []
+        for x in self.data_arrays:
+            self.shapes.append(x.shape[1:])
+            self.batch_bufs.append(np.empty(x.shape[1:] + (self.batch_size,), x.dtype))
 
 
     @property
@@ -65,11 +72,45 @@ class ArrayIterator(object):
             if self.batch_size > bsz:
                 islice2, oslice2 = slice(bsz, None), slice(0, self.batch_size - bsz)
 
-            for src, dst in zip(self.data_arrays, self.Xbuf):
+            for src, dst in zip(self.data_arrays, self.batch_bufs):
                 dst[..., islice1] = np.rollaxis(src[oslice1], 0, src.ndim)
                 if oslice2:
                     dst[..., islice2] = np.rollaxis(src[oslice2], 0, src.ndim)
 
-            yield self.Xbuf
+            yield self.batch_bufs
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
+
+
+class SequentialArrayIterator(object):
+
+    def __init__(self, data_arrays, time_steps, batch_size,
+                 total_iterations=None, get_prev_target=False):
+
+        self.time_steps = time_steps
+        self.batch_size = batch_size
+        self.get_prev_target = get_prev_target
+
+        self.nbatches = len(data_arrays[0]) // (self.batch_size * self.time_steps)
+        self.ndata = self.batch_size * self.nbatches
+
+        if total_iterations is None:
+            self.total_iterations = self.nbatches
+
+        self.index = 0
+        self.shape = (1, self.time_steps)
+
+        self.data_arrays, self.batch_bufs = [], []
+        for x in data_arrays:
+            self.data_arrays.append(x.reshape(self.batch_size, self.nbatches, self.time_steps))
+            self.batch_bufs.append(np.empty(self.shape + (self.batch_size, ), dtype=np.int32))
+
+        self.batch_bufs = tuple(self.batch_bufs)
+
+    def __iter__(self):
+        while self.index < self.total_iterations:
+            for src, dst in zip(self.data_arrays, self.batch_bufs):
+                dst[:] = src[:, self.index % self.nbatches, :].transpose(1, 2, 0)
+            self.index += 1
+            yield self.batch_bufs
+
