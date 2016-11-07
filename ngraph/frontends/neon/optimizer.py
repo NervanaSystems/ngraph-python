@@ -143,7 +143,7 @@ class GradientDescentMomentum(Optimizer):
         Returns:
 
         """
-        self.learning_rate_placeholder = ng.placeholder(axes=(), name='lrate')
+        self.learning_rate_placeholder = ng.placeholder((), name='lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
         grads = [
@@ -248,7 +248,7 @@ class RMSProp(Optimizer):
         self.stochastic_round = stochastic_round
 
     def configure(self, cost):
-        self.lrate = ng.placeholder(axes=(), name='lrate')
+        self.lrate = ng.placeholder((), name='lrate')
 
         variables = list(cost.variables())
         grads = [ng.deriv(cost, variable) / 50.0 for variable in variables]
@@ -261,7 +261,7 @@ class RMSProp(Optimizer):
 
         epsilon, decay = (self.epsilon, self.decay_rate)
         states = [
-            ng.temporary(axes=variable.axes, init=Constant(0))
+            ng.temporary(variable.axes, init=Constant(0))
             for variable in variables
         ]
         state_updates = [

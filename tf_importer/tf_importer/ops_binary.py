@@ -164,8 +164,8 @@ class OpsBinary(OpsBase):
                            in zip(left_axes_pad, right_axes_pad)]
 
             # broadcast left / right, introducing dummy length 1 axes
-            left = ng.Broadcast(left, axes=left_axes_pad)
-            right = ng.Broadcast(right, axes=right_axes_pad)
+            left = ng.broadcast(left, left_axes_pad)
+            right = ng.broadcast(right, right_axes_pad)
 
             # make two-way map of lr matching axes and map for result axes
             lr_axes_map = dict()
@@ -212,7 +212,7 @@ class OpsBinary(OpsBase):
 
         elif left_shape == right_shape:
             # cast right axes to be the same as left
-            right = ng.cast_axes(right, axes=left.axes)
+            right = ng.cast_axes(right, left.axes)
             result_op = ng_op(left, right, name=tf_node.name)
 
         else:

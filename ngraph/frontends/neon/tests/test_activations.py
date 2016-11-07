@@ -27,7 +27,7 @@ def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
     C = ng.make_axis('C')
     N = ng.make_axis('N', batch=True)
     C.length, N.length = inputs.shape
-    x = ng.placeholder(axes=ng.make_axes([C, N]))
+    x = ng.placeholder([C, N])
 
     if deriv is False:
         costfunc = ex.executor(func.__call__(x), x)

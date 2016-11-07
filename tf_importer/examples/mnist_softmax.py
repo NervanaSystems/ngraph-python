@@ -21,7 +21,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 from tf_importer.tf_importer.importer import TFImporter
 from tf_importer.tf_importer.utils import SGDOptimizer
 import tensorflow as tf
-import ngraph as ng
+import ngraph.transformers as ngt
 
 # parameters
 max_iter = 10
@@ -48,7 +48,7 @@ importer.parse_graph_def(graph_def)
 x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init_op])
 
 # transformer and computations
-transformer = ng.NumPyTransformer()
+transformer = ngt.make_transformer()
 updates = SGDOptimizer(lrate).minimize(cost_ng)
 train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
 init_comp = transformer.computation(init_op_ng)

@@ -17,12 +17,12 @@ import ngraph.transformers as ngt
 
 
 @pytest.fixture(scope="class",
-                params=ngt.Transformer.transformer_choices())
+                params=ngt.transformer_choices())
 def transformer_factory(request):
-    factory = ngt.Transformer.make_transformer_factory(request.param)
-    ngt.Transformer.set_transformer_factory(factory)
+    factory = ngt.make_transformer_factory(request.param)
+    ngt.set_transformer_factory(factory)
     yield factory
 
     # Reset transformer factory to default
-    ngt.Transformer.set_transformer_factory(
-        ngt.Transformer.make_transformer_factory("numpy"))
+    ngt.set_transformer_factory(
+        ngt.make_transformer_factory("numpy"))

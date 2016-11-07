@@ -29,7 +29,7 @@ def test_print_op_bprop():
 
     A = ng.make_axis(10, name='A')
 
-    x = ng.placeholder(axes=ng.make_axes([A]))
+    x = ng.placeholder(ng.make_axes([A]))
 
     # randomly initialize
     x_value = rng.uniform(-1, 1, x.axes)
@@ -49,7 +49,7 @@ def test_print_op_fprop(capfd):
 
     A = ng.make_axis(1, name='A')
 
-    x = ng.placeholder(axes=ng.make_axes([A]))
+    x = ng.placeholder(ng.make_axes([A]))
 
     # hardcode value so there are is no rounding to worry about in str
     # comparison in  final assert

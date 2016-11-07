@@ -41,12 +41,12 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import convolution, update_conv, bprop_conv
-from ngraph.op_graph.pooling import pooling, bprop_pool
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor
+    DeviceTensor, make_transformer_factory, set_transformer_factory
 
 
 class proxy_tensor(object):
@@ -228,7 +228,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution)
+    @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
         self.conv_dims.append(op.dims)
         self.append(
@@ -268,7 +268,7 @@ class NumPyCodeGenerator(PyGen):
             outputs=outputs
         )
 
-    @generate_op.on_type(pooling)
+    @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs, argmax):
         self.pool_dims.append(op.dims)
         self.append(
@@ -282,7 +282,7 @@ class NumPyCodeGenerator(PyGen):
             argmax=argmax
         )
 
-    @generate_op.on_type(bprop_pool)
+    @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta, argmax):
         # TODO: get rid of temporary hack that converts argmax to uint8
         self.append(
@@ -628,5 +628,5 @@ class NumPyTransformer(Transformer):
         self.model.allocate()
 
 
-Transformer.set_transformer_factory(
-    Transformer.make_transformer_factory(NumPyTransformer.transformer_name))
+set_transformer_factory(
+    make_transformer_factory(NumPyTransformer.transformer_name))

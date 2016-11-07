@@ -15,10 +15,27 @@
 from __future__ import division
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import make_axis, Axes
+from ngraph.op_graph.axes import make_axis, make_axes
 
 
-class pooling(op_graph.TensorOp):
+def pooling(dims, inputs, argmax, name=None, docstring=None):
+    """
+
+    Args:
+        dims: Dimensions.
+        inputs (TensorOp): Input to pooling.
+        argmax (TensorOp): Selection op.
+        name (String, optional): Name of the Op.
+        docstring (String, optional): Dcoumentation for the computation.
+
+    Returns:
+        TensorOp: The pooling computation.
+
+    """
+    return PoolingOp(dims, inputs, argmax, name=name, docstring=docstring)
+
+
+class PoolingOp(op_graph.TensorOp):
     _index = 0
 
     def __init__(self, dims, inputs, argmax, *args, **kwargs):
@@ -53,24 +70,24 @@ class pooling(op_graph.TensorOp):
                 sample_axes=inputs.axes.sample_axes(),
             ))
         self.batch_axis = batch_axes[0]
-        axes = Axes([make_axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
+        axes = make_axes([make_axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
         for i, name in enumerate(['C', 'D', 'H', 'W']):
             axes[i].name = name
 
         self.dims = dims
         self.argmax = argmax
-        self.index = pooling._index
-        pooling._index += 1
+        self.index = PoolingOp._index
+        PoolingOp._index += 1
 
-        super(pooling, self).__init__(
+        super(PoolingOp, self).__init__(
             args=(inputs, argmax), *args, axes=axes, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, argmax):
-        inputs.generate_add_delta(adjoints, bprop_pool(delta, inputs, argmax, self))
+        inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, argmax, self))
 
 
-class bprop_pool(op_graph.TensorOp):
+class BpropPoolOp(op_graph.TensorOp):
     def __init__(self, delta, inputs, argmax, fprop, *args, **kwargs):
         """
         Arguments:
@@ -79,6 +96,6 @@ class bprop_pool(op_graph.TensorOp):
         self.dims = fprop.dims
         self.index = fprop.index
 
-        super(bprop_pool, self).__init__(
+        super(BpropPoolOp, self).__init__(
             args=(delta, argmax), *args, axes=inputs.axes, **kwargs
         )

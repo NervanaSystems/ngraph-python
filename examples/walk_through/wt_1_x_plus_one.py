@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from neon.util.argparser import NeonArgparser
-from neon import NervanaObject
+from __future__ import print_function
 import ngraph as ng
 import ngraph.transformers as ngt
 
+# Build the graph
+x = ng.placeholder(())
+x_plus_one = x + 1
 
-class NgraphArgparser(NeonArgparser):
-    def parse_args(self, gen_be=True):
-        args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
-        NervanaObject.be.rng = ng.RNG(NervanaObject.be.rng_seed)
-        name = args.backend
-        if name == 'cpu':
-            name = 'numpy'
-        factory = ngt.make_transformer_factory(name)
-        ngt.set_transformer_factory(factory)
+# Select a transformer
+transformer = ngt.make_transformer()
 
-        return args
+# Define a computation
+plus_one = transformer.computation(x_plus_one, x)
+
+# Run the computation
+for i in range(5):
+    print(plus_one(i))

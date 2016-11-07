@@ -23,8 +23,8 @@ from tf_importer.tf_importer.importer import TFImporter
 from tf_importer.tests.importer_tester import ImporterTester
 from tensorflow.examples.tutorials.mnist import input_data
 from tf_importer.tf_importer.utils import SGDOptimizer
-import ngraph as ng
-# import ngraph.transformers as ngt
+import ngraph.transformers as ngt
+
 import pytest
 
 
@@ -57,7 +57,7 @@ class TestMnist(ImporterTester):
             [x, t, cost, init_op])
 
         # transformer and computations
-        transformer = ng.NumPyTransformer()
+        transformer = ngt.make_transformer()
         updates = SGDOptimizer(lrate).minimize(cost_ng)
         train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
         init_comp = transformer.computation(init_op_ng)

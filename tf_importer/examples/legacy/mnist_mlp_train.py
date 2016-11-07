@@ -27,7 +27,7 @@ TODO: infer_node: should determine automatically or receive as arg parameter
 
 from __future__ import print_function, division
 
-import ngraph as ng
+import ngraph.transformers as ngt
 import numpy as np
 from neon.data import MNIST
 from neon.util.argparser import NeonArgparser
@@ -91,7 +91,7 @@ def train_mnist_mlp():
 
     # init computation
     init_comp = None
-    transformer = ng.NumPyTransformer()
+    transformer = ngt.make_transformer()
     if tf_importer.init_op is not None:
         init_comp = transformer.computation([tf_importer.init_op])
 
