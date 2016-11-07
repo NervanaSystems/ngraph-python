@@ -32,8 +32,10 @@ from ngraph.frontends.neon import nnAffine, nnPreprocess, Sequential, Callbacks
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, make_keyed_computation
 import argparse
-from data import make_aeon_loaders
+# from data import make_aeon_loaders
 from aeon import SimpleDataLoader
+from ngraph.frontends.neon import ArrayIterator
+
 from mnist import MNIST
 from ngraph.util.utils import executor
 from ngraph.transformers import Transformer
@@ -52,7 +54,8 @@ np.random.seed(args.rseed)
 
 # Create the dataloader
 train_data, valid_data = MNIST(args.work_dir).load_data()
-train_set = SimpleDataLoader(train_data, args.batch_size, total_iterations=args.num_iterations)
+# train_set = SimpleDataLoader(train_data, args.batch_size, total_iterations=args.num_iterations)
+train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 # train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
 
 

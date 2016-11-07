@@ -19,6 +19,7 @@ from ngraph.frontends.neon.axis import ax, ar
 from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
     Logistic
 # from ngraph.frontends.neon.argparser import NgraphArgparser
+from ngraph.frontends.neon.arrayiterator import *
 from ngraph.frontends.neon.callbacks import *
 from ngraph.frontends.neon.layer import *
 from ngraph.frontends.neon.model import *

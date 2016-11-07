@@ -102,138 +102,143 @@ class nnAffine(nnLayer):
         return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
 
 
-class nnConv1d(nnLayer):
-    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), bias_init=None):
+class nnConvBase(nnLayer):
+    """
+    Convolutional layer that requires explicit binding of all spatial roles
 
-        self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
-                           'S': 1, 'W': 1, 'T': 1, 'D': 1}  # 2D & 3D parameters
+    Args:
+        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+        init (function): function for later initializing filters
+        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
+        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
 
-        if isinstance(fshape, tuple) or isinstance(fshape, list):
-            fshape = {'R': fshape[0], 'K': fshape[1]}
-        if isinstance(strides, int):
-            strides = {'str_h': strides}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding}
+    """
+    def __init__(self, fshape, init, strides, padding, **kwargs):
+        super(nnConvBase, self).__init__(**kwargs)
+        self.convparams = dict(T=None, R=None, S=None, K=None,
+                               pad_h=None, pad_w=None, pad_d=None,
+                               str_h=None, str_w=None, str_d=None)
+
         for d in [fshape, strides, padding]:
             self.convparams.update(d)
 
+        missing_keys = [k for k, v in self.convparams.items() if v is None]
+        if len(missing_keys) > 0:
+            raise ValueError("Missing conv keys: {}".format(missing_keys))
+
         self.init = init
-        self.activation = activation
-        self.b = 0
-        self.bias_init = bias_init
+        self.f_axes = None
+        self.o_axes = None
+        self.W = None
+
 
     def train_outputs(self, in_obj):
-        # if self.bias_init:
-        #     b_axes = ng.Axes([ng.Axis(self.convparams['K'], name='K')])
-        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
+        cpm = self.convparams.copy()
 
-        # Need to expand dims out if we are less than CDHWN
+        if self.f_axes is None:
+            self.f_axes = in_obj.axes.role_axes(ar.Channel)
+            for _ax in (ax.T, ax.R, ax.S, ax.K):
+                self.f_axes += ng.make_axis(name=_ax.shortname, roles=_ax.roles)
+            self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
-        # if len(in_obj.axes.role_axes(ar.D)):
-        #     ng.ExpandDims(in_obj.
+            self.W = ng.Variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
+
+        # TODO: clean this up
+        if self.o_axes is None:
+            self.o_axes = ng.make_axes([
+                ng.make_axis(self.f_axes[4].length, name='C', roles=[ar.Channel]),
+                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
+                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
+                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
+                ax.N
+                ])
+
+        return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
 
-        # if
-        # TODO:  Careful about the conv state that gets tied to op vs. layer
-        convparams = self.convparams.copy()
-        convparams['C'] = in_obj.axes.role_axes('channel').lengths[0]
-        w_axes = ng.Axes([ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')])
-        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
-        return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
-
-
-
-class nnConv(nnLayer):
-    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), bias_init=None):
-
-        self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
-                           'T': 1, 'D': 1}  # 3D parameters
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-
+class nnConv2D(nnConvBase):
+    def __init__(self, fshape, init, strides, padding, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
-            fkeys = ('R', 'S', 'K') if len(fshape) == 3 else ('T', 'R', 'S', 'K')
-            fshape = {k: x for k, x in zip(fkeys, fshape)}
+            if len(fshape) == 2:
+                fshape = (1, fshape[0], fshape[0], fshape[1])
+            elif len(fshape) == 3:
+                fshape = (1, fshape[0], fshape[1], fshape[2])
+            fshape = {k: x for k, x in zip('TRSK', fshape)}
         if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides}
+            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
         if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding}
-        for d in [fshape, strides, padding]:
-            self.convparams.update(d)
+            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
 
-        self.init = init
+        super(nnConv2D, self).__init__(self, fshape, init, strides, padding, **kwargs)
+
+
+class nnConvolution(nnConv2D):
+    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), **kwargs):
         self.activation = activation
-        self.b = 0
-        self.bias_init = bias_init
+        super(nnConvolution, self).__init__(self, fshape, init, strides, padding, **kwargs)
 
     def train_outputs(self, in_obj):
-        # if self.bias_init:
-        #     b_axes = ng.Axes([ng.Axis(self.convparams['K'], name='K')])
-        #     self.b = ng.Variable(axes=b_axes, initial_value=self.bias_init(b_axes.lengths))
-
-        # TODO:  Careful about the conv state that gets tied to op vs. layer
-        convparams = self.convparams.copy()
-        convparams['C'] = in_obj.axes.role_axes('channel').lengths[0]
-        w_axes = ng.Axes([ng.Axis(convparams[ax], name=ax) for ax in ('C', 'T', 'R', 'S', 'K')])
-        self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
-        return self.activation(ng.convolution(convparams, in_obj, self.W) + self.b)
+        return self.activation(super(nnConvolution, self).train_outputs(self, in_obj))
 
 
-class nnPool(nnLayer):
+class nnPoolBase(nnLayer):
+    """
+    Pooling layer that requires explicit binding of all spatial roles
+
+    Args:
+        fshape (dict): filter shape -- must contain keys 'J', 'T', 'R', 'S',
+        init (function): function for later initializing filters
+        strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
+        padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
 
     """
-    Pooling layer implementation.
+    def __init__(self, fshape, init, strides, padding, op='max', **kwargs):
+        super(nnPoolBase, self).__init__(**kwargs)
+        self.poolparams = dict(J=None, T=None, R=None, S=None,
+                               pad_h=None, pad_w=None, pad_d=None, pad_c=None,
+                               str_h=None, str_w=None, str_d=None, str_c=None,
+                               op=op)
 
-    Arguments:
-        fshape (int, tuple(int, int)): one or two dimensional shape
-            of pooling window
-        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
-        strides (int, dict, optional): strides to apply pooling window
-            over. An int applies to both dimensions, or a dict with str_h
-            and str_w applies to h and w dimensions distinctly.  Defaults
-            to str_w = str_h = None
-        padding (int, dict, optional): padding to apply to edges of
-            input. An int applies to both dimensions, or a dict with pad_h
-            and pad_w applies to h and w dimensions distinctly.  Defaults
-            to pad_w = pad_h = None
-        name (str, optional): layer name. Defaults to "PoolingLayer"
-    """
-
-    def __init__(self, fshape, op="max", strides={}, padding={}):
-        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
-                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
-
-        # keep args around in __dict__ for get_description
-        self.op = op
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-        if isinstance(fshape, int):
-            fshape = {'R': fshape, 'S': fshape}
-        elif isinstance(fshape, tuple):
-            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
-            fshape = {k: x for k, x in zip(fkeys, fshape)}
-        elif fshape == 'all':
-            fshape = dict(R=None, S=None)
-        if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding}
         for d in [fshape, strides, padding]:
             self.poolparams.update(d)
 
-    def train_outputs(self, in_obj):
-        shapedict = in_obj.shape_dict()
-        self.poolparams.update(shapedict)
-        if self.poolparams['R'] is None:
-            self.poolparams['R'] = shapedict['H']
-            self.poolparams['S'] = shapedict['W']
-        return ng.pooling(self.poolparams, in_obj)
+        missing_keys = [k for k, v in self.poolparams.items() if v is None]
+        if len(missing_keys) > 0:
+            raise ValueError("Missing pooling keys: {}".format(missing_keys))
 
-    def inf_outputs(self, in_obj):
-        return self.train_outputs(in_obj)
+        self.o_axes = None
+
+
+    def train_outputs(self, in_obj):
+        ppm = self.poolparams.copy()
+
+        # TODO: clean this up
+        if self.o_axes is None:
+            self.o_axes = ng.make_axes([
+                spatial_axis(in_obj.axes, ppm['J'], ppm['pad_c'], ppm['str_c'], role=ar.Channel),
+                spatial_axis(in_obj.axes, ppm['T'], ppm['pad_d'], ppm['str_d'], role=ar.Depth),
+                spatial_axis(in_obj.axes, ppm['R'], ppm['pad_h'], ppm['str_h'], role=ar.Height),
+                spatial_axis(in_obj.axes, ppm['S'], ppm['pad_w'], ppm['str_w'], role=ar.Width),
+                ax.N
+            ])
+
+        return ng.pooling(ppm, in_obj, axes=self.o_axes)
+
+
+class nnPool2D(nnPoolBase):
+    def __init__(self, fshape, init, strides, padding, **kwargs):
+
+        if isinstance(fshape, int):
+            fshape = (1, 1, fshape, fshape)
+        if isinstance(fshape, tuple) or isinstance(fshape, list):
+            if len(fshape) == 2:
+                fshape = (1, 1, fshape[0], fshape[1])
+            if len(fshape) != 4:
+                raise ValueError("Incorrect filter specification: {}".format(missing_keys))
+            fshape = {k: x for k, x in zip('JTRS', fshape)}
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
+        super(nnPool2D, self).__init__(self, fshape, init, strides, padding, **kwargs)
 
