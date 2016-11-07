@@ -130,7 +130,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
             else:
                 out = DotTwoDimensional(x, y,
                                         axes=([op.x_out_axes.flatten(),
-                                            op.y_out_axes.flatten()]))
+                                               op.y_out_axes.flatten()]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
