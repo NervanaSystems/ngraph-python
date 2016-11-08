@@ -177,6 +177,7 @@ The complete program source can be found in :download:`../../examples/walk_throu
 We first define the axes for our tensors. In the nervana graph, `Axes` are similar to tensor shapes, except with additional semantics added. The function ``ng.make_axis`` will create an ``Axis`` object with an optionally supplied `name` argument. For example
 
 .. code-block:: python
+
    my_axis = ng.make_axis(length=256, name='my_axis')
 
 Here, we use a ``NameScope`` to set the names of the various axes. A ``NameScope`` is an object that sets the name of an object to that of its assigned attribute. So when we set ``ax.N`` to an ``Axis`` object, the ``name`` of the object is automatically set to ``ax.N``.
@@ -189,6 +190,8 @@ Here, we use a ``NameScope`` to set the names of the various axes. A ``NameScope
 
 The input data is synthetically generated as a mixture of two Gaussian distributions in 4-d space.  Our dataset consists of 10
 mini-batches of 128 samples each:
+
+.. code-block:: python
 
     g = gendata.MixtureGenerator([.5, .5], (ax.C.length,))
     XS, YS = g.gen_data(ax.N.length, 10)
