@@ -30,7 +30,7 @@ def L2(x):
     Returns:
 
     """
-    return ng.dot(x, x)
+    return ng.auto_dot(x, x)
 
 
 def clip_gradient_norm(grad_list, clip_norm, bsz):

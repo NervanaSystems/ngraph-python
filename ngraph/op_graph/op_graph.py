@@ -2152,61 +2152,84 @@ class Dimshuffle(TensorOp):
         )
 
 
-class Dot(TensorOp):
-    def __init__(self, x, y, use_dual=False, left_transpose=False, y_reduction_axes=None,
-                 **kwargs):
-        x_axes = x.axes
-        if left_transpose:
-            x_axes = x_axes.T
-            use_dual = True
-
-        dual_offset = 0
-        if use_dual:
-            dual_offset = 1
-        y_axes = y.axes
-
-        if y_reduction_axes is None:
-            y_reduction_axes = Axes.intersect(x_axes.get_dual(dual_offset), y_axes)
-        self.y_reduction_axes = y_reduction_axes
-        self.x_reduction_axes = self.y_reduction_axes.get_dual(-dual_offset)
-        self.x_out_axes = x_axes - self.x_reduction_axes
-        self.y_out_axes = y_axes - self.y_reduction_axes
+class DotOp(TensorOp):
+    def __init__(self, x, y, **kwargs):
+        self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
+        self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
+        self.x_out_axes = x.axes - self.x_reduction_axes
+        self.y_out_axes = y.axes - self.y_reduction_axes
 
         axes = self.x_out_axes + self.y_out_axes
 
-        if left_transpose:
-            self.x_reduction_axes = self.x_reduction_axes.T
-
-        super(Dot, self).__init__(
+        super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
         )
-        self.use_dual = use_dual
 
     def generate_adjoints(self, adjoints, delta, x, y):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
-
-        Returns:
-          TODO
-        """
         x.generate_add_delta(
             adjoints,
-            Dot(y, delta, left_transpose=self.use_dual, y_reduction_axes=self.y_out_axes)
+            dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                dualed_axes(y, self.y_reduction_axes, -1, 0))
         )
         y.generate_add_delta(
             adjoints,
-            Dot(x, delta, left_transpose=self.use_dual, y_reduction_axes=self.x_out_axes)
+            dot(dualed_axes(x, self.x_out_axes, -1, +1), delta)
         )
 
 
-def dot(*args, **kwargs):
-    return Dot(*args, **kwargs)
+def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
+    """
+    Cast axes to a dual offset of axes depending on membership in dual_axes.
+
+    Args:
+        x (TensorOp): A tensor.
+        filter: A collection of axes.
+        in_dual_offset: Dual shift amount for axes in filter.
+        out_dual_offset: Dual shift amount for axes not in filter.
+
+    Returns:
+        TesnsorOp: x with axes cast.
+
+    """
+    def dualed(axis):
+        if axis in filter:
+            return axis + in_dual_offset
+        else:
+            return axis + out_dual_offset
+    return cast_axes(x, (dualed(axis) for axis in x.axes))
+
+
+def dot(x, y, name=None):
+    """
+    The dot product of x and y.
+
+    Reduction axes in x are those whose dual offset is one less than an axis in y.
+
+    Args:
+        x (TensorOp): First argument.
+        y (TensorOp): Second argumnent.
+        name (String, optional): Name for the TensorOp.
+
+    Returns:
+        TensorOp: The dot product.
+
+    """
+    return DotOp(x, y, name=name)
+
+
+def auto_dot(x, y):
+    """
+    Returns the dot of x and y, with the axes of x set to their dual offset.
+
+    Args:
+        x (TensorOp): The first value, axes shifted down by 1.
+        y (TensorOp): The second value.
+
+    Returns:
+        TensorOp: The result.
+
+    """
+    return dot(dualed_axes(x, x.axes, -1, 0), y)
 
 
 class LowDimensionalDot(TensorOp):
@@ -2304,7 +2327,7 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert Axes.intersect(reduction_axes, out_axes) == make_axes(())
+        assert reduction_axes.intersect(out_axes) == make_axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs

@@ -88,7 +88,7 @@ def ngraph_l2_norm(np_array):
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)
-    return executor(ng.sqrt(ng.dot(var, var)))()
+    return executor(ng.sqrt(ng.auto_dot(var, var)))()
 
 
 @raise_all_numpy_errors
@@ -96,16 +96,16 @@ def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
-    C = ng.make_axis(name='C')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis(name='C', length=2)
+    N = ng.make_axis(name='N', length=3, batch=True)
 
-    C.length = 2
-    N.length = 3
-    N.batch = True
-    x_axes, y_axes = ng.make_axes((C, N)), ng.make_axes((C,))
+    x_axes = ng.make_axes((C - 1, N))
+    y_axes = ng.make_axes((C,))
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
-    expected_output = np.sum(x_np.T.dot(y_np))
+
+    # x_np[...] = [[1.0, 0.0,1.0], [2.0, 0.0, 3.0]]
+    # y_np[...] = [-1.0, 1.0]
 
     x = ng.placeholder(x_axes)
     y = ng.placeholder(y_axes)
@@ -113,25 +113,47 @@ def test_dot_sum_backprop(transformer_factory):
     s = ng.sum(d, out_axes=())
 
     ex = ExecutorFactory()
-    evaluated_fun = ex.executor(s, x, y)
-    numeric_deriv_fun1 = ex.numeric_derivative(s, x, delta, y)
-    numeric_deriv_fun2 = ex.numeric_derivative(s, y, delta, x)
-    sym_deriv_fun1 = ex.derivative(s, x, y)
-    sym_deriv_fun2 = ex.derivative(s, y, x)
+    s_fun = ex.executor(s, x, y)
+    d_fun = ex.executor(d, x, y)
+
+    dd_dx_fun_num = ex.numeric_derivative(d, x, delta, y)
+    dd_dx_fun_sym = ex.derivative(d, x, y)
+
+    dd_dy_fun_num = ex.numeric_derivative(d, y, delta, x)
+    dd_dy_fun_sym = ex.derivative(d, y, x)
+
+    ds_dx_fun_num = ex.numeric_derivative(s, x, delta, y)
+    ds_dx_fun_sym = ex.derivative(s, x, y)
+
+    ds_dy_fun_num = ex.numeric_derivative(s, y, delta, x)
+    ds_dy_fun_sym = ex.derivative(s, y, x)
 
     # assert outputs are equal
-    evaluated = evaluated_fun(x_np, y_np)
-    np.testing.assert_allclose(evaluated, expected_output, rtol=rtol, atol=atol)
+    d_np = x_np.T.dot(y_np)
+    d_val = d_fun(x_np, y_np)
+    np.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
+
+    dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
+    dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
+    np.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
+
+    dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
+    dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
+    np.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
+
+    s_np = np.sum(d_np)
+    s_val = s_fun(x_np, y_np)
+    np.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
 
     # assert derivative wrt to both tensors is the same when computed
-    # symbolicly by ngraph and numerically
-    numeric_deriv1 = numeric_deriv_fun1(x_np, y_np)
-    sym_deriv1 = sym_deriv_fun1(x_np, y_np)
-    np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=rtol, atol=atol)
+    # symbolically by ngraph and numerically
+    ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
+    ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
+    np.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
 
-    numeric_deriv2 = numeric_deriv_fun2(y_np, x_np)
-    sym_deriv2 = sym_deriv_fun2(y_np, x_np)
-    np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=rtol, atol=atol)
+    ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+    ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
+    np.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
 @raise_all_numpy_errors
@@ -145,7 +167,7 @@ def test_tensor_dot_tensor(transformer_factory):
     tests = [
         {
             'tensor1': [[1, 2], [4, 5], [3, 4]],
-            'tensor1_axes': (C, D),
+            'tensor1_axes': (C, D - 1),
             'tensor2': [2, 5],
             'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
@@ -153,7 +175,7 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[1, 4, 3], [2, 5, 4]],
-            'tensor1_axes': (D, C),
+            'tensor1_axes': (D - 1, C),
             'tensor2': [2, 5],
             'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
@@ -161,7 +183,7 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
-            'tensor1_axes': (N, D, C),
+            'tensor1_axes': (N, D - 1, C - 1),
             'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
             'tensor2_axes': (H, D, C),
             'expected_output': [[51, 81], [188, 297]],
@@ -177,7 +199,9 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[1, 4], [6, 2]],
-            'tensor1_axes': (C, D),
+            'tensor1_axes': (C - 1, D - 1),
+            'tensor2': [[1, 4], [6, 2]],
+            'tensor2_axes': (C, D),
             'expected_output': 57,
             'axes_lengths': {C: 2, D: 2}
         }
@@ -192,14 +216,10 @@ def test_tensor_dot_tensor(transformer_factory):
         tensor1 = ng.placeholder(test['tensor1_axes'])
         value1 = np.array(test['tensor1'], dtype=np.float32)
 
-        if 'tensor2' in test:
-            tensor2 = ng.placeholder(test['tensor2_axes'])
-            value2 = np.array(
-                test['tensor2'], dtype=np.float32
-            )
-        else:
-            tensor2 = tensor1
-            value2 = value1
+        tensor2 = ng.placeholder(test['tensor2_axes'])
+        value2 = np.array(
+            test['tensor2'], dtype=np.float32
+        )
 
         # compute outputs
         expected_output = np.array(test['expected_output'], dtype=np.float32)
@@ -208,21 +228,22 @@ def test_tensor_dot_tensor(transformer_factory):
         dot = ng.dot(tensor1, tensor2)
         evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
-        numeric_deriv_fun1 = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
-        numeric_deriv_fun2 = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
-        sym_deriv_fun1 = ex.derivative(dot, tensor1, tensor2)
-        sym_deriv_fun2 = ex.derivative(dot, tensor2, tensor1)
+        deriv1_fun_num = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
+        deriv1_fun_sym = ex.derivative(dot, tensor1, tensor2)
+
+        deriv2_fun_num = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
+        deriv2_fun_sym = ex.derivative(dot, tensor2, tensor1)
 
         # assert outputs are equal
         evaluated = evaluated_fun(value1, value2)
         np.testing.assert_equal(evaluated, expected_output)
 
         # assert derivative wrt to both tensors is the same when computed
-        # symbolicly by ngraph and numerically
-        numeric_deriv1 = numeric_deriv_fun1(value1, value2)
-        sym_deriv1 = sym_deriv_fun1(value1, value2)
-        np.testing.assert_allclose(numeric_deriv1, sym_deriv1, rtol=1e-2, atol=1e-2)
+        # symbolically by ngraph and numerically
+        deriv1_val_num = deriv1_fun_num(value1, value2)
+        deriv1_val_sym = deriv1_fun_sym(value1, value2)
+        np.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
 
-        numeric_deriv2 = numeric_deriv_fun2(value2, value1)
-        sym_deriv2 = sym_deriv_fun2(value2, value1)
-        np.testing.assert_allclose(numeric_deriv2, sym_deriv2, rtol=1e-2, atol=1e-2)
+        deriv2_val_num = deriv2_fun_num(value2, value1)
+        deriv2_val_sym = deriv2_fun_sym(value2, value1)
+        np.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
