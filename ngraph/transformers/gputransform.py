@@ -45,7 +45,7 @@ from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSour
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, UnsliceKernel
 
 import numpy as np
 import pycuda.driver as drv
@@ -438,7 +438,7 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self, op))
+        self.kernels.append(FillKernel(self, op.tensor_description(), op.scalar))
 
     @add_kernel.on_type(pooling)
     def add_kernel(self, op):
@@ -450,11 +450,15 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(SetItemOneDim)
     def add_kernel(self, op):
-        raise NotImplementedError("SetItemOneDim kernel not implemented")
+        self.kernels.append(SetItemKernel(self, op))
+
+    @add_kernel.on_type(tensor_size)
+    def add_kernel(self, op):
+        self.kernels.append(FillKernel(self, op.tensor_description(), op.reduction_axes.size))
 
     @add_kernel.on_type(Unslice)
     def add_kernel(self, op):
-        raise NotImplementedError("Unslice kernel not implemented")
+        self.kernels.append(UnsliceKernel(self, op))
 
     def compile_all(self):
         self.sourcefile.compile()

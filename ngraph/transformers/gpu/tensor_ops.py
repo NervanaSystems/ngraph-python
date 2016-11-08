@@ -55,11 +55,11 @@ class DimShuffleKernel(GPUKernel):
 
 
 class FillKernel(GPUKernel):
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, td, value):
         super(FillKernel, self).__init__(transformer)
 
-        fill_value = op.scalar
-        self.out = op.tensor_description()
+        self.value = value
+        self.out = td
 
     def bind_buffers(self):
         self.out = self.out.value.tensor
@@ -70,4 +70,42 @@ class FillKernel(GPUKernel):
         Use memset driver functions to fill tensor with scalar
         """
         # TODO: remove neon dependency
-        self.out.fill(self.scalar)
+        self.out.fill(self.value)
+
+class SetItemKernel(GPUKernel):
+    def __init__(self, transformer, op):
+        super(SetItemKernel, self).__init__(transformer)
+
+        self.tensor, self.value = (_ for _ in op.call_info())
+        self.item = op.item
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value.tensor
+        if isinstance(self.value, TensorDescription):
+            self.value = self.value.value.tensor
+
+    def execute(self):
+        # TODO: remove neon dependency
+        self.tensor.__setitem__(self.item, self.value)
+
+
+class UnsliceKernel(GPUKernel):
+    def __init__(self, transformer, op):
+        super(UnsliceKernel, self).__init__(transformer)
+
+        self.out_sliced, self.x = (_ for _ in op.call_info())
+        self.out = op.tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.out_sliced, TensorDescription):
+            self.out_sliced = self.out_sliced.value.tensor
+        if isinstance(self.x, TensorDescription):
+            self.x = self.x.value.tensor
+        if isinstance(self.out, TensorDescription):
+            self.out = self.out.value.tensor
+
+    def execute(self):
+        # TODO: remove neon dependency
+        self.out.fill(0)
+        self.out_sliced[:] = self.x
