@@ -56,16 +56,16 @@ ax.REC.length = time_steps
 ax.N.length = args.batch_size
 
 # placeholders with descriptive names
-inputs = dict(inp=ng.placeholder(axes=ng.make_axes([ax.REC, ax.N])),
-              tgt=ng.placeholder(axes=ng.make_axes([ax.REC, ax.N])),
-              idx=ng.placeholder(axes=ng.make_axes()))
+inputs = dict(inp=ng.placeholder([ax.REC, ax.N]),
+              tgt=ng.placeholder([ax.REC, ax.N]),
+              idx=ng.placeholder([]))
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6)
 output_prob = seq1.train_outputs(inputs['inp'])
 train_cost = ng.cross_entropy_multi(output_prob,
                                     ng.onehot(inputs['tgt'], axis=ax.Y),
                                     usebits=True)
-mean_cost = ng.mean(train_cost, out_axes=())
+mean_cost = ng.mean(train_cost, out_axes=[])
 updates = optimizer(train_cost, inputs['idx'])
 
 # Now bind the computations we are interested in

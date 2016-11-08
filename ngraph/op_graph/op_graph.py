@@ -1111,10 +1111,17 @@ class ExpandDims(ReshapeOp):
         )
 
 
-def expand_dims(x, axis, dim, **kwargs):
+def expand_dims(x, axis, dim, name=None):
+    """
+    Adds additional axes into a tensor.
+    Arguments:
+        x: The tensor.
+        axis: The additional axis.
+        dim: The position to add the axes.
+    """
     if axis in x.axes:
         return x
-    return ExpandDims(x, axis, dim, **kwargs)
+    return ExpandDims(x, axis, dim, name=name)
 
 
 class ResultHandle(ReshapeOp):

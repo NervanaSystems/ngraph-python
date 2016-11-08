@@ -22,6 +22,7 @@ from operator import itemgetter
 import numpy as np  # noqa
 import itertools as itt  # noqa
 from ngraph.op_graph import axes  # noqa
+import warnings
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
@@ -49,62 +50,102 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 
 class NumPyConvEngine(object):
     @staticmethod
-    def xprop():
-        return """
-        K, _, _, _, N = O.shape
-        for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                     enumerate(pSlice),
-                                                     enumerate(qSlice)):
-            sliceT, sliceD, _ = mS
-            sliceR, sliceH, _ = pS
-            sliceS, sliceW, _ = qS
-            slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
-            slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-            O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
-        """
-
-    @staticmethod
-    def fprop_conv():
+    def all_conv_code():
         pycode = """
-        I = {I}
-        F = {F}
-        O = {O}
-        mSlice, pSlice, qSlice, _, _, _ = self.conv_slices[{index}]
-        """ + NumPyConvEngine.xprop()
+        def fprop_conv(self, conv_slices, I, F, O):
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = O.shape
 
-        return pycode
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, _ = mS
+                sliceR, sliceH, _ = pS
+                sliceS, sliceW, _ = qS
+                slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    @staticmethod
-    def bprop_conv():
-        pycode = """
-        I = {E}
-        F = {F}
-        O = {gI}
-        _, _, _, mSlice, pSlice, qSlice = self.conv_slices[{index}]
-        F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
-        """ + NumPyConvEngine.xprop()
+        def bprop_conv(self, conv_slices, E, F, gI):
+            _, _, _, mSlice, pSlice, qSlice = conv_slices
+            F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
+            K, M, P, Q, N = gI.shape
 
-        return pycode
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, _ = mS
+                sliceR, sliceH, _ = pS
+                sliceS, sliceW, _ = qS
+                slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
+                slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    @staticmethod
-    def update_conv():
-        pycode = """
-        I = {I}
-        E = {E}
-        U = {U}
-        mSlice, pSlice, qSlice, _, _, _ = self.conv_slices[{index}]
-        C, _, _, _, K = U.shape
-        U.fill(0.0)
-        for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                     enumerate(pSlice),
-                                                     enumerate(qSlice)):
-            sliceT, sliceD, tlen = mS
-            sliceR, sliceH, rlen = pS
-            sliceS, sliceW, slen = qS
-            slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-            slicedE = E[:, m, p, q, :]
-            update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-            U[:, sliceT, sliceR, sliceS, :] += update
+        def update_conv(self, conv_slices, I, E, U):
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
+
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
+
+        def fprop_pool(self, pool_slices, arrI, arrO):
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            K, M, P, Q, N = arrO.shape
+
+
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, _ = kS
+                sliceD, _ = mS
+                sliceH, _ = pS
+                sliceW, _ = qS
+
+                sliceI = arrI[sliceC, sliceD, sliceH, sliceW, :].reshape(-1, N)
+                if op == "max":
+                    arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
+                    arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
+                elif op == "avg":
+                    arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
+                elif op == "l2":
+                    arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
+
+        def bprop_pool(self, pool_slices, arrE, arrD):
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            arrD[:] = 0
+            K, M, P, Q, N = arrE.shape
+
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, clen = kS
+                sliceD, dlen = mS
+                sliceH, hlen = pS
+                sliceW, wlen = qS
+
+                patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
+                patch_out = (k, m, p, q, slice(None))
+                sliceB = arrD[patch_in].reshape((-1, N))
+                if op == "max":
+                    max_n = arrA[patch_out]
+                    sliceB[max_n, list(range(N))] += arrE[patch_out]
+                elif op == "avg":
+                    sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
+                else:
+                    raise NotImplementedError
+                arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
         """
         return pycode
 
@@ -159,61 +200,6 @@ class NumPyConvEngine(object):
 
 
 class NumPyPoolEngine(object):
-
-    @staticmethod
-    def fprop_pool():
-        pycode = """
-        arrI = {I}
-        arrO = {O}
-        kSlice, mSlice, pSlice, qSlice, arrA = self.pool_slices[{index}]
-        op = self.pool_params[{index}]['op']
-        K, M, P, Q, N = arrO.shape
-        for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                              enumerate(mSlice),
-                                                              enumerate(pSlice),
-                                                              enumerate(qSlice)):
-            sliceI = arrI[kS[0], mS[0], pS[0], qS[0], :].reshape((-1, N))
-            if op == "max":
-                arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
-                arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
-            elif op == "avg":
-                arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
-            elif op == "l2":
-                arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
-        """
-        return pycode
-
-    @staticmethod
-    def bprop_pool():
-        pycode = """
-        arrE = {I}
-        arrD = {O}
-        kSlice, mSlice, pSlice, qSlice, arrA = self.pool_slices[{index}]
-        op = self.pool_params[{index}]['op']
-        K, M, P, Q, N = arrE.shape
-        for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                              enumerate(mSlice),
-                                                              enumerate(pSlice),
-                                                              enumerate(qSlice)):
-            sliceC, clen = kS
-            sliceD, dlen = mS
-            sliceH, hlen = pS
-            sliceW, wlen = qS
-
-            patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
-            patch_out = (k, m, p, q, slice(None))
-            sliceB = arrD[patch_in].reshape((-1, N))
-            if op == "max":
-                max_n = arrA[patch_out]
-                sliceB[max_n, list(range(N))] += arrE[patch_out]
-            elif op == "avg":
-                sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
-            else:
-                raise NotImplementedError
-            arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
-        """
-        return pycode
-
     @staticmethod
     def get_slices(I, O, pool_params):
         C, D, H, W, _ = I.tensor_description.axes.lengths
@@ -227,9 +213,9 @@ class NumPyPoolEngine(object):
         mSlice = [NumPyPoolEngine.pool_slice(m, T, D, p_d, s_d) for m in range(M)]
         pSlice = [NumPyPoolEngine.pool_slice(p, R, H, p_h, s_h) for p in range(P)]
         qSlice = [NumPyPoolEngine.pool_slice(q, S, W, p_w, s_w) for q in range(Q)]
-        array_argmax = np.empty((K, M, P, Q, N), dtype=np.uint8) if op == "max" else None
+        array_argmax = np.empty((K, M, P, Q, N), dtype=np.uint32) if op == "max" else None
 
-        return (kSlice, mSlice, pSlice, qSlice, array_argmax)
+        return (kSlice, mSlice, pSlice, qSlice, op, array_argmax)
 
     @staticmethod
     def pool_slice(q, S, X, padding, strides):
@@ -422,53 +408,25 @@ class NumPyCodeGenerator(PyGen):
         self.conv_slices.append(
             NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
         )
-        self.append(
-            NumPyConvEngine.fprop_conv(),
-            index=op.index,
-            I=inputs,
-            F=filters,
-            O=outputs
-        )
+        self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})", op.index, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append(
-            NumPyConvEngine.bprop_conv(),
-            index=op.index,
-            E=delta,
-            F=filters,
-            gI=outputs
-        )
+        self.append("self.bprop_conv(self.conv_slices[{}], E={}, F={}, gI={})", op.index, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append(
-            NumPyConvEngine.update_conv(),
-            index=op.index,
-            I=inputs,
-            E=delta,
-            U=outputs
-        )
+        self.append("self.update_conv(self.conv_slices[{}], I={}, E={}, U={})", op.index, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.pool_params.append(op.pool_params)
         self.pool_slices.append(NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params))
-        self.append(
-            NumPyPoolEngine.fprop_pool(),
-            index=op.index,
-            I=inputs,
-            O=outputs
-        )
+        self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})", op.index, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
-        self.append(
-            NumPyPoolEngine.bprop_pool(),
-            index=op.index,
-            I=delta,
-            O=outputs
-        )
+        self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})", op.index, delta, outputs)
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):
@@ -608,11 +566,7 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(Onehot)
     def generate_op(self, op, out, x):
         self.append("""
-        o = {o}
-        x = {x}
-        o[:] = 0
-        for i in range(len(x)):
-            o[x[i], i] = 1
+        {o}[:] = np.eye({o}.shape[0])[:, {x}.astype(np.int32)]
         """, x=x, o=out)
 
     @generate_op.on_type(Power)
@@ -779,6 +733,10 @@ class NumPyTransformer(Transformer):
                 self.init_code.append("pass")
             self.code.append(self.init_code.code)
             self.code.endl()
+
+            self.code.append(NumPyConvEngine.all_conv_code())
+            self.code.endl()
+
             self.code.append(self.allocate_storage_code.code)
             self.code.endl()
             if len(self.device_buffers) == 0:

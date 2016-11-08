@@ -44,6 +44,7 @@ np.random.seed(args.rng_seed)
 
 # Create the dataloader
 train_data, valid_data = CIFAR10(args.data_dir).load_data()
+
 train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 valid_set = ArrayIterator(valid_data, args.batch_size)
 
@@ -52,20 +53,15 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 
 
 def cifar_mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
-    return (x - bgr_mean) / 255.
-
-
-def add_depth_axis(x):
-    return ng.expand_dims(x, ax.D, 1)
-
+    bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104., 119., 127.]]))
+    y = ng.expand_dims((x - bgr_mean) / 255., ax.D, 1)
+    return y
 
 seq1 = Sequential([nnPreprocess(functor=cifar_mean_subtract),
-                   nnPreprocess(functor=add_depth_axis),
                    nnConvolution((5, 5, 16), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   nnPool2D(2),
+                   nnPool2D(2, strides=2),
                    nnConvolution((5, 5, 32), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   nnPool2D(2),
+                   nnPool2D(2, strides=2),
                    nnAffine(nout=500, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
                    nnAffine(axes=ax.Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
@@ -78,11 +74,11 @@ ax.Y.length = 10
 
 
 # placeholders with descriptive names
-inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
-              tgt=ng.placeholder(axes=ng.make_axes([ax.N])),
-              idx=ng.placeholder(axes=ng.make_axes()))
+inputs = dict(img=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
+              tgt=ng.placeholder([ax.N]),
+              idx=ng.placeholder([]))
 
-optimizer = GradientDescentMomentum(0.1, 0.9)
+optimizer = GradientDescentMomentum(0.01, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
 errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
 train_cost = ng.cross_entropy_multi(output_prob, ng.onehot(inputs['tgt'], axis=ax.Y))

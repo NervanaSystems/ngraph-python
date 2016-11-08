@@ -107,7 +107,7 @@ class nnAffine(nnLayer):
         if self.b is None:
             self.b = ng.variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
 
-        return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
+        return self.activation(ng.dot(self.W, in_obj, use_dual=True))# + self.b)
 
 
 class nnConvBase(nnLayer):
@@ -187,6 +187,13 @@ class nnConvolution(nnConv2D):
     def train_outputs(self, in_obj):
         return self.activation(super(nnConvolution, self).train_outputs(in_obj))
 
+class nnActivation(nnLayer):
+    def __init__(self, transform, **kwargs):
+        self.transform = transform
+        super(nnActivation, self).__init__(**kwargs)
+
+    def train_outputs(self, in_obj):
+        return self.transform(in_obj)
 
 class nnPoolBase(nnLayer):
     """

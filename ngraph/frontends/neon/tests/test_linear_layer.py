@@ -42,7 +42,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     N = ng.make_axis(batch_size, name="N", batch=True)
     F = ng.make_axis(nin, name="F")
 
-    inp = ng.placeholder(axes=ng.make_axes([F, N]))
+    inp = ng.placeholder([F, N])
     layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
     fprop = layer.train_outputs(inp)
 
@@ -69,7 +69,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
     N = ng.make_axis(batch_size, name="N", batch=True)
     F = ng.make_axis(nin, name="F")
 
-    inp = ng.placeholder(axes=ng.make_axes([F, N]))
+    inp = ng.placeholder([F, N])
     layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
     fprop = layer.train_outputs(inp)
 

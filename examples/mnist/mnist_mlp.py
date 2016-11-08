@@ -61,13 +61,13 @@ ax.Y.length = 10
 
 
 # placeholders with descriptive names
-inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
-              tgt=ng.placeholder(axes=ng.make_axes([ax.N])),
-              idx=ng.placeholder(axes=ng.make_axes()))
+inputs = dict(img=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
+              tgt=ng.placeholder([ax.N]),
+              idx=ng.placeholder([]))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
-errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
+errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['tgt'])
 train_cost = ng.cross_entropy_binary(output_prob, ng.onehot(inputs['tgt'], axis=ax.Y))
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])
