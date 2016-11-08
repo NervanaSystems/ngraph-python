@@ -16,7 +16,7 @@
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 
 def numpy_logreg(xs, ys, max_iter, alpha):
@@ -79,13 +79,13 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     N.length = 4
 
     # input tensors
-    xs = ng.placeholder(axes=(C, N))
-    ys = ng.placeholder(axes=(N))
+    xs = ng.placeholder((C, N))
+    ys = ng.placeholder([N])
 
     # init weights
     thetas_np = np.array([0., 0., 0.])
-    thetas_numpy_tensor = ng.Constant(thetas_np, axes=(C))
-    thetas = ng.Variable(initial_value=thetas_numpy_tensor, axes=(C))
+    thetas_numpy_tensor = ng.constant(thetas_np, [C])
+    thetas = ng.variable([C], initial_value=thetas_numpy_tensor)
 
     # define ops
     loss = get_loss(thetas, xs, ys)
@@ -95,7 +95,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
         update = ng.assign(lvalue=variable, rvalue=variable - alpha * grad)
 
     # transformer
-    transformer = Transformer.make_transformer()
+    transformer = ngt.make_transformer()
     train_eval_func = transformer.computation([grad, loss, thetas, update],
                                               xs, ys)
 

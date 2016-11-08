@@ -114,7 +114,6 @@ class SequentialArrayIterator(object):
         while self.index < self.total_iterations:
             for src, dst in zip(self.data_arrays, self.batch_bufs):
                 idx = self.index % self.nbatches
-                dst[:] = src[:, idx:(idx+1), :].transpose(1, 2, 0)
+                dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
             self.index += 1
             yield self.batch_bufs
-

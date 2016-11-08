@@ -20,7 +20,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import nnAffine, UniformInit
 from ngraph.util.utils import executor
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 
 def pytest_generate_tests(metafunc):
@@ -35,7 +35,6 @@ def pytest_generate_tests(metafunc):
 
 
 def test_linear_zeros(basic_linargs, transformer_factory):
-
     # basic sanity check with 0 weights random inputs
     nin, nout, batch_size = basic_linargs
 
@@ -43,7 +42,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     N = ng.make_axis(batch_size, name="N", batch=True)
     F = ng.make_axis(nin, name="F")
 
-    inp = ng.placeholder(axes=ng.Axes([F, N]))
+    inp = ng.placeholder(axes=ng.make_axes([F, N]))
     layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
     fprop = layer.train_outputs(inp)
 
@@ -51,7 +50,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     x = np.random.random((nin, batch_size))
 
     # evaluate
-    Transformer.make_transformer()
+    ngt.make_transformer()
     out = executor(fprop, inp)(x)
 
     assert np.min(out) == 0.0 and np.max(out) == 0.0
@@ -70,7 +69,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
     N = ng.make_axis(batch_size, name="N", batch=True)
     F = ng.make_axis(nin, name="F")
 
-    inp = ng.placeholder(axes=ng.Axes([F, N]))
+    inp = ng.placeholder(axes=ng.make_axes([F, N]))
     layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
     fprop = layer.train_outputs(inp)
 
@@ -78,7 +77,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
     x = np.ones((nin, batch_size))
 
     # evaluate
-    Transformer.make_transformer()
+    ngt.make_transformer()
     out, w = executor([fprop, layer.W], inp)(x)
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 

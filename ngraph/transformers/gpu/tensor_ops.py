@@ -19,6 +19,7 @@ from ngraph.op_graph.axes import TensorDescription
 
 from neon.backends.convolution import _get_copy_transpose_kernel
 
+
 class DimShuffleKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
@@ -71,6 +72,7 @@ class FillKernel(GPUKernel):
         """
         # TODO: remove neon dependency
         self.out.fill(self.value)
+
 
 class SetItemKernel(GPUKernel):
     def __init__(self, transformer, op):

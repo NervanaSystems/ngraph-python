@@ -28,14 +28,14 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, nnConvolution, nnPool2D, Sequential, Callbacks
+from ngraph.frontends.neon import nnAffine, nnPreprocess, nnConvolution, nnPool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, make_keyed_computation
+from ngraph.frontends.neon import ax, make_keyed_computation, Callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
 from cifar10 import CIFAR10
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on cifar10 dataset')
 args = parser.parse_args()
@@ -50,12 +50,15 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 ######################
 # Model specification
 
+
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
     return (x - bgr_mean) / 255.
 
+
 def add_depth_axis(x):
     return ng.expand_dims(x, ax.D, 1)
+
 
 seq1 = Sequential([nnPreprocess(functor=cifar_mean_subtract),
                    nnPreprocess(functor=add_depth_axis),
@@ -82,13 +85,13 @@ inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
 optimizer = GradientDescentMomentum(0.1, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
 errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
-train_cost = ng.cross_entropy_multi(output_prob, ng.Onehot(inputs['tgt'], axis=ax.Y))
+train_cost = ng.cross_entropy_multi(output_prob, ng.onehot(inputs['tgt'], axis=ax.Y))
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])
 
 
 # Now bind the computations we are interested in
-transformer = Transformer.make_transformer()
+transformer = ngt.make_transformer()
 train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
 inference_computation = make_keyed_computation(transformer, errors, inputs)
 

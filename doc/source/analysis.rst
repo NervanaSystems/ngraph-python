@@ -1,2 +1,0 @@
-Analysis and Memory Allocation
-******************************

@@ -35,7 +35,7 @@ from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
 from mnist import MNIST
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
 args = parser.parse_args()
@@ -68,13 +68,13 @@ inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
 optimizer = GradientDescentMomentum(0.1, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
 errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
-train_cost = ng.cross_entropy_binary(output_prob, ng.Onehot(inputs['tgt'], axis=ax.Y))
+train_cost = ng.cross_entropy_binary(output_prob, ng.onehot(inputs['tgt'], axis=ax.Y))
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])
 
 
 # Now bind the computations we are interested in
-transformer = Transformer.make_transformer()
+transformer = ngt.make_transformer()
 train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
 inference_computation = make_keyed_computation(transformer, errors, inputs)
 

@@ -14,9 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-import numpy as np
-from itertools import takewhile
-import functools
 from operator import itemgetter
 
 
@@ -61,8 +58,8 @@ class Container(object):
         op name regex, and upstream, downstream from given ops.
         Here we just have selection by exact name.
         """
-        return Container({k: v for k,v in self.inputs.items() if k in inputs},
-                         {k: v for k,v in self.outputs.items() if k in outputs})
+        return Container({k: v for k, v in self.inputs.items() if k in inputs},
+                         {k: v for k, v in self.outputs.items() if k in outputs})
 
 
 def make_keyed_computation(transformer, outputs, named_inputs):
@@ -73,19 +70,3 @@ def make_keyed_computation(transformer, outputs, named_inputs):
         return comp_func(*itemgetter(*input_keys)(named_buffers))
 
     return keyed_comp_func
-
-
-def ne_compose(layer_list, function_name):
-
-    inputs, outputs = dict(), dict()
-
-    out_func = functools.reduce(lambda f, g:
-                         lambda x: f(getattr(g, function_name)(x)),
-                     layer_list,
-                     lambda x: x)
-
-    outputs[getattr(layer_list[-1], 'outputs')] = out_func
-
-    return Container(inputs=inputs, outputs=outputs)
-
-

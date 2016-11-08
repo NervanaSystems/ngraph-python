@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Test the usage of ng.Constant
+Test the usage of ng.constant
 """
 from __future__ import print_function
 
@@ -24,7 +24,7 @@ from ngraph.util.utils import executor
 
 def test_constant_init(transformer_factory):
     """TODO."""
-    a = ng.Constant(5)
+    a = ng.constant(5)
     result = executor(a)()
     print(result)
 
@@ -32,15 +32,15 @@ def test_constant_init(transformer_factory):
     print("pass constant initialization")
 
     nparray = np.array(range(5))
-    a = ng.Constant(nparray)
+    a = ng.constant(nparray)
     result = executor(a)()
     np.testing.assert_allclose(result, nparray)
 
 
 def test_constant_add(transformer_factory):
     """TODO."""
-    a = ng.Constant(1)
-    b = ng.Constant(2)
+    a = ng.constant(1)
+    b = ng.constant(2)
     c = a + b
 
     result = executor(c)()
@@ -50,8 +50,8 @@ def test_constant_add(transformer_factory):
 
 def test_constant_multiply(transformer_factory):
     """TODO."""
-    a = ng.Constant(4)
-    b = ng.Constant(2)
+    a = ng.constant(4)
+    b = ng.constant(2)
     c = ng.multiply(a, b)
     result = executor(c)()
     assert result == 8
@@ -63,8 +63,8 @@ def test_numpytensor_add(transformer_factory):
     M = ng.make_axis(name='M', length=2)
     N = ng.make_axis(name='N', length=2)
 
-    a = ng.Constant(np.array([3, 5], dtype=np.float32), axes=[Y])
-    b = ng.Constant(np.array([3, 5], dtype=np.float32), axes=[Y])
+    a = ng.constant(np.array([3, 5], dtype=np.float32), [Y])
+    b = ng.constant(np.array([3, 5], dtype=np.float32), [Y])
     c = a + b
     result = executor(c)()
     assert np.array_equal(result, [6, 10])
@@ -73,8 +73,8 @@ def test_numpytensor_add(transformer_factory):
     np_b = np.array([[1, 2], [3, 4]], dtype=np.float32)
     np_c = np_a + np_b
 
-    a = ng.Constant(np_a, axes=[M, N])
-    b = ng.Constant(np_b, axes=[M, N])
+    a = ng.constant(np_a, [M, N])
+    b = ng.constant(np_b, [M, N])
     c = a + b
     result = executor(c)()
     assert np.array_equal(result, np_c)
@@ -91,10 +91,10 @@ def test_numpytensor_dot(transformer_factory):
 
     M.length = 1
     N.length = 3
-    a = ng.Constant(np_a, axes=[M, N])
+    a = ng.constant(np_a, [M, N])
     N.length = 3
     Y.length = 2
-    b = ng.Constant(np_b, axes=[N, Y])
+    b = ng.constant(np_b, [N, Y])
     c = ng.dot(a, b)
     result = executor(c)()
 
@@ -111,8 +111,8 @@ def test_numpytensor_multiply_constant(transformer_factory):
 
     M.length = 1
     N.length = 3
-    a = ng.Constant(np_a, axes=[M, N])
-    b = ng.Constant(2)
+    a = ng.constant(np_a, [M, N])
+    b = ng.constant(2)
     c = ng.multiply(a, b)
     result = executor(c)()
     print(result)
@@ -129,8 +129,8 @@ def test_numpytensor_add_constant(transformer_factory):
 
     M.length = 1
     N.length = 3
-    a = ng.Constant(np_a, axes=[M, N])
-    b = ng.Constant(2)
+    a = ng.constant(np_a, [M, N])
+    b = ng.constant(2)
     c = ng.add(a, b)
     result = executor(c)()
     print(result)
@@ -148,9 +148,9 @@ def test_numpytensor_fusion(transformer_factory):
 
     M.length = 1
     N.length = 3
-    a = ng.Constant(np_a, axes=[M, N])
-    b = ng.Constant(np_b, axes=[M, N])
-    c = ng.Constant(2)
+    a = ng.constant(np_a, [M, N])
+    b = ng.constant(np_b, [M, N])
+    c = ng.constant(2)
     d = ng.multiply(b, ng.add(a, c))
     result = executor(d)()
     print(result)
@@ -171,9 +171,9 @@ def test_numpytensor_mlp(transformer_factory):
     N.length = 1
     D.length = 3
     H.length = 2
-    x = ng.Constant(np_x, axes=[N, D])
-    w = ng.Constant(np_w, axes=[D, H])
-    b = ng.Constant(np_b, axes=[H])
+    x = ng.constant(np_x, [N, D])
+    w = ng.constant(np_w, [D, H])
+    b = ng.constant(np_b, [H])
     wx = ng.dot(x, w)
     c = wx + b
     result = executor(c)()

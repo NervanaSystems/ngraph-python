@@ -16,9 +16,9 @@
 import numpy as np
 
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
-from ngraph.transformers import Transformer
 from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
@@ -49,7 +49,7 @@ def test_pooling():
 
     J = T = 1
     R = S = 2
-    Transformer.make_transformer()
+    ngt.make_transformer()
 
     padding = dict(pad_d=0, pad_h=0, pad_w=0, pad_c=0)
     strides = dict(str_d=1, str_h=1, str_w=1, str_c=1)
@@ -60,14 +60,8 @@ def test_pooling():
     pool_params.update(strides)
     pool_params.update(fshape)
 
-    ax.N.length = N
-
-    ax.C.length = C
-    ax.D.length = D
-    ax.H.length = H
-    ax.W.length = W
-
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    ax_i.set_shape((C, D, H, W, N))
     inputs = ng.placeholder(axes=ax_i)
 
     ax_o = ng.make_axes([

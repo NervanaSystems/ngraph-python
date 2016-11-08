@@ -70,25 +70,10 @@ def spatial_axis(input, filter, padding, stride, role):
         ax_f = filter.role_axes(role)
         assert len(ax_f) != 0, "Unable to find filter axis with role {}".format(role.name)
         rr = ax_f[0].length
-
     out_axis = make_axis(length=output_dim(hh, rr, padding, stride),
                          name=ax_i[0].short_name,
                          roles=[role])
     return out_axis
-
-
-# def spatial_axis(input, filter, padding, stride, rolename):
-#     ax_i = find_axis_with_role(input.axes, rolename)
-#     assert ax_i is not None, "Unable to find input axis with role {}".format(rolename)
-#     hh = ax_i.length
-#     if isinstance(filter, int):
-#         rr = filter
-#     else:
-#         ax_f = find_axis_with_role(filter.axes, rolename)
-#         assert ax_f is not None, "Unable to find filter axis with role {}".format(rolename)
-#         rr = ax_f.length
-
-#     return make_axis(length=output_dim(hh, rr, padding, stride), name=ax_i.short_name)
 
 
 def make_axis_role(name=None, docstring=None):
@@ -133,7 +118,7 @@ def make_axis(length=None, name=None,
                 roles=roles, docstring=docstring)
 
 
-def make_axes(axes=None):
+def make_axes(axes=()):
     """
     Makes an Axes object.
 
@@ -188,7 +173,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         recurrent: Whether the axis is a recurrent axis.
         match_on_length: Whether to only use length (and not identity) when comparing
             equality against other Axis values. This is useful for anonymous Axis of
-            Constant tensors.
+            constant tensors.
     """
     def __init__(self,
                  length=None,
@@ -267,6 +252,12 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         """
         return 0
 
+    def __add__(self, offset):
+        return self.get_dual(offset)
+
+    def __sub__(self, offset):
+        return self.get_dual(-offset)
+
     def get_dual(self, offset=-1):
         """
         Returns a dual for an axis.
@@ -289,7 +280,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             self.__duals[offset] = dual
         return dual
 
-    def get_transpose(self):
+    @property
+    def T(self):
         return self.primary_axis.get_dual(-1 - self.dual_level)
 
     @property
@@ -720,7 +712,8 @@ class Axes(object):
         )
 
     def __sub__(self, other):
-        return Axes.subtract(self, Axes(other))
+        other = Axes(other)
+        return Axes((axis for axis in self if axis not in other))
 
     def __eq__(self, other):
         if not isinstance(other, Axes):
@@ -743,24 +736,9 @@ class Axes(object):
     def get_dual(self, dual_offset=-1):
         return Axes((axis.get_dual(dual_offset) for axis in self))
 
-    def get_transpose(self):
-        return Axes(axis.get_transpose() for axis in self)
-
-    @staticmethod
-    @with_args_as_axes
-    def subtract(axes1, axes2):
-        """
-        Returns the difference of the two Axes.
-
-        Arguments:
-            axes1: first axes to subtract
-            axes2: second axes to subtract
-
-        Returns:
-            The ordered difference
-        """
-        assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes((axis for axis in axes1 if axis.get_dual(0) not in axes2))
+    @property
+    def T(self):
+        return Axes(axis.T for axis in self)
 
     @staticmethod
     @with_args_as_axes
@@ -1399,12 +1377,18 @@ class TensorDescription(NameableValue):
             The tensor description.
 
         """
+        full_strides = self.full_strides
+        full_sizes = self.full_sizes
+        if self.ndim == 0:
+            full_strides = (0,) * len(new_axes)
+            full_sizes = new_axes.full_lengths
+
         return TensorDescription(
             new_axes,
             base=self.base,
             dtype=self.dtype,
-            full_strides=self.full_strides,
-            full_sizes=self.full_sizes,
+            full_strides=full_strides,
+            full_sizes=full_sizes,
             offset=self.offset,
             name=name
         )

@@ -26,7 +26,8 @@ get_thread_state().name_scope = [None]
 def _get_thread_name_scope():
     """
 
-    :return: Thread-local NameScope.
+    Returns:
+         NameScope: Thread-local NameScope.
     """
     return get_thread_state().name_scope
 
@@ -34,7 +35,8 @@ def _get_thread_name_scope():
 def get_current_name_scope():
     """
 
-    :return: The currently bound NameScope, or None.
+    Return:
+        NameScope: The currently bound NameScope, or None.
     """
     return _get_thread_name_scope()[-1]
 
@@ -49,7 +51,7 @@ def name_scope(name=None, name_scope=None):
         name: Create a new name scope within the current name scope
 
     Returns:
-        The new name scope.
+        NameScope: The new name scope.
     """
 
     name_scope = name_scope or NameScope(name=name)
@@ -85,7 +87,7 @@ def next_name_scope(name_scope_list):
         name_scope_list: A NameScopeList object.
 
     Returns:
-        The next namescope.
+        The next NameScope.
 
     """
     ns = next(name_scope_list)
@@ -99,7 +101,7 @@ def with_name_scope(fun, name=None):
 
     Arguments:
         fun: The function being annotated.
-        name: The name scope name, defaults to the function name
+        name (String): The name scope name, defaults to the function name
 
     Returns:
         The annotated function.
@@ -262,7 +264,7 @@ class NameScope(Parented):
         self._set_value_name("." + name, value)
 
 
-def make_namescope(name):
+def make_name_scope(name):
     """
     Creates a NameScope.
 
@@ -270,7 +272,7 @@ def make_namescope(name):
     is set to the attribute.
 
     Args:
-        name: The name of this namescope.
+        name: The name of this NameScope.
 
     Returns:
         Namescope: A NameScope.

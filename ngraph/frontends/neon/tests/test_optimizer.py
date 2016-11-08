@@ -17,10 +17,11 @@
 Test of the optimizers
 '''
 import ngraph as ng
+import ngraph.transformers as ngt
 import itertools as itt
 import numpy as np
 import copy
-
+from ngraph.util.utils import ExecutorFactory
 from ngraph.frontends.neon import GradientDescentMomentum
 from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 from neon.backends import gen_backend
@@ -65,17 +66,23 @@ def test_gdm(args, transformer_factory):
 
     be = gen_backend(backend='cpu', batch_size=N.length)
 
+    # restrict to numpy transformer for now
+    factory = ngt.make_transformer_factory('numpy')
+    ngt.set_transformer_factory(factory)
+    ngt.make_transformer()
+
     # generate dummy data (to initialize values)
     w_init = np.random.rand(C.length).astype('float32')
 
     # set up nervana graph
-    X = ng.placeholder(axes=ng.Axes([C, N]), name='X')
-    Y = ng.placeholder(axes=ng.Axes([N]), name='Y')
+    X = ng.placeholder([C, N], name='X')
+    Y = ng.placeholder([N], name='Y')
     I = ng.placeholder(axes=(), name='I')
 
-    W = ng.Variable(axes=ng.Axes([C]), initial_value=w_init)
+    W = ng.variable([C], name='W', initial_value=w_init)
 
-    transformer = ng.NumPyTransformer()
+    ex = ExecutorFactory()
+    transformer = ex.transformer
 
     lrate, mom, wdecay = args
     gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)

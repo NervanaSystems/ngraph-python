@@ -15,7 +15,6 @@
 from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
-import collections
 from ngraph.frontends.neon.axis import ar, ax
 import numpy as np
 from operator import itemgetter
@@ -89,6 +88,7 @@ class nnAffine(nnLayer):
         super(nnAffine, self).__init__(**kwargs)
         if self.axes is None:
             assert(nout is not None), "Must provide either axes or nout to Affine"
+
         self.nout = nout
         self.init = init
         self.activation = activation
@@ -103,9 +103,9 @@ class nnAffine(nnLayer):
         w_axes = out_axes - out_axes.recurrent_axes() + in_axes.get_dual()
         b_axes = in_obj.axes.sample_axes()
         if self.W is None:
-            self.W = ng.Variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+            self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         if self.b is None:
-            self.b = ng.Variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
+            self.b = ng.variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
 
         return self.activation(ng.dot(self.W, in_obj, use_dual=True) + self.b)
 
@@ -139,7 +139,6 @@ class nnConvBase(nnLayer):
         self.o_axes = None
         self.W = None
 
-
     def train_outputs(self, in_obj):
         cpm = self.convparams.copy()
         in_axes = in_obj.axes
@@ -149,7 +148,7 @@ class nnConvBase(nnLayer):
                 self.f_axes += ng.make_axis(name=_ax.short_name, roles=_ax.roles)
             self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
-            self.W = ng.Variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
 
         # TODO: clean this up
         if self.o_axes is None:
@@ -159,7 +158,7 @@ class nnConvBase(nnLayer):
                 ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
                 ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
                 ax.N
-                ])
+            ])
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
@@ -241,7 +240,7 @@ class nnPool2D(nnPoolBase):
             if len(fshape) == 2:
                 fshape = (1, 1, fshape[0], fshape[1])
             if len(fshape) != 4:
-                raise ValueError("Incorrect filter specification: {}".format(missing_keys))
+                raise ValueError("Incorrect filter specification: {}".format(fshape))
             fshape = {k: x for k, x in zip('JTRS', fshape)}
         if isinstance(strides, int):
             strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
@@ -307,17 +306,16 @@ class nnRecurrent(nnLayer):
 
         w_in_axes = hidden_axes + (in_axes.sample_axes() - in_axes.recurrent_axes()).get_dual()
         w_re_axes = hidden_axes + hidden_axes.get_dual()
-        b_axes = hidden_axes
 
-        self.W_input = ng.Variable(axes=w_in_axes,
+        self.W_input = ng.variable(axes=w_in_axes,
                                    initial_value=self.init(w_in_axes.lengths), name="W_in")
-        self.W_recur = ng.Variable(axes=w_re_axes,
+        self.W_recur = ng.variable(axes=w_re_axes,
                                    initial_value=self.init_inner(w_re_axes.lengths), name="W_re")
-        self.b = ng.Variable(axes=hidden_axes, initial_value=0, name="bias")
+        self.b = ng.variable(axes=hidden_axes, initial_value=0, name="bias")
 
         h_ff_buf = ng.dot(self.W_input, in_obj, use_dual=True, name="W_in_dot_in")
         h_ff_s = get_steps(h_ff_buf, self.time_axis)
-        self.h_init = ng.Constant(np.zeros(h_ff_s[0].axes.lengths),
+        self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
                                   axes=h_ff_s[0].axes,
                                   name="h_init")
         hprev = [self.h_init]

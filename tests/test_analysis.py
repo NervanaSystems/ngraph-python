@@ -19,6 +19,7 @@ Test the graph analysis functions.
 from __future__ import print_function
 
 import ngraph as ng
+import ngraph.transformers as ngt
 import ngraph.analysis as an
 from builtins import range, zip
 
@@ -40,9 +41,9 @@ def build_graphs(L, BS):
 
     # Builds Network
     activations = [ng.tanh for i in range(len(L) - 2)] + [ng.softmax]
-    X = ng.placeholder(axes=(L[0], BS), name='X')
-    Y = ng.placeholder(axes=(L[-1],), name='Y')
-    W = [ng.Variable(axes=(L_np1, L_n), name='W%d' % i)
+    X = ng.placeholder((L[0], BS), name='X')
+    Y = ng.placeholder((L[-1],), name='Y')
+    W = [ng.variable((L_np1, L_n), name='W%d' % i)
          for i, (L_np1, L_n) in enumerate(zip(L[1:], L[:-1]))]
     A = []
     for i, f in enumerate(activations):
@@ -50,7 +51,7 @@ def build_graphs(L, BS):
         A.append(f(ng.dot(W[i], Aim1)))
     Error = ng.cross_entropy_multi(A[-1], Y)
     dW = [ng.deriv(Error, w) for w in W]
-    transformer = ng.NumPyTransformer()
+    transformer = ngt.make_transformer()
     dfg = an.DataFlowGraph(transformer, dW)
     ifg = an.InterferenceGraph(dfg.liveness())
     return dfg, ifg

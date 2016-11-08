@@ -35,8 +35,8 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
-from ngraph.op_graph.convolution import convolution, bprop_conv, update_conv
-from ngraph.op_graph.pooling import pooling, bprop_pool
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
@@ -408,7 +408,7 @@ class GPUKernelGroup():
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
-    @add_kernel.on_type(convolution)
+    @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
         self.kernels.append(ConvFpropKernel(self, op))
 
@@ -440,11 +440,11 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self, op.tensor_description(), op.scalar))
 
-    @add_kernel.on_type(pooling)
+    @add_kernel.on_type(PoolingOp)
     def add_kernel(self, op):
         raise NotImplementedError("pooling kernel not implemented")
 
-    @add_kernel.on_type(bprop_pool)
+    @add_kernel.on_type(BpropPoolOp)
     def add_kernel(self, op):
         raise NotImplementedError("bprop_pool kernel not implemented")
 

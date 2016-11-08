@@ -16,9 +16,9 @@
 import numpy as np
 
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
-from ngraph.transformers import Transformer
 from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
@@ -47,25 +47,16 @@ def test_convolution():
     D, T = 1, 1
     H = W = 32
     R = S = 2
-    Transformer.make_transformer()
+    ngt.make_transformer()
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
 
-    ax.N.length = N
-    ax.C.length = C
-    ax.D.length = D
-    ax.H.length = H
-    ax.W.length = W
-    ax.T.length = T
-    ax.R.length = R
-    ax.S.length = S
-    ax.K.length = K
-
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-
+    ax_i.set_shape((C, D, H, W, N))
+    ax_f.set_shape((C, T, R, S, K))
     ax_o = ng.make_axes([
         ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
         spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
@@ -73,7 +64,6 @@ def test_convolution():
         spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
         ax.N
     ])
-
 
     inputs = ng.placeholder(axes=ax_i)
     filters = ng.placeholder(axes=ax_f)
@@ -85,7 +75,9 @@ def test_convolution():
     assert input_value.shape == ax_i.lengths
     assert filter_value.shape == ax_f.lengths
 
-    # compute convolution with graph
+    inputs = ng.placeholder(ax_i)
+    filters = ng.placeholder(ax_f)
+
     output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
     targets = ng.placeholder(axes=output.axes)
 

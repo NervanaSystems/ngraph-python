@@ -39,12 +39,12 @@ from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Ar
     SetItemOneDim, sign, sin, sqrt, square, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
-from ngraph.op_graph.convolution import convolution, update_conv, bprop_conv
-from ngraph.op_graph.pooling import pooling, bprop_pool
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor
+    DeviceTensor, make_transformer_factory, set_transformer_factory
 
 
 class NumPyConvEngine(object):
@@ -416,7 +416,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.ndarray.argmin({}, 0, out={})", x, out)
 
-    @generate_op.on_type(convolution)
+    @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
         self.conv_params.append(op.conv_params)
         self.conv_slices.append(
@@ -450,7 +450,7 @@ class NumPyCodeGenerator(PyGen):
             U=outputs
         )
 
-    @generate_op.on_type(pooling)
+    @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.pool_params.append(op.pool_params)
         self.pool_slices.append(NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params))
@@ -461,7 +461,7 @@ class NumPyCodeGenerator(PyGen):
             O=outputs
         )
 
-    @generate_op.on_type(bprop_pool)
+    @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
         self.append(
             NumPyPoolEngine.bprop_pool(),
@@ -815,5 +815,5 @@ class NumPyTransformer(Transformer):
             devlist[buf_index] = np.empty_like(hb)
         devlist[buf_index][:] = hb
 
-Transformer.set_transformer_factory(
-    Transformer.make_transformer_factory(NumPyTransformer.transformer_name))
+set_transformer_factory(
+    make_transformer_factory(NumPyTransformer.transformer_name))

@@ -13,12 +13,27 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from operator import itemgetter
 
 from ngraph.op_graph import op_graph
 
 
-class pooling(op_graph.TensorOp):
+def pooling(poolparams, inputs, axes, name=None, docstring=None):
+    """
+
+    Args:
+        poolparams: Dimensions.
+        inputs (TensorOp): Input to pooling.
+        name (String, optional): Name of the Op.
+        docstring (String, optional): Dcoumentation for the computation.
+
+    Returns:
+        TensorOp: The pooling computation.
+
+    """
+    return PoolingOp(poolparams, inputs, axes=axes, name=name, docstring=docstring)
+
+
+class PoolingOp(op_graph.TensorOp):
     _index = 0
 
     def __init__(self, pool_params, inputs, *args, **kwargs):
@@ -52,19 +67,19 @@ class pooling(op_graph.TensorOp):
                 "currently supported. ").format(pooltype=pooltype))
 
         self.pool_params = pool_params
-        self.index = pooling._index
+        self.index = PoolingOp._index
 
-        pooling._index += 1
+        PoolingOp._index += 1
 
-        super(pooling, self).__init__(
+        super(PoolingOp, self).__init__(
             args=(inputs,), *args, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs):
-        inputs.generate_add_delta(adjoints, bprop_pool(delta, inputs, self))
+        inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, self))
 
 
-class bprop_pool(op_graph.TensorOp):
+class BpropPoolOp(op_graph.TensorOp):
     def __init__(self, delta, inputs, fprop, *args, **kwargs):
         """
         Arguments:
@@ -73,6 +88,6 @@ class bprop_pool(op_graph.TensorOp):
         self.pool_params = fprop.pool_params
         self.index = fprop.index
 
-        super(bprop_pool, self).__init__(
+        super(BpropPoolOp, self).__init__(
             args=(delta,), *args, axes=inputs.axes, **kwargs
         )

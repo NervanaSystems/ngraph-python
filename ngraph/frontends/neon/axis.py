@@ -15,7 +15,7 @@
 import ngraph as ng
 
 # Define axis roles
-ar = ng.make_namescope(name="ar")
+ar = ng.make_name_scope(name="ar")
 
 ar.Height = ng.make_axis_role()
 ar.Width = ng.make_axis_role()
@@ -25,7 +25,7 @@ ar.Channelout = ng.make_axis_role()
 ar.Time = ng.make_axis_role()
 
 # Define the standard Neon axes
-ax = ng.make_namescope(name="ax")
+ax = ng.make_name_scope(name="ax")
 
 ax.N = ng.make_axis(batch=True, docstring="minibatch size")
 

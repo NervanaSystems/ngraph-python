@@ -17,7 +17,7 @@ from ngraph.frontends.neon import Sequential, nnPreprocess, nnRecurrent, nnAffin
 from ngraph.frontends.neon import UniformInit, Callbacks, RMSProp, ax, make_keyed_computation
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import SequentialArrayIterator
-from ngraph.transformers import Transformer
+import ngraph.transformers as ngt
 
 from ptb import PTB
 
@@ -46,7 +46,7 @@ valid_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_siz
 init = UniformInit(low=-0.08, high=0.08)
 
 # model initialization
-seq1 = Sequential([nnPreprocess(functor=lambda x: ng.Onehot(x, axis=ax.Y)),
+seq1 = Sequential([nnPreprocess(functor=lambda x: ng.onehot(x, axis=ax.Y)),
                    nnRecurrent(hidden_size, init, activation=Tanh()),
                    nnAffine(init, activation=Softmax(), bias=init, axes=(ax.Y, ax.REC))])
 
@@ -63,13 +63,13 @@ inputs = dict(inp=ng.placeholder(axes=ng.make_axes([ax.REC, ax.N])),
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6)
 output_prob = seq1.train_outputs(inputs['inp'])
 train_cost = ng.cross_entropy_multi(output_prob,
-                                    ng.Onehot(inputs['tgt'], axis=ax.Y),
+                                    ng.onehot(inputs['tgt'], axis=ax.Y),
                                     usebits=True)
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])
 
 # Now bind the computations we are interested in
-transformer = Transformer.make_transformer()
+transformer = ngt.make_transformer()
 train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
 
 cb = Callbacks(seq1, args.output_file, args.iter_interval)

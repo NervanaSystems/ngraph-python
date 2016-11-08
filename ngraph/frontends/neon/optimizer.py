@@ -244,7 +244,6 @@ class RMSProp(Optimizer):
         self.learning_rate = ng.persistent_tensor(axes=(), name='lrate',
                                                   initial_value=learning_rate)
 
-
     def __call__(self, cost_func, iteration_index):
         with ng.Op.saved_user_deps():
             state_updates, param_updates = [], []
@@ -264,16 +263,15 @@ class RMSProp(Optimizer):
                         lvalue=state,
                         rvalue=decay * state + (1.0 - decay) * ng.square(grad),
                         name='state_u_%s' % i)
-                    )
+                )
 
                 param_updates.append(
                     ng.assign(
                         lvalue=variable,
                         rvalue=variable - ((scale_factor * grad * self.learning_rate)
-                                          / (ng.sqrt(state + epsilon) + epsilon)),
+                                           / (ng.sqrt(state + epsilon) + epsilon)),
                         name='var_u_%s' % i)
-                    )
-
+                )
 
             lr_update = [ng.assign(self.learning_rate,
                                    self.schedule.get_learning_rate(self.learning_rate,

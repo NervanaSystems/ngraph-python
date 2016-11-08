@@ -1,5 +1,4 @@
-import gzip
-from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append, fetch_file
+from ngraph.util.persist import valid_path_append, fetch_file
 import os
 import numpy as np
 

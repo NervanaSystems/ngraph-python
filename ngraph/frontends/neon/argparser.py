@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 import os
 import configargparse
-from ngraph.transformers import Transformer
-from ngraph import RNG
+import ngraph.transformers as ngt
+
 
 class NgraphArgparser(configargparse.ArgumentParser):
 
@@ -49,27 +49,28 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           help="verbosity level.  Add multiple v's to "
                                "further increase verbosity")
         self.add_argument('-w', '--data_dir',
-                            default=os.path.join(self.work_dir, 'data'),
-                            help='working directory in which to cache '
-                                 'downloaded and preprocessed datasets')
+                          default=os.path.join(self.work_dir, 'data'),
+                          help='working directory in which to cache '
+                               'downloaded and preprocessed datasets')
         self.add_argument('-o', '--output_file',
-                            default=self.defaults.get('output_file', 'output.hdf5'),
-                            help='hdf5 data file for metrics computed during '
-                                 'the run, optional.  Can be used by nvis for '
-                                 'visualization.')
+                          default=self.defaults.get('output_file', 'output.hdf5'),
+                          help='hdf5 data file for metrics computed during '
+                               'the run, optional.  Can be used by nvis for '
+                               'visualization.')
 
         self.add_argument('-z', '--batch_size', type=int, default=128)
         self.add_argument('-b', '--backend', choices=['gpu', 'numpy'], default='numpy',
-                            help='backend type')
+                          help='backend type')
         self.add_argument('--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)
         self.add_argument('-r', '--rng_seed', type=int,
-                            default=self.defaults.get('rng_seed', None),
-                            metavar='SEED',
-                            help='random number generator seed')
+                          default=self.defaults.get('rng_seed', None),
+                          metavar='SEED',
+                          help='random number generator seed')
 
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args()
-        factory = Transformer.make_transformer_factory(args.backend)
-        Transformer.set_transformer_factory(factory)
+        factory = ngt.make_transformer_factory(args.backend)
+        ngt.set_transformer_factory(factory)
+
         return args

@@ -7,19 +7,19 @@ rtol = atol = 1e-2
 
 
 def test_stack():
-    ax = ng.make_namescope(name="ax")
-    ax.W = ng.Axis(length=4)
-    ax.H = ng.Axis(length=5)
-    ax.I = ng.Axis(length=3)
+    ax = ng.make_name_scope(name="ax")
+    ax.W = ng.make_axis(length=4)
+    ax.H = ng.make_axis(length=5)
+    ax.I = ng.make_axis(length=3)
 
-    axes = ng.Axes([ax.W, ax.H])
+    axes = ng.make_axes([ax.W, ax.H])
 
     rng = RandomTensorGenerator(0, np.float32)
 
     a_v = [rng.uniform(0, 1, axes) for i in range(ax.I.length)]
 
     for pos in range(len(axes) + 1):
-        a = [ng.placeholder(axes=axes, initial_value=_) for _ in a_v]
+        a = [ng.placeholder(axes, initial_value=_) for _ in a_v]
 
         s = ng.Stack(a, ax.I, pos)
 

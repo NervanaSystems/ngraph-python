@@ -21,8 +21,8 @@ def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     ex = ExecutorFactory()
     N = ng.make_axis("N")
     N.length = outputs.shape[0]
-    y = ng.placeholder(axes=ng.make_axes([N]))
-    t = ng.placeholder(axes=ng.make_axes([N]))
+    y = ng.placeholder([N])
+    t = ng.placeholder([N])
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
     np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)

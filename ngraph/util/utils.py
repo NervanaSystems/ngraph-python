@@ -18,9 +18,8 @@ from builtins import object
 import math
 import numpy as np
 
-from ngraph.op_graph.axes import Axes
-from ngraph.op_graph.op_graph import deriv
-from ngraph.transformers import Transformer
+import ngraph as ng
+import ngraph.transformers as ngt
 import decorator
 
 
@@ -70,7 +69,7 @@ class RandomTensorGenerator(object):
             self.rng.uniform(
                 low,
                 high,
-                Axes(axes).lengths),
+                ng.make_axes(axes).lengths),
             dtype=dtype)
 
     def discrete_uniform(self, low, high, quantum, axes, dtype=None):
@@ -92,7 +91,7 @@ class RandomTensorGenerator(object):
 
         n = math.floor((high - low) / quantum)
         result = np.array(self.rng.random_integers(
-            0, n, Axes(axes).lengths), dtype=dtype)
+            0, n, ng.make_axes(axes).lengths), dtype=dtype)
         np.multiply(result, quantum, result)
         np.add(result, low, result)
         return result
@@ -110,7 +109,7 @@ class RandomTensorGenerator(object):
         Returns:
             The tensor.
         """
-        return self.rng.random_integers(low, high, Axes(axes).lengths).astype(dtype)
+        return self.rng.random_integers(low, high, ng.make_axes(axes).lengths).astype(dtype)
 
 
 def with_error_settings(**new_settings):
@@ -162,14 +161,14 @@ def executor(results, *parameters):
     Returns:
       Function of placeholders in parameters
     """
-    return Transformer.make_transformer().computation(results, *parameters)
+    return ngt.make_transformer().computation(results, *parameters)
 
 
 class ExecutorFactory(object):
     """TODO."""
 
     def __init__(self):
-        self.transformer = Transformer.make_transformer()
+        self.transformer = ngt.make_transformer()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
@@ -200,7 +199,7 @@ class ExecutorFactory(object):
         fshape = f.axes.lengths
         xshape = px.axes.lengths
 
-        dfdx = deriv(f, px)
+        dfdx = ng.deriv(f, px)
         # print "============="
         # for op in Op.ordered_ops([dfdx]):
         #     print '-----'
