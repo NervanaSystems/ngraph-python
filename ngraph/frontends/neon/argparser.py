@@ -53,7 +53,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
                             help='working directory in which to cache '
                                  'downloaded and preprocessed datasets')
         self.add_argument('-o', '--output_file',
-                            default=self.defaults.get('output_file', None),
+                            default=self.defaults.get('output_file', 'output.hdf5'),
                             help='hdf5 data file for metrics computed during '
                                  'the run, optional.  Can be used by nvis for '
                                  'visualization.')

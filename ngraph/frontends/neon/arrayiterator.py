@@ -38,7 +38,6 @@ class ArrayIterator(object):
             self.shapes.append(x.shape[1:])
             self.batch_bufs.append(np.empty(x.shape[1:] + (self.batch_size,), x.dtype))
 
-
     @property
     def nbatches(self):
         """

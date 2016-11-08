@@ -14,92 +14,95 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-CIFAR MLP with spelled out neon model framework in one file
+MNIST MLP with spelled out neon model framework in one file
 
 The motivation is to show the flexibility of ngraph and how user can build a
 model without the neon architecture. This may also help with debugging.
 
 Run it using
-python examples/mnist/mnist_mlp_direct.py --work_dir <localpath> --output_file cfmlp.hdf5
+
+python examples/mnist/mnist_mlp.py --data_dir /usr/local/data/MNIST --output_file out.hd5
+
 """
 from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, Model, Callbacks
+from ngraph.frontends.neon import nnAffine, nnPreprocess, Sequential, Callbacks
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-import argparse
-from data import make_aeon_loaders
+from ngraph.frontends.neon import ax, make_keyed_computation
+from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import ArrayIterator
 
+from cifar10 import CIFAR10
+from ngraph.transformers import Transformer
 
-parser = argparse.ArgumentParser(description='Train a simple mlp on cifar data')
-parser.add_argument('--work_dir', required=True)
-parser.add_argument('--output_file')
-parser.add_argument('--results_file', default='results.csv')
-parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--num_iterations', type=int, default=2000)
-parser.add_argument('--iter_interval', type=int, default=200)
-parser.add_argument('--rseed', type=int, default=0)
+parser = NgraphArgparser(description='Train simple mlp on cifar10 dataset')
 args = parser.parse_args()
 
-np.random.seed(args.rseed)
+np.random.seed(args.rng_seed)
+
+# Create the dataloader
+train_data, valid_data = CIFAR10(args.data_dir).load_data()
+train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
+valid_set = ArrayIterator(valid_data, args.batch_size)
 
 ######################
 # Model specification
-hidden_size, output_size = 200, 10
-H1 = ng.Axis(hidden_size, name="H1")
-Y = ng.Axis(output_size, name="Y")
-
 
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
     return (x - bgr_mean) / 255.
 
-
-my_model = Model([nnPreprocess(functor=cifar_mean_subtract),
-                  nnAffine(out_axis=H1, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                  nnAffine(out_axis=Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
-
-
-transformer = ng.NumPyTransformer()
-
-# Create the dataloader
-train_set, valid_set = make_aeon_loaders(args.work_dir, args.batch_size, transformer)
+seq1 = Sequential([nnPreprocess(functor=cifar_mean_subtract),
+                   nnAffine(nout=200, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   nnAffine(axes=ax.Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
 ######################
 # Input specification
-image_channels, image_height, image_width = train_set.shapes()[0]
-C = ng.Axis(image_channels, name="C")
-H = ng.Axis(image_height, name="H")
-W = ng.Axis(image_width, name="W")
-N = ng.Axis(args.batch_size, name="N", batch=True)
-
-# place holder
-x = ng.placeholder(axes=ng.Axes([C, H, W, N]))
-t = ng.placeholder(axes=ng.Axes([N]))
-it_idx = ng.placeholder(axes=ng.Axes())  # iteration index, for learning rate evolution
-
-optimizer = GradientDescentMomentum(0.01, 0.9)
-
-pred = my_model.get_outputs(x)
-
-train_cost = ng.cross_entropy_multi(pred, ng.Onehot(t, axis=Y))
-train_graph = ([ng.mean(train_cost, out_axes=()),  # mean cost for display
-                optimizer(train_cost, it_idx)],  # update function for optimization
-               x, t, it_idx)  # inputs
-
-inf_graph = (pred, x)
+ax.C.length, ax.H.length, ax.W.length = train_set.shapes[0]
+ax.N.length = args.batch_size
+ax.Y.length = 10
 
 
-my_model.bind_transformer(transformer, train_graph, inf_graph)
+# placeholders with descriptive names
+inputs = dict(img=ng.placeholder(axes=ng.make_axes([ax.C, ax.H, ax.W, ax.N])),
+              tgt=ng.placeholder(axes=ng.make_axes([ax.N])),
+              idx=ng.placeholder(axes=ng.make_axes()))
 
-# train
-cb = Callbacks(my_model, args.output_file, args.iter_interval)
-my_model.train(train_set, args.num_iterations, cb)
+optimizer = GradientDescentMomentum(0.1, 0.9)
+output_prob = seq1.train_outputs(inputs['img'])
+errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
+train_cost = ng.cross_entropy_multi(output_prob, ng.Onehot(inputs['tgt'], axis=ax.Y))
+mean_cost = ng.mean(train_cost, out_axes=())
+updates = optimizer(train_cost, inputs['idx'])
 
-# # validate
-hyps, refs = my_model.eval(valid_set)
-np.savetxt(args.results_file, [(h, r) for h, r in zip(hyps, refs)], fmt='%s,%s')
-a = np.loadtxt(args.results_file, delimiter=',')
-err = np.sum((a[:, 0] != a[:, 1])) / float(a.shape[0])
-print("Misclassification: {}".format(err))
+
+# Now bind the computations we are interested in
+transformer = Transformer.make_transformer()
+train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
+inference_computation = make_keyed_computation(transformer, errors, inputs)
+
+cb = Callbacks(seq1, args.output_file, args.iter_interval)
+
+######################
+# Train Loop
+cb.on_train_begin(args.num_iterations)
+
+for mb_idx, data in enumerate(train_set):
+    cb.on_minibatch_begin(mb_idx)
+    batch_cost, _ = train_computation(dict(img=data[0], tgt=data[1], idx=mb_idx))
+    seq1.current_batch_cost = float(batch_cost)
+    cb.on_minibatch_end(mb_idx)
+
+cb.on_train_end()
+
+######################
+# Evaluation
+all_errors = []
+for data in valid_set:
+    batch_errors = inference_computation(dict(img=data[0], tgt=data[1], idx=0))
+    bsz = min(valid_set.ndata - len(batch_errors), len(batch_errors))
+    all_errors.extend(list(batch_errors[:bsz]))
+
+print("Misclassification: {}".format(np.mean(all_errors)))

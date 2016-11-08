@@ -18,6 +18,8 @@ import ngraph as ng
 import collections
 from ngraph.frontends.neon.axis import ar, ax
 import numpy as np
+from operator import itemgetter
+
 
 class Layer(object):
     """TODO."""
@@ -140,11 +142,11 @@ class nnConvBase(nnLayer):
 
     def train_outputs(self, in_obj):
         cpm = self.convparams.copy()
-
+        in_axes = in_obj.axes
         if self.f_axes is None:
-            self.f_axes = in_obj.axes.role_axes(ar.Channel)
+            self.f_axes = in_axes.role_axes(ar.Channel)
             for _ax in (ax.T, ax.R, ax.S, ax.K):
-                self.f_axes += ng.make_axis(name=_ax.shortname, roles=_ax.roles)
+                self.f_axes += ng.make_axis(name=_ax.short_name, roles=_ax.roles)
             self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
             self.W = ng.Variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
@@ -153,9 +155,9 @@ class nnConvBase(nnLayer):
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
                 ng.make_axis(self.f_axes[4].length, name='C', roles=[ar.Channel]),
-                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
-                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
-                spatial_axis(in_obj.axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
                 ax.N
                 ])
 
@@ -175,16 +177,16 @@ class nnConv2D(nnConvBase):
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
 
-        super(nnConv2D, self).__init__(self, fshape, init, strides, padding, **kwargs)
+        super(nnConv2D, self).__init__(fshape, init, strides, padding, **kwargs)
 
 
 class nnConvolution(nnConv2D):
-    def __init__(self, fshape, init, strides, padding, activation=(lambda x: x), **kwargs):
+    def __init__(self, fshape, init, strides=1, padding=0, activation=(lambda x: x), **kwargs):
         self.activation = activation
-        super(nnConvolution, self).__init__(self, fshape, init, strides, padding, **kwargs)
+        super(nnConvolution, self).__init__(fshape, init, strides, padding, **kwargs)
 
     def train_outputs(self, in_obj):
-        return self.activation(super(nnConvolution, self).train_outputs(self, in_obj))
+        return self.activation(super(nnConvolution, self).train_outputs(in_obj))
 
 
 class nnPoolBase(nnLayer):
@@ -198,7 +200,7 @@ class nnPoolBase(nnLayer):
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
 
     """
-    def __init__(self, fshape, init, strides, padding, op='max', **kwargs):
+    def __init__(self, fshape, strides, padding, op='max', **kwargs):
         super(nnPoolBase, self).__init__(**kwargs)
         self.poolparams = dict(J=None, T=None, R=None, S=None,
                                pad_h=None, pad_w=None, pad_d=None, pad_c=None,
@@ -214,17 +216,16 @@ class nnPoolBase(nnLayer):
 
         self.o_axes = None
 
-
     def train_outputs(self, in_obj):
         ppm = self.poolparams.copy()
-
+        in_axes = in_obj.axes
         # TODO: clean this up
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                spatial_axis(in_obj.axes, ppm['J'], ppm['pad_c'], ppm['str_c'], role=ar.Channel),
-                spatial_axis(in_obj.axes, ppm['T'], ppm['pad_d'], ppm['str_d'], role=ar.Depth),
-                spatial_axis(in_obj.axes, ppm['R'], ppm['pad_h'], ppm['str_h'], role=ar.Height),
-                spatial_axis(in_obj.axes, ppm['S'], ppm['pad_w'], ppm['str_w'], role=ar.Width),
+                ng.spatial_axis(in_axes, ppm['J'], ppm['pad_c'], ppm['str_c'], role=ar.Channel),
+                ng.spatial_axis(in_axes, ppm['T'], ppm['pad_d'], ppm['str_d'], role=ar.Depth),
+                ng.spatial_axis(in_axes, ppm['R'], ppm['pad_h'], ppm['str_h'], role=ar.Height),
+                ng.spatial_axis(in_axes, ppm['S'], ppm['pad_w'], ppm['str_w'], role=ar.Width),
                 ax.N
             ])
 
@@ -232,7 +233,7 @@ class nnPoolBase(nnLayer):
 
 
 class nnPool2D(nnPoolBase):
-    def __init__(self, fshape, init, strides, padding, **kwargs):
+    def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
         if isinstance(fshape, int):
             fshape = (1, 1, fshape, fshape)
@@ -246,7 +247,7 @@ class nnPool2D(nnPoolBase):
             strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
-        super(nnPool2D, self).__init__(self, fshape, init, strides, padding, **kwargs)
+        super(nnPool2D, self).__init__(fshape, strides, padding, **kwargs)
 
 
 class nnRecurrent(nnLayer):

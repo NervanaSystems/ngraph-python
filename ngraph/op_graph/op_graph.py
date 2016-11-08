@@ -1127,6 +1127,12 @@ class ExpandDims(ReshapeOp):
         )
 
 
+def expand_dims(x, axis, dim, **kwargs):
+    if axis in x.axes:
+        return x
+    return ExpandDims(x, axis, dim, **kwargs)
+
+
 class ResultHandle(ReshapeOp):
     def __init__(self, x, **kwargs):
         super(ResultHandle, self).__init__(

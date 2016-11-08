@@ -64,12 +64,13 @@ class CIFAR10(object):
                 Xlist.append(d['data'])
                 ylist.append(d['labels'])
 
-        X_train = np.vstack(Xlist)
+        X_train = np.vstack(Xlist).reshape(-1, 3, 32, 32)
         y_train = np.vstack(ylist)
 
         with open(os.path.join(batchdir, 'test_batch'), 'rb') as f:
             d = pickle_load(f)
             X_test, y_test = d['data'], d['labels']
+            X_test = X_test.reshape(-1, 3, 32, 32)
 
         y_train = y_train.reshape(-1, 1)
         y_test = np.array(y_test).reshape(-1, 1)

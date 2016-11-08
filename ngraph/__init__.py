@@ -16,7 +16,7 @@
 from __future__ import print_function
 
 from ngraph.op_graph.axes_ops import dimshuffle
-from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, Axis, Axes
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, Axis, Axes, spatial_axis
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp
