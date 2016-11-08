@@ -1603,7 +1603,7 @@ def placeholder(axes, dtype=None, initial_value=None, name=None):
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, name=None):
+def temporary(axes, dtype=None, name=None, init=None):
     """
     Temporary storage.
 
@@ -1613,6 +1613,7 @@ def temporary(axes, dtype=None, name=None):
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
         name (String, optional): A name for the storage.
+        init (optional): Neon-style init.
 
     Returns:
         AssignableTensorOp: The placeholder.
@@ -1621,6 +1622,7 @@ def temporary(axes, dtype=None, name=None):
     return AssignableTensorOp(graph_label_type="Temp",
                               constant=False, persistent=True,
                               trainable=False,
+                              init=init,
                               axes=axes, dtype=dtype, name=name)
 
 
@@ -2481,6 +2483,11 @@ def assign(lvalue, rvalue, **kwargs):
     return SetItem(lvalue, (), rvalue, **kwargs)
 
 
+def variance(x, out_axes=None, reduction_axes=None):
+    return mean(square(x - mean(x, out_axes=out_axes, reduction_axes=reduction_axes)),
+                out_axes=out_axes, reduction_axes=reduction_axes)
+
+
 class tensor_size(TensorOp):
     """
     A scalar returning the total size of a tensor.
@@ -2490,9 +2497,11 @@ class tensor_size(TensorOp):
             of these axes instead.
         kwargs: options, including name
     """
-    def __init__(self, x, reduction_axes=None, **kwargs):
-        if reduction_axes is None:
-            reduction_axes = x.axes
+    def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
+        if reduction_axes is None and out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        elif reduction_axes is None:
+            reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
         super(tensor_size, self).__init__(axes=())
 
