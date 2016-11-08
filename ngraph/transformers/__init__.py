@@ -12,9 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.transformers.base import Transformer
+from ngraph.transformers.base import make_transformer, set_transformer_factory, \
+    transformer_choices,  \
+    allocate_transformer, make_transformer_factory, Transformer
 
-__all__ = [Transformer]
+__all__ = [
+    'allocate_transformer',
+    'make_transformer',
+    'make_transformer_factory',
+    'set_transformer_factory',
+    'transformer_choices',
+    'Transformer'
+]
 
 try:
     import ngraph.transformers.nptransform  # noqa

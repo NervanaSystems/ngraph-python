@@ -84,15 +84,15 @@ def check_rnn(seq_len, input_size, hidden_size,
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
     # ========== neon model ==========
-    Cin = ng.Axis(input_size)
-    REC = ng.Axis(seq_len, recurrent=True)
-    N = ng.Axis(batch_size, batch=True)
+    Cin = ng.make_axis(input_size)
+    REC = ng.make_axis(seq_len, recurrent=True)
+    N = ng.make_axis(batch_size, batch=True)
 
     ex = ExecutorFactory()
     NervanaObject.be.rng = RNG(0)
 
     rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
-    inp_ng = ng.placeholder(axes=ng.Axes([Cin, REC, N]))
+    inp_ng = ng.placeholder([Cin, REC, N])
 
     # fprop graph
     out_ng = rnn_ng.configure(inp_ng)

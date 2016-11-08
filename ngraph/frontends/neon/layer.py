@@ -160,7 +160,7 @@ class Convolution(ParameterLayer):
         assert self.weight_shape is None
         names = ['C', 'T', 'R', 'S', 'K']
         weights_axes = [ng.make_axis(self.convparams[key], name=key) for key in names]
-        weights = ng.Variable(axes=weights_axes, init=self.init)
+        weights = ng.variable(weights_axes, init=self.init)
         self.weight_shape = self.nglayer.dimF2
         if self.bsum:
             self.batch_sum_shape = (self.nglayer.K, 1)
@@ -255,8 +255,8 @@ class Pooling(Layer):
         out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
         argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
                        for key in ['C', 'D', 'H', 'W', 'N']]
-        argmax = ng.persistent_tensor(axes=argmax_axes, name='pool')
-        return ng.pooling(self.nglayer, in_obj, argmax)
+        argmax = ng.persistent_tensor(argmax_axes, name='pool')
+        return ng.PoolingOp(self.nglayer, in_obj, argmax)
 
 
 class Linear(ParameterLayer):
@@ -287,7 +287,8 @@ class Linear(ParameterLayer):
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
 
-        self.W = ng.Variable(axes=out_axes - out_axes.recurrent_axes() + in_axes.get_dual(),
+        self.W = ng.variable(out_axes - out_axes.recurrent_axes() +
+                             [axis - 1 for axis in in_axes],
                              init=self.init)
         return ng.dot(self.W, in_obj, use_dual=True)
 
@@ -326,7 +327,7 @@ class Bias(ParameterLayer):
 
         """
         in_obj = super(Bias, self).configure(in_obj)
-        return in_obj + ng.Variable(axes=in_obj.axes.sample_axes())
+        return in_obj + ng.variable(in_obj.axes.sample_axes())
 
 
 class Activation(Layer):

@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.util.utils import ExecutorFactory
-from ngraph.transformers.base import Transformer
+import ngraph.transformers as ngt
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -62,7 +62,7 @@ def test_expand_dims(transformer_factory):
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
+                tensor = ng.placeholder(ng.make_axes(tensor_axes))
 
                 expanded = ng.ExpandDims(tensor, new_axis, dim)
                 expander_fun = ex.executor(expanded, tensor)
@@ -97,7 +97,7 @@ def test_slice(transformer_factory):
 
     try:
         from ngraph.transformers.gputransform import GPUTransformer
-        if isinstance(Transformer.make_transformer(), GPUTransformer):
+        if isinstance(ngt.make_transformer(), GPUTransformer):
             pytest.xfail("fails on pre-neon 1.7 gpu")
     except ImportError:
         pass
@@ -165,7 +165,7 @@ def test_slice(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
+        tensor = ng.placeholder(ng.make_axes(tensor_axes))
         expected = np.array(test['expected'], dtype='float32')
 
         s = test['slice']
@@ -221,7 +221,7 @@ def test_padding(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(axes=ng.make_axes(tensor_axes))
+        tensor = ng.placeholder(ng.make_axes(tensor_axes))
         padding = test['padding']
         padded_axes = test['padded_axes']
         padded = ng.pad(tensor, padding, padded_axes)
@@ -265,11 +265,11 @@ def test_cast_axes(transformer_factory):
     C.length = 2
     D.length = 3
 
-    x = ng.placeholder(axes=(C, D))
+    x = ng.placeholder((C, D))
 
     x_slice = x[1, :]
     # Cast back to known axes
-    x_cast = x_slice.with_axes(D)
+    x_cast = ng.cast_axes(x_slice, [D])
 
     # Verfiy that the tensor broadcasts along ax.D
     y = x + x_cast

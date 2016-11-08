@@ -31,7 +31,7 @@ def test_dimshuffle_fprop(transformer_factory):
     A = ng.make_axis(2)
     B = ng.make_axis(3)
 
-    x = ng.placeholder(axes=ng.make_axes([A, B]))
+    x = ng.placeholder(ng.make_axes([A, B]))
 
     # compute convolution with graph
     output = ng.Dimshuffle(x, axes=ng.make_axes([B, A]))
@@ -53,7 +53,7 @@ def test_dimshuffle_bprop(transformer_factory):
     A = ng.make_axis(2)
     B = ng.make_axis(3)
 
-    x = ng.placeholder(axes=ng.make_axes([A, B]))
+    x = ng.placeholder(ng.make_axes([A, B]))
 
     # randomly initialize
     x_value = rng.uniform(-1, 1, x.axes)
@@ -82,7 +82,7 @@ def C():
 
 @pytest.fixture
 def x(A, B, C):
-    return ng.placeholder(axes=ng.make_axes([A, B]))
+    return ng.placeholder(ng.make_axes([A, B]))
 
 
 def test_fail_on_missing(transformer_factory, x, B):

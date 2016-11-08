@@ -13,19 +13,19 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from neon.util.argparser import NeonArgparser
-from ngraph.transformers import Transformer
 from neon import NervanaObject
-from ngraph import RNG
+import ngraph as ng
+import ngraph.transformers as ngt
 
 
 class NgraphArgparser(NeonArgparser):
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args(gen_be=gen_be)
-        NervanaObject.be.rng = RNG(NervanaObject.be.rng_seed)
+        NervanaObject.be.rng = ng.RNG(NervanaObject.be.rng_seed)
         name = args.backend
         if name == 'cpu':
             name = 'numpy'
-        factory = Transformer.make_transformer_factory(name)
-        Transformer.set_transformer_factory(factory)
+        factory = ngt.make_transformer_factory(name)
+        ngt.set_transformer_factory(factory)
 
         return args

@@ -25,11 +25,11 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples tf_importer
+STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
 TEST_OPTS :=
-TEST_DIRS := tests/ tf_importer/tests/ ngraph/frontends/neon/tests
+TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -61,7 +61,7 @@ clean:
 
 test:
 	@echo Running unit tests...
-	@py.test --cov=ngraph --cov=tf_importer $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml
 
 style:
