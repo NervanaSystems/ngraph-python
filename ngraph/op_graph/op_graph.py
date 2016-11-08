@@ -2166,6 +2166,30 @@ class DotOp(TensorOp):
         )
 
     def generate_adjoints(self, adjoints, delta, x, y):
+        """
+        Generates the adjoint contributions for x and y.
+
+        On input, x axes can be grouped as IJ* and y axes as JK where
+        J* is predecessor of J.
+
+        Axes will be:
+            Delta: IK.
+            x adj: IJ*
+            y adj: JK
+
+        For x adj, we have IK and JK, so we dual K for delta and J for y
+        to get IK* and J*K for a product of IJ*.
+
+        For y adj, we have IJ* and IK, to get JK, so we dual I and undual
+        J* in x, to get I*J and IK for a product of JK.
+
+        Args:
+            adjoints: The adjoints for the deriv being computed.
+            delta (TensorOp): The backprop op.
+            x (TensorOp): The x argument.
+            y (TensorOp): The y argument.
+
+        """
         x.generate_add_delta(
             adjoints,
             dot(dualed_axes(delta, self.y_out_axes, -1, 0),
