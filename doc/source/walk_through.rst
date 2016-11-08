@@ -22,9 +22,7 @@ Let's begin with a very simple example: computing ``x+1`` for several values of 
 API.  We should think of the computation as being invoked from the *host*, but possibly taking place
 somewhere else, which we will refer to as *the device.*
 
-The nervana graph currently uses a compilation model. You define computations you want to run, compile them, and
-then run them. In the future, we plan to make this even more compiler-like, where you produce something like an
-executable that can later be run on various platforms, as well as provide a more interactive version.
+The nervana graph currently uses a compilation model. Users first define the computations, then they are compiled and run. In the future, we plan an even more compiler-like approach, where an executable is produced can later be run on various platforms, in addition to an interactive version.
 
 Our first program will provide values for ``x`` and receive ``x+1`` for each ``x`` provided.
 
@@ -56,36 +54,46 @@ The complete program is
         print(plus_one(i))
 
 
-We begin by importing ``ngraph``, the Python module for frontend graph construction, and ``ngraph.transformers``, the module for frontend transformer operations.
+We begin by importing ``ngraph``, the Python module for graph construction, and ``ngraph.transformers``, the module for transformer operations.
 
-Next we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we use ``placeholder`` to define a port for transferring tensors between the host and the device. We use ``Axes`` to tell nervana graph about these tensors. Axes are like tensor shapes, with some semantics added. In this example, ``x`` is a scalar so the axes are empty.
+.. code-block:: python
 
-The ``ngraph`` graph construction API uses functions to build a graph of ``Op`` objects. Each function may add operations to the graph, and will return an ``Op`` that represents the computation. Here, the ``Op`` returned is a ``TensorOp``, which defines the Python "magic methods" for arithmetic. We can use a ``TensorOp`` in an arithmetic expression, the result is an ``Op`` for the result of that operation. We could less concisely have written
+    import ngraph as ng
+    import ngraph.transformers as ngt
+
+Next, we create an operational graph (op-graph) for the computation.  Following |TF| terminology, we use ``placeholder`` to define a port for transferring tensors between the host and the device. ``Axes`` are used to tell the graph the tensor shape. In this example, ``x`` is a scalar so the axes are empty.
+
+The ``ngraph`` graph construction API uses functions to build a graph of ``Op`` objects. Each function may add operations to the graph, and will return an ``Op`` that represents the computation. Here, the ``Op`` returned is a ``TensorOp``, which defines the Python "magic methods" for arithmetic (for example, ``__add__()``). We could less concisely have written
 
 .. code-block:: python
 
     x_plus_one = ng.add(x, 1)
 
-which may be more convenient when implementing a frontend.
-
-Another bit of behind the scenes magic occurs with the Python ``1``, which is not an ``Op``. When an argument to a graph constructors is not an ``Op``, nervana graph will attempt to convert it to an ``Op`` using ``ng.constant``, the graph function for making a constant. Thus, what is really happening is
+Another bit of behind the scenes magic occurs with the Python ``1``, which is not an ``Op``. When an argument to a graph constructor is not an ``Op``, nervana graph will attempt to convert it to an ``Op`` using ``ng.constant``, the graph function for creating a constant. Thus, what is really happening is:
 
 .. code-block:: python
 
     x_plus_one = ng.add(x, ng.constant(1))
 
-Once the op-graph is set up, we can compile it with a *transformer*.  Here we use ``make_transformer`` to make a defuult transformer.  We tell the transformer the function to compute ``x_plus_one`` and the associated parameter ``x``. The current default transformer uses NumPy for execution.
+Once the op-graph is defined, we can compile it with a *transformer*.  Here we use ``make_transformer`` to make a default transformer.  We tell the transformer the function to compute, ``x_plus_one``, and the associated parameter ``x``. The current default transformer uses NumPy for execution.
 
-The first time the transformer executes a computation, the graph is analyzed and compiled, and the storage is allocated and initialized on the device.  These steps can be performed manually, for example if some device state is to be restored from
-previously saved state.  Once compiled, the computations are callable Python objects.
+.. code-block:: python
 
-On each call to ``plus_one`` the value of ``x`` is copied to the device, 1 is added, and then the result is copied
+    # Select a transformer
+    transformer = ngt.make_transformer()
+
+    # Define a computation
+    plus_one = transformer.computation(x_plus_one, x)
+
+The first time the transformer executes a computation, the graph is analyzed and compiled, and storage is allocated and initialized on the device. Once compiled, the computations are callable Python objects.
+
+On each call to ``x_plus_one`` the value of ``x`` is copied to the device, 1 is added, and then the result is copied
 back from the device.
 
 The Compiled x + 1 Program
 --------------------------
 
-We can examine the compiled code (currently located in ``/tmp`` folder) to view the runtime device model. Here we show the code with some clarifying comments.
+The compiled code can be examined (currently located in ``/tmp`` folder) to view the runtime device model. Here we show the code with some clarifying comments.
 
 .. code-block:: python
 
@@ -140,7 +148,6 @@ We can examine the compiled code (currently located in ``/tmp`` folder) to view 
             self.alloc_a_AssignableTensorOp_1_0()
             self.alloc_a_AddZeroDim_0_0()
 
-
         def Computation_0(self):
             np.add(self.a_AssignableTensorOp_0_0_v_AssignableTensorOp_0_0_, self.a_AssignableTensorOp_1_0_v_AssignableTensorOp_1_0_, out=self.a_AddZeroDim_0_0_v_AddZeroDim_0_0_)
 
@@ -148,14 +155,14 @@ We can examine the compiled code (currently located in ``/tmp`` folder) to view 
             pass
 
 
-Tensors have two components, storage for their elements (using the convention ``a_`` for the allocated storage of a tensor) and views of that storage (denoted as ``a_...v_``).  The ``alloc_`` methods allocate
+Tensors have two components: storage for their elements (using the convention ``a_`` for the allocated storage of a tensor) and views of that storage (denoted as ``a_...v_``).  The ``alloc_`` methods allocate
 storage and then create the views of the storage that will be needed.  The view creation is separated from the
 allocation because storage may be allocated in multiple ways.  The ``allocate`` method calls each
 allocator, and each allocator creates the needed views.  The NumPy transformer's ``allocate`` method calls the
 ``allocate`` method.
 
-Each allocated storage can also be initialized to for example, random gaussian variables. In this example, there are no initializations, so the method ``init`` which performs  the one-time device
-initialization is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
+Each allocated storage can also be initialized to, for example, random gaussian variables. In this example, there are no initializations, so the method ``init``, which performs the one-time device
+initialization, is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
 
 The method ``Computation_0`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
 so let's look at a more complex example next.
@@ -163,12 +170,16 @@ so let's look at a more complex example next.
 Logistic Regression
 ===================
 
-This example performs logistic regression. We want to classify an obervation :math:`x` into one of two classes, denoted by :math:`y=0` and :math:`y=1`. With a simple linear model :math:`\hat{y}=\sigma(Wx)`, we want to find the optimal values for :math:`W`. Here, we use gradient descent with a learning rate of :math:`\alpha` and the cross-entropy as the error function.
+This example performs logistic regression. We want to classify an obervation :math:`x` into one of two classes, denoted by :math:`y=0` and :math:`y=1`. Using a simple linear model :math:`\hat{y}=\sigma(Wx)`, we want to find the optimal values for :math:`W`. Here, we use gradient descent with a learning rate of :math:`\alpha` and the cross-entropy as the error function.
 
 The complete program source can be found in :download:`../../examples/walk_through/wt_2_logres.py`.
 
-The data is synthetically generated as a mixture of two Gaussian distributions in 4-d space.  Our dataset consists of 10
-mini-batches of 128 samples each:
+We first define the axes for our tensors. In the nervana graph, `Axes` are similar to tensor shapes, except with additional semantics added. The function ``ng.make_axis`` will create an ``Axis`` object with an optionally supplied `name` argument. For example
+
+.. code-block:: python
+   my_axis = ng.make_axis(length=256, name='my_axis')
+
+Here, we use a ``NameScope`` to set the names of the various axes. A ``NameScope`` is an object that sets the name of an object to that of its assigned attribute. So when we set ``ax.N`` to an ``Axis`` object, the ``name`` of the object is automatically set to ``ax.N``.
 
 .. code-block:: python
 
@@ -176,27 +187,25 @@ mini-batches of 128 samples each:
     ax.N = ng.make_axis(length=128)
     ax.C = ng.make_axis(length=4)
 
+The input data is synthetically generated as a mixture of two Gaussian distributions in 4-d space.  Our dataset consists of 10
+mini-batches of 128 samples each:
+
     g = gendata.MixtureGenerator([.5, .5], (ax.C.length,))
     XS, YS = g.gen_data(ax.N.length, 10)
 
 
-Our model has three placeholders, ``X``, ``Y``, and ``alpha``. Each placeholder needs to have its axes specified, so we first define the axes. The function ``ng.make_axis`` will make an ``Axis``, and a ``name`` argument may be supplied, but we instead use a ``NameScope`` to set the names. A ``NameScope`` is an object that sets the name of an object that is set to one of its attributes. So when we set ``ax.N`` to an ``Axis`` object, the ``name`` of the object is set to ``ax.N``.
-
-``alpha`` is a scalar, so we pass in empty axes:
+Our model has three placeholders, ``X``, ``Y``, and ``alpha``, each of which need to have axes defined. ``alpha`` is a scalar, so we pass in empty axes:
 
 .. code-block:: python
 
     alpha = ng.placeholder(())
 
-``X`` and ``Y`` are tensors and need axes:
-have shape, which we provide to the placeholders. Our convention is to use the last axis for samples.  The placeholders can be specified as:
+``X`` and ``Y`` are tensors for the input and output data, respectively. Our convention is to use the last axis for samples.  The placeholders can be specified as:
 
 .. code-block:: python
 
     X = ng.placeholder([ax.C, ax.N])
     Y = ng.placeholder([ax.N])
-
-The ``X`` has two axes, the channel axis ``ax.C``, and the batch axis, ``ax.N``, while each ``Y`` is a scalar on the batch axis ``ax.N``.
 
 We also need to specify the training weights, ``W``.  Unlike a placeholder, ``W`` should retain its value from computation
 to computation (for example, across mini-batches of training).  Following |TF|, we call this a *variable*.  We specify the variable with both ``Axes`` and also an initial value:
@@ -205,16 +214,18 @@ to computation (for example, across mini-batches of training).  Following |TF|, 
 
     W = ng.variable([ax.C - 1], initial_value=0)
 
-The ``dot`` operation applies a transformation specified by its first argument to its second argument. If you have vectors :math:`v1`  and :math:`w`, then :math:`v^Tw` will transform :math:`w` to a scalar. We can think of the transpose as converting the vecor :math:`v` into a function that operates on :math:`w`. If we have :math:`A^Tw` we can think of :math:`A^T` as a vector or transformation, with the result being a vector of scalars.
-
-Things are a little more complicated with tensors since there can be many axes, and we want to mark which axes in the first argument of ``dot`` are to act on axes in the second argument. Every axis is a member of a family of axes we call duals of the axis, and each axis in the family has a position. When you create an axis, its dual position is 0. We have defined ``dot`` do pair axes in the first and second arguments that are in the same dual family and have consecutive positions. We want the variable `W` to act on the `ax.C` axis, so we want the axis for `W` to be in the position before `ax.C`, which we can obtain with `ax.C - 1`. We initialize ``W`` to ``0``.
-
 Now we can estimate :math:`y` and compute the average loss:
 
 .. code-block:: python
 
     Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True))
     L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
+
+Here we use several ngraph functions, including ``ng.dot`` and ``ng.sigmoid``. Since a tensor can have multiple axes, we need a way to mark which axes in the first argument of ``ng.dot`` are to act on which axes in the second argument.
+
+Every axis is a member of a family of axes we call duals of the axis, and each axis in the family has a position. When you create an axis, its dual position is 0. ``dot`` pairs axes in the first and second arguments that are of the same dual family and have consecutive positions.
+
+We want the variable `W` to act on the `ax.C` axis, so we want the axis for `W` to be in the position before `ax.C`, which we can obtain with `ax.C - 1`. We initialize ``W`` to ``0``.
 
 NOTE: The ``dot`` operation previously matched axes by identity, which was problematic for RNNs. We are temporarily using ``use_dual`` to indicate that the axis matching based on dual axes should be used until all previous uses of ``dot`` have been modified.
 
@@ -319,7 +330,7 @@ We can add a bias :math:`b` to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This ch
     Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
 
 Now we have two variables to update, ``W`` and ``b``.  However, all the updates are essentially the same, and
-we know that everything to be updated is a variable.  We can use the ``variables`` method to find all the
+we know that everything to be updated is a variable.  We can use the ``variables()`` method to find all the
 trainable variables used in an ``Op``'s computation:
 
 .. code-block:: python
