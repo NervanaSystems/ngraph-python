@@ -28,16 +28,7 @@
    installation.rst
    overview.rst
    walk_through.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Tutorials
-
-   mnist_tutorial.rst
    building_graphs.rst
-   building_new_layers.rst
-   example_ops.rst
 
 .. toctree::
    :hidden:
@@ -46,11 +37,8 @@
 
    op_graph.rst
    tensors.rst
-   analysis.rst
    autodiff.rst
    axes.rst
-   frontends.rst
-   transformers.rst
    tensorflow.rst
 
 .. toctree::
@@ -59,4 +47,4 @@
    :caption: API
 
    api.rst
-   internal.rst
+   implementation.rst
