@@ -22,7 +22,7 @@ from neon.backends import gen_backend
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, \
+    CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -93,7 +93,7 @@ class GPUKernel():
         self.input0_1d = False
         self.input1_1d = False
 
-    @generic_method
+    @generic_method(Op)
     def add_op(self, op, *args):
         if op.is_device_op:
             raise ValueError("Unhandled op: {}".format(op))

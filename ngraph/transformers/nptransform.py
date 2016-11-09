@@ -29,7 +29,7 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, \
+    CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -198,7 +198,7 @@ class NumPyCodeGenerator(PyGen):
             return x.ref_str
         return x
 
-    @generic_method
+    @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
             raise ValueError((

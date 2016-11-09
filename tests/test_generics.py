@@ -39,7 +39,7 @@ def generic_checker(check):
 
 
 def test_generic_function():
-    @generic_function
+    @generic_function()
     def selector(x, y):
         return ('base', x, y)
 
@@ -70,7 +70,7 @@ def test_generic_function():
 
 
 class Visitor(object):
-    @generic_method
+    @generic_method()
     def selector(self, x, y):
         return ('base', x, y)
 

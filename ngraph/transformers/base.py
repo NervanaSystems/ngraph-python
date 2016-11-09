@@ -435,7 +435,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finish_transform()
         self.finalized = True
 
-    @generic_method
+    @generic_method(Op)
     def initialize_tensor_descriptions(self, op):
         """
         Ensures that tensor descriptions associated with op are initialized.
@@ -500,7 +500,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Allocate storage on the device.
         """
 
-    @generic_method
+    @generic_method(Op)
     def initialize_constant(self, op):
         pass
 

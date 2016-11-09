@@ -71,7 +71,7 @@ class PeepholeGraphPass(GraphPass):
 
 class RequiredTensorShaping(PeepholeGraphPass):
     """TODO."""
-    @generic_method
+    @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         """
         TODO.
@@ -210,7 +210,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
 
 class SimplePrune(PeepholeGraphPass):
     """TODO."""
-    @generic_method
+    @generic_method()
     def visit(self, op):
         """
         TODO.
