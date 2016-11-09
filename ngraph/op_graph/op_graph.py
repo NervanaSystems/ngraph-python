@@ -1847,25 +1847,46 @@ class ElementWise(TensorOp):
 
 
 class UnaryElementwiseAxesOp(ElementWise):
+    """
+    Handles initialization and 1d shaping for unary elementwise operations.
+    """
     one_d_class = None
 
     def __init__(self, x, name=None):
         super(UnaryElementwiseAxesOp, self).__init__(args=(x,), axes=x.axes, name=name)
 
     def reduce_to_one_d(self):
+        """
+        Flatten the argument, do the op, and then unflatten the result.
+
+        The class attribure one_d_class should hold the Op class for the flattened operation.
+
+        Returns:
+            Flattened computation.
+
+        """
         return unflatten(self.__class__.one_d_class(flatten(self.args[0]), name=self.name))
 
 
 class UnaryElementwiseOneDOp(ElementWise):
+    """
+    Handles initialization for unary operations.
+    """
     def __init__(self, x, name=None):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes, name=name)
 
 
 class NegativeOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d negative.
+    """
     pass
 
 
 class NegativeOp(UnaryElementwiseAxesOp):
+    """
+    Negative of a tensor.
+    """
     one_d_class = NegativeOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1888,10 +1909,16 @@ def negative(x, name=None):
 
 
 class AbsoluteOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d absolute value.
+    """
     pass
 
 
 class AbsoluteOp(UnaryElementwiseAxesOp):
+    """
+    Absolute value of a tensor.
+    """
     one_d_class = AbsoluteOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1914,10 +1941,16 @@ def absolute(x, name=None):
 
 
 class SinOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d sin.
+    """
     pass
 
 
 class SinOp(UnaryElementwiseAxesOp):
+    """
+    Sin of a tensor.
+    """
     one_d_class = SinOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1940,10 +1973,16 @@ def sin(x):
 
 
 class CosOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d cos.
+    """
     pass
 
 
 class CosOp(UnaryElementwiseAxesOp):
+    """
+    Cos of a tensor.
+    """
     one_d_class = CosOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1966,10 +2005,16 @@ def cos(x, name=None):
 
 
 class TanhOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d tanh.
+    """
     pass
 
 
 class TanhOp(UnaryElementwiseAxesOp):
+    """
+    Tanh of a tensor.
+    """
     one_d_class = TanhOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -1992,10 +2037,16 @@ def tanh(x, name=None):
 
 
 class ExpOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d exp.
+    """
     pass
 
 
 class ExpOp(UnaryElementwiseAxesOp):
+    """
+    Exp of a tensor.
+    """
     one_d_class = ExpOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -2018,10 +2069,16 @@ def exp(x, name=None):
 
 
 class LogOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d log.
+    """
     pass
 
 
 class LogOp(UnaryElementwiseAxesOp):
+    """
+    Log of a tensor.
+    """
     one_d_class = LogOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -2061,10 +2118,16 @@ def safelog(x, limit=np.exp(-safelog_cutoff)):
 
 
 class ReciprocalOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d reciprocal.
+    """
     pass
 
 
 class ReciprocalOp(UnaryElementwiseAxesOp):
+    """
+    Reciprocal of a tensor.
+    """
     one_d_class = ReciprocalOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -2087,10 +2150,12 @@ def reciprocal(x, name=None):
 
 
 class SignOneDOp(UnaryElementwiseOneDOp):
+    "1d Sign."
     pass
 
 
 class SignOp(UnaryElementwiseAxesOp):
+    "Sign of a tensor."
     one_d_class = SignOneDOp
 
 
@@ -2110,10 +2175,16 @@ def sign(x, name=None):
 
 
 class SquareOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d square.
+    """
     pass
 
 
 class SquareOp(UnaryElementwiseAxesOp):
+    """
+    Square of a tensor.
+    """
     one_d_class = SquareOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
@@ -2136,10 +2207,14 @@ def square(x, name=None):
 
 
 class SqrtOneDOp(UnaryElementwiseOneDOp):
+    "1d square root."
     pass
 
 
 class SqrtOp(UnaryElementwiseAxesOp):
+    """
+    Square root of a tensor.
+    """
     one_d_class = SqrtOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
