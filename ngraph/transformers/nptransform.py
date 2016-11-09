@@ -466,7 +466,7 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(AssignOneDOp)
     def generate_op(self, op, out, tensor, value):
-        self.append("{}.__setitem__(..., {})", tensor, value)
+        self.append("{}.__setitem__((), {})", tensor, value)
 
     @generate_op.on_type(SetItemOneDOp)
     def generate_op(self, op, out, tensor, item, value):
