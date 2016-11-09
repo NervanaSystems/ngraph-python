@@ -290,7 +290,7 @@ class Linear(ParameterLayer):
         self.W = ng.variable(out_axes - out_axes.recurrent_axes() +
                              [axis - 1 for axis in in_axes],
                              init=self.init)
-        return ng.dot(self.W, in_obj, use_dual=True)
+        return ng.dot(self.W, in_obj)
 
 
 class Bias(ParameterLayer):

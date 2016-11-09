@@ -31,7 +31,7 @@ Y = ng.placeholder([ax.N])
 
 W = ng.variable([ax.C - 1], initial_value=0)
 
-Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True))
+Y_hat = ng.sigmoid(ng.dot(W, X))
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
 grad = ng.deriv(L, W)

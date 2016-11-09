@@ -77,7 +77,7 @@ def test_gdm(args, transformer_factory):
     # set up nervana graph
     X = ng.placeholder([C, N], name='X')
     Y = ng.placeholder([N], name='Y')
-    W = ng.variable([C], name='W', initial_value=w_init)
+    W = ng.variable([C - 1], name='W', initial_value=w_init)
 
     ex = ExecutorFactory()
     transformer = ex.transformer

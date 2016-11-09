@@ -34,7 +34,7 @@ Y = ng.placeholder([ax.N])
 W = ng.variable([ax.C - 1], initial_value=0)
 b = ng.variable((), initial_value=0)
 
-Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
+Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
 updates = [ng.assign(v, v - alpha * ng.deriv(L, v))

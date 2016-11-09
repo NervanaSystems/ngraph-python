@@ -35,7 +35,7 @@ def test_evalutaion_twice(transformer_factory):
 
     hidden1_weights = ng.constant(
         np.array([[1], [1]], dtype='float32'),
-        ng.make_axes([C, W])
+        ng.make_axes([C - 1, W])
     )
 
     hidden1_biases = ng.constant(
@@ -43,7 +43,7 @@ def test_evalutaion_twice(transformer_factory):
         ng.make_axes([D, W])
     )
 
-    hidden1 = ng.dot(x, hidden1_weights) + hidden1_biases
+    hidden1 = ng.dot(hidden1_weights, x) + hidden1_biases
 
     comp = executor(hidden1)
 
