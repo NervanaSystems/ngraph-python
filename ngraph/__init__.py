@@ -27,10 +27,13 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     persistent_tensor, placeholder, \
     slice_along_axis, temporary, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
-    temporary, constant_value, variance
+    temporary, constant_value, variance, \
+    negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
+    square, sqrt
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
+    'absolute',
     'add',
     'as_op',
     'as_ops',
@@ -40,17 +43,28 @@ __all__ = [
     'constant',
     'constant_value',
     'convolution',
+    'cos',
+    'exp',
     'is_constant',
     'is_constant_scalar',
+    'log',
     'make_axes',
     'make_axis',
     'make_axis_role',
     'make_name_scope',
     'name_scope',
+    'negative',
     'persistent_tensor',
     'placeholder',
     'pooling',
+    'reciprocal',
+    'safelog',
+    'sign',
+    'sin',
     'slice_along_axis',
+    'sqrt',
+    'square',
+    'tanh',
     'temporary',
     'variable',
     'variance',

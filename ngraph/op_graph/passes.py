@@ -22,7 +22,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, Dot, ReductionOp, m
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, Dimshuffle
+    Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp
 
 from ngraph.util.generics import generic_method
 
@@ -156,6 +156,10 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(OnehotTwoDim)
     def visit(self, op):
         pass
+
+    @visit.on_type(UnaryElementwiseAxesOp)
+    def visit(self, op):
+        self.replace_op(op, op.reduce_to_one_d())
 
     @visit.on_type(BinaryElementWiseAxesOp)
     def visit(self, op):

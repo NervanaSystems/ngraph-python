@@ -28,19 +28,19 @@ from ngraph.op_graph import axes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
+from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, CosOneDOp, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, exp, \
+    EqualOneDim, EqualZeroDim, ExpOneDOp, \
     GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
     LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, \
-    SetItemOneDim, sign, sin, sqrt, square, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, ReciprocalOneDOp, \
+    SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
+    Sum, TanhOneDOp, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
@@ -208,7 +208,7 @@ class NumPyCodeGenerator(PyGen):
                 op=op.__class__.__name__,
             ))
 
-    @generate_op.on_type(absolute)
+    @generate_op.on_type(AbsoluteOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
 
@@ -296,7 +296,7 @@ class NumPyCodeGenerator(PyGen):
             argmax=argmax
         )
 
-    @generate_op.on_type(cos)
+    @generate_op.on_type(CosOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
@@ -343,7 +343,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(exp)
+    @generate_op.on_type(ExpOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.exp({}, out={})", x, out)
 
@@ -383,7 +383,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.less_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(log)
+    @generate_op.on_type(LogOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.log({}, out={})", x, out)
 
@@ -419,7 +419,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(negative)
+    @generate_op.on_type(NegativeOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
 
@@ -458,7 +458,7 @@ class NumPyCodeGenerator(PyGen):
                 {out}[()] = {x}
             """, out=out, x=x)
 
-    @generate_op.on_type(reciprocal)
+    @generate_op.on_type(ReciprocalOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
@@ -466,19 +466,19 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__({}, {})", tensor, op.item, value)
 
-    @generate_op.on_type(sign)
+    @generate_op.on_type(SignOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.sign({}, out=out)", x, out)
 
-    @generate_op.on_type(sin)
+    @generate_op.on_type(SinOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.sin({}, out={})", x, out)
 
-    @generate_op.on_type(sqrt)
+    @generate_op.on_type(SqrtOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.sqrt({}, out={})", x, out)
 
-    @generate_op.on_type(square)
+    @generate_op.on_type(SquareOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.square({}, out={})", x, out)
 
@@ -494,7 +494,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.sum({}, axis=0, out={})", x, out)
 
-    @generate_op.on_type(tanh)
+    @generate_op.on_type(TanhOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
 
