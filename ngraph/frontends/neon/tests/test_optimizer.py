@@ -77,7 +77,7 @@ def test_gdm(args, transformer_factory):
     # set up nervana graph
     X = ng.placeholder([C, N], name='X')
     Y = ng.placeholder([N], name='Y')
-    W = ng.variable([C], name='W', initial_value=w_init)
+    W = ng.variable([C - 1], name='W', initial_value=w_init)
 
     ex = ExecutorFactory()
     transformer = ex.transformer
@@ -117,7 +117,7 @@ def test_gdm(args, transformer_factory):
         be_W = param.get()[:, 0]
         be_Ws.append(be_W)
 
-        np.testing.assert_allclose(be_W, ng_W, rtol=1e-4)
+        np.testing.assert_allclose(be_W, ng_W, rtol=1e-3)
 
         # generate dummy data for the next minibatch
         (x, y, _) = generate_data(C, N)

@@ -256,7 +256,7 @@ class Pooling(Layer):
         argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
                        for key in ['C', 'D', 'H', 'W', 'N']]
         argmax = ng.persistent_tensor(argmax_axes, name='pool')
-        return ng.PoolingOp(self.nglayer, in_obj, argmax)
+        return ng.pooling(self.nglayer, in_obj, argmax)
 
 
 class Linear(ParameterLayer):
@@ -290,7 +290,7 @@ class Linear(ParameterLayer):
         self.W = ng.variable(out_axes - out_axes.recurrent_axes() +
                              [axis - 1 for axis in in_axes],
                              init=self.init)
-        return ng.dot(self.W, in_obj, use_dual=True)
+        return ng.dot(self.W, in_obj)
 
 
 class Bias(ParameterLayer):

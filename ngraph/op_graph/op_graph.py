@@ -619,7 +619,7 @@ def as_ops(xs):
     return tuple(as_op(x) for x in xs)
 
 
-class InitTensor(Op):
+class InitTensorOp(Op):
     """
     Initializes a device tensor from a CPU tensor.
 
@@ -633,7 +633,7 @@ class InitTensor(Op):
 
     """
     def __init__(self, tensor, valfun, **kwargs):
-        super(InitTensor, self).__init__(args=(tensor,), **kwargs)
+        super(InitTensorOp, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
 
     @property
@@ -644,6 +644,20 @@ class InitTensor(Op):
             False, because this is run from the CPU.
         """
         return False
+
+
+def init_tensor(tensor, valfun):
+    """
+    Initializes a device tensor from a CPU tensor.
+
+    Arguments:
+        tensor: Tensor to be intialized.
+        valfun: Function that performs initialization
+
+    Returns:
+        Op: The tensor initialization.
+
+    """
 
 
 class SetItem(Op):
@@ -1512,7 +1526,7 @@ def constant(const, axes=None, dtype=None, name=None):
     def value_fun(tensor):
         return val_tensor
 
-    val.add_initializer(InitTensor(val, value_fun))
+    val.add_initializer(init_tensor(val, value_fun))
 
     return val
 
@@ -1603,7 +1617,7 @@ def placeholder(axes, dtype=None, initial_value=None, name=None):
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, name=None):
+def temporary(axes, dtype=None, name=None, init=None):
     """
     Temporary storage.
 
@@ -1613,6 +1627,7 @@ def temporary(axes, dtype=None, name=None):
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
         name (String, optional): A name for the storage.
+        init (optional): Neon-style init.
 
     Returns:
         AssignableTensorOp: The placeholder.
@@ -1621,6 +1636,7 @@ def temporary(axes, dtype=None, name=None):
     return AssignableTensorOp(graph_label_type="Temp",
                               constant=False, persistent=True,
                               trainable=False,
+                              init=init,
                               axes=axes, dtype=dtype, name=name)
 
 
@@ -1775,7 +1791,7 @@ class RNG(object):
                 tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
-        val.add_initializer(InitTensor(val, value_fun))
+        val.add_initializer(init_tensor(val, value_fun))
         return val
 
     def normal(self, loc, scale, size, **kwargs):
@@ -1798,7 +1814,7 @@ class RNG(object):
                 tensor_description.dtype)
 
         val = constant_storage(axes=size, **kwargs)
-        val.add_initializer(InitTensor(val, value_fun))
+        val.add_initializer(init_tensor(val, value_fun))
         return val
 
 
@@ -2362,61 +2378,114 @@ class Dimshuffle(TensorOp):
         )
 
 
-class Dot(TensorOp):
-    def __init__(self, x, y, use_dual=False, left_transpose=False, y_reduction_axes=None,
-                 **kwargs):
-        x_axes = x.axes
-        if left_transpose:
-            x_axes = x_axes.T
-            use_dual = True
+class DotOp(TensorOp):
+    def __init__(self, x, y, **kwargs):
+        self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
+        self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
+        self.x_out_axes = x.axes - self.x_reduction_axes
+        self.y_out_axes = y.axes - self.y_reduction_axes
 
-        dual_offset = 0
-        if use_dual:
-            dual_offset = 1
-        y_axes = y.axes
-
-        if y_reduction_axes is None:
-            y_reduction_axes = Axes.intersect(x_axes.get_dual(dual_offset), y_axes)
-        self.y_reduction_axes = y_reduction_axes
-        self.x_reduction_axes = self.y_reduction_axes.get_dual(-dual_offset)
-        self.x_out_axes = x_axes - self.x_reduction_axes
-        self.y_out_axes = y_axes - self.y_reduction_axes
-
+        if len(self.x_out_axes.intersect(self.y_out_axes)):
+            raise ValueError("Intersection in out axes for dot.")
         axes = self.x_out_axes + self.y_out_axes
 
-        if left_transpose:
-            self.x_reduction_axes = self.x_reduction_axes.T
-
-        super(Dot, self).__init__(
+        super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
         )
-        self.use_dual = use_dual
 
     def generate_adjoints(self, adjoints, delta, x, y):
         """
-        TODO.
+        Generates the adjoint contributions for x and y.
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-          y: TODO
+        On input, x axes can be grouped as IJ* and y axes as JK where
+        J* is predecessor of J.
 
-        Returns:
-          TODO
+        Axes will be:
+            Delta: IK.
+            x adj: IJ*
+            y adj: JK
+
+        For x adj, we have IK and JK, so we dual K for delta and J for y
+        to get IK* and J*K for a product of IJ*.
+
+        For y adj, we have IJ* and IK, to get JK, so we dual I and undual
+        J* in x, to get I*J and IK for a product of JK.
+
+        Args:
+            adjoints: The adjoints for the deriv being computed.
+            delta (TensorOp): The backprop op.
+            x (TensorOp): The x argument.
+            y (TensorOp): The y argument.
+
         """
         x.generate_add_delta(
             adjoints,
-            Dot(y, delta, left_transpose=self.use_dual, y_reduction_axes=self.y_out_axes)
+            dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                dualed_axes(y, self.y_reduction_axes, -1, 0))
         )
         y.generate_add_delta(
             adjoints,
-            Dot(x, delta, left_transpose=self.use_dual, y_reduction_axes=self.x_out_axes)
+            dot(dualed_axes(x, self.x_out_axes, -1, +1), delta)
         )
 
 
-def dot(*args, **kwargs):
-    return Dot(*args, **kwargs)
+def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
+    """
+    Cast axes to a dual offset of axes depending on membership in dual_axes.
+
+    In a dot(a, b), each pair of axes (a_i, b_j) between a and b where
+    a_i = b_j - 1
+    will be paired for multiplication and then summing.
+
+    Args:
+        x (TensorOp): A tensor.
+        filter: A collection of axes.
+        in_dual_offset: Dual shift amount for axes in filter.
+        out_dual_offset: Dual shift amount for axes not in filter.
+
+    Returns:
+        TesnsorOp: x with axes cast.
+
+    """
+    def dualed(axis):
+        if axis in filter:
+            return axis + in_dual_offset
+        else:
+            return axis + out_dual_offset
+    return cast_axes(x, (dualed(axis) for axis in x.axes))
+
+
+def dot(x, y, name=None):
+    """
+    The dot product of x and y.
+
+    Reduction axes in x are those whose dual offset is one less than an axis in y.
+
+    Args:
+        x (TensorOp): First argument.
+        y (TensorOp): Second argumnent.
+        name (String, optional): Name for the TensorOp.
+
+    Returns:
+        TensorOp: The dot product.
+
+    """
+    return DotOp(x, y, name=name)
+
+
+def squared_L2(x):
+    """
+    Returns the dot of x and y, with the axes of x set to their dual offset.
+
+    Args:
+        x (TensorOp): The first value, axes shifted down by 1.
+        y (TensorOp): The second value.
+
+    Returns:
+        TensorOp: The result.
+
+    """
+    return dot(dualed_axes(x, x.axes, -1, 0), x)
 
 
 class LowDimensionalDot(TensorOp):
@@ -2514,7 +2583,7 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert Axes.intersect(reduction_axes, out_axes) == make_axes(())
+        assert reduction_axes.intersect(out_axes) == make_axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs

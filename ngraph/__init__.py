@@ -24,10 +24,10 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     is_constant, is_constant_scalar, constant_value, constant_storage, \
-    persistent_tensor, placeholder, \
+    persistent_tensor, placeholder, init_tensor, \
     slice_along_axis, temporary, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
-    temporary, constant_value, variance, \
+    temporary, constant_value, variance, squared_L2, \
     negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
     square, sqrt
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
@@ -64,6 +64,7 @@ __all__ = [
     'slice_along_axis',
     'sqrt',
     'square',
+    'squared_L2',
     'tanh',
     'temporary',
     'variable',
