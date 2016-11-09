@@ -80,27 +80,20 @@ class Recurrent(ParameterLayer):
 
         self.W_input = ng.variable(
             hidden_axes + (in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()).get_dual(),
-            init=self.init,
-            name="W_input"
-        )
+            init=self.init).named("W_input")
 
         self.W_recur = ng.variable(
             hidden_axes + [axis - 1 for axis in hidden_axes],
-            init=self.init_inner,
-            name="W_recur"
-        )
+            init=self.init_inner).named("W_recur")
 
         self.b = ng.variable(
             hidden_axes,
-            initial_value=0,
-            name="bias"
-        )
+            initial_value=0).named("bias")
 
         h_ff_buf = ng.dot(self.W_input, in_obj, name="W_in_dot_in")
         h_ff_s = get_steps(h_ff_buf, self.time_axis)
         self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
-                                  h_ff_s[0].axes,
-                                  name="h_init")
+                                  h_ff_s[0].axes).named("h_init")
         hprev = [self.h_init]
 
         for i in range(self.time_axis.length):

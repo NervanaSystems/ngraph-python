@@ -55,7 +55,7 @@ class OpsNN(OpsBase):
         axis_y = logits.axes[1]
 
         # labels_one_hot: (Y2, N2)
-        labels_one_hot = ng.onehot(labels, axis=axis_y)
+        labels_one_hot = ng.one_hot(labels, axis=axis_y)
 
         # predicts: (N1, Y1)
         predicts = ng.softmax(logits, normalization_axes=axis_y)
@@ -64,7 +64,7 @@ class OpsNN(OpsBase):
         predicts_axes = ng.make_axes(
             [axis for axis in reversed(predicts.axes)])
         predicts = ng.Dimshuffle(predicts, axes=predicts_axes)
-        labels_one_hot = ng.cast_axes(labels_one_hot, axes=predicts_axes)
+        labels_one_hot = ng.cast_axes(labels_one_hot, predicts_axes)
 
         # cross_entropy: (N1,)
         cross_entropy = ng.cross_entropy_multi(

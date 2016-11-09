@@ -92,7 +92,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     variable = list(loss.variables())[0]  # we only have one variable thetas
     grad = ng.deriv(loss, variable)
     with ng.Op.saved_user_deps():
-        update = ng.assign(lvalue=variable, rvalue=variable - alpha * grad)
+        update = ng.assign(variable, variable - alpha * grad)
 
     # transformer
     transformer = ngt.make_transformer()

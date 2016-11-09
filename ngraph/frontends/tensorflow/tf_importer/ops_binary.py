@@ -221,11 +221,11 @@ class OpsBinary(OpsBase):
         elif left_shape == right_shape:
             # cast right axes to be the same as left
             right = ng.cast_axes(right, left.axes)
-            result_op = ng_op(left, right, name=tf_node.name)
+            result_op = ng_op(left, right).named(tf_node.name)
 
         else:
             # no need for casting
-            result_op = ng_op(left, right, name=tf_node.name)
+            result_op = ng_op(left, right).named(tf_node.name)
 
         # return op
         return result_op

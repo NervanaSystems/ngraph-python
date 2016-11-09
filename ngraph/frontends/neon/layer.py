@@ -255,7 +255,7 @@ class Pooling(Layer):
         out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
         argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
                        for key in ['C', 'D', 'H', 'W', 'N']]
-        argmax = ng.persistent_tensor(argmax_axes, name='pool')
+        argmax = ng.persistent_tensor(argmax_axes).named('pool')
         return ng.pooling(self.nglayer, in_obj, argmax)
 
 

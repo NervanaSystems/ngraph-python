@@ -191,6 +191,10 @@ class NameableValue(object):
         NameableValue.__all_names[name] = self
         self.__name = name
 
+    def named(self, name):
+        self.name = name
+        return self
+
 
 _default_parent = object()
 

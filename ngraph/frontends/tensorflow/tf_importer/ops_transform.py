@@ -59,7 +59,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Rank` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.constant(rank, axes=ng.make_axes([]), name=tf_node.name)
+        return ng.constant(rank, ng.make_axes([])).named(tf_node.name)
 
     def Range(self, tf_node, inputs):
         """
@@ -88,7 +88,7 @@ class OpsTransform(OpsBase):
 
         # return
         return ng.constant(
-            range_val, axes=shape_to_axes(range_val.shape), name=tf_node.name)
+            range_val, shape_to_axes(range_val.shape)).named(tf_node.name)
 
     def Size(self, tf_node, inputs):
         """
@@ -114,7 +114,7 @@ class OpsTransform(OpsBase):
             raise NotImplementedError("[NON-NATIVE] `Size` op's axes must be "
                                       "pre-determined before execution.")
         # return
-        return ng.constant(size, axes=ng.make_axes([]), name=tf_node.name)
+        return ng.constant(size, ng.make_axes([])).named(tf_node.name)
 
     def Cast(self, tf_node, inputs):
         """
@@ -163,7 +163,7 @@ class OpsTransform(OpsBase):
         axes = ng.make_axes([ng.make_axis(len(left.axes.lengths)), ])
 
         # return
-        return ng.constant(shape, axes=axes, name=tf_node.name)
+        return ng.constant(shape, axes).named(tf_node.name)
 
     def Reshape(self, tf_node, inputs):
         """
@@ -187,7 +187,7 @@ class OpsTransform(OpsBase):
             # new tensor
             np_val = np.reshape(tensor.const, shape.const.astype(int))
             return ng.constant(
-                np_val, axes=shape_to_axes(np_val.shape), name=tf_node.name)
+                np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
         except:
             raise NotImplementedError(
                 "Reshape not supported in ngraph, "
@@ -228,8 +228,7 @@ class OpsTransform(OpsBase):
         # make new constants
         return ng.constant(
             output_val,
-            axes=shape_to_axes(output_val.shape),
-            name=tf_node.name)
+            shape_to_axes(output_val.shape)).named(tf_node.name)
 
     def ExpandDims(self, tf_node, inputs):
         """
@@ -265,4 +264,4 @@ class OpsTransform(OpsBase):
         out_axis = ng.make_axes(pre_axis + [one_axis] + pos_axis)
 
         # broadcast
-        return ng.broadcast(tensor, axes=out_axis)
+        return ng.broadcast(tensor, out_axis)
