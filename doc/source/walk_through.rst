@@ -221,7 +221,7 @@ Now we can estimate :math:`y` and compute the average loss:
 
 .. code-block:: python
 
-    Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True))
+    Y_hat = ng.sigmoid(ng.dot(W, X))
     L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
 
 Here we use several ngraph functions, including ``ng.dot`` and ``ng.sigmoid``. Since a tensor can have multiple axes, we need a way to mark which axes in the first argument of ``ng.dot`` are to act on which axes in the second argument.
@@ -230,7 +230,7 @@ Every axis is a member of a family of axes we call duals of the axis, and each a
 
 We want the variable `W` to act on the `ax.C` axis, so we want the axis for `W` to be in the position before `ax.C`, which we can obtain with `ax.C - 1`. We initialize ``W`` to ``0``.
 
-NOTE: The ``dot`` operation previously matched axes by identity, which was problematic for RNNs. We are temporarily using ``use_dual`` to indicate that the axis matching based on dual axes should be used until all previous uses of ``dot`` have been modified.
+NOTE: The ``dot`` operation previously matched axes by identity, which was problematic for RNNs.
 
 Gradient descent requires computing the gradient, :math:`dL/dW`:
 
@@ -330,7 +330,7 @@ We can add a bias :math:`b` to the model: :math:`\hat{y}=\sigma(Wx+b)`.  This ch
     W = ng.variable([ax.C - 1], initial_value=0)
     b = ng.variable((), initial_value=0)
 
-    Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
+    Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 
 Now we have two variables to update, ``W`` and ``b``.  However, all the updates are essentially the same, and
 we know that everything to be updated is a variable.  We can use the ``variables()`` method to find all the
@@ -390,7 +390,7 @@ The calculation remains:
 
 .. code-block:: python
 
-    Y_hat = ng.sigmoid(ng.dot(W, X, use_dual=True) + b)
+    Y_hat = ng.sigmoid(ng.dot(W, X) + b)
 
 The two dual axes of ``W`` will match the corresponding axes of ``X`` in the dot product.
 
