@@ -21,7 +21,8 @@ from neon.backends import gen_backend
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, CosOneDOp, \
+from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
+    CosOneDOp, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -30,10 +31,10 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, ReciprocalOneDOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -277,7 +278,7 @@ class GPUKernel():
     def add_op(self, op, out, x, y):
         self._buffer_op("ne", x=x, y=y, out=out)
 
-    @add_op.on_type(Onehot)
+    @add_op.on_type(OneHotOp)
     def add_op(self, op, out, x):
         self._buffer_op("onehot", x=x, out=out)
 
@@ -328,7 +329,7 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
 
-    @add_op.on_type(tensor_size)
+    @add_op.on_type(TensorSizeOp)
     def add_op(self, op, out):
         self._buffer_op("fill", x=op.reduction_axes.size, out=out)
 

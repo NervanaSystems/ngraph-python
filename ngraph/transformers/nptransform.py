@@ -28,7 +28,8 @@ from ngraph.op_graph import axes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, CosOneDOp, \
+from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
+    CosOneDOp, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -37,10 +38,10 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, ReciprocalOneDOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
@@ -431,7 +432,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(Onehot)
+    @generate_op.on_type(OneHotOp)
     def generate_op(self, op, out, x):
         self.append("""
         o = {o}
@@ -498,7 +499,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
 
-    @generate_op.on_type(tensor_size)
+    @generate_op.on_type(TensorSizeOp)
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 

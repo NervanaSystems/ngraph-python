@@ -29,7 +29,8 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
     temporary, constant_value, variance, squared_L2, \
     negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
-    square, sqrt
+    square, sqrt, tensor_size, assign, set_item, batch_size, pad, sigmoid, \
+    one_hot
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     'as_op',
     'as_ops',
     'axes_with_order',
+    'batch_size',
     'broadcast',
     'cast_axes',
     'constant',
@@ -54,11 +56,15 @@ __all__ = [
     'make_name_scope',
     'name_scope',
     'negative',
+    'one_hot',
+    'pad',
     'persistent_tensor',
     'placeholder',
     'pooling',
     'reciprocal',
     'safelog',
+    'set_item',
+    'sigmoid',
     'sign',
     'sin',
     'slice_along_axis',
@@ -67,6 +73,7 @@ __all__ = [
     'squared_L2',
     'tanh',
     'temporary',
+    'tensor_size',
     'variable',
     'variance',
     'with_name_scope',

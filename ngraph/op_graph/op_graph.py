@@ -655,12 +655,13 @@ def init_tensor(tensor, valfun):
         valfun: Function that performs initialization
 
     Returns:
-        Op: The tensor initialization.
+        InitTensorOp: The tensor initialization.
 
     """
+    return InitTensorOp(tensor, valfun)
 
 
-class SetItem(Op):
+class SetItemOp(Op):
     """
     tensor[item] = val.
 
@@ -677,10 +678,26 @@ class SetItem(Op):
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         val = broadcast(val, tensor.axes)
-        super(SetItem, self).__init__(args=(tensor, val), **kwargs)
+        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
         self.item = item
         tensor.user_deps = OrderedSet([self])
         self.force = force
+
+
+def set_item(tensor, item, val, force=False, name=None):
+    """
+
+    Args:
+        tensor: (AssignableTensorOp): An assignable TensorOp.
+        item: The index.
+        val: The value to assign.
+        force (bool): Override constant check on tensor.
+
+    Returns:
+        SetItemOp: The op.
+
+    """
+    return SetItemOp(tensor, item, val, force=force, name=name)
 
 
 class SetItemOneDim(Op):
@@ -855,23 +872,23 @@ class TensorOp(Op):
 
     # Only works when capturing ops
     def __setitem__(self, key, val):
-        return SetItem(self, key, val)
+        return set_item(self, key, val)
 
     # Only works when capturing ops
     def __iadd__(self, val):
-        return SetItem(self, slice(None, None, None), self + val)
+        return set_item(self, slice(None, None, None), self + val)
 
     # Only works when capturing ops
     def __isub__(self, val):
-        return SetItem(self, slice(None, None, None), self - val)
+        return set_item(self, slice(None, None, None), self - val)
 
     # Only works when capturing ops
     def __imul__(self, val):
-        return SetItem(self, slice(None, None, None), self * val)
+        return set_item(self, slice(None, None, None), self * val)
 
     # Only works when capturing ops
     def __idiv__(self, val):
-        return SetItem(self, slice(None, None, None), self / val)
+        return set_item(self, slice(None, None, None), self / val)
 
     def __getitem__(self, item):
         return Slice(self, item)
@@ -961,14 +978,14 @@ class TensorOp(Op):
         """
         return self.axes.shape_dict()
 
-    def mean(self, **kwargs):
+    def mean(self, reduction_axes=None, out_axes=None):
         """
         Used in Neon front end.
 
         Returns: mean(self)
 
         """
-        return mean(self, **kwargs)
+        return mean(self, reduction_axes=reduction_axes, out_axes=out_axes)
 
     @property
     def value(self):
@@ -1837,6 +1854,7 @@ class UnaryElementwiseAxesOp(ElementWise):
 
     def reduce_to_one_d(self):
         return unflatten(self.__class__.one_d_class(flatten(self.args[0]), name=self.name))
+
 
 class UnaryElementwiseOneDOp(ElementWise):
     def __init__(self, x, name=None):
@@ -2748,16 +2766,16 @@ def argmin(x, dtype=None, **kwargs):
     return Argmin(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
-def assign(lvalue, rvalue, **kwargs):
+def assign(lvalue, rvalue, name=None):
     """
     Assignment; lvalue <= rvalue
 
     Arguments:
         lvalue: Tensor to assign to.
         rvalue: Value to be assigned.
-        kwargs: options, including name
+        name (String, optional): Name.
     """
-    return SetItem(lvalue, (), rvalue, **kwargs)
+    return set_item(lvalue, (), rvalue, name=name)
 
 
 def variance(x, out_axes=None, reduction_axes=None):
@@ -2765,7 +2783,7 @@ def variance(x, out_axes=None, reduction_axes=None):
                 out_axes=out_axes, reduction_axes=reduction_axes)
 
 
-class tensor_size(TensorOp):
+class TensorSizeOp(TensorOp):
     """
     A scalar returning the total size of a tensor.
     Arguments:
@@ -2780,10 +2798,22 @@ class tensor_size(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(tensor_size, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(axes=())
 
 
-class batch_size(tensor_size):
+def tensor_size(x, reduction_axes=None, out_axes=None):
+    """
+    A scalar returning the total size of a tensor.
+    Arguments:
+        x: The tensor whose axes we are measuring.
+        reduction_axes: if supplied, return the size
+            of these axes instead.
+        kwargs: options, including name
+    """
+    return TensorSizeOp(x, reduction_axes=reduction_axes, out_axes=out_axes)
+
+
+class BatchSizeOp(TensorSizeOp):
     """
     A scalar returning the total size of the batch axes of
     a tensor.
@@ -2792,14 +2822,27 @@ class batch_size(tensor_size):
         kwargs: options, including name
     """
     def __init__(self, x, **kwargs):
-        super(batch_size, self).__init__(
+        super(BatchSizeOp, self).__init__(
             x=x,
             reduction_axes=x.axes.batch_axes(),
             **kwargs
         )
 
 
-def pad(x, paddings, axes=None, **kwargs):
+def batch_size(x):
+    """
+
+    Args:
+        x: A Tensor
+
+    Returns:
+        The size of the batch axis in x.
+
+    """
+    return BatchSizeOp(x)
+
+
+def pad(x, paddings, axes=None):
     """
     Pads a tensor with zeroes along each of its dimensions.
 
@@ -2812,7 +2855,6 @@ def pad(x, paddings, axes=None, **kwargs):
         of the form (before, after)
       axes: the axes to be given to the padded tensor.
         If unsupplied, we create anonymous axes of the correct lengths.
-      **kwargs: Additional args for the created Op.
 
     Returns:
         TensorOp: symbolic expression for the padded tensor
@@ -2852,10 +2894,10 @@ def pad(x, paddings, axes=None, **kwargs):
         s = tuple(None if p == 0 else p for p in s)
         return slice(s[0], s[1], 1)
     slices = tuple(to_slice(p) for p in paddings)
-    return Unslice(x, axes=axes, slices=slices, **kwargs)
+    return Unslice(x, axes=axes, slices=slices)
 
 
-class Onehot(TensorOp):
+class OneHotOp(TensorOp):
     """
     Converts a tensor containing class indices to a onehot representation.
     For example, if x is a one-dimesnional tensor with value [0, 1], and the
@@ -2871,7 +2913,7 @@ class Onehot(TensorOp):
     """
     def __init__(self, x, axis, **kwargs):
         self.axis = axis
-        super(Onehot, self).__init__(
+        super(OneHotOp, self).__init__(
             args=(x,),
             axes=make_axes((axis,)) + x.axes,
             **kwargs
@@ -2888,21 +2930,31 @@ class Onehot(TensorOp):
         x, = self.args
         if len(x.axes) > 1:
             x = flatten(x)
-            out = OnehotTwoDim(x, self.axis)
+            out = OneHotTwoDimOp(x, self.axis)
             out = unflatten(
                 out,
                 [out.axes[0]] + list(out.axes[1].axes)
             )
             return out
         else:
-            return OnehotTwoDim(x, self.axis)
+            return OneHotTwoDimOp(x, self.axis)
 
 
-def onehot(*args, **kwargs):
-    return Onehot(*args, **kwargs)
+def one_hot(x, axis):
+    """
+
+    Args:
+        x: The one_hot tensor.
+        axis: The hot axis.
+
+    Returns:
+        OneHotOp: The op.
+
+    """
+    return OneHotOp(x, axis)
 
 
-class OnehotTwoDim(Onehot):
+class OneHotTwoDimOp(OneHotOp):
     """
     Handles conversion from one-dimensional vector of class labels
     to a two-dimensional onehot representation.
@@ -2914,11 +2966,13 @@ class OnehotTwoDim(Onehot):
     """
     def __init__(self, x, axis, **kwargs):
         assert len(x.axes) == 1
-        super(OnehotTwoDim, self).__init__(x, axis, **kwargs)
+        super(OneHotTwoDimOp, self).__init__(x, axis, **kwargs)
 
 
 class Sigmoid(object):
-    """Sigmoid"""
+    """
+    Marks a subgraph as a sigmoid to improve computation and autodiff.
+    """
 
     def __init__(self, x):
         self.x = x
@@ -2938,16 +2992,17 @@ class Sigmoid(object):
         self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
 
 
-def sigmoid(x, **kwargs):
+def sigmoid(x):
     """
-    TODO.
+    sigmoid(x)
+
+        :math:`\frac{1}{1+exp(-x)}`
 
     Arguments:
-      x: TODO
-      **kwargs: TODO
+        x: A tensor
 
     Returns:
-      TODO
+        TensorOp: sigmoid(x).
     """
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))
@@ -3000,18 +3055,21 @@ class Buffer(object):
         self.views = OrderedSet()
 
 
-def mean(x, **kwargs):
+def mean(x, reduction_axes=None, out_axes=None):
     """
-    TODO.
+    Computes the mean of x.
 
     Arguments:
-      x: TODO
-      **kwargs: TODO
+        x (TensorOp): A tensor.
+        reduction_axes (Axes, optional): If supplied, the mean is computed over these axes.
+        out_axes (Axes, optional): If supplied, the result has these axes; the mean is computed
+            over the remaining axes.
 
     Returns:
-      TODO
+        TensorOp: The mean.
     """
-    return sum(x, **kwargs) / tensor_size(x, **kwargs)
+    return sum(x, reduction_axes=reduction_axes, out_axes=out_axes) / \
+        tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
 def deriv(dependent_op, independent_op):

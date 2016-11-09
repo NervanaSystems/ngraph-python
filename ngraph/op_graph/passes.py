@@ -20,8 +20,8 @@ from collections import Iterable
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
-    OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, constant, \
+    OneHotTwoDimOp, BinaryElementWiseAxesOp, SetItemOp, DotOneDimensional, DotTwoDimensional, \
+    DotTwoByOne, exp, log, negative, OneHotOp, SetItemOneDim, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp
 
 from ngraph.util.generics import generic_method
@@ -149,11 +149,11 @@ class RequiredTensorShaping(PeepholeGraphPass):
     def visit(self, op):
         pass
 
-    @visit.on_type(Onehot)
+    @visit.on_type(OneHotOp)
     def visit(self, op):
         self.replace_op(op, op.as_two_dim())
 
-    @visit.on_type(OnehotTwoDim)
+    @visit.on_type(OneHotTwoDimOp)
     def visit(self, op):
         pass
 
@@ -165,7 +165,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
     def visit(self, op):
         self.replace_op(op, op.reduce_to_oned())
 
-    @visit.on_type(SetItem)
+    @visit.on_type(SetItemOp)
     def visit(self, op):
         tensor, val = op.args
         assert not isinstance(tensor, ReshapeOp)

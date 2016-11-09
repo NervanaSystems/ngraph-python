@@ -55,7 +55,7 @@ class OpsNN(OpsBase):
         axis_y = logits.axes[1]
 
         # labels_one_hot: (Y2, N2)
-        labels_one_hot = ng.onehot(labels, axis=axis_y)
+        labels_one_hot = ng.one_hot(labels, axis=axis_y)
 
         # predicts: (N1, Y1)
         predicts = ng.softmax(logits, normalization_axes=axis_y)

@@ -122,14 +122,14 @@ class OpsGradient(OpsBase):
         if grad_x_reduce_idx_:
             x_array = np.array(grad_x_reduce_idx_)
             ng_x_array = ng.constant(
-                x_array, axes=shape_to_axes(x_array.shape), name=tf_node.name)
+                x_array, shape_to_axes(x_array.shape)).named(tf_node.name)
         else:
             ng_x_array = None
 
         if grad_y_reduce_idx_:
             y_array = np.array(grad_y_reduce_idx_)
             ng_y_array = ng.constant(
-                y_array, axes=shape_to_axes(y_array.shape), name=tf_node.name)
+                y_array, axes=shape_to_axes(y_array.shape)).named(tf_node.name)
         else:
             ng_y_array = None
 
