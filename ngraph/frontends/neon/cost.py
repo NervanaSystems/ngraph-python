@@ -130,7 +130,7 @@ class SumSquared(Cost):
         Define the cost function and its gradient as lambda functions.
         """
         d = y - t
-        return ng.auto_dot(d, d) / 2
+        return ng.squared_L2(d) / 2
 
 
 class MeanSquared(Cost):

@@ -2159,6 +2159,8 @@ class DotOp(TensorOp):
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
+        if len(self.x_out_axes.intersect(self.y_out_axes)):
+            raise ValueError("Intersection in out axes for dot.")
         axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
@@ -2205,6 +2207,10 @@ def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
     """
     Cast axes to a dual offset of axes depending on membership in dual_axes.
 
+    In a dot(a, b), each pair of axes (a_i, b_j) between a and b where
+    a_i = b_j - 1
+    will be paired for multiplication and then summing.
+
     Args:
         x (TensorOp): A tensor.
         filter: A collection of axes.
@@ -2241,7 +2247,7 @@ def dot(x, y, name=None):
     return DotOp(x, y, name=name)
 
 
-def auto_dot(x, y):
+def squared_L2(x):
     """
     Returns the dot of x and y, with the axes of x set to their dual offset.
 
@@ -2253,7 +2259,7 @@ def auto_dot(x, y):
         TensorOp: The result.
 
     """
-    return dot(dualed_axes(x, x.axes, -1, 0), y)
+    return dot(dualed_axes(x, x.axes, -1, 0), x)
 
 
 class LowDimensionalDot(TensorOp):

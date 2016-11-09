@@ -88,7 +88,7 @@ def ngraph_l2_norm(np_array):
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)
-    return executor(ng.sqrt(ng.auto_dot(var, var)))()
+    return executor(ng.sqrt(ng.squared_L2(var)))()
 
 
 @raise_all_numpy_errors

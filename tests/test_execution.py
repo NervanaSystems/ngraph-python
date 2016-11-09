@@ -116,7 +116,7 @@ def test_placeholder(transformer_factory):
 
     x = ng.placeholder([W, H])
     d = 2 * x
-    d2 = ng.auto_dot(x, x)
+    d2 = ng.squared_L2(x)
 
     ex = ExecutorFactory()
     # Return placeholder, param is placeholder
