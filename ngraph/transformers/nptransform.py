@@ -39,9 +39,10 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
-    SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
+    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
@@ -463,9 +464,13 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
-    @generate_op.on_type(SetItemOneDim)
+    @generate_op.on_type(AssignOneDOp)
     def generate_op(self, op, out, tensor, value):
-        self.append("{}.__setitem__({}, {})", tensor, op.item, value)
+        self.append("{}.__setitem__(..., {})", tensor, value)
+
+    @generate_op.on_type(SetItemOneDOp)
+    def generate_op(self, op, out, tensor, item, value):
+        self.append("{}.__setitem__({}, {})", tensor, item, value)
 
     @generate_op.on_type(SignOneDOp)
     def generate_op(self, op, out, x):

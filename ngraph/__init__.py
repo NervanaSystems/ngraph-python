@@ -29,7 +29,7 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
     temporary, constant_value, variance, squared_L2, \
     negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
-    square, sqrt, tensor_size, assign, set_item, batch_size, pad, sigmoid, \
+    square, sqrt, tensor_size, assign, batch_size, pad, sigmoid, \
     one_hot
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 

@@ -143,7 +143,7 @@ class GradientDescentMomentum(Optimizer):
         Returns:
 
         """
-        self.learning_rate_placeholder = ng.placeholder((), name='lrate')
+        self.learning_rate_placeholder = ng.placeholder(()).named('lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
         grads = [
@@ -151,8 +151,8 @@ class GradientDescentMomentum(Optimizer):
             for variable in variables
         ]
         velocities = [ng.persistent_tensor(
-            axes=variable.axes, init=Constant(0),
-            name=variable.name + '_vel') for variable in variables]
+            axes=variable.axes, init=Constant(0)).named(variable.name + '_vel')
+            for variable in variables]
 
         scale_factor = 1
         if self.gradient_clip_norm:
@@ -248,7 +248,7 @@ class RMSProp(Optimizer):
         self.stochastic_round = stochastic_round
 
     def configure(self, cost):
-        self.lrate = ng.placeholder((), name='lrate')
+        self.lrate = ng.placeholder(()).named('lrate')
 
         variables = list(cost.variables())
         grads = [ng.deriv(cost, variable) / 50.0 for variable in variables]

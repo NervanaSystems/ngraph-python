@@ -32,10 +32,10 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
-    SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
+    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
-    Function
+    Function, SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
@@ -290,12 +290,13 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(SetItemOneDim)
+    @add_op.on_type(AssignOneDOp)
     def add_op(self, op, out, tensor, value):
-        if op.item is None or op.item == _none_slice or op.item == ():
-            self._buffer_op("assign", x=value, out=tensor)
-        else:
-            self._buffer_op("set_item", x=value, y=op.item, out=tensor)
+        self._buffer_op("assign", x=value, out=tensor)
+
+    @add_op.on_type(SetItemOneDOp)
+    def add_op(self, op, out, tensor, item, value):
+        self._buffer_op("set_item", x=value, y=op.item, out=tensor)
 
     @add_op.on_type(SignOneDOp)
     def add_op(self, op, out, x):

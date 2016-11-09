@@ -661,52 +661,62 @@ def init_tensor(tensor, valfun):
     return InitTensorOp(tensor, valfun)
 
 
-class SetItemOp(Op):
+class AssignOp(Op):
     """
-    tensor[item] = val.
+    tensor[...] = val.
 
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
-        item: The index.
         val: The value to assign.
         force (bool): Override constant check on tensor.
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, tensor, item, val, force=False, **kwargs):
+    def __init__(self, tensor, val, force=False, **kwargs):
         tensor, val = as_ops((tensor, val))
         if not force and not tensor.assignable:
             raise ValueError("{} is not assignable.".format(tensor))
         val = broadcast(val, tensor.axes)
-        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
-        self.item = item
+        super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
         tensor.user_deps = OrderedSet([self])
         self.force = force
 
 
-def set_item(tensor, item, val, force=False, name=None):
-    """
-
-    Args:
-        tensor: (AssignableTensorOp): An assignable TensorOp.
-        item: The index.
-        val: The value to assign.
-        force (bool): Override constant check on tensor.
-
-    Returns:
-        SetItemOp: The op.
-
-    """
-    return SetItemOp(tensor, item, val, force=force, name=name)
-
-
-class SetItemOneDim(Op):
-    def __init__(self, tensor, item, val, force=False, **kwargs):
+class AssignOneDOp(Op):
+    def __init__(self, tensor, val, force=False, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
-        super(SetItemOneDim, self).__init__(args=(tensor, val), **kwargs)
-        self.item = item
+        super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
+
+
+def assign(lvalue, rvalue):
+    """
+    Assignment; lvalue <= rvalue
+
+    Arguments:
+        lvalue: Tensor to assign to.
+        rvalue: Value to be assigned.
+        item (optional):
+    """
+    return AssignOp(lvalue, rvalue)
+
+
+class SetItemOneDOp(Op):
+    """
+    tensor[item] = val
+
+    This is a stub and has no frontend support at this time.
+
+    Arguments:
+        tensor (AssignableTensorOp): An assignable tensor.
+        item: An index into the tensor.
+        val (TensorOp): A value to assign.
+
+    """
+    def __init__(self, tensor, item, val, **kwargs):
+        super(SetItemOneDOp, self).__init__(args=(tensor, item, val), **kwargs)
+        tensor.user_deps = OrderedSet([self])
 
 
 class doall(Op):
@@ -870,25 +880,26 @@ class TensorOp(Op):
     def __ge__(self, val):
         return greater_equal(self, val)
 
-    # Only works when capturing ops
     def __setitem__(self, key, val):
-        return set_item(self, key, val)
+        if key == slice(None) or key is Ellipsis:
+            return assign(self, val)
+        raise ValueError("Setting {} is not supported yet".format(key))
 
     # Only works when capturing ops
     def __iadd__(self, val):
-        return set_item(self, slice(None, None, None), self + val)
+        return assign(self, self + val)
 
     # Only works when capturing ops
     def __isub__(self, val):
-        return set_item(self, slice(None, None, None), self - val)
+        return assign(self, self - val)
 
     # Only works when capturing ops
     def __imul__(self, val):
-        return set_item(self, slice(None, None, None), self * val)
+        return assign(self, self * val)
 
     # Only works when capturing ops
     def __idiv__(self, val):
-        return set_item(self, slice(None, None, None), self / val)
+        return assign(self, self / val)
 
     def __getitem__(self, item):
         return Slice(self, item)
@@ -1083,19 +1094,18 @@ class AxesCastOp(ReshapeOp):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
 
 
-def cast_axes(tensor, axes, name=None):
+def cast_axes(tensor, axes):
     """
     Cast the axes of a tensor to new axes.
 
     Args:
         tensor (TensorOp): The tensor.
         axes (Axes): The new axes.
-        name (String, optional): The name of the result.
 
     Returns:
         TensorOp: The tensor with new axes.
     """
-    return AxesCastOp(tensor, axes, name=name)
+    return AxesCastOp(tensor, axes)
 
 
 class ExpandDims(ReshapeOp):
@@ -1503,7 +1513,7 @@ class AssignableTensorOp(TensorOp):
         return False
 
 
-def constant(const, axes=None, dtype=None, name=None):
+def constant(const, axes=None, dtype=None):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
@@ -1519,7 +1529,7 @@ def constant(const, axes=None, dtype=None, name=None):
     """
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
-                             graph_label_type=graph_label_type, dtype=dtype, name=name)
+                             graph_label_type=graph_label_type, dtype=dtype)
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
@@ -1589,7 +1599,7 @@ def constant_value(value):
     return value.const
 
 
-def constant_storage(axes, dtype=None, name=None, initial_value=None):
+def constant_storage(axes, dtype=None, initial_value=None):
     """
     A tensor that is supposed to remain constant.
 
@@ -1608,18 +1618,17 @@ def constant_storage(axes, dtype=None, name=None, initial_value=None):
     return AssignableTensorOp(graph_label_type="constant",
                               constant=True, persistent=True,
                               trainable=False,
-                              axes=axes, dtype=dtype, name=name,
+                              axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
-def placeholder(axes, dtype=None, initial_value=None, name=None):
+def placeholder(axes, dtype=None, initial_value=None):
     """
     A persistent tensor to be initialized from the CPU.
 
     Args:
         axes (Axes): The axes of the placeholder.
         dtype (optional): The dtype of the placeholder.
-        name (String, optional): The name of the placeholder.
         initial_value (optional): A host constant or callable. If callable, will
             be called to generate an initial value.
 
@@ -1630,11 +1639,11 @@ def placeholder(axes, dtype=None, initial_value=None, name=None):
     return AssignableTensorOp(graph_label_type="placeholder",
                               constant=False, persistent=True, trainable=False,
                               input=True,
-                              axes=axes, dtype=dtype, name=name,
+                              axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, name=None, init=None):
+def temporary(axes, dtype=None, init=None):
     """
     Temporary storage.
 
@@ -1643,7 +1652,6 @@ def temporary(axes, dtype=None, name=None, init=None):
     Args:
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
-        name (String, optional): A name for the storage.
         init (optional): Neon-style init.
 
     Returns:
@@ -1654,10 +1662,10 @@ def temporary(axes, dtype=None, name=None, init=None):
                               constant=False, persistent=True,
                               trainable=False,
                               init=init,
-                              axes=axes, dtype=dtype, name=name)
+                              axes=axes, dtype=dtype)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None, name=None, init=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, init=None):
     """
     Persistent storage.
 
@@ -1678,12 +1686,12 @@ def persistent_tensor(axes, dtype=None, initial_value=None, name=None, init=None
     return AssignableTensorOp(graph_label_type="Persistent",
                               constant=False, persistent=True,
                               trainable=False,
-                              axes=axes, dtype=dtype, name=name,
+                              axes=axes, dtype=dtype,
                               initial_value=initial_value,
                               init=init)
 
 
-def variable(axes, dtype=None, name=None, initial_value=None, init=None):
+def variable(axes, dtype=None, initial_value=None, init=None):
     """
     A trainable tensor.
 
@@ -1700,7 +1708,7 @@ def variable(axes, dtype=None, name=None, initial_value=None, init=None):
     """
     return AssignableTensorOp(graph_label_type="Variable",
                               constant=False, persistent=True,
-                              trainable=True, axes=axes, name=name,
+                              trainable=True, axes=axes,
                               dtype=dtype,
                               initial_value=initial_value, init=init)
 
@@ -1789,7 +1797,7 @@ class RNG(object):
         self.seed = seed
         self.rng = np.random.RandomState(seed=seed)
 
-    def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
+    def uniform(self, low=0.0, high=1.0, size=None):
         """
         TODO.
 
@@ -1807,11 +1815,11 @@ class RNG(object):
             return self.rng.uniform(low, high, tensor_description.sizes).astype(
                 tensor_description.dtype)
 
-        val = constant_storage(axes=size, **kwargs)
+        val = constant_storage(axes=size)
         val.add_initializer(init_tensor(val, value_fun))
         return val
 
-    def normal(self, loc, scale, size, **kwargs):
+    def normal(self, loc, scale, size):
         """
         TODO.
 
@@ -1830,7 +1838,7 @@ class RNG(object):
                 loc, scale, tensor_description.sizes).astype(
                 tensor_description.dtype)
 
-        val = constant_storage(axes=size, **kwargs)
+        val = constant_storage(axes=size)
         val.add_initializer(init_tensor(val, value_fun))
         return val
 
@@ -1852,8 +1860,8 @@ class UnaryElementwiseAxesOp(ElementWise):
     """
     one_d_class = None
 
-    def __init__(self, x, name=None):
-        super(UnaryElementwiseAxesOp, self).__init__(args=(x,), axes=x.axes, name=name)
+    def __init__(self, x):
+        super(UnaryElementwiseAxesOp, self).__init__(args=(x,), axes=x.axes)
 
     def reduce_to_one_d(self):
         """
@@ -1865,15 +1873,15 @@ class UnaryElementwiseAxesOp(ElementWise):
             Flattened computation.
 
         """
-        return unflatten(self.__class__.one_d_class(flatten(self.args[0]), name=self.name))
+        return unflatten(self.__class__.one_d_class(flatten(self.args[0])).named(self.name))
 
 
 class UnaryElementwiseOneDOp(ElementWise):
     """
     Handles initialization for unary operations.
     """
-    def __init__(self, x, name=None):
-        super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes, name=name)
+    def __init__(self, x):
+        super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
 
 
 class NegativeOneDOp(UnaryElementwiseOneDOp):
@@ -1893,19 +1901,18 @@ class NegativeOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, -delta)
 
 
-def negative(x, name=None):
+def negative(x):
     """
     Returns the negative of x.
 
     Args:
         x (TensorOp): tensor.
-        name (String, optional): Name
 
     Returns:
         (TensorOp): The negative of x.
 
     """
-    return NegativeOp(x, name=name)
+    return NegativeOp(x)
 
 
 class AbsoluteOneDOp(UnaryElementwiseOneDOp):
@@ -1925,19 +1932,18 @@ class AbsoluteOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, sign(x) * delta)
 
 
-def absolute(x, name=None):
+def absolute(x):
     """
     Returns the absolute value of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The absolute value of x.
 
     """
-    return AbsoluteOp(x, name=name)
+    return AbsoluteOp(x)
 
 
 class SinOneDOp(UnaryElementwiseOneDOp):
@@ -1963,7 +1969,6 @@ def sin(x):
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: sin of x.
@@ -1989,19 +1994,18 @@ class CosOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, -delta * sin(x))
 
 
-def cos(x, name=None):
+def cos(x):
     """
     Returns the cos of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The cos of x.
 
     """
-    return CosOp(x, name=name)
+    return CosOp(x)
 
 
 class TanhOneDOp(UnaryElementwiseOneDOp):
@@ -2021,19 +2025,18 @@ class TanhOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
 
 
-def tanh(x, name=None):
+def tanh(x):
     """
     Returns the cos of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The tanh of x.
 
     """
-    return TanhOp(x, name=name)
+    return TanhOp(x)
 
 
 class ExpOneDOp(UnaryElementwiseOneDOp):
@@ -2053,19 +2056,18 @@ class ExpOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, delta * self)
 
 
-def exp(x, name=None):
+def exp(x):
     """
     Returns the exp of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The exp of x.
 
     """
-    return ExpOp(x, name=name)
+    return ExpOp(x)
 
 
 class LogOneDOp(UnaryElementwiseOneDOp):
@@ -2095,19 +2097,18 @@ class LogOp(UnaryElementwiseAxesOp):
         do_adjoints(delta, x)
 
 
-def log(x, name=None):
+def log(x):
     """
     Returns the log of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The log of x.
 
     """
-    return LogOp(x, name=name)
+    return LogOp(x)
 
 
 safelog_cutoff = 50.0
@@ -2134,19 +2135,18 @@ class ReciprocalOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, -self * self * delta)
 
 
-def reciprocal(x, name=None):
+def reciprocal(x):
     """
     Returns the reciprocal of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The reciprocal of x.
 
     """
-    return ReciprocalOp(x, name=name)
+    return ReciprocalOp(x)
 
 
 class SignOneDOp(UnaryElementwiseOneDOp):
@@ -2159,19 +2159,18 @@ class SignOp(UnaryElementwiseAxesOp):
     one_d_class = SignOneDOp
 
 
-def sign(x, name=None):
+def sign(x):
     """
     Returns the sign of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The sign of x.
 
     """
-    return SignOp(x, name=name)
+    return SignOp(x)
 
 
 class SquareOneDOp(UnaryElementwiseOneDOp):
@@ -2191,19 +2190,18 @@ class SquareOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, 2.0 * delta * x)
 
 
-def square(x, name=None):
+def square(x):
     """
     Returns the square of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The square of x.
 
     """
-    return SquareOp(x, name=name)
+    return SquareOp(x)
 
 
 class SqrtOneDOp(UnaryElementwiseOneDOp):
@@ -2221,19 +2219,18 @@ class SqrtOp(UnaryElementwiseAxesOp):
         x.generate_add_delta(adjoints, .5 * delta * self)
 
 
-def sqrt(x, name=None):
+def sqrt(x):
     """
     Returns the square root of x.
 
     Args:
         x (TensorOp): A tensor.
-        name (String, optional): Name
 
     Returns:
         TensorOp: The square root of x.
 
     """
-    return SqrtOp(x, name=name)
+    return SqrtOp(x)
 
 
 class BinaryElementWiseAxesOp(ElementWise):
@@ -2841,18 +2838,6 @@ def argmin(x, dtype=None, **kwargs):
     return Argmin(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
-def assign(lvalue, rvalue, name=None):
-    """
-    Assignment; lvalue <= rvalue
-
-    Arguments:
-        lvalue: Tensor to assign to.
-        rvalue: Value to be assigned.
-        name (String, optional): Name.
-    """
-    return set_item(lvalue, (), rvalue, name=name)
-
-
 def variance(x, out_axes=None, reduction_axes=None):
     return mean(square(x - mean(x, out_axes=out_axes, reduction_axes=reduction_axes)),
                 out_axes=out_axes, reduction_axes=reduction_axes)
@@ -2878,30 +2863,14 @@ class TensorSizeOp(TensorOp):
 
 def tensor_size(x, reduction_axes=None, out_axes=None):
     """
-    A scalar returning the total size of a tensor.
+    A scalar returning the total size of a tensor in elements.
+
     Arguments:
         x: The tensor whose axes we are measuring.
         reduction_axes: if supplied, return the size
             of these axes instead.
-        kwargs: options, including name
     """
     return TensorSizeOp(x, reduction_axes=reduction_axes, out_axes=out_axes)
-
-
-class BatchSizeOp(TensorSizeOp):
-    """
-    A scalar returning the total size of the batch axes of
-    a tensor.
-    Arguments:
-        x: The tensor whose axes we are measuring.
-        kwargs: options, including name
-    """
-    def __init__(self, x, **kwargs):
-        super(BatchSizeOp, self).__init__(
-            x=x,
-            reduction_axes=x.axes.batch_axes(),
-            **kwargs
-        )
 
 
 def batch_size(x):
@@ -2914,7 +2883,7 @@ def batch_size(x):
         The size of the batch axis in x.
 
     """
-    return BatchSizeOp(x)
+    return tensor_size(x, reduction_axes=x.axes.batch_axes())
 
 
 def pad(x, paddings, axes=None):
