@@ -17,6 +17,7 @@ from ngraph.transformers.gpu.kernel import GPUKernel
 
 from neon.backends import convolution
 
+from operator import itemgetter
 import numpy as np
 
 class ConvFpropKernel(GPUKernel):
@@ -26,10 +27,11 @@ class ConvFpropKernel(GPUKernel):
         self.O = op.tensor_description()
         self.I, self.F = (_ for _ in op.call_info())
         conv_dims = op.conv_params
+        self.dtype = self.O.dtype
 
-        C, D, H, W, _ = self.I.tensor_description.axes.lengths
-        C, R, S, T, K = self.F.tensor_description.axes.lengths
-        K, M, P, Q, _ = self.O.tensor_description.axes.lengths
+        C, D, H, W, N = self.I.axes.lengths
+        C, R, S, T, K = self.F.axes.lengths
+        K, M, P, Q, _ = self.O.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
@@ -52,7 +54,7 @@ class ConvFpropKernel(GPUKernel):
             from .winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
-            if dtype == np.float32 and enable_winograd == 4:
+            if self.dtype == np.float32 and enable_winograd == 4:
                 winograd = 4
             else:
                 winograd = 2
@@ -78,7 +80,7 @@ class ConvFpropKernel(GPUKernel):
         super(ConvFpropKernel, self).bind_buffers()
 
     def execute(self):
-        self.fprop_kernels.execute(1)
+        self.fprop_kernels.execute(1, unbind=False)
 
 
 class ConvBpropKernel(GPUKernel):
@@ -88,10 +90,11 @@ class ConvBpropKernel(GPUKernel):
         self.O = op.tensor_description()
         self.E, self.F = (_ for _ in op.call_info())
         conv_dims = op.conv_params
+        self.dtype = self.O.dtype
 
-        C, D, H, W, _ = self.O.tensor_description.axes.lengths
-        C, R, S, T, K = self.F.tensor_description.axes.lengths
-        K, M, P, Q, _ = self.E.tensor_description.axes.lengths
+        C, D, H, W, N = self.O.axes.lengths
+        C, R, S, T, K = self.F.axes.lengths
+        K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
@@ -115,7 +118,7 @@ class ConvBpropKernel(GPUKernel):
             from .winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
-            if dtype == np.float32 and enable_winograd == 4:
+            if self.dtype == np.float32 and enable_winograd == 4:
                 winograd = 4
             else:
                 winograd = 2
@@ -139,7 +142,7 @@ class ConvBpropKernel(GPUKernel):
         super(ConvBpropKernel, self).bind_buffers()
 
     def execute(self):
-        self.bprop_kernels.execute(1)
+        self.bprop_kernels.execute(1, unbind=False)
 
 
 class ConvUpdateKernel(GPUKernel):
@@ -149,10 +152,11 @@ class ConvUpdateKernel(GPUKernel):
         self.U = op.tensor_description()
         self.E, self.I = (_ for _ in op.call_info())
         conv_dims = op.conv_params
+        self.dtype = self.U.dtype
 
-        C, D, H, W, _ = self.I.tensor_description.axes.lengths
-        C, R, S, T, K = self.U.tensor_description.axes.lengths
-        K, M, P, Q, _ = self.E.tensor_description.axes.lengths
+        C, D, H, W, N = self.I.axes.lengths
+        C, R, S, T, K = self.U.axes.lengths
+        K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
@@ -175,7 +179,7 @@ class ConvUpdateKernel(GPUKernel):
             from .winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
-            if dtype == np.float32 and enable_winograd == 4:
+            if self.dtype == np.float32 and enable_winograd == 4:
                 winograd = 4
             else:
                 winograd = 2
@@ -202,4 +206,4 @@ class ConvUpdateKernel(GPUKernel):
         super(ConvUpdateKernel, self).bind_buffers()
 
     def execute(self):
-        self.updat_kernels.execute(1)
+        self.updat_kernels.execute(1, unbind=False)

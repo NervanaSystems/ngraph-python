@@ -27,6 +27,7 @@ from neon.layers.layer import Convolution
 
 rng = RandomTensorGenerator(0, np.float32)
 
+
 NervanaObject.be = gen_backend()
 
 
@@ -47,7 +48,7 @@ def test_convolution():
     D, T = 1, 1
     H = W = 32
     R = S = 2
-    ngt.make_transformer()
+
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
     conv_params = padding.copy()
@@ -117,4 +118,4 @@ def test_convolution():
     np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
 
     # Compare update
-    np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)

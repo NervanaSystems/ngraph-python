@@ -45,6 +45,7 @@ from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSour
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
+from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, UnsliceKernel
 
 import numpy as np
@@ -410,55 +411,55 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
-        self.kernels.append(ConvFpropKernel(self, op))
+        self.kernels.append(ConvFpropKernel(self.transformer, op))
 
     @add_kernel.on_type(bprop_conv)
     def add_kernel(self, op):
-        self.kernels.append(ConvBpropKernel(self, op))
+        self.kernels.append(ConvBpropKernel(self.transformer, op))
 
     @add_kernel.on_type(update_conv)
     def add_kernel(self, op):
-        self.kernels.append(ConvUpdateKernel(self, op))
+        self.kernels.append(ConvUpdateKernel(self.transformer, op))
 
     @add_kernel.on_type(DotOneDimensional)
     def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self, op))
+        self.kernels.append(GEMMKernel(self.transformer, op))
 
     @add_kernel.on_type(DotTwoDimensional)
     def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self, op))
+        self.kernels.append(GEMMKernel(self.transformer, op))
 
     @add_kernel.on_type(DotTwoByOne)
     def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self, op))
+        self.kernels.append(GEMMKernel(self.transformer, op))
 
     @add_kernel.on_type(Dimshuffle)
     def add_kernel(self, op):
-        self.kernels.append(DimShuffleKernel(self, op))
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self, op.tensor_description(), op.scalar))
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.scalar))
 
     @add_kernel.on_type(PoolingOp)
     def add_kernel(self, op):
-        raise NotImplementedError("pooling kernel not implemented")
+        self.kernels.append(PoolFpropKernel(self.transformer, op))
 
     @add_kernel.on_type(BpropPoolOp)
     def add_kernel(self, op):
-        raise NotImplementedError("bprop_pool kernel not implemented")
+        self.kernels.append(PoolBpropKernel(self.transformer, op))
 
     @add_kernel.on_type(SetItemOneDim)
     def add_kernel(self, op):
-        self.kernels.append(SetItemKernel(self, op))
+        self.kernels.append(SetItemKernel(self.transformer, op))
 
     @add_kernel.on_type(tensor_size)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self, op.tensor_description(), op.reduction_axes.size))
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.reduction_axes.size))
 
     @add_kernel.on_type(Unslice)
     def add_kernel(self, op):
-        self.kernels.append(UnsliceKernel(self, op))
+        self.kernels.append(UnsliceKernel(self.transformer, op))
 
     def compile_all(self):
         self.sourcefile.compile()
@@ -470,6 +471,7 @@ class GPUKernelGroup():
             if not k.buffers_bound:
                 k.bind_buffers()
 
+            #print k
             k.execute()
 
 
@@ -731,6 +733,7 @@ class GPUTransformer(Transformer):
         self.buffer_allocators = []
         self.kernel_groups = dict()
         self.tensors = dict()
+        self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
         self.closed = False
