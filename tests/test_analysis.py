@@ -43,7 +43,7 @@ def build_graphs(L, BS):
     activations = [ng.tanh for i in range(len(L) - 2)] + [ng.softmax]
     X = ng.placeholder((L[0], BS), name='X')
     Y = ng.placeholder((L[-1],), name='Y')
-    W = [ng.variable((L_np1, L_n), name='W%d' % i)
+    W = [ng.variable((L_np1, L_n - 1), name='W%d' % i)
          for i, (L_np1, L_n) in enumerate(zip(L[1:], L[:-1]))]
     A = []
     for i, f in enumerate(activations):

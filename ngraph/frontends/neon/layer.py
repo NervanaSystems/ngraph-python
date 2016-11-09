@@ -100,14 +100,14 @@ class nnAffine(nnLayer):
         out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
-        w_axes = out_axes - out_axes.recurrent_axes() + in_axes.get_dual()
+        w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
         b_axes = in_obj.axes.sample_axes()
         if self.W is None:
             self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
         if self.b is None:
             self.b = ng.variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
 
-        return self.activation(ng.dot(self.W, in_obj, use_dual=True))# + self.b)
+        return self.activation(ng.dot(self.W, in_obj))  # + self.b)
 
 
 class nnConvBase(nnLayer):
@@ -187,6 +187,7 @@ class nnConvolution(nnConv2D):
     def train_outputs(self, in_obj):
         return self.activation(super(nnConvolution, self).train_outputs(in_obj))
 
+
 class nnActivation(nnLayer):
     def __init__(self, transform, **kwargs):
         self.transform = transform
@@ -194,6 +195,7 @@ class nnActivation(nnLayer):
 
     def train_outputs(self, in_obj):
         return self.transform(in_obj)
+
 
 class nnPoolBase(nnLayer):
     """
@@ -311,8 +313,9 @@ class nnRecurrent(nnLayer):
         else:
             hidden_axes = ng.make_axes([ng.make_axis(self.nout, name='Hidden_in')])
 
-        w_in_axes = hidden_axes + (in_axes.sample_axes() - in_axes.recurrent_axes()).get_dual()
-        w_re_axes = hidden_axes + hidden_axes.get_dual()
+        w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
+                                   in_axes.recurrent_axes()]
+        w_re_axes = hidden_axes + [axis - 1 for axis in hidden_axes]
 
         self.W_input = ng.variable(axes=w_in_axes,
                                    initial_value=self.init(w_in_axes.lengths), name="W_in")

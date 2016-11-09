@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
-from ngraph.op_graph.op_graph import BroadcastOp, broadcast, Dot, ReductionOp, make_axes, \
+from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     OnehotTwoDim, BinaryElementWiseAxesOp, SetItem, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, exp, log, negative, Onehot, SetItemOneDim, ReshapeOp, flatten, constant, \
@@ -85,7 +85,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if op.must_reduce:
             self.replace_op(op, op.reduce_to_twod())
 
-    @visit.on_type(Dot)
+    @visit.on_type(DotOp)
     def visit(self, op):
         x, y = op.args
         x_reduction_axes = op.x_reduction_axes

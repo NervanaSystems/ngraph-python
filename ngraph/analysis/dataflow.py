@@ -55,14 +55,12 @@ class DataFlowGraph(Digraph):
         Arguments:
           results(dict): Results of the desired computation
         """
-        self.stack.add(w)
         if w not in self.successors:
             self.successors[w] = OrderedSet()
         for v in w.other_deps + list(w.args):
-            self.successors[v].add(w)
-            if v not in self.stack:
+            if v not in self.successors:
                 self._fill_successors(v)
-        self.stack.remove(w)
+            self.successors[v].add(w)
 
     @property
     def instructions(self):

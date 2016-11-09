@@ -22,7 +22,6 @@ from operator import itemgetter
 import numpy as np  # noqa
 import itertools as itt  # noqa
 from ngraph.op_graph import axes  # noqa
-import warnings
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
@@ -408,25 +407,30 @@ class NumPyCodeGenerator(PyGen):
         self.conv_slices.append(
             NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
         )
-        self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})", op.index, inputs, filters, outputs)
+        self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
+                    op.index, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("self.bprop_conv(self.conv_slices[{}], E={}, F={}, gI={})", op.index, delta, filters, outputs)
+        self.append("self.bprop_conv(self.conv_slices[{}], E={}, F={}, gI={})",
+                    op.index, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("self.update_conv(self.conv_slices[{}], I={}, E={}, U={})", op.index, inputs, delta, outputs)
+        self.append("self.update_conv(self.conv_slices[{}], I={}, E={}, U={})",
+                    op.index, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.pool_params.append(op.pool_params)
         self.pool_slices.append(NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params))
-        self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})", op.index, inputs, outputs)
+        self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
+                    op.index, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
-        self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})", op.index, delta, outputs)
+        self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
+                    op.index, delta, outputs)
 
     @generate_op.on_type(cos)
     def generate_op(self, op, out, x):

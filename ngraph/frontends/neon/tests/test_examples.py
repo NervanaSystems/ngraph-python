@@ -23,14 +23,14 @@ example_dir = os.path.join(base_dir, '../../../../examples/')
 work_dir = os.getenv('NGRAPH_WORK_DIR', os.path.join(os.path.expanduser('~'), 'nervana'))
 work_dir = os.path.realpath(work_dir)
 
-db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp_direct.py'),
-                'arguments': '--work_dir {} --num_iterations {} --iter_interval {}'.format(
+db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp.py'),
+                'arguments': '--data_dir {} --num_iterations {} --iter_interval {} -r 0'.format(
                     work_dir, 950, 475),
-                'cost': 0.290034},
+                'cost': 0.28437907},
       'cifar10': {'filename': os.path.join(example_dir, 'cifar10', 'cifar10_mlp.py'),
-                  'arguments': '--work_dir {} --num_iterations {} --iter_interval {}'.format(
+                  'arguments': '--data_dir {} --num_iterations {} --iter_interval {} -r 0'.format(
                   work_dir, 950, 475),
-                  'cost': 1.5028026}
+                  'cost': 1.6199253}
       }
 
 

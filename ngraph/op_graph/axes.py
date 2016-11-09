@@ -740,21 +740,18 @@ class Axes(object):
     def T(self):
         return Axes(axis.T for axis in self)
 
-    @staticmethod
-    @with_args_as_axes
-    def intersect(axes1, axes2):
+    def intersect(self, axes):
         """
         Returns the intersection of the elements, leaving out duplicate Axes.
 
         Arguments:
-            axes1: first axes to intersect
-            axes2: second axes to intersect
+            axes: second axes to intersect
 
         Returns:
             The ordered intersection
         """
-        assert isinstance(axes1, Axes) and isinstance(axes2, Axes)
-        return Axes((axis for axis in axes1 if axis in axes2))
+        axes = make_axes(axes)
+        return make_axes((axis for axis in self._axes if axis in axes))
 
     @staticmethod
     @with_args_as_axes

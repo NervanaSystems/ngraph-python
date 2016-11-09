@@ -21,6 +21,7 @@ from neon.backends.kernels.cuda import pooling
 from operator import itemgetter, mul
 import numpy as np
 
+
 class PoolFpropKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(PoolFpropKernel, self).__init__(transformer)
@@ -35,7 +36,7 @@ class PoolFpropKernel(GPUKernel):
         elif self.dtype.type is np.float32:
             clss = "spool"
         else:
-            raise TypeError("Type not supported.")
+            raise TypeError("Type not supported {}".format(clss))
 
         C, D, H, W, _ = self.I.axes.lengths
         K, M, P, Q, N = self.O.axes.lengths
@@ -83,9 +84,9 @@ class PoolFpropKernel(GPUKernel):
         self.dimF2  = None
         self.dimI2  = (C * D * H * W, N)
         self.dimO2  = (K * M * P * Q, N)
-        self.sizeI  = reduce(mul, self.dimI, 1)
-        self.sizeO  = reduce(mul, self.dimO, 1)
-        self.nOut   = reduce(mul, self.MPQ, 1) * K
+        self.sizeI  = np.product(self.dimI)
+        self.sizeO  = np.product(self.dimO)
+        self.nOut   = np.product(self.MPQ) * K
 
         # precompute some multiplications for fast constant memory access
         WN   = W * N
@@ -256,9 +257,9 @@ class PoolBpropKernel(GPUKernel):
         self.dimF2  = None
         self.dimI2  = (C * D * H * W, N)
         self.dimO2  = (K * M * P * Q, N)
-        self.sizeI  = reduce(mul, self.dimI, 1)
-        self.sizeO  = reduce(mul, self.dimO, 1)
-        self.nOut   = reduce(mul, self.MPQ, 1) * K
+        self.sizeI  = np.product(self.dimI)
+        self.sizeO  = np.product(self.dimO)
+        self.nOut   = np.product(self.MPQ) * K
 
         # precompute some multiplications for fast constant memory access
         WN   = W * N

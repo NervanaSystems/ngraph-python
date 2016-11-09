@@ -48,6 +48,7 @@ def test_convolution():
     D, T = 1, 1
     H = W = 32
     R = S = 2
+    ngt.make_transformer()
 
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)

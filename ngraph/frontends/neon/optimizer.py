@@ -55,7 +55,6 @@ class Schedule(object):
         8, 0.25
         9, 0.25
     """
-
     def __init__(self, step_config=None, change=1.):
         """
         Class constructor.
@@ -107,7 +106,7 @@ def clip_gradient_norm(grad_list, clip_norm, bsz):
     """
     s = None
     for param in grad_list:
-        term = ng.sqrt(ng.dot(param, param))  # L2 norm
+        term = ng.squared_L2(param)
         if s is None:
             s = term
         else:

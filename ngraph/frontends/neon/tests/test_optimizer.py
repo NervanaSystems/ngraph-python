@@ -79,7 +79,7 @@ def test_gdm(args, transformer_factory):
     Y = ng.placeholder([N], name='Y')
     I = ng.placeholder(axes=(), name='I')
 
-    W = ng.variable([C], name='W', initial_value=w_init)
+    W = ng.variable([C - 1], name='W', initial_value=w_init)
 
     ex = ExecutorFactory()
     transformer = ex.transformer

@@ -66,7 +66,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
         return 1. / (1. + ng.exp(-x))
 
     def predict(thetas, xs):
-        return sigmoid(ng.dot(xs, thetas))
+        return sigmoid(ng.dot(thetas, xs))
 
     def get_loss(thetas, xs, ys):
         ys_pred = predict(thetas, xs)
@@ -85,7 +85,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     # init weights
     thetas_np = np.array([0., 0., 0.])
     thetas_numpy_tensor = ng.constant(thetas_np, [C])
-    thetas = ng.variable([C], initial_value=thetas_numpy_tensor)
+    thetas = ng.variable([C - 1], initial_value=thetas_numpy_tensor)
 
     # define ops
     loss = get_loss(thetas, xs, ys)

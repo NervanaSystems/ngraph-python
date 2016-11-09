@@ -28,7 +28,7 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     persistent_tensor, placeholder, \
     slice_along_axis, temporary, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
-    temporary, constant_value, variance
+    temporary, constant_value, variance, squared_L2
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
@@ -52,6 +52,7 @@ __all__ = [
     'placeholder',
     'pooling',
     'slice_along_axis',
+    'squared_L2',
     'temporary',
     'variable',
     'variance',
