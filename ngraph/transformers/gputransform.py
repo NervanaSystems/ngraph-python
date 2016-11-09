@@ -21,19 +21,19 @@ from neon.backends import gen_backend
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
+from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, CosOneDOp, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, exp, \
+    EqualOneDim, EqualZeroDim, ExpOneDOp, \
     GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
     LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, \
-    sign, sin, sqrt, square, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, ReciprocalOneDOp, \
+    SetItemOneDim, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Sum, TanhOneDOp, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
     Function
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -97,7 +97,7 @@ class GPUKernel():
         if op.is_device_op:
             raise ValueError("Unhandled op: {}".format(op))
 
-    @add_op.on_type(absolute)
+    @add_op.on_type(AbsoluteOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("abs", x=x, out=out)
 
@@ -145,7 +145,7 @@ class GPUKernel():
     def add_op(self, op, outputs, delta, argmax):
         self._buffer_op("bprop_pool", op.dims, delta, outputs, argmax)
 
-    @add_op.on_type(cos)
+    @add_op.on_type(CosOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("cos", x=x, out=out)
 
@@ -189,7 +189,7 @@ class GPUKernel():
     def add_op(self, op, out, x, y):
         self._buffer_op("eq", x=x, y=y, out=out)
 
-    @add_op.on_type(exp)
+    @add_op.on_type(ExpOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("exp", x=x, out=out)
 
@@ -229,7 +229,7 @@ class GPUKernel():
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
 
-    @add_op.on_type(log)
+    @add_op.on_type(LogOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("log", x=x, out=out)
 
@@ -265,7 +265,7 @@ class GPUKernel():
     def add_op(self, op, out, x, y):
         self._buffer_op("mul", x=x, y=y, out=out)
 
-    @add_op.on_type(negative)
+    @add_op.on_type(NegativeOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("neg", x=x, out=out)
 
@@ -285,7 +285,7 @@ class GPUKernel():
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
 
-    @add_op.on_type(reciprocal)
+    @add_op.on_type(ReciprocalOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
@@ -296,19 +296,19 @@ class GPUKernel():
         else:
             self._buffer_op("set_item", x=value, y=op.item, out=tensor)
 
-    @add_op.on_type(sign)
+    @add_op.on_type(SignOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
 
-    @add_op.on_type(sin)
+    @add_op.on_type(SinOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sin", x=x, out=out)
 
-    @add_op.on_type(sqrt)
+    @add_op.on_type(SqrtOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqrt", x=x, out=out)
 
-    @add_op.on_type(square)
+    @add_op.on_type(SquareOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqr", x=x, out=out)
 
@@ -324,7 +324,7 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("sum", x=x, axis=0, out=out)
 
-    @add_op.on_type(tanh)
+    @add_op.on_type(TanhOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
 
