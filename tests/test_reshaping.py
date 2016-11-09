@@ -62,7 +62,7 @@ def test_expand_dims(transformer_factory):
                 tensor_np = np.array(
                     test['tensor'], dtype=np.float32
                 )
-                tensor = ng.placeholder(ng.make_axes(tensor_axes))
+                tensor = ng.placeholder(tensor_axes)
 
                 expanded = ng.ExpandDims(tensor, new_axis, dim)
                 expander_fun = ex.executor(expanded, tensor)
@@ -165,7 +165,7 @@ def test_slice(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(ng.make_axes(tensor_axes))
+        tensor = ng.placeholder(tensor_axes)
         expected = np.array(test['expected'], dtype='float32')
 
         s = test['slice']
@@ -221,7 +221,7 @@ def test_padding(transformer_factory):
         tensor_np = np.array(
             test['tensor'], dtype='float32'
         )
-        tensor = ng.placeholder(ng.make_axes(tensor_axes))
+        tensor = ng.placeholder(tensor_axes)
         padding = test['padding']
         padded_axes = test['padded_axes']
         padded = ng.pad(tensor, padding, padded_axes)

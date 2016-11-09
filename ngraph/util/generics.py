@@ -17,11 +17,17 @@ from functools import wraps
 
 
 class TypeMethods(object):
-    """TODO."""
+    """
+    Maintains the mapping of types to method handlers.
 
-    def __init__(self, base_method, **kvargs):
+    Also, keeps the `dispatch_base_type` which is the superclass that all types must subclass to
+    dispatch on. (For safety).
+    """
+
+    def __init__(self, base_method, dispatch_base_type, **kvargs):
         super(TypeMethods, self).__init__(**kvargs)
         self.base_method = base_method
+        self.dispatch_base_type = dispatch_base_type
         self.methods = {}
 
     def on_type_wrapper(self, generic_function, dispatch_type):
@@ -58,18 +64,20 @@ class TypeMethods(object):
         return self.base_method
 
 
-def generic_function(base_function):
+def generic_function(dispatch_base_type=object):
     """
     Makes a function generic on its first argument's type.
 
     The default base function should be marked with @generic_function.
     Specialized handlers should be marked with @{base}.on_type(type)
 
+    dispatch_base_type: The base class which all dispatch args must subclass from.
+
     Example:
 
     .. code-block:: python
 
-        @generic_function
+        @generic_function()
         def visit(arg)
             print(arg)
 
@@ -81,53 +89,57 @@ def generic_function(base_function):
         def visit(arg):
             print("Visiting a Y")
 
-    Arguments:
-        base_function: Default implementation of the function.
-
     Returns:
         The generic function
     """
-    type_methods = TypeMethods(base_function)
 
-    @wraps(base_function)
-    def generic(dispatch_arg, *args, **kwargs):
-        """
-        The generic function's implementation.
+    def real_decorator(base_function):
+        type_methods = TypeMethods(base_function, dispatch_base_type)
 
-        Arguments:
-            dispatch_arg: The argument that distpaches.
-            *args: Remaining args.
-            **kwargs: Keyword args.
+        @wraps(base_function)
+        def generic(dispatch_arg, *args, **kwargs):
+            """
+            The generic function's implementation.
 
-        Returns: The result of the selected method.
+            Arguments:
+                dispatch_arg: The argument that distpaches.
+                *args: Remaining args.
+                **kwargs: Keyword args.
 
-        """
-        return type_methods.get_method(dispatch_arg)(dispatch_arg, *args, **kwargs)
+            Returns: The result of the selected method.
 
-    def on_type(dispatch_type):
-        """
-        Marks the handler sub-method for when the first argument has type dispatch_type.
+            """
+            return type_methods.get_method(dispatch_arg)(dispatch_arg, *args, **kwargs)
 
-        Arguments:
-            dispatch_type: The dispatch type.
+        def on_type(dispatch_type):
+            """
+            Marks the handler sub-method for when the first argument has type dispatch_type.
 
-        Returns: The wrapper for the method.
+            Arguments:
+                dispatch_type: The dispatch type.
 
-        """
-        return type_methods.on_type_wrapper(generic, dispatch_type)
+            Returns: The wrapper for the method.
+            """
+            if not issubclass(dispatch_type, type_methods.dispatch_base_type):
+                raise ValueError("Dispatch type {} must be a subclass of `{}`"
+                                 .format(dispatch_type, type_methods.dispatch_base_type))
+            return type_methods.on_type_wrapper(generic, dispatch_type)
 
-    generic.on_type = on_type
+        generic.on_type = on_type
+        return generic
 
-    return generic
+    return real_decorator
 
 
-def generic_method(base_method):
+def generic_method(dispatch_base_type=object):
     """
     Makes a method generic on its first argument.
 
     A generic method is like a generic function, except that dispatch is on the type of the first
     non-self argument.  The first method, the default, should be marked with @generic_method.
     Specialized methods should be marked with @method.on_type(type)
+
+    dispatch_base_type: The base class which all dispatch args must subclass from.
 
     Example:
 
@@ -142,7 +154,7 @@ def generic_method(base_method):
                 for value in values:
                     self.visit(value)
 
-            @generic_method
+            @generic_method()
             def visit(self, arg)
                 self.others.append(arg)
 
@@ -154,45 +166,47 @@ def generic_method(base_method):
             def visit(self, arg):
                 self.ys.append(arg)
 
-    Arguments:
-        base_method: Default implementation of the method.
-
     Returns:
         The generic method
     """
-    type_methods = TypeMethods(base_method)
 
-    @wraps(base_method)
-    def generic(s, dispatch_arg, *args, **kwargs):
-        """
-        The generic method's implementation.
+    def real_decorator(base_method):
+        type_methods = TypeMethods(base_method, dispatch_base_type)
 
-        Arguments:
-            s: self.
-            dispatch_arg: Argument that controls generic method selection.
-            *args: Remaining positional args.
-            **kwargs: Keyword args.
+        @wraps(base_method)
+        def generic(s, dispatch_arg, *args, **kwargs):
+            """
+            The generic method's implementation.
 
-        Returns: The result of the selected method.
+            Arguments:
+                s: self.
+                dispatch_arg: Argument that controls generic method selection.
+                *args: Remaining positional args.
+                **kwargs: Keyword args.
 
-        """
-        return type_methods.get_method(dispatch_arg)(s, dispatch_arg, *args, **kwargs)
+            Returns: The result of the selected method.
 
-    def on_type(dispatch_type):
-        """
-        Marks the handler sub-method for when the first argument has type dispatch_type.
+            """
+            return type_methods.get_method(dispatch_arg)(s, dispatch_arg, *args, **kwargs)
 
-        Arguments:
-            dispatch_type: The dispatch type.
+        def on_type(dispatch_type):
+            """
+            Marks the handler sub-method for when the first argument has type dispatch_type.
 
-        Returns: The wrapper for the method.
+            Arguments:
+                dispatch_type: The dispatch type.
 
-        """
-        return type_methods.on_type_wrapper(generic, dispatch_type)
+            Returns: The wrapper for the method.
+            """
+            if not issubclass(dispatch_type, type_methods.dispatch_base_type):
+                raise ValueError("Dispatch type {} must be a subclass of `{}`"
+                                 .format(dispatch_type, type_methods.dispatch_base_type))
+            return type_methods.on_type_wrapper(generic, dispatch_type)
 
-    generic.on_type = on_type
+        generic.on_type = on_type
+        return generic
 
-    return generic
+    return real_decorator
 
 
 class OpTypeMethods(TypeMethods):

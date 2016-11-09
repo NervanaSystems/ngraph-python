@@ -46,7 +46,7 @@ valid_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_siz
 init = UniformInit(low=-0.08, high=0.08)
 
 # model initialization
-seq1 = Sequential([nnPreprocess(functor=lambda x: ng.onehot(x, axis=ax.Y)),
+seq1 = Sequential([nnPreprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y)),
                    nnRecurrent(hidden_size, init, activation=Tanh()),
                    nnAffine(init, activation=Softmax(), bias=init, axes=(ax.Y, ax.REC))])
 
@@ -63,7 +63,7 @@ inputs = dict(inp=ng.placeholder([ax.REC, ax.N]),
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6)
 output_prob = seq1.train_outputs(inputs['inp'])
 train_cost = ng.cross_entropy_multi(output_prob,
-                                    ng.onehot(inputs['tgt'], axis=ax.Y),
+                                    ng.one_hot(inputs['tgt'], axis=ax.Y),
                                     usebits=True)
 mean_cost = ng.mean(train_cost, out_axes=[])
 updates = optimizer(train_cost, inputs['idx'])

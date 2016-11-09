@@ -161,8 +161,8 @@ class GradientDescentMomentum(Optimizer):
         self.wdecay = wdecay
         self.schedule = schedule
         self.stochastic_round = stochastic_round
-        self.learning_rate = ng.persistent_tensor(axes=(), name='lrate',
-                                                  initial_value=learning_rate)
+        self.learning_rate = ng.persistent_tensor(axes=(),
+                                                  initial_value=learning_rate).named('lrate')
 
     def __call__(self, cost_func, iteration_index):
         with ng.Op.saved_user_deps():
@@ -175,7 +175,8 @@ class GradientDescentMomentum(Optimizer):
                 grad = clip_gradient_value(ng.deriv(batch_cost, variable) / batch_size,
                                            self.gradient_clip_value)
 
-                velocity = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+                velocity = ng.persistent_tensor(axes=variable.axes,
+                                                initial_value=0.).named(variable.name + '_vel')
                 velocity_updates.append(
                     ng.assign(velocity,
                               velocity * self.momentum_coef - self.learning_rate * (
@@ -240,8 +241,8 @@ class RMSProp(Optimizer):
         self.schedule = schedule
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.learning_rate = ng.persistent_tensor(axes=(), name='lrate',
-                                                  initial_value=learning_rate)
+        self.learning_rate = ng.persistent_tensor(axes=(),
+                                                  initial_value=learning_rate).named('lrate')
 
     def __call__(self, cost_func, iteration_index):
         with ng.Op.saved_user_deps():
@@ -260,8 +261,8 @@ class RMSProp(Optimizer):
                 state_updates.append(
                     ng.assign(
                         lvalue=state,
-                        rvalue=decay * state + (1.0 - decay) * ng.square(grad),
-                        name='state_u_%s' % i)
+                        rvalue=decay * state + (1.0 - decay) * ng.square(grad)
+                    ).named('state_u_%s' % i)
                 )
 
                 param_updates.append(
@@ -269,7 +270,7 @@ class RMSProp(Optimizer):
                         lvalue=variable,
                         rvalue=variable - ((scale_factor * grad * self.learning_rate)
                                            / (ng.sqrt(state + epsilon) + epsilon)),
-                        name='var_u_%s' % i)
+                    ).named('var_u_%s' % i)
                 )
 
             lr_update = [ng.assign(self.learning_rate,

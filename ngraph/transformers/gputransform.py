@@ -21,20 +21,21 @@ from neon.backends import gen_backend
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-from ngraph.op_graph.op_graph import absolute, AddOneDim, AddZeroDim, Argmax, Argmin, cos, \
+from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
+    CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, exp, \
+    EqualOneDim, EqualZeroDim, ExpOneDOp, \
     GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
     LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, log, Max, MaximumOneDim, MaximumZeroDim, Min, \
+    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    negative, NotEqualOneDim, NotEqualZeroDim, Onehot, Power, reciprocal, SetItemOneDim, \
-    sign, sin, sqrt, square, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
+    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, tanh, tensor_size, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
-    Function
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Function, SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
@@ -85,12 +86,12 @@ class ElementWiseKernel(GPUKernel):
         self.kernel = None
         self.shared_size = 0
 
-    @generic_method
+    @generic_method(Op)
     def add_op(self, op, *args):
         if op.is_device_op:
             raise ValueError("Unhandled op: {}".format(op))
 
-    @add_op.on_type(absolute)
+    @add_op.on_type(AbsoluteOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("abs", x=x, out=out)
 
@@ -118,7 +119,27 @@ class ElementWiseKernel(GPUKernel):
                         axis=0,
                         out=out)
 
-    @add_op.on_type(cos)
+    @add_op.on_type(ConvolutionOp)
+    def add_op(self, op, outputs, inputs, filters):
+        self._buffer_op("fprop_conv", op.dims, inputs, filters, outputs)
+
+    @add_op.on_type(bprop_conv)
+    def add_op(self, op, outputs, delta, filters):
+        self._buffer_op("bprop_conv", op.dims, filters, delta, outputs)
+
+    @add_op.on_type(update_conv)
+    def add_op(self, op, outputs, delta, inputs):
+        self._buffer_op("update_conv", op.dims, inputs, delta, outputs)
+
+    @add_op.on_type(PoolingOp)
+    def add_op(self, op, outputs, inputs, argmax):
+        self._buffer_op("fprop_pool", op.dims, inputs, outputs, argmax)
+
+    @add_op.on_type(BpropPoolOp)
+    def add_op(self, op, outputs, delta, argmax):
+        self._buffer_op("bprop_pool", op.dims, delta, outputs, argmax)
+
+    @add_op.on_type(CosOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("cos", x=x, out=out)
 
@@ -158,7 +179,7 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("eq", x=x, y=y, out=out)
 
-    @add_op.on_type(exp)
+    @add_op.on_type(ExpOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("exp", x=x, out=out)
 
@@ -194,7 +215,7 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
 
-    @add_op.on_type(log)
+    @add_op.on_type(LogOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("log", x=x, out=out)
 
@@ -230,7 +251,7 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("mul", x=x, y=y, out=out)
 
-    @add_op.on_type(negative)
+    @add_op.on_type(NegativeOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("neg", x=x, out=out)
 
@@ -242,7 +263,7 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("ne", x=x, y=y, out=out)
 
-    @add_op.on_type(Onehot)
+    @add_op.on_type(OneHotOp)
     def add_op(self, op, out, x):
         self._buffer_op("onehot", x=x, out=out)
 
@@ -250,23 +271,31 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
 
-    @add_op.on_type(reciprocal)
+    @add_op.on_type(ReciprocalOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(sign)
+    @add_op.on_type(AssignOneDOp)
+    def add_op(self, op, out, tensor, value):
+        self._buffer_op("assign", x=value, out=tensor)
+
+    @add_op.on_type(SetItemOneDOp)
+    def add_op(self, op, out, tensor, item, value):
+        self._buffer_op("set_item", x=value, y=op.item, out=tensor)
+
+    @add_op.on_type(SignOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
 
-    @add_op.on_type(sin)
+    @add_op.on_type(SinOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sin", x=x, out=out)
 
-    @add_op.on_type(sqrt)
+    @add_op.on_type(SqrtOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqrt", x=x, out=out)
 
-    @add_op.on_type(square)
+    @add_op.on_type(SquareOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqr", x=x, out=out)
 
@@ -282,9 +311,52 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("sum", x=x, axis=0, out=out)
 
-    @add_op.on_type(tanh)
+    @add_op.on_type(TanhOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
+
+    @add_op.on_type(TensorSizeOp)
+    def add_op(self, op, out):
+        self._buffer_op("fill", x=op.reduction_axes.size, out=out)
+
+    @add_op.on_type(Unslice)
+    def add_op(self, op, out, out_sliced, x):
+        self._buffer_op("unslice", x=x, y=out, out=out_sliced)
+
+    @add_op.on_type(Stack)
+    def add_op(self, op, out, *args):
+        # TODO: we may want to have the inputs write into slices of a
+        # preallocated buffer for this op.
+        # We cannot use the numpy stack function as it is unavailable in
+        # older versions.
+        # self.append("o={}", out)
+        # slices = [slice(None)] * len(op.axes)
+        # for i, arg in enumerate(args):
+        #    slices[op.pos] = i
+        #    self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
+        raise ValueError("Unhandled op: {}".format(op))
+
+    def bind_buffers(self):
+        """
+        Binds GPU addresses of buffers to the kernel parameters. When kernels
+        and initial parameters are generated, tensors have not yet been
+        allocated so a placeholder is used for the memory addresses. This must
+        be called before the first kernel run to bind the tensor addresses in
+        GPU memory to the kernel parameters.
+        """
+        if self.compound:
+            for index in range(len(self.params)):
+                if isinstance(self.params[index], TensorDescription):
+                    self.params[index] = self.params[index].value.tensor.gpudata
+        else:
+            new_op = [self.ops_buffer[0][0]]
+            for i in range(1, 5):
+                if isinstance(self.ops_buffer[0][i], TensorDescription):
+                    new_op.append(self.ops_buffer[0][i].value.tensor)
+                else:
+                    new_op.append(self.ops_buffer[0][i])
+            self.ops_buffer[0] = tuple(new_op)
+        self.buffers_bound = True
 
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
         """

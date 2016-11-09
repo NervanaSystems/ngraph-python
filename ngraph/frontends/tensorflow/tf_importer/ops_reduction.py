@@ -59,8 +59,7 @@ class OpsReduction(OpsBase):
         new_out_axes = [
             ng.make_axis(length=axis.length) for axis in result_op.axes
         ]
-        result_op = ng.cast_axes(
-            result_op, ng.make_axes(new_out_axes), name=tf_node.name)
+        result_op = ng.cast_axes(result_op, new_out_axes).named(tf_node.name)
 
         return result_op
 
@@ -134,7 +133,7 @@ class OpsReduction(OpsBase):
             ]
 
             # broadcast for safety
-            result_op = ng.constant(np_result, axes=out_axes)
+            result_op = ng.constant(np_result, out_axes)
             return result_op
         except:
             raise NotImplementedError("reduce_prod currently not supported in "

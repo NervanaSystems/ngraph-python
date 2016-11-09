@@ -198,6 +198,11 @@ class NameableValue(object):
             sn = sn.split('.')[1]
         return sn
 
+    def named(self, name):
+        self.name = name
+        return self
+
+
 _default_parent = object()
 
 

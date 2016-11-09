@@ -25,35 +25,56 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     is_constant, is_constant_scalar, constant_value, constant_storage, \
-    persistent_tensor, placeholder, \
+    persistent_tensor, placeholder, init_tensor, \
     slice_along_axis, temporary, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
-    temporary, constant_value, variance, squared_L2
+    temporary, constant_value, variance, squared_L2, \
+    negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
+    square, sqrt, tensor_size, assign, batch_size, pad, sigmoid, \
+    one_hot
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
+    'absolute',
     'add',
     'as_op',
     'as_ops',
     'axes_with_order',
+    'batch_size',
     'broadcast',
     'cast_axes',
     'constant',
     'constant_value',
     'convolution',
+    'cos',
+    'exp',
     'is_constant',
     'is_constant_scalar',
+    'log',
     'make_axes',
     'make_axis',
     'make_axis_role',
     'make_name_scope',
     'name_scope',
+    'negative',
+    'one_hot',
+    'pad',
     'persistent_tensor',
     'placeholder',
     'pooling',
+    'reciprocal',
+    'safelog',
+    'set_item',
+    'sigmoid',
+    'sign',
+    'sin',
     'slice_along_axis',
+    'sqrt',
+    'square',
     'squared_L2',
+    'tanh',
     'temporary',
+    'tensor_size',
     'variable',
     'variance',
     'with_name_scope',

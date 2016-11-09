@@ -22,7 +22,7 @@ from builtins import object
 from future.utils import with_metaclass
 
 from ngraph.analysis.memory import assign_buffers
-from ngraph.op_graph.op_graph import Op, TensorOp, InitTensor, tensor_descriptions, \
+from ngraph.op_graph.op_graph import Op, TensorOp, InitTensorOp, tensor_descriptions, \
     Function, doall, ResultHandle
 from ngraph.op_graph.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
@@ -435,7 +435,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finish_transform()
         self.finalized = True
 
-    @generic_method
+    @generic_method(Op)
     def initialize_tensor_descriptions(self, op):
         """
         Ensures that tensor descriptions associated with op are initialized.
@@ -500,11 +500,11 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Allocate storage on the device.
         """
 
-    @generic_method
+    @generic_method(Op)
     def initialize_constant(self, op):
         pass
 
-    @initialize_constant.on_type(InitTensor)
+    @initialize_constant.on_type(InitTensorOp)
     def initialize_constant(self, op):
         tensor_description, = tensor_descriptions(op.args)
         value = op.valfun(tensor_description)

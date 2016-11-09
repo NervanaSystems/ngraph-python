@@ -75,11 +75,10 @@ def test_gdm(args, transformer_factory):
     w_init = np.random.rand(C.length).astype('float32')
 
     # set up nervana graph
-    X = ng.placeholder([C, N], name='X')
-    Y = ng.placeholder([N], name='Y')
-    I = ng.placeholder(axes=(), name='I')
-
-    W = ng.variable([C - 1], name='W', initial_value=w_init)
+    X = ng.placeholder([C, N]).named('X')
+    Y = ng.placeholder([N]).named('Y')
+    I = ng.placeholder(axes=()).named('I')
+    W = ng.variable([C - 1], initial_value=w_init).named('W')
 
     ex = ExecutorFactory()
     transformer = ex.transformer

@@ -41,7 +41,7 @@ class OpsVariable(OpsBase):
         except:
             raise NotImplementedError('Shape must be know prior to execution')
 
-        return ng.variable(axes=axes, name=tf_node.name)
+        return ng.variable(axes).named(tf_node.name)
 
     def Assign(self, tf_node, inputs):
         """

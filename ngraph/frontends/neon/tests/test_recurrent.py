@@ -38,7 +38,6 @@ from ngraph.frontends.neon import nnRecurrent, GaussianInit, Tanh
 from recurrent_ref import Recurrent as RefRecurrent
 
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
-from ngraph import RNG
 
 rng = RandomTensorGenerator()
 

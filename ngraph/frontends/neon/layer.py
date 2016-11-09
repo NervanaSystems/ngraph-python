@@ -97,7 +97,7 @@ class nnAffine(nnLayer):
         self.b = 0 if self.bias is None else None
 
     def train_outputs(self, in_obj):
-        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
+        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
         w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
@@ -145,7 +145,7 @@ class nnConvBase(nnLayer):
         if self.f_axes is None:
             self.f_axes = in_axes.role_axes(ar.Channel)
             for _ax in (ax.T, ax.R, ax.S, ax.K):
-                self.f_axes += ng.make_axis(name=_ax.short_name, roles=_ax.roles)
+                self.f_axes += ng.make_axis(roles=_ax.roles).named(_ax.short_name)
             self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
@@ -153,7 +153,7 @@ class nnConvBase(nnLayer):
         # TODO: clean this up
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(self.f_axes[4].length, name='C', roles=[ar.Channel]),
+                ng.make_axis(self.f_axes[4].length, roles=[ar.Channel]).named('C'),
                 ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
                 ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
                 ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
@@ -311,27 +311,29 @@ class nnRecurrent(nnLayer):
         if self.axes is not None:
             hidden_axes = self.axes - self.axes.recurrent_axes()
         else:
-            hidden_axes = ng.make_axes([ng.make_axis(self.nout, name='Hidden_in')])
+            hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden_in')])
 
         w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
                                    in_axes.recurrent_axes()]
         w_re_axes = hidden_axes + [axis - 1 for axis in hidden_axes]
 
         self.W_input = ng.variable(axes=w_in_axes,
-                                   initial_value=self.init(w_in_axes.lengths), name="W_in")
+                                   initial_value=self.init(w_in_axes.lengths)
+                                   ).named("W_in")
         self.W_recur = ng.variable(axes=w_re_axes,
-                                   initial_value=self.init_inner(w_re_axes.lengths), name="W_re")
-        self.b = ng.variable(axes=hidden_axes, initial_value=0, name="bias")
+                                   initial_value=self.init_inner(w_re_axes.lengths)
+                                   ).named("W_re")
+        self.b = ng.variable(axes=hidden_axes, initial_value=0).named("bias")
 
-        h_ff_buf = ng.dot(self.W_input, in_obj, name="W_in_dot_in")
+        h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
         h_ff_s = get_steps(h_ff_buf, self.time_axis)
         self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
-                                  axes=h_ff_s[0].axes,
-                                  name="h_init")
+                                  axes=h_ff_s[0].axes).named('h_init')
+
         hprev = [self.h_init]
 
         for i in range(self.time_axis.length):
-            d = ng.dot(self.W_recur, hprev[i], name="W_rec_dot_h{}".format(i))
+            d = ng.dot(self.W_recur, hprev[i]).named("W_rec_dot_h{}".format(i))
             h = self.activation(d + h_ff_s[i] + self.b)
             h.name = "activ{}".format(i)
             hprev.append(h)

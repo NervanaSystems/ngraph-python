@@ -850,7 +850,7 @@ def one_hot_comparison(hot_axes, axes, C):
         vindex.extend(udxiter.multi_index)
         v[tuple(vindex)] = 1
 
-    v_t = executor(ng.onehot(u_p, axis=C), u_p)(u)
+    v_t = executor(ng.one_hot(u_p, axis=C), u_p)(u)
     np.testing.assert_allclose(v_t, v)
 
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.op_graph.op_graph import AssignableTensorOp
+from ngraph.op_graph.op_graph import AssignableTensorOp, Op
 from ngraph.op_graph.passes import PeepholeGraphPass, GraphPass, SimplePrune
 from ngraph.util.generics import generic_method
 
@@ -34,7 +34,7 @@ class MySimplePeepholeGraphPass(PeepholeGraphPass):
     def __init__(self):
         super(MySimplePeepholeGraphPass, self).__init__()
 
-    @generic_method
+    @generic_method(Op)
     def visit(self, op):
         pass
 
@@ -46,7 +46,7 @@ class MySimplePeepholeGraphPass(PeepholeGraphPass):
 
 class MySimpleGraphPass(GraphPass):
     def do_pass(self, ops):
-        return len(ng.Op.ordered_ops(ops))
+        return len(Op.ordered_ops(ops))
 
 
 def test_simple_peephole():
@@ -54,3 +54,10 @@ def test_simple_peephole():
     pass_inst = MySimplePeepholeGraphPass()
     output_graph = pass_inst.do_pass([simple_graph]).pop()
     assert output_graph.args[0].args[0].const == 10.0
+
+
+def test_simple_pass():
+    base_op, simple_graph = get_simple_graph()
+    pass_inst = MySimpleGraphPass()
+    output_val = pass_inst.do_pass([simple_graph])
+    assert output_val == 3

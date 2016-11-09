@@ -38,7 +38,7 @@ class OpsUnary(OpsBase):
         left = inputs[0]
 
         # result
-        result_op = ng_op(left, name=tf_node.name)
+        result_op = ng_op(left).named(tf_node.name)
 
         # return op
         return result_op
@@ -89,7 +89,7 @@ class OpsUnary(OpsBase):
         Inputs to tf_node:
             features, name
         """
-        return ng.maximum(inputs[0], 0., name=tf_node.name)
+        return ng.maximum(inputs[0], 0.).named(tf_node.name)
 
     def Identity(self, tf_node, inputs):
         """
@@ -123,7 +123,7 @@ class OpsUnary(OpsBase):
         Inputs to tf_node:
             x, name
         """
-        return ng.log(inputs[0], name=tf_node.name)
+        return ng.log(inputs[0]).named(tf_node.name)
 
     def Neg(self, tf_node, inputs):
         """
@@ -139,4 +139,4 @@ class OpsUnary(OpsBase):
         Inputs to tf_node:
             x, name
         """
-        return ng.negative(inputs[0], name=tf_node.name)
+        return ng.negative(inputs[0]).named(tf_node.name)
