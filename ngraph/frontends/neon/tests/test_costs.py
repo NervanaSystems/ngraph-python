@@ -105,7 +105,7 @@ def test_sum_squared(transformer_factory):
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
 
     def cost(y, t):
-        return ng.dot(y - t, y - t) / 2
+        return ng.squared_L2(y - t) / 2
 
     compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
 
@@ -116,7 +116,7 @@ def test_sum_squared_limits(transformer_factory):
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
 
     def cost(y, t):
-        return ng.dot(y - t, y - t) / 2
+        return ng.squared_L2(y - t) / 2
 
     compare_tensors(cost, outputs, targets, expected_result, tol=1e-7)
 

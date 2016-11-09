@@ -46,4 +46,4 @@ def test_init_gaussian():
     ys = np.zeros((N,), dtype=np.float32)
     loss_val, w_val = update_fun(5.0, xs, ys)
 
-    print loss_val
+    print(loss_val)
