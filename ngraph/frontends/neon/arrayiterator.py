@@ -103,7 +103,6 @@ class SequentialArrayIterator(object):
 
         self.data_arrays, self.batch_bufs = [], []
         for x in data_arrays:
-            # import pdb; pdb.set_trace()
             x = x[:(self.ndata * self.time_steps)]
             self.data_arrays.append(x.reshape(self.batch_size, self.nbatches, self.time_steps))
             self.batch_bufs.append(np.empty(self.shape + (self.batch_size, ), dtype=np.int32))
