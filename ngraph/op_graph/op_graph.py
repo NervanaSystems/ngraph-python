@@ -1603,7 +1603,7 @@ def placeholder(axes, dtype=None, initial_value=None, name=None):
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, name=None):
+def temporary(axes, dtype=None, name=None, init=None):
     """
     Temporary storage.
 
@@ -1613,6 +1613,7 @@ def temporary(axes, dtype=None, name=None):
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
         name (String, optional): A name for the storage.
+        init (optional): Neon-style init.
 
     Returns:
         AssignableTensorOp: The placeholder.
@@ -1621,6 +1622,7 @@ def temporary(axes, dtype=None, name=None):
     return AssignableTensorOp(graph_label_type="Temp",
                               constant=False, persistent=True,
                               trainable=False,
+                              init=init,
                               axes=axes, dtype=dtype, name=name)
 
 
