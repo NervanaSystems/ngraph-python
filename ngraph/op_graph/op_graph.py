@@ -224,7 +224,6 @@ class Op(NameableValue, DebugInfo):
             for dep in arg.user_deps:
                 self.add_other_dep(dep)
         self.schemas = []
-        self._adjoints = None
         self.const = const
         self.is_constant = constant
         self.initializers = OrderedSet()
@@ -491,41 +490,24 @@ class Op(NameableValue, DebugInfo):
 
         return params
 
-    @property
     @cachetools.cached({})
-    def initial_adjoint(self):
-        """
-        Most models only require the adjoints map for their scalar loss
-        functions, in which case the adjoint is initialized to a scalar 1.
-        Some autodiff tests calculate the derivative of a tensor by
-        initializing all but one elements of a tensor to zero and the remaining
-        element to one.  To allow this, we create a placeholder for the initial
-        adjoint and allow it to be accessed by the _initial_adjoint field.
-        """
-        if len(self.axes) == 0:
-            return constant(1)
-        else:
-            return placeholder(self.axes)
-
-    @cachetools.cached({})
-    def adjoints(self):
+    def adjoints(self, error):
         """
         Returns a map containing the adjoints of this op with respect to other
         ops.
 
-        Creates the map if it does not already exist.  Most models only
-        require the adjoints map for their scalar loss functions, in which case
-        the adjoint is initialized to a scalar 1.  Some autodiff tests
-        calculate the derivative of a tensor by initializing all but one
-        elements of a tensor to zero and the remaining element to one.  To
-        allow this, we create a placeholder for the initial adjoint and allow
-        it to be accessed by the _initial_adjoint field.
+        Creates the map if it does not already exist.
+
+        Arguments:
+            error (TensorOp, optional): The tensor holding the error value
+                the derivative will be computed at. Must have the same axes as dependent.
+
 
         Returns:
             Map from Op to dSelf/dOp.
         """
         adjoints = {
-            self: self.initial_adjoint,
+            self: error,
         }
 
         # visit ops in reverse depth first post-order. it is important that
@@ -800,7 +782,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not Axes.same_elems(self.axes, delta.axes):
+        if not self.axes.has_same_axes(delta.axes):
             raise ValueError(
                 'A tensor and its adjoint must have the same axes.'
             )
@@ -1263,7 +1245,7 @@ class ReorderAxes(ReshapeOp):
         axes: The new axes.
     """
     def __init__(self, x, axes, **kwargs):
-        if not Axes.same_elems(x.axes, axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -2459,7 +2441,7 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
 
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
-        if not Axes.same_elems(x.axes, axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -3129,38 +3111,32 @@ def mean(x, reduction_axes=None, out_axes=None):
         tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
-def deriv(dependent_op, independent_op):
+def deriv(dependent, independent, error=constant(1)):
     """
-    TODO.
+    Computes the operation for [dDependent/dIndependent](error=1).
 
-    Arguments:
-      dependent_op: TODO
-      independent_op: TODO
+    The derivative is a multi-linear function.
+
+    Args:
+        dependent (TensorOp): Dependent op.
+        independent(TensorOp): Independent op.
+        error (TensorOp, optional): The tensor holding the error where the
+            derivative will be computed at. Must have the same axes as dependent.
 
     Returns:
-      TODO
+        TensorOp: Derivative applied to error. Has axes of independent.
+
     """
-    adjoints = dependent_op.forwarded.adjoints()
+    if not error.axes.has_same_axes(dependent.axes):
+        raise ValueError("Dependent and error must have the same set of axes")
 
-    if independent_op not in adjoints:
-        # TODO: check to see if independent_op is even used to compute
-        # dependent_op.  If so, pinpoint which Op isn't defining the necessary
-        # adjoints.  If it isn't used, give that more specific error to the
-        # user.
-        raise ValueError((
-            "Attempted to take the derivative of {dependent_op} with respect "
-            "to {independent_op}, but {independent_op} was not present in "
-            "{dependent_op}'s adjoints.  This is most likely because "
-            "{independent_op} isn't used to compute {dependent_op} or one of "
-            "the ops used to compute {independent_op} hasn't defined the "
-            "necessary adjoints."
-        ).format(
-            dependent_op=dependent_op,
-            independent_op=independent_op,
-        ))
+    adjoints = dependent.forwarded.adjoints(error)
 
-    adjoint = adjoints[independent_op.forwarded]
-    return broadcast(adjoint.forwarded, axes=independent_op.axes)
+    if independent not in adjoints:
+        return constant(0, independent.axes)
+
+    adjoint = adjoints[independent.forwarded]
+    return broadcast(adjoint.forwarded, axes=independent.axes)
 
 
 class CrossEntropyMultiInner(object):

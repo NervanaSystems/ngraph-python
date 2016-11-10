@@ -199,7 +199,6 @@ class ExecutorFactory(object):
         fshape = f.axes.lengths
         xshape = px.axes.lengths
 
-        dfdx = ng.deriv(f, px)
         # print "============="
         # for op in Op.ordered_ops([dfdx]):
         #     print '-----'
@@ -211,9 +210,12 @@ class ExecutorFactory(object):
         px.input = True
 
         if len(fshape) is 0:
-            return self.transformer.computation(dfdx, px, *parameters)
+            return self.transformer.computation(ng.deriv(f, px), px, *parameters)
         else:
-            comp = self.transformer.computation(dfdx, f.initial_adjoint, px, *parameters)
+            initial_adjoint = ng.placeholder(f.axes)
+            adjoint = np.zeros(fshape, dtype=f.dtype)
+            dfdx = ng.deriv(f, px, error=initial_adjoint)
+            comp = self.transformer.computation(dfdx, initial_adjoint, px, *parameters)
 
             def helper(x, *args):
                 dfdxshape = list(fshape)
@@ -222,8 +224,6 @@ class ExecutorFactory(object):
 
                 dindex = [0 for _ in fshape]
                 dindex.extend([slice(None) for _ in xshape])
-
-                adjoint = np.zeros(fshape, dtype=x.dtype)
 
                 idxiter = np.nditer(
                     adjoint, flags=['multi_index'], op_flags=['readwrite'])
