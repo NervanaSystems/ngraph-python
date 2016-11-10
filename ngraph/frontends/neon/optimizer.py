@@ -143,7 +143,7 @@ class GradientDescentMomentum(Optimizer):
         Returns:
 
         """
-        self.learning_rate_placeholder = ng.placeholder((), name='lrate')
+        self.learning_rate_placeholder = ng.placeholder(()).named('lrate')
         learning_rate_value = self.learning_rate_placeholder
         variables = list(cost.variables())
         grads = [
@@ -163,14 +163,14 @@ class GradientDescentMomentum(Optimizer):
 
         velocity_updates = [
             ng.assign(
-                lvalue=velocity,
-                rvalue=velocity * self.momentum_coef - learning_rate_value * (
+                velocity,
+                velocity * self.momentum_coef - learning_rate_value * (
                     scale_factor * grad + self.wdecay * variable)
             )
             for variable, grad, velocity in zip(variables, grads, velocities)]
 
         param_updates = [
-            ng.assign(lvalue=variable, rvalue=variable + velocity)
+            ng.assign(variable, variable + velocity)
             for variable, velocity in zip(variables, velocities)
         ]
 
@@ -266,16 +266,18 @@ class RMSProp(Optimizer):
         ]
         state_updates = [
             ng.assign(
-                lvalue=state,
-                rvalue=decay * state + (1.0 - decay) * ng.square(grad)).named('state_u_%s' % i)
-            for i, (state, grad) in enumerate(zip(states, grads))
+                state,
+                decay * state + (1.0 - decay) * ng.square(grad),
+                name='state_u_%s' % i
+            ) for i, (state, grad) in enumerate(zip(states, grads))
         ]
         param_updates = [
             ng.assign(
-                lvalue=param,
-                rvalue=param - ((scale_factor * grad * self.lrate)
-                                / (ng.sqrt(state + epsilon) + epsilon))).named('param_u_%s' % i)
-            for i, (state, grad, param) in enumerate(zip(states, grads, variables))
+                param,
+                param - ((scale_factor * grad * self.lrate)
+                         / (ng.sqrt(state + epsilon) + epsilon)),
+                name='param_u_%s' % i
+            ) for i, (state, grad, param) in enumerate(zip(states, grads, variables))
         ]
         return ng.doall(state_updates + param_updates)
 
