@@ -16,21 +16,20 @@ from __future__ import division
 from ngraph.op_graph import op_graph
 
 
-def convolution(conv_params, inputs, filters, axes, name=None, docstring=None):
+def convolution(conv_params, inputs, filters, axes, docstring=None):
     """
 
     Args:
         conv_params: Dimensions.
         inputs (TensorOp): The input tensor.
         filters (TensorOp): Filter/kernel tensor.
-        name (String, optional): Name for the op.
         docstring (String, optional): Documentation for the op.
 
     Returns:
         TensorOp: The result of the convolution.
 
     """
-    return ConvolutionOp(conv_params, inputs, filters, axes=axes, name=name, docstring=docstring)
+    return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 
 
 class ConvolutionOp(op_graph.TensorOp):

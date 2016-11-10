@@ -17,20 +17,19 @@ from __future__ import division
 from ngraph.op_graph import op_graph
 
 
-def pooling(poolparams, inputs, axes, name=None, docstring=None):
+def pooling(poolparams, inputs, axes, docstring=None):
     """
 
     Args:
         poolparams: Dimensions.
         inputs (TensorOp): Input to pooling.
-        name (String, optional): Name of the Op.
         docstring (String, optional): Dcoumentation for the computation.
 
     Returns:
         TensorOp: The pooling computation.
 
     """
-    return PoolingOp(poolparams, inputs, axes=axes, name=name, docstring=docstring)
+    return PoolingOp(poolparams, inputs, axes=axes, docstring=docstring)
 
 
 class PoolingOp(op_graph.TensorOp):

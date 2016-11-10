@@ -224,8 +224,6 @@ class Callback(object):
         return False
 
 
-
-
 class ProgressCallback(Callback):
     """
     Callback shows overall progress
@@ -237,9 +235,9 @@ class ProgressCallback(Callback):
 
     def on_train_begin(self, callback_data, model):
         self.tpbar = tqdm(desc="Overall",
-                         unit="minibatches",
-                         ncols=80,
-                         total=callback_data['config'].attrs['total_iterations'])
+                          unit="minibatches",
+                          ncols=80,
+                          total=callback_data['config'].attrs['total_iterations'])
 
     def on_train_end(self, callback_data, model):
         self.tpbar.close()
