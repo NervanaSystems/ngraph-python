@@ -374,6 +374,7 @@ class Op(NameableValue, DebugInfo):
         for dep in self.other_deps:
             value.add_other_dep(dep)
         tdcache.tensor_description_cache.clear()
+        value.metadata.update(self.metadata)
 
     @property
     def forwarded(self):
