@@ -20,6 +20,7 @@ from neon.backends import convolution
 from operator import itemgetter
 import numpy as np
 
+
 class ConvFpropKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(ConvFpropKernel, self).__init__(transformer)
@@ -41,16 +42,18 @@ class ConvFpropKernel(GPUKernel):
         enable_winograd = transformer.ng.enable_winograd
         use_cudac_kernels = transformer.ng.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels and "
+                                 "pre-Maxwell GPUs")
 
             self.fprop_kernels = convolution.FpropCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -66,7 +69,7 @@ class ConvFpropKernel(GPUKernel):
             else:
                 self.fprop_kernels = FpropWinograd_2x2_3x3(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             self.fprop_kernels = convolution.FpropDirect(*args)
 
@@ -104,17 +107,19 @@ class ConvBpropKernel(GPUKernel):
         enable_winograd = transformer.ng.enable_winograd
         use_cudac_kernels = transformer.ng.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels and "
+                                 "pre-Maxwell GPUs")
 
             # TODO small C bprop?
             self.bprop_kernels = convolution.BpropCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -128,7 +133,7 @@ class ConvBpropKernel(GPUKernel):
             else:
                 self.bprop_kernels = BpropWinograd_2x2_3x3(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             self.bprop_kernels = convolution.BpropDirect(*args)
 
@@ -166,16 +171,18 @@ class ConvUpdateKernel(GPUKernel):
         enable_winograd = transformer.ng.enable_winograd
         use_cudac_kernels = transformer.ng.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels "
+                                 "and pre-Maxwell GPUs")
 
             self.updat_kernels = convolution.UpdateCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -191,7 +198,7 @@ class ConvUpdateKernel(GPUKernel):
             else:
                 self.updat_kernels = UpdateWinograd_3x3_2x2(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             if N >= 4:
                 self.updat_kernels = convolution.UpdateDirect(*args)

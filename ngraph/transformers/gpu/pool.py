@@ -65,8 +65,6 @@ class PoolFpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        bprop_zero = self.overlap or self.gaps
-
         self.op   = pool_op
         self.C    = C
         self.K    = K
@@ -92,7 +90,6 @@ class PoolFpropKernel(GPUKernel):
         WN   = W * N
         HWN  = H * WN
         DHWN = D * HWN
-        DH   = D * H
         RS   = R * S
         RST  = T * RS
         JRST = J * RST
@@ -211,7 +208,7 @@ class PoolBpropKernel(GPUKernel):
         elif self.dtype.type is np.float32:
             clss = "spool"
         else:
-            raise TypeError("Type not supported.")
+            raise TypeError("Type not supported {}".format(clss))
 
         C, D, H, W, _ = self.O.axes.lengths
         K, M, P, Q, N = self.I.axes.lengths
@@ -239,8 +236,6 @@ class PoolBpropKernel(GPUKernel):
             self.gaps = 1
         else:
             self.gaps = 0
-
-        bprop_zero = self.overlap or self.gaps
 
         self.op   = pool_op
         self.C    = C

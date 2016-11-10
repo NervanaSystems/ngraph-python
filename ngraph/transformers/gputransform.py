@@ -47,7 +47,8 @@ from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, UnsliceKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
+    UnsliceKernel
 
 import numpy as np
 import pycuda.driver as drv
@@ -324,28 +325,6 @@ class ElementWiseKernel(GPUKernel):
         #    self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
         raise ValueError("Unhandled op: {}".format(op))
 
-    def bind_buffers(self):
-        """
-        Binds GPU addresses of buffers to the kernel parameters. When kernels
-        and initial parameters are generated, tensors have not yet been
-        allocated so a placeholder is used for the memory addresses. This must
-        be called before the first kernel run to bind the tensor addresses in
-        GPU memory to the kernel parameters.
-        """
-        if self.compound:
-            for index in range(len(self.params)):
-                if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = self.params[index].value.tensor.gpudata
-        else:
-            new_op = [self.ops_buffer[0][0]]
-            for i in range(1, 5):
-                if isinstance(self.ops_buffer[0][i], TensorDescription):
-                    new_op.append(self.ops_buffer[0][i].value.tensor)
-                else:
-                    new_op.append(self.ops_buffer[0][i])
-            self.ops_buffer[0] = tuple(new_op)
-        self.buffers_bound = True
-
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
         """
         Adds an op to the list of ops to be compiled into a kernel
@@ -515,7 +494,8 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.reduction_axes.size))
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
+                                       op.reduction_axes.size))
 
     @add_kernel.on_type(Unslice)
     def add_kernel(self, op):
@@ -531,7 +511,6 @@ class GPUKernelGroup():
             if not k.buffers_bound:
                 k.bind_buffers()
 
-            #print k
             k.execute()
 
 

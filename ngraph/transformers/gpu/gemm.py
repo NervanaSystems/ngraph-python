@@ -22,6 +22,7 @@ from neon.backends import kernel_specs
 
 import numpy as np
 
+
 class GEMMKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(GEMMKernel, self).__init__(transformer)
@@ -58,7 +59,6 @@ class GEMMKernel(GPUKernel):
         assert len(C.shape) == 2
 
         # one dimension must be contiguous
-        #import pdb; pdb.set_trace()
         assert min(A.strides) == 1 or max(A.strides) == 1
         assert min(B.strides) == 1 or max(B.strides) == 1
         assert min(C.strides) == 1 or max(C.strides) == 1 or vector_dot
@@ -149,20 +149,20 @@ class GEMMKernel(GPUKernel):
         gridA = m // sizeA + (m % sizeA != 0)
         gridB = n // sizeB + (n % sizeB != 0)
 
-        k_vec = 8 if sizeA in (16,32) or sizeB == 32 else 16
+        k_vec = 8 if sizeA in (16, 32) or sizeB == 32 else 16
 
         vec_opt = None
         if op == "tn":
             if (m % 4 == 0 and n % 4 == 0 and
-                A.strides[1] % 4 == 0 and B.strides[0] % 4 == 0):
+                    A.strides[1] % 4 == 0 and B.strides[0] % 4 == 0):
                 vec_opt = ("vec",)
         elif op == "nn":
             if (k % k_vec == 0 and n % 4 == 0 and
-                A.strides[0] % k_vec == 0 and B.strides[0] % 4 == 0):
+                    A.strides[0] % k_vec == 0 and B.strides[0] % 4 == 0):
                 vec_opt = ("vec",)
         elif op == "nt":
             if (k % k_vec == 0 and n % 4 == 0 and
-                A.strides[0] % k_vec == 0 and B.strides[1] % k_vec == 0):
+                    A.strides[0] % k_vec == 0 and B.strides[1] % k_vec == 0):
                 vec_opt = ("vec",)
 
         # nt and nn are more efficient with k%16==0
