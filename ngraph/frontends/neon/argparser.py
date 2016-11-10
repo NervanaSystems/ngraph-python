@@ -48,6 +48,9 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           default=self.defaults.get('verbose', 1),
                           help="verbosity level.  Add multiple v's to "
                                "further increase verbosity")
+        self.add_argument('--no_progress_bar',
+                          action="store_true",
+                          help="suppress running display of progress bar")
         self.add_argument('-w', '--data_dir',
                           default=os.path.join(self.work_dir, 'data'),
                           help='working directory in which to cache '
@@ -72,5 +75,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
         args = super(NgraphArgparser, self).parse_args()
         factory = ngt.make_transformer_factory(args.backend)
         ngt.set_transformer_factory(factory)
+
+        # invert no_progress_bar meaning and store in args.progress_bar
+        args.progress_bar = not args.no_progress_bar
 
         return args

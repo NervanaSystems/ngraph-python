@@ -91,7 +91,7 @@ transformer = ngt.make_transformer()
 train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
 inference_computation = make_keyed_computation(transformer, errors, inputs)
 
-cb = Callbacks(seq1, args.output_file, args.iter_interval)
+cb = Callbacks(seq1, args.output_file, args.iter_interval, show_progress=args.progress_bar)
 
 ######################
 # Train Loop

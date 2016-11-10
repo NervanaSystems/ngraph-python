@@ -20,12 +20,13 @@ import os
 import time
 from timeit import default_timer
 import weakref
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 
 class Callbacks(object):
-    def __init__(self, model, output_file, interval_freq):
+    def __init__(self, model, output_file, interval_freq, show_progress=True):
         '''
         just store a list of callbacks
         '''
@@ -45,6 +46,8 @@ class Callbacks(object):
 
         self.add_callback(RunTimerCallback())
         self.add_callback(TrainCostCallback())
+        if show_progress:
+            self.add_callback(ProgressCallback(minibatch_freq=1, interval_freq=interval_freq))
         self.add_callback(TrainLoggerCallback(minibatch_freq=1, interval_freq=interval_freq))
 
     def __del__(self):
@@ -221,6 +224,30 @@ class Callback(object):
         return False
 
 
+
+
+class ProgressCallback(Callback):
+    """
+    Callback shows overall progress
+    """
+
+    def __init__(self, interval_freq, minibatch_freq):
+        self.interval_freq = interval_freq
+        self.minibatch_freq = minibatch_freq
+
+    def on_train_begin(self, callback_data, model):
+        self.tpbar = tqdm(desc="Overall",
+                         unit="minibatches",
+                         ncols=80,
+                         total=callback_data['config'].attrs['total_iterations'])
+
+    def on_train_end(self, callback_data, model):
+        self.tpbar.close()
+
+    def on_minibatch_end(self, callback_data, model, iteration_idx):
+        self.tpbar.update(1)
+
+
 class RunTimerCallback(Callback):
     """
     Callback which tracks the total training time.
@@ -334,6 +361,6 @@ class TrainLoggerCallback(Callback):
     def on_interval_end(self, callback_data, model, iteration_idx):
         interval = slice(iteration_idx + 1 - self.interval_freq, iteration_idx)
         train_cost = callback_data["cost/train"][interval].mean()
-        print("Iteration {} -- Avg Train cost: {}".format(iteration_idx + 1, train_cost))
+        tqdm.write("Iteration {} -- Avg Train cost: {}".format(iteration_idx + 1, train_cost))
         # logger.warn("Interval %d Minibatch %d complete. Train cost: %f",
         #             interval, (iteration_idx % self.interval_freq), train_cost)
