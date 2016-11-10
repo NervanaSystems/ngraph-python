@@ -16,7 +16,6 @@
 import numpy as np
 
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
 from ngraph.op_graph.axes import spatial_axis
