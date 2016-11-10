@@ -21,6 +21,21 @@ from neon.backends.convolution import _get_copy_transpose_kernel
 
 
 class DimShuffleKernel(GPUKernel):
+    """
+    Kernel used to copy a tensor into another tensor with the same axes, but
+    different order of dimensions. A transpose that supports any number or
+    ordering of dimensions.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (DimShuffle): Graph op being transformed into this kernel
+
+    Attributes:
+        kernel (pycuda.driver.Function): Compiled GPU kernel to execute this
+            dimshuffle operation
+        params (list): List of parameters to pass to kernel
+    """
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
@@ -51,11 +66,27 @@ class DimShuffleKernel(GPUKernel):
         super(DimShuffleKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Calls the compiled DimShuffle kernel on the default stream.
+        """
         self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                         None, *self.params)
 
 
 class FillKernel(GPUKernel):
+    """
+    Kernel used to fill a tensor with a scalar value.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        td (TensorDescription): Tensor to fill
+        value : Scalar value used to fill tensor
+
+    Attributes:
+        value : Scalar value to fill tensor
+        out (GPUTensor): Tensor to fill with value
+    """
     def __init__(self, transformer, td, value):
         super(FillKernel, self).__init__(transformer)
 
@@ -63,18 +94,36 @@ class FillKernel(GPUKernel):
         self.out = td
 
     def bind_buffers(self):
+        """
+        Get allocated GPU tensor for output
+        """
         self.out = self.out.value.tensor
         super(FillKernel, self).bind_buffers()
 
     def execute(self):
         """
         Use memset driver functions to fill tensor with scalar
+        Temporarily uses neon GPUTensor's fill method
         """
         # TODO: remove neon dependency
         self.out.fill(self.value)
 
 
 class SetItemKernel(GPUKernel):
+    """
+    Kernel used set all or part of a tensor with a value. Value can be
+    a scalar, another tensor, or a numpy array
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (SetItemOneDOp): Graph op being transformed into this kernel
+
+    Attributes:
+        tensor (GPUTensor): Dest tensor
+        value: Source scalar, numpy array, or tensor
+        item (slice): Slice to apply to dest tensor
+    """
     def __init__(self, transformer, op):
         super(SetItemKernel, self).__init__(transformer)
 
@@ -82,17 +131,38 @@ class SetItemKernel(GPUKernel):
         self.item = op.item
 
     def bind_buffers(self):
+        """
+        Get allocated GPU tensor for output and potentially source value
+        """
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor.value.tensor
         if isinstance(self.value, TensorDescription):
             self.value = self.value.value.tensor
 
     def execute(self):
+        """
+        Run kernel to copy into tensor
+        Temporarily using the neon GPUTensor implementation
+        """
         # TODO: remove neon dependency
         self.tensor.__setitem__(self.item, self.value)
 
 
 class UnsliceKernel(GPUKernel):
+    """
+    Kernel used for Unslice op
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (Unslice): Graph op being transformed into this kernel
+
+    Attributes:
+        out (GPUTensor): Full dest tensor
+        out_sliced (GPUTensor): Slice of dest tensor which is the same shape as
+            the source tensor
+        value (GPUTensor: Source tensor
+    """
     def __init__(self, transformer, op):
         super(UnsliceKernel, self).__init__(transformer)
 
@@ -100,6 +170,9 @@ class UnsliceKernel(GPUKernel):
         self.out = op.tensor_description()
 
     def bind_buffers(self):
+        """
+        Get allocated GPU tensor for source and dest
+        """
         if isinstance(self.out_sliced, TensorDescription):
             self.out_sliced = self.out_sliced.value.tensor
         if isinstance(self.x, TensorDescription):
@@ -108,6 +181,9 @@ class UnsliceKernel(GPUKernel):
             self.out = self.out.value.tensor
 
     def execute(self):
+        """
+        Run fill and SetItem kernel to execute the Unslice operation
+        """
         # TODO: remove neon dependency
         self.out.fill(0)
         self.out_sliced[:] = self.x

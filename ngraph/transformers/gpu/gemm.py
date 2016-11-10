@@ -24,6 +24,23 @@ import numpy as np
 
 
 class GEMMKernel(GPUKernel):
+    """
+    Kernel object to execute matrix multiply on two tensors. Selects from Nervana's
+    sass GEMM kernels for maxwell and later GPUs and CuBLAS for older GPUs.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (DotOp): Graph op being transformed into this kernel
+
+    Attributes:
+        A (TensorDescriptionWrapper): Tensor for first operand
+        B (TensorDescriptionWrapper): Tensor for second operand
+        C (TensorDescriptionWrapper): Tensor for output
+        kernel (pycuda.driver.Function): Compiled GPU kernel to execute this
+            GEMM operation
+        params (list): List of parameters to pass to kernel
+    """
     def __init__(self, transformer, op):
         super(GEMMKernel, self).__init__(transformer)
 
@@ -37,6 +54,14 @@ class GEMMKernel(GPUKernel):
             self._build_maxas_kernel(op)
 
     def _build_maxas_kernel(self, op, size=None):
+        """
+        Uses tensor dimensions and axis ordering to select a sass kernel and use
+        maxas to compile it for later use.
+
+        Arguments:
+            op (DotOp): Graph op being transformed into this kernel
+            size (str): Optional preselected tile size
+        """
         # Get inputs to gemm
         C = TensorDescriptionWrapper(op.tensor_description(), 2, gemm=True)
         A, B = (TensorDescriptionWrapper(_, 2, gemm=True) for _ in op.call_info())
@@ -195,6 +220,9 @@ class GEMMKernel(GPUKernel):
         super(GEMMKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Either calls into CuBLAS or runs the compiled sass GEMM kernel
+        """
         if self.use_cublas:
             raise NotImplementedError("Not yet supported")
         else:

@@ -314,15 +314,6 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Stack)
     def add_op(self, op, out, *args):
-        # TODO: we may want to have the inputs write into slices of a
-        # preallocated buffer for this op.
-        # We cannot use the numpy stack function as it is unavailable in
-        # older versions.
-        # self.append("o={}", out)
-        # slices = [slice(None)] * len(op.axes)
-        # for i, arg in enumerate(args):
-        #    slices[op.pos] = i
-        #    self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
         raise ValueError("Unhandled op: {}".format(op))
 
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
@@ -415,6 +406,8 @@ class GPUKernelGroup():
         ng (NervanaGPU): Neon backend used to execute special ops
         kernels (:obj:`list` of :class:`GPUKernel`): List of compiled GPUKernel
             objects to run at evaluation time
+        sourcefile (CudaSourceFile): CUDA C source file that will contain all
+            GPU elementwise kernels for this computation
     """
 
     def __init__(self, transformer, name):
@@ -502,11 +495,21 @@ class GPUKernelGroup():
         self.kernels.append(UnsliceKernel(self.transformer, op))
 
     def compile_all(self):
+        """
+        Compiles all CUDA C kernels in this group's source file and updates the
+        corresponding kernel objects with their pycuda prepared functions.
+        """
         self.sourcefile.compile()
         for kernel in self.kernels:
             kernel.compile(self.sourcefile)
 
     def __call__(self):
+        """
+        Loops over all kernels contained in this group and executes them. Since buffers
+        are allocated between kernel compilation and the first run of the computation,
+        we have to update GPU memory pointers in the arguments for each kernel on the
+        first execution of each kernel.
+        """
         for k in self.kernels:
             if not k.buffers_bound:
                 k.bind_buffers()

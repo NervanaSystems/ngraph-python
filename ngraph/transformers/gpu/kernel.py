@@ -15,6 +15,14 @@
 
 
 def pointer_from_td(td):
+    """
+    Gets a GPU address from an allocated TensorDescription
+
+    Arguments:
+        td (TensorDescription): Tensor to get the address of
+
+    Returns: A GPU address (int or pycuda.DeviceAllocation)
+    """
     return td.value.tensor.gpudata
 
 
@@ -37,13 +45,40 @@ class GPUKernel(object):
         self.transformer = transformer
 
     def bind_buffers(self):
+        """
+        Binds GPU addresses of buffers to the kernel parameters. When kernels
+        and initial parameters are generated, tensors have not yet been
+        allocated so a placeholder is used for the memory addresses. This must
+        be called before the first kernel run to bind the tensor addresses in
+        GPU memory to the kernel parameters.
+        """
         self.buffers_bound = True
 
     def execute(self):
+        """
+        Runs the kernel
+        """
         raise NotImplementedError("No execute() implemented")
 
     def generate_source(self, sourcefile=None):
+        """
+        Called when the kernel is added to the kernel group. The group's
+        shared sourcefile is passed so that all kernels in a group can
+        add code to the same file.
+
+        Arguments:
+            sourcefile (CudaSourceFile): Source file to generate the kernel's
+                code into
+        """
         pass
 
     def compile(self, sourcefile=None):
+        """
+        Called after NVCC has been run on the sourcefile passed to generate_source
+        to create a binary. Kernels can query the sourcefile for function pointers
+        to the compiled kernel in this function.
+
+        Arguments:
+            sourcefile (CudaSourceFile): Source file that was passed to generate_source
+        """
         pass

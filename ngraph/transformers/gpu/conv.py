@@ -22,6 +22,21 @@ import numpy as np
 
 
 class ConvFpropKernel(GPUKernel):
+    """
+    Kernel object to execute convolution forward propagation. Selects from Nervana's
+    sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (Convolution): Graph op being transformed into this kernel
+
+    Attributes:
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        F (TensorDescriptionWrapper): Tensor for filters
+        O (TensorDescriptionWrapper): Tensor for output feature maps
+        fprop_kernels (KernelGroup): Kernel(s) used to execute fprop convolution
+    """
     def __init__(self, transformer, op):
         super(ConvFpropKernel, self).__init__(transformer)
 
@@ -74,6 +89,10 @@ class ConvFpropKernel(GPUKernel):
             self.fprop_kernels = convolution.FpropDirect(*args)
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         I_data = self.I.value.tensor
         F_data = self.F.value.tensor
         O_data = self.O.value.tensor
@@ -83,10 +102,28 @@ class ConvFpropKernel(GPUKernel):
         super(ConvFpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.fprop_kernels.execute(1, unbind=False)
 
 
 class ConvBpropKernel(GPUKernel):
+    """
+    Kernel object to execute convolution backward propagation. Selects from Nervana's
+    sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (bprop_conv): Graph op being transformed into this kernel
+
+    Attributes:
+        E (TensorDescriptionWrapper): Tensor for deltas from next layer
+        F (TensorDescriptionWrapper): Tensor for filters
+        O (TensorDescriptionWrapper): Tensor for output deltas
+        bprop_kernels (KernelGroup): Kernel(s) used to execute bprop convolution
+    """
     def __init__(self, transformer, op):
         super(ConvBpropKernel, self).__init__(transformer)
 
@@ -138,6 +175,10 @@ class ConvBpropKernel(GPUKernel):
             self.bprop_kernels = convolution.BpropDirect(*args)
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         E_data = self.E.value.tensor
         F_data = self.F.value.tensor
         O_data = self.O.value.tensor
@@ -147,10 +188,28 @@ class ConvBpropKernel(GPUKernel):
         super(ConvBpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.bprop_kernels.execute(1, unbind=False)
 
 
 class ConvUpdateKernel(GPUKernel):
+    """
+    Kernel object to execute convolution update to compute filter gradient. Selects
+    from Nervana's sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (update_conv): Graph op being transformed into this kernel
+
+    Attributes:
+        E (TensorDescriptionWrapper): Tensor for deltas from next layer
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        U (TensorDescriptionWrapper): Tensor for output gradient for update
+        updat_kernels (KernelGroup): Kernel(s) used to execute convolution update
+    """
     def __init__(self, transformer, op):
         super(ConvUpdateKernel, self).__init__(transformer)
 
@@ -206,6 +265,10 @@ class ConvUpdateKernel(GPUKernel):
                 raise NotImplementedError("This is not supported")
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         E_data = self.E.value.tensor
         I_data = self.I.value.tensor
         U_data = self.U.value.tensor
@@ -213,4 +276,7 @@ class ConvUpdateKernel(GPUKernel):
         super(ConvUpdateKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.updat_kernels.execute(1, unbind=False)
