@@ -383,6 +383,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
     def run_registered_graph_passes(self, ops):
         for graph_pass in self.graph_passes:
+            print ("run graph pass ", graph_pass)
             graph_pass.do_pass(ops)
 
     def _transform_computations(self):

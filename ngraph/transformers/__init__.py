@@ -34,3 +34,8 @@ try:
     import ngraph.transformers.gputransform  # noqa
 except ImportError:
     pass
+
+try:
+    import ngraph.transformers.hetrtransform  # noqa
+except ImportError:
+    pass

@@ -12,6 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import absolute_import
-from __future__ import division
 from __future__ import print_function
+import ngraph as ng
+import ngraph.transformers as ngt
+
+# Build the graph
+x = ng.placeholder(())
+with ng.metadata(device='cpu'):
+    x_plus_one = x + 1
+
+# Select a transformer
+transformer = ngt.make_transformer()
+import ngraph.transformers.passes.nviz
+transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
+
+# Define a computation
+plus_one = transformer.computation(x_plus_one, x)
+
+# Run the computation
+for i in range(5):
+    print(plus_one(i))
