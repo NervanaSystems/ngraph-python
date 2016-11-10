@@ -269,7 +269,7 @@ class RMSProp(Optimizer):
                 lvalue=state,
                 rvalue=decay * state + (1.0 - decay) * ng.square(grad)).named('state_u_%s' % i)
             for i, (state, grad) in enumerate(zip(states, grads))
-            ]
+        ]
         param_updates = [
             ng.assign(
                 lvalue=param,
