@@ -20,9 +20,9 @@ import gendata
 
 ax = ng.make_name_scope(name="ax")
 
-ax.W = ng.make_axis(length=4)
-ax.H = ng.make_axis(length=1)
-ax.N = ng.make_axis(length=128)
+ax.W = ng.make_axis(length=1)
+ax.H = ng.make_axis(length=4)
+ax.N = ng.make_axis(length=128, batch=True)
 
 g = gendata.MixtureGenerator([.5, .5], (ax.W.length, ax.H.length))
 XS, YS = g.gen_data(ax.N.length, 10)
@@ -36,10 +36,10 @@ Y = ng.placeholder([ax.N])
 W = ng.variable([ax.W - 1, ax.H - 1], initial_value=0)
 b = ng.variable((), initial_value=0)
 
-Y_hat = ng.sigmoid(ng.dot(W, X) + b)
-L = ng.cross_entropy_binary(Y_hat, Y) / ng.tensor_size(Y_hat)
+Y_hat = ng.sigmoid(ng.dot(W, X, name="WX") + b)
+L = ng.cross_entropy_binary(Y_hat, Y, out_axes=None) / ng.batch_size(Y_hat)
 
-updates = [ng.assign(v, v - alpha * ng.deriv(L, v) / ng.tensor_size(Y_hat))
+updates = [ng.assign(v, v - alpha * ng.deriv(L, v) / ng.batch_size(Y_hat))
            for v in L.variables()]
 
 all_updates = ng.doall(updates)
@@ -56,7 +56,7 @@ def avg_loss():
     for xs, ys in zip(EVAL_XS, EVAL_YS):
         loss_val = eval_fun(xs, ys)
         total_loss += loss_val
-    return total_loss / len(xs)
+    return total_loss / xs.shape[-1]
 
 print("Starting avg loss: {}".format(avg_loss()))
 for i in range(10):

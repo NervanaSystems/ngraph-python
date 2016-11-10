@@ -3275,8 +3275,11 @@ def cross_entropy_binary(y, t, usebits=False, out_axes=None,
     Returns:
         Cross entropy.
     """
-    result = sum(cross_entropy_binary_inner(y, t), out_axes=out_axes,
-                 enable_sig_opt=enable_sig_opt, enable_diff_opt=enable_diff_opt)
+    result = sum(cross_entropy_binary_inner(y, t,
+                                            enable_sig_opt=enable_sig_opt,
+                                            enable_diff_opt=enable_diff_opt),
+                 out_axes=out_axes
+                 )
 
     if usebits:
         result = result * np.float(1. / np.log(2.0))
