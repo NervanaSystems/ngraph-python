@@ -755,9 +755,11 @@ class GPUDeviceTensor(DeviceTensor):
             if type(value) == np.ndarray:
                 # TODO: warn?
                 value = self.transformer.ng.array(value)
-                self.__getitem__(key)._assign(value)
 
-            self.__getitem__(key)._assign(value)
+                if value.T.shape == self.__getitem__(key).shape:
+                    self.__getitem__(key)._assign(value.T)
+                else:
+                    self.__getitem__(key)._assign(value)
 
     def reshape(self, shape):
         """Temporary for conv"""
