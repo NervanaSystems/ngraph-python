@@ -17,12 +17,10 @@ from __future__ import division
 from __future__ import print_function
 
 from functools import wraps
-
+from operator import itemgetter
 # These are indirectly used by the generated code
 import numpy as np  # noqa
-from neon.backends.layer_cpu import ConvLayer  # noqa
-from neon import NervanaObject  # noqa
-from neon.backends import gen_backend
+import itertools as itt  # noqa
 from ngraph.op_graph import axes  # noqa
 
 from ngraph.util.pygen import PyGen, indenting
@@ -51,13 +49,186 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
     DeviceTensor, make_transformer_factory, set_transformer_factory
 
 
-class proxy_tensor(object):
-    """ A fake CPUTensor to make old neon implementation of ConvLayer happy """
-    # TODO: refactor away
+class NumPyConvEngine(object):
+    @staticmethod
+    def all_conv_code():
+        pycode = """
+        def fprop_conv(self, conv_slices, I, F, O):
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = O.shape
 
-    def __init__(self, tensor):
-        self._tensor = tensor
-        self.size = np.prod(self._tensor.shape)
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, _ = mS
+                sliceR, sliceH, _ = pS
+                sliceS, sliceW, _ = qS
+                slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
+
+        def bprop_conv(self, conv_slices, E, F, gI):
+            _, _, _, mSlice, pSlice, qSlice = conv_slices
+            F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
+            K, M, P, Q, N = gI.shape
+
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, _ = mS
+                sliceR, sliceH, _ = pS
+                sliceS, sliceW, _ = qS
+                slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
+                slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
+
+        def update_conv(self, conv_slices, I, E, U):
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
+
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
+
+        def fprop_pool(self, pool_slices, arrI, arrO):
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            K, M, P, Q, N = arrO.shape
+
+
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, _ = kS
+                sliceD, _ = mS
+                sliceH, _ = pS
+                sliceW, _ = qS
+
+                sliceI = arrI[sliceC, sliceD, sliceH, sliceW, :].reshape(-1, N)
+                if op == "max":
+                    arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
+                    arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
+                elif op == "avg":
+                    arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
+                elif op == "l2":
+                    arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
+
+        def bprop_pool(self, pool_slices, arrE, arrD):
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            arrD[:] = 0
+            K, M, P, Q, N = arrE.shape
+
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, clen = kS
+                sliceD, dlen = mS
+                sliceH, hlen = pS
+                sliceW, wlen = qS
+
+                patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
+                patch_out = (k, m, p, q, slice(None))
+                sliceB = arrD[patch_in].reshape((-1, N))
+                if op == "max":
+                    max_n = arrA[patch_out]
+                    sliceB[max_n, list(range(N))] += arrE[patch_out]
+                elif op == "avg":
+                    sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
+                else:
+                    raise NotImplementedError
+                arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
+        """
+        return pycode
+
+    @staticmethod
+    def get_slices(I, F, O, conv_params):
+        C, D, H, W, _ = I.tensor_description.axes.lengths
+        C, T, R, S, K = F.tensor_description.axes.lengths
+        K, M, P, Q, _ = O.tensor_description.axes.lengths
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_params)
+        mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
+        pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
+        qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
+        dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d) for d in range(D)]
+        hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h) for h in range(H)]
+        wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w) for w in range(W)]
+
+        return (mSlice, pSlice, qSlice, dSlice, hSlice, wSlice)
+
+    @staticmethod
+    def fprop_slice(q, S, X, padding, strides):
+        firstF = 0
+        lastF = S - 1
+        qs = q * strides - padding
+        x2 = qs + lastF
+        if qs < 0:
+            firstF = -qs
+            qs = 0
+        if x2 >= X:
+            dif = x2 - X + 1
+            lastF -= dif
+            x2 -= dif
+        return (slice(firstF, lastF + 1), slice(qs, x2 + 1), lastF - firstF + 1)
+
+    @staticmethod
+    def bprop_slice(x, S, Q, padding, strides):
+        qs = x - (S - padding - 1)
+        firstF = None
+        for s in range(S):  # TODO remove loop logic here.
+            q = qs + s
+            if q % strides == 0:
+                q //= strides
+                if q >= 0 and q < Q:
+                    if firstF is None:
+                        firstF = s
+                        firstE = q
+                    lastF = s
+                    lastE = q
+        if firstF is None:
+            return (slice(0, 0, 1), slice(0, 0, 1), 0)
+        return (slice(firstF, lastF + 1, strides), slice(firstE, lastE + 1, 1), 0)
+
+
+class NumPyPoolEngine(object):
+    @staticmethod
+    def get_slices(I, O, pool_params):
+        C, D, H, W, _ = I.tensor_description.axes.lengths
+        K, M, P, Q, N = O.tensor_description.axes.lengths
+
+        J, T, R, S, op = itemgetter(*('J', 'T', 'R', 'S', 'op'))(pool_params)
+        p_c, p_d, p_h, p_w = itemgetter(*('pad_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
+        s_c, s_d, s_h, s_w = itemgetter(*('str_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
+
+        kSlice = [NumPyPoolEngine.pool_slice(k, J, C, p_c, s_c) for k in range(K)]
+        mSlice = [NumPyPoolEngine.pool_slice(m, T, D, p_d, s_d) for m in range(M)]
+        pSlice = [NumPyPoolEngine.pool_slice(p, R, H, p_h, s_h) for p in range(P)]
+        qSlice = [NumPyPoolEngine.pool_slice(q, S, W, p_w, s_w) for q in range(Q)]
+        array_argmax = np.empty((K, M, P, Q, N), dtype=np.uint32) if op == "max" else None
+
+        return (kSlice, mSlice, pSlice, qSlice, op, array_argmax)
+
+    @staticmethod
+    def pool_slice(q, S, X, padding, strides):
+        qs = q * strides - padding
+        firstI = None
+        for s in range(S):
+            x = qs + s
+            if x >= 0 and x < X:
+                if firstI is None:
+                    firstI = x
+                lastI = x
+        return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -188,8 +359,10 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
-        self.conv_dims = []
-        self.pool_dims = []
+        self.conv_params = dict()
+        self.conv_slices = dict()
+        self.pool_params = dict()
+        self.pool_slices = dict()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -232,71 +405,33 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
-        self.conv_dims.append(op.dims)
-        self.append(
-            """
-            self.be.fprop_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
-                               proxy_tensor({filters}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            inputs=inputs,
-            filters=filters,
-            outputs=outputs
-        )
-
-    @generate_op.on_type(update_conv)
-    def generate_op(self, op, outputs, delta, inputs):
-        self.append(
-            """
-            self.be.update_conv(self.conv_dims[{index}], proxy_tensor({inputs}),
-                                proxy_tensor({delta}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            inputs=inputs,
-            delta=delta,
-            outputs=outputs
-        )
+        self.conv_params[op.index] = op.conv_params
+        self.conv_slices[op.index] = \
+            NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
+        self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
+                    op.index, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append(
-            """
-            self.be.bprop_conv(self.conv_dims[{index}], proxy_tensor({filters}),
-                               proxy_tensor({delta}), proxy_tensor({outputs}))
-            """,
-            index=op.index,
-            filters=filters,
-            delta=delta,
-            outputs=outputs
-        )
+        self.append("self.bprop_conv(self.conv_slices[{}], E={}, F={}, gI={})",
+                    op.index, delta, filters, outputs)
+
+    @generate_op.on_type(update_conv)
+    def generate_op(self, op, outputs, delta, inputs):
+        self.append("self.update_conv(self.conv_slices[{}], I={}, E={}, U={})",
+                    op.index, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
-    def generate_op(self, op, outputs, inputs, argmax):
-        self.pool_dims.append(op.dims)
-        self.append(
-            """
-            self.be.fprop_pool(self.pool_dims[{index}], proxy_tensor({inputs}),
-                               proxy_tensor({outputs}), proxy_tensor({argmax}))
-            """,
-            index=op.index,
-            outputs=outputs,
-            inputs=inputs,
-            argmax=argmax
-        )
+    def generate_op(self, op, outputs, inputs):
+        self.pool_params[op.index] = op.pool_params
+        self.pool_slices[op.index] = NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params)
+        self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
+                    op.index, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
-    def generate_op(self, op, outputs, delta, argmax):
-        # TODO: get rid of temporary hack that converts argmax to uint8
-        self.append(
-            """
-            self.be.bprop_pool(self.pool_dims[{index}], proxy_tensor({delta}),
-                               proxy_tensor({outputs}), proxy_tensor(np.uint8({argmax})))
-            """,
-            index=op.index,
-            outputs=outputs,
-            delta=delta,
-            argmax=argmax
-        )
+    def generate_op(self, op, outputs, delta):
+        self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
+                    op.index, delta, outputs)
 
     @generate_op.on_type(CosOneDOp)
     def generate_op(self, op, out, x):
@@ -436,11 +571,7 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(OneHotOp)
     def generate_op(self, op, out, x):
         self.append("""
-        o = {o}
-        x = {x}
-        o[:] = 0
-        for i in range(len(x)):
-            o[x[i], i] = 1
+        {o}[:] = np.eye({o}.shape[0])[:, {x}.astype(np.int32)]
         """, x=x, o=out)
 
     @generate_op.on_type(Power)
@@ -538,10 +669,8 @@ class NumPyTransformer(Transformer):
     transformer_name = "numpy"
 
     def __init__(self, **kwargs):
-        if NervanaObject.be is None or NervanaObject.be.device_type != 0:
-            # This creates a backend for unit tests.
-            NervanaObject.be = gen_backend('cpu')
         super(NumPyTransformer, self).__init__(**kwargs)
+        self.conv_engine = NumPyConvEngine()
         self.init_code = NumPyCodeGenerator()
         self.allocate_storage_code = NumPyCodeGenerator()
         self.allocate_code = NumPyCodeGenerator()
@@ -549,6 +678,8 @@ class NumPyTransformer(Transformer):
         self.code = NumPyCodeGenerator()
         self.model = None
         self.n_computations = 0
+        self.use_pinned_mem = False
+        self.rng_seed = None
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -577,7 +708,7 @@ class NumPyTransformer(Transformer):
         self.allocate_code.indent(1)
 
     def finish_transform_allocate(self):
-        self.init_code.append("""self.be = NervanaObject.be""")
+        pass
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:
@@ -611,6 +742,10 @@ class NumPyTransformer(Transformer):
                 self.init_code.append("pass")
             self.code.append(self.init_code.code)
             self.code.endl()
+
+            self.code.append(NumPyConvEngine.all_conv_code())
+            self.code.endl()
+
             self.code.append(self.allocate_storage_code.code)
             self.code.endl()
             if len(self.device_buffers) == 0:
@@ -624,8 +759,11 @@ class NumPyTransformer(Transformer):
 
         r = self.code.compile("op", globals())
         self.model = r['Model']()
-        self.model.conv_dims = self.compute_code.conv_dims
-        self.model.pool_dims = self.compute_code.pool_dims
+        self.model.conv_params = self.compute_code.conv_params
+        self.model.pool_params = self.compute_code.pool_params
+        self.model.conv_slices = self.compute_code.conv_slices
+        self.model.pool_slices = self.compute_code.pool_slices
+
         for computation in self.computations:
             executor = getattr(self.model, computation.name)
             computation.executor = executor
@@ -633,6 +771,16 @@ class NumPyTransformer(Transformer):
     def allocate_storage(self):
         self.model.allocate()
 
+    def consume(self, buf_index, hostlist, devlist):
+        '''
+        This is currently used for Aeon dataloading -- need to set things up to do actual
+        device buffer allocation
+        '''
+        assert 0 <= buf_index < 2, 'Can only double buffer'
+        hb = np.rollaxis(hostlist[buf_index], 0, hostlist[buf_index].ndim)
+        if devlist[buf_index] is None:
+            devlist[buf_index] = np.empty_like(hb)
+        devlist[buf_index][:] = hb
 
 set_transformer_factory(
     make_transformer_factory(NumPyTransformer.transformer_name))

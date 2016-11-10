@@ -15,9 +15,10 @@
 
 from __future__ import print_function
 
+from ngraph.op_graph.axes_ops import dimshuffle
 import ngraph.transformers as transformers
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, spatial_axis
 
-from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp

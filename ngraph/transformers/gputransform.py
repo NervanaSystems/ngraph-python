@@ -41,7 +41,13 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
+
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
+from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.gemm import GEMMKernel
+from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
+from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, UnsliceKernel
 
 import numpy as np
 import pycuda.driver as drv
@@ -50,19 +56,17 @@ import pycuda.driver as drv
 _none_slice = slice(None, None, None)
 
 
-class GPUKernel():
+class ElementWiseKernel(GPUKernel):
     """
-    Object which represents a single kernel that will run on the GPU. This can
+    Kernel type used to execute one or more simple elementwise ops. This can
     be either a single op or a list of fused ops which corresponds to a
     Function object in the graph. In the case of regular ops (fused or single)
     the kernel generator in float_ew2 will be used to generate a CUDA C kernel
     that executes these ops. As the function is transformed by the transformer,
     we buffer ops into a list and then compile the kernel at the end.
 
-    Some ops (non regular) are not handled by the kernel generator and instead
-    rely on neon NervanaGPU implementations. These are genrally ops which
-    cannot be fused or done in place such as dot and dimshuffle. In these cases
-    self.compound will be set to False.
+    Some ops (non regular such as GEMM, convolution) are not handled by this kernel
+    generator.
 
     Arguments:
         transformer (GPUTransformer): GPU transformer containing instance of
@@ -74,24 +78,13 @@ class GPUKernel():
         params (list): Parameters to pass to the compiled GPU kernel
         kernel (pycuda.driver.Function): Handle to the compiled GPU kernel
         shared_size (int): Size of shared memory needed by kernel
-        compound (bool): True if the kernel needs to be pre-compiled using the
-            float_ew2 module
-        buffers_bound (bool): Flag indicates if GPU addresses have been bound
-            to kernel parameters
-        transformer (GPUTransformer): GPU transformer containing NervanaGPU
-            object which is used for ops such as dot, dimshuffle, etc.
     """
-
     def __init__(self, transformer):
+        super(ElementWiseKernel, self).__init__(transformer)
         self.ops_buffer = []
         self.params = None
         self.kernel = None
         self.shared_size = 0
-        self.compound = True
-        self.buffers_bound = False
-        self.transformer = transformer
-        self.input0_1d = False
-        self.input1_1d = False
 
     @generic_method(Op)
     def add_op(self, op, *args):
@@ -150,10 +143,6 @@ class GPUKernel():
     def add_op(self, op, out, x):
         self._buffer_op("cos", x=x, out=out)
 
-    @add_op.on_type(Dimshuffle)
-    def add_op(self, op, out, x):
-        self._buffer_op("dimshuffle", x=x, y=op.old_axis_positions, out=out)
-
     @add_op.on_type(DivideOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
@@ -193,10 +182,6 @@ class GPUKernel():
     @add_op.on_type(ExpOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("exp", x=x, out=out)
-
-    @add_op.on_type(Fill)
-    def add_op(self, op, out, x):
-        self._buffer_op("fill", x=op.scalar, out=x)
 
     @add_op.on_type(GreaterOneDim)
     def add_op(self, op, out, x, y):
@@ -294,10 +279,6 @@ class GPUKernel():
     def add_op(self, op, out, tensor, value):
         self._buffer_op("assign", x=value, out=tensor)
 
-    @add_op.on_type(SetItemOneDOp)
-    def add_op(self, op, out, tensor, item, value):
-        self._buffer_op("set_item", x=value, y=op.item, out=tensor)
-
     @add_op.on_type(SignOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
@@ -329,14 +310,6 @@ class GPUKernel():
     @add_op.on_type(TanhOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
-
-    @add_op.on_type(TensorSizeOp)
-    def add_op(self, op, out):
-        self._buffer_op("fill", x=op.reduction_axes.size, out=out)
-
-    @add_op.on_type(Unslice)
-    def add_op(self, op, out, out_sliced, x):
-        self._buffer_op("unslice", x=x, y=out, out=out_sliced)
 
     @add_op.on_type(Stack)
     def add_op(self, op, out, *args):
@@ -385,10 +358,23 @@ class GPUKernel():
             axis (int): For reduction ops, indicate the axis to reduce
                 along
         """
-
         self.ops_buffer.append((op, x, y, out, axis, extra))
 
-    def generate_source(self, name, sourcefile=None):
+    def bind_buffers(self):
+        """
+        Binds GPU addresses of buffers to the kernel parameters. When kernels
+        and initial parameters are generated, tensors have not yet been
+        allocated so a placeholder is used for the memory addresses. This must
+        be called before the first kernel run to bind the tensor addresses in
+        GPU memory to the kernel parameters.
+        """
+        for index in range(len(self.params)):
+            if isinstance(self.params[index], TensorDescription):
+                self.params[index] = pointer_from_td(self.params[index])
+
+        super(ElementWiseKernel, self).bind_buffers()
+
+    def generate_source(self, sourcefile=None):
         """
         Generates source code and adds it to a kernel file to be compiled later.
         First checks if this is a compound kernel which needs to be compiled.
@@ -397,37 +383,15 @@ class GPUKernel():
         at run time.
 
         Arguments:
-            name (string): Function name of the kernel to compile
             sourcefile (CudaSourceFile): Object handling cuda source file generation
         """
         if len(self.ops_buffer) == 0:
             return False
 
-        if len(self.ops_buffer) == 1:
-            if (self.ops_buffer[0][0] == "dot" or
-                    self.ops_buffer[0][0] == "fprop_conv" or
-                    self.ops_buffer[0][0] == "bprop_conv" or
-                    self.ops_buffer[0][0] == "update_conv" or
-                    self.ops_buffer[0][0] == "fprop_pool" or
-                    self.ops_buffer[0][0] == "bprop_pool" or
-                    self.ops_buffer[0][0] == "fill" or
-                    self.ops_buffer[0][0] == "set_item" or
-                    self.ops_buffer[0][0] == "dimshuffle" or
-                    self.ops_buffer[0][0] == "unslice"):
-                self.compound = False
-
-                if isinstance(self.ops_buffer[0][1], TensorDescription) and \
-                        len(self.ops_buffer[0][1].shape) == 1:
-                    self.input0_1d = True
-                if isinstance(self.ops_buffer[0][2], TensorDescription) and \
-                        len(self.ops_buffer[0][2].shape) == 1:
-                    self.input1_1d = True
-
-        if self.compound:
-            if sourcefile is not None:
-                # Code generation and compilation are only separate when a sourcefile is
-                # provided
-                self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
+        if sourcefile is not None:
+            # Code generation and compilation are only separate when a sourcefile is
+            # provided
+            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
 
         return True
 
@@ -438,16 +402,19 @@ class GPUKernel():
         if len(self.ops_buffer) == 0:
             return False
 
-        if self.compound:
-            if sourcefile is None:
-                # Generate and compile single kernel
-                self.kernel, self.params, self.shared_size = \
-                    _prepare_compound_kernel(self.ops_buffer)
-            else:
-                # Get kernel object from compiled sourcefile
-                self.kernel = sourcefile.get_kernel(self.name)
+        if sourcefile is None:
+            # Generate and compile single kernel
+            self.kernel, self.params, self.shared_size = \
+                _prepare_compound_kernel(self.ops_buffer)
+        else:
+            # Get kernel object from compiled sourcefile
+            self.kernel = sourcefile.get_kernel(self.name)
 
         return True
+
+    def execute(self):
+        self.kernel.prepared_async_call(*self.params,
+                                        shared_size=self.shared_size)
 
 
 class GPUKernelGroup():
@@ -471,56 +438,101 @@ class GPUKernelGroup():
             objects to run at evaluation time
     """
 
-    def __init__(self, transformer, kernels):
+    def __init__(self, transformer, name):
         self.transformer = transformer
         self.ng = transformer.ng
-        self.kernels = kernels
+        self.kernels = []
+        self.name = name
+        self.sourcefile = CudaSourceFile(name)
+
+    @generic_method(Op)
+    def add_kernel(self, op):
+        # Use default kernel generator for single operation
+        out = op.tensor_description()
+        call_info = (_ for _ in op.call_info())
+
+        kernel = ElementWiseKernel(self.transformer)
+        kernel.add_op(op, out, *call_info)
+
+        if kernel.generate_source(self.sourcefile):
+            self.kernels.append(kernel)
+
+    @add_kernel.on_type(Function)
+    def add_kernel(self, op):
+        # Iterate over compounded operations and build kernel for them
+        kernel = ElementWiseKernel(self.transformer)
+        for sub_op in op.instructions:
+            out = sub_op.tensor_description()
+            call_info = (_ for _ in sub_op.call_info())
+            kernel.add_op(sub_op, out, *call_info)
+
+        if kernel.generate_source(self.sourcefile):
+            self.kernels.append(kernel)
+
+    @add_kernel.on_type(ConvolutionOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(bprop_conv)
+    def add_kernel(self, op):
+        self.kernels.append(ConvBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(update_conv)
+    def add_kernel(self, op):
+        self.kernels.append(ConvUpdateKernel(self.transformer, op))
+
+    @add_kernel.on_type(DotOneDimensional)
+    def add_kernel(self, op):
+        self.kernels.append(GEMMKernel(self.transformer, op))
+
+    @add_kernel.on_type(DotTwoDimensional)
+    def add_kernel(self, op):
+        self.kernels.append(GEMMKernel(self.transformer, op))
+
+    @add_kernel.on_type(DotTwoByOne)
+    def add_kernel(self, op):
+        self.kernels.append(GEMMKernel(self.transformer, op))
+
+    @add_kernel.on_type(Dimshuffle)
+    def add_kernel(self, op):
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
+
+    @add_kernel.on_type(Fill)
+    def add_kernel(self, op):
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.scalar))
+
+    @add_kernel.on_type(PoolingOp)
+    def add_kernel(self, op):
+        self.kernels.append(PoolFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(BpropPoolOp)
+    def add_kernel(self, op):
+        self.kernels.append(PoolBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(SetItemOneDOp)
+    def add_kernel(self, op):
+        self.kernels.append(SetItemKernel(self.transformer, op))
+
+    @add_kernel.on_type(TensorSizeOp)
+    def add_kernel(self, op):
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.reduction_axes.size))
+
+    @add_kernel.on_type(Unslice)
+    def add_kernel(self, op):
+        self.kernels.append(UnsliceKernel(self.transformer, op))
+
+    def compile_all(self):
+        self.sourcefile.compile()
+        for kernel in self.kernels:
+            kernel.compile(self.sourcefile)
 
     def __call__(self):
         for k in self.kernels:
             if not k.buffers_bound:
                 k.bind_buffers()
 
-            if k.compound:
-                # Execute prepared kernel
-                kernel = k.kernel
-                params = k.params
-                kernel.prepared_async_call(*params, shared_size=k.shared_size)
-            else:
-                op = k.ops_buffer[0]
-                if op[0] == "dot":
-                    if k.input0_1d and k.input1_1d:
-                        if np.prod(op[3].shape) == 1:
-                            self.ng.compound_dot(op[1].T, op[2], op[3])
-                        else:
-                            self.ng.compound_dot(op[1], op[2].T, op[3])
-                    else:
-                        self.ng.compound_dot(op[1], op[2], op[3])
-                elif op[0] == "fprop_conv":
-                    self.ng.fprop_conv(op[1], op[2], op[3], op[4])
-                elif op[0] == "bprop_conv":
-                    self.ng.bprop_conv(op[1], op[2], op[3], op[4])
-                elif op[0] == "update_conv":
-                    self.ng.update_conv(op[1], op[2], op[3], op[4])
-                elif op[0] == "fprop_pool":
-                    self.ng.fprop_pool(op[1], op[2], op[3], op[4])
-                elif op[0] == "bprop_pool":
-                    self.ng.bprop_pool(op[1], op[2], op[3], op[4])
-                elif op[0] == "fill":
-                    op[3].fill(op[1])
-                elif op[0] == "set_item":
-                    op[3].__setitem__(op[2], op[1])
-                elif op[0] == "dimshuffle":
-                    if len(op[1].shape) == 2 and (op[1].shape[0] == 1 or op[1].shape[1] == 1):
-                        if op[1].shape == op[3].shape:
-                            op[3][:] = op[1]
-                        else:
-                            op[3][:] = op[1].T
-                    else:
-                        self.ng.copy_transpose(op[1], op[3], axes=op[2])
-                elif op[0] == "unslice":
-                    op[2].fill(0)
-                    op[3][:] = op[1]
+            #print k
+            k.execute()
 
 
 class GPUBufferAllocator():
@@ -743,9 +755,13 @@ class GPUDeviceTensor(DeviceTensor):
             if type(value) == np.ndarray:
                 # TODO: warn?
                 value = self.transformer.ng.array(value)
-                self.__getitem__(key)._assign(value)
 
-            self.__getitem__(key)._assign(value)
+                if value.T.shape == self.__getitem__(key).shape:
+                    self.__getitem__(key)._assign(value.T)
+                else:
+                    self.__getitem__(key)._assign(value)
+            else:
+                self.__getitem__(key)._assign(value)
 
     def reshape(self, shape):
         """Temporary for conv"""
@@ -781,6 +797,7 @@ class GPUTransformer(Transformer):
         self.buffer_allocators = []
         self.kernel_groups = dict()
         self.tensors = dict()
+        self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
         self.closed = False
@@ -824,36 +841,12 @@ class GPUTransformer(Transformer):
         pass
 
     def transform_ordered_ops(self, ordered_ops, name):
-        kernels = []
-        sourcefile = CudaSourceFile(name)
-
-        for fun in ordered_ops:
-            if isinstance(fun, Function):
-                # Iterate over compounded operations and build kernel for them
-                kernel = GPUKernel(self)
-                for op in fun.instructions:
-                    out = op.tensor_description()
-                    call_info = (_ for _ in op.call_info())
-                    kernel.add_op(op, out, *call_info)
-            else:
-                # Generate kernel for single operation
-                out = fun.tensor_description()
-                call_info = (_ for _ in fun.call_info())
-
-                kernel = GPUKernel(self)
-                kernel.add_op(fun, out, *call_info)
-
-            # Generate source code for kernel
-            if kernel.generate_source(name, sourcefile):
-                kernels.append(kernel)
-
-        # Compile source code in file
-        sourcefile.compile()
-        for kernel in kernels:
-            kernel.compile(sourcefile)
-
         # Create kernel group
-        kernel_group = GPUKernelGroup(self, kernels)
+        kernel_group = GPUKernelGroup(self, name)
+        for fun in ordered_ops:
+            kernel_group.add_kernel(fun)
+
+        kernel_group.compile_all()
         self.kernel_groups[name] = kernel_group
 
         return name

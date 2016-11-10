@@ -1,0 +1,81 @@
+import gzip
+from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append, fetch_file
+import os
+from tqdm import tqdm
+import numpy as np
+from PIL import Image
+
+
+class MNIST(object):
+    """
+    Arguments:
+        path (str): Local path to copy data files.
+    """
+    def __init__(self, path='.', include_channel=True):
+        self.path = path
+        self.url = 'https://s3.amazonaws.com/img-datasets'
+        self.filename = 'mnist.pkl.gz'
+        self.size = 15296311
+        self.include_channel = True
+
+    def load_data(self):
+        """
+        Fetch the MNIST dataset and load it into memory.
+
+        Arguments:
+            path (str, optional): Local directory in which to cache the raw
+                                  dataset.  Defaults to current directory.
+            normalize (bool, optional): Whether to scale values between 0 and 1.
+                                        Defaults to True.
+
+        Returns:
+            tuple: Both training and test sets are returned.
+        """
+        workdir, filepath = valid_path_append(self.path, '', self.filename)
+        if not os.path.exists(filepath):
+            fetch_file(self.url, self.filename, filepath, self.size)
+
+        with gzip.open(filepath, 'rb') as f:
+            self.train_set, self.valid_set = pickle_load(f)
+
+        if self.include_channel:
+            self.train_set = (self.train_set[0].reshape(60000, 1, 28, 28), self.train_set[1])
+            self.valid_set = (self.valid_set[0].reshape(10000, 1, 28, 28), self.valid_set[1])
+
+        return self.train_set, self.valid_set
+
+
+def ingest_mnist(root_dir, overwrite=False):
+    '''
+    Save MNIST dataset as PNG files
+    '''
+    out_dir = os.path.join(root_dir, 'mnist')
+
+    set_names = ('train', 'val')
+    manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
+
+    if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
+        return manifest_files
+
+    dataset = {k: s for k, s in zip(set_names, MNIST(out_dir, False).load_data())}
+
+    # Write out label files and setup directory structure
+    lbl_paths, img_paths = dict(), dict(train=dict(), val=dict())
+    for lbl in range(10):
+        lbl_paths[lbl] = ensure_dirs_exist(os.path.join(out_dir, 'labels', str(lbl) + '.txt'))
+        np.savetxt(lbl_paths[lbl], [lbl], fmt='%d')
+        for setn in ('train', 'val'):
+            img_paths[setn][lbl] = ensure_dirs_exist(os.path.join(out_dir, setn, str(lbl) + '/'))
+
+    # Now write out image files and manifests
+    for setn, manifest in zip(set_names, manifest_files):
+        records = []
+        for idx, (img, lbl) in enumerate(tqdm(zip(*dataset[setn]))):
+            img_path = os.path.join(img_paths[setn][lbl], str(idx) + '.png')
+            im = Image.fromarray(img)
+            im.save(os.path.join(out_dir, img_path), format='PNG')
+            records.append((os.path.relpath(img_path, out_dir),
+                            os.path.relpath(lbl_paths[lbl], out_dir)))
+        np.savetxt(manifest, records, fmt='%s,%s')
+
+    return manifest_files

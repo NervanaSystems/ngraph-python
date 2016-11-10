@@ -191,6 +191,13 @@ class NameableValue(object):
         NameableValue.__all_names[name] = self
         self.__name = name
 
+    @property
+    def short_name(self):
+        sn = self.__name.split('_')[0]
+        if sn.find('.') != -1:
+            sn = sn.split('.')[1]
+        return sn
+
     def named(self, name):
         self.name = name
         return self
@@ -266,7 +273,7 @@ def make_name_scope(name):
     """
     Creates a NameScope.
 
-    When NameableValue objects are assigned to attributes od a NameScope, the name of the object
+    When NameableValue objects are assigned to attributes of a NameScope, the name of the object
     is set to the attribute.
 
     Args:

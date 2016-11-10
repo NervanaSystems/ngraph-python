@@ -15,30 +15,27 @@
 from __future__ import division
 
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import make_axis, make_axes
 
 
-def pooling(dims, inputs, argmax, name=None, docstring=None):
+def pooling(poolparams, inputs, axes, docstring=None):
     """
 
     Args:
-        dims: Dimensions.
+        poolparams: Dimensions.
         inputs (TensorOp): Input to pooling.
-        argmax (TensorOp): Selection op.
-        name (String, optional): Name of the Op.
         docstring (String, optional): Dcoumentation for the computation.
 
     Returns:
         TensorOp: The pooling computation.
 
     """
-    return PoolingOp(dims, inputs, argmax, name=name, docstring=docstring)
+    return PoolingOp(poolparams, inputs, axes=axes, docstring=docstring)
 
 
 class PoolingOp(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, dims, inputs, argmax, *args, **kwargs):
+    def __init__(self, pool_params, inputs, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -49,13 +46,6 @@ class PoolingOp(op_graph.TensorOp):
             raise ValueError((
                 'pooling input shape must be length 5, found {}'
             ).format(len(inputs.shape)))
-
-        if 'axes' in kwargs:
-            raise ValueError(
-                "pooling does not currently support the 'axes' argument.  The "
-                "output axes are entirely determined by the shape of the "
-                "input and filter Ops."
-            )
 
         batch_axes = inputs.axes.batch_axes()
         if len(batch_axes) != 1:
@@ -69,33 +59,34 @@ class PoolingOp(op_graph.TensorOp):
                 n_sample_axes=len(inputs.axes.sample_axes()),
                 sample_axes=inputs.axes.sample_axes(),
             ))
-        self.batch_axis = batch_axes[0]
-        axes = make_axes([make_axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
-        for i, name in enumerate(['C', 'D', 'H', 'W']):
-            axes[i].name = name
+        pooltype = pool_params['op']
+        if pooltype not in ('max', 'avg'):
+            raise ValueError((
+                "Unsupported pooling type: {pooltype}.  Only max and avg pooling "
+                "currently supported. ").format(pooltype=pooltype))
 
-        self.dims = dims
-        self.argmax = argmax
+        self.pool_params = pool_params
         self.index = PoolingOp._index
+
         PoolingOp._index += 1
 
         super(PoolingOp, self).__init__(
-            args=(inputs, argmax), *args, axes=axes, **kwargs
+            args=(inputs,), *args, **kwargs
         )
 
-    def generate_adjoints(self, adjoints, delta, inputs, argmax):
-        inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, argmax, self))
+    def generate_adjoints(self, adjoints, delta, inputs):
+        inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, self))
 
 
 class BpropPoolOp(op_graph.TensorOp):
-    def __init__(self, delta, inputs, argmax, fprop, *args, **kwargs):
+    def __init__(self, delta, inputs, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
         """
-        self.dims = fprop.dims
+        self.pool_params = fprop.pool_params
         self.index = fprop.index
 
         super(BpropPoolOp, self).__init__(
-            args=(delta, argmax), *args, axes=inputs.axes, **kwargs
+            args=(delta,), *args, axes=inputs.axes, **kwargs
         )
