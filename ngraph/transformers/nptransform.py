@@ -359,10 +359,10 @@ def get_tensors(f):
 class NumPyCodeGenerator(PyGen):
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
-        self.conv_params = []
-        self.conv_slices = []
-        self.pool_params = []
-        self.pool_slices = []
+        self.conv_params = dict()
+        self.conv_slices = dict()
+        self.pool_params = dict()
+        self.pool_slices = dict()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -405,10 +405,9 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
-        self.conv_params.append(op.conv_params)
-        self.conv_slices.append(
+        self.conv_params[op.index] = op.conv_params
+        self.conv_slices[op.index] = \
             NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        )
         self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, inputs, filters, outputs)
 
@@ -424,8 +423,8 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
-        self.pool_params.append(op.pool_params)
-        self.pool_slices.append(NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params))
+        self.pool_params[op.index] = op.pool_params
+        self.pool_slices[op.index] = NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params)
         self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
                     op.index, inputs, outputs)
 

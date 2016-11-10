@@ -177,9 +177,11 @@ class PoolFpropKernel(GPUKernel):
 
         # Allocate argmax tensor
         if self.op == "max":
-            # assert self.index not in self.transformer.argmax_tensors
-            argmax = self.transformer.ng.empty_like(self.O.value.tensor)
-            self.transformer.argmax_tensors[self.index] = argmax
+            if self.index not in self.transformer.argmax_tensors:
+                argmax = self.transformer.ng.empty_like(self.O.value.tensor)
+                self.transformer.argmax_tensors[self.index] = argmax
+            else:
+                argmax = self.transformer.argmax_tensors[self.index]
             A_data = argmax.gpudata
         else:
             A_data = 0
