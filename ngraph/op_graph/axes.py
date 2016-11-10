@@ -827,7 +827,7 @@ class Axes(object):
             axes (Axes): axes.
 
         Returns:
-            True if axess has the same elements,
+            True if axes has the same elements,
             False otherwise.
         """
         return set(self) == set(make_axes(axes))

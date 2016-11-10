@@ -498,6 +498,11 @@ class Op(NameableValue, DebugInfo):
 
         Creates the map if it does not already exist.
 
+        Arguments:
+            error (TensorOp, optional): The tensor holding the error value
+                the derivative will be computed at. Must have the same axes as dependent.
+
+
         Returns:
             Map from Op to dSelf/dOp.
         """
@@ -3115,8 +3120,8 @@ def deriv(dependent, independent, error=constant(1)):
     Args:
         dependent (TensorOp): Dependent op.
         independent(TensorOp): Independent op.
-        error (TensorOp, optional): The tensor holding the error where value
-            the tensor will be computed at. Must have the same axes as dependent.
+        error (TensorOp, optional): The tensor holding the error where the
+            derivative will be computed at. Must have the same axes as dependent.
 
     Returns:
         TensorOp: Derivative applied to error. Has axes of independent.

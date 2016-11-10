@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
+import pytest
 import ngraph as ng
 import ngraph.transformers as ngt
 import numpy as np
@@ -914,8 +915,5 @@ def test_tensor_derivative():
     """
     W = ng.make_axis(5)
     p = ng.placeholder(W)
-    try:
+    with pytest.raises(ValueError):
         ng.deriv(p, p)
-        assert("Tensor derivative without error failed")
-    except (ValueError):
-        pass
