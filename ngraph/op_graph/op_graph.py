@@ -777,7 +777,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.same_elems(delta.axes):
+        if not self.axes.has_same_axes(delta.axes):
             raise ValueError(
                 'A tensor and its adjoint must have the same axes.'
             )
@@ -1227,7 +1227,7 @@ class ReorderAxes(ReshapeOp):
         axes: The new axes.
     """
     def __init__(self, x, axes, **kwargs):
-        if not x.axes.same_elems(axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -2423,7 +2423,7 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
 
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
-        if not x.axes.same_elems(axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -3109,7 +3109,7 @@ def deriv(dependent, independent, error=constant(1)):
         TensorOp: Derivative applied to error. Has axes of independent.
 
     """
-    if not error.axes.same_elems(dependent.axes):
+    if not error.axes.has_same_axes(dependent.axes):
         raise ValueError("Dependent and error must have the same set of axes")
 
     adjoints = dependent.forwarded.adjoints(error)
