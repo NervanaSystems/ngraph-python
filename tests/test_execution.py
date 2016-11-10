@@ -906,3 +906,16 @@ def test_elementwise_fp16_out(transformer_factory):
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     ngt.make_transformer().initialize()
+
+
+def test_tensor_derivative():
+    """
+    Ensure that a dTensor/dTensor fails if error tensor is not provided.
+    """
+    W = ng.make_axis(5)
+    p = ng.placeholder(W)
+    try:
+        ng.deriv(p, p)
+        assert("Tensor derivative without error failed")
+    except (ValueError):
+        pass

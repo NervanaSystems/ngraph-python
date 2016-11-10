@@ -776,21 +776,18 @@ class Axes(object):
         """
         return self._axes.index(axis)
 
-    @staticmethod
-    @with_args_as_axes
-    def same_elems(axes1, axes2):
+    def same_elems(self, axes):
         """
-        Checks whether two Axes have the same elements.
+        Checks whether axes have the same set of elements as self.
 
         Arguments:
-            axes1: First axes.
-            axes2: Second axes.
+            axes (Axes): axes.
 
         Returns:
-            True if axes1 and axes2 have the same elements,
+            True if axess has the same elements,
             False otherwise.
         """
-        return set(axes1) == set(axes2)
+        return set(self) == set(make_axes(axes))
 
     @staticmethod
     @with_args_as_axes
@@ -1271,7 +1268,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The reordered tensor description.
         """
-        Axes.same_elems(self.axes, new_axes)
+        self.axes.same_elems(new_axes)
         return self.reorder_and_broadcast(new_axes, name)
 
     def reorder_and_broadcast(self, new_axes, name):
