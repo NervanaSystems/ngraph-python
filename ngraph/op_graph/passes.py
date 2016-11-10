@@ -123,11 +123,12 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = flatten_at(y, len(y_reduction_axes))
 
             if len(out_axes) == 0:
-                out = DotOneDimensional(x, y, axes=make_axes())
+                out = DotOneDimensional(x, y, axes=())
             elif len(x.axes) == 1:
-                out = DotTwoByOne(Transpose(y), x, axes=out_axes)
+                y = Transpose(y)
+                out = DotTwoByOne(y, x, axes=y.axes[0])
             elif len(y.axes) == 1:
-                out = DotTwoByOne(x, y, axes=out_axes)
+                out = DotTwoByOne(x, y, axes=x.axes[0])
             else:
                 out = DotTwoDimensional(x, y,
                                         axes=([op.x_out_axes.flatten(),
