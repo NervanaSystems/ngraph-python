@@ -55,6 +55,18 @@ def tdcache():
 tdcache.tensor_description_cache = {}
 
 
+@contextmanager
+def metadata(**metadata):
+    """
+    Capture all Ops created within the context. Hides ops created in this
+    context from parent contexts.
+    """
+    with Op.all_ops() as ops:
+        yield
+    for op in ops:
+        op.metadata.update(metadata)
+
+
 def with_op_metadata(f, metadata=None):
     """
     Decorator to add metadata to all ops created inside the decorated function.
