@@ -80,7 +80,7 @@ inputs = dict(img=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
-errors = ng.not_equal(ng.argmax(output_prob, out_axes=(ax.N)), inputs['tgt'])
+errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['tgt'])
 train_cost = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt'], axis=ax.Y))
 mean_cost = ng.mean(train_cost, out_axes=())
 updates = optimizer(train_cost, inputs['idx'])

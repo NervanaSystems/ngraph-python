@@ -9,6 +9,7 @@ scipy
 # autopep8 (temporary add)
 autopep8==1.2.4
 # other requirements
+tqdm==4.8.4
 cachetools
 decorator
 requests
