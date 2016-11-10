@@ -279,10 +279,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, tensor, value):
         self._buffer_op("assign", x=value, out=tensor)
 
-    @add_op.on_type(SetItemOneDOp)
-    def add_op(self, op, out, tensor, item, value):
-        self._buffer_op("set_item", x=value, y=op.item, out=tensor)
-
     @add_op.on_type(SignOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
@@ -314,14 +310,6 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(TanhOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
-
-    @add_op.on_type(TensorSizeOp)
-    def add_op(self, op, out):
-        self._buffer_op("fill", x=op.reduction_axes.size, out=out)
-
-    @add_op.on_type(Unslice)
-    def add_op(self, op, out, out_sliced, x):
-        self._buffer_op("unslice", x=x, y=out, out=out_sliced)
 
     @add_op.on_type(Stack)
     def add_op(self, op, out, *args):
@@ -457,7 +445,7 @@ class GPUKernelGroup():
         self.name = name
         self.sourcefile = CudaSourceFile(name)
 
-    @generic_method
+    @generic_method(Op)
     def add_kernel(self, op):
         # Use default kernel generator for single operation
         out = op.tensor_description()
@@ -521,11 +509,11 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(SetItemOneDim)
+    @add_kernel.on_type(SetItemOneDOp)
     def add_kernel(self, op):
         self.kernels.append(SetItemKernel(self.transformer, op))
 
-    @add_kernel.on_type(tensor_size)
+    @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.reduction_axes.size))
 
