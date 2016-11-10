@@ -30,7 +30,7 @@ class ConvFpropKernel(GPUKernel):
         self.dtype = self.O.dtype
 
         C, D, H, W, N = self.I.axes.lengths
-        C, R, S, T, K = self.F.axes.lengths
+        C, T, R, S, K = self.F.axes.lengths
         K, M, P, Q, _ = self.O.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
@@ -93,7 +93,7 @@ class ConvBpropKernel(GPUKernel):
         self.dtype = self.O.dtype
 
         C, D, H, W, N = self.O.axes.lengths
-        C, R, S, T, K = self.F.axes.lengths
+        C, T, R, S, K = self.F.axes.lengths
         K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
@@ -136,7 +136,7 @@ class ConvBpropKernel(GPUKernel):
         E_data = self.E.value.tensor
         F_data = self.F.value.tensor
         O_data = self.O.value.tensor
-        self.bprop_kernels.bind_params(E_data, F_data, O_data, X=None,
+        self.bprop_kernels.bind_params(E_data, F_data, O_data, O_data,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
         super(ConvBpropKernel, self).bind_buffers()
@@ -155,7 +155,7 @@ class ConvUpdateKernel(GPUKernel):
         self.dtype = self.U.dtype
 
         C, D, H, W, N = self.I.axes.lengths
-        C, R, S, T, K = self.U.axes.lengths
+        C, T, R, S, K = self.U.axes.lengths
         K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)

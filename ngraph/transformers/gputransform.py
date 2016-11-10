@@ -760,6 +760,8 @@ class GPUDeviceTensor(DeviceTensor):
                     self.__getitem__(key)._assign(value.T)
                 else:
                     self.__getitem__(key)._assign(value)
+            else:
+                self.__getitem__(key)._assign(value)
 
     def reshape(self, shape):
         """Temporary for conv"""
