@@ -15,22 +15,81 @@
 from __future__ import division
 from builtins import object, zip
 import ngraph as ng
-from neon.optimizers.optimizer import Schedule
-from neon.initializers import Constant
+import numpy as np
 
 
-# Optimizer support
-def L2(x):
+class Schedule(object):
     """
-    TODO.
+    Learning rate schedule.
 
-    Arguments:
-      x: TODO
+    By default implements a constant learning rate:
 
-    Returns:
+    .. code-block:: python
 
+        # Constant learning rate of 0.01 across training iterations
+        optimizer = GradientDescentMomentum(0.01, 0.9, schedule = Schedule())
+
+    Otherwise, the schedule multiplies the learning rate by change at every element in
+    ``step_config``.
+    For example,
+
+    .. code-block:: python
+
+        schedule = Schedule(step_config=[2, 6], change=0.5)
+        optimizer = GradientDescentMomentum(1.0, 0.9, schedule = Schedule())
+
+    will yield a learning rate schedule of:
+
+    .. csv-table::
+        :header: "iteration", "LR"
+        :widths: 20, 10
+
+        0, 1.0
+        1, 1.0
+        2, 0.5
+        3, 0.5
+        4, 0.5
+        5, 0.5
+        6, 0.25
+        7, 0.25
+        8, 0.25
+        9, 0.25
     """
-    return ng.squared_L2(x)
+    def __init__(self, step_config=None, change=1.):
+        """
+        Class constructor.
+
+        Arguments:
+            step_config (list, optional): Configure the step times (list of epoch indices).
+                                          Defaults to None (constant).
+            change (int, optional): The learning rate is
+                                    multiplied by ``change ** steps``, where ``steps`` is the
+                                    number of steps in the step schedule that have passed.
+        """
+
+        if isinstance(step_config, list) and isinstance(change, list):
+            assert len(step_config) == len(change), "change and step_config must have the same" \
+                "length after step_config is deduplicated to do epoch-level LR assignment."
+
+        self.step_config = step_config
+        self.change = change
+        self.steps = 0
+
+    def get_learning_rate(self, learning_rate, epoch):
+        """
+        Returns the current learning rate given the epoch and initial learning rate.
+
+        Arguments:
+            learning_rate (float): Initial learning rate
+            epoch (int): Current epoch, used to calculate the adjusted learning rate
+
+        Returns:
+            (float): The adjusted learning rate
+        """
+        if isinstance(self.step_config, list):
+            self.steps = np.sum(epoch >= np.array(self.step_config))
+
+        return learning_rate * self.change ** self.steps
 
 
 def clip_gradient_norm(grad_list, clip_norm, bsz):
@@ -47,7 +106,7 @@ def clip_gradient_norm(grad_list, clip_norm, bsz):
     """
     s = None
     for param in grad_list:
-        term = ng.sqrt(L2(param))
+        term = ng.squared_L2(param)
         if s is None:
             s = term
         else:
@@ -80,34 +139,6 @@ class Optimizer(object):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
 
-    def configure(self, cost):
-        """
-        Returns the update and computation subgraph `Op` to optimize a cost
-        function.
-
-        Arguments:
-          cost: The cost `Op` that this optimizer is attempting to minimize.
-
-        Returns:
-          An `Op` implementing the parameter updates to `Variable`s upstream of
-          `cost`.
-
-        """
-        raise NotImplementedError()
-
-    def optimize(self, params_to_optimize, epoch):
-        """
-        TODO.
-
-        Arguments:
-          params_to_optimize: TODO
-          epoch: TODO
-
-        Returns:
-
-        """
-        raise NotImplementedError()
-
 
 class GradientDescentMomentum(Optimizer):
     """TODO."""
@@ -124,71 +155,42 @@ class GradientDescentMomentum(Optimizer):
             schedule=Schedule(),
             **kwargs):
         super(GradientDescentMomentum, self).__init__(**kwargs)
-        self.learning_rate = learning_rate
         self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
         self.schedule = schedule
         self.stochastic_round = stochastic_round
+        self.learning_rate = ng.persistent_tensor(axes=(),
+                                                  initial_value=learning_rate).named('lrate')
 
-    def configure(self, cost):
-        """
-        TODO.
+    def __call__(self, cost_func, iteration_index):
+        with ng.Op.saved_user_deps():
+            velocity_updates, param_updates = [], []
+            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_size = cost_func.axes.batch_axes()[0].length
+            scale_factor = 1
 
-        Arguments:
-          cost: TODO
-          batch_size: TODO
+            for variable in batch_cost.variables():
+                grad = clip_gradient_value(ng.deriv(batch_cost, variable) / batch_size,
+                                           self.gradient_clip_value)
 
-        Returns:
+                velocity = ng.persistent_tensor(axes=variable.axes,
+                                                initial_value=0.).named(variable.name + '_vel')
+                velocity_updates.append(
+                    ng.assign(velocity,
+                              velocity * self.momentum_coef - self.learning_rate * (
+                                  scale_factor * grad + self.wdecay * variable)))
 
-        """
-        self.learning_rate_placeholder = ng.placeholder(()).named('lrate')
-        learning_rate_value = self.learning_rate_placeholder
-        variables = list(cost.variables())
-        grads = [
-            ng.deriv(cost, variable)
-            for variable in variables
-        ]
-        velocities = [ng.persistent_tensor(
-            axes=variable.axes, init=Constant(0)).named(variable.name + '_vel')
-            for variable in variables]
+                param_updates.append(ng.assign(variable, variable + velocity))
 
-        scale_factor = 1
-        if self.gradient_clip_norm:
-            scale_factor = clip_gradient_norm(grads)
-        if self.gradient_clip_value is not None:
-            grads = [clip_gradient_value(
-                grade, self.gradient_clip_value) for grade in grads]
+            lr_update = [ng.assign(self.learning_rate,
+                                   self.schedule.get_learning_rate(self.learning_rate,
+                                                                   iteration_index))]
 
-        velocity_updates = [
-            ng.assign(
-                velocity,
-                velocity * self.momentum_coef - learning_rate_value * (
-                    scale_factor * grad + self.wdecay * variable)
-            )
-            for variable, grad, velocity in zip(variables, grads, velocities)]
+            updates = ng.doall(velocity_updates + param_updates + lr_update)
 
-        param_updates = [
-            ng.assign(variable, variable + velocity)
-            for variable, velocity in zip(variables, velocities)
-        ]
-
-        return ng.doall(velocity_updates + param_updates)
-
-    def optimize(self, epoch):
-        """
-        TODO.
-
-        Arguments:
-          epoch: TODO
-
-        Returns:
-
-        """
-        learning_rate = self.schedule.get_learning_rate(
-            self.learning_rate, epoch)
-        self.learning_rate_placeholder.value[()] = learning_rate
+        return updates
 
 
 class RMSProp(Optimizer):
@@ -208,7 +210,6 @@ class RMSProp(Optimizer):
     """
     def __init__(
         self,
-        stochastic_round=False,
         decay_rate=0.95,
         learning_rate=2e-3,
         epsilon=1e-6,
@@ -220,10 +221,6 @@ class RMSProp(Optimizer):
         """
         Class constructor.
         Arguments:
-            stochastic_round (bool): Set this to True for stochastic rounding.
-                                     If False rounding will be to nearest.
-                                     If True will perform stochastic rounding using default width.
-                                     Only affects the gpu backend.
             decay_rate (float): decay rate of states
             learning_rate (float): the multiplication coefficent of updates
             epsilon (float): smoothing epsilon to avoid divide by zeros
@@ -241,54 +238,45 @@ class RMSProp(Optimizer):
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
-        self.learning_rate = learning_rate
         self.schedule = schedule
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.stochastic_round = stochastic_round
+        self.learning_rate = ng.persistent_tensor(axes=(),
+                                                  initial_value=learning_rate).named('lrate')
 
-    def configure(self, cost):
-        self.lrate = ng.placeholder(()).named('lrate')
+    def __call__(self, cost_func, iteration_index):
+        with ng.Op.saved_user_deps():
+            state_updates, param_updates = [], []
+            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_size = cost_func.axes.batch_axes()[0].length
 
-        variables = list(cost.variables())
-        grads = [ng.deriv(cost, variable) / 50.0 for variable in variables]
-        scale_factor = 1
-        if self.gradient_clip_norm:
-            scale_factor = clip_gradient_norm(grads)
-        if self.gradient_clip_value is not None:
-            grads = [clip_gradient_value(
-                grade, self.gradient_clip_value) for grade in grads]
+            grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+            scale_factor = clip_gradient_norm(grads) if self.gradient_clip_norm else 1
 
-        epsilon, decay = (self.epsilon, self.decay_rate)
-        states = [
-            ng.temporary(variable.axes, init=Constant(0))
-            for variable in variables
-        ]
-        state_updates = [
-            ng.assign(
-                state,
-                decay * state + (1.0 - decay) * ng.square(grad),
-                name='state_u_%s' % i
-            ) for i, (state, grad) in enumerate(zip(states, grads))
-        ]
-        param_updates = [
-            ng.assign(
-                param,
-                param - ((scale_factor * grad * self.lrate)
-                         / (ng.sqrt(state + epsilon) + epsilon)),
-                name='param_u_%s' % i
-            ) for i, (state, grad, param) in enumerate(zip(states, grads, variables))
-        ]
-        return ng.doall(state_updates + param_updates)
+            epsilon, decay = (self.epsilon, self.decay_rate)
+            for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
+                grad = clip_gradient_value(grad, self.gradient_clip_value)
 
-    def optimize(self, epoch):
+                state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+                state_updates.append(
+                    ng.assign(
+                        lvalue=state,
+                        rvalue=decay * state + (1.0 - decay) * ng.square(grad)
+                    ).named('state_u_%s' % i)
+                )
 
-        """
-        TODO.
-        Arguments:
-          epoch: TODO
-        Returns:
-        """
-        learning_rate = self.schedule.get_learning_rate(
-            self.learning_rate, epoch)
-        self.lrate.value[()] = learning_rate
+                param_updates.append(
+                    ng.assign(
+                        lvalue=variable,
+                        rvalue=variable - ((scale_factor * grad * self.learning_rate)
+                                           / (ng.sqrt(state + epsilon) + epsilon)),
+                    ).named('var_u_%s' % i)
+                )
+
+            lr_update = [ng.assign(self.learning_rate,
+                                   self.schedule.get_learning_rate(self.learning_rate,
+                                                                   iteration_index))]
+
+            updates = ng.doall(state_updates + param_updates + lr_update)
+
+        return updates

@@ -18,12 +18,9 @@ Test of the mlp/linear layer
 import itertools as itt
 import numpy as np
 import ngraph as ng
+from ngraph.frontends.neon import nnAffine, UniformInit
+from ngraph.util.utils import executor
 import ngraph.transformers as ngt
-from neon.initializers.initializer import Uniform
-from neon import NervanaObject
-from ngraph.frontends.neon.layer import Linear
-from ngraph.util.utils import ExecutorFactory
-from ngraph import RNG
 
 
 def pytest_generate_tests(metafunc):
@@ -38,39 +35,28 @@ def pytest_generate_tests(metafunc):
 
 
 def test_linear_zeros(basic_linargs, transformer_factory):
-    ngt.make_transformer()
-    NervanaObject.be.rng = RNG(0)
     # basic sanity check with 0 weights random inputs
     nin, nout, batch_size = basic_linargs
-    init_unif = Uniform(low=0.0, high=0.0)
 
     # set inputs
-    N = ng.make_axis("N", batch=True)
-    F = ng.make_axis("F")
-    N.length = batch_size
-    F.length = nin
+    N = ng.make_axis(batch_size, name="N", batch=True)
+    F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder([F, N])
-    layer = Linear(nout=nout, init=init_unif)
-
-    ex = ExecutorFactory()
-    transformer = ex.transformer
-
-    fprop = layer.configure(inp)
-
-    # set up fprop
-    output = transformer.computation(fprop, inp)
+    layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
+    fprop = layer.train_outputs(inp)
 
     # create data
     x = np.random.random((nin, batch_size))
 
-    out = output(x)
+    # evaluate
+    ngt.make_transformer()
+    out = executor(fprop, inp)(x)
+
     assert np.min(out) == 0.0 and np.max(out) == 0.0
 
 
 def test_linear_ones(basic_linargs, transformer_factory):
-    ngt.make_transformer()
-    NervanaObject.be.rng = RNG(0)
 
     # basic sanity check with all ones on the inputs
     # and weights, check that each row in output
@@ -78,33 +64,21 @@ def test_linear_ones(basic_linargs, transformer_factory):
     # this check will confirm that the correct number
     # of operations is being run
     nin, nout, batch_size = basic_linargs
-    init_unif = Uniform(low=1.0, high=1.0)
 
     # set inputs
-    N = ng.make_axis("N", batch=True)
-    F = ng.make_axis("F")
-    N.length = batch_size
-    F.length = nin
+    N = ng.make_axis(batch_size, name="N", batch=True)
+    F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder([F, N])
+    layer = nnAffine(nout=nout, init=UniformInit(0.0, 0.0))
+    fprop = layer.train_outputs(inp)
 
-    layer = Linear(nout=nout, init=init_unif)
-    fprop = layer.configure(inp)
-    transformer = ngt.make_transformer()
-
-    # set up fprop
-    output = transformer.computation(fprop, inp)
-
-    # set up ability to retrieve weights
-    weights = transformer.computation(layer.W)
-    transformer.initialize()
-
-    # run computation
+    # create data
     x = np.ones((nin, batch_size))
 
-    out = output(x)
-    w = weights()
+    # evaluate
+    ngt.make_transformer()
+    out, w = executor([fprop, layer.W], inp)(x)
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 
-    assert np.allclose(sums, out, atol=0.0, rtol=0.0), \
-        '%e' % np.max(np.abs(out - sums))
+    assert np.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))

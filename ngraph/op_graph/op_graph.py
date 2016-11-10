@@ -1129,6 +1129,19 @@ class ExpandDims(ReshapeOp):
         )
 
 
+def expand_dims(x, axis, dim):
+    """
+    Adds additional axes into a tensor.
+    Arguments:
+        x: The tensor.
+        axis: The additional axis.
+        dim: The position to add the axes.
+    """
+    if axis in x.axes:
+        return x
+    return ExpandDims(x, axis, dim)
+
+
 class ResultHandle(ReshapeOp):
     def __init__(self, x, **kwargs):
         super(ResultHandle, self).__init__(

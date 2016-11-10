@@ -12,17 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import numpy as np
+from functools import partial
 
-# commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import make_axes
-from ngraph.frontends.neon.axis import ax, ar
-from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
-from ngraph.frontends.neon.argparser import NgraphArgparser
-from ngraph.frontends.neon.arrayiterator import *
-from ngraph.frontends.neon.callbacks import *
-from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import *
-from ngraph.frontends.neon.optimizer import *
-from ngraph.frontends.neon.initializer import *
-from ngraph.frontends.neon.recurrent import Recurrent
+
+class GaussianInit(object):
+    def __init__(self, mean=0.0, var=0.01):
+        self.functor = partial(np.random.normal, mean, var)
+
+    def __call__(self, out_shape):
+        return self.functor(out_shape)
+
+
+class UniformInit(object):
+    def __init__(self, low=-0.01, high=0.01):
+        self.functor = partial(np.random.uniform, low, high)
+
+    def __call__(self, out_shape):
+        return self.functor(out_shape)
+
+
+class ConstantInit(object):
+    def __init__(self, val=0.0):
+        self.val = val
+
+    def __call__(self, out_shape):
+        return self.val

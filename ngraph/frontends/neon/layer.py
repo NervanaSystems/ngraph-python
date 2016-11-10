@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
+from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
-from neon import NervanaObject
+from ngraph.frontends.neon.axis import ar, ax
+import numpy as np
+from operator import itemgetter
 
-
-# TODO These are stubs for implementing Neon's layers
 
 class Layer(object):
     """TODO."""
@@ -47,20 +47,6 @@ class Layer(object):
         return in_obj
 
 
-class BranchNode(Layer):
-    """TODO."""
-
-    def __init__(self, **kwargs):
-        super(BranchNode, self).__init__(**kwargs)
-
-
-class SkipNode(Layer):
-    """TODO."""
-
-    def __init__(self, **kwargs):
-        super(SkipNode, self).__init__(**kwargs)
-
-
 class ParameterLayer(Layer):
     """TODO."""
 
@@ -74,201 +60,236 @@ class ParameterLayer(Layer):
         self.batch_sum = None
 
 
-class Convolution(ParameterLayer):
+class nnLayer(object):
+    def __init__(self, name=None, inputs=None, outputs=None, axes=None):
+        self.name = name
+        self.inputs = inputs
+        self.outputs = outputs
+        self.axes = axes
+
+    def train_outputs(self, in_obj):
+        raise NotImplementedError()
+
+    def inference_outputs(self, in_obj):
+        return self.train_outputs(in_obj)
+
+
+class nnPreprocess(nnLayer):
+    def __init__(self, functor, **kwargs):
+        super(nnPreprocess, self).__init__(**kwargs)
+        self.functor = functor
+
+    def train_outputs(self, in_obj):
+        return self.functor(in_obj)
+
+
+class nnAffine(nnLayer):
+    def __init__(self, init, nout=None, activation=(lambda x: x), bias=None, **kwargs):
+        super(nnAffine, self).__init__(**kwargs)
+        if self.axes is None:
+            assert(nout is not None), "Must provide either axes or nout to Affine"
+
+        self.nout = nout
+        self.init = init
+        self.activation = activation
+        self.bias = bias
+        self.W = None
+        self.b = 0 if self.bias is None else None
+
+    def train_outputs(self, in_obj):
+        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
+        in_axes = in_obj.axes.sample_axes()
+        in_axes = in_axes - in_axes.recurrent_axes()
+        w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
+        b_axes = in_obj.axes.sample_axes()
+        if self.W is None:
+            self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+        if self.b is None:
+            self.b = ng.variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
+
+        return self.activation(ng.dot(self.W, in_obj))  # + self.b)
+
+
+class nnConvBase(nnLayer):
     """
-    Convolutional layer implementation.
+    Convolutional layer that requires explicit binding of all spatial roles
 
-    Arguments:
-       fshape (tuple(int)): three dimensional shape of convolution window
-       strides (int, dict, optional): strides to apply convolution
-           window over. An int applies to both dimensions, or a dict with
-           str_h and str_w applies to h and w dimensions distinctly.  Defaults
-           to str_w = str_h = None
-       padding (int, dict, optional): padding to apply to edges of
-           input. An int applies to both dimensions, or a dict with pad_h
-           and pad_w applies to h and w dimensions distinctly.  Defaults
-           to pad_w = pad_h = None
-       init (Initializer, optional): Initializer object to use for
-           initializing layer weights
-       name (str, optional): layer name. Defaults to "ConvolutionLayer"
+    Args:
+        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+        init (function): function for later initializing filters
+        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
+        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
+
     """
+    def __init__(self, fshape, init, strides, padding, **kwargs):
+        super(nnConvBase, self).__init__(**kwargs)
+        self.convparams = dict(T=None, R=None, S=None, K=None,
+                               pad_h=None, pad_w=None, pad_d=None,
+                               str_h=None, str_w=None, str_d=None)
 
-    def __init__(self, fshape, strides={}, padding={}, init=None, bsum=False,
-                 name=None, parallelism="Data", cafe_compat=False, dtype=None):
-        super(Convolution, self).__init__(init, name, parallelism)
-        self.be = NervanaObject.be
-        self.weight_shape = None
-        self.nglayer = None
-        self.bsum = bsum
-        self.convparams = {'str_h': 1, 'str_w': 1, 'str_d': 1,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0,
-                           'T': 1, 'D': 1}  # 3D parameters
-
-        # keep around args in __dict__ for get_description.
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-        self.cafe_compat = cafe_compat
-        self.dtype = dtype
-
-        if isinstance(fshape, tuple) or isinstance(fshape, list):
-            fkeys = ('R', 'S', 'K') if len(
-                fshape) == 3 else ('T', 'R', 'S', 'K')
-            fshape = {k: x for k, x in zip(fkeys, fshape)}
-        if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding}
         for d in [fshape, strides, padding]:
             self.convparams.update(d)
 
-    def __str__(self):
-        spatial_dim = len(self.in_shape[1:])
-        spatial_str = "%d x (" + "x".join(("%d",) * spatial_dim) + ")"
-        padstr_str = ",".join(("%d",) * spatial_dim)
-        padstr_dim = ([] if spatial_dim == 2 else ['d']) + ['h', 'w']
+        missing_keys = [k for k, v in self.convparams.items() if v is None]
+        if len(missing_keys) > 0:
+            raise ValueError("Missing conv keys: {}".format(missing_keys))
 
-        pad_tuple = tuple(self.convparams[k]
-                          for k in ['pad_' + d for d in padstr_dim])
-        str_tuple = tuple(self.convparams[k]
-                          for k in ['str_' + d for d in padstr_dim])
+        self.init = init
+        self.f_axes = None
+        self.o_axes = None
+        self.W = None
 
-        fmt_tuple = (self.name,) + self.in_shape + \
-            self.out_shape + pad_tuple + str_tuple
-        fmt_string = "Convolution Layer '%s': " + \
-                     spatial_str + " inputs, " + spatial_str + " outputs, " + \
-                     padstr_str + " padding, " + padstr_str + " stride"
+    def train_outputs(self, in_obj):
+        cpm = self.convparams.copy()
+        in_axes = in_obj.axes
+        if self.f_axes is None:
+            self.f_axes = in_axes.role_axes(ar.Channel)
+            for _ax in (ax.T, ax.R, ax.S, ax.K):
+                self.f_axes += ng.make_axis(roles=_ax.roles).named(_ax.short_name)
+            self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
-        return ((fmt_string % fmt_tuple))
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
 
-    def configure(self, in_obj):
-        """
-        Sets shape based parameters of this layer given an input tuple or int
-        or input layer.
+        # TODO: clean this up
+        if self.o_axes is None:
+            self.o_axes = ng.make_axes([
+                ng.make_axis(self.f_axes[4].length, roles=[ar.Channel]).named('C'),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
+                ax.N
+            ])
 
-        Arguments:
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
-
-        Returns:
-            (tuple): shape of output data
-        """
-        super(Convolution, self).configure(in_obj)
-        assert self.nglayer is None
-        self.convparams.update(in_obj.shape_dict())
-        self.nglayer = self.be.conv_layer(self.be.default_dtype, **self.convparams)
-        assert self.weight_shape is None
-        names = ['C', 'T', 'R', 'S', 'K']
-        weights_axes = [ng.make_axis(self.convparams[key], name=key) for key in names]
-        weights = ng.variable(weights_axes, init=self.init)
-        self.weight_shape = self.nglayer.dimF2
-        if self.bsum:
-            self.batch_sum_shape = (self.nglayer.K, 1)
-        return ng.convolution(self.nglayer, in_obj, weights)
+        return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
 
-class Deconvolution(ParameterLayer):
-    """TODO."""
-
-    def __init__(self, fshape, strides={}, padding={}, bsum=False, **kwargs):
-        super(Deconvolution, self).__init__(**kwargs)
-
-
-class Pooling(Layer):
-
-    """
-    Pooling layer implementation.
-
-    Arguments:
-        fshape (int, tuple(int, int)): one or two dimensional shape
-            of pooling window
-        op (str, optional): pooling operation in [max, avg]. Defaults to "max"
-        strides (int, dict, optional): strides to apply pooling window
-            over. An int applies to both dimensions, or a dict with str_h
-            and str_w applies to h and w dimensions distinctly.  Defaults
-            to str_w = str_h = None
-        padding (int, dict, optional): padding to apply to edges of
-            input. An int applies to both dimensions, or a dict with pad_h
-            and pad_w applies to h and w dimensions distinctly.  Defaults
-            to pad_w = pad_h = None
-        name (str, optional): layer name. Defaults to "PoolingLayer"
-    """
-
-    def __init__(self, fshape, op="max", strides={}, padding={},
-                 name=None):
-        super(Pooling, self).__init__(name)
-        self.be = NervanaObject.be
-        self.poolparams = {'str_h': None, 'str_w': None, 'str_d': None, 'str_c': None,
-                           'pad_h': 0, 'pad_w': 0, 'pad_d': 0, 'pad_c': 0,
-                           'J': 1, 'T': 1, 'D': 1, 'op': op}  # 3D paramaters
-
-        # keep args around in __dict__ for get_description
-        self.op = op
-        self.fshape = fshape
-        self.strides = strides
-        self.padding = padding
-        self.owns_delta = True
-        if isinstance(fshape, int):
-            fshape = {'R': fshape, 'S': fshape}
-        elif isinstance(fshape, tuple):
-            fkeys = ('R', 'S') if len(fshape) == 2 else ('T', 'R', 'S')
-            fshape = {k: x for k, x in zip(fkeys, fshape)}
-        elif fshape == 'all':
-            fshape = dict(R=None, S=None)
+class nnConv2D(nnConvBase):
+    def __init__(self, fshape, init, strides, padding, **kwargs):
+        if isinstance(fshape, tuple) or isinstance(fshape, list):
+            if len(fshape) == 2:
+                fshape = (1, fshape[0], fshape[0], fshape[1])
+            elif len(fshape) == 3:
+                fshape = (1, fshape[0], fshape[1], fshape[2])
+            fshape = {k: x for k, x in zip('TRSK', fshape)}
         if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides}
+            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
         if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding}
+            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+
+        super(nnConv2D, self).__init__(fshape, init, strides, padding, **kwargs)
+
+
+class nnConvolution(nnConv2D):
+    def __init__(self, fshape, init, strides=1, padding=0, activation=(lambda x: x), **kwargs):
+        self.activation = activation
+        super(nnConvolution, self).__init__(fshape, init, strides, padding, **kwargs)
+
+    def train_outputs(self, in_obj):
+        return self.activation(super(nnConvolution, self).train_outputs(in_obj))
+
+
+class nnActivation(nnLayer):
+    def __init__(self, transform, **kwargs):
+        self.transform = transform
+        super(nnActivation, self).__init__(**kwargs)
+
+    def train_outputs(self, in_obj):
+        return self.transform(in_obj)
+
+
+class nnPoolBase(nnLayer):
+    """
+    Pooling layer that requires explicit binding of all spatial roles
+
+    Args:
+        fshape (dict): filter shape -- must contain keys 'J', 'T', 'R', 'S',
+        init (function): function for later initializing filters
+        strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
+        padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
+
+    """
+    def __init__(self, fshape, strides, padding, op='max', **kwargs):
+        super(nnPoolBase, self).__init__(**kwargs)
+        self.poolparams = dict(J=None, T=None, R=None, S=None,
+                               pad_h=None, pad_w=None, pad_d=None, pad_c=None,
+                               str_h=None, str_w=None, str_d=None, str_c=None,
+                               op=op)
+
         for d in [fshape, strides, padding]:
             self.poolparams.update(d)
-        self.nglayer = None
 
-    def __str__(self):
-        return "Pooling Layer '%s': %d x (%dx%d) inputs, %d x (%dx%d) outputs" % (
-               self.name,
-               self.in_shape[0], self.in_shape[1], self.in_shape[2],
-               self.out_shape[0], self.out_shape[1], self.out_shape[2])
+        missing_keys = [k for k, v in self.poolparams.items() if v is None]
+        if len(missing_keys) > 0:
+            raise ValueError("Missing pooling keys: {}".format(missing_keys))
 
-    def configure(self, in_obj):
-        """
-        Sets shape based parameters of this layer given an input tuple or int
-        or input layer.
+        self.o_axes = None
 
-        Arguments:
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                  information for layer
+    def train_outputs(self, in_obj):
+        ppm = self.poolparams.copy()
+        in_axes = in_obj.axes
+        # TODO: clean this up
+        if self.o_axes is None:
+            self.o_axes = ng.make_axes([
+                ng.spatial_axis(in_axes, ppm['J'], ppm['pad_c'], ppm['str_c'], role=ar.Channel),
+                ng.spatial_axis(in_axes, ppm['T'], ppm['pad_d'], ppm['str_d'], role=ar.Depth),
+                ng.spatial_axis(in_axes, ppm['R'], ppm['pad_h'], ppm['str_h'], role=ar.Height),
+                ng.spatial_axis(in_axes, ppm['S'], ppm['pad_w'], ppm['str_w'], role=ar.Width),
+                ax.N
+            ])
 
-        Returns:
-            (tuple): shape of output data
-        """
-        super(Pooling, self).configure(in_obj)
-        assert self.nglayer is None
-        shapedict = in_obj.shape_dict()
-        shapedict['N'] = self.be.bsz
-        self.poolparams.update(shapedict)
-        if self.poolparams['R'] is None:
-            self.poolparams['R'] = shapedict['H']
-            self.poolparams['S'] = shapedict['W']
-        self.nglayer = self.be.pool_layer(self.be.default_dtype, **self.poolparams)
-        (K, M, P, Q, N) = self.nglayer.dimO
-        self.out_shape = (K, M, P, Q)
-        out_shape_dict = dict(C=K, D=M, H=P, W=Q, N=N)
-        argmax_axes = [ng.make_axis(out_shape_dict[key], name=key)
-                       for key in ['C', 'D', 'H', 'W', 'N']]
-        argmax = ng.persistent_tensor(argmax_axes).named('pool')
-        return ng.pooling(self.nglayer, in_obj, argmax)
+        return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
 
-class Linear(ParameterLayer):
-    """TODO."""
+class nnPool2D(nnPoolBase):
+    def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
-    def __init__(self, nout, bsum=False, **kwargs):
-        super(Linear, self).__init__(**kwargs)
-        self.nout = nout
-        self.inputs = None
-        self.bsum = bsum
+        if isinstance(fshape, int):
+            fshape = (1, 1, fshape, fshape)
+        if isinstance(fshape, tuple) or isinstance(fshape, list):
+            if len(fshape) == 2:
+                fshape = (1, 1, fshape[0], fshape[1])
+            if len(fshape) != 4:
+                raise ValueError("Incorrect filter specification: {}".format(fshape))
+            fshape = {k: x for k, x in zip('JTRS', fshape)}
+        if isinstance(strides, int):
+            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
+        if isinstance(padding, int):
+            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
+        super(nnPool2D, self).__init__(fshape, strides, padding, **kwargs)
 
-    def configure(self, in_obj):
+
+class nnRecurrent(nnLayer):
+    """
+    Basic recurrent layer.
+    Arguments:
+        output_size (int): Number of hidden/output units
+        init (Initializer): Function for initializing the model's input to hidden weights.  By
+                            default, this initializer will also be used for recurrent parameters
+                            unless init_inner is also specified.  Biases will always be
+                            initialized to zero.
+        init_inner (Initializer, optional): Function for initializing the model's recurrent
+                                            parameters.  If absent, will default to using same
+                                            initializer provided to init.
+        activation (Transform): Activation function for the input modulation
+        reset_cells (bool): default to be False to make the layer stateful,
+                            set to True to be stateless
+        name (str, optional): name to refer to this layer as.
+    Attributes:
+        W_input (Tensor): weights from inputs to output units
+            (input_size, output_size)
+        W_recur (Tensor): weights for recurrent connections
+            (output_size, output_size)
+        b (Tensor): Biases on output units (output_size, 1)
+    """
+
+    def __init__(self, output_size, init, init_inner=None, activation=None, **kwargs):
+        super(nnRecurrent, self).__init__(**kwargs)
+        self.nout = output_size
+        self.activation = activation
+        self.init = init
+        self.init_inner = init_inner or init
+
+    def train_outputs(self, in_obj):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -281,306 +302,41 @@ class Linear(ParameterLayer):
            (Tensor): output
 
         """
-        in_obj = super(Linear, self).configure(in_obj)
-        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout, name='Hidden')])
-
-        in_axes = in_obj.axes.sample_axes()
-        in_axes = in_axes - in_axes.recurrent_axes()
-
-        self.W = ng.variable(out_axes - out_axes.recurrent_axes() +
-                             [axis - 1 for axis in in_axes],
-                             init=self.init)
-        return ng.dot(self.W, in_obj)
-
-
-class Bias(ParameterLayer):
-    """
-    A bias layer implemented that adds a learned bias to inputs and produces
-    outputs of the same shape.
-
-    Arguments:
-       init (Initializer, optional): Initializer object to use for
-           initializing layer bias
-       name (str, optional): Layer name. Defaults to "BiasLayer"
-
-    Returns:
-
-    """
-
-    def __init__(self, init, **kwargs):
-        super(Bias, self).__init__(**kwargs)
-        self.y = None
-        self.owns_output = False
-        self.owns_delta = False
-
-    def configure(self, in_obj):
-        """
-        Sets shape based parameters of this layer given an input tuple or int
-        or input layer.
-
-        Arguments:
-            graph: TODO.
-            in_obj (int, tuple, Layer or Tensor): object that provides shape
-                                                 information for layer
-        Returns:
-            (Tensor): output
-
-        """
-        in_obj = super(Bias, self).configure(in_obj)
-        return in_obj + ng.variable(in_obj.axes.sample_axes())
-
-
-class Activation(Layer):
-    """
-    A layer that applies a specified transform to the inputs and
-    produces outputs of the same shape.
-
-    Generally used to implement nonlinearities for layer post activations.
-
-    Arguments:
-       transform (Transform): a transform object with fprop and bprop
-           functions to apply
-       name (str, optional): Layer name. Defaults to "ActivationLayer"
-    """
-
-    def __init__(self, transform, **kwargs):
-        super(Activation, self).__init__(**kwargs)
-        self.transform = transform
-
-    def configure(self, in_obj):
-        """
-        Sets shape based parameters of this layer given an input tuple or int
-        or input layer.
-
-        Arguments:
-          in_obj: input to the layer
-
-        Returns:
-          (Tensor): output
-
-        """
-        in_obj = super(Activation, self).configure(in_obj)
-        return self.transform(in_obj)
-
-
-class DataTransform(Layer):
-    """TODO."""
-
-    def __init__(self, transform, **kwargs):
-        super(DataTransform, self).__init__(**kwargs)
-
-
-class ColorNoise(Layer):
-    """TODO."""
-
-    def __init__(
-            self,
-            colorpca=None,
-            colorstd=None,
-            noise_coeff=0.1,
-            name="ColorNoiseLayer",
-            **kwargs):
-        super(ColorNoise, self).__init__(name=name, **kwargs)
-
-
-class CompoundLayer(list):
-    """Base class for macro layers."""
-
-    def __init__(
-            self,
-            bias=None,
-            batch_norm=False,
-            activation=None,
-            name=None,
-            axes=None):
-        if batch_norm and (bias is not None):
-            raise AttributeError('Batchnorm and bias cannot be combined')
-        self.activation = activation
-        self.batch_norm = batch_norm
-        self.bias = bias
-        self.axes = axes
-
-    def add_postfilter_layers(self):
-        """TODO."""
-        if self.bias is not None:
-            self.append(Bias(init=self.bias))
-        if self.batch_norm:
-            self.append(BatchNorm())
-        if self.activation is not None:
-            self.append(Activation(transform=self.activation))
-
-
-class Affine(CompoundLayer):
-    """
-    A linear layer with a learned bias and activation, implemented as a list
-    composing separate linear, bias/batchnorm and activation layers.
-
-    Arguments:
-       nout (int, tuple): Desired size or shape of layer output
-       init (Initializer, optional): Initializer object to use for
-           initializing layer weights and bias
-       bias (Initializer): an initializer to use for bias parameters
-       activation (Transform): a transform object with fprop and bprop
-           functions to apply
-       name (str): the root name for the layer, suffixes are automatically
-           generated for the component layers
-
-    Returns:
-
-    """
-
-    def __init__(self, nout, init, bias=None,
-                 batch_norm=False, activation=None, name=None, **kwargs):
-        super(Affine, self).__init__(bias=bias, batch_norm=batch_norm,
-                                     activation=activation, name=name, **kwargs)
-        self.append(Linear(nout, init=init, bsum=batch_norm,
-                           name=name, axes=self.axes))
-        self.add_postfilter_layers()
-
-
-class Conv(CompoundLayer):
-    """
-    A convolutional layer with a learned bias and activation, implemented as a
-    list composing separate Convolution, Bias and Activation layers.
-
-    Arguments:
-       fshape (tuple(int)): three dimensional shape of convolution window
-       init (Initializer, optional): Initializer object to use for
-           initializing layer weights and bias
-       strides (int, dict, optional): strides to apply convolution
-           window over. An int applies to both dimensions, or a dict with
-           str_h and str_w applies to h and w dimensions distinctly.  Defaults
-           to str_w = str_h = None
-       pad (int, dict, optional): padding to apply to edges of
-           input. An int applies to both dimensions, or a dict with pad_h
-           and pad_w applies to h and w dimensions distinctly.  Defaults
-           to pad_w = pad_h = None
-       bias (Initializer): an initializer to use for bias parameters
-       activation (Transform): a transform object with fprop and bprop
-           functions to apply
-       name (str): the root name for the layer, suffixes are automatically
-           generated for the component layers
-
-    Returns:
-
-    """
-
-    def __init__(self, fshape, init, strides={}, padding={},
-                 bias=None,
-                 batch_norm=False,
-                 activation=None,
-                 name=None):
-        super(Conv, self).__init__(bias=bias, batch_norm=batch_norm,
-                                   activation=activation, name=name)
-        self.append(
-            Convolution(
-                fshape=fshape,
-                strides=strides,
-                padding=padding,
-                init=init,
-                bsum=batch_norm,
-                name=name))
-        self.add_postfilter_layers()
-
-
-class Deconv(CompoundLayer):
-    """Same as Conv layer, but implements a composite deconvolution layer."""
-
-    def __init__(
-            self,
-            fshape,
-            init,
-            strides={},
-            padding={},
-            bias=None,
-            batch_norm=False,
-            activation=None,
-            name=None):
-        super(Deconv, self).__init__(bias=bias, batch_norm=batch_norm,
-                                     activation=activation, name=name)
-        self.append(
-            Deconvolution(
-                fshape=fshape,
-                strides=strides,
-                padding=padding,
-                init=init,
-                bsum=batch_norm))
-        self.add_postfilter_layers()
-
-
-class LRN(Layer):
-    """TODO."""
-
-    def __init__(
-            self,
-            depth,
-            alpha=1.,
-            beta=0.,
-            ascale=1.,
-            bpower=1.,
-            **kwargs):
-        super(LRN, self).__init__(**kwargs)
-
-
-class Dropout(Layer):
-    """TODO."""
-
-    def __init__(self, keep=0.5, **kwargs):
-        super(Dropout, self).__init__(**kwargs)
-
-
-class LookupTable(ParameterLayer):
-    """TODO."""
-
-    def __init__(self, vocab_size, embedding_dim, init, update=True,
-                 pad_idx=None, **kwargs):
-        super(LookupTable, self).__init__(**kwargs)
-
-
-class GeneralizedCost(object):
-    """
-    A cost layer that applies the provided cost function and computes errors
-    with respect to inputs and targets.
-
-    Arguments:
-      costfunc (Cost): Class with costfunc that computes error.
-
-    Returns:
-
-    """
-
-    def __init__(self, costfunc, name=None, **kwargs):
-        super(GeneralizedCost, self).__init__(**kwargs)
-        self.costfunc = costfunc
-        self.name = name
-
-    def initialize(self, inputs, targets):
-        """
-        Compute the cost function over the inputs and targets.
-
-        Arguments:
-         inputs (Tensor): Tensor containing input values to be compared to
-             targets
-         targets (Tensor): Tensor containing target values.
-
-        Returns:
-          Tensors containing mean cost, total costs, sample costs
-
-        """
-        self.costs = self.costfunc(inputs, targets)
-        self.total_cost = ng.sum(self.costs, out_axes=())
-        self.mean_cost = self.total_cost / ng.batch_size(self.costs)
-
-
-class BatchNorm(Layer):
-    """TODO."""
-
-    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
-        super(BatchNorm, self).__init__(**kwargs)
-
-
-class BatchNormAutodiff(BatchNorm):
-    """TODO."""
-
-    def __init__(self, rho=0.99, eps=1e-6, **kwargs):
-        super(BatchNormAutodiff, self).__init__(**kwargs)
+        in_axes = in_obj.axes
+        self.time_axis = in_axes.recurrent_axes()[0]
+
+        def get_steps(x, time_axis):
+            return [ng.slice_along_axis(x, time_axis, i) for i in range(time_axis.length)]
+
+        if self.axes is not None:
+            hidden_axes = self.axes - self.axes.recurrent_axes()
+        else:
+            hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden_in')])
+
+        w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
+                                   in_axes.recurrent_axes()]
+        w_re_axes = hidden_axes + [axis - 1 for axis in hidden_axes]
+
+        self.W_input = ng.variable(axes=w_in_axes,
+                                   initial_value=self.init(w_in_axes.lengths)
+                                   ).named("W_in")
+        self.W_recur = ng.variable(axes=w_re_axes,
+                                   initial_value=self.init_inner(w_re_axes.lengths)
+                                   ).named("W_re")
+        self.b = ng.variable(axes=hidden_axes, initial_value=0).named("bias")
+
+        h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
+        h_ff_s = get_steps(h_ff_buf, self.time_axis)
+        self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
+                                  axes=h_ff_s[0].axes).named('h_init')
+
+        hprev = [self.h_init]
+
+        for i in range(self.time_axis.length):
+            d = ng.dot(self.W_recur, hprev[i]).named("W_rec_dot_h{}".format(i))
+            h = self.activation(d + h_ff_s[i] + self.b)
+            h.name = "activ{}".format(i)
+            hprev.append(h)
+
+        rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=1)
+        return rnn_out

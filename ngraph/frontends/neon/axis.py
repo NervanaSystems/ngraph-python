@@ -20,25 +20,28 @@ ar = ng.make_name_scope(name="ar")
 ar.Height = ng.make_axis_role()
 ar.Width = ng.make_axis_role()
 ar.Depth = ng.make_axis_role()
-ar.Channels = ng.make_axis_role()
+ar.Channel = ng.make_axis_role()
+ar.Channelout = ng.make_axis_role()
+ar.Time = ng.make_axis_role()
 
 # Define the standard Neon axes
 ax = ng.make_name_scope(name="ax")
 
 ax.N = ng.make_axis(batch=True, docstring="minibatch size")
 
-ax.C = ng.make_axis(roles=[ar.Channels], docstring="number of input channels")
+ax.C = ng.make_axis(roles=[ar.Channel], docstring="number of input feature maps")
 ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
 ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
 ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
-ax.REC = ng.make_axis(recurrent=True, docstring="recurrent axis")
+ax.REC = ng.make_axis(roles=[ar.Time], recurrent=True, docstring="recurrent axis")
 
 ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
 ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
 ax.T = ng.make_axis(roles=[ar.Depth], docstring="filter depth")
+ax.J = ng.make_axis(roles=[ar.Channel], docstring="filter channel size (for crossmap pooling)")
+ax.K = ng.make_axis(roles=[ar.Channelout], docstring="number of output feature maps")
 
-ax.K = ng.make_axis(roles=[ar.Channels], docstring="number of output channels")
 ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")
 ax.P = ng.make_axis(roles=[ar.Height], docstring="output image height")
 ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")

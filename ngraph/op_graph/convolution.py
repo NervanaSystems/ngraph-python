@@ -13,32 +13,29 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-
 from ngraph.op_graph import op_graph
-from ngraph.op_graph.axes import make_axis, make_axes
 
 
-def convolution(dims, inputs, filters, name=None, docstring=None):
+def convolution(conv_params, inputs, filters, axes, docstring=None):
     """
 
     Args:
-        dims: Dimensions.
+        conv_params: Dimensions.
         inputs (TensorOp): The input tensor.
         filters (TensorOp): Filter/kernel tensor.
-        name (String, optional): Name for the op.
         docstring (String, optional): Documentation for the op.
 
     Returns:
         TensorOp: The result of the convolution.
 
     """
-    return ConvolutionOp(dims, inputs, filters, name=name, docstring=docstring)
+    return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 
 
 class ConvolutionOp(op_graph.TensorOp):
     _index = 0
 
-    def __init__(self, dims, inputs, filters, *args, **kwargs):
+    def __init__(self, conv_params, inputs, filters, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -56,45 +53,30 @@ class ConvolutionOp(op_graph.TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if 'axes' in kwargs:
-            raise ValueError(
-                "convolution does not currently support the 'axes' argument.  The "
-                "output axes are entirely determined by the shape of the "
-                "input and filter Ops."
-            )
-
-        if inputs.axes[0].length != filters.axes[0].length:
+        if inputs.axes[0] != filters.axes[0]:
             raise ValueError((
-                'the first axis in input and filter must be the same.  The '
-                'first axis in input is {inputs} and in filter is {filters}.'
-            ).format(
-                inputs=inputs.axes[0],
-                filters=filters.axes[0],
-            ))
+                'the first axis in input {inputs} and filter {filters} are not the same.'
+            ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
 
         batch_axes = inputs.axes.batch_axes()
         if len(batch_axes) != 1:
             raise ValueError((
-                "Input must have one batch axis.  Found {n_batch_axes} batch "
-                "axes: {batch_axes} and {n_sample_axes} sample axes: "
-                "{sample_axes}."
+                "Input must have one batch axis.  "
+                "Found {n_batch_axes} batch axes: {batch_axes} "
+                "Found {n_sample_axes} sample axes: {sample_axes}."
             ).format(
                 n_batch_axes=len(batch_axes),
                 batch_axes=batch_axes,
                 n_sample_axes=len(inputs.axes.sample_axes()),
                 sample_axes=inputs.axes.sample_axes(),
             ))
-        self.batch_axis = batch_axes[0]
-        axes = make_axes([make_axis(dim) for dim in dims.dimO[:-1]]) + self.batch_axis
-        for i, name in enumerate(['C', 'D', 'H', 'W']):
-            axes[i].name = name
 
-        self.dims = dims
+        self.conv_params = conv_params
         self.index = ConvolutionOp._index
         ConvolutionOp._index += 1
 
         super(ConvolutionOp, self).__init__(
-            args=(inputs, filters), *args, axes=axes, **kwargs
+            args=(inputs, filters), *args, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
@@ -112,7 +94,7 @@ class update_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = fprop.dims
+        self.conv_params = fprop.conv_params
         self.index = fprop.index
 
         super(update_conv, self).__init__(
@@ -127,7 +109,7 @@ class bprop_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.dims = fprop.dims
+        self.conv_params = fprop.conv_params
         self.index = fprop.index
 
         super(bprop_conv, self).__init__(

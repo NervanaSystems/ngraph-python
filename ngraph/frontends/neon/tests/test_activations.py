@@ -216,5 +216,5 @@ def test_logistic_derivative(transformer_factory):
     inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
     f = 1.0 / (1.0 + np.exp(-inputs))
     outputs = f * (1.0 - f)
-    compare_tensors(Logistic(shortcut=False),
+    compare_tensors(Logistic(),
                     inputs, outputs, deriv=True, tol=1e-7)

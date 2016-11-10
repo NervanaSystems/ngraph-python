@@ -34,15 +34,10 @@ import numpy as np
 
 import ngraph as ng
 
-from ngraph.frontends.neon.activation import Tanh
-from ngraph.frontends.neon.recurrent import Recurrent
-
-from neon.initializers.initializer import Gaussian, Constant
-from neon import NervanaObject
+from ngraph.frontends.neon import nnRecurrent, GaussianInit, Tanh
 from recurrent_ref import Recurrent as RefRecurrent
 
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
-from ngraph import RNG
 
 rng = RandomTensorGenerator()
 
@@ -66,7 +61,7 @@ def test_ref_compare_ones(refgruargs):
     # for all ones init
     seq_len, input_size, hidden_size, batch_size = refgruargs
     check_rnn(seq_len, input_size, hidden_size,
-              batch_size, Constant(val=1.0))
+              batch_size, (lambda x: 1.0))
 
 
 def test_ref_compare_rand(refgruargs):
@@ -74,12 +69,11 @@ def test_ref_compare_rand(refgruargs):
     # for Gaussian random init
     seq_len, input_size, hidden_size, batch_size = refgruargs
     check_rnn(seq_len, input_size, hidden_size, batch_size,
-              Gaussian())
+              GaussianInit(0.0, 1.0))
 
 
 # compare neon RNN to reference RNN implementation
-def check_rnn(seq_len, input_size, hidden_size,
-              batch_size, init_func):
+def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     # init_func is the initializer for the model params
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -89,13 +83,13 @@ def check_rnn(seq_len, input_size, hidden_size,
     N = ng.make_axis(batch_size, batch=True)
 
     ex = ExecutorFactory()
-    NervanaObject.be.rng = RNG(0)
+    np.random.seed(0)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(), time_axis=REC)
+    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh())
     inp_ng = ng.placeholder([Cin, REC, N])
 
     # fprop graph
-    out_ng = rnn_ng.configure(inp_ng)
+    out_ng = rnn_ng.train_outputs(inp_ng)
     out_ng.input = True
 
     rnn_W_input = rnn_ng.W_input
@@ -167,5 +161,5 @@ def check_rnn(seq_len, input_size, hidden_size,
 
 if __name__ == '__main__':
     seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
-    init = Gaussian(0.1)
+    init = GaussianInit(0.0, 0.1)
     check_rnn(seq_len, input_size, hidden_size, batch_size, init)

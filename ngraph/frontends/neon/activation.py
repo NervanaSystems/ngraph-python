@@ -17,14 +17,7 @@ from builtins import object
 import ngraph as ng
 
 
-class Transform(object):
-    """TODO."""
-
-    def __init__(self, name=None):
-        self.name = name
-
-
-class Rectlin(Transform):
+class Rectlin(object):
     """
     Rectified Linear Unit (ReLu) activation function, :math:`f(x) = \max(x, 0)`.
     Can optionally set a slope which will make this a Leaky ReLu.
@@ -36,9 +29,7 @@ class Rectlin(Transform):
 
         Arguments:
             slope (float, optional): Slope for negative domain. Defaults to 0.
-            name (string, optional): Name to assign this class instance.
         """
-        super(Rectlin, self).__init__(**kwargs)
         self.slope = slope
 
     def __call__(self, x):
@@ -54,14 +45,8 @@ class Rectlin(Transform):
         return ng.maximum(x, 0) + self.slope * ng.minimum(0, x)
 
 
-class Identity(Transform):
+class Identity(object):
     """Identity activation function, :math:`f(x) = x`"""
-
-    def __init__(self, **kwargs):
-        """
-        Class constructor.
-        """
-        super(Identity, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -76,13 +61,13 @@ class Identity(Transform):
         return x
 
 
-class Explin(Transform):
+class Explin(object):
     """
     Exponential Linear activation function, :math:`f(x) = \max(x, 0) + \\alpha (e^{\min(x, 0)}-1)`
     From: Clevert, Unterthiner and Hochreiter, ICLR 2016.
     """
 
-    def __init__(self, alpha=1.0, **kwargs):
+    def __init__(self, alpha=1.0):
         """
         Class constructor.
 
@@ -90,7 +75,6 @@ class Explin(Transform):
             alpha (float): weight of exponential factor for negative values (default: 1.0).
             name (string, optional): Name (default: None)
         """
-        super(Explin, self).__init__(**kwargs)
         self.alpha = alpha
 
     def __call__(self, x):
@@ -106,10 +90,10 @@ class Explin(Transform):
         return ng.maximum(x, 0) + self.alpha * (ng.exp(ng.minimum(x, 0)) - 1)
 
 
-class Normalizer(Transform):
+class Normalizer(object):
     """Normalize inputs by a fixed divisor."""
 
-    def __init__(self, divisor=128., **kwargs):
+    def __init__(self, divisor=128.):
         """
         Class constructor.
 
@@ -117,7 +101,6 @@ class Normalizer(Transform):
             divisor (float, optional): Normalization factor (default: 128)
             name (string, optional): Name (default: None)
         """
-        super(Normalizer, self).__init__(**kwargs)
         self.divisor = divisor
 
     def __call__(self, x):
@@ -133,18 +116,8 @@ class Normalizer(Transform):
         return x / self.divisor
 
 
-class Softmax(Transform):
+class Softmax(object):
     """SoftMax activation function. Ensures that the activation output sums to 1."""
-
-    def __init__(self, epsilon=2 ** -23, **kwargs):
-        """
-        Class constructor.
-
-        Arguments:
-            name (string, optional): Name (default: none)
-            epsilon (float, optional): Not used.
-        """
-        super(Softmax, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -159,14 +132,8 @@ class Softmax(Transform):
         return ng.softmax(x)
 
 
-class Tanh(Transform):
+class Tanh(object):
     """Hyperbolic tangent activation function, :math:`f(x) = \\tanh(x)`."""
-
-    def __init__(self, **kwargs):
-        """
-        Class constructor.
-        """
-        super(Tanh, self).__init__(**kwargs)
 
     def __call__(self, x):
         """
@@ -181,24 +148,12 @@ class Tanh(Transform):
         return ng.tanh(x)
 
 
-class Logistic(Transform):
+class Logistic(object):
     """
     Logistic sigmoid activation function, :math:`f(x) = 1 / (1 + \exp(-x))`
 
     Squashes the input from range :math:`[-\infty,+\infty]` to :math:`[0, 1]`
     """
-
-    def __init__(self, shortcut=False, **kwargs):
-        """
-        Initialize Logistic based on whether shortcut is True or False. Shortcut
-        should be set to true when Logistic is used in conjunction with a CrossEntropy cost.
-        Doing so allows a shortcut calculation to be used during backpropagation.
-
-        Arguments:
-            shortcut (bool): If True, shortcut calculation will be used during backpropagation.
-            **kwargs: TODO
-        """
-        super(Logistic, self).__init__(**kwargs)
 
     def __call__(self, x):
         """

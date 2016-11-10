@@ -40,6 +40,42 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
+def output_dim(X, S, padding, strides, pooling=False):
+        """
+        Compute along 1 dimension, with these sizes, what will be the output dimension.
+
+        Arguments:
+            X (int): input data dimension
+            S (int): filter dimension
+            padding (int): padding on each side
+            strides (int): striding
+            pooling (bool): flag for setting pooling layer size
+        """
+        size = ((X - S + 2 * padding) // strides) + 1
+
+        if pooling and padding >= S:
+            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
+
+        return size
+
+
+def spatial_axis(input, filter, padding, stride, role):
+    ax_i = input.role_axes(role)
+    assert len(ax_i) != 0, "Unable to find input axis with role {}".format(role.name)
+    hh = ax_i[0].length
+
+    if isinstance(filter, int):
+        rr = filter
+    else:
+        ax_f = filter.role_axes(role)
+        assert len(ax_f) != 0, "Unable to find filter axis with role {}".format(role.name)
+        rr = ax_f[0].length
+    out_axis = make_axis(length=output_dim(hh, rr, padding, stride),
+                         name=ax_i[0].short_name,
+                         roles=[role])
+    return out_axis
+
+
 def make_axis_role(name=None, docstring=None):
     """
     Returns a new AxisRole.
@@ -271,7 +307,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             True if this axis has the role.
 
         """
-        return axis_role in self.axis_roles
+        return axis_role in self.roles
 
     def add_role(self, axis_role):
         """
@@ -604,6 +640,13 @@ class Axes(object):
             The Axes subset that are recurrent axes.
         """
         return Axes(axis for axis in self if axis.is_recurrent)
+
+    def role_axes(self, role):
+        """
+        Returns:
+            The Axes subset that have the specified role
+        """
+        return Axes(axis for axis in self if axis.has_role(role))
 
     def flatten(self):
         if len(self) == 1:

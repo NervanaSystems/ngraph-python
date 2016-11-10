@@ -233,7 +233,7 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, max_dims):
+    def __init__(self, tensor_description, max_dims, gemm=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
@@ -246,8 +246,19 @@ class TensorDescriptionWrapper:
             self.shape = (1, )
 
         if len(self.shape) < max_dims:
-            self.shape = tuple([1] + list(self.shape))
-            self.strides = tuple([0] + list(self.strides))
+            if gemm:
+                self.shape = tuple(list(self.shape) + [1])
+                self.strides = tuple(list(self.strides) + [1])
+            else:
+                self.shape = tuple([1] + list(self.shape))
+                self.strides = tuple([0] + list(self.strides))
+
+        self.strides = [s // self.dtype.itemsize for s in self.strides]
+        self.strides = tuple(self.strides)
+
+    @property
+    def is_trans(self):
+        return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
 
 class GenerationContext:
@@ -842,18 +853,18 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         args.append("unsigned int stridea_" + ctx.buffers[buf])
         arg_desc = arg_desc + "PI"
         params.append(buf.td)
-        params.append(buf.strides[0] // buf.dtype.itemsize)
+        params.append(buf.strides[0])
 
         if dims == 2:
             args.append("unsigned int strideb_" + ctx.buffers[buf])
             arg_desc = arg_desc + "I"
-            params.append(buf.strides[1] // buf.dtype.itemsize)
+            params.append(buf.strides[1])
         elif dims == 3:
             args.append("unsigned int strideb_" + ctx.buffers[buf])
             args.append("unsigned int stridec_" + ctx.buffers[buf])
             arg_desc = arg_desc + "II"
-            params.append(buf.strides[1] // buf.dtype.itemsize)
-            params.append(buf.strides[2] // buf.dtype.itemsize)
+            params.append(buf.strides[1])
+            params.append(buf.strides[2])
 
     return (args, arg_desc, params)
 
