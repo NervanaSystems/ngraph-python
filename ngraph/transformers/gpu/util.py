@@ -87,3 +87,20 @@ def get_cache_dir(subdir=None):
         os.makedirs(cache_dir)
 
     return cache_dir
+
+
+@context_dependent_memoize
+def _get_events():
+    return (drv.Event(), drv.Event())
+
+
+@context_dependent_memoize
+def _get_scratch_data(scratch_size):
+    return drv.mem_alloc(scratch_size)
+
+
+def _reset_scratch_data():
+    try:
+        delattr(_get_scratch_data.__wrapped__, '_pycuda_ctx_dep_memoize_dic')
+    except AttributeError:
+        pass

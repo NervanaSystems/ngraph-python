@@ -44,7 +44,7 @@ class GEMMKernel(GPUKernel):
         super(GEMMKernel, self).__init__(transformer)
 
         # Sass kernels only supported on Maxwell or newer
-        if transformer.ng.use_cudac_kernels:
+        if transformer.runtime.use_cudac_kernels:
             self.use_cublas = True
             self.kernel = None
             self.params = None

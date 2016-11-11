@@ -18,6 +18,26 @@ from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.op_graph.axes import TensorDescription
 
+import numpy as np
+
+
+def get_dimshuffle(dtype, shape, axes, src, dst):
+    """
+    Gets dimshuffle kernel and parameters for two same-sized tensors
+
+    Arguments:
+        dtype: tensor data type
+        shape (tuple): source shape
+        axes (tuple): new order of axes
+        src (TensorDescriptionWrapper): source tensor
+        dst (TensorDescriptionWrapper): dest tensor
+    """
+    kernel = _get_copy_transpose_kernel(dtype, shape, axes)
+    params = [dst.td, src.td] + list(kernel.args)
+    params = params + list(src.strides) + list(dst.strides)
+
+    return (kernel, params)
+
 
 class DimShuffleKernel(GPUKernel):
     """
@@ -46,9 +66,7 @@ class DimShuffleKernel(GPUKernel):
         shape = in_tensor.shape
         axes = op.old_axis_positions
 
-        self.kernel = _get_copy_transpose_kernel(dtype, shape, axes)
-        self.params = [out.td, in_tensor.td] + list(self.kernel.args)
-        self.params = self.params + list(in_tensor.strides) + list(out.strides)
+        self.kernel, self.params = get_dimshuffle(dtype, shape, axes, in_tensor, out)
 
     def bind_buffers(self):
         """
@@ -104,7 +122,6 @@ class FillKernel(GPUKernel):
         Use memset driver functions to fill tensor with scalar
         Temporarily uses neon GPUTensor's fill method
         """
-        # TODO: remove neon dependency
         self.out.fill(self.value)
 
 
@@ -129,6 +146,18 @@ class SetItemKernel(GPUKernel):
         self.tensor, self.value = (_ for _ in op.call_info())
         self.item = op.item
 
+        # Use copy transpose kernel for unsupported cases
+        if len(self.tensor.strides) > 0 and np.min(self.tensor.strides) < 0 and self.item is None:
+            dtype = self.tensor.dtype
+            shape = self.tensor.shape
+            axes = range(len(self.tensor.shape))
+
+            self.kernel, self.params = get_dimshuffle(dtype, shape, tuple(axes),
+                                                      TensorDescriptionWrapper(self.value),
+                                                      TensorDescriptionWrapper(self.tensor))
+        else:
+            self.kernel = None
+
     def bind_buffers(self):
         """
         Get allocated GPU tensor for output and potentially source value
@@ -138,13 +167,25 @@ class SetItemKernel(GPUKernel):
         if isinstance(self.value, TensorDescription):
             self.value = self.value.value.tensor
 
+        if self.kernel is not None:
+            for index in range(len(self.params)):
+                if isinstance(self.params[index], TensorDescription):
+                    self.params[index] = pointer_from_td(self.params[index])
+
+        super(SetItemKernel, self).bind_buffers()
+
     def execute(self):
         """
         Run kernel to copy into tensor
         Temporarily using the neon GPUTensor implementation
         """
-        # TODO: remove neon dependency
-        self.tensor.__setitem__(self.item, self.value)
+        if self.kernel is not None:
+            self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
+                                            None, *self.params)
+        elif self.tensor.shape == ():
+            self.tensor.fill(self.value)
+        else:
+            self.tensor.__setitem__(self.item, self.value)
 
 
 class UnsliceKernel(GPUKernel):
@@ -168,6 +209,18 @@ class UnsliceKernel(GPUKernel):
         self.out_sliced, self.x = (_ for _ in op.call_info())
         self.out = op.tensor_description()
 
+        # Use copy transpose kernel for unsupported cases
+        if len(self.out_sliced.strides) > 0 and np.min(self.out_sliced.strides) < 0:
+            dtype = self.out_sliced.dtype
+            shape = self.out_sliced.shape
+            axes = range(len(self.out_sliced.shape))
+
+            self.kernel, self.params = get_dimshuffle(dtype, shape, tuple(axes),
+                                                      TensorDescriptionWrapper(self.x),
+                                                      TensorDescriptionWrapper(self.out_sliced))
+        else:
+            self.kernel = None
+
     def bind_buffers(self):
         """
         Get allocated GPU tensor for source and dest
@@ -179,10 +232,22 @@ class UnsliceKernel(GPUKernel):
         if isinstance(self.out, TensorDescription):
             self.out = self.out.value.tensor
 
+        if self.kernel is not None:
+            for index in range(len(self.params)):
+                if isinstance(self.params[index], TensorDescription):
+                    self.params[index] = pointer_from_td(self.params[index])
+
+        super(UnsliceKernel, self).bind_buffers()
+
     def execute(self):
         """
         Run fill and SetItem kernel to execute the Unslice operation
         """
-        # TODO: remove neon dependency
         self.out.fill(0)
-        self.out_sliced[:] = self.x
+        if self.kernel is not None:
+            self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
+                                            None, *self.params)
+        elif self.out_sliced.shape == ():
+            self.out_sliced.fill(self.x.get())
+        else:
+            self.out_sliced[:] = self.x

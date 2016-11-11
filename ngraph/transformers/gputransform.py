@@ -15,8 +15,6 @@
 from builtins import range
 import atexit
 
-from neon.backends import gen_backend
-
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
@@ -48,6 +46,8 @@ from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     UnsliceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
+from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
+                                         _get_sm_count, get_cache_dir
 
 import numpy as np
 import pycuda.driver as drv
@@ -412,7 +412,6 @@ class GPUKernelGroup():
 
     def __init__(self, transformer, name):
         self.transformer = transformer
-        self.ng = transformer.ng
         self.kernels = []
         self.name = name
         self.sourcefile = CudaSourceFile(name)
@@ -835,7 +834,7 @@ class GPUDeviceTensor(DeviceTensor):
         contig_tensor = GPUArray(self.tensor.shape, dtype=self.tensor.dtype)
         src_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
         dst_strides = [s // contig_tensor.dtype.itemsize for s in contig_tensor.strides]
-        kernel = _get_copy_transpose_kernel(self.tensor.dtype.str,
+        kernel = _get_copy_transpose_kernel(self.tensor.dtype,
                                             self.tensor.shape,
                                             range(len(self.tensor.shape)))
         params = [contig_tensor.gpudata, self.tensor.gpudata] + list(kernel.args)
@@ -852,13 +851,110 @@ class GPUDeviceTensor(DeviceTensor):
         """
         src_strides = [s // tensor.dtype.itemsize for s in tensor.strides]
         dst_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
-        kernel = _get_copy_transpose_kernel(tensor.dtype.str,
+        kernel = _get_copy_transpose_kernel(tensor.dtype,
                                             tensor.shape,
                                             range(len(tensor.shape)))
         params = [self.tensor.gpudata, tensor.gpudata] + list(kernel.args)
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
         return contig_tensor
+
+
+class GPURuntime(object):
+    def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
+                 scratch_size=0):
+        drv.init()
+        self.device_id = device_id if device_id is not None else 0
+
+        # check compute capability
+        self.compute_capability = drv.Device(self.device_id).compute_capability()
+        if self.compute_capability[0] < 3:
+            raise RuntimeError("Unsupported GPU")
+
+        # context
+        self.ctx = drv.Device(self.device_id).make_context()
+
+        # attributes
+        self.stream = None
+        self.warmup = False
+        self.scratch_size = scratch_size
+        self.scratch_offset = 0
+        self.sm_count = _get_sm_count()
+
+        # store GPU memory size in bytes
+        self.gpu_memory_size = drv.mem_get_info()[1]
+
+        # Fall back to CUDA C kernels on older (pre-Maxwell) GPU generations
+        if self.compute_capability[0] < 5:
+            # TODO: this is not fully supported in graph yet
+            self.use_cudac_kernels = True
+        else:
+            self.use_cudac_kernels = False
+        
+        # TODO
+        # self.cublas_handle = cublas.cublasCreate()
+
+        self.enable_winograd = enable_winograd
+        self.deterministic = deterministic
+        self.cache_dir = get_cache_dir()
+
+    def cleanup(self):
+        try:
+            self.ctx.pop()
+            self.ctx.detach()
+        except drv.Error:
+            pass
+
+    def get_events(self):
+        return _get_events()
+
+    def scratch_buffer_reset(self):
+        self.scratch_size = 0
+        self.scratch_offset = 0
+        _reset_scratch_data()
+
+    def scratch_buffer_init(self):
+        self.scratch_offset = 0
+
+    def scratch_buffer(self, size):
+
+        if size & 127 != 0:
+            size += 128 - (size & 127)
+
+        if size > self.scratch_size:
+            raise RuntimeError(
+                "nervanagpu.scratch_size(%d) is too small for this operation(%d)" % (
+                    self.scratch_size, size))
+
+        self.scratch_offset = size
+
+        return int(_get_scratch_data(self.scratch_size))
+
+    def scratch_buffer_offset(self, size):
+
+        if size & 127 != 0:
+            size += 128 - (size & 127)
+
+        if size + self.scratch_offset > self.scratch_size:
+            raise RuntimeError(
+                "nervanagpu.scratch_size(%d) is too small for this operation(%d, %d)" % (
+                    self.scratch_size, size, self.scratch_offset))
+
+        data = int(_get_scratch_data(self.scratch_size)) + self.scratch_offset
+        self.scratch_offset += size
+
+        return data
+
+    def set_scratch_size(self, *args):
+
+        total_size = 0
+        for size in args:
+            if size & 127 != 0:
+                size += 128 - (size & 127)
+            total_size += size
+
+        if total_size > self.scratch_size:
+            self.scratch_size = total_size
 
 
 class GPUTransformer(Transformer):
@@ -868,15 +964,15 @@ class GPUTransformer(Transformer):
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
-    __nervanagpu = None
+    __runtime = None
 
     transformer_name = "gpu"
 
     @staticmethod
     def close_gpu():
-        if GPUTransformer.__nervanagpu is not None:
-            GPUTransformer.__nervanagpu.cleanup_backend()
-            GPUTransformer.__nervanagpu = None
+        if GPUTransformer.__runtime is not None:
+            GPUTransformer.__runtime.cleanup()
+            GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):
         # TODO: Re-enable fusion
@@ -889,13 +985,12 @@ class GPUTransformer(Transformer):
         self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
-        self.closed = False
 
-        if GPUTransformer.__nervanagpu is None:
-            GPUTransformer.__nervanagpu = gen_backend('gpu')
+        if GPUTransformer.__runtime is None:
+            GPUTransformer.__runtime = GPURuntime()
             atexit.register(GPUTransformer.close_gpu)
 
-        self.ng = GPUTransformer.__nervanagpu
+        self.runtime = GPUTransformer.__runtime
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)

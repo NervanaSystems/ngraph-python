@@ -20,6 +20,8 @@ from ngraph.transformers.gpu.kernels.cuda import pooling
 from operator import itemgetter, mul
 import numpy as np
 
+from pycuda.gpuarray import empty_like
+
 
 class PoolFpropKernel(GPUKernel):
     """
@@ -181,7 +183,7 @@ class PoolFpropKernel(GPUKernel):
 
         self.kernel = pooling.map_string2func(self.fprop_kernel[0],
                                               self.dtype.str[1:],
-                                              self.transformer.ng.compute_capability)
+                                              self.transformer.runtime.compute_capability)
 
     def bind_buffers(self):
         """
@@ -196,7 +198,7 @@ class PoolFpropKernel(GPUKernel):
         # Allocate argmax tensor
         if self.op == "max":
             if self.index not in self.transformer.argmax_tensors:
-                argmax = self.transformer.ng.empty_like(self.O.value.tensor)
+                argmax = empty_like(self.O.value.tensor)
                 self.transformer.argmax_tensors[self.index] = argmax
             else:
                 argmax = self.transformer.argmax_tensors[self.index]
@@ -204,7 +206,6 @@ class PoolFpropKernel(GPUKernel):
         else:
             A_data = 0
 
-        # TODO: argmax??
         kernel_args = self.fprop_kernel
         self.params = [kernel_args[1], kernel_args[2], None,
                        I_data.gpudata, O_data.gpudata, A_data, 1.0, 0.0, 0]
@@ -443,7 +444,7 @@ class PoolBpropKernel(GPUKernel):
 
         self.kernel = pooling.map_string2func(self.bprop_kernel[0],
                                               self.dtype.str[1:],
-                                              self.transformer.ng.compute_capability)
+                                              self.transformer.runtime.compute_capability)
 
     def bind_buffers(self):
         """

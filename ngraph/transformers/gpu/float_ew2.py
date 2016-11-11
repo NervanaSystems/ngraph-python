@@ -234,7 +234,7 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, max_dims, gemm=False):
+    def __init__(self, tensor_description, max_dims=1, gemm=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape

@@ -95,13 +95,6 @@ def test_expand_dims(transformer_factory):
 def test_slice(transformer_factory):
     """TODO."""
 
-    try:
-        from ngraph.transformers.gputransform import GPUTransformer
-        if isinstance(ngt.make_transformer(), GPUTransformer):
-            pytest.xfail("fails on pre-neon 1.7 gpu")
-    except ImportError:
-        pass
-
     C = ng.make_axis(name='C')
     D = ng.make_axis(name='D')
 

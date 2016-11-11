@@ -50,11 +50,11 @@ class ConvFpropKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
         if use_cudac_kernels:
@@ -137,11 +137,11 @@ class ConvBpropKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
         if use_cudac_kernels:
@@ -223,11 +223,11 @@ class ConvUpdateKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
         if use_cudac_kernels:

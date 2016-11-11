@@ -44,8 +44,42 @@ __device__ __forceinline__ int div64(int value, int magic, int shift)
 """
 
 
+def _get_oned_copy_kernel(dtype, shape):
+    copy = r"""
+__global__ void copy_oned(%(type)s* out, const %(type)s* in, int dim, long long src_str,
+                          long long dst_str)
+{
+    int tid_x = threadIdx.x;
+    int idx = blockIdx.x;
+
+    idx = (idx << 5) + tid_x;
+
+    const %(type)s* in0 = in + (src_str * idx);
+    %(type)s* out0 = out + (dst_str * idx);
+
+    if(idx < dim) *out0 = *in0;
+}
+"""
+    code = copy % dict(
+        type=_get_register_type(dtype)
+    )
+
+    # print code
+    module = SourceModule(code)
+    kernel = module.get_function("copy_oned")
+    kernel.prepare("PPIqq")
+
+    kernel.grid = (_ceil_div(shape[0], 32), 1, 1)
+    kernel.block = (32, 1, 1)
+    kernel.args = (shape[0], )
+
+    return kernel
+
+
 @context_dependent_memoize
 def _get_copy_transpose_kernel(dtype, shape, axes=None):
+    if len(shape) == 1:
+        return _get_oned_copy_kernel(dtype, shape)
 
     src = list(range(len(shape)))
     dst = list(axes)
