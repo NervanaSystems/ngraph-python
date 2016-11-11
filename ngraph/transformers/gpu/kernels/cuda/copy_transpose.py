@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from builtins import reduce
 from future.utils import native_str
 from operator import mul
 

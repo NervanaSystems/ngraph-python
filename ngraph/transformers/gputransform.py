@@ -47,7 +47,7 @@ from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, Set
     UnsliceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
-                                         _get_sm_count, get_cache_dir
+    _get_sm_count, get_cache_dir
 
 import numpy as np
 import pycuda.driver as drv
@@ -721,7 +721,7 @@ class GPUDeviceTensor(DeviceTensor):
             return self.tensor
         elif not isinstance(index, tuple):
             index = (index,)
-        
+
         # Slice tensor by changing shape, strides, and base address
         new_shape = []
         new_offset = 0
@@ -805,7 +805,7 @@ class GPUDeviceTensor(DeviceTensor):
             # Reshape to satisfy pycuda if necessary
             if sliced.shape != value.shape:
                 sliced = self.tensor.reshape(value.shape)
-            
+
             if self.is_contiguous:
                 sliced[:] = value
             else:
@@ -857,7 +857,6 @@ class GPUDeviceTensor(DeviceTensor):
         params = [self.tensor.gpudata, tensor.gpudata] + list(kernel.args)
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
-        return contig_tensor
 
 
 class GPURuntime(object):
@@ -890,7 +889,7 @@ class GPURuntime(object):
             self.use_cudac_kernels = True
         else:
             self.use_cudac_kernels = False
-        
+
         # TODO
         # self.cublas_handle = cublas.cublasCreate()
 

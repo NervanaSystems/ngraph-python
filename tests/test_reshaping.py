@@ -17,7 +17,6 @@ import numpy as np
 import pytest
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.util.utils import ExecutorFactory
-import ngraph.transformers as ngt
 
 delta = 1e-3
 rtol = atol = 1e-2
