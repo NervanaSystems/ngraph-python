@@ -30,7 +30,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Affine, Preprocess, Sequential
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
-from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_callbacks
+from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
@@ -44,10 +44,8 @@ np.random.seed(args.rng_seed)
 
 # Create the dataloader
 train_data, valid_data = MNIST(args.data_dir).load_data()
-train_set = ArrayIterator(train_data, args.batch_size,
-                          total_iterations=args.num_iterations,
-                          keys=['img', 'tgt'])
-valid_set = ArrayIterator(valid_data, args.batch_size, keys=['img', 'tgt'])
+train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
+valid_set = ArrayIterator(valid_data, args.batch_size)
 
 ######################
 # Model specification
@@ -57,19 +55,19 @@ seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
 
 ######################
 # Input specification
-ax.C.length, ax.H.length, ax.W.length = train_set.shapes[0]
+ax.C.length, ax.H.length, ax.W.length = train_set.shapes['image']
 ax.N.length = args.batch_size
 ax.Y.length = 10
 
 # placeholders with descriptive names
-inputs = dict(img=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
-              tgt=ng.placeholder([ax.N]))
+inputs = dict(image=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
+              label=ng.placeholder([ax.N]))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 
-output_prob = seq1.train_outputs(inputs['img'])
-errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['tgt'])
-loss = ng.cross_entropy_binary(output_prob, ng.one_hot(inputs['tgt'], axis=ax.Y))
+output_prob = seq1.train_outputs(inputs['image'])
+errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['label'])
+loss = ng.cross_entropy_binary(output_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 mean_cost = ng.mean(loss, out_axes=())
 updates = optimizer(loss)
 
@@ -81,12 +79,12 @@ transformer = ngt.make_transformer()
 train_computation = make_bound_computation(transformer, train_outputs, inputs)
 loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
-cbs = make_callbacks(output_file=args.output_file,
-                     frequency=args.iter_interval,
-                     train_computation=train_computation,
-                     total_iterations=args.num_iterations,
-                     eval_set=valid_set,
-                     loss_computation=loss_computation,
-                     use_progress_bar=args.progress_bar)
+cbs = make_default_callbacks(output_file=args.output_file,
+                             frequency=args.iter_interval,
+                             train_computation=train_computation,
+                             total_iterations=args.num_iterations,
+                             eval_set=valid_set,
+                             loss_computation=loss_computation,
+                             use_progress_bar=args.progress_bar)
 
 loop_train(train_set, train_computation, cbs)

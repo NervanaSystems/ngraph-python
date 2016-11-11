@@ -15,7 +15,7 @@
 import ngraph as ng
 from ngraph.frontends.neon import Sequential, Preprocess, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_callbacks
+from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
@@ -38,11 +38,9 @@ gradient_clip_value = None
 tree_bank_data = PTB(path=args.data_dir)
 ptb_data = tree_bank_data.load_data()
 train_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_size,
-                                    keys=['inp', 'tgt'],
                                     time_steps=time_steps, total_iterations=args.num_iterations)
 
-valid_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_size,
-                                    keys=['inp', 'tgt'],
+valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_size,
                                     time_steps=time_steps)
 
 # weight initialization
@@ -59,12 +57,12 @@ ax.REC.length = time_steps
 ax.N.length = args.batch_size
 
 # placeholders with descriptive names
-inputs = dict(inp=ng.placeholder([ax.REC, ax.N]),
-              tgt=ng.placeholder([ax.REC, ax.N]))
+inputs = dict(inp_txt=ng.placeholder([ax.REC, ax.N]),
+              tgt_txt=ng.placeholder([ax.REC, ax.N]))
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6)
-output_prob = seq1.train_outputs(inputs['inp'])
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt'], axis=ax.Y), usebits=True)
+output_prob = seq1.train_outputs(inputs['inp_txt'])
+loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
 
@@ -76,12 +74,12 @@ transformer = ngt.make_transformer()
 train_computation = make_bound_computation(transformer, train_outputs, inputs)
 loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
-cbs = make_callbacks(output_file=args.output_file,
-                     frequency=args.iter_interval,
-                     train_computation=train_computation,
-                     total_iterations=args.num_iterations,
-                     eval_set=valid_set,
-                     loss_computation=loss_computation,
-                     use_progress_bar=args.progress_bar)
+cbs = make_default_callbacks(output_file=args.output_file,
+                             frequency=args.iter_interval,
+                             train_computation=train_computation,
+                             total_iterations=args.num_iterations,
+                             eval_set=valid_set,
+                             loss_computation=loss_computation,
+                             use_progress_bar=args.progress_bar)
 
 loop_train(train_set, train_computation, cbs)

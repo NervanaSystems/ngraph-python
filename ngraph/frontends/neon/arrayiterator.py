@@ -3,7 +3,7 @@ import numpy as np
 
 class ArrayIterator(object):
 
-    def __init__(self, data_arrays, batch_size, total_iterations=None, keys=None):
+    def __init__(self, data_arrays, batch_size, total_iterations=None, time_steps=1):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -15,41 +15,38 @@ class ArrayIterator(object):
             batch_size (int): number of examples in each minibatch
             total_iterations (int): number of minibatches to cycle through on this iterator.
                                     If not provided, it will cycle through all of the data once.
-            keys (list, str): Optional list of tags to attach to the dataset and return a dict
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
-
-        if isinstance(data_arrays, list) or isinstance(data_arrays, tuple):
+        self.time_steps = time_steps
+        if isinstance(data_arrays, dict):
             self.data_arrays = data_arrays
+        elif isinstance(data_arrays, (list, tuple)):
+            self.data_arrays = {k: x for k, x in enumerate(data_arrays)}
         else:
-            self.data_arrays = [data_arrays]
+            self.data_arrays = {0: data_arrays}
+        self.keys = list(self.data_arrays.keys())
 
-        if keys is not None:
-            if isinstance(keys, list) or isinstance(keys, tuple):
-                self.keys = keys
-            else:
-                self.keys = [keys]
-            if len(self.keys) != len(self.data_arrays):
-                raise ValueError("Number of keys must match the number of data_arrays")
-        else:
-            self.keys = keys
+        # just get an arbitrary element for len
+        self.ndata = len(self.data_arrays[self.keys[0]])
+        if self.time_steps != 1:
+            self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
+        self.ntokens = self.ndata * self.time_steps
 
-        self.ndata = len(self.data_arrays[0])
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
 
-        if total_iterations is None:
-            self.total_iterations = -(-self.ndata // self.batch_size)
-        else:
-            self.total_iterations = total_iterations
-
         self.start = 0
         self.index = 0
-        self.shapes, self.batch_bufs = [], []
-        for x in self.data_arrays:
-            self.shapes.append(x.shape[1:])
-            self.batch_bufs.append(np.empty(x.shape[1:] + (self.batch_size,), x.dtype))
+
+        self.total_iterations = self.nbatches if total_iterations is None else total_iterations
+        self.make_batch_buffers()
+
+    def make_batch_buffers(self):
+        self.shapes, self.batch_bufs = dict(), dict()
+        for k, x in self.data_arrays.items():
+            self.shapes[k] = x.shape[1:]
+            self.batch_bufs[k] = np.empty(x.shape[1:] + (self.batch_size,), x.dtype)
 
     @property
     def nbatches(self):
@@ -85,68 +82,46 @@ class ArrayIterator(object):
             if self.batch_size > bsz:
                 islice2, oslice2 = slice(bsz, None), slice(0, self.batch_size - bsz)
 
-            for src, dst in zip(self.data_arrays, self.batch_bufs):
+            for k in self.keys:
+                src, dst = self.data_arrays[k], self.batch_bufs[k]
+
                 dst[..., islice1] = np.rollaxis(src[oslice1], 0, src.ndim)
                 if oslice2:
                     dst[..., islice2] = np.rollaxis(src[oslice2], 0, src.ndim)
 
-            if self.keys is None:
-                yield self.batch_bufs
-            else:
-                yield {k: v for k, v in zip(self.keys, self.batch_bufs)}
+            yield self.batch_bufs
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
 
-class SequentialArrayIterator(object):
+class SequentialArrayIterator(ArrayIterator):
 
-    def __init__(self, data_arrays, time_steps, batch_size,
-                 total_iterations=None, get_prev_target=False, keys=None):
-
-        self.time_steps = time_steps
-        self.batch_size = batch_size
+    def __init__(self, data_arrays, batch_size, time_steps,
+                 total_iterations=None, get_prev_target=False):
         self.get_prev_target = get_prev_target
 
-        self.nbatches = len(data_arrays[0]) // (self.batch_size * self.time_steps)
-        self.ndata = self.batch_size * self.nbatches
+        super(SequentialArrayIterator, self).__init__(
+            data_arrays=data_arrays,
+            batch_size=batch_size,
+            total_iterations=total_iterations,
+            time_steps=time_steps,
+        )
+        self.make_batch_buffers()
 
-        if total_iterations is None:
-            self.total_iterations = self.nbatches
-        else:
-            self.total_iterations = total_iterations
-
-        self.index = 0
-        self.shape = (1, self.time_steps)
-
-        self.data_arrays, self.batch_bufs = [], []
-        for x in data_arrays:
-            x = x[:(self.ndata * self.time_steps)]
-            self.data_arrays.append(x.reshape(self.batch_size, self.nbatches, self.time_steps))
-            self.batch_bufs.append(np.empty(self.shape + (self.batch_size, ), dtype=np.int32))
-
-        if keys is not None:
-            if isinstance(keys, list) or isinstance(keys, tuple):
-                self.keys = keys
-            else:
-                self.keys = [keys]
-            if len(self.keys) != len(self.data_arrays):
-                raise ValueError("Number of keys must match the number of data_arrays")
-        else:
-            self.keys = keys
-
-        self.batch_bufs = tuple(self.batch_bufs)
-
-    def reset(self):
-        self.index = 0
+    def make_batch_buffers(self):
+        self.shapes, self.batch_bufs = dict(), dict()
+        for k, x in self.data_arrays.items():
+            self.data_arrays[k] = x[:self.ntokens].reshape(
+                self.batch_size, self.nbatches, self.time_steps)
+            self.shapes[k] = (1, self.time_steps)
+            self.batch_bufs[k] = np.empty((1, self.time_steps, self.batch_size), dtype=np.int32)
 
     def __iter__(self):
         while self.index < self.total_iterations:
-            for src, dst in zip(self.data_arrays, self.batch_bufs):
+            for k in self.keys:
+                src, dst = self.data_arrays[k], self.batch_bufs[k]
                 idx = self.index % self.nbatches
                 dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
             self.index += 1
 
-            if self.keys is None:
-                yield self.batch_bufs
-            else:
-                yield {k: v for k, v in zip(self.keys, self.batch_bufs)}
+            yield self.batch_bufs

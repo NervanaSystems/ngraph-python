@@ -65,17 +65,19 @@ class CIFAR10(object):
                 ylist.append(d['labels'])
 
         X_train = np.vstack(Xlist).reshape(-1, 3, 32, 32)
-        y_train = np.vstack(ylist)
+        y_train = np.vstack(ylist).ravel()
 
         with open(os.path.join(batchdir, 'test_batch'), 'rb') as f:
             d = pickle_load(f)
             X_test, y_test = d['data'], d['labels']
             X_test = X_test.reshape(-1, 3, 32, 32)
 
-        y_train = y_train.reshape(-1, 1)
-        y_test = np.array(y_test).reshape(-1, 1)
+        self.train_set = {'image': X_train,
+                          'label': y_train}
+        self.valid_set = {'image': X_test,
+                          'label': np.array(y_test)}
 
-        return (X_train, y_train), (X_test, y_test)
+        return self.train_set, self.valid_set
 
 
 def ingest_cifar10(root_dir, padded_size=32, overwrite=False):

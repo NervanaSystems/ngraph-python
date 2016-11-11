@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 from __future__ import division, print_function
 
 import h5py
@@ -21,25 +35,25 @@ class CallbackPhase(Enum):
     minibatch_post = 5
 
 
-def make_callbacks(output_file, frequency,
-                   train_computation, total_iterations,
-                   eval_set=None, loss_computation=None,
-                   use_progress_bar=True):
+def make_default_callbacks(output_file, frequency, train_computation, total_iterations,
+                           eval_set=None, loss_computation=None, use_progress_bar=True):
 
-    cbs = Callbacks(output_file, total_iterations)
+    cbs = CallbackContainer(output_file, total_iterations)
 
     cbs.append(TrainCostCallback(train_computation))
-    if use_progress_bar:
-        cbs.append(ProgressCallback())
 
     cbs.append(TrainLoggerCallback(frequency))
+
     if eval_set is not None:
         cbs.append(LossCallback(frequency, eval_set, loss_computation))
+
+    if use_progress_bar:
+        cbs.append(ProgressCallback())
 
     return cbs
 
 
-class Callbacks(object):
+class CallbackContainer(object):
     def __init__(self, output_file, total_iterations, callback_list=[]):
         '''
         just store a list of callbacks
@@ -86,13 +100,13 @@ class Callbacks(object):
         """
         self._callbacks.insert(index, cb)
 
-    def __call__(self, phase, batch_data=None, batch_idx=None):
+    def __call__(self, phase, data=None, idx=None):
         for c in self._callbacks:
-            c(self.callback_data, phase, batch_data, batch_idx)
+            c(self.callback_data, phase, data, idx)
 
 
 class Callback(object):
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         pass
 
 
@@ -104,21 +118,21 @@ class TrainCostCallback(Callback):
     def __init__(self, computation):
         self.computation = computation
 
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             iterations = callback_data['config'].attrs['total_iterations']
             callback_data.create_dataset("cost/train", (iterations,))
             # clue in the data reader to use the 'minibatch' time_markers
             callback_data['cost/train'].attrs['time_markers'] = 'minibatch'
         elif phase == CallbackPhase.minibatch_post:
-            callback_data['cost/train'][batch_idx] = self.computation(batch_data)['batch_cost']
+            callback_data['cost/train'][idx] = self.computation(data)['batch_cost']
 
 
 class RunTimerCallback(Callback):
     """
     Callback which tracks the total training time.
     """
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.timing = callback_data.create_group("time/train")
             self.timing.create_dataset("start_time", (1,), dtype='float64')
@@ -134,7 +148,7 @@ class ProgressCallback(Callback):
     """
     Callback shows overall progress
     """
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.tpbar = tqdm(desc="Overall",
                               unit="minibatches",
@@ -156,13 +170,13 @@ class TrainLoggerCallback(Callback):
     def __init__(self, frequency):
         self.frequency = frequency
 
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         if phase == CallbackPhase.minibatch_post:
-            if ((batch_idx + 1) % self.frequency == 0):
-                interval = slice(batch_idx + 1 - self.frequency, batch_idx)
+            if ((idx + 1) % self.frequency == 0):
+                interval = slice(idx + 1 - self.frequency, idx)
                 train_cost = callback_data["cost/train"][interval].mean()
                 tqdm.write("Interval {} Iteration {} complete.  Avg Train cost: {}".format(
-                    batch_idx // self.frequency + 1, batch_idx + 1, train_cost))
+                    idx // self.frequency + 1, idx + 1, train_cost))
 
 
 class LossCallback(Callback):
@@ -179,7 +193,7 @@ class LossCallback(Callback):
         self.dataset = dataset
         self.interval_loss_comp = interval_loss_comp
 
-    def __call__(self, callback_data, phase, batch_data, batch_idx):
+    def __call__(self, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.total_iterations = callback_data['config'].attrs['total_iterations']
             num_intervals = self.total_iterations // self.frequency
@@ -189,9 +203,9 @@ class LossCallback(Callback):
         elif phase == CallbackPhase.train_post:
             losses = loop_eval(self.dataset, self.interval_loss_comp)
             tqdm.write("Training complete.  Avg losses: {}".format(losses))
-        elif phase == CallbackPhase.minibatch_post and ((batch_idx + 1) % self.frequency == 0):
+        elif phase == CallbackPhase.minibatch_post and ((idx + 1) % self.frequency == 0):
             start_loss = default_timer()
-            interval_idx = batch_idx // self.frequency
+            interval_idx = idx // self.frequency
 
             losses = loop_eval(self.dataset, self.interval_loss_comp)
 
@@ -200,7 +214,7 @@ class LossCallback(Callback):
 
             callback_data["time/loss"][interval_idx] = (default_timer() - start_loss)
             tqdm.write("Interval {} Iteration {} complete.  Avg losses: {}".format(
-                interval_idx + 1, batch_idx + 1, losses))
+                interval_idx + 1, idx + 1, losses))
 
 
 def loop_train(dataset, computation, callbacks):

@@ -11,12 +11,11 @@ class MNIST(object):
     Arguments:
         path (str): Local path to copy data files.
     """
-    def __init__(self, path='.', include_channel=True):
+    def __init__(self, path='.'):
         self.path = path
         self.url = 'https://s3.amazonaws.com/img-datasets'
         self.filename = 'mnist.pkl.gz'
         self.size = 15296311
-        self.include_channel = True
 
     def load_data(self):
         """
@@ -38,9 +37,10 @@ class MNIST(object):
         with gzip.open(filepath, 'rb') as f:
             self.train_set, self.valid_set = pickle_load(f)
 
-        if self.include_channel:
-            self.train_set = (self.train_set[0].reshape(60000, 1, 28, 28), self.train_set[1])
-            self.valid_set = (self.valid_set[0].reshape(10000, 1, 28, 28), self.valid_set[1])
+        self.train_set = {'image': self.train_set[0].reshape(60000, 1, 28, 28),
+                          'label': self.train_set[1]}
+        self.valid_set = {'image': self.valid_set[0].reshape(10000, 1, 28, 28),
+                          'label': self.valid_set[1]}
 
         return self.train_set, self.valid_set
 
