@@ -15,8 +15,7 @@
 
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.util import _magic32, _flatten, _ceil_div
-
-from neon.backends.kernels.cuda import pooling
+from ngraph.transformers.gpu.kernels.cuda import pooling
 
 from operator import itemgetter, mul
 import numpy as np
