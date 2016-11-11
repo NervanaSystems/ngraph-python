@@ -197,7 +197,6 @@ class GradientDescentMomentum(Optimizer):
 
 
 class RMSProp(Optimizer):
-
     """
     Root Mean Square propagation.
     Root Mean Square (RMS) propagation protects against vanishing and
@@ -253,7 +252,7 @@ class RMSProp(Optimizer):
     def __call__(self, cost_func, iteration_index):
         with ng.Op.saved_user_deps():
             state_updates, param_updates = [], []
-            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
 
             grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
