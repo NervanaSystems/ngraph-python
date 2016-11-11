@@ -170,7 +170,7 @@ class GradientDescentMomentum(Optimizer):
     def __call__(self, cost_func, iteration_index):
         with ng.Op.saved_user_deps():
             velocity_updates, param_updates = [], []
-            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
             scale_factor = 1
 
