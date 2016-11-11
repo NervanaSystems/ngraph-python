@@ -14,13 +14,28 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.kernel import GPUKernel
-
-from neon.backends import convolution
+from ngraph.transformers.gpu.kernels import convolution
 
 from operator import itemgetter
 import numpy as np
 
+
 class ConvFpropKernel(GPUKernel):
+    """
+    Kernel object to execute convolution forward propagation. Selects from Nervana's
+    sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (Convolution): Graph op being transformed into this kernel
+
+    Attributes:
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        F (TensorDescriptionWrapper): Tensor for filters
+        O (TensorDescriptionWrapper): Tensor for output feature maps
+        fprop_kernels (KernelGroup): Kernel(s) used to execute fprop convolution
+    """
     def __init__(self, transformer, op):
         super(ConvFpropKernel, self).__init__(transformer)
 
@@ -35,22 +50,24 @@ class ConvFpropKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels and "
+                                 "pre-Maxwell GPUs")
 
             self.fprop_kernels = convolution.FpropCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -66,11 +83,15 @@ class ConvFpropKernel(GPUKernel):
             else:
                 self.fprop_kernels = FpropWinograd_2x2_3x3(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             self.fprop_kernels = convolution.FpropDirect(*args)
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         I_data = self.I.value.tensor
         F_data = self.F.value.tensor
         O_data = self.O.value.tensor
@@ -80,10 +101,28 @@ class ConvFpropKernel(GPUKernel):
         super(ConvFpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.fprop_kernels.execute(1, unbind=False)
 
 
 class ConvBpropKernel(GPUKernel):
+    """
+    Kernel object to execute convolution backward propagation. Selects from Nervana's
+    sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (bprop_conv): Graph op being transformed into this kernel
+
+    Attributes:
+        E (TensorDescriptionWrapper): Tensor for deltas from next layer
+        F (TensorDescriptionWrapper): Tensor for filters
+        O (TensorDescriptionWrapper): Tensor for output deltas
+        bprop_kernels (KernelGroup): Kernel(s) used to execute bprop convolution
+    """
     def __init__(self, transformer, op):
         super(ConvBpropKernel, self).__init__(transformer)
 
@@ -98,23 +137,25 @@ class ConvBpropKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels and "
+                                 "pre-Maxwell GPUs")
 
             # TODO small C bprop?
             self.bprop_kernels = convolution.BpropCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -128,11 +169,15 @@ class ConvBpropKernel(GPUKernel):
             else:
                 self.bprop_kernels = BpropWinograd_2x2_3x3(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             self.bprop_kernels = convolution.BpropDirect(*args)
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         E_data = self.E.value.tensor
         F_data = self.F.value.tensor
         O_data = self.O.value.tensor
@@ -142,10 +187,28 @@ class ConvBpropKernel(GPUKernel):
         super(ConvBpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.bprop_kernels.execute(1, unbind=False)
 
 
 class ConvUpdateKernel(GPUKernel):
+    """
+    Kernel object to execute convolution update to compute filter gradient. Selects
+    from Nervana's sass convolution/winograd kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (update_conv): Graph op being transformed into this kernel
+
+    Attributes:
+        E (TensorDescriptionWrapper): Tensor for deltas from next layer
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        U (TensorDescriptionWrapper): Tensor for output gradient for update
+        updat_kernels (KernelGroup): Kernel(s) used to execute convolution update
+    """
     def __init__(self, transformer, op):
         super(ConvUpdateKernel, self).__init__(transformer)
 
@@ -160,22 +223,24 @@ class ConvUpdateKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.ng, self.dtype, N, C, K, D, H, W, T, R, S,
+        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.ng.enable_winograd
-        use_cudac_kernels = transformer.ng.use_cudac_kernels
+        enable_winograd = transformer.runtime.enable_winograd
+        use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
-        ####### Cuda C ###########
+        # ---- Cuda C ----
         if use_cudac_kernels:
-            #3D conv not supported yet
+            # 3D conv not supported yet
             if T > 1 or D > 1:
-                raise ValueError("3D Convolution not supported by CUDA C kernels and pre-Maxwell GPUs")
+                raise ValueError("3D Convolution not supported by CUDA C kernels "
+                                 "and pre-Maxwell GPUs")
 
             self.updat_kernels = convolution.UpdateCuda(*args)
 
-        ####### Winograd ###########
-        elif enable_winograd and R == 3 and S == 3 and all(x == 1 for x in (D,M,T,str_w,str_h,str_d)):
+        # ---- Winograd ----
+        elif enable_winograd and R == 3 and S == 3 and \
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
             from .winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -191,7 +256,7 @@ class ConvUpdateKernel(GPUKernel):
             else:
                 self.updat_kernels = UpdateWinograd_3x3_2x2(*args)
 
-        ####### Direct ###########
+        # ---- Direct ----
         else:
             if N >= 4:
                 self.updat_kernels = convolution.UpdateDirect(*args)
@@ -199,6 +264,10 @@ class ConvUpdateKernel(GPUKernel):
                 raise NotImplementedError("This is not supported")
 
     def bind_buffers(self):
+        """
+        Gets GPUTensor for inputs and output. Binds all parameters to the GPU
+        kernels
+        """
         E_data = self.E.value.tensor
         I_data = self.I.value.tensor
         U_data = self.U.value.tensor
@@ -206,4 +275,7 @@ class ConvUpdateKernel(GPUKernel):
         super(ConvUpdateKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Call into convolution library to execute kernels
+        """
         self.updat_kernels.execute(1, unbind=False)

@@ -14,15 +14,32 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.kernel import GPUKernel
-
-from neon.backends.layer_gpu import _magic32, _flatten, _ceil_div
-from neon.backends.kernels.cuda import pooling
+from ngraph.transformers.gpu.util import _magic32, _flatten, _ceil_div
+from ngraph.transformers.gpu.kernels.cuda import pooling
 
 from operator import itemgetter, mul
 import numpy as np
 
+from pycuda.gpuarray import empty_like
+
 
 class PoolFpropKernel(GPUKernel):
+    """
+    Kernel object to execute pooling forward propagation. Selects from Nervana's
+    cuda pooling kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (PoolingOp): Graph op being transformed into this kernel
+
+    Attributes:
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        O (TensorDescriptionWrapper): Tensor for output feature maps
+        kernel (pycuda.driver.Function): Compiled GPU kernel to execute this
+            pooling operation
+        params (list): List of parameters to pass to kernel
+    """
     def __init__(self, transformer, op):
         super(PoolFpropKernel, self).__init__(transformer)
 
@@ -65,8 +82,6 @@ class PoolFpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        bprop_zero = self.overlap or self.gaps
-
         self.op   = pool_op
         self.C    = C
         self.K    = K
@@ -92,7 +107,6 @@ class PoolFpropKernel(GPUKernel):
         WN   = W * N
         HWN  = H * WN
         DHWN = D * HWN
-        DH   = D * H
         RS   = R * S
         RST  = T * RS
         JRST = J * RST
@@ -169,16 +183,22 @@ class PoolFpropKernel(GPUKernel):
 
         self.kernel = pooling.map_string2func(self.fprop_kernel[0],
                                               self.dtype.str[1:],
-                                              self.transformer.ng.compute_capability)
+                                              self.transformer.runtime.compute_capability)
 
     def bind_buffers(self):
+        """
+        Gets allocated tensors for input and output feature maps.
+        Allocates a scratch tensor for argmax indices if the op is max pooling
+        since this is required for bprop. Builds a final list of parameters to
+        pass to the kernel.
+        """
         I_data = self.I.value.tensor
         O_data = self.O.value.tensor
 
         # Allocate argmax tensor
         if self.op == "max":
             if self.index not in self.transformer.argmax_tensors:
-                argmax = self.transformer.ng.empty_like(self.O.value.tensor)
+                argmax = empty_like(self.O.value.tensor)
                 self.transformer.argmax_tensors[self.index] = argmax
             else:
                 argmax = self.transformer.argmax_tensors[self.index]
@@ -186,7 +206,6 @@ class PoolFpropKernel(GPUKernel):
         else:
             A_data = 0
 
-        # TODO: argmax??
         kernel_args = self.fprop_kernel
         self.params = [kernel_args[1], kernel_args[2], None,
                        I_data.gpudata, O_data.gpudata, A_data, 1.0, 0.0, 0]
@@ -194,10 +213,29 @@ class PoolFpropKernel(GPUKernel):
         super(PoolFpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Executes the pooling kernel.
+        """
         self.kernel.prepared_async_call(*self.params, shared_size=self.fprop_lut_size)
 
 
 class PoolBpropKernel(GPUKernel):
+    """
+    Kernel object to execute pooling backward propagation. Selects from Nervana's
+    cuda pooling kernels.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (BpropPoolOp): Graph op being transformed into this kernel
+
+    Attributes:
+        I (TensorDescriptionWrapper): Tensor for input feature maps
+        O (TensorDescriptionWrapper): Tensor for output feature maps
+        kernel (pycuda.driver.Function): Compiled GPU kernel to execute this
+            pooling operation
+        params (list): List of parameters to pass to kernel
+    """
     def __init__(self, transformer, op):
         super(PoolBpropKernel, self).__init__(transformer)
 
@@ -211,7 +249,7 @@ class PoolBpropKernel(GPUKernel):
         elif self.dtype.type is np.float32:
             clss = "spool"
         else:
-            raise TypeError("Type not supported.")
+            raise TypeError("Type not supported {}".format(clss))
 
         C, D, H, W, _ = self.O.axes.lengths
         K, M, P, Q, N = self.I.axes.lengths
@@ -239,8 +277,6 @@ class PoolBpropKernel(GPUKernel):
             self.gaps = 1
         else:
             self.gaps = 0
-
-        bprop_zero = self.overlap or self.gaps
 
         self.op   = pool_op
         self.C    = C
@@ -408,9 +444,15 @@ class PoolBpropKernel(GPUKernel):
 
         self.kernel = pooling.map_string2func(self.bprop_kernel[0],
                                               self.dtype.str[1:],
-                                              self.transformer.ng.compute_capability)
+                                              self.transformer.runtime.compute_capability)
 
     def bind_buffers(self):
+        """
+        Gets allocated tensors for input and output feature maps.
+        Allocates a scratch tensor for argmax indices if the op is max pooling
+        since this is required for bprop. Builds a final list of parameters to
+        pass to the kernel.
+        """
         I_data = self.I.value.tensor
         O_data = self.O.value.tensor
 
@@ -429,4 +471,7 @@ class PoolBpropKernel(GPUKernel):
         super(PoolBpropKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Executes the pooling kernel.
+        """
         self.kernel.prepared_async_call(*self.params, shared_size=self.bprop_lut_size)

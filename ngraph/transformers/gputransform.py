@@ -15,10 +15,6 @@
 from builtins import range
 import atexit
 
-from neon.backends.nervanagpu import GPUTensor
-from neon import NervanaObject
-from neon.backends import gen_backend
-
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
@@ -47,10 +43,15 @@ from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, UnsliceKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
+    UnsliceKernel
+from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
+from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
+    _get_sm_count, get_cache_dir
 
 import numpy as np
 import pycuda.driver as drv
+from pycuda.gpuarray import GPUArray
 
 
 _none_slice = slice(None, None, None)
@@ -313,38 +314,7 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Stack)
     def add_op(self, op, out, *args):
-        # TODO: we may want to have the inputs write into slices of a
-        # preallocated buffer for this op.
-        # We cannot use the numpy stack function as it is unavailable in
-        # older versions.
-        # self.append("o={}", out)
-        # slices = [slice(None)] * len(op.axes)
-        # for i, arg in enumerate(args):
-        #    slices[op.pos] = i
-        #    self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
         raise ValueError("Unhandled op: {}".format(op))
-
-    def bind_buffers(self):
-        """
-        Binds GPU addresses of buffers to the kernel parameters. When kernels
-        and initial parameters are generated, tensors have not yet been
-        allocated so a placeholder is used for the memory addresses. This must
-        be called before the first kernel run to bind the tensor addresses in
-        GPU memory to the kernel parameters.
-        """
-        if self.compound:
-            for index in range(len(self.params)):
-                if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = self.params[index].value.tensor.gpudata
-        else:
-            new_op = [self.ops_buffer[0][0]]
-            for i in range(1, 5):
-                if isinstance(self.ops_buffer[0][i], TensorDescription):
-                    new_op.append(self.ops_buffer[0][i].value.tensor)
-                else:
-                    new_op.append(self.ops_buffer[0][i])
-            self.ops_buffer[0] = tuple(new_op)
-        self.buffers_bound = True
 
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
         """
@@ -436,11 +406,12 @@ class GPUKernelGroup():
         ng (NervanaGPU): Neon backend used to execute special ops
         kernels (:obj:`list` of :class:`GPUKernel`): List of compiled GPUKernel
             objects to run at evaluation time
+        sourcefile (CudaSourceFile): CUDA C source file that will contain all
+            GPU elementwise kernels for this computation
     """
 
     def __init__(self, transformer, name):
         self.transformer = transformer
-        self.ng = transformer.ng
         self.kernels = []
         self.name = name
         self.sourcefile = CudaSourceFile(name)
@@ -515,23 +486,33 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.reduction_axes.size))
+        self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
+                                       op.reduction_axes.size))
 
     @add_kernel.on_type(Unslice)
     def add_kernel(self, op):
         self.kernels.append(UnsliceKernel(self.transformer, op))
 
     def compile_all(self):
+        """
+        Compiles all CUDA C kernels in this group's source file and updates the
+        corresponding kernel objects with their pycuda prepared functions.
+        """
         self.sourcefile.compile()
         for kernel in self.kernels:
             kernel.compile(self.sourcefile)
 
     def __call__(self):
+        """
+        Loops over all kernels contained in this group and executes them. Since buffers
+        are allocated between kernel compilation and the first run of the computation,
+        we have to update GPU memory pointers in the arguments for each kernel on the
+        first execution of each kernel.
+        """
         for k in self.kernels:
             if not k.buffers_bound:
                 k.bind_buffers()
 
-            #print k
             k.execute()
 
 
@@ -613,32 +594,11 @@ class GPUTensorAllocator():
         """
         tensor_description = self.tensor_description
 
-        if tensor_description.shape == ():
-            shape = (1, )
-        else:
-            shape = tensor_description.shape
-
-        if tensor_description.strides == ():
-            strides = (1, )
-        else:
-            # Note that TensorDescription strides are in units of bytes, but
-            # GPUTensor expects units of elements
-            strides = [s // tensor_description.dtype.itemsize for s in tensor_description.strides]
-            strides = tuple(strides)
-
-        if len(shape) == 1 and len(strides) == 1:
-            shape = (shape[0], 1)
-            strides = (strides[0], 0)
-
         gpudata = int(buffer_alloc) + tensor_description.offset
-        new_tensor = GPUTensor(self.transformer.ng,
-                               shape,
-                               dtype=tensor_description.dtype,
-                               gpudata=gpudata,
-                               strides=strides)
-
-        if new_tensor.strides[0] < new_tensor.strides[-1]:
-            new_tensor.is_trans = True
+        new_tensor = GPUArray(tensor_description.shape,
+                              tensor_description.dtype,
+                              gpudata=gpudata,
+                              strides=tensor_description.strides)
 
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
@@ -724,49 +684,276 @@ class GPUDeviceTensor(DeviceTensor):
         self.transformer.add_view_allocator(tensor_alloc)
 
     def get(self, tensor):
-        if self.tensor.is_contiguous or (len(self.tensor.shape) == 2 and
-                                         (self.tensor.shape[0] == 1 or
-                                          self.tensor.shape[1] == 1)):
-            np_ary = self.tensor.get().reshape(self.tensor_description.shape)
+        """
+        Copy the device tensor to a numpy array.
+
+        Arguments:
+            tensor (np.ndarray): Optional output array
+
+        Returns:
+            Numpy array containing tensor data
+        """
+        if np.sum(self.tensor.strides) != 0:
+            if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
+                contig_tensor = self.tensor
+            else:
+                # Need to do memcpy from contiguous device memory
+                contig_tensor = self.as_contiguous()
+
+            if tensor is None:
+                return contig_tensor.get()
+            tensor[:] = contig_tensor.get()
         else:
-            temp_gpu_tensor = self.transformer.ng.empty(shape=self.tensor.shape,
-                                                        dtype=self.tensor.dtype)
-            self.transformer.ng.copy_transpose(self.tensor,
-                                               temp_gpu_tensor,
-                                               axes=range(len(self.tensor.shape)))
-            np_ary = temp_gpu_tensor.get().reshape(self.tensor_description.shape)
+            # Tensor is just a broadcasted scalar, get scalar value and fill output array
+            view = GPUArray((1, ), dtype=self.tensor.dtype, gpudata=self.tensor.gpudata)[0]
+            value = view.get()
 
-        if tensor is None:
-            return np_ary
-        tensor[:] = np_ary
+            if tensor is None:
+                out = np.ndarray(self.tensor.shape, dtype=self.tensor.dtype)
+                out.fill(value)
+                return out
+            tensor.fill(value)
 
-    def __getitem__(self, key):
-        return self.tensor.__getitem__(key)
+        return tensor
+
+    def __getitem__(self, index):
+        if index is None or index == _none_slice or index == ():
+            return self.tensor
+        elif not isinstance(index, tuple):
+            index = (index,)
+
+        # Slice tensor by changing shape, strides, and base address
+        new_shape = []
+        new_offset = 0
+        new_strides = []
+        seen_ellipsis = False
+
+        shape = self.tensor.shape
+        dtype = self.tensor.dtype
+        strides = self.tensor.strides
+
+        # Iterate over axes of index to compute new offset, shape, strides
+        array_axis = 0
+        for index_axis in range(len(index)):
+            index_entry = index[index_axis]
+
+            if array_axis > len(shape):
+                raise IndexError("Too many axes in index")
+
+            if isinstance(index_entry, slice):
+                # Standard slicing (start:stop:step)
+                start, stop, idx_strides = index_entry.indices(shape[array_axis])
+
+                new_offset += (start * strides[array_axis] * dtype.itemsize)
+                new_shape.append(-((start - stop) // idx_strides))
+                new_strides.append(idx_strides * strides[array_axis])
+
+                array_axis += 1
+            elif isinstance(index_entry, (int, np.integer)):
+                # Single index value
+                new_offset += (index_entry * strides[array_axis] * dtype.itemsize)
+                new_shape.append(1)
+                new_strides.append(strides[array_axis])
+
+                array_axis += 1
+            elif index_entry is Ellipsis:
+                # Use same shape as original for these axes
+                if seen_ellipsis:
+                    raise IndexError(
+                        "More than one ellipsis not allowed in index")
+                seen_ellipsis = True
+
+                remaining_index_count = len(index) - (index_axis + 1)
+                new_array_axis = len(shape) - remaining_index_count
+                if new_array_axis < array_axis:
+                    raise IndexError("Invalid use of ellipsis in index")
+                while array_axis < new_array_axis:
+                    new_shape.append(shape[array_axis])
+                    new_strides.append(strides[array_axis])
+                    array_axis += 1
+            else:
+                raise IndexError("Invalid subindex in axis %d" % index_axis)
+
+        # Create view
+        return GPUArray(new_shape,
+                        dtype,
+                        strides=new_strides,
+                        gpudata=(self.tensor.gpudata + new_offset))
 
     def __setitem__(self, key, value):
-        if type(value) == np.float32 or type(value) == np.float64:
-            value = float(value)
-        elif type(value) == np.int32 or type(value) == np.int64:
-            value = int(value)
-
-        if self.tensor.is_contiguous:
-            self.tensor.__setitem__(key, value)
+        # Use fill for scalar values
+        if type(value) == np.float32 or type(value) == np.float64 or \
+                type(value) == float:
+            self.tensor.fill(value)
+        elif type(value) == np.int32 or type(value) == np.int64 or \
+                type(value) == int:
+            self.tensor.fill(value)
+        elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
+            self.tensor.fill(value)
+        elif np.sum(self.tensor.strides) == 0:
+            view = GPUArray((1, ), dtype=self.tensor.dtype)
+            view.fill(value)
         else:
-            if type(value) == np.ndarray:
-                # TODO: warn?
-                value = self.transformer.ng.array(value)
+            # Convert to correct dtype if necessary
+            if value.dtype != self.tensor.dtype:
+                new_value = np.ndarray(self.tensor.shape, dtype=self.tensor.dtype)
+                new_value[:] = value
+                value = new_value
 
-                if value.T.shape == self.__getitem__(key).shape:
-                    self.__getitem__(key)._assign(value.T)
-                else:
-                    self.__getitem__(key)._assign(value)
+            sliced = self.__getitem__(key)
+
+            # Reshape to satisfy pycuda if necessary
+            if sliced.shape != value.shape:
+                sliced = self.tensor.reshape(value.shape)
+
+            if self.is_contiguous:
+                sliced[:] = value
             else:
-                self.__getitem__(key)._assign(value)
+                contig_tensor = GPUArray(value.shape, self.tensor.dtype)
+                contig_tensor[:] = value
+                self.from_contiguous(contig_tensor)
 
-    def reshape(self, shape):
-        """Temporary for conv"""
-        # TODO Remove when CONV is finished
-        return self.tensor.reshape(shape)
+    @property
+    def is_contiguous(self):
+        if self.tensor.shape == ():
+            return True
+
+        # Compute contiguous strides and compare with tensor strides
+        contiguous_strides = [self.tensor.dtype.itemsize]
+        for dim in reversed(self.tensor.shape[1:]):
+            contiguous_strides.insert(0, contiguous_strides[0] * dim)
+        return (tuple(contiguous_strides) == self.tensor.strides)
+
+    def as_contiguous(self):
+        """
+        Creates a new GPUArray with the same dimensions, but using contiguous memory
+
+        Returns:
+            New contiguous GPUArray with separate underlying device allocation
+        """
+        contig_tensor = GPUArray(self.tensor.shape, dtype=self.tensor.dtype)
+        src_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
+        dst_strides = [s // contig_tensor.dtype.itemsize for s in contig_tensor.strides]
+        kernel = _get_copy_transpose_kernel(self.tensor.dtype,
+                                            self.tensor.shape,
+                                            range(len(self.tensor.shape)))
+        params = [contig_tensor.gpudata, self.tensor.gpudata] + list(kernel.args)
+        params = params + src_strides + dst_strides
+        kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
+        return contig_tensor
+
+    def from_contiguous(self, tensor):
+        """
+        Copies from a contiguous GPUArray with the same dimensions into this tensor
+
+        Arguments:
+            tensor (GPUArray): Contiguous tensor with same dimensions to use as source
+        """
+        src_strides = [s // tensor.dtype.itemsize for s in tensor.strides]
+        dst_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
+        kernel = _get_copy_transpose_kernel(tensor.dtype,
+                                            tensor.shape,
+                                            range(len(tensor.shape)))
+        params = [self.tensor.gpudata, tensor.gpudata] + list(kernel.args)
+        params = params + src_strides + dst_strides
+        kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
+
+
+class GPURuntime(object):
+    def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
+                 scratch_size=0):
+        drv.init()
+        self.device_id = device_id if device_id is not None else 0
+
+        # check compute capability
+        self.compute_capability = drv.Device(self.device_id).compute_capability()
+        if self.compute_capability[0] < 3:
+            raise RuntimeError("Unsupported GPU")
+
+        # context
+        self.ctx = drv.Device(self.device_id).make_context()
+
+        # attributes
+        self.stream = None
+        self.warmup = False
+        self.scratch_size = scratch_size
+        self.scratch_offset = 0
+        self.sm_count = _get_sm_count()
+
+        # store GPU memory size in bytes
+        self.gpu_memory_size = drv.mem_get_info()[1]
+
+        # Fall back to CUDA C kernels on older (pre-Maxwell) GPU generations
+        if self.compute_capability[0] < 5:
+            # TODO: this is not fully supported in graph yet
+            self.use_cudac_kernels = True
+        else:
+            self.use_cudac_kernels = False
+
+        # TODO
+        # self.cublas_handle = cublas.cublasCreate()
+
+        self.enable_winograd = enable_winograd
+        self.deterministic = deterministic
+        self.cache_dir = get_cache_dir()
+
+    def cleanup(self):
+        try:
+            self.ctx.pop()
+            self.ctx.detach()
+        except drv.Error:
+            pass
+
+    def get_events(self):
+        return _get_events()
+
+    def scratch_buffer_reset(self):
+        self.scratch_size = 0
+        self.scratch_offset = 0
+        _reset_scratch_data()
+
+    def scratch_buffer_init(self):
+        self.scratch_offset = 0
+
+    def scratch_buffer(self, size):
+
+        if size & 127 != 0:
+            size += 128 - (size & 127)
+
+        if size > self.scratch_size:
+            raise RuntimeError(
+                "nervanagpu.scratch_size(%d) is too small for this operation(%d)" % (
+                    self.scratch_size, size))
+
+        self.scratch_offset = size
+
+        return int(_get_scratch_data(self.scratch_size))
+
+    def scratch_buffer_offset(self, size):
+
+        if size & 127 != 0:
+            size += 128 - (size & 127)
+
+        if size + self.scratch_offset > self.scratch_size:
+            raise RuntimeError(
+                "nervanagpu.scratch_size(%d) is too small for this operation(%d, %d)" % (
+                    self.scratch_size, size, self.scratch_offset))
+
+        data = int(_get_scratch_data(self.scratch_size)) + self.scratch_offset
+        self.scratch_offset += size
+
+        return data
+
+    def set_scratch_size(self, *args):
+
+        total_size = 0
+        for size in args:
+            if size & 127 != 0:
+                size += 128 - (size & 127)
+            total_size += size
+
+        if total_size > self.scratch_size:
+            self.scratch_size = total_size
 
 
 class GPUTransformer(Transformer):
@@ -776,20 +963,17 @@ class GPUTransformer(Transformer):
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
-    __nervanagpu = None
+    __runtime = None
 
     transformer_name = "gpu"
 
     @staticmethod
     def close_gpu():
-        if GPUTransformer.__nervanagpu is not None:
-            GPUTransformer.__nervanagpu.cleanup_backend()
-            GPUTransformer.__nervanagpu = None
+        if GPUTransformer.__runtime is not None:
+            GPUTransformer.__runtime.cleanup()
+            GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):
-        if NervanaObject.be is None or NervanaObject.be.device_type != 1:
-            # This creates a backend for unit tests.
-            NervanaObject.be = gen_backend('gpu')
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
@@ -800,13 +984,12 @@ class GPUTransformer(Transformer):
         self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
-        self.closed = False
 
-        if GPUTransformer.__nervanagpu is None:
-            GPUTransformer.__nervanagpu = NervanaObject.be
+        if GPUTransformer.__runtime is None:
+            GPUTransformer.__runtime = GPURuntime()
             atexit.register(GPUTransformer.close_gpu)
 
-        self.ng = GPUTransformer.__nervanagpu
+        self.runtime = GPUTransformer.__runtime
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
