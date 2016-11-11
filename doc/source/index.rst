@@ -27,7 +27,9 @@
 
    installation.rst
    overview.rst
-   walk_through.rst
+   Graph_Introduction.rst
+   Logistic_Regression_Part_1.rst
+   Logistic_Regression_Part_2.rst
    building_graphs.rst
 
 .. toctree::
