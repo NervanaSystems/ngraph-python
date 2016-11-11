@@ -81,15 +81,19 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     Cin = ng.make_axis(input_size)
     REC = ng.make_axis(seq_len, recurrent=True)
     N = ng.make_axis(batch_size, batch=True)
+    H = ng.make_axis(hidden_size)
+    ax_s = ng.make_axes([H, N])
 
     ex = ExecutorFactory()
     np.random.seed(0)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh())
+    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh(), reset_cells=True)
+
     inp_ng = ng.placeholder([Cin, REC, N])
+    init_state_ng = ng.placeholder(ax_s)
 
     # fprop graph
-    out_ng = rnn_ng.train_outputs(inp_ng)
+    out_ng = rnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
     out_ng.input = True
 
     rnn_W_input = rnn_ng.W_input
@@ -99,7 +103,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     rnn_b = rnn_ng.b
     rnn_b.input = True
 
-    fprop_neon_fun = ex.executor(out_ng, inp_ng)
+    fprop_neon_fun = ex.executor(out_ng, inp_ng, init_state_ng)
+
     dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
     dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
     dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
@@ -109,7 +114,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
 
     # fprop on random inputs
     input_value = rng.uniform(-1, 1, inp_ng.axes)
-    fprop_neon = fprop_neon_fun(input_value).copy()
+    init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
+    fprop_neon = fprop_neon_fun(input_value, init_state_value).copy()
 
     # after the rnn graph has been executed, can get the W values. Get copies so
     # shared values don't confuse derivatives
@@ -151,7 +157,7 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
     (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-     dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref)
+     dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref, init_states=init_state_value)
 
     # comparing outputs
     np.testing.assert_allclose(fprop_neon[:, :, 0], h_ref_list, rtol=0.0, atol=1.0e-5)
