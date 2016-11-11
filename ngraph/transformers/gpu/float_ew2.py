@@ -16,8 +16,9 @@ from builtins import range, zip
 import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
-from neon.backends.util.source_module import SourceModule
-from neon.backends.layer_gpu import _get_sm_count
+from ngraph.transformers.gpu.util import _get_sm_count
+
+from pycuda.compiler import SourceModule
 
 import numpy as np
 

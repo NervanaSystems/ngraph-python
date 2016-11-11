@@ -15,9 +15,9 @@
 
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.util import _get_sm_count
 from ngraph.op_graph.axes import TensorDescription
 
-from neon.backends.layer_gpu import _get_sm_count
 from neon.backends import kernel_specs
 
 import numpy as np

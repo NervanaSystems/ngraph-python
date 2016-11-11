@@ -15,9 +15,8 @@
 
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.op_graph.axes import TensorDescription
-
-from neon.backends.convolution import _get_copy_transpose_kernel
 
 
 class DimShuffleKernel(GPUKernel):
@@ -43,7 +42,7 @@ class DimShuffleKernel(GPUKernel):
         (arg, ) = (_ for _ in op.call_info())
         in_tensor = TensorDescriptionWrapper(arg, 2)
 
-        dtype = out.dtype.str
+        dtype = out.dtype
         shape = in_tensor.shape
         axes = op.old_axis_positions
 

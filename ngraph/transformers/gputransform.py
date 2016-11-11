@@ -685,16 +685,27 @@ class GPUDeviceTensor(DeviceTensor):
         self.transformer.add_view_allocator(tensor_alloc)
 
     def get(self, tensor):
+        """
+        Copy the device tensor to a numpy array.
+
+        Arguments:
+            tensor (np.ndarray): Optional output array
+
+        Returns:
+            Numpy array containing tensor data
+        """
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
             else:
+                # Need to do memcpy from contiguous device memory
                 contig_tensor = self.as_contiguous()
 
             if tensor is None:
                 return contig_tensor.get()
             tensor[:] = contig_tensor.get()
         else:
+            # Tensor is just a broadcasted scalar, get scalar value and fill output array
             view = GPUArray((1, ), dtype=self.tensor.dtype, gpudata=self.tensor.gpudata)[0]
             value = view.get()
 
@@ -703,6 +714,8 @@ class GPUDeviceTensor(DeviceTensor):
                 out.fill(value)
                 return out
             tensor.fill(value)
+
+        return tensor
 
     def __getitem__(self, index):
         if index is None or index == _none_slice or index == ():
@@ -813,6 +826,12 @@ class GPUDeviceTensor(DeviceTensor):
         return (tuple(contiguous_strides) == self.tensor.strides)
 
     def as_contiguous(self):
+        """
+        Creates a new GPUArray with the same dimensions, but using contiguous memory
+
+        Returns:
+            New contiguous GPUArray with separate underlying device allocation
+        """
         contig_tensor = GPUArray(self.tensor.shape, dtype=self.tensor.dtype)
         src_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
         dst_strides = [s // contig_tensor.dtype.itemsize for s in contig_tensor.strides]
@@ -825,6 +844,12 @@ class GPUDeviceTensor(DeviceTensor):
         return contig_tensor
 
     def from_contiguous(self, tensor):
+        """
+        Copies from a contiguous GPUArray with the same dimensions into this tensor
+
+        Arguments:
+            tensor (GPUArray): Contiguous tensor with same dimensions to use as source
+        """
         src_strides = [s // tensor.dtype.itemsize for s in tensor.strides]
         dst_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
         kernel = _get_copy_transpose_kernel(tensor.dtype.str,
