@@ -15,11 +15,11 @@ from __future__ import division
 
 from contextlib import contextmanager
 
-import collections
 import inspect
 import cachetools
 import numpy as np
-from builtins import object, str
+from builtins import object
+from functools import wraps
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
@@ -53,6 +53,42 @@ def tdcache():
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
 tdcache.tensor_description_cache = {}
+
+
+@contextmanager
+def metadata(**metadata):
+    """
+    Capture all Ops created within the context. Hides ops created in this
+    context from parent contexts.
+    """
+    with Op.all_ops() as ops:
+        yield
+    for op in ops:
+        op.metadata.update(metadata)
+
+
+def with_op_metadata(f, metadata=None):
+    """
+    Decorator to add metadata to all ops created inside the decorated function.
+    If this decorator is applied to a method of a class with a class
+    variable `metadata` defined as a dictionary then we add that to the
+    op metadata to attach.
+    """
+    metadata = metadata or dict()
+    assert isinstance(metadata, dict), "Metadata must be dict, not {}".format(type(metadata))
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        with Op.all_ops() as ops:
+            result = f(*args, **kwargs)
+        # If this decorator is applied to a method of a class with a class
+        # variable called `metadata` then we add that to the
+        if len(args) > 0 and hasattr(type(args[0]), 'metadata'):
+            metadata.update(type(args[0]).metadata)
+        for op in ops:
+            op.metadata.update(metadata)
+        return result
+    return wrapper
 
 
 class DebugInfo(object):
@@ -107,7 +143,7 @@ class Op(NameableValue, DebugInfo):
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
         reference (bool): The storage is accessed via a reference.  Default False.
-        tags: String or a set of strings used for filtering in searches.
+        metadata: String key value dictionary for frontend metadata.
         trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
@@ -120,7 +156,8 @@ class Op(NameableValue, DebugInfo):
             not shared.  Always True if reference is set.
         reference (bool): The storage is accessed via a reference.  Implies persistent.
         schemas: Information about how the Op was generated.
-        tags: Set of strings used for filtering in searches.
+        metadata: Dictionary with of string keys and values used for attaching
+            arbitrary metadata to nodes.
         trainable: The value is trainable.
     """
 
@@ -136,19 +173,39 @@ class Op(NameableValue, DebugInfo):
 
     @staticmethod
     @contextmanager
-    def captured_ops(ops=None):
+    def captured_ops():
         """
-        Capture all Ops created within the context.
-
-        Arguments:
-            ops: List for collecting created ops.
-
+        Capture all Ops created within the context. Hides ops created in this
+        context from parent contexts.
         """
+        ops = []
         try:
             Op._get_thread_ops().append(ops)
             yield (ops)
         finally:
             Op._get_thread_ops().pop()
+
+    # We need to create another stack here because all_ops and captured_ops
+    # have different semantics that don't work with a shared stack
+    get_thread_state().all_ops = [None]
+
+    @staticmethod
+    @contextmanager
+    def all_ops():
+        """
+        Collects all Ops created within the context. Does not hide ops created
+        in this context from parent contexts.
+        """
+        ops = []
+        try:
+            all_ops = get_thread_state().all_ops
+            all_ops.append(ops)
+            yield (ops)
+        finally:
+            all_ops.pop()
+            parent = all_ops[-1]
+            if parent is not None:
+                parent.extend(ops)
 
     # The thread's global user_deps map
     get_thread_state().user_deps = [dict()]
@@ -195,7 +252,7 @@ class Op(NameableValue, DebugInfo):
 
     def __init__(self,
                  args=(),
-                 tags=None,
+                 metadata=None,
                  const=None,
                  constant=False,
                  initializers=None,
@@ -205,18 +262,17 @@ class Op(NameableValue, DebugInfo):
                  **kwargs):
         super(Op, self).__init__(**kwargs)
         self.__args = ()
-        self.tags = set()
+        self.metadata = dict()
         self.args = args
         # TODO: is this ok?  __repr__ wants a .name
         if self.name is None:
             self.name = 'empty_name'
 
-        if tags is not None:
-            if isinstance(tags, collections.Iterable) and \
-                    not isinstance(tags, (bytes, str)):
-                self.tags.update(tags)
-            else:
-                self.tags.add(tags)
+        if metadata is not None:
+            if not isinstance(metadata, dict):
+                raise ValueError("Metadata must be of type dict,"
+                                 "not {} of {}".format(type(metadata), metadata))
+            self.metadata.update(metadata)
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
@@ -224,7 +280,6 @@ class Op(NameableValue, DebugInfo):
             for dep in arg.user_deps:
                 self.add_other_dep(dep)
         self.schemas = []
-        self._adjoints = None
         self.const = const
         self.is_constant = constant
         self.initializers = OrderedSet()
@@ -235,9 +290,14 @@ class Op(NameableValue, DebugInfo):
         self.reference = reference
         self.trainable = trainable
 
+        # Add this op to both the captured op and all op accounting lists
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
+        all_ops = get_thread_state().all_ops[-1]
+        if all_ops is not None:
+            all_ops.append(self)
+
         self.style = {}
         self.ops = []
         self.__forward = None
@@ -314,6 +374,7 @@ class Op(NameableValue, DebugInfo):
         for dep in self.other_deps:
             value.add_other_dep(dep)
         tdcache.tensor_description_cache.clear()
+        value.metadata.update(self.metadata)
 
     @property
     def forwarded(self):
@@ -491,41 +552,24 @@ class Op(NameableValue, DebugInfo):
 
         return params
 
-    @property
     @cachetools.cached({})
-    def initial_adjoint(self):
-        """
-        Most models only require the adjoints map for their scalar loss
-        functions, in which case the adjoint is initialized to a scalar 1.
-        Some autodiff tests calculate the derivative of a tensor by
-        initializing all but one elements of a tensor to zero and the remaining
-        element to one.  To allow this, we create a placeholder for the initial
-        adjoint and allow it to be accessed by the _initial_adjoint field.
-        """
-        if len(self.axes) == 0:
-            return constant(1)
-        else:
-            return placeholder(self.axes)
-
-    @cachetools.cached({})
-    def adjoints(self):
+    def adjoints(self, error):
         """
         Returns a map containing the adjoints of this op with respect to other
         ops.
 
-        Creates the map if it does not already exist.  Most models only
-        require the adjoints map for their scalar loss functions, in which case
-        the adjoint is initialized to a scalar 1.  Some autodiff tests
-        calculate the derivative of a tensor by initializing all but one
-        elements of a tensor to zero and the remaining element to one.  To
-        allow this, we create a placeholder for the initial adjoint and allow
-        it to be accessed by the _initial_adjoint field.
+        Creates the map if it does not already exist.
+
+        Arguments:
+            error (TensorOp, optional): The tensor holding the error value
+                the derivative will be computed at. Must have the same axes as dependent.
+
 
         Returns:
             Map from Op to dSelf/dOp.
         """
         adjoints = {
-            self: self.initial_adjoint,
+            self: error,
         }
 
         # visit ops in reverse depth first post-order. it is important that
@@ -800,7 +844,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not Axes.same_elems(self.axes, delta.axes):
+        if not self.axes.has_same_axes(delta.axes):
             raise ValueError(
                 'A tensor and its adjoint must have the same axes.'
             )
@@ -1263,7 +1307,7 @@ class ReorderAxes(ReshapeOp):
         axes: The new axes.
     """
     def __init__(self, x, axes, **kwargs):
-        if not Axes.same_elems(x.axes, axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -1494,8 +1538,7 @@ class AssignableTensorOp(TensorOp):
             # TODO Maybe we want to use a single context for all of initialization.  We would
             # need to do the following in a separate method called during transformation.
             if init is not None:
-                capture = []
-                with Op.captured_ops(capture):
+                with Op.captured_ops() as capture:
                     init.fill(self)
                 for c in capture:
                     self.add_initializer(c)
@@ -2459,7 +2502,7 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
 
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
-        if not Axes.same_elems(x.axes, axes):
+        if not x.axes.has_same_axes(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -3129,38 +3172,32 @@ def mean(x, reduction_axes=None, out_axes=None):
         tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
-def deriv(dependent_op, independent_op):
+def deriv(dependent, independent, error=constant(1)):
     """
-    TODO.
+    Computes the operation for [dDependent/dIndependent](error=1).
 
-    Arguments:
-      dependent_op: TODO
-      independent_op: TODO
+    The derivative is a multi-linear function.
+
+    Args:
+        dependent (TensorOp): Dependent op.
+        independent(TensorOp): Independent op.
+        error (TensorOp, optional): The tensor holding the error where the
+            derivative will be computed at. Must have the same axes as dependent.
 
     Returns:
-      TODO
+        TensorOp: Derivative applied to error. Has axes of independent.
+
     """
-    adjoints = dependent_op.forwarded.adjoints()
+    if not error.axes.has_same_axes(dependent.axes):
+        raise ValueError("Dependent and error must have the same set of axes")
 
-    if independent_op not in adjoints:
-        # TODO: check to see if independent_op is even used to compute
-        # dependent_op.  If so, pinpoint which Op isn't defining the necessary
-        # adjoints.  If it isn't used, give that more specific error to the
-        # user.
-        raise ValueError((
-            "Attempted to take the derivative of {dependent_op} with respect "
-            "to {independent_op}, but {independent_op} was not present in "
-            "{dependent_op}'s adjoints.  This is most likely because "
-            "{independent_op} isn't used to compute {dependent_op} or one of "
-            "the ops used to compute {independent_op} hasn't defined the "
-            "necessary adjoints."
-        ).format(
-            dependent_op=dependent_op,
-            independent_op=independent_op,
-        ))
+    adjoints = dependent.forwarded.adjoints(error)
 
-    adjoint = adjoints[independent_op.forwarded]
-    return broadcast(adjoint.forwarded, axes=independent_op.axes)
+    if independent not in adjoints:
+        return constant(0, independent.axes)
+
+    adjoint = adjoints[independent.forwarded]
+    return broadcast(adjoint.forwarded, axes=independent.axes)
 
 
 class CrossEntropyMultiInner(object):

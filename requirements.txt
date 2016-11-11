@@ -10,9 +10,13 @@ scipy
 autopep8==1.2.4
 # other requirements
 tqdm==4.8.4
-enum=0.4.6
+enum==0.4.6
 cachetools
 decorator
 requests
 # aeon (for examples using aeon only without neon)
 #-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon
+# notebooks
+jupyter
+nbconvert
+nbformat

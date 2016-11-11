@@ -134,6 +134,7 @@ def clip_gradient_value(grad, clip_value=None):
 
 class Optimizer(object):
     """TODO."""
+    metadata = {'layer_type': 'optimizer'}
 
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(**kwargs)
@@ -143,6 +144,7 @@ class Optimizer(object):
 
 class GradientDescentMomentum(Optimizer):
     """TODO."""
+    metadata = {'layer_type': 'gradient_descent_optimizer'}
 
     def __init__(
             self,
@@ -165,6 +167,7 @@ class GradientDescentMomentum(Optimizer):
         self.learning_rate = ng.persistent_tensor(axes=(),
                                                   initial_value=learning_rate).named('lrate')
 
+    @ng.with_op_metadata
     def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             velocity_updates, param_updates = [], []
@@ -196,7 +199,6 @@ class GradientDescentMomentum(Optimizer):
 
 
 class RMSProp(Optimizer):
-
     """
     Root Mean Square propagation.
     Root Mean Square (RMS) propagation protects against vanishing and
@@ -210,6 +212,8 @@ class RMSProp(Optimizer):
         \\theta' &= \\theta - \\frac{\\alpha}{\\sqrt{\\mu + \\epsilon} + \\epsilon}\\nabla J
     where we use :math:`\\epsilon` as a (small) smoothing factor to prevent from dividing by zero.
     """
+    metadata = {'layer_type': 'RMS_prop_optimizer'}
+
     def __init__(
         self,
         decay_rate=0.95,
@@ -246,6 +250,7 @@ class RMSProp(Optimizer):
         self.learning_rate = ng.persistent_tensor(axes=(),
                                                   initial_value=learning_rate).named('lrate')
 
+    @ng.with_op_metadata
     def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             state_updates, param_updates = [], []
