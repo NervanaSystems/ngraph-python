@@ -16,8 +16,9 @@ from builtins import range, zip
 import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
-from neon.backends.util.source_module import SourceModule
-from neon.backends.layer_gpu import _get_sm_count
+from ngraph.transformers.gpu.util import _get_sm_count
+
+from pycuda.compiler import SourceModule
 
 import numpy as np
 
@@ -233,7 +234,7 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, max_dims, gemm=False):
+    def __init__(self, tensor_description, max_dims=1, gemm=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape

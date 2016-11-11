@@ -15,19 +15,36 @@
 
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.util import _get_sm_count
+from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.op_graph.axes import TensorDescription
-
-from neon.backends.layer_gpu import _get_sm_count
-from neon.backends import kernel_specs
 
 import numpy as np
 
+
 class GEMMKernel(GPUKernel):
+    """
+    Kernel object to execute matrix multiply on two tensors. Selects from Nervana's
+    sass GEMM kernels for maxwell and later GPUs and CuBLAS for older GPUs.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (DotOp): Graph op being transformed into this kernel
+
+    Attributes:
+        A (TensorDescriptionWrapper): Tensor for first operand
+        B (TensorDescriptionWrapper): Tensor for second operand
+        C (TensorDescriptionWrapper): Tensor for output
+        kernel (pycuda.driver.Function): Compiled GPU kernel to execute this
+            GEMM operation
+        params (list): List of parameters to pass to kernel
+    """
     def __init__(self, transformer, op):
         super(GEMMKernel, self).__init__(transformer)
 
         # Sass kernels only supported on Maxwell or newer
-        if transformer.ng.use_cudac_kernels:
+        if transformer.runtime.use_cudac_kernels:
             self.use_cublas = True
             self.kernel = None
             self.params = None
@@ -36,6 +53,14 @@ class GEMMKernel(GPUKernel):
             self._build_maxas_kernel(op)
 
     def _build_maxas_kernel(self, op, size=None):
+        """
+        Uses tensor dimensions and axis ordering to select a sass kernel and use
+        maxas to compile it for later use.
+
+        Arguments:
+            op (DotOp): Graph op being transformed into this kernel
+            size (str): Optional preselected tile size
+        """
         # Get inputs to gemm
         C = TensorDescriptionWrapper(op.tensor_description(), 2, gemm=True)
         A, B = (TensorDescriptionWrapper(_, 2, gemm=True) for _ in op.call_info())
@@ -58,7 +83,6 @@ class GEMMKernel(GPUKernel):
         assert len(C.shape) == 2
 
         # one dimension must be contiguous
-        #import pdb; pdb.set_trace()
         assert min(A.strides) == 1 or max(A.strides) == 1
         assert min(B.strides) == 1 or max(B.strides) == 1
         assert min(C.strides) == 1 or max(C.strides) == 1 or vector_dot
@@ -149,20 +173,20 @@ class GEMMKernel(GPUKernel):
         gridA = m // sizeA + (m % sizeA != 0)
         gridB = n // sizeB + (n % sizeB != 0)
 
-        k_vec = 8 if sizeA in (16,32) or sizeB == 32 else 16
+        k_vec = 8 if sizeA in (16, 32) or sizeB == 32 else 16
 
         vec_opt = None
         if op == "tn":
             if (m % 4 == 0 and n % 4 == 0 and
-                A.strides[1] % 4 == 0 and B.strides[0] % 4 == 0):
+                    A.strides[1] % 4 == 0 and B.strides[0] % 4 == 0):
                 vec_opt = ("vec",)
         elif op == "nn":
             if (k % k_vec == 0 and n % 4 == 0 and
-                A.strides[0] % k_vec == 0 and B.strides[0] % 4 == 0):
+                    A.strides[0] % k_vec == 0 and B.strides[0] % 4 == 0):
                 vec_opt = ("vec",)
         elif op == "nt":
             if (k % k_vec == 0 and n % 4 == 0 and
-                A.strides[0] % k_vec == 0 and B.strides[1] % k_vec == 0):
+                    A.strides[0] % k_vec == 0 and B.strides[1] % k_vec == 0):
                 vec_opt = ("vec",)
 
         # nt and nn are more efficient with k%16==0
@@ -195,6 +219,9 @@ class GEMMKernel(GPUKernel):
         super(GEMMKernel, self).bind_buffers()
 
     def execute(self):
+        """
+        Either calls into CuBLAS or runs the compiled sass GEMM kernel
+        """
         if self.use_cublas:
             raise NotImplementedError("Not yet supported")
         else:
