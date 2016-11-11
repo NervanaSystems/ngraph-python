@@ -16,7 +16,6 @@ from builtins import range
 import atexit
 
 from neon.backends import gen_backend
-from neon.backends.convolution import _get_copy_transpose_kernel
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
@@ -48,6 +47,7 @@ from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvU
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     UnsliceKernel
+from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 
 import numpy as np
 import pycuda.driver as drv

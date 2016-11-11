@@ -14,8 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.kernel import GPUKernel
-
-from neon.backends import convolution
+from ngraph.transformers.gpu.kernels import convolution
 
 from operator import itemgetter
 import numpy as np
