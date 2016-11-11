@@ -24,7 +24,7 @@ from future.utils import with_metaclass
 from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensorOp, tensor_descriptions, \
     Function, doall, ResultHandle
-from ngraph.op_graph.passes import RequiredTensorShaping, SimplePrune
+from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 from ngraph.util.ordered import OrderedSet
