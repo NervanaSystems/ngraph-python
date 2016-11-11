@@ -28,9 +28,9 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import nnAffine, nnPreprocess, nnConvolution, nnPool2D, Sequential
+from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, make_keyed_computation, Callbacks
+from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
@@ -44,10 +44,10 @@ np.random.seed(args.rng_seed)
 
 # Create the dataloader
 train_data, valid_data = CIFAR10(args.data_dir).load_data()
-
-train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
-valid_set = ArrayIterator(valid_data, args.batch_size)
-
+train_set = ArrayIterator(train_data, args.batch_size,
+                          total_iterations=args.num_iterations,
+                          keys=['img', 'tgt'])
+valid_set = ArrayIterator(valid_data, args.batch_size, keys=['img', 'tgt'])
 ######################
 # Model specification
 
@@ -57,13 +57,13 @@ def cifar_mean_subtract(x):
     y = ng.expand_dims((x - bgr_mean) / 255., ax.D, 1)
     return y
 
-seq1 = Sequential([nnPreprocess(functor=cifar_mean_subtract),
-                   nnConvolution((5, 5, 16), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   nnPool2D(2, strides=2),
-                   nnConvolution((5, 5, 32), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   nnPool2D(2, strides=2),
-                   nnAffine(nout=500, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   nnAffine(axes=ax.Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
+seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
+                   Convolution((5, 5, 16), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Pool2D(2, strides=2),
+                   Convolution((5, 5, 32), init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Pool2D(2, strides=2),
+                   Affine(nout=500, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Affine(axes=ax.Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
 ######################
 # Input specification
@@ -75,42 +75,30 @@ ax.Y.length = 10
 
 # placeholders with descriptive names
 inputs = dict(img=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
-              tgt=ng.placeholder([ax.N]),
-              idx=ng.placeholder([]))
+              tgt=ng.placeholder([ax.N]))
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
 output_prob = seq1.train_outputs(inputs['img'])
 errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['tgt'])
-train_cost = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt'], axis=ax.Y))
-mean_cost = ng.mean(train_cost, out_axes=())
-updates = optimizer(train_cost, inputs['idx'])
+loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt'], axis=ax.Y))
+mean_cost = ng.mean(loss, out_axes=())
+updates = optimizer(loss)
 
+
+train_outputs = dict(batch_cost=mean_cost, updates=updates)
+loss_outputs = dict(cross_ent_loss=loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
 transformer = ngt.make_transformer()
-train_computation = make_keyed_computation(transformer, [mean_cost, updates], inputs)
-inference_computation = make_keyed_computation(transformer, errors, inputs)
+train_computation = make_bound_computation(transformer, train_outputs, inputs)
+loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
-cb = Callbacks(seq1, args.output_file, args.iter_interval, show_progress=args.progress_bar)
+cbs = make_callbacks(output_file=args.output_file,
+                     frequency=args.iter_interval,
+                     train_computation=train_computation,
+                     total_iterations=args.num_iterations,
+                     eval_set=valid_set,
+                     loss_computation=loss_computation,
+                     use_progress_bar=args.progress_bar)
 
-######################
-# Train Loop
-cb.on_train_begin(args.num_iterations)
-
-for mb_idx, data in enumerate(train_set):
-    cb.on_minibatch_begin(mb_idx)
-    batch_cost, _ = train_computation(dict(img=data[0], tgt=data[1], idx=mb_idx))
-    seq1.current_batch_cost = float(batch_cost)
-    cb.on_minibatch_end(mb_idx)
-
-cb.on_train_end()
-
-######################
-# Evaluation
-all_errors = []
-for data in valid_set:
-    batch_errors = inference_computation(dict(img=data[0], tgt=data[1], idx=0))
-    bsz = min(valid_set.ndata - len(batch_errors), len(batch_errors))
-    all_errors.extend(list(batch_errors[:bsz]))
-
-print("Misclassification: {}".format(np.mean(all_errors)))
+loop_train(train_set, train_computation, cbs)

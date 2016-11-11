@@ -138,6 +138,7 @@ class Optimizer(object):
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
+        self.iteration_index = 0
 
 
 class GradientDescentMomentum(Optimizer):
@@ -164,10 +165,10 @@ class GradientDescentMomentum(Optimizer):
         self.learning_rate = ng.persistent_tensor(axes=(),
                                                   initial_value=learning_rate).named('lrate')
 
-    def __call__(self, cost_func, iteration_index):
+    def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             velocity_updates, param_updates = [], []
-            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
             scale_factor = 1
 
@@ -186,9 +187,10 @@ class GradientDescentMomentum(Optimizer):
 
             lr_update = [ng.assign(self.learning_rate,
                                    self.schedule.get_learning_rate(self.learning_rate,
-                                                                   iteration_index))]
+                                                                   self.iteration_index))]
 
             updates = ng.doall(velocity_updates + param_updates + lr_update)
+            self.iteration_index += 1
 
         return updates
 
@@ -244,10 +246,10 @@ class RMSProp(Optimizer):
         self.learning_rate = ng.persistent_tensor(axes=(),
                                                   initial_value=learning_rate).named('lrate')
 
-    def __call__(self, cost_func, iteration_index):
+    def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             state_updates, param_updates = [], []
-            batch_cost = ng.sum(cost_func, reduction_axes=cost_func.axes.batch_axes())
+            batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
 
             grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
@@ -275,8 +277,9 @@ class RMSProp(Optimizer):
 
             lr_update = [ng.assign(self.learning_rate,
                                    self.schedule.get_learning_rate(self.learning_rate,
-                                                                   iteration_index))]
+                                                                   self.iteration_index))]
 
             updates = ng.doall(state_updates + param_updates + lr_update)
+            self.iteration_index += 1
 
         return updates

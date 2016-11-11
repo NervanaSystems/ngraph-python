@@ -3,7 +3,7 @@ import numpy as np
 
 class ArrayIterator(object):
 
-    def __init__(self, data_arrays, batch_size, total_iterations=None):
+    def __init__(self, data_arrays, batch_size, total_iterations=None, keys=None):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -13,6 +13,9 @@ class ArrayIterator(object):
             data_arrays (ndarray, shape: [# examples, feature size]): Input features of the
                 dataset.
             batch_size (int): number of examples in each minibatch
+            total_iterations (int): number of minibatches to cycle through on this iterator.
+                                    If not provided, it will cycle through all of the data once.
+            keys (list, str): Optional list of tags to attach to the dataset and return a dict
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
@@ -21,6 +24,16 @@ class ArrayIterator(object):
             self.data_arrays = data_arrays
         else:
             self.data_arrays = [data_arrays]
+
+        if keys is not None:
+            if isinstance(keys, list) or isinstance(keys, tuple):
+                self.keys = keys
+            else:
+                self.keys = [keys]
+            if len(self.keys) != len(self.data_arrays):
+                raise ValueError("Number of keys must match the number of data_arrays")
+        else:
+            self.keys = keys
 
         self.ndata = len(self.data_arrays[0])
         if self.ndata < self.batch_size:
@@ -52,6 +65,7 @@ class ArrayIterator(object):
         the last uneven minibatch. Not necessary when data is divisible by batch size
         """
         self.start = 0
+        self.index = 0
 
     def __iter__(self):
         """
@@ -76,7 +90,10 @@ class ArrayIterator(object):
                 if oslice2:
                     dst[..., islice2] = np.rollaxis(src[oslice2], 0, src.ndim)
 
-            yield self.batch_bufs
+            if self.keys is None:
+                yield self.batch_bufs
+            else:
+                yield {k: v for k, v in zip(self.keys, self.batch_bufs)}
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
@@ -84,7 +101,7 @@ class ArrayIterator(object):
 class SequentialArrayIterator(object):
 
     def __init__(self, data_arrays, time_steps, batch_size,
-                 total_iterations=None, get_prev_target=False):
+                 total_iterations=None, get_prev_target=False, keys=None):
 
         self.time_steps = time_steps
         self.batch_size = batch_size
@@ -107,7 +124,20 @@ class SequentialArrayIterator(object):
             self.data_arrays.append(x.reshape(self.batch_size, self.nbatches, self.time_steps))
             self.batch_bufs.append(np.empty(self.shape + (self.batch_size, ), dtype=np.int32))
 
+        if keys is not None:
+            if isinstance(keys, list) or isinstance(keys, tuple):
+                self.keys = keys
+            else:
+                self.keys = [keys]
+            if len(self.keys) != len(self.data_arrays):
+                raise ValueError("Number of keys must match the number of data_arrays")
+        else:
+            self.keys = keys
+
         self.batch_bufs = tuple(self.batch_bufs)
+
+    def reset(self):
+        self.index = 0
 
     def __iter__(self):
         while self.index < self.total_iterations:
@@ -115,4 +145,8 @@ class SequentialArrayIterator(object):
                 idx = self.index % self.nbatches
                 dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
             self.index += 1
-            yield self.batch_bufs
+
+            if self.keys is None:
+                yield self.batch_bufs
+            else:
+                yield {k: v for k, v in zip(self.keys, self.batch_bufs)}
