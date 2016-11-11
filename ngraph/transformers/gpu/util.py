@@ -13,6 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+import os
+import appdirs
+
 import pycuda.driver as drv
 from pycuda.tools import context_dependent_memoize
 
@@ -64,3 +67,23 @@ def _closest_divisor(val, div, maxdiv=8):
 def _get_sm_count():
     attributes = drv.Context.get_device().get_attributes()
     return attributes[drv.device_attribute.MULTIPROCESSOR_COUNT]
+
+
+def get_cache_dir(subdir=None):
+    """
+    Function for getting cache directory to store reused files like kernels, or scratch space
+    for autotuning, etc.
+    """
+    cache_dir = os.environ.get("NEON_CACHE_DIR")
+
+    if cache_dir is None:
+        cache_dir = appdirs.user_cache_dir("neon", "neon")
+
+    if subdir:
+        subdir = subdir if isinstance(subdir, list) else [subdir]
+        cache_dir = os.path.join(cache_dir, *subdir)
+
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
+    return cache_dir
