@@ -84,6 +84,8 @@ class nnPreprocess(nnLayer):
 
 
 class nnAffine(nnLayer):
+    metadata = {'layer_type': 'affine'}
+
     def __init__(self, init, nout=None, activation=(lambda x: x), bias=None, **kwargs):
         super(nnAffine, self).__init__(**kwargs)
         if self.axes is None:
@@ -96,6 +98,7 @@ class nnAffine(nnLayer):
         self.W = None
         self.b = 0 if self.bias is None else None
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
         in_axes = in_obj.axes.sample_axes()
@@ -121,6 +124,8 @@ class nnConvBase(nnLayer):
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
 
     """
+    metadata = {'layer_type': 'convolution'}
+
     def __init__(self, fshape, init, strides, padding, **kwargs):
         super(nnConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
@@ -139,6 +144,7 @@ class nnConvBase(nnLayer):
         self.o_axes = None
         self.W = None
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         cpm = self.convparams.copy()
         in_axes = in_obj.axes
@@ -184,15 +190,19 @@ class nnConvolution(nnConv2D):
         self.activation = activation
         super(nnConvolution, self).__init__(fshape, init, strides, padding, **kwargs)
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         return self.activation(super(nnConvolution, self).train_outputs(in_obj))
 
 
 class nnActivation(nnLayer):
+    metadata = {'layer_type': 'activation'}
+
     def __init__(self, transform, **kwargs):
         self.transform = transform
         super(nnActivation, self).__init__(**kwargs)
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         return self.transform(in_obj)
 
@@ -208,6 +218,8 @@ class nnPoolBase(nnLayer):
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
 
     """
+    metadata = {'layer_type': 'pooling'}
+
     def __init__(self, fshape, strides, padding, op='max', **kwargs):
         super(nnPoolBase, self).__init__(**kwargs)
         self.poolparams = dict(J=None, T=None, R=None, S=None,
@@ -224,6 +236,7 @@ class nnPoolBase(nnLayer):
 
         self.o_axes = None
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         ppm = self.poolparams.copy()
         in_axes = in_obj.axes
@@ -281,6 +294,7 @@ class nnRecurrent(nnLayer):
             (output_size, output_size)
         b (Tensor): Biases on output units (output_size, 1)
     """
+    metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, output_size, init, init_inner=None, activation=None, **kwargs):
         super(nnRecurrent, self).__init__(**kwargs)
@@ -289,6 +303,7 @@ class nnRecurrent(nnLayer):
         self.init = init
         self.init_inner = init_inner or init
 
+    @ng.with_op_metadata
     def train_outputs(self, in_obj):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -333,10 +348,11 @@ class nnRecurrent(nnLayer):
         hprev = [self.h_init]
 
         for i in range(self.time_axis.length):
-            d = ng.dot(self.W_recur, hprev[i]).named("W_rec_dot_h{}".format(i))
-            h = self.activation(d + h_ff_s[i] + self.b)
-            h.name = "activ{}".format(i)
-            hprev.append(h)
+            with ng.metadata(recurrent_step=str(i)):
+                d = ng.dot(self.W_recur, hprev[i]).named("W_rec_dot_h{}".format(i))
+                h = self.activation(d + h_ff_s[i] + self.b)
+                h.name = "activ{}".format(i)
+                hprev.append(h)
 
         rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=1)
         return rnn_out

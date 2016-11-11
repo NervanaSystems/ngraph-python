@@ -2,6 +2,20 @@
 
 Nervana Graph is Nervana's computational graph.
 
+## Temporary Notice
+
+This repository changed names on 11/11/2016 from "ngraph" to "private-ngraph" ahead of the public release of "ngraph"
+
+Although github.com supports the old name, it is recommended to stop using ngraph by
+either cloning anew or changing your checked out origin as follows:
+
+```
+cd ~/code
+mv ngraph private-ngraph
+cd private-ngraph
+git remote set-url origin https://github.com/NervanaSystems/private-ngraph
+```
+
 ## Installation
 
 First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.

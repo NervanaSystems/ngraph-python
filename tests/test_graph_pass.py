@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 import ngraph as ng
 from ngraph.op_graph.op_graph import AssignableTensorOp, Op
-from ngraph.op_graph.passes import PeepholeGraphPass, GraphPass, SimplePrune
+from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass, SimplePrune
 from ngraph.util.generics import generic_method
 
 
