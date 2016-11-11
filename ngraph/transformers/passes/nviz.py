@@ -16,6 +16,8 @@ import json
 import random
 import tempfile
 
+import six
+
 from ngraph.transformers.passes.passes import GraphPass
 
 
@@ -72,8 +74,10 @@ class VizPass(GraphPass):
     """
     A graph pass that visualizes nervana graphs and displays them to the user
     """
-    def __init__(self, subgraph_attr=None):
+    def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False):
         super(VizPass, self).__init__()
+        self.show_axes = show_axes
+        self.show_all_metadata = show_all_metadata
         self.subgraph_attr = subgraph_attr
 
     def get_subgraphs(self, ops):
@@ -94,8 +98,11 @@ class VizPass(GraphPass):
 
     def add_op_to_graph(self, op, graph):
         op_label = op.name
-        if hasattr(op, 'axes'):
+        if hasattr(op, 'axes') and self.show_axes:
             op_label += "\n{}".format(op.axes)
+        if self.show_all_metadata:
+            for k, v in six.iteritems(op.metadata):
+                op_label += "\n{}={}".format(k, v)
         graph.node(op.name, op_label)
         for arg in op.args:
             graph.edge(op.name, arg.name)
