@@ -21,46 +21,6 @@ from operator import itemgetter
 
 
 class Layer(object):
-    """TODO."""
-
-    def __init__(
-            self,
-            name=None,
-            graph=None,
-            axes=None,
-            parallelism="Unknown",
-            **kwargs):
-        super(Layer, self).__init__(**kwargs)
-        self.name = name
-        self.axes = axes
-
-    def configure(self, in_obj):
-        """
-        Add to computation graph for the layer.
-
-        Arguments:
-          in_obj: The input for the layer
-
-        Returns:
-          The output of the layer
-        """
-        return in_obj
-
-
-class ParameterLayer(Layer):
-    """TODO."""
-
-    def __init__(self, init=None, name=None, parallelism='Unknown', **kwargs):
-        super(ParameterLayer, self).__init__(name=name, parallelism=parallelism,
-                                             **kwargs)
-        self.has_params = True
-        self.init = init
-        self.W = None
-        self.dW = None
-        self.batch_sum = None
-
-
-class nnLayer(object):
     def __init__(self, name=None, inputs=None, outputs=None, axes=None):
         self.name = name
         self.inputs = inputs
@@ -74,20 +34,20 @@ class nnLayer(object):
         return self.train_outputs(in_obj)
 
 
-class nnPreprocess(nnLayer):
+class Preprocess(Layer):
     def __init__(self, functor, **kwargs):
-        super(nnPreprocess, self).__init__(**kwargs)
+        super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
     def train_outputs(self, in_obj):
         return self.functor(in_obj)
 
 
-class nnAffine(nnLayer):
+class Affine(Layer):
     metadata = {'layer_type': 'affine'}
 
     def __init__(self, init, nout=None, activation=(lambda x: x), bias=None, **kwargs):
-        super(nnAffine, self).__init__(**kwargs)
+        super(Affine, self).__init__(**kwargs)
         if self.axes is None:
             assert(nout is not None), "Must provide either axes or nout to Affine"
 
@@ -113,7 +73,7 @@ class nnAffine(nnLayer):
         return self.activation(ng.dot(self.W, in_obj))  # + self.b)
 
 
-class nnConvBase(nnLayer):
+class ConvBase(Layer):
     """
     Convolutional layer that requires explicit binding of all spatial roles
 
@@ -127,7 +87,7 @@ class nnConvBase(nnLayer):
     metadata = {'layer_type': 'convolution'}
 
     def __init__(self, fshape, init, strides, padding, **kwargs):
-        super(nnConvBase, self).__init__(**kwargs)
+        super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
                                str_h=None, str_w=None, str_d=None)
@@ -169,7 +129,7 @@ class nnConvBase(nnLayer):
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
 
-class nnConv2D(nnConvBase):
+class Conv2D(ConvBase):
     def __init__(self, fshape, init, strides, padding, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
@@ -182,32 +142,32 @@ class nnConv2D(nnConvBase):
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
 
-        super(nnConv2D, self).__init__(fshape, init, strides, padding, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, **kwargs)
 
 
-class nnConvolution(nnConv2D):
+class Convolution(Conv2D):
     def __init__(self, fshape, init, strides=1, padding=0, activation=(lambda x: x), **kwargs):
         self.activation = activation
-        super(nnConvolution, self).__init__(fshape, init, strides, padding, **kwargs)
+        super(Convolution, self).__init__(fshape, init, strides, padding, **kwargs)
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
-        return self.activation(super(nnConvolution, self).train_outputs(in_obj))
+        return self.activation(super(Convolution, self).train_outputs(in_obj))
 
 
-class nnActivation(nnLayer):
+class Activation(Layer):
     metadata = {'layer_type': 'activation'}
 
     def __init__(self, transform, **kwargs):
         self.transform = transform
-        super(nnActivation, self).__init__(**kwargs)
+        super(Activation, self).__init__(**kwargs)
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
         return self.transform(in_obj)
 
 
-class nnPoolBase(nnLayer):
+class PoolBase(Layer):
     """
     Pooling layer that requires explicit binding of all spatial roles
 
@@ -221,7 +181,7 @@ class nnPoolBase(nnLayer):
     metadata = {'layer_type': 'pooling'}
 
     def __init__(self, fshape, strides, padding, op='max', **kwargs):
-        super(nnPoolBase, self).__init__(**kwargs)
+        super(PoolBase, self).__init__(**kwargs)
         self.poolparams = dict(J=None, T=None, R=None, S=None,
                                pad_h=None, pad_w=None, pad_d=None, pad_c=None,
                                str_h=None, str_w=None, str_d=None, str_c=None,
@@ -253,7 +213,7 @@ class nnPoolBase(nnLayer):
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
 
-class nnPool2D(nnPoolBase):
+class Pool2D(PoolBase):
     def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
         if isinstance(fshape, int):
@@ -268,10 +228,10 @@ class nnPool2D(nnPoolBase):
             strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
-        super(nnPool2D, self).__init__(fshape, strides, padding, **kwargs)
+        super(Pool2D, self).__init__(fshape, strides, padding, **kwargs)
 
 
-class nnRecurrent(nnLayer):
+class Recurrent(Layer):
     """
     Basic recurrent layer.
     Arguments:
@@ -297,7 +257,7 @@ class nnRecurrent(nnLayer):
     metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, output_size, init, init_inner=None, activation=None, **kwargs):
-        super(nnRecurrent, self).__init__(**kwargs)
+        super(Recurrent, self).__init__(**kwargs)
         self.nout = output_size
         self.activation = activation
         self.init = init

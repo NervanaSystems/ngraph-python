@@ -77,7 +77,6 @@ def test_gdm(args, transformer_factory):
     # set up nervana graph
     X = ng.placeholder([C, N]).named('X')
     Y = ng.placeholder([N]).named('Y')
-    I = ng.placeholder(axes=()).named('I')
     W = ng.variable([C - 1], initial_value=w_init).named('W')
 
     ex = ExecutorFactory()
@@ -89,8 +88,8 @@ def test_gdm(args, transformer_factory):
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
     # where (x, y) are nparrays that fill the placeholders X and Y
-    updates = gdm(cost, I)
-    ngraph_optimize = transformer.computation([W, updates], X, Y, I)
+    updates = gdm(cost)
+    ngraph_optimize = transformer.computation([W, updates], X, Y)
     transformer.initialize()
 
     # set up the neon gdm
@@ -107,7 +106,7 @@ def test_gdm(args, transformer_factory):
     # run for 20 minibatches
     for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
         # obtain ngraph results
-        (ng_W, _) = ngraph_optimize(x, y, i)
+        (ng_W, _) = ngraph_optimize(x, y)
         ng_Ws.append(copy.deepcopy(ng_W))
 
         # obtain neon results

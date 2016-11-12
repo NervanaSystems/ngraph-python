@@ -21,8 +21,8 @@ from ngraph.frontends.neon.activation import Rectlin, Identity, Explin, Normaliz
 from ngraph.frontends.neon.argparser import NgraphArgparser
 from ngraph.frontends.neon.arrayiterator import *
 from ngraph.frontends.neon.callbacks import *
+# from ngraph.frontends.neon.callbacks2 import *
 from ngraph.frontends.neon.layer import *
 from ngraph.frontends.neon.model import *
 from ngraph.frontends.neon.optimizer import *
 from ngraph.frontends.neon.initializer import *
-from ngraph.frontends.neon.recurrent import Recurrent

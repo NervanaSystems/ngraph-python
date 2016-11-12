@@ -42,6 +42,6 @@ class PTB(object):
             else:
                 y = np.concatenate((X[1:], X[:1]))
 
-            self.data_dict[phase] = (X, y)
+            self.data_dict[phase] = {'inp_txt': X, 'tgt_txt': y}
 
         return self.data_dict

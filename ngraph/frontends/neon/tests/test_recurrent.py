@@ -34,7 +34,7 @@ import numpy as np
 
 import ngraph as ng
 
-from ngraph.frontends.neon import nnRecurrent, GaussianInit, Tanh
+from ngraph.frontends.neon import Recurrent, GaussianInit, Tanh
 from recurrent_ref import Recurrent as RefRecurrent
 
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
@@ -85,7 +85,7 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     ex = ExecutorFactory()
     np.random.seed(0)
 
-    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh())
+    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh())
     inp_ng = ng.placeholder([Cin, REC, N])
 
     # fprop graph
