@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from collections import defaultdict
 from ngraph.op_graph.op_graph import OrderedSet
 
 try:
@@ -70,7 +71,7 @@ class Digraph(object):
         Returns:
           Result
         """
-        result = {x: OrderedSet() for x in list(adjacency.keys())}
+        result = defaultdict(OrderedSet)
         for x, others in list(adjacency.items()):
             for y in others:
                 result[y].add(x)
@@ -99,35 +100,48 @@ class Digraph(object):
           fun: Function): Function to apply to each visited node
           reverse: bool): whether to do DFS on the reversed graph
         """
-        visited = set()
-        nexts = self.successors
         if reverse:
-            nexts = Digraph._invert(nexts)
+            nexts = Digraph._invert(self.successors)
+        else:
+            nexts = self.successors
 
-        # Visit single node
-        def visit(u, fun):
-            """
-            TODO.
+        available = OrderedSet()
+        counts = dict()
+        parents = defaultdict(list)
+        ready = OrderedSet()
 
-            Arguments:
-              u: TODO
-              fun: TODO
-            """
-            if u not in visited:
-                visited.add(u)
-                vs = nexts[u]
-                for v in sorted(vs, key=lambda x: x.name):
-                    if v not in visited:
-                        visit(v, fun)
-                fun(u)
+        available.update(node.forwarded for node in starts)
+        while available:
+            node = available.pop()
+            node.update_forwards()
 
-        # Get output nodes
-        for x in sorted(starts, key=lambda x: x.name):
-            visit(x, fun)
+            if node in counts:
+                continue
+
+            children = [child.forwarded for child in nexts[node]]
+            if children:
+                counts[node] = len(children)
+                for child in children:
+                    parents[child].append(node)
+                available.update(children)
+            else:
+                ready.add(node)
+
+        while ready:
+            node = ready.pop()
+            fun(node)
+            for p in parents.get(node, []):
+                count = counts[p] - 1
+                if count == 0:
+                    ready.add(p)
+                    del counts[p]
+                else:
+                    counts[p] = count
 
     @property
     def inputs(self):
         """TODO."""
+
         predecessors = Digraph._invert(self.successors)
         return [u for u, vs in iter(list(predecessors.items())) if len(vs) == 0]
 

@@ -26,7 +26,7 @@ class OrderedSet(set, collections.MutableSequence):
     def __init__(self, values=None):
         self.elt_list = []
         if values is not None:
-            if isinstance(values, collections.Sequence):
+            if isinstance(values, collections.Iterable):
                 self.update(values)
             else:
                 raise ValueError()
@@ -72,7 +72,7 @@ class OrderedSet(set, collections.MutableSequence):
         Returns:
 
         """
-        if not isinstance(values, collections.Sequence):
+        if not isinstance(values, collections.Iterable):
             raise ValueError()
         for value in values:
             self.add(value)
@@ -111,6 +111,9 @@ class OrderedSet(set, collections.MutableSequence):
         value = self.elt_list.pop()
         super(OrderedSet, self).remove(value)
         return value
+
+    def __delitem__(self, value):
+        self.remove(value)
 
     def remove(self, value):
         """

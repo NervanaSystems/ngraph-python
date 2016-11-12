@@ -20,6 +20,7 @@ import cachetools
 import numpy as np
 from builtins import object
 from functools import wraps
+from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
@@ -332,28 +333,38 @@ class Op(NameableValue, DebugInfo):
         Returns:
             None
         """
-        visited = set()
+        available = OrderedSet()
+        counts = dict()
+        parents = defaultdict(list)
+        ready = OrderedSet()
 
-        def visit(node):
-            """
-            Recursively visit all nodes used to compute this node.
-
-            Arguments:
-                node: the node to visit
-
-            Returns:
-                None
-            """
-            node = node.forwarded
+        available.update(root.forwarded for root in roots)
+        while available:
+            node = available.pop()
             node.update_forwards()
-            if node not in visited:
-                for n in node.other_deps + list(node.args):
-                    visit(n)
-                fun(node)
-                visited.add(node)
 
-        for node in roots:
-            visit(node)
+            if node in counts:
+                continue
+
+            children = [child.forwarded for child in node.all_deps]
+            if children:
+                counts[node] = len(children)
+                for child in children:
+                    parents[child].append(node)
+                available.update(children)
+            else:
+                ready.add(node)
+
+        while ready:
+            node = ready.pop()
+            fun(node)
+            for p in parents.get(node, []):
+                count = counts[p] - 1
+                if count == 0:
+                    ready.add(p)
+                    del counts[p]
+                else:
+                    counts[p] = count
 
     @property
     def forward(self):
@@ -393,6 +404,15 @@ class Op(NameableValue, DebugInfo):
     def add_other_dep(self, dep):
         # Add the dep to the op that actually does the work.
         self.device_op.other_deps.add(dep.forwarded)
+
+    @property
+    def all_deps(self):
+        """
+
+        Returns:
+            Ops that must execute before this one can.
+        """
+        return self.device_op.other_deps + self.args
 
     def add_initializer(self, init):
         self.initializers.add(init)
