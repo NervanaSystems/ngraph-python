@@ -70,10 +70,11 @@ def test_ref_compare_rand(refgruargs):
     seq_len, input_size, hidden_size, batch_size = refgruargs
     check_rnn(seq_len, input_size, hidden_size, batch_size,
               GaussianInit(0.0, 1.0))
-
+    check_rnn(seq_len, input_size, hidden_size, batch_size,
+              GaussianInit(0.0, 1.0), return_seq=False)
 
 # compare neon RNN to reference RNN implementation
-def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
+def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_seq=True):
     # init_func is the initializer for the model params
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -87,7 +88,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     ex = ExecutorFactory()
     np.random.seed(0)
 
-    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh(), reset_cells=True)
+    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh(),
+                         reset_cells=True, return_sequence=return_seq)
 
     inp_ng = ng.placeholder([Cin, REC, N])
     init_state_ng = ng.placeholder(ax_s)
@@ -157,10 +159,13 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
     (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-     dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref, init_states=init_state_value)
-
+    dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref, init_states=init_state_value)
     # comparing outputs
-    np.testing.assert_allclose(fprop_neon[:, :, 0], h_ref_list, rtol=0.0, atol=1.0e-5)
+    if return_seq is False:
+        h_ref_list = h_ref_list[:, -1].reshape(-1, 1)
+    else:
+        fprop_neon = fprop_neon[:, :, 0]
+    np.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
 
     return
 
@@ -168,4 +173,4 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
 if __name__ == '__main__':
     seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
     init = GaussianInit(0.0, 0.1)
-    check_rnn(seq_len, input_size, hidden_size, batch_size, init)
+    check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
