@@ -139,6 +139,7 @@ class Optimizer(object):
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
+        self.iteration_index = 0
 
 
 class GradientDescentMomentum(Optimizer):
@@ -167,7 +168,7 @@ class GradientDescentMomentum(Optimizer):
                                                   initial_value=learning_rate).named('lrate')
 
     @ng.with_op_metadata
-    def __call__(self, cost_func, iteration_index):
+    def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             velocity_updates, param_updates = [], []
             batch_cost = ng.sum(cost_func, out_axes=())
@@ -189,9 +190,10 @@ class GradientDescentMomentum(Optimizer):
 
             lr_update = [ng.assign(self.learning_rate,
                                    self.schedule.get_learning_rate(self.learning_rate,
-                                                                   iteration_index))]
+                                                                   self.iteration_index))]
 
             updates = ng.doall(velocity_updates + param_updates + lr_update)
+            self.iteration_index += 1
 
         return updates
 
@@ -249,7 +251,7 @@ class RMSProp(Optimizer):
                                                   initial_value=learning_rate).named('lrate')
 
     @ng.with_op_metadata
-    def __call__(self, cost_func, iteration_index):
+    def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
             state_updates, param_updates = [], []
             batch_cost = ng.sum(cost_func, out_axes=())
@@ -280,8 +282,9 @@ class RMSProp(Optimizer):
 
             lr_update = [ng.assign(self.learning_rate,
                                    self.schedule.get_learning_rate(self.learning_rate,
-                                                                   iteration_index))]
+                                                                   self.iteration_index))]
 
             updates = ng.doall(state_updates + param_updates + lr_update)
+            self.iteration_index += 1
 
         return updates

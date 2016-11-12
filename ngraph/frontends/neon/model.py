@@ -62,11 +62,26 @@ class Container(object):
                          {k: v for k, v in self.outputs.items() if k in outputs})
 
 
-def make_keyed_computation(transformer, outputs, named_inputs):
-    input_keys = tuple(named_inputs.keys())
-    comp_func = transformer.computation(outputs, *itemgetter(*input_keys)(named_inputs))
+class BoundComputation(object):
+    """
+    Callable object that has inputs and outputs of a computation bound via names
+    """
+    def __init__(self, transformer, named_outputs, named_inputs):
+        self.input_keys = tuple(named_inputs.keys())
+        self.output_keys = tuple(named_outputs.keys())
 
-    def keyed_comp_func(named_buffers):
-        return comp_func(*itemgetter(*input_keys)(named_buffers))
+        outputs = itemgetter(*self.output_keys)(named_outputs)
+        outputs = [outputs] if len(self.output_keys) == 1 else list(outputs)
 
-    return keyed_comp_func
+        inputs = itemgetter(*self.input_keys)(named_inputs)
+        self.num_outputs = len(outputs)
+        self.comp_func = transformer.computation(outputs, *inputs)
+
+    def __call__(self, named_buffers):
+        result_tuple = self.comp_func(*itemgetter(*self.input_keys)(named_buffers))
+        result_dict = {k: v for k, v in zip(self.output_keys, result_tuple)}
+        return result_dict
+
+
+def make_bound_computation(transformer, named_outputs, named_inputs):
+    return BoundComputation(transformer, named_outputs, named_inputs)
