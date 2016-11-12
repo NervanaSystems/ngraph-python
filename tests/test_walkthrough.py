@@ -32,8 +32,7 @@ notebooks = glob.glob(os.path.join(notebook_dir, '*.ipynb'))
 kernel = 'python{}'.format(sys.version_info[0])
 
 
-@pytest.mark.parametrize("notebook", [notebooks[0], notebooks[1],
-                                      pytest.mark.xfail(notebooks[2])])
+@pytest.mark.parametrize("notebook", notebooks)
 def test_notebooks(transformer_factory, notebook):
     with open(notebook) as f:
         nb = nbformat.read(f, as_version=4)

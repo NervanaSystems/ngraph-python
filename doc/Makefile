@@ -9,7 +9,8 @@ SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         =
 BUILDDIR      = build
-WALKTHROUGH_DIR = ../examples/walk_through/
+DOC_DIR       := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+WALKTHROUGH_DIR = $(DOC_DIR)/../examples/walk_through/
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
@@ -57,8 +58,8 @@ clean:
 	rm -rf source/generated
 
 convert:
-	jupyter nbconvert --to rst $(wildcard $(WALKTHROUGH_DIR)/*.ipynb)
-	mv *.rst source/
+	@echo $(TOP)
+	jupyter nbconvert --to rst $(wildcard $(WALKTHROUGH_DIR)/*.ipynb) --output-dir source/
 
 html: convert
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
