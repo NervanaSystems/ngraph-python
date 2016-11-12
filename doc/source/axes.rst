@@ -182,7 +182,7 @@ Axes Reduction
 
 - We specify the reduction axes in ``reduction_axes``. Reduction operations can
   have arbitrary number of reduction axes. The order of the reduction axes
-  can be arbitary.
+  can be arbitrary.
 - When ``reduction_axes`` is empty, reduction is performed on NONE of the axes.
 
 Examples: ::
@@ -196,7 +196,7 @@ Axes casting
 ------------
 
 Use ``AxesCastOp`` to cast at axes to targeting axes with the same dimensions.
-For example, we might want to sum two layes's outputs, where they have the same
+For example, we might want to sum two layer's outputs, where they have the same
 dimensions but different axes. ::
 
     # assume C1.length == C2.length == 100
@@ -214,7 +214,7 @@ Axes broadcasting
 -----------------
 
 Use ``ng.Broadcast`` to broadcast to new axes. The new axes shall be a superset
-of the original axes. The order of the new axes can be arbitary.
+of the original axes. The order of the new axes can be arbitrary.
 
 Examples: ::
 

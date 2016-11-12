@@ -27,9 +27,9 @@ Activate the virtualenv with ``. .venv/bin/activate``, then run::
 Examples
 ========
 
-Several useful example scripts demonstate how to use Nervana Graph:
+Several useful example scripts demonstrate how to use Nervana Graph:
 
-* ``ngraph/examples/walk_through/`` contains several walkthrough code.
+* ``ngraph/examples/walk_through/`` contains several walk through code.
 * ``ngraph/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
 * ``ngraph/examples/cifar10_mlp.py`` uses the neon front-end to define and train the model.
 
