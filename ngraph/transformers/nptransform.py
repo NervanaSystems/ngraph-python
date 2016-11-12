@@ -39,7 +39,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, StackOp, Dimshuffle, \
     SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -644,8 +644,9 @@ class NumPyCodeGenerator(PyGen):
         self.append("{}.fill(0)", out)
         self.append("{}.__setitem__((), {})", out_sliced, x)
 
-    @generate_op.on_type(Stack)
+    @generate_op.on_type(StackOp)
     def generate_op(self, op, out, *args):
+        return
         # TODO: we may want to have the inputs write into slices of a
         # preallocated buffer for this op.
         # We cannot use the numpy stack function as it is unavailable in

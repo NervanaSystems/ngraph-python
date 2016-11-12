@@ -727,11 +727,29 @@ class AssignOp(Op):
 
 
 class AssignOneDOp(Op):
+    """
+    Assign a value to a 1d tensor.
+
+    Arguments:
+        tensor (AssignableTensorOp): The value to assign to.
+        value (TensorOp): The value.
+    """
     def __init__(self, tensor, val, force=False, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
         super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
+
+
+class AssignTwoDOp(AssignOneDOp):
+    """
+    Assign a value to a 2d tensor
+
+    Arguments:
+        tensor (AssignableTensorOp): The value to assign to.
+        value (TensorOp): The value.
+    """
+    pass
 
 
 def assign(lvalue, rvalue):
@@ -1769,9 +1787,12 @@ def variable(axes, dtype=None, initial_value=None, init=None):
                               initial_value=initial_value, init=init)
 
 
-class Stack(TensorOp):
+class StackOp(AssignableTensorOp):
     """
     Joins a list of identically-axed tensors along a new axis.
+
+    Assign each argument into the appropriate slice of the storage associated
+    with this op.
 
     Arguments:
         x_list: A list of identically-axed tensors to join.
@@ -1785,8 +1806,48 @@ class Stack(TensorOp):
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
-        axes = make_axes(tuple(x_axes[:pos]) + (axis,) + tuple(x_axes[pos:]))
-        super(Stack, self).__init__(args=tuple(x_list), axes=axes)
+        axes_0 = x_axes[:pos]
+        axes_1 = x_axes[pos:]
+        arg_axes = axes_0 + axes_1
+
+        axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
+        super(StackOp, self).__init__(args=tuple(x_list), axes=axes)
+
+        # In order to avoid setting copies of our storage, we need a flattened
+        # version of our storage so we can treat the slices as 2d tensors without
+        # tensor shaping doing the sets into a copy of our slices.
+        flat_axes = []
+        flat_slices = []
+        if len(axes_0) > 0:
+            flat_axes.append(FlattenedAxis(axes_0))
+            flat_slices.append(slice(None))
+        flat_pos = len(flat_axes)
+        flat_axes.append(axis)
+        flat_slices.append(0)
+        if len(axes_1) > 0:
+            flat_axes.append(FlattenedAxis(axes_1))
+            flat_slices.append(slice(None))
+        flat_self = flatten(self, flat_axes)
+
+        if len(axes_0) == 0 or len(axes_1) == 0:
+            assign_op = AssignOneDOp
+        else:
+            assign_op = AssignTwoDOp
+
+        deps = OrderedSet()
+        for i, arg in enumerate(self.args):
+            slices = list(flat_slices)
+            slices[flat_pos] = i
+            slice_op = Slice(flat_self, slices)
+            # Make sure the args are in the same order as our axes
+            ordered_arg = axes_with_order(arg, arg_axes)
+            # Arg is now 1d or 2d, depending on pos
+            flattened_arg = flatten_at(ordered_arg, pos)
+            # All users of this need to do the assigns
+            deps.add(assign_op(slice_op, flattened_arg))
+
+        self.user_deps = deps
+        pass
 
     def generate_adjoints(self, adjoints, delta, *x_list):
         s = [slice(None)] * len(self.axes)
@@ -1796,6 +1857,21 @@ class Stack(TensorOp):
                 adjoints,
                 Slice(delta, tuple(s), axes=x.axes)
             )
+
+
+def stack(x_list, axis, pos=0):
+    """
+
+    Args:
+        x_list: A list of identically-axed tensors to join.
+        axis: The axis to select joined tensors.
+        pos: The position within the axes of the x_list tensors to insert axis in the result.
+
+    Returns:
+        TensorOp: The joined tensors.
+
+    """
+    return StackOp(x_list, axis, pos)
 
 
 class Unslice(TensorOp):
