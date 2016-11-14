@@ -44,7 +44,7 @@ make doc
 ## Examples
 
 * ``ngraph/examples/walk_through/`` contains several code walk throughs.
-* ``ngraph/examples/mnist/mnist__mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
+* ``ngraph/examples/mnist/mnist_mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
 * ``ngraph/examples/cifar10/cifar10_conv.py`` uses the neon front-end to define and train a CNN model on CIFAR10 data.
 * ``ngraph/examples/cifar10/cifar10_mlp.py`` uses the neon front-end to define and train a MLP model on CIFAR10 data.
 * ``ngraph/examples/ptb/char_rnn.py`` uses the neon front-end to define and train a character-level RNN model on Penn Treebank data.
