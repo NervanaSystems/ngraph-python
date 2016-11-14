@@ -115,7 +115,7 @@ There are two ways to implement the three methods.
 
     For values at level 0 that we want derivatives for we use the second approach, and the remaining values at level 0 use the first approach, which ignores the updates.  At higher levels, the approach depends on the computation and how many computations use the value.  If the update is simple, or if the value is only used once, the first approach should be used, while if it is cheaper to accumulate the adjoint and process it all at once, the second approach is used.
 
-For example, if we have a compoutation :math:`t_m = t_a t_b` then, since :math:`dt_m = t_b dt_a+t_a dt_b`, we perform
+For example, if we have a computation :math:`t_m = t_a t_b` then, since :math:`dt_m = t_b dt_a+t_a dt_b`, we perform
 
 .. math::
     \overline{t_a} += \overline{t_m} t_b\\
@@ -142,7 +142,7 @@ An element wise operation is just many individual operations at the same level; 
 TODO
 ====
 
-Migrate the rest of the GoogleDocs here.
+Migrate the rest of the Google Docs here.
 
 Computing Derivatives in Op-Graph
 =================================

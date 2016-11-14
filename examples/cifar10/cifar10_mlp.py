@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2015-2016 Nervana Systems Inc.
+# Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,14 +14,14 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-MNIST MLP with spelled out neon model framework in one file
+CIFAR10 MLP with spelled out neon model framework in one file
 
 The motivation is to show the flexibility of ngraph and how user can build a
 model without the neon architecture. This may also help with debugging.
 
 Run it using
 
-python examples/mnist/mnist_mlp.py --data_dir /usr/local/data/MNIST --output_file out.hd5
+python examples/cifar10/cifar10_mlp.py --data_dir /usr/local/data/CIFAR10 --output_file out.hd5
 
 """
 from __future__ import division

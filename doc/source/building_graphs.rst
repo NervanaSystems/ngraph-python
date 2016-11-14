@@ -29,13 +29,13 @@ To build op-graphs, we link together a sequence of operations that are instances
 
 Supported ops are shown in the below figure:
 
-.. image:: assets/op_heirarchy.png
+.. image:: assets/op_hierarchy.png
 
 
 Graph evaluation
 ================
 
-During computation, the input and output values must be stored somehwere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``::
+During computation, the input and output values must be stored somewhere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``::
 
     import ngraph as ng
     import ngraph.frontends.base.axis as ax
