@@ -644,19 +644,6 @@ class NumPyCodeGenerator(PyGen):
         self.append("{}.fill(0)", out)
         self.append("{}.__setitem__((), {})", out_sliced, x)
 
-    @generate_op.on_type(StackOp)
-    def generate_op(self, op, out, *args):
-        return
-        # TODO: we may want to have the inputs write into slices of a
-        # preallocated buffer for this op.
-        # We cannot use the numpy stack function as it is unavailable in
-        # older versions.
-        self.append("o={}", out)
-        slices = [slice(None)] * len(op.axes)
-        for i, arg in enumerate(args):
-            slices[op.pos] = i
-            self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
-
 
 class NumPyTransformer(Transformer):
     """
