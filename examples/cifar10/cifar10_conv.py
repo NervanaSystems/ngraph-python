@@ -37,7 +37,7 @@ from ngraph.frontends.neon import ArrayIterator
 from cifar10 import CIFAR10
 import ngraph.transformers as ngt
 
-parser = NgraphArgparser(description='Train simple mlp on cifar10 dataset')
+parser = NgraphArgparser(description='Train simple CNN on cifar10 dataset')
 args = parser.parse_args()
 
 np.random.seed(args.rng_seed)

@@ -17,8 +17,8 @@
 Installation
 ************
 
-To install |geon|, be sure to first install neon in a virtual environment.
-Activate the virtualenv with ``. .venv/bin/activate``, then run::
+To install |geon|, you must first install neon in a virtual environment.
+Activate the neon virtualenv with ``. .venv/bin/activate``, then run::
 
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
@@ -29,9 +29,11 @@ Examples
 
 Several useful example scripts demonstrate how to use Nervana Graph:
 
-* ``ngraph/examples/walk_through/`` contains several walk through code.
-* ``ngraph/examples/mnist_mlp.py`` uses the neon front-end to define and train the model.
-* ``ngraph/examples/cifar10_mlp.py`` uses the neon front-end to define and train the model.
+* ``ngraph/examples/walk_through/`` contains several code walk throughs.
+* ``ngraph/examples/mnist/mnist__mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
+* ``ngraph/examples/cifar10/cifar10_conv.py`` uses the neon front-end to define and train a CNN model on CIFAR10 data.
+* ``ngraph/examples/cifar10/cifar10_mlp.py`` uses the neon front-end to define and train a MLP model on CIFAR10 data.
+* ``ngraph/examples/ptb/char_rnn.py`` uses the neon front-end to define and train a character-level RNN model on Penn Treebank data.
 
 Developer Guide
 ===============
@@ -45,6 +47,3 @@ Documentation can be generated via::
 
     make doc
 
-
-The latest html documentation is also built by Jenkins and can be viewed
-`here <http://jenkins.sd.nervana.ai:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html>`_.
