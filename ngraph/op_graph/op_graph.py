@@ -1847,7 +1847,6 @@ class StackOp(AssignableTensorOp):
             deps.add(assign_op(slice_op, flattened_arg))
 
         self.user_deps = deps
-        pass
 
     def generate_adjoints(self, adjoints, delta, *x_list):
         s = [slice(None)] * len(self.axes)
