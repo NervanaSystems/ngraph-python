@@ -39,7 +39,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Dimshuffle, \
     SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -643,18 +643,6 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, out_sliced, x):
         self.append("{}.fill(0)", out)
         self.append("{}.__setitem__((), {})", out_sliced, x)
-
-    @generate_op.on_type(Stack)
-    def generate_op(self, op, out, *args):
-        # TODO: we may want to have the inputs write into slices of a
-        # preallocated buffer for this op.
-        # We cannot use the numpy stack function as it is unavailable in
-        # older versions.
-        self.append("o={}", out)
-        slices = [slice(None)] * len(op.axes)
-        for i, arg in enumerate(args):
-            slices[op.pos] = i
-            self.append("o.__setitem__({s}, {x})", s=tuple(slices), x=arg)
 
 
 class NumPyTransformer(Transformer):
