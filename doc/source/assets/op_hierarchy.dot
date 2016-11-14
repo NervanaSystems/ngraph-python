@@ -1,13 +1,11 @@
 digraph {
+  graph [pad="0.0", nodesep="0.2", ranksep="0.1"];
   node [style=filled fillcolor="#abd3d2" color=white]
   edge [color="#999999"]
   rankdir=LR;
-  DebugInfo -> object
-  Op -> NameableValue, DebugInfo
+  # Op -> NameableValue, DebugInfo
   InitTensorOp -> Op
   AssignOp -> Op
-  AssignOneDOp -> Op
-  SetItemOneDOp -> Op
   doall -> Op
   Fill -> Op
   TensorOp -> Op
@@ -24,49 +22,39 @@ digraph {
   AssignableTensorOp -> TensorOp
   Stack -> TensorOp
   Unslice -> TensorOp
-  RNG -> object
   AllReduce -> Op
   ElementWise -> TensorOp
   UnaryElementwiseAxesOp -> ElementWise
-  UnaryElementwiseOneDOp -> ElementWise
-  NegativeOneDOp -> UnaryElementwiseOneDOp
   NegativeOp -> UnaryElementwiseAxesOp
-  AbsoluteOneDOp -> UnaryElementwiseOneDOp
   AbsoluteOp -> UnaryElementwiseAxesOp
-  SinOneDOp -> UnaryElementwiseOneDOp
   SinOp -> UnaryElementwiseAxesOp
-  CosOneDOp -> UnaryElementwiseOneDOp
   CosOp -> UnaryElementwiseAxesOp
-  TanhOneDOp -> UnaryElementwiseOneDOp
   TanhOp -> UnaryElementwiseAxesOp
-  ExpOneDOp -> UnaryElementwiseOneDOp
   ExpOp -> UnaryElementwiseAxesOp
-  LogOneDOp -> UnaryElementwiseOneDOp
   LogOp -> UnaryElementwiseAxesOp
-  ReciprocalOneDOp -> UnaryElementwiseOneDOp
   ReciprocalOp -> UnaryElementwiseAxesOp
-  SignOneDOp -> UnaryElementwiseOneDOp
   SignOp -> UnaryElementwiseAxesOp
-  SquareOneDOp -> UnaryElementwiseOneDOp
   SquareOp -> UnaryElementwiseAxesOp
-  SqrtOneDOp -> UnaryElementwiseOneDOp
   SqrtOp -> UnaryElementwiseAxesOp
   BinaryElementWiseAxesOp -> ElementWise
-  BinaryElementWiseLowDOp -> ElementWise
   Dimshuffle -> TensorOp
   DotOp -> TensorOp
-  LowDimensionalDot -> TensorOp
-  DotOneDimensional -> LowDimensionalDot
-  DotTwoDimensional -> LowDimensionalDot
-  DotTwoByOne -> LowDimensionalDot
-  Softmax -> object
   ReductionOp -> TensorOp
   TensorSizeOp -> TensorOp
   OneHotOp -> TensorOp
-  OneHotTwoDimOp -> OneHotOp
-  Sigmoid -> object
   Function -> Op
-  Buffer -> object
-  CrossEntropyMultiInner -> object
-  CrossEntropyBinaryInner -> object
+  AddOp -> BinaryElementWiseAxesOp
+  SubtractOp -> BinaryElementWiseAxesOp
+  MultiplyOp -> BinaryElementWiseAxesOp
+  DivideOp -> BinaryElementWiseAxesOp
+  ModOp -> BinaryElementWiseAxesOp
+  MaximumOp -> BinaryElementWiseAxesOp
+  MinimumOp -> BinaryElementWiseAxesOp
+  PowerOp -> BinaryElementWiseAxesOp
+  EqualOp -> BinaryElementWiseAxesOp
+  NotEqualOp -> BinaryElementWiseAxesOp
+  GreaterOp -> BinaryElementWiseAxesOp
+  GreaterEqualOp -> BinaryElementWiseAxesOp
+  LessOp -> BinaryElementWiseAxesOp
+  LessEqualOp -> BinaryElementWiseAxesOp
 }
