@@ -2,20 +2,6 @@
 
 Nervana Graph is Nervana's computational graph.
 
-## Temporary Notice
-
-This repository changed names on 11/11/2016 from "ngraph" to "private-ngraph" ahead of the public release of "ngraph"
-
-Although github.com supports the old name, it is recommended to stop using ngraph by
-either cloning anew or changing your checked out origin as follows:
-
-```
-cd ~/code
-mv ngraph private-ngraph
-cd private-ngraph
-git remote set-url origin https://github.com/NervanaSystems/private-ngraph
-```
-
 ## Installation
 
 First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
@@ -55,12 +41,10 @@ To generate the documentation as html files
 make doc
 ```
 
-The latest html documentation is also built by Jenkins and can be viewed
-[here](http://jenkins.sd.nervana.ai:8080/job/NEON_NGRAPH_Integration_Test/lastSuccessfulBuild/artifact/doc/build/html/index.html)
-
-
 ## Examples
 
-`examples/walk_through/log_res.py` is a simple example of using graph operations.
-`examples/mnist_mlp.py` uses the neon front-end to define and train the model.
-`examples/cifar10_mlp.py` uses the neon front-end to define and train the model.
+* ``ngraph/examples/walk_through/`` contains several code walk throughs.
+* ``ngraph/examples/mnist/mnist_mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
+* ``ngraph/examples/cifar10/cifar10_conv.py`` uses the neon front-end to define and train a CNN model on CIFAR10 data.
+* ``ngraph/examples/cifar10/cifar10_mlp.py`` uses the neon front-end to define and train a MLP model on CIFAR10 data.
+* ``ngraph/examples/ptb/char_rnn.py`` uses the neon front-end to define and train a character-level RNN model on Penn Treebank data.

@@ -161,7 +161,7 @@ allocation because storage may be allocated in multiple ways.  The ``allocate`` 
 allocator, and each allocator creates the needed views.  The NumPy transformer's ``allocate`` method calls the
 ``allocate`` method.
 
-Each allocated storage can also be initialized to, for example, random gaussian variables. In this example, there are no initializations, so the method ``init``, which performs the one-time device
+Each allocated storage can also be initialized to, for example, random Gaussian variables. In this example, there are no initializations, so the method ``init``, which performs the one-time device
 initialization, is empty.  Constants, such as 1, are copied to the device as part of the allocation process.
 
 The method ``Computation_0`` handles the ``plus_one`` computation.  Clearly this is not the optimal way to add 1 to a scalar,
@@ -170,7 +170,7 @@ so let's look at a more complex example next.
 Logistic Regression
 ===================
 
-This example performs logistic regression. We want to classify an obervation :math:`x` into one of two classes, denoted by :math:`y=0` and :math:`y=1`. Using a simple linear model :math:`\hat{y}=\sigma(Wx)`, we want to find the optimal values for :math:`W`. Here, we use gradient descent with a learning rate of :math:`\alpha` and the cross-entropy as the error function.
+This example performs logistic regression. We want to classify an observation :math:`x` into one of two classes, denoted by :math:`y=0` and :math:`y=1`. Using a simple linear model :math:`\hat{y}=\sigma(Wx)`, we want to find the optimal values for :math:`W`. Here, we use gradient descent with a learning rate of :math:`\alpha` and the cross-entropy as the error function.
 
 The complete program source can be found in :download:`../../examples/walk_through/wt_2_logres.py`.
 
@@ -374,7 +374,7 @@ Multi-dimensional Logistic Regression
 
 The complete program source can be found in :download:`../../examples/walk_through/wt_5_logres_multi.py`.
 
-We are switching from a flat :math:`C`-dimensional featurespace to an :math:`W\times H` feature space.  The
+We are switching from a flat :math:`C`-dimensional feature space to an :math:`W\times H` feature space.  The
 weights are now also a :math:`W\times H` tensor:
 
 .. code-block:: python
