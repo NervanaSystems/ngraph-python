@@ -28,6 +28,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
+    RngOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
@@ -44,7 +45,7 @@ from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    UnsliceKernel
+    UnsliceKernel, RngFillKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -52,6 +53,7 @@ from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_
 import numpy as np
 import pycuda.driver as drv
 from pycuda.gpuarray import GPUArray
+from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
 
 _none_slice = slice(None, None, None)
@@ -471,6 +473,13 @@ class GPUKernelGroup():
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.scalar))
+
+    @add_kernel.on_type(RngOp)
+    def add_kernel(self, op):
+        self.kernels.append(RngFillKernel(self.transformer,
+                                          op.tensor_description(),
+                                          op.distribution,
+                                          op.params))
 
     @add_kernel.on_type(PoolingOp)
     def add_kernel(self, op):
@@ -892,6 +901,7 @@ class GPURuntime(object):
 
         # TODO
         # self.cublas_handle = cublas.cublasCreate()
+        self.pcg = rng_mrg()
 
         self.enable_winograd = enable_winograd
         self.deterministic = deterministic

@@ -1899,6 +1899,64 @@ class RNG(object):
         return val
 
 
+class RngOp(TensorOp):
+
+    def __init__(self, distribution, params, x, *args, **kwargs):
+        """
+        Arguments:
+            x  : input tensor.
+            distribution : either 'uniform' or 'normal'
+            params: dict for specifying parameters of distribution
+        Return:
+        """
+        if distribution not in ('uniform', 'normal'):
+            raise ValueError((
+                'unsupported distribution: {}'
+            ).format(distribution))
+
+        self.distribution = distribution
+        self.params = params
+
+        super(RngOp, self).__init__(
+            args=(x,), axes=x.axes, *args, **kwargs
+        )
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, 0)
+
+
+def uniform(x, low=0.0, high=1.0):
+    """
+    Fills x with uniform distribution between low and high.
+
+    Args:
+        x (TensorOp): A tensor.
+        low (float): lower limit of distribution range
+        high (float): upper limit of distribution range
+
+    Returns:
+        TensorOp: The  value of x.
+
+    """
+    return RngOp(distribution='uniform', params=dict(low=low, high=high), x=x)
+
+
+def normal(x, loc=0.0, scale=1.0):
+    """
+    Fills x with normal distribution centered around loc and scaled by scale
+
+    Args:
+        x (TensorOp): A tensor.
+        loc (float): mean of distribution
+        scale (float): standard deviation of distribution
+
+    Returns:
+        TensorOp: The  value of x.
+
+    """
+    return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
+
+
 class AllReduce(Op):
     """TODO."""
 

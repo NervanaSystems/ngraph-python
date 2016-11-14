@@ -342,6 +342,31 @@ class BatchNorm(Layer):
         return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
 
 
+class Dropout(Layer):
+    """
+    Layer for stochastically droping activations to prevent overfitting
+    Args:
+        keep (float):  Number between 0 and 1 that indicates probability of any particular
+                       activation being dropped.  Default 0.5.
+    """
+
+    metadata = {'layer_type': 'dropout'}
+
+    def __init__(self, keep=0.5, **kwargs):
+        self.keep = keep
+        self.mask = None
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        in_axes = in_obj.axes.sample_axes()
+        self.mask = self.mask or ng.persistent_tensor(axes=in_axes).named('mask')
+        self.mask = ng.uniform(self.mask, low=0.0, high=1.0) <= self.keep
+        return self.mask * in_obj
+
+    def inference_outputs(self, in_obj):
+        return self.keep * in_obj
+
+
 class Recurrent(Layer):
     """
     Basic recurrent layer.
