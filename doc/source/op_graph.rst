@@ -54,7 +54,7 @@ Since the transformation process replaces subgraphs with more primitive subgraph
 
 Sometimes a node can disappear.  For example, a ``log(exp(x))`` could be replaced by ``x``, but a frontend could be holding the ``log`` or ``exp`` ``Op``.  In this case, there are a few choices for the ``forward.`` If the ``Op`` is one that has been specified as needing to be available, the transformation should ensure that the value is still computed.  Otherwise, the ``forward`` attribute can be set to ``Invalid`` or it can be set to CPU operations that compute it from ``x``.
 
-When one subgraph replaces another, the ``args`` and ``other_deps`` for all extenral ``Ops`` that reference the subgraph are updated (``user_deps`` is only used during graph construction), so only the frontend value access functions need to make use of the ``forward`` attribute.  The ``snap`` function will follow forwarding; a frontend may use this function to pre-forward ``Ops``.  In the case where the ``Op`` forwards to an ``invalid``, the original ``Op`` is returned, so that an exception is only raised if an attempt is made to access the value.
+When one subgraph replaces another, the ``args`` and ``other_deps`` for all external ``Ops`` that reference the subgraph are updated (``user_deps`` is only used during graph construction), so only the frontend value access functions need to make use of the ``forward`` attribute.  The ``snap`` function will follow forwarding; a frontend may use this function to pre-forward ``Ops``.  In the case where the ``Op`` forwards to an ``invalid``, the original ``Op`` is returned, so that an exception is only raised if an attempt is made to access the value.
 
 Schema
 ======

@@ -31,6 +31,7 @@ neon/backends/kernels/dump
 .idea
 *~
 .ipynb_checkpoints
+*.bak
 
 # mxnet
 *.bin
