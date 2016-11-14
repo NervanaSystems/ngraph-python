@@ -13,8 +13,8 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-TensorFlow Importer
-===================
+TensorFlow
+==========
 
 Minimal Example
 ---------------

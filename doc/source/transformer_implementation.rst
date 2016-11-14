@@ -13,42 +13,5 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-This documentation covers the public APIs for nervana graph.
-
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
-
-   ngraph
-   ngraph.transformers
-   ngraph.types
-
-ngraph
-======
-
-Graph construction.
-
-.. py:module: ngraph
-
-.. automodule:: ngraph
-   :members:
-
-ngraph.transformers
-===================
-
-Transformer manipulation.
-
-.. py:module: ngraph.transformers
-
-.. automodule:: ngraph.transformers
-   :members:
-
-ngraph.types
-============
-
-.. py:module: ngraph.types
-
-.. automodule:: ngraph.types
-   :members:
-
-
+Transformer Implementation
+**************************
