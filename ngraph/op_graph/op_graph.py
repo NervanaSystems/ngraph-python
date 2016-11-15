@@ -2394,7 +2394,7 @@ class SqrtOp(UnaryElementwiseAxesOp):
     one_d_class = SqrtOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, .5 * delta * self)
+        x.generate_add_delta(adjoints, 0.5 * delta / self)
 
 
 def sqrt(x):
@@ -3017,8 +3017,8 @@ def argmin(x, dtype=None, **kwargs):
 
 
 def variance(x, out_axes=None, reduction_axes=None):
-    return mean(square(x - mean(x, out_axes=out_axes, reduction_axes=reduction_axes)),
-                out_axes=out_axes, reduction_axes=reduction_axes)
+    return (mean(square(x), out_axes=out_axes, reduction_axes=reduction_axes) -
+            square(mean(x, out_axes=out_axes, reduction_axes=reduction_axes)))
 
 
 class TensorSizeOp(TensorOp):

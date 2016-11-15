@@ -921,7 +921,7 @@ def test_tensor_derivative():
 
 def test_mean(transformer_factory):
     ax = ng.name_scope('x')
-    ax.N = ng.make_axis(128)
+    ax.N = ng.make_axis(128, batch=True)
     ax.Y = ng.make_axis(100)
 
     inputs = ng.placeholder([ax.Y, ax.N])
@@ -940,15 +940,47 @@ def test_mean(transformer_factory):
     np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
 
 
-def test_mean_wgrad(transformer_factory):
+def test_variance_wgrad(transformer_factory):
     ax = ng.name_scope('x')
-    ax.N = ng.make_axis(128)
+    ax.N = ng.make_axis(128, batch=True)
     ax.Y = ng.make_axis(100)
 
     inputs = ng.placeholder([ax.Y, ax.N])
     targets = ng.placeholder([ax.Y, ax.N])
 
-    inp_stat = ng.mean(inputs, reduction_axes=inputs.axes.batch_axes())
+    inp_stat = ng.variance(inputs, reduction_axes=inputs.axes.batch_axes())
+    err = ng.sum(inp_stat - targets, out_axes=())
+    d_inputs = ng.deriv(err, inputs)
+    comp_func = executor([err, d_inputs], inputs, targets)
+
+    input_value = rng.uniform(-0.1, 0.1, inputs.axes)
+    target_value = rng.uniform(-0.1, 0.1, targets.axes)
+    ng_f_res, ng_b_res = comp_func(input_value, target_value)
+
+    np_f_res = np.sum(np.var(input_value, axis=1, keepdims=True) - target_value)
+
+    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
+
+    np_b_res = 2 * (input_value - np.mean(input_value, axis=1, keepdims=True))
+
+    np.testing.assert_allclose(np_b_res, ng_b_res, rtol=0, atol=1e-4)
+
+
+def test_variance_sqrt_inverse(transformer_factory):
+    ax = ng.name_scope('x')
+    ax.N = ng.make_axis(128, batch=True)
+    ax.Y = ng.make_axis(100)
+
+    inputs = ng.placeholder([ax.Y, ax.N])
+    targets = ng.placeholder([ax.Y, ax.N])
+
+    epsilon = 1e-3
+
+    inp_stat = ng.reciprocal(
+        ng.sqrt(
+            ng.variance(inputs, reduction_axes=inputs.axes.batch_axes()) + epsilon
+        )
+    )
     err = ng.sum(inp_stat - targets, out_axes=())
     d_inputs = ng.deriv(err, inputs)
     comp_func = executor([err, d_inputs], inputs, targets)
@@ -957,6 +989,14 @@ def test_mean_wgrad(transformer_factory):
     target_value = rng.uniform(-1, 1, targets.axes)
     ng_f_res, ng_b_res = comp_func(input_value, target_value)
 
-    np_f_res = np.sum(np.mean(input_value, axis=1, keepdims=True) - target_value)
+    npv = np.var(input_value, axis=1, keepdims=True) + epsilon
+    np_f_res = 1.0 / np.sqrt(npv)
+
+    npv_delta = 2 * (input_value - np.mean(input_value, axis=1, keepdims=True))
+
+    np_b_res = - 0.5 * np_f_res / npv * npv_delta
+
+    np_f_res = np.sum(np_f_res - target_value)
 
     np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np_b_res, ng_b_res, rtol=0, atol=1e-4)
