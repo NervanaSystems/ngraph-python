@@ -55,13 +55,15 @@ def cifar_mean_subtract(x):
     y = ng.expand_dims((x - bgr_mean) / 255., ax.D, 1)
     return y
 
+init_uni = UniformInit(-0.1, 0.1)
+
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
-                   Convolution((5, 5, 16), w_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Convolution((5, 5, 16), filter_init=init_uni, activation=Rectlin()),
                    Pool2D(2, strides=2),
-                   Convolution((5, 5, 32), w_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Convolution((5, 5, 32), filter_init=init_uni, activation=Rectlin()),
                    Pool2D(2, strides=2),
-                   Affine(nout=500, w_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   Affine(axes=ax.Y, w_init=UniformInit(-0.1, 0.1), activation=Softmax())])
+                   Affine(nout=500, weight_init=init_uni, activation=Rectlin()),
+                   Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
 
 ######################
 # Input specification

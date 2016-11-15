@@ -250,10 +250,10 @@ class Bias(Layer):
 
 
 class Affine(Layer):
-    def __init__(self, w_init, nout=None, b_init=None, activation=None,
+    def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
-        self.linear = Linear(init=w_init, nout=nout, **kwargs)
-        self.bias = Bias(init=b_init)
+        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
+        self.bias = Bias(init=bias_init)
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
@@ -273,10 +273,10 @@ class Affine(Layer):
 
 
 class Convolution(Layer):
-    def __init__(self, fshape, w_init, strides=1, padding=0, b_init=None, activation=None,
+    def __init__(self, fshape, filter_init, strides=1, padding=0, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
-        self.conv = Conv2D(fshape, w_init, strides, padding, **kwargs)
-        self.bias = Bias(init=b_init)
+        self.conv = Conv2D(fshape, filter_init, strides, padding, **kwargs)
+        self.bias = Bias(init=bias_init)
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
