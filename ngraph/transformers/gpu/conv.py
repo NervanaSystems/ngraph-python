@@ -68,7 +68,7 @@ class ConvFpropKernel(GPUKernel):
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
                 all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
-            from .winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
+            from .kernels.winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
             if self.dtype == np.float32 and enable_winograd == 4:
@@ -156,7 +156,7 @@ class ConvBpropKernel(GPUKernel):
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
                 all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
-            from .winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
+            from .kernels.winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
             if self.dtype == np.float32 and enable_winograd == 4:
@@ -241,7 +241,7 @@ class ConvUpdateKernel(GPUKernel):
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
                 all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
-            from .winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
+            from .kernels.winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
             if self.dtype == np.float32 and enable_winograd == 4:

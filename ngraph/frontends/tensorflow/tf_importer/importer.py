@@ -16,6 +16,7 @@ from __future__ import print_function
 
 # basics
 import mimetypes
+import sys
 
 # tensorflow
 import tensorflow as tf
@@ -54,7 +55,6 @@ class TFImporter:
         # read graph_def
         graph_def = tf.GraphDef()
         if mimetypes.guess_type(pb_file)[0] == 'text/plain':
-            graph_def = tf.GraphDef()
             with open(pb_file, 'r') as f:
                 text_format.Merge(f.read(), graph_def)
         else:
@@ -226,3 +226,10 @@ class TFImporter:
         # get unimplemented ops
         unimplemented_ops = required_ops - supported_ops
         return sorted(list(unimplemented_ops))
+
+
+if __name__ == '__main__':
+    # get unimplemented ops
+    importer = TFImporter()
+    ops = importer._get_unimplemented_ops(sys.argv[1])
+    print(ops)

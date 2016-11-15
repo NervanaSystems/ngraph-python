@@ -60,6 +60,9 @@ class OpsGradient(OpsBase):
 
         Returns:
             A ngraph Op corresponding to the tensorflow node.
+
+        Inputs to tf_node:
+            value, learning rate, gradient
         """
         var, lr, grad = inputs
         return ng.assign(var, var - lr * grad)
@@ -74,11 +77,16 @@ class OpsGradient(OpsBase):
         TODO: Untested in real models, dangerous. Currently, our implementation
         only imports forward graph from tensorflow and does the gradient
         computation in ngraph.
+
         Arguments:
             tf_node: NodeDef object, the tensorflow node to convert.
             inputs: List of ngraph Ops as inputs to this node.
+
         Returns:
             A ngraph Op corresponding to the tensorflow node.
+
+        Inputs to tf_node:
+            sx, sy
         """
         # get inputs
         sx, sy = list(to_int(inputs[0].const)), list(to_int(inputs[1].const))

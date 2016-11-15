@@ -62,7 +62,9 @@ class ImporterTester(object):
             tf_feed_dict=None,
             print_tf_result=False,
             print_ng_result=False,
-            verbose=False):
+            verbose=False,
+            rtol=1e-05,
+            atol=1e-08):
         """
         Performs test with optional feed_dicts, compares result of TF and ngraph
         Args:
@@ -88,7 +90,8 @@ class ImporterTester(object):
             verbose=verbose)
 
         # assert
-        assert np.allclose(tf_result, ng_result)
+        assert tf_result.shape == ng_result.shape
+        assert np.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
 
     def ng_run(self,
                tf_target_node,
