@@ -28,6 +28,7 @@ These are known issues which are being addressed:
 
 - The transformer fusion and memory sharing optimizations are currently hampered by some of the tensor dimension reshaping introduced by the existing lowering passes.
 - Nervana Graph still requires a neon installation as a dependency.
+- RNNs don't work well with longer sequences (longer than 30).
 
 ### Highlighted Future Work
 - Nervana Graph serialization/deserialization.
