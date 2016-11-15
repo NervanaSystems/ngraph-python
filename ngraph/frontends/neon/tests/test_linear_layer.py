@@ -18,7 +18,7 @@ Test of the mlp/linear layer
 import itertools as itt
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Affine, UniformInit
+from ngraph.frontends.neon import Linear, UniformInit
 from ngraph.util.utils import executor
 import ngraph.transformers as ngt
 
@@ -43,7 +43,7 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder([F, N])
-    layer = Affine(nout=nout, init=UniformInit(0.0, 0.0))
+    layer = Linear(nout=nout, init=UniformInit(0.0, 0.0))
     fprop = layer.train_outputs(inp)
 
     # create data
@@ -70,7 +70,7 @@ def test_linear_ones(basic_linargs, transformer_factory):
     F = ng.make_axis(nin, name="F")
 
     inp = ng.placeholder([F, N])
-    layer = Affine(nout=nout, init=UniformInit(0.0, 0.0))
+    layer = Linear(nout=nout, init=UniformInit(1.0, 1.0))
     fprop = layer.train_outputs(inp)
 
     # create data

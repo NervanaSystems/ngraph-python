@@ -127,6 +127,48 @@ class FillKernel(GPUKernel):
         self.out.fill(self.value)
 
 
+class RngFillKernel(GPUKernel):
+    """
+    Kernel used to fill a tensor with a random distribution value.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer with kernel generator and runtime driver
+        td (TensorDescription): Tensor to fill
+        distribution (str): type of random distribution to use,
+                            can be either 'uniform' or 'normal'
+        params (dict): distribution specific parameters
+
+    Attributes:
+        value : Scalar value to fill tensor
+        out (GPUTensor): Tensor to fill with value
+    """
+    def __init__(self, transformer, td, distribution, params):
+        super(RngFillKernel, self).__init__(transformer)
+
+        self.distribution = distribution
+        self.params = params
+        self.out = td
+
+    def bind_buffers(self):
+        """
+        Get allocated GPU tensor for output
+        """
+        self.out = self.out.value.tensor
+        super(RngFillKernel, self).bind_buffers()
+
+    def execute(self):
+        """
+        Use memset driver functions to fill tensor with scalar
+        """
+        if self.distribution == 'uniform':
+            self.transformer.runtime.pcg.fill_uniform(self.out)
+            self.out[:] = (self.out * (self.params['high'] - self.params['low']) +
+                           self.params['low'])
+        elif self.distribution == 'normal':
+            self.transformer.runtime.pcg.fill_normal(self.out)
+            self.out[:] = self.out * self.params['scale'] + self.params['loc']
+
+
 class SetItemKernel(GPUKernel):
     """
     Kernel used set all or part of a tensor with a value. Value can be

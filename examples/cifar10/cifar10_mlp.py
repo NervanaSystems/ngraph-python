@@ -55,8 +55,8 @@ def cifar_mean_subtract(x):
     return (x - bgr_mean) / 255.
 
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
-                   Affine(nout=200, init=UniformInit(-0.1, 0.1), activation=Rectlin()),
-                   Affine(axes=ax.Y, init=UniformInit(-0.1, 0.1), activation=Softmax())])
+                   Affine(nout=200, weight_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
+                   Affine(axes=ax.Y, weight_init=UniformInit(-0.1, 0.1), activation=Softmax())])
 
 ######################
 # Input specification

@@ -37,7 +37,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
-    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
+    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Dimshuffle, \
     SetItemOneDOp
@@ -432,6 +432,15 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta):
         self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
                     op.index, delta, outputs)
+
+    @generate_op.on_type(RngOp)
+    def generate_op(self, op, out, x):
+        if op.distribution == 'uniform':
+            rstr = "uniform(low={low}, high={high}".format(**op.params)
+        elif op.distribution == 'normal':
+            rstr = "normal(loc={loc}, scale={scale}".format(**op.params)
+
+        self.append("{out}[()] = np.random.{rstr}, size={out}.shape)", out=out, rstr=rstr)
 
     @generate_op.on_type(CosOneDOp)
     def generate_op(self, op, out, x):

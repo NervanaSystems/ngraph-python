@@ -38,8 +38,6 @@ class MNIST(object):
         Arguments:
             path (str, optional): Local directory in which to cache the raw
                                   dataset.  Defaults to current directory.
-            normalize (bool, optional): Whether to scale values between 0 and 1.
-                                        Defaults to True.
 
         Returns:
             tuple: Both training and test sets are returned.

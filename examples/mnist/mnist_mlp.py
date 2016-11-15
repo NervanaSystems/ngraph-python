@@ -50,8 +50,8 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
-                   Affine(nout=100, init=GaussianInit(), activation=Rectlin()),
-                   Affine(axes=ax.Y, init=GaussianInit(), activation=Logistic())])
+                   Affine(nout=100, weight_init=GaussianInit(), activation=Rectlin()),
+                   Affine(axes=ax.Y, weight_init=GaussianInit(), activation=Logistic())])
 
 ######################
 # Input specification

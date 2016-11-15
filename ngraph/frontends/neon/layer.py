@@ -43,20 +43,17 @@ class Preprocess(Layer):
         return self.functor(in_obj)
 
 
-class Affine(Layer):
-    metadata = {'layer_type': 'affine'}
+class Linear(Layer):
+    metadata = {'layer_type': 'linear'}
 
-    def __init__(self, init, nout=None, activation=(lambda x: x), bias=None, **kwargs):
-        super(Affine, self).__init__(**kwargs)
+    def __init__(self, init, nout=None, **kwargs):
+        super(Linear, self).__init__(**kwargs)
         if self.axes is None:
-            assert(nout is not None), "Must provide either axes or nout to Affine"
+            assert(nout is not None), "Must provide either axes or nout to Linear"
 
         self.nout = nout
         self.init = init
-        self.activation = activation
-        self.bias = bias
         self.W = None
-        self.b = 0 if self.bias is None else None
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
@@ -64,13 +61,10 @@ class Affine(Layer):
         in_axes = in_obj.axes.sample_axes()
         in_axes = in_axes - in_axes.recurrent_axes()
         w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
-        b_axes = in_obj.axes.sample_axes()
         if self.W is None:
             self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
-        if self.b is None:
-            self.b = ng.variable(axes=b_axes, initial_value=self.bias(b_axes.lengths))
 
-        return self.activation(ng.dot(self.W, in_obj))  # + self.b)
+        return ng.dot(self.W, in_obj)
 
 
 class ConvBase(Layer):
@@ -145,16 +139,6 @@ class Conv2D(ConvBase):
         super(Conv2D, self).__init__(fshape, init, strides, padding, **kwargs)
 
 
-class Convolution(Conv2D):
-    def __init__(self, fshape, init, strides=1, padding=0, activation=(lambda x: x), **kwargs):
-        self.activation = activation
-        super(Convolution, self).__init__(fshape, init, strides, padding, **kwargs)
-
-    @ng.with_op_metadata
-    def train_outputs(self, in_obj):
-        return self.activation(super(Convolution, self).train_outputs(in_obj))
-
-
 class Activation(Layer):
     metadata = {'layer_type': 'activation'}
 
@@ -164,7 +148,11 @@ class Activation(Layer):
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
-        return self.transform(in_obj)
+        # An activation layer with no transform defaults to identity
+        if self.transform:
+            return self.transform(in_obj)
+        else:
+            return in_obj
 
 
 class PoolBase(Layer):
@@ -229,6 +217,154 @@ class Pool2D(PoolBase):
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
         super(Pool2D, self).__init__(fshape, strides, padding, **kwargs)
+
+
+class Bias(Layer):
+    """
+    Bias layer, common to linear and convolutional layers
+
+    Args:
+        init (function): function for later initializing bias values
+        shared (bool): applies only to convolutional biases.  Whether to use same bias for
+                       entire feature map.  Default true.
+    """
+    metadata = {'layer_type': 'bias'}
+
+    def __init__(self, init, shared=True, **kwargs):
+        super(Bias, self).__init__(**kwargs)
+        self.W = None
+        self.init = init
+        self.shared = shared
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        if self.init:
+            w_axes = in_obj.axes.sample_axes()
+            if self.shared and len(in_obj.axes.role_axes(ar.Channel)) != 0:
+                w_axes = in_obj.axes.role_axes(ar.Channel)
+
+            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+            return in_obj + self.W
+        else:
+            return in_obj
+
+
+class Affine(Layer):
+    def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
+                 batch_norm=False, **kwargs):
+        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
+        self.bias = Bias(init=bias_init)
+        self.batch_norm = BatchNorm() if batch_norm else None
+        self.activation = Activation(transform=activation)
+
+    def train_outputs(self, in_obj):
+        l_out = self.linear.train_outputs(in_obj)
+        b_out = self.bias.train_outputs(l_out)
+        bn_out = self.batch_norm.train_outputs(b_out) if self.batch_norm else b_out
+        a_out = self.activation.train_outputs(bn_out)
+        return a_out
+
+    def inference_outputs(self, in_obj):
+        l_out = self.linear.inference_outputs(in_obj)
+        b_out = self.bias.inference_outputs(l_out)
+        bn_out = self.batch_norm.inference_outputs(b_out) if self.batch_norm else b_out
+        a_out = self.activation.inference_outputs(bn_out)
+        return a_out
+
+
+class Convolution(Layer):
+    def __init__(self, fshape, filter_init, strides=1, padding=0, bias_init=None, activation=None,
+                 batch_norm=False, **kwargs):
+        self.conv = Conv2D(fshape, filter_init, strides, padding, **kwargs)
+        self.bias = Bias(init=bias_init)
+        self.batch_norm = BatchNorm() if batch_norm else None
+        self.activation = Activation(transform=activation)
+
+    def train_outputs(self, in_obj):
+        l_out = self.conv.train_outputs(in_obj)
+        b_out = self.bias.train_outputs(l_out)
+        bn_out = self.batch_norm.train_outputs(b_out) if self.batch_norm else b_out
+        a_out = self.activation.train_outputs(bn_out)
+        return a_out
+
+    def inference_outputs(self, in_obj):
+        l_out = self.conv.inference_outputs(in_obj)
+        b_out = self.bias.inference_outputs(l_out)
+        bn_out = self.batch_norm.inference_outputs(b_out) if self.batch_norm else b_out
+        a_out = self.activation.inference_outputs(bn_out)
+        return a_out
+
+
+class BatchNorm(Layer):
+    """
+    A batch normalization layer as described in [Ioffe2015]_.
+
+    Normalizes a batch worth of inputs by subtracting batch mean and
+    dividing by batch variance.  Then scales by learned factor gamma and
+    shifts by learned bias beta.
+
+    Notes:
+
+    .. [Ioffe2015] http://arxiv.org/abs/1502.03167
+    """
+    metadata = {'layer_type': 'batch_norm'}
+
+    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
+        self.rho = rho
+        self.eps = eps
+        self.gamma = None
+        self.beta = None
+        self.gmean = None
+        self.gvar = None
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        in_axes = in_obj.axes.sample_axes()
+        red_axes = ng.make_axes()
+        if len(in_axes.role_axes(ar.Channel)) != 0:
+            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.Channel)
+        red_axes += in_obj.axes.batch_axes()
+        out_axes = in_axes - red_axes
+
+        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
+        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=0.0).named('beta')
+        self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+        self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+
+        xmean = ng.mean(in_obj, reduction_axes=red_axes)
+        xvar = ng.variance(in_obj, reduction_axes=red_axes)
+        ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho))
+        ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho))
+
+        return self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+
+    def inference_outputs(self, in_obj):
+        return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
+
+
+class Dropout(Layer):
+    """
+    Layer for stochastically droping activations to prevent overfitting
+    Args:
+        keep (float):  Number between 0 and 1 that indicates probability of any particular
+                       activation being dropped.  Default 0.5.
+    """
+
+    metadata = {'layer_type': 'dropout'}
+
+    def __init__(self, keep=0.5, **kwargs):
+        self.keep = keep
+        self.mask = None
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        in_axes = in_obj.axes.sample_axes()
+        self.mask = self.mask or ng.persistent_tensor(axes=in_axes).named('mask')
+        self.mask = ng.uniform(self.mask, low=0.0, high=1.0) <= self.keep
+        return self.mask * in_obj
+
+    def inference_outputs(self, in_obj):
+        return self.keep * in_obj
 
 
 class Recurrent(Layer):
