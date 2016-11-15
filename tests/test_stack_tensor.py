@@ -21,7 +21,7 @@ def test_stack():
     for pos in range(len(axes) + 1):
         a = [ng.placeholder(axes, initial_value=_) for _ in a_v]
 
-        s = ng.Stack(a, ax.I, pos)
+        s = ng.stack(a, ax.I, pos)
 
         ex = ExecutorFactory()
 

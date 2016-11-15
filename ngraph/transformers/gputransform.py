@@ -30,7 +30,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Stack, Dimshuffle, \
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, StackOp, Dimshuffle, \
     Function, SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -312,7 +312,7 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
 
-    @add_op.on_type(Stack)
+    @add_op.on_type(StackOp)
     def add_op(self, op, out, *args):
         raise ValueError("Unhandled op: {}".format(op))
 
