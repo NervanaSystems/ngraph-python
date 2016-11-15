@@ -1528,8 +1528,6 @@ class AssignableTensorOp(TensorOp):
 
     Arguments:
         input: The storage is used as an input from the CPU. Implies persistent.
-        init: A Neon initialization function with a fill method that takes the tensor
-            as an argument.
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
             value.
@@ -1540,7 +1538,6 @@ class AssignableTensorOp(TensorOp):
 
     def __init__(
             self,
-            init=None,
             initial_value=None,
             input=False,
             persistent=False,
@@ -1555,12 +1552,7 @@ class AssignableTensorOp(TensorOp):
             # for the main computations.
             # TODO Maybe we want to use a single context for all of initialization.  We would
             # need to do the following in a separate method called during transformation.
-            if init is not None:
-                with Op.captured_ops() as capture:
-                    init.fill(self)
-                for c in capture:
-                    self.add_initializer(c)
-            elif callable(initial_value):
+            if callable(initial_value):
                 self.add_initializer(assign(self, initial_value()))
             elif initial_value is not None:
                 self.add_initializer(assign(self, initial_value))
@@ -1717,7 +1709,7 @@ def placeholder(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, init=None):
+def temporary(axes, dtype=None, initial_value=None):
     """
     Temporary storage.
 
@@ -1726,7 +1718,8 @@ def temporary(axes, dtype=None, init=None):
     Args:
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
-        init (optional): Neon-style init.
+        initial_value (optional): A host constant or callable. If callable, will
+            be called to generate an initial value.
 
     Returns:
         AssignableTensorOp: The placeholder.
@@ -1735,11 +1728,11 @@ def temporary(axes, dtype=None, init=None):
     return AssignableTensorOp(graph_label_type="Temp",
                               constant=False, persistent=True,
                               trainable=False,
-                              init=init,
-                              axes=axes, dtype=dtype)
+                              axes=axes, dtype=dtype,
+                              initial_value=initial_value)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None, init=None):
+def persistent_tensor(axes, dtype=None, initial_value=None):
     """
     Persistent storage.
 
@@ -1750,8 +1743,6 @@ def persistent_tensor(axes, dtype=None, initial_value=None, init=None):
         dtype (optional): The dtype of the persistent storage.
         initial_value (optional): A host constant or callable. If callable, will
             be called to generate an initial value.
-        name (String, optional): The name of the persistent storage.
-        init (optional): Neon init.
 
     Returns:
         AssignableTensorOp: The persistent storage.
@@ -1761,11 +1752,10 @@ def persistent_tensor(axes, dtype=None, initial_value=None, init=None):
                               constant=False, persistent=True,
                               trainable=False,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value,
-                              init=init)
+                              initial_value=initial_value)
 
 
-def variable(axes, dtype=None, initial_value=None, init=None):
+def variable(axes, dtype=None, initial_value=None):
     """
     A trainable tensor.
 
@@ -1774,7 +1764,6 @@ def variable(axes, dtype=None, initial_value=None, init=None):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
-        init: For neon backwards-compatibility.
 
     Returns:
         AssignableTensorOp: The variable.
@@ -1784,7 +1773,7 @@ def variable(axes, dtype=None, initial_value=None, init=None):
                               constant=False, persistent=True,
                               trainable=True, axes=axes,
                               dtype=dtype,
-                              initial_value=initial_value, init=init)
+                              initial_value=initial_value)
 
 
 class StackOp(AssignableTensorOp):
