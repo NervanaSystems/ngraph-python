@@ -18,8 +18,8 @@ Transformers
 
 Transformers are used to convert the op graph into a backend specific executable format. Once the graph has been defined, one or more computations are created using a transformer. Computations are handles to executable objects created by the transformer, which can be called to evaluate a subset of the entire graph. All transformers must implement a common abstract interface allowing users to easily switch between backends without altering their computation graph definition. Transformers are currently provided for the following backends:
 
--CPUs (via NumPy)
--NVIDIA GPUs (via PyCUDA)
+- CPUs (via NumPy)
+- NVIDIA GPUs (via PyCUDA)
 
 Additional transformers will be implemented for other backends in the future.
 
@@ -29,19 +29,19 @@ Transformer Creation
 Transformers should be created using the factory interface in ngraph.transformers.base
 
 .. code-block:: python
-	from ngraph.transformers import make_transformer
-	transformer = make_transformer()
+    from ngraph.transformers import make_transformer
+    transformer = make_transformer()
 
 This will create a transformer using the default factory (NumPy). It is possible to set the transformer factory manually to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this
 
 .. code-block:: python
-	import ngraph.transformers as ngt
-	available_transformers = ngt.transformer_choices()
-	if 'gpu' in available_transformers:
-		factory = ngt.make_transformer_factory('gpu')
-		ngt.set_transformer_factory(factory)
+    import ngraph.transformers as ngt
+    available_transformers = ngt.transformer_choices()
+    if 'gpu' in available_transformers:
+        factory = ngt.make_transformer_factory('gpu')
+        ngt.set_transformer_factory(factory)
 
-	transformer = ngt.make_transformer()
+    transformer = ngt.make_transformer()
 
 The above example first checks if the GPU transformer is available (this will depend on whether CUDA and PyCuda are installed). If the GPU transformer is available, the example sets the transformer factory to generate GPU transformers. The call to ``make_transformer`` will then return a GPU transformer if available, and a NumPy transformer otherwise.
 
@@ -56,9 +56,9 @@ Computation Creation
 Computations are created with the ``Transformer::computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be op graph nodes. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
 
 .. code-block:: python
-	import ngraph as ng
+    import ngraph as ng
 
-	a = ng.constant(4)
+    a = ng.constant(4)
     b = ng.constant(2)
     c = ng.placeholder(())
     d = ng.multiply(a, b)
@@ -76,7 +76,7 @@ Computation Execution
 This computation object can be executed with is ``__call__`` method by specifying the input ``c``.
 
 .. code-block:: python
-	result_e = example_comp(7)
+    result_e = example_comp(7)
 
 The return value of this call will be the resulting value of ``e``, which should be ((4 * 2) + 7) = 15.
 
