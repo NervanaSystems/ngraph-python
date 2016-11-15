@@ -6,7 +6,7 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-def test_stack():
+def test_stack(transformer_factory):
     ax = ng.make_name_scope(name="ax")
     ax.W = ng.make_axis(length=4)
     ax.H = ng.make_axis(length=5)
