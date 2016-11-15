@@ -15,10 +15,10 @@
 from setuptools import setup, find_packages
 setup(
     name="ngraph",
-    version="0.1",
+    version="0.4",
     packages=find_packages(exclude=["tests"]),
     author='Nervana Systems',
     author_email='info@nervanasys.com',
     url='http://www.nervanasys.com',
-    license='License :: Proprietary License',
+    license='License :: Apache 2.0',
 )
