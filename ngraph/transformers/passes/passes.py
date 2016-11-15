@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp, \
-    negative
+    negative, cast_axes
 
 from ngraph.util.generics import generic_method
 
@@ -150,6 +150,18 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(DotTwoByOne)
     def visit(self, op):
         pass
+
+    @visit.on_type(Sum)
+    def visit(self, op):
+        x = op.args[0]
+        if x.is_scalar:
+            # Sum of a scalar is just the scalar times the axes size rebroadcast
+            val = broadcast(cast_axes(x, ()) * op.reduction_axes.size, op.axes)
+            self.replace_op(op, val)
+            return
+        # call-next-method
+        if op.must_reduce:
+            self.replace_op(op, op.reduce_to_twod())
 
     @visit.on_type(OneHotOp)
     def visit(self, op):
