@@ -3954,7 +3954,8 @@ div[class^='highlight'] pre {
 }
 
 .go {
-  color: #fff;
+  /* Original white wasn't visible */
+  color: #333333;
 }
 
 .gp {

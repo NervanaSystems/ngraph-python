@@ -71,7 +71,7 @@ clean:
 convert:
 	@echo $(TOP)
 	jupyter nbconvert --to rst $(wildcard $(WALKTHROUGH_DIR)/*.ipynb) --output-dir source/
-
+	cat source/Graph_Introduction.rst source/Logistic_Regression_Part_1.rst source/Logistic_Regression_Part_2.rst > source/walk_throughs.rst
 html: convert
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
