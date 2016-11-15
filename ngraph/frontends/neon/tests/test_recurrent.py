@@ -31,13 +31,11 @@ The following are made sure to be the same in both recurrent layers
 
 import itertools as itt
 import numpy as np
-
 import ngraph as ng
 
 from ngraph.frontends.neon import Recurrent, GaussianInit, Tanh
-from recurrent_ref import Recurrent as RefRecurrent
-
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
+from recurrent_ref import Recurrent as RefRecurrent
 
 rng = RandomTensorGenerator()
 
@@ -73,6 +71,7 @@ def test_ref_compare_rand(refgruargs):
     check_rnn(seq_len, input_size, hidden_size, batch_size,
               GaussianInit(0.0, 1.0), return_seq=False)
 
+
 # compare neon RNN to reference RNN implementation
 def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_seq=True):
     # init_func is the initializer for the model params
@@ -88,8 +87,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_se
     ex = ExecutorFactory()
     np.random.seed(0)
 
-    rnn_ng = nnRecurrent(hidden_size, init_func, activation=Tanh(),
-                         reset_cells=True, return_sequence=return_seq)
+    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
+                       reset_cells=True, return_sequence=return_seq)
 
     inp_ng = ng.placeholder([Cin, REC, N])
     init_state_ng = ng.placeholder(ax_s)
@@ -159,7 +158,9 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_se
     rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
     (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-    dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref, init_states=init_state_value)
+        dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref,
+                                                  deltas_ref, init_states=init_state_value)
+
     # comparing outputs
     if return_seq is False:
         h_ref_list = h_ref_list[:, -1].reshape(-1, 1)

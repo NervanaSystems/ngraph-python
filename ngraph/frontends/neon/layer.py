@@ -395,7 +395,7 @@ class Recurrent(Layer):
 
     def __init__(self, output_size, init, init_inner=None, activation=None,
                  reset_cells=False, return_sequence=True, **kwargs):
-        super(nnRecurrent, self).__init__(**kwargs)
+        super(Recurrent, self).__init__(**kwargs)
 
         self.nout = output_size
         self.activation = activation
@@ -425,7 +425,6 @@ class Recurrent(Layer):
         in_axes = in_obj.axes
         self.time_axis = in_axes.recurrent_axes()[0]
         self.time_axis_idx = in_axes.index(self.time_axis)
-
 
         if self.axes is not None:
             hidden_axes = self.axes - self.axes.recurrent_axes()
@@ -458,7 +457,6 @@ class Recurrent(Layer):
                 self.h_init = ng.variable(initial_value=np.zeros(hidden_state_axes.lengths),
                                           axes=hidden_state_axes).named('h_init')
 
-        in_s = get_steps(in_obj, self.time_axis)
         hprev = [self.h_init]
 
         h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
@@ -472,7 +470,7 @@ class Recurrent(Layer):
                 hprev.append(h)
 
         if self.return_sequence is True:
-            rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=self.time_axis_idx)
+            rnn_out = ng.stack(hprev[1:], self.time_axis, pos=self.time_axis_idx)
         else:
             rnn_out = hprev[-1]
 

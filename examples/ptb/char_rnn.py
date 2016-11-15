@@ -48,9 +48,9 @@ valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_siz
 init = UniformInit(low=-0.08, high=0.08)
 
 # model initialization
-seq1 = Sequential([nnPreprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y)),
-                   nnRecurrent(hidden_size, init, activation=Tanh(), reset_cells=False),
-                   nnAffine(init, activation=Softmax(), bias=init, axes=(ax.Y, ax.REC))])
+seq1 = Sequential([Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y)),
+                   Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False),
+                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y, ax.REC))])
 
 # Bind axes lengths:
 ax.Y.length = len(tree_bank_data.vocab)
