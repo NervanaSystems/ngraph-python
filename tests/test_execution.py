@@ -917,3 +917,46 @@ def test_tensor_derivative():
     p = ng.placeholder(W)
     with pytest.raises(ValueError):
         ng.deriv(p, p)
+
+
+def test_mean(transformer_factory):
+    ax = ng.name_scope('x')
+    ax.N = ng.make_axis(128)
+    ax.Y = ng.make_axis(100)
+
+    inputs = ng.placeholder([ax.Y, ax.N])
+    targets = ng.placeholder([ax.Y, ax.N])
+
+    inp_stat = ng.mean(inputs, reduction_axes=inputs.axes.batch_axes())
+    err = ng.sum(inp_stat - targets, out_axes=())
+    comp_func = executor(err, inputs, targets)
+
+    input_value = rng.uniform(-1, 1, inputs.axes)
+    target_value = rng.uniform(-1, 1, targets.axes)
+    ng_f_res = comp_func(input_value, target_value)
+
+    np_f_res = np.sum(np.mean(input_value, axis=1, keepdims=True) - target_value)
+
+    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
+
+
+def test_mean_wgrad(transformer_factory):
+    ax = ng.name_scope('x')
+    ax.N = ng.make_axis(128)
+    ax.Y = ng.make_axis(100)
+
+    inputs = ng.placeholder([ax.Y, ax.N])
+    targets = ng.placeholder([ax.Y, ax.N])
+
+    inp_stat = ng.mean(inputs, reduction_axes=inputs.axes.batch_axes())
+    err = ng.sum(inp_stat - targets, out_axes=())
+    d_inputs = ng.deriv(err, inputs)
+    comp_func = executor([err, d_inputs], inputs, targets)
+
+    input_value = rng.uniform(-1, 1, inputs.axes)
+    target_value = rng.uniform(-1, 1, targets.axes)
+    ng_f_res, ng_b_res = comp_func(input_value, target_value)
+
+    np_f_res = np.sum(np.mean(input_value, axis=1, keepdims=True) - target_value)
+
+    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
