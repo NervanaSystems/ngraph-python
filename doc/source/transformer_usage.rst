@@ -35,6 +35,7 @@ Transformers should be created using the factory interface in ngraph.transformer
 This will create a transformer using the default factory (NumPy). It is possible to set the transformer factory manually to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this
 
 .. code-block:: python
+
     import ngraph.transformers as ngt
     available_transformers = ngt.transformer_choices()
     if 'gpu' in available_transformers:
@@ -56,6 +57,7 @@ Computation Creation
 Computations are created with the ``Transformer::computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be op graph nodes. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
 
 .. code-block:: python
+
     import ngraph as ng
 
     a = ng.constant(4)
