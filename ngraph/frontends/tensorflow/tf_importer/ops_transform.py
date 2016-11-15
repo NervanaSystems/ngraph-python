@@ -87,8 +87,8 @@ class OpsTransform(OpsBase):
                                       "supported.")
 
         # return
-        return ng.constant(
-            range_val, shape_to_axes(range_val.shape)).named(tf_node.name)
+        return ng.constant(range_val,
+                           shape_to_axes(range_val.shape)).named(tf_node.name)
 
     def Size(self, tf_node, inputs):
         """
@@ -179,19 +179,47 @@ class OpsTransform(OpsBase):
         Inputs to tf_node:
             tensor, shape, name
         """
-        # TODO: currently only support constants, reshape is not in ngraph
+        # TODO: currently only support constants and flatten to 1d and 2d
         # get inputs
         tensor, shape = inputs
 
-        try:
-            # new tensor
-            np_val = np.reshape(tensor.const, shape.const.astype(int))
-            return ng.constant(
-                np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
-        except:
-            raise NotImplementedError(
-                "Reshape not supported in ngraph, "
-                "currently only const tensor is supported.")
+        def get_flatten_idx(shape_i, shape_o):
+            """
+            check if flattening shape is valid
+            Args:
+                shape_i: input tensor shape
+                shape_o: output flattend tensor shape
+
+            Returns:
+                None if flatten not valid, otherwise the flatten_at index
+            """
+            return None
+
+        # get input and output shape
+        shape_i = tensor.shape.lengths
+        shape_o = tuple(shape.const.astype(int))
+        if np.prod(shape_i) != np.prod(shape_o):
+            raise ValueError("Total size of input and output dimension "
+                             "mismatch.")
+
+        if tensor.const is not None:
+            # reshape const
+            np_val = np.reshape(tensor.const, shape_o)
+            return ng.constant(np_val,
+                               shape_to_axes(np_val.shape)).named(tf_node.name)
+        else:
+            ndims_o = len(shape_o)
+            if ndims_o != 1 and ndims_o != 2:
+                raise NotImplementedError("Reshape can only support flatten"
+                                          "to 1d or 2d.")
+            if ndims_o == 1:
+                tensor = ng.flatten(tensor)
+            else:
+                cumprods = list(np.cumprod(shape_i))
+                flatten_at_idx = cumprods.index(shape_o[0]) + 1
+                tensor = ng.flatten_at(tensor, flatten_at_idx)
+            res = ng.cast_axes(tensor, shape_to_axes(shape_o))
+            return res.named(tf_node.name)
 
     def Tile(self, tf_node, inputs):
         """
@@ -226,9 +254,8 @@ class OpsTransform(OpsBase):
         output_val = np.tile(input_val, multiples_val.astype(int))
 
         # make new constants
-        return ng.constant(
-            output_val,
-            shape_to_axes(output_val.shape)).named(tf_node.name)
+        return ng.constant(output_val,
+                           shape_to_axes(output_val.shape)).named(tf_node.name)
 
     def ExpandDims(self, tf_node, inputs):
         """

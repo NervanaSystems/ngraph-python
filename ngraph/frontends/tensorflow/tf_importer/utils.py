@@ -43,6 +43,81 @@ class SGDOptimizer(object):
         return updates
 
 
+def np_layout_shuffle(in_tensor, in_axes, out_axes):
+    """
+    Perform numpy array dim-shuffle and expand / shrink dims.
+
+    Example usage (from tf -> ng):
+        np_layout_shuffle(np_tf_image,  in_axes='NHWC', out_axes='CDHWN')
+        np_layout_shuffle(np_tf_weight, in_axes='RSCK', out_axes='CTRSK')
+
+    In the implementation:
+        axis: string / char like "C"
+        dim: length of a certain axis
+        index: index of axis, e.g. in 'NHWC', idx of 'H' is 1
+
+    Example dim-shuffle index:
+        (N, H, W, C) -> (N, H, W, C, D) -> (C, D, H, W, N) => 3, 4, 1, 2, 0
+                         0, 1, 2, 3, 4
+        (C, D, H, W, N) -> (C, H, W, N) -> (N, H, W, C) => 3, 1, 2, 0
+                            0, 1, 2, 3
+
+    Arguments:
+        in_tensor: input numpy array
+        in_axes: input layout strings, for example, in conv2d,
+                 tf's image layout : 'NHWC', with D=1 to expand dim
+                 tf's weight layout: 'RSCK', with T=1 to expand dim
+        out_axes: output layoutn strings, for example, in conv2d,
+                  ng's image layout : 'CDHWN'
+                  ng's weight layout: 'CTRSK'
+
+    Returns:
+        numpy array out_tensor
+    """
+    # in_tensor match in_axes
+    if len(in_axes) != np.ndim(in_tensor):
+        raise ValueError("in_tensor does not match in_axes.")
+
+    # out_axes must be a (non-strict) superset of in_axes, except dim 1 in_axes
+    in_axes_set = set(in_axes)
+    out_axes_set = set(out_axes)
+    for index, axis in enumerate(in_axes):
+        if axis not in out_axes_set and in_tensor.shape[index] != 1:
+            raise ValueError("out_axes not compatible with in_axes.")
+
+    # dim expand / squeeze in_tensor to match output
+    if len(in_axes) < len(out_axes):
+        # expand
+        extra_axes = "".join(list(out_axes_set - in_axes_set))
+        extra_dims = (1, ) * len(extra_axes)
+        in_tensor = np.reshape(in_tensor, in_tensor.shape + extra_dims)
+        in_axes = in_axes + extra_axes
+    elif len(in_axes) > len(out_axes):
+        # squeeze
+        expanded_in_dims = [
+            dim for axis, dim in zip(in_axes, in_tensor.shape)
+            if axis in out_axes_set
+        ]
+        in_tensor = np.reshape(in_tensor, expanded_in_dims)
+        in_axes = "".join(filter(lambda axis: axis in out_axes_set, in_axes))
+
+    # sanity check
+    assert np.ndim(in_tensor) == len(in_axes) == len(out_axes)
+    assert set(in_axes) == set(out_axes)
+
+    # create list mapping for dim-shuffle, find in_axes's index in out_axes
+    in_axes_list = list(in_axes)
+    try:
+        in_out_index = [in_axes_list.index(axis) for axis in out_axes]
+    except ValueError:
+        raise ValueError("out_axes not compatible with in_axes.")
+
+    # dim-shuffle
+    out_tensor = np.transpose(in_tensor, in_out_index)
+
+    return out_tensor
+
+
 def remove_tf_name_prefix(name):
     """
     Strip ^ from TF's node name.

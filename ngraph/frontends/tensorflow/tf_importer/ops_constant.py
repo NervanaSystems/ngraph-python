@@ -24,7 +24,7 @@ import scipy.stats
 
 class OpsConstant(OpsBase):
     """
-    Mix-in class for unary ops.
+    Mix-in class for constant ops.
     """
 
     def Const(self, tf_node, inputs):
@@ -43,8 +43,8 @@ class OpsConstant(OpsBase):
         """
         # convert to numpy value
         np_val = tensor_util.MakeNdarray(tf_node.attr['value'].tensor)
-        ng_op = ng.constant(
-            np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
 
     def Fill(self, tf_node, inputs):
@@ -73,8 +73,8 @@ class OpsConstant(OpsBase):
         np_val.fill(const_val)
 
         # create op
-        ng_op = ng.constant(
-            np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
 
     def TruncatedNormal(self, tf_node, inputs):
@@ -112,8 +112,8 @@ class OpsConstant(OpsBase):
         generator = scipy.stats.truncnorm(
             (lo - mu) / sigma, (up - mu) / sigma, loc=mu, scale=sigma)
         np_val = generator.rvs(shape)
-        ng_op = ng.constant(
-            np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
 
     def RandomStandardNormal(self, tf_node, inputs):
@@ -137,8 +137,8 @@ class OpsConstant(OpsBase):
 
         # generate standard normal
         np_val = np.random.standard_normal(size=shape)
-        ng_op = ng.constant(
-            np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
 
     def ZerosLike(self, tf_node, inputs):
@@ -160,6 +160,6 @@ class OpsConstant(OpsBase):
         """
         shape = inputs[0].axes.lengths
         np_val = np.zeros(shape)
-        ng_op = ng.constant(
-            np_val, shape_to_axes(np_val.shape)).named(tf_node.name)
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
