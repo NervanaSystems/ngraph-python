@@ -13,46 +13,5 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-
-|Geon|
-================
-
-:Release: |version|
-:Date: |today|
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Introduction
-
-   overview.rst
-   installation.rst
-   walk_throughs.rst
-   future_work.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Building Graphs
-
-   building_graphs.rst
-   axes.rst
-   autodiff.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Transformers
-
-   transformer_usage.rst
-   transformer_implementation.rst
-   tensors.rst
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Frontends
-
-   neon.rst
-   tensorflow.rst
-
+neon
+****
