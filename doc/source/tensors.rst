@@ -16,8 +16,52 @@
 Tensors
 =======
 
-.. Note::
-   While the following exposition of abstract tensors is useful for advanced users of ngraph, the reader can safely skip this sub-section on a first reading of the documentation and return to it at a later time if desired.
+Tensors are created with the ``AssignableTensorOp`` with several key attributes passed in as arguments:
+
+- ``constant``: Immutable tensor that can be inlined.
+- ``persistent``: Value is retained across computations (for example, weights)
+- ``trainable``: Marker for a tensor that is meant to be retrieved as part of a variable list.
+- ``input``: Tensor that allows for a value to be passed in during runtime.
+
+For convenience, we provide several helper functions to define commonly used configurations of tensors, as shown below.
+
+.. csv-table::
+    :header: "Method", "constant", "persistent", "trainable", "input", "Example Usage"
+    :widths: 20, 8, 8, 8, 8, 40
+    :delim: |
+
+    ``ng.constant`` | True | True | False | False | Constants specified during graph creation.
+    ``ng.placeholder`` | False | True | False | True | Used for input values, typically from host.
+    ``ng.persistent_tensor`` | False | True | False | False | Persistent tensors, such as velocity in SGD.
+    ``ng.variable`` | False | True | True | False | Parameters that are updated during training.
+
+
+
+Basic Tensor Descriptions
+*************************
+
+In Nervana Graph, we often have to reason about tensors before any computations or allocations are performed. For this reason, we use ``tensor descriptions`` to hold enough metadata about tensors for analysis/simplification. Basic tensor descriptions only have shape and element type information. Although the shape is an ordered list of lengths, the order does not imply a particular layout/striding for the dimensions. The basic tensor descriptions, with restrictions on dimensions and striding, are appropriate for the basic operations that all Nervana Graph transformers must implement. They may also be useful for front ends that describe tensors by shape.
+
+If we know the layout of a tensor, we can compute layout of subsequent slices and reshapings. But in Nervana Graph, we only know the layout for the subset of tensors where the layout has been explicitly provided by the frontend. But we still need information about which tensors are views of each other, dimension lengths, alignment constraints, slicing, etc. We use ``BasicTensorDescription`` to represent all the information the graph needs to know about tensors. During the transformation process, this may vary. When a tensor is first added to the graph, little may be known about it, but by the time execution occurs, layout needs to be known.
+
+BasicTensorDescription:
++++++++++++++++++++++++
+    Describes a tensor by its shape and element type.
+
+    Attributes:
+        - dtype: The dtype of the elements.
+        - rank: The number of dimensions.
+        - read_only: True for an r-tensor, False for an l-tensor.
+        - shape: An n-tuple of non-negative integers. The length of the tuple is the rank.
+        - layout: strides and offset, if known.
+
+
+Every basic tensor-valued ``Op`` corresponds to an r-tensor (if an allocation, an l-tensor) and has a ``BasicTensorDescription`` describes the tensor, and is computed from the tensor descriptions of the parameters and arguments to the ``Op``.
+
+During the transformation process, the tensor description may be augmented with additional information, such as a storage layout and storage assignment. The value of an ``Op`` might be a different view of a tensor, in which case the sharing must be indicated in its ``tensor_description``. An ``AllocationOp`` is a special case of a tensor-valued ``Op`` in that its tensors is an l-tensor. At the end of the transformation process, all tensor descriptions for l-tensors must contain enough information for them to be allocated.
+
+Implementation Details
+**********************
 
 Abstractly, an n-tensor is a map from an n-dimensional rectangle of non-negative integers to values of homogeneous type. In programming languages, there are two kinds of values, l-values and r-values. L-values can appear on the left side of an assignment and r-values can appear on the right side of an assignment. For example, ``x`` can be an l-value or an r-value, while ``x + y`` is an r-value. Likewise, if a tensor's values are l-values, the tensor is an l-tensor, and if the tensor's values are r-values, the tensors is an r-tensor. The tensor ``x`` is an l-tensor since values can be assigned to its elements, as in ``x[...] = y``, while the tensor ``x + y`` is an r-tensor because values cannot be assigned to it. An r-tensor only needs to be able to provide values; it does not need to store them. The tensor ``x + y`` could produce the value for an index ``i`` by providing ``x[i] + y[i]`` every time it is needed, and a constant tensor could ignore the index and always produce the value.
 
@@ -53,97 +97,6 @@ An L-tensor is typically represented as a contiguous region of memory and a mapp
 
 There are many ways to map an index to a linear index which correspond to permutations of the stride n-tuple. Two common special cases are Row-major and column-major ordering. In row-major order, the strides are listed in decreasing order and can be calculated using partial products of the allocated sizes for each dimension, multiplied from the right, while for column-major order, the strides are in increasing order and are calculated by multiplying the sizes from the left. For example, if the sizes of the dimensions of a 3d-tensor are ``(5, 3, 2)`` then the row-major strides would be ``(6, 2, 1)``, and ``(1, 5, 15)`` for column major-order. Note that if two elements of the stride, shape, and size are permuted, then the same linear index is given by permuting the index in the same way. For example, a transpose view just requires these permutations.
 
-Views allow for simpler implementation of tensor operations. For example consider implementing a subtraction operation for arbitrary n-tensors of the same shape. Implemented directory, an n-tuple index iterator would need to be maintained. However, if the n-tuple iterator would iterate over the linearized indices in the same order for both tensors, we can consider the *flattened* tensor view versions of these two tensors and use a single integer iterator to walk through pairs of elements from each tensor using the same offset for each. This will produce the same result as if we had iterated through the two tensors using multidimensional indexing, but may result in the element pairs being accessed in different orders. This is only possible if the tensors have the same layout and strides. 
-
-Basic Tensor Descriptions
-*************************
-
-In Nervana Graph, it is useful to be able to reason about tensors in an abstract way before any computations or allocations are performed. For this reason we use ``tensor descriptions`` to hold enough metadata about tensors in order do analysis/simplification. Basic tensor descriptions only have shape and element type information. Although the shape is an ordered list of lengths, the order does not imply a particular layout/striding for the elements. The basic tensor descriptions, with restrictions on dimensions and striding, are appropriate for the basic operations that all Nervana Graph transformers must implement. They may also be useful for front ends that describe tensors by shape.
-
-If we know the layout of a tensor, we can compute layout of subsequent slices and reshapings. But in Nervana Graph, we only know the layout for the subset of tensors where the layout has been explicitly provided by the frontend. But we still need information about which tensors are views of each other, dimension lengths, alignment constraints, slicing, etc. We use ``BasicTensorDescription`` to represent all the information the graph needs to know about tensors. During the transformation process, this may vary. When a tensor is first added to the graph, little may be known about it, but by the time execution occurs, layout needs to be known.
-
-BasicTensorDescription:
-+++++++++++++++++++++++
-    Describes a tensor by its shape and element type.
-
-    Attributes:
-        - dtype: The dtype of the elements.
-        - rank: The number of dimensions.
-        - read_only: True for an r-tensor, False for an l-tensor.
-        - shape: An n-tuple of non-negative integers. The length of the tuple is the rank.
-        - layout: strides and offset, if known.
-
-SimpleTensorViewDescription(BasicTensorDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Common information for all simple views.
-
-    Attributes:
-        - base_tensor: The viewed tensor.
-
-BroadcastTensorDescription(SimpleTensorViewDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Add broadcast dimensions to the viewed tensor.
-
-    Parameters:
-        - broadcast_shape: The shape of the view, with ``1``s denoting broadcast dimensions. This shape tuple with 1s removed must be the same as the shape of the underlying ``base_tensor``.
-
-FlattenTensorDescription(SimpleTensorViewDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Flatten two or more axes.
-
-    Attributes:
-        - shape: The shape of the view, where sub-tuples indicated flattened dimensions. For example, ``((32, 32), 128)`` flattens the first two dimensions of ``(32, 32, 128)``. The shape with sub-tuple lengths promoted to the tuple must match the shape of the viewed tensor.
-
-PermuteTensorDescription(SimpleTensorViewDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Permute two or more axes.
-
-    Attributes:
-        - permutation: A tuple of the viewed tensor's dimensions in the view. For example, a permutation of ``(1, 2, 0)`` of a tensor with shape ``(2, 3, 5)`` would have shape ``(3, 5, 2)``.
-
-SliceTensorDescription(SimpleTensorViewDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Slice one or more dimensions.
-
-    Attributes:
-        - slices: A tuple of slices of the viewed tensor. Must be the same number of dimensions as tensor and contain slices or dimension lengths.
-
-PadTensorDescription(SimpleTensorViewDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Add padding to one or more dimensions.
-
-    Attributes:
-        - pre_padding: n-tuple of zero padding added before each dimension.
-        - post_padding: n-tuple of zero padding added after each dimension
-
-ComplexTensorViewDescription(BasicTensorDescription):
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Describes a complex view of a tensor, i.e. one composed of multiple tensors.  TBD.
-
-Every basic tensor-valued ``Op`` corresponds to an r-tensor (if an allocation, an l-tensor) and has a ``BasicTensorDescription`` describes the tensor, and is computed from the tensor descriptions of the parameters and arguments to the ``Op``.
-
-During the transformation process, the tensor description may be augmented with additional information, such as a storage layout and storage assignment. The value of an ``Op`` might be a different view of a tensor, in which case the sharing must be indicated in its ``tensor_description``. An ``AllocationOp`` is a special case of a tensor-valued ``Op`` in that its tensors is an l-tensor. At the end of the transformation process, all tensor descriptions for l-tensors must contain enough information for them to be allocated.
-
-Axes
-****
-
-Axes provide a way to add semantic information about a tensor's dimensions. For example, rather than a tensor having a shape of ``(32, 32)`` we can say it has axes of ``(W, H)``. If one tensor has axes of ``(W, H)`` and another has axes of ``(H, W)`` and we add them, the semantic information tells us that we need to swap the axis order, as written (the chosen layouts may be such that no swapping is actually needed). Axes also simplify broadcasting; if adding a ``(W, H)`` tensor to a ``(W, H, N)`` tensor, we can infer that the first axis should broadcast on the ``N`` axis. This results in a broadcast axis with the same axis class as ``N``.
-
-In a network, the semantics such as "Height," or "Channels" or "Hidden" may apply to dimensions of different lengths in different dimensions. We call these designations the *axis class*. When an axis is created, an axis class may be supplied; if a class is not supplied, a unique class is created for the axis.
-
-Elementwise operations match axes by identity. If there is not an identity match, but two axes are of the same class and length, they will match. Otherwise, broadcasting will be used to make the axes the same.
-
-Convolution is more complicated. The filter moves over some axes to form dot products on other axes. The axis classes of the filter and input should match according to the dot product. The filter has output axes, whose classes should match the classes of the output. If the output axes default, they will be generated and use the appropriate classes.
-
-For dot, we associate a partial order with axes; every normal axis has an offset of 0, but we can obtain a related offset axis that is offset by any integer. In the dot product, axes in the first element will match axes in the second axis with an offset one higher. The transpose operation on a tensor makes a view where the axis offsets are all subtracted from -1. This makes ``dot(x, y) = dot(y.T, x.T).T`` hold, and ``dot(x.T, x)`` is the L2 norm for any tensor ``x``.
-
-TensorDescription(BasicTensorDescription):
-++++++++++++++++++++++++++++++++++++++++++++++
-    Extends a tensor description to have axes. The shape comes from the length of the axes.
-
-    Attributes:
-        - axes: The axes of the tensor.
-
-
+Views allow for simpler implementation of tensor operations. For example consider implementing a subtraction operation for arbitrary n-tensors of the same shape. Implemented directory, an n-tuple index iterator would need to be maintained. However, if the n-tuple iterator would iterate over the linearized indices in the same order for both tensors, we can consider the *flattened* tensor view versions of these two tensors and use a single integer iterator to walk through pairs of elements from each tensor using the same offset for each. This will produce the same result as if we had iterated through the two tensors using multidimensional indexing, but may result in the element pairs being accessed in different orders. This is only possible if the tensors have the same layout and strides.
 
 
