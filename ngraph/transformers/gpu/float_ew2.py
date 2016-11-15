@@ -22,6 +22,9 @@ from pycuda.compiler import SourceModule
 
 import numpy as np
 
+flex_verbose = False
+
+
 _op_templates = {
     "assign": r"%(out)s = %(x)s;",
     "finite": None,
@@ -216,12 +219,43 @@ _defines_template3 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
 _header_template = r"""
 
 %(defines)s
+%(flex_defines)s
 __global__ void %(kernel_name)s(%(args)s)
 {"""
 
 _includes_template = r"""#include <float.h>
 #include <cuda_fp16.h>
 """
+
+# flex templates
+_flex_scale_template = "( %(reg)s * %(scale)s )"
+_flex_conversion_template = "reg_out = fp32_to_int16(%(scale)s * %(out)s);"
+_flex_maxabs_template1 = "flex_max = max_abs(flex_max, %(out)s);"
+_flex_maxabs_template2 = "atomicMax(flex_stats, flex_max);"
+
+
+# flex functions taken from neon flexsim neon/backends/cuda_templates.py
+_common_fp32_to_int16 = r"""
+__device__ __forceinline__ short fp32_to_int16(float val)
+{
+    short ret;
+    asm("cvt.rni.s16.f32 %0, %1;" : "=h"(ret) : "f"(val));
+    return ret;
+}
+"""
+
+_common_max_abs = r"""
+__device__ __forceinline__ float max_abs(int max_abs, int val)
+{
+    asm("{\n\t"
+        ".reg .s32 abs_val;\n\t"
+        "abs.s32 abs_val, %1;\n\t"
+        "max.s32 %0, %0, abs_val;\n\t"
+        "}" : "+r"(max_abs) : "r"(val));
+    return max_abs;
+}
+"""
+
 
 indent_str = "    "
 
@@ -260,6 +294,12 @@ class TensorDescriptionWrapper:
     @property
     def is_trans(self):
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
+
+    def is_flex(self):
+        return hasattr(self.td.buffer.data.device_tensor(self.td), 'flex_entry')
+
+    def flex_entry(self):
+        return self.td.buffer.data.device_tensor(self.td).flex_entry
 
 
 class GenerationContext:
@@ -589,9 +629,13 @@ def _build_register_mapping(stages):
     register_inits = {}
     register_types = {}
     buffers = {}
+    buffer_types = {}
     last_write = {}
     constants = {}
     has_argmaxmin = False
+    # flex_scale: register name --> (kernel arg name, flex entry, whether is output)
+    flex_scale = {}
+    flex_stats_ptr = None
 
     for stage, stage_index in zip(stages, range(len(stages))):
         for op, op_index in zip(stage, range(len(stage))):
@@ -607,9 +651,11 @@ def _build_register_mapping(stages):
                         register_types[regname] = _get_register_type(type(inval), False)
                     else:
                         regname = "reg" + str(reg_count)
+                        sclname = "scale" + str(reg_count)
                         reg_count = reg_count + 1
                         register_mapping[inval] = regname
                         register_types[regname] = _get_register_type(inval.dtype, False)
+
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
                                 "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
@@ -619,13 +665,23 @@ def _build_register_mapping(stages):
                         if _is_buffer(inval):
                             buffername = "buf" + str(len(buffers))
                             buffers[inval] = buffername
+                            buffer_types[inval] = _get_register_type(inval.dtype, True)
+
+                        # flex
+                        if inval.is_flex():
+                            flex_entry = inval.flex_entry()
+                            flex_scale[regname] = (sclname, flex_entry, False)
+                            register_types[regname] = "short"  # TODO: move into _get_register_type
+                            buffer_types[inval] = "short"
+
 
             if op[3] not in register_mapping:
                 regname = "reg" + str(reg_count)
+                sclname = "scale" + str(reg_count)
                 reg_count = reg_count + 1
                 register_mapping[op[3]] = regname
-
                 register_types[regname] = _get_register_type(op[3].dtype, False)
+
                 if op[0] in _redop_templates:
                     register_inits[regname] = _redop_inits[op[0]]
                 else:
@@ -634,6 +690,16 @@ def _build_register_mapping(stages):
                 if _is_buffer(op[3]):
                     buffername = "buf" + str(len(buffers))
                     buffers[op[3]] = buffername
+                    buffer_types[op[3]] = _get_register_type(op[3].dtype, True)
+
+                # flex
+                if op[3].is_flex():
+                    flex_entry = op[3].flex_entry()
+                    flex_scale[regname] = (sclname, flex_entry, True)
+                    flex_stats_ptr = flex_entry.ptr
+                    register_types[regname] = "float"  # TODO: move into _get_register_type
+                    if _is_buffer(op[3]):
+                        buffer_types[op[3]] = "short"
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
@@ -643,14 +709,17 @@ def _build_register_mapping(stages):
     ctx.register_inits = register_inits
     ctx.register_types = register_types
     ctx.buffers = buffers
+    ctx.buffer_types = buffer_types
     ctx.constants = constants
     ctx.last_write = last_write
     ctx.has_argmaxmin = has_argmaxmin
+    ctx.flex_scale = flex_scale
+    ctx.flex_stats_ptr = flex_stats_ptr
     return ctx
 
 
 def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements,
-                         loop_axis, warp_reductions, reduction_stores):
+                         loop_axis, flex_ops, warp_reductions, reduction_stores):
     """
     Generates CUDA C code for a single stage which can contain any number of
     elementwise operations followed by one or more reductions. This code takes
@@ -708,6 +777,13 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
     for warp_red in warp_reductions:
         code = code + warp_red
 
+    # FLEX TODO: newlines when not flex
+    # flex - scale result and convert to int16, compute maxabs
+    code = code + "\n"
+    for fop in flex_ops:
+        code = code + "\n" + indent_str + fop
+    code = code + "\n"
+
     # Add reduction stores
     for store in reduction_stores:
         code = code + "\n" + indent_str + store
@@ -717,7 +793,7 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
 
 def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
                           kernel_name, argstring, axes_mapping, loop_axis,
-                          kernel_identifier):
+                          kernel_identifier, flex_defines=""):
     """
     Generates entire kernel code which can be passed to the CUDA C compiler.
     Takes care of function header, defines, and initialization code.
@@ -747,7 +823,8 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     header = _header_template % {
         "defines": defines,
         "kernel_name": kernel_name,
-        "args": argstring
+        "args": argstring,
+        "flex_defines": flex_defines
     }
 
     # Initialization code
@@ -763,6 +840,10 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     if ctx.has_argmaxmin:
         reg_decls = reg_decls + "\n    float temp_val = 0.0f;"
         reg_decls = reg_decls + "\n    unsigned int temp_idx = 0;"
+
+    if ctx.flex_stats_ptr is not None:
+       reg_decls = reg_decls + "\n    int flex_max = 0;"
+       reg_decls = reg_decls + "\n    short reg_out = 0;"
 
     smem_decls = ""
     smem_inits = ""
@@ -816,6 +897,8 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     return code
 
 
+
+
 def _generate_kernel_args(ctx, axes_mapping, dims):
     """
     Generates a list of parameters which need to be passed to the CUDA kernel
@@ -850,7 +933,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         params.append(ctx.constants[constant])
 
     for buf in ctx.buffers.keys():
-        args.append(_get_register_type(buf.dtype, True) + "* " + ctx.buffers[buf])
+        args.append(ctx.buffer_types[buf] + "* " + ctx.buffers[buf])
         args.append("unsigned int stridea_" + ctx.buffers[buf])
         arg_desc = arg_desc + "PI"
         params.append(buf.td)
@@ -867,8 +950,29 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
             params.append(buf.strides[1])
             params.append(buf.strides[2])
 
-    return (args, arg_desc, params)
+    # add flex scale arguments
+    # create flex_params_info for future use
+    #   - change kernel params as flex scale changes
+    #   - access flex ids of changed tensors
+    flex_params_info = []
+    for argname, flex_entry, is_output in ctx.flex_scale.values():
+        args.append("float " + argname)
+        arg_desc = arg_desc + "f"
+        # compute index into params of current scale arg
+        index = len(params)
+        index += 3  # 3 params are added in _prepare_compound_kernel - brittle code?
+        # add scale
+        scale = 1.0/flex_entry.scale if is_output else flex_entry.scale
+        params.append(scale)
+        # record info about this scale arg
+        flex_params_info.append((index, flex_entry, is_output))
 
+    if ctx.flex_stats_ptr is not None:
+        args.append("int * flex_stats")
+        arg_desc = arg_desc + "P"
+        params.append(ctx.flex_stats_ptr)
+
+    return (args, arg_desc, params, flex_params_info)
 
 def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     """
@@ -980,24 +1084,41 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     buffers_in_reg[stage_index].add(inval)
 
+            # flex: code for scaling flex tensors
+            xreg = ctx.register_mapping[op[1]]
+            yreg = ctx.register_mapping[op[2]]  # may be None
+            x_code, y_code = xreg, yreg
+            if xreg in ctx.flex_scale:
+                x_code = _flex_scale_template % {
+                    "reg": xreg,
+                    "scale": ctx.flex_scale[xreg][0]
+                }
+            if yreg in ctx.flex_scale:
+                if yreg is not 'None':
+                    y_code = _flex_scale_template % {
+                        "reg": yreg,
+                        "scale": ctx.flex_scale[yreg][0]
+                    }
+
             if op[0] in _op_templates:
                 if op[0] == "onehot" and op[4] != loop_axis:
                     index = "idx" + str(loop_axis)
                 else:
                     index = "item"
                 op_code = _op_templates[op[0]] % {
-                    "x": ctx.register_mapping[op[1]],
-                    "y": ctx.register_mapping[op[2]],
+                    "x": x_code,
+                    "y": y_code,
                     "out": ctx.register_mapping[op[3]],
                     "index": index
                 }
             else:
                 op_code = _redop_templates[op[0]] % {
-                    "x": ctx.register_mapping[op[1]],
-                    "y": ctx.register_mapping[op[2]],
+                    "x": x_code,
+                    "y": y_code,
                     "out": ctx.register_mapping[op[3]],
                     "index": "item"
                 }
+                # FLEX TODO modifications?
                 redop_code = _redop32_templates[op[0]] % {
                     "out": ctx.register_mapping[op[3]],
                     "y": ctx.register_mapping[op[2]],
@@ -1020,6 +1141,16 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
             op_statements.append(op_code)
 
+            flex_ops = []
+            reg = ctx.register_mapping[op[3]]
+            output_is_flex = reg in ctx.flex_scale
+            if output_is_flex:
+                op_statements.append(_flex_conversion_template % {
+                            "out": reg,
+                            "scale": ctx.flex_scale[reg][0]})
+                op_statements.append(_flex_maxabs_template1 % {"out": "reg_out"})
+                flex_ops.append(_flex_maxabs_template2)
+
             if _is_buffer(op[3]):
                 buffers_in_reg[stage_index].add(op[3])
                 if op[0] in _redop_templates:
@@ -1036,7 +1167,9 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # doesn't support data format
                     reg_name = ctx.register_mapping[op[3]]
                     type_key = (ctx.register_types[reg_name],
-                                _get_register_type(op[3].dtype, True))
+                                _get_register_type(op[3].dtype, True))  # FLEX TODO: op[3].dtype if flex will be overridden
+                    if output_is_flex:
+                        reg_name = "reg_out"
                     if type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
@@ -1076,8 +1209,8 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
         # Build stage code from collected statements
         code = code + _generate_stage_code(broadcast_loads, loop_loads, loop_stores,
-                                           op_statements, loop_axis, warp_reductions,
-                                           reduction_stores)
+                                           op_statements, loop_axis, flex_ops,
+                                           warp_reductions, reduction_stores)
 
     # Construct kernel name
     kernel_name = "float_ew" + kernel_identifier + "_"
@@ -1088,17 +1221,23 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     kernel_name = kernel_name + '_'.join(op_names)
 
     # Compute arguments, parameters, and descriptor string
-    args, arg_desc, params = _generate_kernel_args(ctx, axes_mapping, dims)
+    args, arg_desc, params, flex_params_info = _generate_kernel_args(ctx, axes_mapping, dims)
     argstring = ', '.join(args)
+
+    if flex_verbose: print params
+
+    # flex function definitions
+    flex_defines = _common_fp32_to_int16 + _common_max_abs
 
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
                                  kernel_name, argstring, axes_mapping, loop_axis,
-                                 kernel_identifier)
+                                 kernel_identifier, flex_defines=flex_defines)
 
-    return (code, kernel_name, arg_desc, params)
+    if flex_verbose: print code
 
+    return (code, kernel_name, arg_desc, params, flex_params_info)
 
 def _prepare_compound_kernel(ops):
     """
@@ -1113,7 +1252,7 @@ def _prepare_compound_kernel(ops):
 
     # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
-    code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims)
+    code, kernel_name, arg_desc, params, flex_params_info = _get_compound_kernel(ops, axes_mapping, dims)
 
     # Compile kernel
     code = _includes_template + code
@@ -1137,7 +1276,7 @@ def _prepare_compound_kernel(ops):
             griddim[2] = axis[2]
 
     params = [tuple(griddim), tuple(blockdim), None] + params
-    return (kernel, params, 128)
+    return (kernel, params, 128, flex_params_info)
 
 
 def _call_compound_kernel(ops):
@@ -1147,7 +1286,8 @@ def _call_compound_kernel(ops):
     ops (list): List of tuples describing ops to execute in kernel. Each tuple
         should be of the format (op_name, input0, input1, output, axis)
     """
-    kernel, params, shared_size = _prepare_compound_kernel(ops)
+    # FLEX question: this function is unused? doesn't look like flex_params_info is needed here
+    kernel, params, shared_size, _ = _prepare_compound_kernel(ops)
     kernel.prepared_async_call(*params, shared_size=shared_size)
 
 
@@ -1175,7 +1315,7 @@ class CudaSourceFile:
 
         # Generate kernel source code and block/grid mapping
         (axes_mapping, dims) = _get_axes_mapping(ops)
-        code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims,
+        code, kernel_name, arg_desc, params, flex_params_info = _get_compound_kernel(ops, axes_mapping, dims,
                                                                    str(self.num_kernels))
 
         # Calculate block and grid dims
@@ -1204,7 +1344,7 @@ class CudaSourceFile:
         self.num_kernels = self.num_kernels + 1
 
         # Return kernel name and params
-        return (kernel_name, params)
+        return (kernel_name, params, flex_params_info)
 
     def compile(self):
         assert not self.compiled

@@ -62,7 +62,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
                                'visualization.')
 
         self.add_argument('-z', '--batch_size', type=int, default=128)
-        self.add_argument('-b', '--backend', choices=['gpu', 'numpy'], default='numpy',
+        self.add_argument('-b', '--backend', choices=['gpu', 'numpy', 'flexgpu'], default='numpy',
                           help='backend type')
         self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)

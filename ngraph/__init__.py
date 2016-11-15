@@ -84,5 +84,6 @@ __all__ = [
 
 try:
     from ngraph.transformers.gputransform import GPUTransformer
+    from ngraph.transformers.flexgputransform import FlexGPUTransformer
 except ImportError:
     pass

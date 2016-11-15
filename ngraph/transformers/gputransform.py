@@ -361,7 +361,8 @@ class ElementWiseKernel(GPUKernel):
         if sourcefile is not None:
             # Code generation and compilation are only separate when a sourcefile is
             # provided
-            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
+            # FLEX TODO: adding flex_params_info into non-flex class is a quick and dirty solution
+            self.name, self.params, self.flex_params_info = sourcefile.add_kernel(self.ops_buffer)
 
         return True
 
@@ -374,7 +375,8 @@ class ElementWiseKernel(GPUKernel):
 
         if sourcefile is None:
             # Generate and compile single kernel
-            self.kernel, self.params, self.shared_size = \
+            # FLEX TODO: adding flex_params_info into non-flex class is a quick and dirty solution
+            self.kernel, self.params, self.shared_size, self.flex_params_info = \
                 _prepare_compound_kernel(self.ops_buffer)
         else:
             # Get kernel object from compiled sourcefile
@@ -387,7 +389,7 @@ class ElementWiseKernel(GPUKernel):
                                         shared_size=self.shared_size)
 
 
-class GPUKernelGroup():
+class GPUKernelGroup(object):
     """
     A group of GPU kernels which corresponds to a Computation object. Since we
     can't always compound all ops from a Computation into a single GPU kernel,
@@ -505,6 +507,9 @@ class GPUKernelGroup():
         for kernel in self.kernels:
             kernel.compile(self.sourcefile)
 
+    def setup_kernel_execute(self, kernel):
+        pass
+
     def __call__(self):
         """
         Loops over all kernels contained in this group and executes them. Since buffers
@@ -516,6 +521,7 @@ class GPUKernelGroup():
             if not k.buffers_bound:
                 k.bind_buffers()
 
+            self.setup_kernel_execute(k)
             k.execute()
 
 
@@ -586,6 +592,11 @@ class GPUTensorAllocator():
         self.tensor_name = tensor.name
         self.tensor_description = tensor.tensor_description
         self._tensor = None
+        # TODO: this doesn't feel super clean, but just to get something working...
+        if hasattr(transformer, 'use_flex_dtype'):
+            self.dtype = np.int16
+        else:
+            self.dtype = self.tensor_description.dtype
 
     def __call__(self, buffer_alloc):
         """
@@ -599,7 +610,7 @@ class GPUTensorAllocator():
 
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUArray(tensor_description.shape,
-                              tensor_description.dtype,
+                              self.dtype,
                               gpudata=gpudata,
                               strides=tensor_description.strides)
 
@@ -622,10 +633,19 @@ class GPURegister():
         self.name = name
 
 
+class GPUDeviceBufferReference(DeviceBufferReference):
+    """
+    Analogous to NumPyDeviceBufferReference.
+    """
+    def __init__(self, transformer, **kwargs):
+        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
+
+
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
     Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
     """
+
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(GPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -650,14 +670,6 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.current_buffer = buffer_alloc
         self.transform_allocate_views()
         self.transformer.current_buffer = None
-
-
-class GPUDeviceBufferReference(DeviceBufferReference):
-    """
-    Analogous to NumPyDeviceBufferReference.
-    """
-    def __init__(self, transformer, **kwargs):
-        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class GPUDeviceTensor(DeviceTensor):
@@ -700,6 +712,7 @@ class GPUDeviceTensor(DeviceTensor):
         Returns:
             Numpy array containing tensor data
         """
+
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
@@ -722,6 +735,9 @@ class GPUDeviceTensor(DeviceTensor):
             tensor.fill(value)
 
         return tensor
+
+    def set_dtype(self, dtype):
+        self.tensor_description.dtype = dtype
 
     def __getitem__(self, index):
         if index is None or index == _none_slice or index == ():
@@ -1045,9 +1061,12 @@ class GPUTransformer(Transformer):
     def finish_transform_allocate(self):
         pass
 
+    def gpu_kernel_group(self, name):
+        return GPUKernelGroup(self, name)
+
     def transform_ordered_ops(self, ordered_ops, name):
         # Create kernel group
-        kernel_group = GPUKernelGroup(self, name)
+        kernel_group = self.gpu_kernel_group(name)
         for fun in ordered_ops:
             kernel_group.add_kernel(fun)
 
