@@ -450,5 +450,5 @@ class Recurrent(Layer):
                 h.name = "activ{}".format(i)
                 hprev.append(h)
 
-        rnn_out = ng.Stack(hprev[1:], self.time_axis, pos=1)
+        rnn_out = ng.stack(hprev[1:], self.time_axis, pos=1)
         return rnn_out

@@ -31,7 +31,7 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     temporary, constant_value, variance, squared_L2, \
     negative, absolute, sin, cos, tanh, exp, log, reciprocal, safelog, sign, \
     square, sqrt, tensor_size, assign, batch_size, pad, sigmoid, \
-    one_hot
+    one_hot, stack
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
 
 __all__ = [
@@ -72,6 +72,7 @@ __all__ = [
     'sqrt',
     'square',
     'squared_L2',
+    'stack',
     'tanh',
     'temporary',
     'tensor_size',
