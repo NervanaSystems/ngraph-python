@@ -312,10 +312,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
 
-    @add_op.on_type(StackOp)
-    def add_op(self, op, out, *args):
-        raise ValueError("Unhandled op: {}".format(op))
-
     def _buffer_op(self, op, x=None, y=None, out=None, axis=None, extra=None):
         """
         Adds an op to the list of ops to be compiled into a kernel
