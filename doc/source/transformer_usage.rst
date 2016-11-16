@@ -29,6 +29,7 @@ Transformer Creation
 Transformers should be created using the factory interface in ngraph.transformers.base
 
 .. code-block:: python
+
     from ngraph.transformers import make_transformer
     transformer = make_transformer()
 
@@ -61,14 +62,14 @@ Computations are created with the ``Transformer::computation`` method. When crea
     import ngraph as ng
 
     a = ng.constant(4)
-    b = ng.constant(2)
+    b = ng.placeholder(())
     c = ng.placeholder(())
     d = ng.multiply(a, b)
     e = ng.add(d, c)
 
-    example_comp = transformer.computation([e], c)
+    example_comp = transformer.computation(e, b, c)
 
-This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The only result that we need to specify to create the computation is ``e`` since ``d`` will be discovered when the transformer traverses the graph. In this example, ``a`` and ``b`` are constants so they do not need to be passed in as inputs, but ``c`` is a placeholder tensor which must be filled as an input.
+This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The first argument is the result of the computation and the remaining arguments are inputs to the computation. The only result that we need to specify to create the computation is ``e`` since ``d`` will be discovered when the transformer traverses the graph. In this example, ``a`` is a constant so it does not need to be passed in as an input, but ``b`` and ``c`` are placeholder tensors which must be filled as inputs.
 
 After all computations are created, the ``transformer::initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this will be called automatically if a computation is called before manually calling ``initialize``). **Note** that new computations cannot be created with a transformer after ``initialize`` has been called. For more information on this initialization process, see the transformer_implementation.rst documentation file.
 
@@ -78,16 +79,37 @@ Computation Execution
 This computation object can be executed with is ``__call__`` method by specifying the input ``c``.
 
 .. code-block:: python
-    result_e = example_comp(7)
+
+    result_e = example_comp(2, 7)
 
 The return value of this call will be the resulting value of ``e``, which should be ((4 * 2) + 7) = 15.
 
 Computations with Multiple Results
 ----------------------------------
 
+In real world cases, we often want computations that return multiple results. For example a single training iteration may compute both the cost value and the weight updates. Multiple results can be passed to computation creation in a list. After execution, the computation will return a tuple of the results:
+
+.. code-block:: python
+
+    example_comp2 = transformer.computation([d, e], b, c)
+    result_d, result_e = example_comp2(2, 7)
+
+In addition to returning the final result as above, this example will also set result_d to the result of the d operation, which should be 8.
+
 Transformed Graph State
 -----------------------
+
+Once the transformer has been initialized and computation objects have been finalized, all tensors (constants, variables, placeholders) will be allocated in device memory. These tensors are only allocated and initialized once at transformation time, so the transformed graph has state that is persistent between computation evaluations. This is most important for variable tensors, since constants are never modified after creation and placeholders are usually filled by the caller each time a computation is run. The value of variable tensors will remain unchanged between the finish of one computation and the subsequent evaluation of another.
+
+Computations created by the same transformer will share state for any op graph nodes which are needed by both computations. If a variable tensor is assigned in one computation, the updated value will be seen by a subsequent call to a different computation which references that variable tensor. An example of this is a script that defines both a train and test computation. We want to evaluate the test computation to check convergence periodically using the parameters being trained in the train computation.
 
 Executor Utility
 ================
 
+For convenience, an executor utility is provided in ngraph.util.utils. This executor utility reduces the process of creating a transformer and a computation to a single function call. **Note** that calling this function creates a new transformer each time, so it should not be used for cases where multiple computations with shared state are needed.
+
+.. code-block:: python
+
+	from ngraph.util.utils import executor 
+    example_comp = executor(e, b, c)
+    result_e = example_comp(2, 7)
