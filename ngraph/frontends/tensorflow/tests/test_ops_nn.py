@@ -16,17 +16,123 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from builtins import filter
 
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
+from ngraph.frontends.tensorflow.tf_importer.ops_nn import tf_conv2d_pool_padding
+import pytest
+import itertools
+
+
+def gen_conv_testcase():
+    """
+    Generate convolution test cases
+
+    Returns:
+        Iterator of (C, D, H, W, N, T, R, S, K, strides, padding)
+    """
+
+    def args_filter(args):
+        """
+        Filter currently not supported case (only symmetric padding allowed).
+
+        Returns:
+            True if args shall be kept.
+        """
+        C, D, H, W, N, T, R, S, K, strides, padding = args
+        pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding((N, H, W, C),
+                                                            (R, S, C, K),
+                                                            strides, padding)
+        return pad_t == pad_b and pad_l == pad_r
+
+    # test params
+    Cs = [2, ]
+    Ds = [1, ]
+    Hs = [28, 11]
+    Ws = [28, 11]
+    Ns = [8, ]
+    Ts = [1, ]
+    Rs = [1, 3]
+    Ss = [1, 3]
+    Ks = [4, ]
+    strides_list = [[1, 1, 1, 1], [1, 2, 3, 1]]
+    paddings = ['SAME', 'VALID']
+    all_args = list(
+        itertools.product(Cs, Ds, Hs, Ws, Ns, Ts, Rs, Ss, Ks, strides_list,
+                          paddings))
+    return filter(args_filter, all_args)
+
+
+def gen_pool_testcase():
+    """
+    Generate pooling test cases
+
+    Returns:
+        Iterator of (C, D, H, W, N, J, T, R, S, strides, padding)
+    """
+
+    def args_filter(args):
+        """
+        Filter currently not supported case (only symmetric padding allowed).
+
+        Returns:
+            True if args shall be kept.
+        """
+        C, D, H, W, N, J, T, R, S, strides, padding = args
+        pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding((N, H, W, C),
+                                                            (R, S, C, C),
+                                                            strides, padding)
+        return pad_t == pad_b and pad_l == pad_r
+
+    # test params
+    Cs = [2, ]
+    Ds = [1, ]
+    Hs = [28, 11]
+    Ws = [28, 11]
+    Ns = [8, ]
+    Js = [1, ]
+    Ts = [1, ]
+    Rs = [1, 3]
+    Ss = [1, 3]
+    strides_list = [[1, 1, 1, 1], [1, 2, 3, 1]]
+    paddings = ['SAME', 'VALID']
+    all_args = list(
+        itertools.product(Cs, Ds, Hs, Ws, Ns, Js, Ts, Rs, Ss, strides_list,
+                          paddings))
+    return filter(args_filter, all_args)
 
 
 class Tester(ImporterTester):
+    @pytest.mark.parametrize("all_args", gen_conv_testcase())
+    def test_conv(self, all_args):
+        C, D, H, W, N, T, R, S, K, strides, padding = all_args
+        image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
+        weight = tf.constant(np.random.rand(R, S, C, K).astype(np.float32))
+        result = tf.nn.conv2d(image, weight, strides=strides, padding=padding)
+        self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
+
+    @pytest.mark.parametrize("all_args", gen_pool_testcase())
+    def test_max_pooling(self, all_args):
+        C, D, H, W, N, J, T, R, S, strides, padding = all_args
+        ksize = (1, R, S, J)
+        image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
+        result = tf.nn.max_pool(image, ksize, strides=strides, padding=padding)
+        self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
+
+    @pytest.mark.parametrize("all_args", gen_conv_testcase())
+    def test_bias_add(self, all_args):
+        C, D, H, W, N, _, _, _, _, strides, padding = all_args
+        image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
+        bias = tf.constant(np.random.rand(C).astype(np.float32))
+        result = image + bias
+        self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
+
     def test_sparse_softmax_cross_entropy_with_logits(self):
         # numpy random values
         np_logits = np.random.randn(128, 10).astype(np.float32)
-        np_labels = np.random.randint(10, size=(128, ))
+        np_labels = np.random.randint(10, size=(128,))
 
         # tf placeholders
         tf_logits = tf.placeholder(tf.float32, shape=np_logits.shape)

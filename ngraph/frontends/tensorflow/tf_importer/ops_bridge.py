@@ -67,4 +67,5 @@ class OpsBridge(OpsConstant, OpsBinary, OpsPlaceholder, OpsUnary, OpsMatmul,
         if hasattr(self, op_name):
             return getattr(self, op_name)(tf_node, input_ops)
         else:
+            # print(tf_node.name, "ignored.")
             return None

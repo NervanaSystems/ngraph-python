@@ -13,7 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.tensorflow.tf_importer.utils import is_compatible_numpy_shape
+from ngraph.frontends.tensorflow.tf_importer.utils import \
+    is_compatible_numpy_shape
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
 import ngraph as ng
 
@@ -38,6 +39,28 @@ class OpsBinary(OpsBase):
             x, y, name
         """
         return self._element_wise_binary(ng.add, tf_node, inputs)
+
+    def BiasAdd(self, tf_node, inputs):
+        """
+        Special case for add where bias is 1d, and bias's length is equal to
+        value's last dim.
+
+        Arguments:
+            tf_node: NodeDef object, the tensorflow node tso convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the tensorflow node.
+
+        Inputs to tf_node:
+            value, bias
+        """
+        value, bias = inputs
+        if len(bias.axes) != 1:
+            raise ValueError("Bias's must be 1D.")
+        if bias.axes.lengths[0] != value.axes.lengths[-1]:
+            raise ValueError("Bias's length must equal to value's last dim.")
+        return self.Add(tf_node, inputs)
 
     def Sub(self, tf_node, inputs):
         """

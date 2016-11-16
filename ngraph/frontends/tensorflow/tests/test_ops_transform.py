@@ -26,7 +26,7 @@ from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
 class Tester(ImporterTester):
     def test_rank(self):
         # shapes to test
-        shapes = [(1, ), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
@@ -54,7 +54,7 @@ class Tester(ImporterTester):
 
     def test_size(self):
         # shapes to test
-        shapes = [(1, ), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
@@ -73,7 +73,7 @@ class Tester(ImporterTester):
 
     def test_shape(self):
         # shapes to test
-        shapes = [(1, ), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
+        shapes = [(1,), (1, 2), (1, 2, 3), (1, 2, 3, 4)]
 
         # tf placeholders
         placeholders = [tf.placeholder(tf.float32, shape=s) for s in shapes]
@@ -91,15 +91,28 @@ class Tester(ImporterTester):
             self.run(op, tf_feed_dict=feed_dict)
 
     def test_reshape(self):
-        # TODO: currently Reshape not supported in ngrpah, only test const case
+        # TODO: currently generic reshape is not supported in ngraph yet
+        # shapes
+        shapes = [(360,), (3, 120), (12, 30), (60, 6)]
+
+        # const reshape
         x = tf.constant(
             np.random.randn(3, 4, 5, 6).astype(np.float32), dtype=tf.float32)
-        shapes = [(3, 120), (12, 30), (60, 6)]
-
-        # test
         for shape in shapes:
             x_reshaped = tf.reshape(x, shape)
             self.run(x_reshaped, tf_feed_dict={})
+
+    def test_reshape_flatten(self):
+        # TODO: currently only supports flatten to 1d or 2d
+        shapes = [(360,), (3, 120), (12, 30), (60, 6)]
+
+        # flatten to 1d or 2d
+        x = tf.Variable(
+            np.random.randn(3, 4, 5, 6).astype(np.float32), dtype=tf.float32)
+        init_op = tf.initialize_all_variables()
+        for shape in shapes:
+            x_reshaped = tf.reshape(x, shape)
+            self.run(x_reshaped, tf_init_op=init_op, tf_feed_dict={})
 
     def test_tile(self):
         # TODO: currently Tile not supported in ngrpah, only test const case

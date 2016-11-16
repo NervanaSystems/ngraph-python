@@ -2394,7 +2394,7 @@ class SqrtOp(UnaryElementwiseAxesOp):
     one_d_class = SqrtOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, .5 * delta * self)
+        x.generate_add_delta(adjoints, 0.5 * delta / self)
 
 
 def sqrt(x):
