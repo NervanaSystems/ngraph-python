@@ -16,12 +16,51 @@
 Autodiff
 ********
 
-We use the autodiff algorithm to generate the *backprop* computations for derivatives. Autodiff is based on symbolic differentiation, the chain rule, and heuristic groupings of computations.
+We use the autodiff algorithm to generate the *backprop* computations for derivatives. Autodiff is based on symbolic differentiation via the chain rule.
 
-Computation as Steps
-====================
+Computing Derivatives in Op-Graph
+=================================
 
-Although we write a computation in a program as a series of expressions, they are converted into a series of steps, each a function producing a value from previously computed values.  We will use the notation :math:`t_mj` for a value which is computed from :math:`\{t_{ij} | i<m\}`.  We start with the independent variables,
+Each ``Op`` node in our graph implements the ``generate_adjoints`` method, which defines the local gradient for that operation and propagates the deltas to its arguments. To compute the derivatives, we first perform a topological sort on the graph, then traverse the graph in order, calling each node's ``generate_adjoints`` method to add the required backprop computations to the graph.
+
+The ``generate_adjoints`` method accepts ``adjoints``, ``delta``, and the arguments of the op.
+The ``adjoints`` contains
+partially computed backprop ``Ops``, while ``delta`` is the complete adjoint of the ``Op``.
+
+To implement ``generate_adjoints`` for an ``Op`` for the function
+
+.. math:: f(x_1, x_2, \ldots, x_n)
+
+write out
+
+.. math:: df = a_1 dx_1 + a_2 dx_2 + \ldots + a_n dx_n
+
+Then::
+
+    def generate_adjoints(adjoints, delta, x1, x2, ..., xn):
+        x1.generate_add_delta(adjoints, a1 * delta)
+        x2.generate_add_delta(adjoints, a2 * delta)
+        ...
+        xn.generate_add_delta(adjoints, an * delta)
+
+
+For example,
+
+.. math:: f(x,y) = xy
+
+    df = y dx + x dy
+
+So::
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, y * delta)
+        y.generate_add_delta(adjoints, x * delta)
+
+
+Technical Details
+=================
+
+Although we write a computation in a program as a series of expressions, they are converted into a series of steps, each a function producing a value from previously computed values.  We will use the notation :math:`t_{mj}` for a value which is computed from :math:`\{t_{ij} | i<m\}`.  We start with the independent variables,
 
 .. math:: t_{00}, t_{01}, \ldots
 
@@ -64,7 +103,7 @@ where :math:`a_{mj}` is called the *adjoint* of :math:`dt_{mj}`.
 If we expand the :math:`dt_{mj}` terms, we will be left with only :math:`dt_{ij}` terms for :math:`i<m`.  During the expansion, we can push the :math:`a_{mij}` adjoints down to the next level.
 
 Example
-=======
+-------
 
 To compute :math:`y = ax^2+bx+c` we have:
 
@@ -105,13 +144,13 @@ Finally, we expand the first level terms to get
     &= t_{10}dt_{00}+t_{03}dt_{01}+1dt_{02}+(2t_{00}t_{01}+t_{01})dt_{03}
 
 The Algorithm
-=============
+-------------
 
 Every intermediate value in the computation supports three adjoint methods, initialize, increment, and finalize.  The initialize step is performed when the intermediate value is computed, the increment is called when a node which uses the value sends a contribution to the adjoint, and finalize is called when there will be no more contributions to the adjoint; processing at its level is complete.
 
 There are two ways to implement the three methods.
     1. The initialize and finalize methods do nothing, while the increment method propagates to increment methods at lower levels.
-    2. We associate an adjoint array of the same kinds as the value; for .  Initialize initializes the adjoint to 0 (possibly also allocating it), increment increments the adjoint, and finalize propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
+    2. We associate an adjoint array of the same kind as the value.  Initialize initializes the adjoint to 0 (possibly also allocating it), increment increments the adjoint, and finalize propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
 
     For values at level 0 that we want derivatives for we use the second approach, and the remaining values at level 0 use the first approach, which ignores the updates.  At higher levels, the approach depends on the computation and how many computations use the value.  If the update is simple, or if the value is only used once, the first approach should be used, while if it is cheaper to accumulate the adjoint and process it all at once, the second approach is used.
 
@@ -124,61 +163,3 @@ For example, if we have a computation :math:`t_m = t_a t_b` then, since :math:`d
 where we use :math:`\overline{t}` to denote the adjoint we are accumulating for :math:`t`.
 
 We use method 2 so that we only need to perform the multiplication once.  Compare this with :math:`t_m=t_a+t_b` with derivative :math:`dt_a+dt_b`.  If there are two uses of the value, using approach 2 requires allocating and initializing an array for the adjoint (we could have the first update perform the initialization), followed by one addition to the adjoint, and then two additions as the adjoint is passed to the next level, while approach 1 requires four additions to the adjoints at the next level, but no additional storage.
-
-Arrays
-======
-
-When we are computing with large arrays, we want to keep the computation efficient for large arrays.  Fortunately we can do this, as described below.  For an array value :math:`\overline{T}`, there will be one adjoint for each element of :math:`T`, so the adjoints have the same axes as :math:`T`.
-
-Element-wise Operations
-=======================
-
-An element wise operation is just many individual operations at the same level; there is no interaction between values in the operation.  Then for an element wise function :math:`f` we just need element wise multiplication of :math:`T` by the elementwise partial derivatives of :math:`f` followed by element wise increments to the argument adjoints.  For example, for :math:`T_m =T_aT_b` we perform:
-
-.. math::
-    \overline{T_a} &+= \overline{T_m}T_b\\
-    \overline{T_b} &+= \overline{T_m}T_a
-
-TODO
-====
-
-Migrate the rest of the Google Docs here.
-
-Computing Derivatives in Op-Graph
-=================================
-
-Derivatives are computed with backprop computations that are generated in two steps.  First, users of the ``Op`` accumulate their adjoints (backprops) into the adjoint for the ``Op``, and then the ``Op`` propagates its adjoint into the adjoints of its args.  The adjoint of an ``Op`` is a tensor with the same tensor description as the ``Op``, but which may have a different storage representation for ``Ops`` with axes information.
-
-The ``generate_adjoints`` method will be passed ``adjoints``, ``delta``, and the ``*args`` of the op.
-The ``adjoints`` contains
-partially computed backprop ``Ops``, while ``delta`` is the complete adjoint of the ``Op``.
-
-To implement ``generate_adjoints`` for an ``Op`` for the function
-
-.. math:: f(x_1, x_2, \ldots, x_n)
-
-write out
-
-.. math:: df = a_1 dx_1 + a_2 dx_2 + \ldots + a_n dx_n
-
-Then::
-
-    def generate_adjoints(adjoints, delta, x1, x2, ..., xn):
-        x1.generate_add_delta(adjoints, a1 * delta)
-        x2.generate_add_delta(adjoints, a2 * delta)
-        ...
-        xn.generate_add_delta(adjoints, an * delta)
-
-
-For example,
-
-.. math:: f(x,y) = xy
-
-    df = y dx + x dy
-
-So::
-
-    def generate_adjoints(self, adjoints, delta, x, y):
-        x.generate_add_delta(adjoints, y * delta)
-        y.generate_add_delta(adjoints, x * delta)
-

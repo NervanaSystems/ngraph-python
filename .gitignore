@@ -54,3 +54,9 @@ neon/backends/kernels/dump
 
 # test
 coverage.xml
+
+# doc
+doc/source/Graph_Introduction.rst
+doc/source/Logistic_Regression_Part_1.rst
+doc/source/Logistic_Regression_Part_2.rst
+doc/source/walk_throughs.rst
