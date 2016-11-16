@@ -20,7 +20,7 @@ Introduction
 ------------
 
 An Axis labels a dimension of a tensor. The op-graph uses
-the identity of Axis objects to pair and specify dimensions in
+the identity of ``Axis`` objects to pair and specify dimensions in
 symbolic expressions. This system has several advantages over
 using the length and position of the axis as in other frameworks:
 
@@ -36,8 +36,63 @@ same lengths but are logically distinct, e.g. if the number of
 training examples and the number of input features are both 50.
 
 
-Property of Axes
-----------------
+Core concepts
+-------------
+
+Axis and Axes
+~~~~~~~~~~~~~
+- ``Axis`` represents one dimension of a tensor. We can use ``ng.make_axis`` to
+  create an ``Axis``.
+  ::
+
+    H = ng.make_axis(length=3, name='height')
+    W = ng.make_axis(length=4, name='width')
+
+- ``Axes`` represents multiple dimensions of a tensor. We can use ``ng.make_axes``
+  to create ``Axes``.
+  ::
+
+    axes = ng.make_axes([H, W])
+
+- After the ``Axes`` is created, we can apply it to a tensor. For example:
+  ::
+
+    image = ng.placholder(axes=axes)
+
+- It's possible to delay the specification of axis length.
+  ::
+
+    H = ng.make_axis(length=3, name='height')
+    W = ng.make_axis(length=4, name='width')
+    image = ng.placholder(axes=ng.make_axes([H, W]))
+    H.length = 3
+    W.length = 4
+
+
+AxisRole
+~~~~~~~~
+``AxisRole`` is the "type" for an ``Axis``.
+
+- For example, in layer 1's feature
+  map axes ``(C1, D1, H1, W1, N)`` and layer 2's feature map axes
+  ``(C2, D2, H2, W2, N)``, ``C1`` and ``C2`` shares the same ``AxisRole`` as
+  "channels", while ``D1`` and ``D2`` shares the same ``AxisRole`` as "depth".
+- AxisRole is primarily for automatic axes inferencing. For example, a conv kernel
+  can look at its input feature maps' ``AxisRole`` to determine whether a
+  dimshuffle shall be applied prior to convolution.
+- We can create ``AxisRole`` via ``ng.make_axis_role()``. For example:
+  ::
+
+    role_channel = ng.make_axis_role()
+    axis_channel = ng.axis(length=3, roles=[role_channel])
+
+
+DualAxis
+~~~~~~~~
+
+
+Properties
+----------
 
 1. The order of Axes does not matter. ::
 
@@ -45,7 +100,7 @@ Property of Axes
 
     - ``x`` and ``y`` have the same number of axes and same set of axes
     - After shuffling of ``y``'s axes to be the same order of ``x``'s, the
-      underlying value are the same.
+      underlying values are the same.
 
   - We can check element-wise tensor equality using ``ng.equal()``. In the
     following scripts, ``x`` and ``y`` are equal.  ::
@@ -53,18 +108,17 @@ Property of Axes
       import numpy as np
       import ngraph as ng
 
-      H = ng.Axis(length=2)
-      W = ng.Axis(length=3)
+      H = ng.make_axis(length=2)
+      W = ng.make_axis(length=3)
       np_val = np.random.rand(2, 3)
-      x = ng.Constant(np_val, axes=ng.Axes([H, W]))
-      y = ng.Constant(np_val.T, axes=ng.Axes([W, H]))
+      x = ng.constant(np_val, axes=ng.make_axes([H, W]))
+      y = ng.constant(np_val.T, axes=ng.make_axes([W, H]))
       z = ng.equal(x, y)
 
       trans = ng.NumPyTransformer()
       comp = trans.computation([z])
       z_val = comp()[0]
       print(z_val)
-      # prints
       # [[ True  True  True]
       #  [ True  True  True]]
 
@@ -72,10 +126,10 @@ Property of Axes
 
   For example: ::
 
-      H = ng.Axis(length=2)
-      W = ng.Axis(length=2)
-      x = ng.Constant(np.ones((2, 2)), axes=ng.Axes([H, H]))  # throws exception
-      x = ng.Constant(np.ones((2, 2)), axes=ng.Axes([H, W]))  # good
+      H = ng.make_axis(length=2)
+      W = ng.make_axis(length=2)
+      x = ng.constant(np.ones((2, 2)), axes=ng.make_axes([H, H]))  # throws exception
+      x = ng.constant(np.ones((2, 2)), axes=ng.make_axes([H, W]))  # good
 
 3. Axes have context
 
@@ -126,10 +180,10 @@ Elementwise Binary Ops
 
   ::
 
-    x = ng.Constant(np.ones((2, 3)),       | x = ng.Constant(np.ones((2, 3)),
-                    axes=ng.Axes([H, W]))  |                 axes=ng.Axes([H, W]))
-    y = ng.Constant(np.ones((3, 2)),       | y = ng.Constant(np.ones((3, 2)),
-                    axes=ng.Axes([W, H]))  |                 axes=ng.Axes([W, H]))
+    x = ng.constant(np.ones((2, 3)),       | x = ng.constant(np.ones((2, 3)),
+                    axes=ng.make_axes([H, W]))  |                 axes=ng.make_axes([H, W]))
+    y = ng.constant(np.ones((3, 2)),       | y = ng.constant(np.ones((3, 2)),
+                    axes=ng.make_axes([W, H]))  |                 axes=ng.make_axes([W, H]))
     z = x + y  # <==                       | z = y + x  # <==
                                            |
     trans = ng.NumPyTransformer()          | trans = ng.NumPyTransformer()
@@ -200,14 +254,14 @@ For example, we might want to sum two layer's outputs, where they have the same
 dimensions but different axes. ::
 
     # assume C1.length == C2.length == 100
-    hidden_1 = ng.Constant(np.ones((100, 128)), axes=ng.Axes((C1, N)))
-    hidden_2 = ng.Constant(np.ones((100, 128)), axes=ng.Axes((C2, N)))
+    hidden_1 = ng.constant(np.ones((100, 128)), axes=ng.make_axes((C1, N)))
+    hidden_2 = ng.constant(np.ones((100, 128)), axes=ng.make_axes((C2, N)))
 
     # if we add directly without casting
     sum_direct = hidden_1 + hidden_2  # sum_direct has axes: (C1, C2, N)
 
     # cast before sum
-    hidden_2_cast = ng.AxesCastOp(hidden_2_cast, ng.Axes((C1, N)))
+    hidden_2_cast = ng.make_axesCastOp(hidden_2_cast, ng.make_axes((C1, N)))
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: (C1, N)
 
 Axes broadcasting
