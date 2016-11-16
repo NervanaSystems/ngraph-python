@@ -59,7 +59,7 @@ In addition to ``args``, there are two other types of edges in Nervana Graphs. E
 We see here that ``mysum`` doesn't have any initializers because its value is only known at runtime. ``x`` on the other hand is a constant and can and must be initialized before any computations occur. Initializer subgraphs (the ops in ``initializers`` and all upstream ops) themselves contain ``SetItem``, ``Fill``, ``Flatten``, ``ConstantOp`` and other ops to manipulate a tensor to get it ready for computation.
 
 Non-data Control Dependencies
---------------------
+-----------------------------
 Finally, consider the following code:
 
 .. code-block:: python
