@@ -15,3 +15,11 @@
 
 neon
 ****
+
+The neon frontend to ngraph wraps together common deep learning primitives, such as activation functions. optimizers, layers, and more. We include in this release several examples to illustrate how to use the neon frontend to construct your models:
+- ``examples/minst/mnist_mlp.py``: multi-layer perceptron on the MNIST digits dataset.
+- ``examples/cifar10/cifar10_mlp.py``: multi-layer perceptron on the CIFAR10 dataset.
+- ``examples/cifar10/cifar10_conv.py``: convolutional neural networks applied to the CIFAR10 dataset.
+- ``examples/ptb/char_rnn.py``: character-level RNN language model on the Penn Treebank dataset.
+
+
