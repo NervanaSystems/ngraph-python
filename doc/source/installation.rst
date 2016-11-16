@@ -19,26 +19,26 @@ Installation
 
 To install |geon|, you must first install our neon in a virtual environment. For neon install instructions, see: http://neon.nervanasys.com/.
 
-Activate the neon virtualenv with ``. .venv/bin/activate``, then run::
+Activate the neon virtualenv with ``. .venv/bin/activate`` and then run::
 
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
     make install
 
-Examples
-========
+Getting Started
+===============
 
 Several jupyter notebook walk-throughs demonstrate how to use Nervana Graph:
 
-* ``ngraph/examples/walk_through/`` guides developers through writing logistic regression with ngraph
+* ``ngraph/examples/walk_through/`` guides developers through implementing logistic regression with ngraph
 * ``ngraph/examples/mnist/MNIST_Direct.ipynb`` demonstrates building a deep learning model using ngraph directly.
 
 The neon frontend can also be used to define and train deep learning models:
 
-* ``ngraph/examples/mnist/mnist_mlp.py``: multi-layer perceptron network on MNIST dataset
-* ``ngraph/examples/cifar10/cifar10_conv.py``: convolutional neural network on CIFAR-10
-* ``ngraph/examples/cifar10/cifar10_mlp.py``: multi-layer perceptron on CIFAR-10 dataset
-* ``ngraph/examples/ptb/char_rnn.py`` character-level RNN model on Penn Treebank data.
+* ``ngraph/examples/mnist/mnist_mlp.py``: Multi-layer perceptron network on MNIST dataset.
+* ``ngraph/examples/cifar10/cifar10_conv.py``: Convolutional neural network on CIFAR-10.
+* ``ngraph/examples/cifar10/cifar10_mlp.py``: Multi-layer perceptron on CIFAR-10 dataset.
+* ``ngraph/examples/ptb/char_rnn.py``: Character-level RNN model on Penn Treebank data.
 
 We also include examples for using tensorflow to define graphs that are then passed to ngraph for execution:
 
@@ -47,8 +47,8 @@ We also include examples for using tensorflow to define graphs that are then pas
 * ``ngraph/frontends/tensorflow/examples/mnist_mlp.py``
 
 
-Developer Guide
-===============
+Developer Guidelines
+====================
 
 Before checking in code, run the unit tests and check for style errors::
 
