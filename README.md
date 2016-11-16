@@ -26,17 +26,17 @@ To run the unit tests:
 make test
 ```
 
-Before checking in code, ensure no "make style" errors
+Before checking in code, ensure no "make style" errors:
 ```
 make style
 ```
 
-To fix style errors
+To fix style errors:
 ```
 make fixstyle
 ```
 
-To generate the documentation as html files
+To generate the documentation as html files:
 ```
 make doc
 ```
