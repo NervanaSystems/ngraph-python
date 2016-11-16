@@ -62,7 +62,7 @@ We use ``Axes`` to define the shape of tensors in ngraph. For example,
 
   ::
 
-    image = ng.placeholder(axes=axes)
+    image = ng.placeholder(axes)
 
 We can also delay the specification of the axis length.
 
@@ -70,7 +70,7 @@ We can also delay the specification of the axis length.
 
     H = ng.make_axis(length=3, name='height')
     W = ng.make_axis(length=4, name='width')
-    image = ng.placeholder(axes=ng.make_axes([H, W]))
+    image = ng.placeholder([H, W])
     H.length = 3
     W.length = 4
 
@@ -99,8 +99,8 @@ When two tensors are provided to a multi-axis operation, such as ``ng.dot()``, w
 
 For example, if you have two tensors to dot together, other approaches may rely on the user to make sure the right-most axis of the first tensor matches the left-most of the second tensor. (e.g. ``(N x M) dot (M x K) = (N x K)``). Instead we have semantic axis, so we can create two tensors::
 
-  A = ng.placeholder(axes=[ax.C, ax.H, ax.W, ax.N])
-  B = ng.placeholder(axes=[ax.K, ax.C-1, ax.H-1, ax.W-1])
+  A = ng.placeholder([ax.C, ax.H, ax.W, ax.N])
+  B = ng.placeholder([ax.K, ax.C-1, ax.H-1, ax.W-1])
 
 The ``-1`` offset signifies that during a ``ng.dot(A, B)`` operation, the ``ax.C``, ``ax.H``, ``ax.W`` axes should be matched and cancelled out, leaving the unmatched axes in the result -- a tensor with axes ``[ax.K, ax.N]``.
 
@@ -116,10 +116,6 @@ Here are some more examples of using ``DualAxis`` in dot products that illustrat
     (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
     (M, C, H, W)  • (C + 1, H + 1, W + 1, N) -> (M, N)
 
-    # swapping the left and right operands is allowed
-    (H, W - 1) • (W, N) -> (H, N)
-    (W, N) • (H, W - 1) -> (H, N)
-
     # swapping the order of the axes is allowed
     (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
     (M, W - 1, H - 1, C - 1)  • (C, H, W, N) -> (M, N)
@@ -131,14 +127,13 @@ Properties
 
 1. The order of Axes does not matter. ::
 
-  - Two tensors ``x`` and ``y`` are considered to be equal if
+  - Two tensors ``x`` and ``y`` are considered having the same type if
 
     - ``x`` and ``y`` have the same number of axes and same set of axes
     - After shuffling of ``y``'s axes to be the same order of ``x``'s, the
       underlying values are the same.
 
-  - We can check element-wise tensor equality using ``ng.equal()``. In the
-    following scripts, ``x`` and ``y`` are equal.  ::
+  - We can check element-wise tensor equality using ``ng.equal()``. ::
 
       import numpy as np
       import ngraph as ng
@@ -146,8 +141,8 @@ Properties
       H = ng.make_axis(length=2)
       W = ng.make_axis(length=3)
       np_val = np.random.rand(2, 3)
-      x = ng.constant(np_val, axes=ng.make_axes([H, W]))
-      y = ng.constant(np_val.T, axes=ng.make_axes([W, H]))
+      x = ng.constant(np_val, [H, W])
+      y = ng.constant(np_val.T, [W, H])
       z = ng.equal(x, y)
 
       trans = ng.NumPyTransformer()
@@ -157,14 +152,14 @@ Properties
       # [[ True  True  True]
       #  [ True  True  True]]
 
-2. A tensor cannot have repetitive axes.
+2. An axis can occur at most once in the axes of a tensor.
 
   For example: ::
 
       H = ng.make_axis(length=2)
       W = ng.make_axis(length=2)
-      x = ng.constant(np.ones((2, 2)), axes=ng.make_axes([H, H]))  # throws exception
-      x = ng.constant(np.ones((2, 2)), axes=ng.make_axes([H, W]))  # good
+      x = ng.constant(np.ones((2, 2)), [H, H])  # throws exception
+      x = ng.constant(np.ones((2, 2)), [H, W])  # good
 
 3. Axes have context
 
@@ -248,23 +243,21 @@ Elementwise Binary Ops
 
   ::
 
-    x = ng.constant(np.ones((2, 3)),           | x = ng.constant(np.ones((2, 3)),
-                    axes=ng.make_axes([H, W])) |                 axes=ng.make_axes([H, W]))
-    y = ng.constant(np.ones((3, 2)),           | y = ng.constant(np.ones((3, 2)),
-                    axes=ng.make_axes([W, H])) |                 axes=ng.make_axes([W, H]))
-    z = x + y  # <==                           | z = y + x  # <==
-                                               |
-    trans = ng.NumPyTransformer()              | trans = ng.NumPyTransformer()
-    comp = trans.computation([z])              | comp = trans.computation([z])
-    z_val = comp()[0]                          | z_val = comp()[0]
-    print(z_val)                               | print(z_val)
-    print(z_val.shape)                         | print(z_val.shape)
-    -------------------------------------------------------------------------------
-    Output:                                    | Output:
-    [[ 2.  2.  2.]                             | [[ 2.  2.]
-      [ 2.  2.  2.]]                           |  [ 2.  2.]
-    (2, 3)                                     |  [ 2.  2.]]
-                                               | (3, 2)
+    x = ng.constant(np.ones((2, 3)), [H, W]) | x = ng.constant(np.ones((2, 3)), [H, W])
+    y = ng.constant(np.ones((3, 2)), [W, H]) | y = ng.constant(np.ones((3, 2)), [W, H])
+    z = x + y                                | z = y + x  # <== changed order
+                                             |
+    trans = ng.NumPyTransformer()            | trans = ng.NumPyTransformer()
+    comp = trans.computation([z])            | comp = trans.computation([z])
+    z_val = comp()[0]                        | z_val = comp()[0]
+    print(z_val)                             | print(z_val)
+    print(z_val.shape)                       | print(z_val.shape)
+    -----------------------------------------------------------------------------
+    Output:                                  | Output:
+    [[ 2.  2.  2.]                           | [[ 2.  2.]
+      [ 2.  2.  2.]]                         |  [ 2.  2.]
+    (2, 3)                                   |  [ 2.  2.]]
+                                             | (3, 2)
 
 - Associative property is as usual. ::
 
@@ -289,11 +282,11 @@ Examples: ::
 
     from ngraph.frontends.neon.axis import ax
     x = ng.placeholder([ax.C, ax.H, ax.W])
-    ng.sum(x, reduction_axes=ng.make_axes([]))            -> [ax.C, ax.H, ax.W]
-    ng.sum(x, reduction_axes=ng.make_axes([ax.C]))        -> [ax.H, ax.W]
-    ng.sum(x, reduction_axes=ng.make_axes([ax.C, ax.W]))  -> [ax.H]
-    ng.sum(x, reduction_axes=ng.make_axes([ax.W, ax.C]))  -> [ax.H]
-    ng.sum(x, reduction_axes=x.axes)                      -> []
+    ng.sum(x, reduction_axes=[])            -> [ax.C, ax.H, ax.W]
+    ng.sum(x, reduction_axes=[ax.C])        -> [ax.H, ax.W]
+    ng.sum(x, reduction_axes=[ax.C, ax.W])  -> [ax.H]
+    ng.sum(x, reduction_axes=[ax.W, ax.C])  -> [ax.H]
+    ng.sum(x, reduction_axes=x.axes)        -> []
 
 
 Axes Casting
@@ -304,15 +297,15 @@ For example, we might want to sum two layer's outputs, where they have the same
 dimensions but different axes. Examples: ::
 
     # assume C1.length == C2.length == 100
-    hidden_1 = ng.constant(np.ones((100, 128)), axes=ng.make_axes((C1, N)))
-    hidden_2 = ng.constant(np.ones((100, 128)), axes=ng.make_axes((C2, N)))
+    hidden_1 = ng.constant(np.ones((100, 128)), [C1, N])
+    hidden_2 = ng.constant(np.ones((100, 128)), [C2, N])
 
     # if we add directly without casting
-    sum_direct = hidden_1 + hidden_2  # sum_direct has axes: (C1, C2, N)
+    sum_direct = hidden_1 + hidden_2  # sum_direct has axes: [C1, C2, N]
 
     # cast before sum
-    hidden_2_cast = ng.cast_axes(hidden_2_cast, ng.make_axes((C1, N)))
-    sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: (C1, N)
+    hidden_2_cast = ng.cast_axes(hidden_2_cast, [C1, N])
+    sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: [C1, N]
 
 
 Axes Broadcasting
@@ -323,16 +316,16 @@ of the original axes. The order of the new axes can be arbitrary. Examples: ::
 
     from ngraph.frontends.neon.axis import ax
     x = ng.placeholder([ax.C, ax.H])
-    ng.broadcast(x, axes=ng.make_axes([ax.C, ax.H, ax.W]))  -> [ax.C, ax.H, ax.W]
-    ng.broadcast(x, axes=ng.make_axes([ax.W, ax.H, ax.C]))  -> [ax.W, ax.H, ax.C]
+    ng.broadcast(x, [ax.C, ax.H, ax.W])  -> [ax.C, ax.H, ax.W]
+    ng.broadcast(x, [ax.W, ax.H, ax.C])  -> [ax.W, ax.H, ax.C]
 
 
-Axes dim-shuffle
-----------------
-
-Use ``ng.Dimshuffle`` to shuffle axes. The new axes must be the same set as the
-original axes. Examples: ::
-
-    from ngraph.frontends.neon.axis import ax
-    x = ng.placeholder([ax.C, ax.H, ax.W])
-    ng.Dimshuffle(x, ng.make_axes([ax.H, ax.W, ax.C])).axes
+.. Axes dim-shuffle
+.. ----------------
+..
+.. Use ``ng.Dimshuffle`` to shuffle axes. The new axes must be the same set as the
+.. original axes. Examples: ::
+..
+..     from ngraph.frontends.neon.axis import ax
+..     x = ng.placeholder([ax.C, ax.H, ax.W])
+..     ng.Dimshuffle(x, ng.make_axes([ax.H, ax.W, ax.C])).axes
