@@ -16,9 +16,9 @@
 TensorFlow
 ==========
 
-In ngraph, we aim to provide utilities that enables frontend interoperability
-with other frameworks such as TensorFlow. The TensorFlow importer allows user
-to define models in TensorFlow and then execute computations in ngrah.
+In ngraph, we aim to provide utilities that enable frontend interoperability
+with other frameworks such as TensorFlow. The TensorFlow importer allows users
+to define models in TensorFlow and then execute computations in ngraph.
 
 Minimal Example
 ---------------
@@ -69,7 +69,7 @@ example, please head on to the ``examples`` directory under importer.
 
 In the example, we need to explicitly set ``init`` to
 ``tf.initialize_all_variables()`` since we need to use the handle of the
-``init`` op for ngrpah to execute the correct initialization.
+``init`` op for ngraph to execute the correct initialization.
 
 2. Import TensorFlow ``GraphDef``
 ::
@@ -115,7 +115,7 @@ autodiff to compute gradients and get optimizers.
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
 Now we can train the model in ngraph as if it were a native ngraph model. All
-ngrpah functionalities and syntax can be applied after the graph is imported.
+ngraph functionalities and syntax can be applied after the graph is imported.
 
 6. Training using TensorFlow as comparison
 ::
