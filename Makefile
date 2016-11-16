@@ -89,13 +89,34 @@ check:
 
 fixstyle: autopep8
 
+autopep8:
+	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
+	@echo run "git diff" to see what may need to be checked in and "make style" to see what work remains
+
 doc:
 	$(MAKE) -C $(DOC_DIR) clean
 	$(MAKE) -C $(DOC_DIR) html
 	@echo "Documentation built in $(DOC_DIR)/build/html"
 	@echo
 
+publish_doc: doc
+ifneq (,$(DOC_PUB_HOST))
+	@-cd $(DOC_DIR)/build/html && \
+		rsync -avz -essh --perms --chmod=ugo+rX . \
+		$(DOC_PUB_USER)@$(DOC_PUB_HOST):$(DOC_PUB_RELEASE_PATH)
+	@-ssh $(DOC_PUB_USER)@$(DOC_PUB_HOST) \
+		'rm -f $(DOC_PUB_PATH)/latest && \
+		 ln -sf $(DOC_PUB_RELEASE_PATH) $(DOC_PUB_PATH)/latest'
+else
+	@echo "Can't publish.  Ensure DOC_PUB_HOST, DOC_PUB_USER, DOC_PUB_PATH set"
+endif
 
-autopep8:
-	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
-	@echo run "git diff" to see what may need to be checked in and "make style" to see what work remains
+release: check
+	@echo "Bump version number in setup.py"
+	@vi setup.py
+	@echo "Bump version number in doc/source/conf.py"
+	@vi doc/source/conf.py
+	@echo "Update ChangeLog"
+	@vi ChangeLog
+	@echo "TODO (manual steps): release on github and update docs with 'make publish_doc'"
+	@echo
