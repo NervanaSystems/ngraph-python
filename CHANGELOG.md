@@ -1,6 +1,6 @@
 # ChangeLog
 
-## v0.4.0 (2016-11-15):
+## v0.4.0 (2016-11-16):
 
 Nervana graph is a library for developing frameworks that can efficiently run deep learning computations on a variety of compute platforms. In this preview release we introduce three primary API components:
 - An API for creating computational `Nervana Graphs`.
@@ -17,7 +17,7 @@ Nervana graph is a library for developing frameworks that can efficiently run de
 - With the introduction of named `Axes` we lay the foundation for frontend writers to reason about tensor axis without concern of memory layout or order (for future optimization against hardware targets which often have differing and specific requirements for batch axis orderings for example).
 
 ### Transformer API
-- This release ships with two example transformers targetting CPU and GPU hardware targets. 
+- This release ships with two example transformers targetting CPU and GPU hardware targets.
 - Both transformers support memory usage optimization passes.
 - The GPU transformer also includes preliminary support for automatic kernel fusion/compounding for increased performance.
 - Transformers allow users to register an included set of optional compiler passes for debug and visualization.
