@@ -17,7 +17,7 @@ Overview
 ********
 
 .. Note::
-   Nervana Graph is currently a preview release and the API's and abstractions are subject to change. We encourage you to contribute to the discussion and help shape the future Nervana Graph.
+   Nervana Graph is currently a preview release and the API's and implementation are subject to change. We encourage you to contribute to the discussion and help shape the future Nervana Graph.
 
 The Nervana Graph (ngraph) is a Python library for implementing programs that convert descriptions of neural networks into programs that run efficiently on a variety of platforms. In designing ngraph we kept three guiding motivations in mind:
 
@@ -43,9 +43,9 @@ Nervana Graphs
 --------------
 The computational graphs of Theano and |TF| require a user to reason about the underlying tensor shapes while constructing the graph. This is tedious and error prone for the user and eliminates the ability for a compiler to reorder axes to match the assumptions of particular hardware platforms as well.
 
-To avoid this, The ngraph API enables users to define a set of named axes, attach them to tensors during graph construction, and specify them by name (rather than position) when needed.  These axes can be named according to the particular domain of the problem at hand to help a user with these tasks.  This flexibility then allows the necessary reshaping/shuffling to be inferred by the transformer before execution. Additionally, these inferred tensor axis orderings can then be optimized across the entire computational graph for ordering preferences of the underlying runtimes/hardware platforms to optimize cache locality and runtime execution time.
+To simplify tensor management, the ngraph API enables users to define a set of named axes, attach them to tensors during graph construction, and specify them by name (rather than position) when needed.  These axes can be named according to the particular domain of the problem at hand to help a user with these tasks.  This flexibility then allows the necessary reshaping/shuffling to be inferred by the transformer before execution. Additionally, these inferred tensor axis orderings can then be optimized across the entire computational graph for ordering preferences of the underlying runtimes/hardware platforms to optimize cache locality and runtime execution time.
 
-These capabilities underline one of the tenants of ngraph which is to operate at a high enough layer of abstraction that transformers can make execution efficient without needing a "sufficiently smart compiler" while also allowing users and frontends to more easily compose these building blocks together.
+These capabilities highlight one of the tenants of ngraph, which is to operate at a higher level of abstraction so transformers can make execution efficient without needing a "sufficiently smart compiler" that can reverse-engineer the higher level structure, as well as allowing users and frontends to more easily compose these building blocks together.
 
 Frontends
 ---------
@@ -83,7 +83,7 @@ For an example of building and executing ngraphs, please see the :doc:`walkthrou
     import ngraph.transformers as ngt
 
     # Build a graph
-    x = ng.placeholder(axes=())
+    x = ng.placeholder(())
     x_plus_one = x + 1
 
     # Construct a transformer
@@ -113,8 +113,8 @@ We are actively working towards:
 - Add additional support for more popular frontends.
 - Distributed, heterogeneous backend target support.
 - C APIs for interoperability to enable other languages to create/execute graphs.
-- Modern, cloud native model deployment strategies
-- Reinforcement learning friendly `network construction <http://openreview.net/forum?id=r1Ue8Hcxg>`_ frontends
+- Modern, cloud native model deployment strategies.
+- Reinforcement learning friendly `network construction <http://openreview.net/forum?id=r1Ue8Hcxg>`_ frontends.
 
 Join us
 -------
