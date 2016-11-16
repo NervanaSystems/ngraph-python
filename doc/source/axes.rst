@@ -133,21 +133,54 @@ Properties
 
 3. Axes have context
 
-  For example, a set of standard neon axes are defined for neon frontends. ::
+  A set of standard neon axes are defined for neon frontends.
 
-    N = Axis(name='N', batch=True)
-    C = Axis(name='C')
-    D = Axis(name='D')
-    H = Axis(name='H')
-    W = Axis(name='W')
-    T = Axis(name='T', recurrent=True)
-    R = Axis(name='R')
-    S = Axis(name='S')
-    K = Axis(name='K')
-    M = Axis(name='M')
-    P = Axis(name='P')
-    Q = Axis(name='Q')
-    Y = Axis(name='Y')
+  - Axes roles
+  ::
+
+    ar = ng.make_name_scope(name="ar")
+    ar.Height = ng.make_axis_role()
+    ar.Width = ng.make_axis_role()
+    ar.Depth = ng.make_axis_role()
+    ar.Channel = ng.make_axis_role()
+    ar.Channelout = ng.make_axis_role()
+    ar.Time = ng.make_axis_role()
+
+  - Image / feature map
+  ::
+
+    ax = ng.make_name_scope(name="ax")
+    ax.N = ng.make_axis(batch=True, docstring="minibatch size")
+    ax.C = ng.make_axis(roles=[ar.Channel], docstring="number of input feature maps")
+    ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
+    ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
+    ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
+
+  - Filter
+  ::
+
+    ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
+    ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
+    ax.T = ng.make_axis(roles=[ar.Depth], docstring="filter depth")
+    ax.J = ng.make_axis(roles=[ar.Channel], docstring="filter channel size (for crossmap pooling)")
+    ax.K = ng.make_axis(roles=[ar.Channelout], docstring="number of output feature maps")
+
+  - Output
+  ::
+
+    ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")
+    ax.P = ng.make_axis(roles=[ar.Height], docstring="output image height")
+    ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")
+
+  - Recurrent
+  ::
+
+    ax.REC = ng.make_axis(roles=[ar.Time], recurrent=True, docstring="recurrent axis")
+
+  - Target
+  ::
+
+    ax.Y = ng.make_axis(docstring="target")
 
 
 Elementwise Binary Ops
@@ -246,7 +279,7 @@ Examples: ::
     reduce((C, H, W), reduction_axes=(C, W)) -> (H,)
     reduce((C, H, W), reduction_axes=(W, C)) -> (H,)
 
-Axes casting
+Axes Casting
 ------------
 
 Use ``AxesCastOp`` to cast at axes to targeting axes with the same dimensions.
@@ -264,7 +297,7 @@ dimensions but different axes. ::
     hidden_2_cast = ng.make_axesCastOp(hidden_2_cast, ng.make_axes((C1, N)))
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: (C1, N)
 
-Axes broadcasting
+Axes Broadcasting
 -----------------
 
 Use ``ng.Broadcast`` to broadcast to new axes. The new axes shall be a superset
