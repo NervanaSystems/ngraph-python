@@ -46,7 +46,5 @@ Before checking in code, run the unit tests and check for style errors::
 Documentation can be generated via::
 
     make doc
-<<<<<<< HEAD
 
-=======
->>>>>>> 26d0393... building_graphs doc updates
+And viewed at ``doc/build/html/index.html``.
