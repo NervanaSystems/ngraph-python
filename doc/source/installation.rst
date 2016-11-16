@@ -17,7 +17,8 @@
 Installation
 ************
 
-To install |geon|, you must first install neon in a virtual environment.
+To install |geon|, you must first install our neon in a virtual environment. For neon install instructions, see: http://neon.nervanasys.com/.
+
 Activate the neon virtualenv with ``. .venv/bin/activate``, then run::
 
     git clone git@github.com:NervanaSystems/ngraph.git
@@ -27,13 +28,24 @@ Activate the neon virtualenv with ``. .venv/bin/activate``, then run::
 Examples
 ========
 
-Several useful example scripts demonstrate how to use Nervana Graph:
+Several jupyter notebook walk-throughs demonstrate how to use Nervana Graph:
 
-* ``ngraph/examples/walk_through/`` contains several code walk throughs.
-* ``ngraph/examples/mnist/mnist_mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
-* ``ngraph/examples/cifar10/cifar10_conv.py`` uses the neon front-end to define and train a CNN model on CIFAR10 data.
-* ``ngraph/examples/cifar10/cifar10_mlp.py`` uses the neon front-end to define and train a MLP model on CIFAR10 data.
-* ``ngraph/examples/ptb/char_rnn.py`` uses the neon front-end to define and train a character-level RNN model on Penn Treebank data.
+* ``ngraph/examples/walk_through/`` guides developers through writing logistic regression with ngraph
+* ``ngraph/examples/mnist/MNIST_Direct.ipynb`` demonstrates building a deep learning model using ngraph directly.
+
+The neon frontend can also be used to define and train deep learning models:
+
+* ``ngraph/examples/mnist/mnist_mlp.py``: multi-layer perceptron network on MNIST dataset
+* ``ngraph/examples/cifar10/cifar10_conv.py``: convolutional neural network on CIFAR-10
+* ``ngraph/examples/cifar10/cifar10_mlp.py``: multi-layer perceptron on CIFAR-10 dataset
+* ``ngraph/examples/ptb/char_rnn.py`` character-level RNN model on Penn Treebank data.
+
+We also include examples for using tensorflow to define graphs that are then passed to ngraph for execution:
+
+* ``ngraph/frontends/tensorflow/examples/minimal.py``
+* ``ngraph/frontends/tensorflow/examples/logistic_regression.py``
+* ``ngraph/frontends/tensorflow/examples/mnist_mlp.py``
+
 
 Developer Guide
 ===============

@@ -20,13 +20,18 @@ Overview
    Nervana Graph is currently a preview release and the API's and abstractions are subject to change. We encourage you to contribute to the discussion and help shape the future Nervana Graph.
 
 The Nervana Graph (ngraph) is a Python library for implementing programs that convert descriptions of neural networks into programs that run efficiently on a variety of platforms. In designing ngraph we kept three guiding motivations in mind:
-1. A modular and flexible library designed around a unifying computational graph to empower users with composable deep learning abstractions. 
+
+1. A modular and flexible library designed around a unifying computational graph to empower users with composable deep learning abstractions.
+
 2. Execution of these models with maximal computational efficiency without worrying about details such as kernel fusion/compounding or data layout.
+
 3. Enabling all of this on any user's hardware whether one or multiple CPUs, GPUs, and/or Nervana Engines.
 
-To achieve these goals, the ngraph library has three layers: 
+To achieve these goals, the ngraph library has three layers:
 1. An API for creating computational ngraphs.
+
 2. Two higher level frontend APIs (TensorFlow and Neon) utilizing the ngraph API for common deep learning workflows.
+
 3. A transformer API for compiling these graphs and executing them on GPUs and CPUs.
 
 .. image :: assets/ngraph_workflow.png
@@ -47,7 +52,7 @@ Most applications and users don't need the full flexibility offered by the ngrap
 
 We also realize that users already know and use existing frameworks today and might want to continue using/combine models written in other frameworks. To that end, we demonstrate the capability to **convert existing tensorflow models into ngraphs** and execute them using ngraph transformers. This importer supports a variety of common operation types today and will be expanding in future releases. We also plan on implementing compatibility with other frameworks in the near future, so stay tuned.
 
-Additionally, we wish to stress that because ngraph offers the core building blocks of deep learning computation and multiple high performance backends, adding frontends is a straightforward affair and improvements to a backend (or new backends) are automatically leveraged by all existing and future frontends. So users get to keep using their preferred syntax while benefiting from the shared compilation machinery.  
+Additionally, we wish to stress that because ngraph offers the core building blocks of deep learning computation and multiple high performance backends, adding frontends is a straightforward affair and improvements to a backend (or new backends) are automatically leveraged by all existing and future frontends. So users get to keep using their preferred syntax while benefiting from the shared compilation machinery.
 
 Transformers
 ------------
@@ -63,7 +68,7 @@ Making sure that models execute quickly with minimal memory overhead is critical
 
 With these realities in mind, we designed ngraph transformers to automate and abstract these details away from frontends through clean APIs, while allowing the power user room to tweak things all simultaneously while not limiting the flexible abstractions for model creation.  In ngraph, we believe the key to achieving these goals rests in standing on the shoulders of giants in [modern compiler design](http://www.aosabook.org/en/llvm.html) to promote flexibility and experimentation in choosing the set and order of compiler optimizations for a transformer to use.
 
-Each ngraph transformer (or backend in LLVM parlance) targets a particular hardware backend and acts as an interface to compile an ngraph into a computation that is ready to be evaluated by the user as a function handle. 
+Each ngraph transformer (or backend in LLVM parlance) targets a particular hardware backend and acts as an interface to compile an ngraph into a computation that is ready to be evaluated by the user as a function handle.
 
 Today ngraph ships with a transformer for GPU and CPU execution, but in the future we plan on implementing heterogeneous device transformers with distributed training support.
 
@@ -93,8 +98,9 @@ For an example of building and executing ngraphs, please see the [walkthrough](F
 Status and Future Work
 ----------------------
 
-As this is a preview release, we have much work left to do. Currently we include working examples 
+As this is a preview release, we have much work left to do. Currently we include working examples
 of:
+
 - MLP networks using MNIST and CIFAR-10.
 - Convolutional networks using MNIST and CIFAR-10.
 - RNN's using Penn Treebank.
