@@ -118,4 +118,4 @@ def test_gdm(args, transformer_factory):
         be_W = param.get()[:, 0]
         be_Ws.append(be_W)
 
-        np.testing.assert_allclose(be_W, ng_W, rtol=1e-4)
+        np.testing.assert_allclose(be_W, ng_W, rtol=1e-3)
