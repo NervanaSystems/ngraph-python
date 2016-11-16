@@ -110,6 +110,6 @@ For convenience, an executor utility is provided in ngraph.util.utils. This exec
 
 .. code-block:: python
 
-	from ngraph.util.utils import executor 
+    from ngraph.util.utils import executor 
     example_comp = executor(e, b, c)
     result_e = example_comp(2, 7)
