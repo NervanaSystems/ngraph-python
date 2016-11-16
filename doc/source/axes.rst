@@ -19,7 +19,7 @@ Axes
 Introduction
 ------------
 
-An Axis labels a dimension of a tensor. The op-graph uses
+An ``Axis`` labels a dimension of a tensor. The op-graph uses
 the identity of ``Axis`` objects to pair and specify dimensions in
 symbolic expressions. This system has several advantages over
 using the length and position of the axis as in other frameworks:
@@ -35,87 +35,73 @@ this prevents interference between axes that happen to have the
 same lengths but are logically distinct, e.g. if the number of
 training examples and the number of input features are both 50.
 
+3. **Generic.** The order of axes for multi-dimensional tensors do not
+imply a specific data layout or striding, making the graph specification
+compatible across different hardware with different constraints.
 
 Core concepts
 -------------
 
 Axis and Axes
 ~~~~~~~~~~~~~
-- ``Axis`` represents one dimension of a tensor. We can use ``ng.make_axis`` to
-  create an ``Axis``.
+
+The ``Axis`` object represents one dimension of a tensor, and can be created with the ``ng.make_axis`` method.
   ::
 
     H = ng.make_axis(length=3, name='height')
     W = ng.make_axis(length=4, name='width')
 
-- ``Axes`` represents multiple dimensions of a tensor. We can use ``ng.make_axes``
-  to create ``Axes``.
+For tensors with multiple dimensions, we create an ``Axes`` passing in a list of individual ``Axis`` objects. Note that
+the ordering does *not* matter in specifying the axes, and has no bearing on the eventual data layout during execution. See Properties
+for a full description of axes properties.
   ::
 
     axes = ng.make_axes([H, W])
 
-- After the ``Axes`` is created, we can apply it to a tensor. For example:
+We use ``Axes`` to define the shape of tensors in ngraph. For example,
   ::
 
-    image = ng.placholder(axes=axes)
+    image = ng.placeholder(axes=axes)
 
-- It's possible to delay the specification of axis length.
+We can also delay the specification of the axis length.
   ::
 
     H = ng.make_axis(length=3, name='height')
     W = ng.make_axis(length=4, name='width')
-    image = ng.placholder(axes=ng.make_axes([H, W]))
+    image = ng.placeholder(axes=ng.make_axes([H, W]))
     H.length = 3
     W.length = 4
 
+Semantics
+---------
+
+In the nervana graph, our axis design is very flexible. Axes can be given arbitrary names and the ordering of the axes does not matter. Sometimes, however, axes need to have additional semantic information provided to operations.
 
 AxisRole
 ~~~~~~~~
-``AxisRole`` is the "type" for an ``Axis``.
 
-- For example, in layer 1's feature
-  map axes ``(C1, D1, H1, W1, N)`` and layer 2's feature map axes
-  ``(C2, D2, H2, W2, N)``, ``C1`` and ``C2`` shares the same ``AxisRole`` as
-  "channels", while ``D1`` and ``D2`` shares the same ``AxisRole`` as "depth".
-- AxisRole is primarily for automatic axes inferencing. For example, a conv kernel
-  can look at its input feature maps' ``AxisRole`` to determine whether a
-  dimshuffle shall be applied prior to convolution.
-- We can create ``AxisRole`` via ``ng.make_axis_role()``. For example:
+For example, convolution kernels need to know which axes correspond to the channel, height, width, and/or depth, in order to assemble the feature map. For this reason, we can attach ``AxisRole`` types to any ``axis`` by using ``ng.make_axis_role()``. For example, to create an axis with the ``Channel`` role:
   ::
 
-    role_channel = ng.make_axis_role()
-    axis_channel = ng.axis(length=3, roles=[role_channel])
+    role_channel = ng.make_axis_role(name="Channel")
+    axis_channel = ng.axis(length=3, roles=[role_channel], name="my_axis")
 
+The neon frontend relies on several axis roles, specified by its name: ``Height``, ``Width``, ``Depth``, ``Channel``, ``Channelout``, and ``Time``. These roles are primarily used for automatic axes inference. For example, a convolution kernel can examine the input feature maps'``AxisRole`` to determine whether a dimshuffle shall be applied prior to convolution.
 
 DualAxis
 ~~~~~~~~
-The nervana graph axes are agnostic to data layout on the compute device, so
-the ordering of the axes does not matter. As a consequence, when two tensors
-are provided to a ``ng.dot()`` operation, for example, one needs to indicate
-which are the corresponding axes that should be matched together. We use
-"dual offsets" of +/- 1 to mark which axes should be matched during a multi-axis
-operation. For example:
-::
 
-  x_axes = ng.make_axes([ax.C, ax.H, ax.W, ax.N])
-  x = ng.placeholder(axes=x_axes)
-  w_axes = ng.make_axes([ax.M, ax.C - 1, ax.H - 1, ax.W - 1])
-  w = ng.variable(initial_value=np.random.randn(*w_axes.lengths),
-                  axes=w_axes)
-  result = ng.dot(w, x)
+When two tensors are provided to a multi-axis operation, such as ``ng.dot()``, we need to indicate the corresponding axes that should be paired together. We use
+"dual offsets" of +/- 1 to mark which axes should be matched during a multi-axis operation.
 
-- In the example, ``x`` is the right-hand side operand of ``ng.dot``, and we call
-  ``x``'s axes the primary axes.
-- Then to get the left-hand side matching dual axes of the primary axes, we use
-  the ``-1`` operation to mark the matchin axes. That is, ``ax.C - 1``,
-  ``ax.H - 1``, ``ax.W - 1`` match ``ax.C``, ``ax.H`` aond ``ax.W`` respectively.
-  Similary, if we treat the left-hand side operand's axes to be the primary axes,
-  we use the ``+1`` operation to mark its corresponding right-hand side
-  operand's axes.
-- When a dot operation is performed, the matching axes will be combined and
-  cancelled out, leaving the unmatched axes in the result's axes. In the example
-  above, the resulting axes of ``ng.dot(w, x)`` are [ax.M, ax.N].
-- More examples on ``DualAxis`` in dot products
+For example, if you have two tensors to dot together, other approaches may rely on the user to make sure the right-most axis of the first tensor matches the left-most of the second tensor. (e.g. ``(N x M) dot (M x K) = (N x K)``). Instead we have semantic axis, so we can create two tensors::
+
+  A = ng.placeholder(axes=[ax.C, ax.H, ax.W, ax.N])
+  B = ng.placeholder(axes=[ax.K, ax.C-1, ax.H-1, ax.W-1])
+
+The ``-1`` offset signifies that during a ``ng.dot(A, B)`` operation, the ``ax.C``, ``ax.H``, ``ax.W`` axes should be matched and cancelled out, leaving the unmatched axes in the result -- a tensor with axes ``[ax.K, ax.N]``.
+
+Here are some more examples of using ``DualAxis`` in dot products that illustrate its properties
   ::
 
     # 2d dot
@@ -134,6 +120,7 @@ operation. For example:
     (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
     (M, W - 1, H - 1, C - 1)  • (C, H, W, N) -> (M, N)
 
+We can also use ``ng.cast_axis`` to recast the axes of an already defined tensor into the same dimensions, but using different offsets, to specify which dimensions should be reduced.
 
 Properties
 ----------
