@@ -64,11 +64,11 @@ Finally, consider the following code:
 
 .. code-block:: python
 
-    >>> x = ng.placeholder(initial_value=0, axes=())
+    >>> x = ng.placeholder((), initial_value=0)
     >>> a = ng.assign(x, 5)
     >>> z = x + 1
 
-Here we create a scalar placeholder ``x``, then fill that placeholder with the value ``5``. Then we add one to ``x``. It is not clear initially if ``z`` when evaluated should equal ``1`` or ``6``. In Python at the last line of the previous code block, ``x`` still points to the initial ``placeholder`` with value ``0``. However, In Nervana Graph we believe most users intend the assign operation to occur before the final incrementing by one. Therefore the ordering semantics of ``ng.assign`` happen in accordance with the graph creation order.
+Here we create a scalar placeholder ``x``, then fill that placeholder with the value ``5``. Then we add one to ``x``. It is not clear initially if ``z`` when evaluated should equal ``1`` or ``6``. In Python at the last line of the previous code block, ``x`` still points to the initial ``placeholder`` with value ``0``. However, in Nervana Graph we believe most users intend the assign operation to occur before the final incrementing by one. Therefore the ordering semantics of ``ng.assign`` happen in accordance with the graph creation order.
 
 In order to enforce these ordering semantics, Nervana Graph accounts for control dependencies between ``Ops`` when ``AssignOps`` are involved. To illustrate:
 
@@ -94,8 +94,7 @@ Nervana graph also allows for contexts where the dependencies can be ignored, pa
     from ngraph.transformers.nptransform import NumPyTransformer
 
     # set w
-    axes = ng.make_axes([])
-    w = ng.variable(axes=axes, initial_value=0)
+    w = ng.variable((), initial_value=0)
 
     # update op
     update_op = ng.assign(w, w + 1)
@@ -125,10 +124,12 @@ This modification will then allow the `w_comp()` to properly print ``0, 0, 0`` f
 
 We see this context being used in the optimizer where velocities and parameters have a self-assignment with ``ng.assign``.
 
+Note: The ``user_deps`` facility is likely to be replaced.
+
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which is a subclass of the class :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former providing ``Ops`` with automatically generated unique names and the latter providing debug info as to the line number and filename where this node was constructed.
+All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former provides ``Ops`` with automatically generated unique names and the latter provides debug info as to the line number and filename where this node was constructed.
 
 In addition to the three graph properties explained above (``args``,
 ``initializers``, and ``other_deps``), all ops have the additional attributes:
@@ -178,7 +179,7 @@ During computation (covered in more detail in :doc:`transformer_usage`), the inp
     import ngraph as ng
     from ngraph.frontends.neon as ax
 
-    x = ng.placeholder(axes=ng.make_axes(ax.C, ax.W, ax.H, ax.N))
+    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
 
 This ``placeholder`` will create an ``AssignableTensorOp`` to trigger the necessary storage to be allocated on the host device and trigger values to be transferred between the device and host. When the op is used in a graph computation, the op serves as a Python handle for the tensor stored on the device.
 
@@ -196,7 +197,7 @@ On the other hand, to directly modify the value of the ``placeholder``, use:
 
     ng.SetItem(x, x + x)
 
-Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
+Constructing the graph consists mostly of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
 
 .. code-block:: python
 
@@ -217,12 +218,12 @@ function:
     import ngraph as ng
     from ngraph.frontends.neon import ax
 
-    x = ng.placeholder(axes=ng.make_axes((ax.C, ax.W, ax.H, ax.N)))
-    y0 = ng.placeholder(axes=ng.make_axes((ax.Y, ax.N))
-    w = ng.Variable(axes=(ng.make_axes((ax.C, ax.W, ax.H, ax.Y))))
-    b = ng.Variable(axes=(ng.make_axes((ax.Y,)))
+    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
+    y0 = ng.placeholder((ax.Y, ax.N))
+    w = ng.variable((ax.C, ax.W, ax.H, ax.Y)))
+    b = ng.variable((ax.Y,))
     y = ng.tanh(dot(w, x) + b)
-    c = ng.dot((y - y0), (y - y0))
+    c = ng.squared_L2(y - y0)
     d = ng.deriv(c, w)
 
 The python variable ``d`` will hold an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
@@ -236,7 +237,7 @@ In some cases, it is convenient for an op graph construction function to associa
 
 .. code-block:: python
 
-    >>> x = ng.placeholder(axes=(ng.make_axis(20, 'C')))
+    >>> x = ng.placeholder((ng.make_axis(20, 'C')))
     >>> s = ng.softmax(x)
     >>> s.schemas
     [<ngraph.op_graph.op_graph.Softmax at 0x10c5e2210>]
