@@ -3017,8 +3017,8 @@ def argmin(x, dtype=None, **kwargs):
 
 
 def variance(x, out_axes=None, reduction_axes=None):
-    return (mean(square(x), out_axes=out_axes, reduction_axes=reduction_axes) -
-            square(mean(x, out_axes=out_axes, reduction_axes=reduction_axes)))
+    return mean(square(x - mean(x, out_axes=out_axes, reduction_axes=reduction_axes)),
+                out_axes=out_axes, reduction_axes=reduction_axes)
 
 
 class TensorSizeOp(TensorOp):
