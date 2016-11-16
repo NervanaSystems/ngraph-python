@@ -102,4 +102,5 @@ for mb_idx, data in enumerate(train_set):
                                           inp_dec=data['prev_tgt'],
                                           tgt=data['tgt_txt']))
     if mb_idx % args.iter_interval == 0:
-        print mb_idx, float(batch_output['batch_cost'])
+        print("Iteration {} complete. Avg losses: {}".format(mb_idx + 1,
+                                                             float(batch_output['batch_cost'])))
