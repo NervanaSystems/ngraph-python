@@ -89,6 +89,50 @@ AxisRole
 
 DualAxis
 ~~~~~~~~
+The nervana graph axes are agnostic to data layout on the compute device, so
+the ordering of the axes does not matter. As a consequence, when two tensors
+are provided to a ``ng.dot()`` operation, for example, one needs to indicate
+which are the corresponding axes that should be matched together. We use
+"dual offsets" of +/- 1 to mark which axes should be matched during a multi-axis
+operation. For example:
+::
+
+  x_axes = ng.make_axes([ax.C, ax.H, ax.W, ax.N])
+  x = ng.placeholder(axes=x_axes)
+  w_axes = ng.make_axes([ax.M, ax.C - 1, ax.H - 1, ax.W - 1])
+  w = ng.variable(initial_value=np.random.randn(*w_axes.lengths),
+                  axes=w_axes)
+  result = ng.dot(w, x)
+
+- In the example, ``x`` is the right-hand side operand of ``ng.dot``, and we call
+  ``x``'s axes the primary axes.
+- Then to get the left-hand side matching dual axes of the primary axes, we use
+  the ``-1`` operation to mark the matchin axes. That is, ``ax.C - 1``,
+  ``ax.H - 1``, ``ax.W - 1`` match ``ax.C``, ``ax.H`` aond ``ax.W`` respectively.
+  Similary, if we treat the left-hand side operand's axes to be the primary axes,
+  we use the ``+1`` operation to mark its corresponding right-hand side
+  operand's axes.
+- When a dot operation is performed, the matching axes will be combined and
+  cancelled out, leaving the unmatched axes in the result's axes. In the example
+  above, the resulting axes of ``ng.dot(w, x)`` are [ax.M, ax.N].
+- More examples on ``DualAxis`` in dot products
+  ::
+
+    # 2d dot
+    (H, W - 1) • (W, N) -> (H, N)
+    (H, W) • (W + 1, N) -> (H, N)
+
+    # 4d dot
+    (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
+    (M, C, H, W)  • (C + 1, H + 1, W + 1, N) -> (M, N)
+
+    # swapping the left and right operands is allowed
+    (H, W - 1) • (W, N) -> (H, N)
+    (W, N) • (H, W - 1) -> (H, N)
+
+    # swapping the order of the axes is allowed
+    (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
+    (M, W - 1, H - 1, C - 1)  • (C, H, W, N) -> (M, N)
 
 
 Properties
@@ -156,7 +200,7 @@ Properties
     ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
     ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
-  - Filter
+  - Filter (convolution kernel)
   ::
 
     ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
@@ -242,28 +286,6 @@ Elementwise Binary Ops
   (H,) * (W,) + (H,) * (N,) = (H, W) * (H, N) = (H, W, N)
 
 
-Dot Products
-------------
-
-- 2D matrix dot with 2D matrix. ::
-
-  (H, W) • (W, N) -> (H, N)
-
-- Dot operation will be performed on overlapping axes of the left and right
-  operands. That is, the overlapping axes will be eliminated in the output
-  tensor. ::
-
-  (C, H, W) • (H, W, N) -> (C, N)
-  (H, W) • (H,) -> (W,)
-
-- Left & right operands can be swapped, order of axis can be swapped, results
-  are equivalent, though order can be different. ::
-
-  (H, W) • (W, N) -> (H, N)
-  (W, H) • (W, N) -> (H, N)
-  (W, N) • (H, W) -> (N, H)
-
-
 Axes Reduction
 --------------
 
@@ -279,10 +301,11 @@ Examples: ::
     reduce((C, H, W), reduction_axes=(C, W)) -> (H,)
     reduce((C, H, W), reduction_axes=(W, C)) -> (H,)
 
+
 Axes Casting
 ------------
 
-Use ``AxesCastOp`` to cast at axes to targeting axes with the same dimensions.
+Use ``ng.cast_axes`` to cast at axes to targeting axes with the same dimensions.
 For example, we might want to sum two layer's outputs, where they have the same
 dimensions but different axes. ::
 
@@ -294,13 +317,14 @@ dimensions but different axes. ::
     sum_direct = hidden_1 + hidden_2  # sum_direct has axes: (C1, C2, N)
 
     # cast before sum
-    hidden_2_cast = ng.make_axesCastOp(hidden_2_cast, ng.make_axes((C1, N)))
+    hidden_2_cast = ng.cast_axes(hidden_2_cast, ng.make_axes((C1, N)))
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: (C1, N)
+
 
 Axes Broadcasting
 -----------------
 
-Use ``ng.Broadcast`` to broadcast to new axes. The new axes shall be a superset
+Use ``ng.broadcast`` to broadcast to new axes. The new axes shall be a superset
 of the original axes. The order of the new axes can be arbitrary.
 
 Examples: ::
