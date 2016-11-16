@@ -28,7 +28,6 @@
    overview.rst
    installation.rst
    walk_throughs.rst
-   future_work.rst
 
 .. toctree::
    :hidden:

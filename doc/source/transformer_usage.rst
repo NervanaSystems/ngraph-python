@@ -113,3 +113,24 @@ For convenience, an executor utility is provided in ngraph.util.utils. This exec
     from ngraph.util.utils import executor 
     example_comp = executor(e, b, c)
     result_e = example_comp(2, 7)
+
+Graph execution
+===============
+
+A *computation* is a subset of ops whose values are desired and corresponds to a callable procedure on a backend.
+Users define one or more computations by specifying sets of ops to be computed.  In addition, the transformer
+will define four additional procedures:
+
+`allocate`
+    Allocate required storage required for all computations.  This includes all allocations for all ops
+    marked as `in`.
+
+`initialize`
+    Run all initializations.  These are all the `initializers` for the ops needed for the computations.  These
+    are analogous to C++ static initializers.
+
+`save`
+    Save all persistent state.  These are states with the `persistent` property set.
+
+`restore`
+    Restore saved state.
