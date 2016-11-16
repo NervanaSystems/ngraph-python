@@ -21,9 +21,9 @@ We use the autodiff algorithm to generate the *backprop* computations for deriva
 Computing Derivatives in Op-Graph
 =================================
 
-Each ``Op`` node in our graph implements the ``generate_adjoints`` method, which defines the local gradient for that operation and propagates the deltas to its arguments. To compute the derivaties, the graph first performs a topological sort on the graph, then traverses the graph in order, calling each node's ``generate_adjoints`` method to add the required backprop computations to the graph.
+Each ``Op`` node in our graph implements the ``generate_adjoints`` method, which defines the local gradient for that operation and propagates the deltas to its arguments. To compute the derivatives, we first perform a topological sort on the graph, then traverse the graph in order, calling each node's ``generate_adjoints`` method to add the required backprop computations to the graph.
 
-The ``generate_adjoints`` method accepts ``adjoints``, ``delta``, and the arguments` of the op.
+The ``generate_adjoints`` method accepts ``adjoints``, ``delta``, and the arguments of the op.
 The ``adjoints`` contains
 partially computed backprop ``Ops``, while ``delta`` is the complete adjoint of the ``Op``.
 
@@ -150,7 +150,7 @@ Every intermediate value in the computation supports three adjoint methods, init
 
 There are two ways to implement the three methods.
     1. The initialize and finalize methods do nothing, while the increment method propagates to increment methods at lower levels.
-    2. We associate an adjoint array of the same kinds as the value; for .  Initialize initializes the adjoint to 0 (possibly also allocating it), increment increments the adjoint, and finalize propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
+    2. We associate an adjoint array of the same kind as the value.  Initialize initializes the adjoint to 0 (possibly also allocating it), increment increments the adjoint, and finalize propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
 
     For values at level 0 that we want derivatives for we use the second approach, and the remaining values at level 0 use the first approach, which ignores the updates.  At higher levels, the approach depends on the computation and how many computations use the value.  If the update is simple, or if the value is only used once, the first approach should be used, while if it is cheaper to accumulate the adjoint and process it all at once, the second approach is used.
 

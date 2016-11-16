@@ -44,8 +44,8 @@ In Nervana Graph, we often have to reason about tensors before any computations 
 
 If we know the layout of a tensor, we can compute layout of subsequent slices and reshapings. But in Nervana Graph, we only know the layout for the subset of tensors where the layout has been explicitly provided by the frontend. But we still need information about which tensors are views of each other, dimension lengths, alignment constraints, slicing, etc. We use ``BasicTensorDescription`` to represent all the information the graph needs to know about tensors. During the transformation process, this may vary. When a tensor is first added to the graph, little may be known about it, but by the time execution occurs, layout needs to be known.
 
-BasicTensorDescription:
-+++++++++++++++++++++++
+Tensor Descriptions:
+++++++++++++++++++++
     Describes a tensor by its shape and element type.
 
     Attributes:
@@ -56,9 +56,9 @@ BasicTensorDescription:
         - layout: strides and offset, if known.
 
 
-Every basic tensor-valued ``Op`` corresponds to an r-tensor (if an allocation, an l-tensor) and has a ``BasicTensorDescription`` describes the tensor, and is computed from the tensor descriptions of the parameters and arguments to the ``Op``.
+Every basic tensor-valued ``Op`` corresponds to an r-tensor, i.e. a tensor whose value can be on the right side of an assignment. Allocations correspond to l-tensor, i.e. tensors whose values can be assigned.  Each tensor has a tensor description that describes the tensor, and is computed from the tensor descriptions of the parameters and arguments to the ``Op``.
 
-During the transformation process, the tensor description may be augmented with additional information, such as a storage layout and storage assignment. The value of an ``Op`` might be a different view of a tensor, in which case the sharing must be indicated in its ``tensor_description``. An ``AllocationOp`` is a special case of a tensor-valued ``Op`` in that its tensors is an l-tensor. At the end of the transformation process, all tensor descriptions for l-tensors must contain enough information for them to be allocated.
+During the transformation process, the tensor description may be augmented with additional information, such as a storage layout and storage assignment. The value of an ``Op`` might be a different view of a tensor, in which case the sharing must be indicated in its tensor description. An ``AssignableTensorOp`` is a special case of a tensor-valued ``Op`` in that its tensor is an l-tensor. At the end of the transformation process, all tensor descriptions for l-tensors must contain enough information for them to be allocated.
 
 Implementation Details
 **********************
