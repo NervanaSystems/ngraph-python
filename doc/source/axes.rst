@@ -257,23 +257,23 @@ Elementwise Binary Ops
 
   ::
 
-    x = ng.constant(np.ones((2, 3)),       | x = ng.constant(np.ones((2, 3)),
-                    axes=ng.make_axes([H, W]))  |                 axes=ng.make_axes([H, W]))
-    y = ng.constant(np.ones((3, 2)),       | y = ng.constant(np.ones((3, 2)),
-                    axes=ng.make_axes([W, H]))  |                 axes=ng.make_axes([W, H]))
-    z = x + y  # <==                       | z = y + x  # <==
-                                           |
-    trans = ng.NumPyTransformer()          | trans = ng.NumPyTransformer()
-    comp = trans.computation([z])          | comp = trans.computation([z])
-    z_val = comp()[0]                      | z_val = comp()[0]
-    print(z_val)                           | print(z_val)
-    print(z_val.shape)                     | print(z_val.shape)
+    x = ng.constant(np.ones((2, 3)),           | x = ng.constant(np.ones((2, 3)),
+                    axes=ng.make_axes([H, W])) |                 axes=ng.make_axes([H, W]))
+    y = ng.constant(np.ones((3, 2)),           | y = ng.constant(np.ones((3, 2)),
+                    axes=ng.make_axes([W, H])) |                 axes=ng.make_axes([W, H]))
+    z = x + y  # <==                           | z = y + x  # <==
+                                               |
+    trans = ng.NumPyTransformer()              | trans = ng.NumPyTransformer()
+    comp = trans.computation([z])              | comp = trans.computation([z])
+    z_val = comp()[0]                          | z_val = comp()[0]
+    print(z_val)                               | print(z_val)
+    print(z_val.shape)                         | print(z_val.shape)
     -------------------------------------------------------------------------------
-    Output:                                | Output:
-    [[ 2.  2.  2.]                         | [[ 2.  2.]
-      [ 2.  2.  2.]]                       |  [ 2.  2.]
-    (2, 3)                                 |  [ 2.  2.]]
-                                           | (3, 2)
+    Output:                                    | Output:
+    [[ 2.  2.  2.]                             | [[ 2.  2.]
+      [ 2.  2.  2.]]                           |  [ 2.  2.]
+    (2, 3)                                     |  [ 2.  2.]]
+                                               | (3, 2)
 
 - Associative property is as usual. ::
 
@@ -296,10 +296,13 @@ Axes Reduction
 
 Examples: ::
 
-    reduce((C, H, W), reduction_axes=())     -> (A, B, C)
-    reduce((C, H, W), reduction_axes=(C,))   -> (B, C)
-    reduce((C, H, W), reduction_axes=(C, W)) -> (H,)
-    reduce((C, H, W), reduction_axes=(W, C)) -> (H,)
+    from ngraph.frontends.neon.axis import ax
+    x = ng.placeholder([ax.C, ax.H, ax.W])
+    ng.sum(x, reduction_axes=ng.make_axes([]))            -> [ax.C, ax.H, ax.W]
+    ng.sum(x, reduction_axes=ng.make_axes([ax.C]))        -> [ax.H, ax.W]
+    ng.sum(x, reduction_axes=ng.make_axes([ax.C, ax.W]))  -> [ax.H]
+    ng.sum(x, reduction_axes=ng.make_axes([ax.W, ax.C]))  -> [ax.H]
+    ng.sum(x, reduction_axes=x.axes)                      -> []
 
 
 Axes Casting
@@ -324,10 +327,25 @@ dimensions but different axes. ::
 Axes Broadcasting
 -----------------
 
-Use ``ng.broadcast`` to broadcast to new axes. The new axes shall be a superset
+Use ``ng.broadcast`` to broadcast to new axes. The new axes must be a superset
 of the original axes. The order of the new axes can be arbitrary.
 
 Examples: ::
 
-    broadcast((C, H), axes=(C, H, W)) -> (C, H, W)
-    broadcast((C, H), axes=(W, H, C)) -> (W, H, C)
+    from ngraph.frontends.neon.axis import ax
+    x = ng.placeholder([ax.C, ax.H])
+    ng.broadcast(x, axes=ng.make_axes([ax.C, ax.H, ax.W]))  -> [ax.C, ax.H, ax.W]
+    ng.broadcast(x, axes=ng.make_axes([ax.W, ax.H, ax.C]))  -> [ax.W, ax.H, ax.C]
+
+
+Axes dim-shuffle
+----------------
+
+Use ``ng.Dimshuffle`` to shuffle axes. The new axes must be the same set as the
+original axes.
+
+Examples: ::
+
+    from ngraph.frontends.neon.axis import ax
+    x = ng.placeholder([ax.C, ax.H, ax.W])
+    ng.Dimshuffle(x, ng.make_axes([ax.H, ax.W, ax.C])).axes
