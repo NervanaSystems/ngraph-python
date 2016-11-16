@@ -73,7 +73,7 @@ To compose a computational graph, we support the following operations:
     :widths: 30, 70
     :delim: |
 
-    :meth:`ngraph.absolute` | :math:`abs(a)`
+    :meth:`ngraph.absolute` | :math:`\operatorname{abs}(a)`
     :meth:`ngraph.negative` | :math:`-a`
 	:meth:`ngraph.sign` | if :math:`x<0`, :math:`-1`; if :math:`x=0`, :math:`0`; if :math:`x>0`, :math:`1`
 	:meth:`ngraph.add` | :math:`a+b`
