@@ -937,7 +937,7 @@ def test_mean(transformer_factory):
 
     np_f_res = np.sum(np.mean(input_value, axis=1, keepdims=True) - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
 def test_variance_wgrad(transformer_factory):
@@ -959,11 +959,11 @@ def test_variance_wgrad(transformer_factory):
 
     np_f_res = np.sum(np.var(input_value, axis=1, keepdims=True) - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
     np_b_res = 2 * (input_value - np.mean(input_value, axis=1, keepdims=True))
 
-    np.testing.assert_allclose(np_b_res, ng_b_res, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
 def test_variance_sqrt_inverse(transformer_factory):
@@ -998,5 +998,5 @@ def test_variance_sqrt_inverse(transformer_factory):
 
     np_f_res = np.sum(np_f_res - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, rtol=0, atol=1e-4)
-    np.testing.assert_allclose(np_b_res, ng_b_res, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
+    np.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
