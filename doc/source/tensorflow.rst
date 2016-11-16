@@ -55,7 +55,7 @@ Here's a minimal example for the TensorFlow importer.
 Walk-through of MNIST MLP Example
 ---------------------------------
 Here's a walk-through of the MNIST MLP example. For full source code of the
-example, please head to the
+example, please see the
 `examples <https://github.com/NervanaSystems/ngraph/tree/master/ngraph/frontends/tensorflow/examples/>`__
 directory.
 
@@ -92,7 +92,7 @@ In the example, we need to explicitly set ``init`` to
 
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
 
-TensorFlow nodes are converted to an ngraph ops. In order to evaluate a
+TensorFlow nodes are converted to ngraph ops. In order to evaluate a
 TensorFlow node, we need to get its corresponding ngraph node using
 ``TFImporter.get_op_handle()``.
 
@@ -151,21 +151,21 @@ Current Limitations
   - A util function ``TFImporter._get_unimplemented_ops()`` is provided for
     getting a list of unimplemented ops from a particular model.
 
-2. The importer should be used to imports forward graph.
+2. The importer should be used to import the forward graph.
 
-  - User should use the importer to import forward pass of the TensorFlow graph,
+  - User should use the importer to import the forward pass of the TensorFlow graph,
     and then perform autodiff and training updates in ngraph.
-  - TensorFlow ops related to gradient computation is not supported.
-  - In the future, two-way weights exchange between TensorFlow and ngraph will
+  - TensorFlow ops related to gradient computation are not supported.
+  - In the future, bidirectional weight exchange between TensorFlow and ngraph will
     also be supported.
 
 3. Static-ness
 
-  - In ngraph, transformer may alter the computation graph during
+  - In ngraph, the transformer may alter the computation graph during the
     transformation phase, thus we need to declare all computations before
-    executing any one of them. Altering the imported graph after transformer
+    executing any of them. Altering the imported graph after transformer
     initialization is not supported.
   - TensorFlow allows dynamic parameters to its ops. For example, the kernel
-    size of a ``Conv2d`` can be results from another computation. Since
+    size of a ``Conv2d`` can be the result of another computation. Since
     ngraph needs to know dimension information prior to execution to allocate
-    memory, dynamic parameters is not supported in importer.
+    memory, dynamic parameters are not supported in importer.
