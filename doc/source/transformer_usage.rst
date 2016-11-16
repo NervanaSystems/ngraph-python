@@ -16,7 +16,7 @@
 Transformers
 ************
 
-Transformers are used to convert the op graph into a backend specific executable format. Once the graph has been defined, one or more computations are created using a transformer. Computations are handles to executable objects created by the transformer, which can be called to evaluate a subset of the entire graph. All transformers must implement a common abstract interface allowing users to easily switch between backends without altering their computation graph definition. Transformers are currently provided for the following backends:
+Transformers are used to convert the ``Op`` graph into a backend specific executable format. Once the graph has been defined, one or more computations are created using a transformer. Computations are handles to executable objects created by the transformer, which can be called to evaluate a subset of the entire graph. All transformers must implement a common abstract interface allowing users to easily switch between backends without altering their computation graph definition. Transformers are currently provided for the following backends:
 
 - CPUs (via NumPy)
 - NVIDIA GPUs (via PyCUDA)
@@ -50,12 +50,12 @@ The above example first checks if the GPU transformer is available (this will de
 Computations
 ============
 
-Computations objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on the transformer that created the computation. For example the NumPy transformer generates python NumPy code which is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels which can be called to evaluate the computation.
+Computation objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on the transformer that created the computation. For example the NumPy transformer generates python NumPy code which is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels which can be called to evaluate the computation.
 
 Computation Creation
 --------------------
 
-Computations are created with the ``Transformer::computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be op graph nodes. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
+Computations are created with the ``Transformer.computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be ngraph ``Op``s. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
 
 .. code-block:: python
 
@@ -71,7 +71,7 @@ Computations are created with the ``Transformer::computation`` method. When crea
 
 This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The first argument is the result of the computation and the remaining arguments are inputs to the computation. The only result that we need to specify to create the computation is ``e`` since ``d`` will be discovered when the transformer traverses the graph. In this example, ``a`` is a constant so it does not need to be passed in as an input, but ``b`` and ``c`` are placeholder tensors which must be filled as inputs.
 
-After all computations are created, the ``transformer::initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this will be called automatically if a computation is called before manually calling ``initialize``). **Note** that new computations cannot be created with a transformer after ``initialize`` has been called. For more information on this initialization process, see the transformer_implementation.rst documentation file.
+After all computations are created, the ``Transformer.initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this will be called automatically if a computation is called before manually calling ``initialize``). **Note** that new computations cannot be created with a transformer after ``initialize`` has been called. For more information on this initialization process, see the transformer_implementation.rst documentation file.
 
 Computation Execution
 ---------------------
