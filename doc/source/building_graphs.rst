@@ -23,9 +23,9 @@ Nervana Graph Structure
 Data Dependencies
 -----------------
 
-An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph. 
+An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph.
 
-For example, 
+For example,
 
 .. code-block:: python
 
@@ -85,18 +85,58 @@ In order to enforce these ordering semantics, Nervana Graph accounts for control
 
 All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured as data dependencies of that ``Op``*. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
 
+Nervana graph also allows for contexts where the dependencies can be ignored, particularly when a variable has a self-assignment. For example, consider the following toy example:
+
+.. code-block:: python
+
+    import ngraph as ng
+    import numpy as np
+    from ngraph.transformers.nptransform import NumPyTransformer
+
+    # set w
+    axes = ng.make_axes([])
+    w = ng.variable(axes=axes, initial_value=0)
+
+    # update op
+    update_op = ng.assign(w, w + 1)
+
+    # transformer
+    transformer = NumPyTransformer()
+    w_comp = transformer.computation(w)
+
+    print(w_comp())
+    print(w_comp())
+    print(w_comp())
+
+The above code will print ``1, 2, 3`. Even though the defined computation only retrieves the variable ``w``, the ``ng.assign`` dependencies get triggered such that the variable still updates with every call even though we simply want to retrieve the results.
+
+We can guard the `update_op` with a context `ng.Op.saved_user_deps` to make sure that this dependency exists outside of the main stream.
+
+.. code-block:: python
+
+    with ng.Op.saved_user_deps():
+        update_op = ng.assign(w, w + 1)
+
+This modification will then allow the `w_comp()` to properly print ``0, 0, 0`` for each call. Ops that are defined inside the context are not included in the dependencies of the computation unless explicitly named. To recreate the ``1, 2, 3`` behavior now that the ``update_op`` is guarded, we would have to explicitly name the ``update_op`` in the computation:
+
+.. code-block:: python
+
+    w_comp = transformer.computation([w, update_op])
+
+We see this context being used in the optimizer where velocities and parameters have a self-assignment with `ng.assign`.
+
 General properties of ops
 =========================
 
 All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which is a subclass of the class :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former providing ``Ops`` with automatically generated unique names and the latter providing debug info as to the line number and filename where this node was constructed.
 
-In addition to the three graph properties explained above (``args``, 
+In addition to the three graph properties explained above (``args``,
 ``initializers``, and ``other_deps``), all ops have the additional attributes:
 
 `axes`
-    The axes of the result of the computation. This only needs to be specified 
-    by the frontend or user during ``Op`` creation if the default result is not 
-    correct or not inferrable for a particular ``Op`` type. The `axes` are also 
+    The axes of the result of the computation. This only needs to be specified
+    by the frontend or user during ``Op`` creation if the default result is not
+    correct or not inferrable for a particular ``Op`` type. The `axes` are also
     available as a gettable property.
 
 `name`
@@ -104,8 +144,8 @@ In addition to the three graph properties explained above (``args``,
     Some front ends may also make use of the `name`.  The `name` is a settable property.
 
 `metadata`
-    A dictionary of key,value string pairs that can be used to select/filter 
-    ops when manipulating them. For example, ``stochastic=dropout`` may be used 
+    A dictionary of key,value string pairs that can be used to select/filter
+    ops when manipulating them. For example, ``stochastic=dropout`` may be used
     to indicate groups of trainable variables in conjunction with drop-out.
 
 Some useful properties of ops are:
