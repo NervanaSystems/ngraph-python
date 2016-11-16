@@ -44,8 +44,8 @@ Core concepts
 
 Axis and Axes
 ~~~~~~~~~~~~~
-
 The ``Axis`` object represents one dimension of a tensor, and can be created with the ``ng.make_axis`` method.
+
   ::
 
     H = ng.make_axis(length=3, name='height')
@@ -59,11 +59,13 @@ for a full description of axes properties.
     axes = ng.make_axes([H, W])
 
 We use ``Axes`` to define the shape of tensors in ngraph. For example,
+
   ::
 
     image = ng.placeholder(axes=axes)
 
 We can also delay the specification of the axis length.
+
   ::
 
     H = ng.make_axis(length=3, name='height')
@@ -81,6 +83,7 @@ AxisRole
 ~~~~~~~~
 
 For example, convolution kernels need to know which axes correspond to the channel, height, width, and/or depth, in order to assemble the feature map. For this reason, we can attach ``AxisRole`` types to any ``axis`` by using ``ng.make_axis_role()``. For example, to create an axis with the ``Channel`` role:
+
   ::
 
     role_channel = ng.make_axis_role(name="Channel")
@@ -102,6 +105,7 @@ For example, if you have two tensors to dot together, other approaches may rely 
 The ``-1`` offset signifies that during a ``ng.dot(A, B)`` operation, the ``ax.C``, ``ax.H``, ``ax.W`` axes should be matched and cancelled out, leaving the unmatched axes in the result -- a tensor with axes ``[ax.K, ax.N]``.
 
 Here are some more examples of using ``DualAxis`` in dot products that illustrate its properties
+
   ::
 
     # 2d dot
@@ -297,7 +301,7 @@ Axes Casting
 
 Use ``ng.cast_axes`` to cast at axes to targeting axes with the same dimensions.
 For example, we might want to sum two layer's outputs, where they have the same
-dimensions but different axes. ::
+dimensions but different axes. Examples: ::
 
     # assume C1.length == C2.length == 100
     hidden_1 = ng.constant(np.ones((100, 128)), axes=ng.make_axes((C1, N)))
@@ -315,9 +319,7 @@ Axes Broadcasting
 -----------------
 
 Use ``ng.broadcast`` to broadcast to new axes. The new axes must be a superset
-of the original axes. The order of the new axes can be arbitrary.
-
-Examples: ::
+of the original axes. The order of the new axes can be arbitrary. Examples: ::
 
     from ngraph.frontends.neon.axis import ax
     x = ng.placeholder([ax.C, ax.H])
@@ -329,9 +331,7 @@ Axes dim-shuffle
 ----------------
 
 Use ``ng.Dimshuffle`` to shuffle axes. The new axes must be the same set as the
-original axes.
-
-Examples: ::
+original axes. Examples: ::
 
     from ngraph.frontends.neon.axis import ax
     x = ng.placeholder([ax.C, ax.H, ax.W])
