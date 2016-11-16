@@ -17,8 +17,10 @@ TensorFlow
 ==========
 
 In ngraph, we aim to provide utilities that enable frontend interoperability
-with other frameworks such as TensorFlow. The TensorFlow importer allows users
-to define models in TensorFlow and then execute computations in ngraph.
+with other frameworks such as `TensorFlow <https://www.tensorflow.org/>`__.
+The TensorFlow importer allows users to define a limited set models in
+TensorFlow and then execute computations using ngraph transformers.
+
 
 Minimal Example
 ---------------
@@ -50,12 +52,14 @@ Here's a minimal example for the TensorFlow importer.
     print(f_result)
 
 
-Walk-through of Mnist MLP Example
+Walk-through of MNIST MLP Example
 ---------------------------------
-Here's a walk-through of the Mnist MLP example. For full source code of the
-example, please head on to the ``examples`` directory under importer.
+Here's a walk-through of the MNIST MLP example. For full source code of the
+example, please head to the
+`examples <https://github.com/NervanaSystems/ngraph/tree/master/ngraph/frontends/tensorflow/examples/>`__
+directory.
 
-1. Define Mnist MLP model in TensorFlow
+1. Define MNIST MLP model in TensorFlow
 ::
 
     x = tf.placeholder(tf.float32, [args.batch_size, 784])
@@ -79,9 +83,9 @@ In the example, we need to explicitly set ``init`` to
 
 - We use the ``TFImporter.parse_graph_def()`` function to import from
   TensorFlow sessions's ``graph_def``.
-- The importer also support importeing from a ``graph_def`` protobuf file
+- The importer also support importing from a ``graph_def`` protobuf file
   using ``TFImporter.parse_protobuf()``. For example, a ``graph_def`` file can
-  be dump by ``tf.train.SummaryWriter()``.
+  be dumped by ``tf.train.SummaryWriter()``.
 
 3. Get handles of corresponding ngraph ops
 ::
@@ -104,7 +108,7 @@ TensorFlow node, we need to get its corresponding ngraph node using
 As we only import the forward graph from TensorFlow, we should use ngraph's
 autodiff to compute gradients and get optimizers.
 
-5. Traininig using ngraph
+5. Training using ngraph
 ::
 
     mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
@@ -133,7 +137,7 @@ ngraph functionalities and syntax can be applied after the graph is imported.
             print("[Iter %s] Cost = %s" % (idx, cost_val))
 
 Finally, we train the model using standard TensorFlow. The ngraph results above
-shall all match TensorFlow's result.
+match TensorFlow's results.
 
 
 Current Limitations
@@ -147,9 +151,9 @@ Current Limitations
   - A util function ``TFImporter._get_unimplemented_ops()`` is provided for
     getting a list of unimplemented ops from a particular model.
 
-2. The importer shall be used to imports forward graph.
+2. The importer should be used to imports forward graph.
 
-  - User shall use the importer to import forward pass of the TensorFlow graph,
+  - User should use the importer to import forward pass of the TensorFlow graph,
     and then perform autodiff and training updates in ngraph.
   - TensorFlow ops related to gradient computation is not supported.
   - In the future, two-way weights exchange between TensorFlow and ngraph will
@@ -157,11 +161,11 @@ Current Limitations
 
 3. Static-ness
 
-  - In ngraph, transformer may alter the computation graph at during
+  - In ngraph, transformer may alter the computation graph during
     transformation phase, thus we need to declare all computations before
-    executing any one of them. Alternating the imported graph after transformer
+    executing any one of them. Altering the imported graph after transformer
     initialization is not supported.
   - TensorFlow allows dynamic parameters to its ops. For example, the kernel
-    size of a ``Conv2d`` of can be results from another computation. Since
+    size of a ``Conv2d`` can be results from another computation. Since
     ngraph needs to know dimension information prior to execution to allocate
     memory, dynamic parameters is not supported in importer.
