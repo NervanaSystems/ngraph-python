@@ -15,7 +15,7 @@
 from setuptools import setup, find_packages
 setup(
     name="ngraph",
-    version="0.4",
+    version="0.4.0",
     packages=find_packages(exclude=["tests"]),
     author='Nervana Systems',
     author_email='info@nervanasys.com',

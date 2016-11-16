@@ -71,7 +71,7 @@ copyright = u'2016, Nervana Systems Inc'
 # built documents.
 #
 # The short X.Y.Z version.
-version = '%s' % (0.4.0)
+version = '0.4.0'
 # The full version, including git-hash and alpha/beta/rc tags.
 release = version
 
