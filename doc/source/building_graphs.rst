@@ -15,7 +15,7 @@
 
 Building graphs
 ***************
-Frontends (or users who require the flexibility of constructing Nervana Graph ``Ops`` directly) utilize a set of factory functions to construct Nervana Graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op`` that is not typically a concern to users or frontends but gives a hierarchical structure that can be helpful.
+Frontends (or users who require the flexibility of constructing Nervana Graph ``Ops`` directly) utilize a set of graph construction functions to construct Nervana Graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op`` that is not typically a concern to users or frontends but gives a hierarchical structure that can be helpful.
 
 Nervana Graph Structure
 =======================
@@ -23,7 +23,7 @@ Nervana Graph Structure
 Data Dependencies
 -----------------
 
-An ``Op``'s primary role is to function as nodes in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph. 
+An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph. 
 
 For example, 
 
@@ -122,16 +122,9 @@ Some useful properties of ops are:
 Op Hierarchy
 ============
 
-Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind factory functions.
+Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind graph construction functions.
 
-All Nervana Graph nodes are instances of subclasses of the class ``Op``, most notably:
-
-* ``Op``: Base class for all ops.
-* ``TensorOp (Op)``: Ops that produce a Tensor.
-* ``ReshapeOp (TensorOp)``: Ops that change the actual or perceived dimension of a tensor.
-* ``ElementWise (TensorOp)``: Ops that perform element-wise calculations.
-
-This is captured in the full class hierarchy in the following figure.
+All Nervana Graph nodes are instances of subclasses of the class ``Op`` which is captured in the full class hierarchy in the following figure.
 
 .. image:: assets/op_hierarchy.svg
 
@@ -147,7 +140,7 @@ During computation (covered in more detail in :doc:`transformer_usage`), the inp
 
     x = ng.placeholder(axes=ng.make_axes(ax.C, ax.W, ax.H, ax.N))
 
-This will create an ``AllocationOp`` for a ``placeholder`` with the provided list of axes and assign the op to the python variable ``x``.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
+This ``placeholder`` will create an ``AssignableTensorOp`` to trigger the necessary storage to be allocated on the host device and trigger values to be transferred between the device and host. When the op is used in a graph computation, the op serves as a Python handle for the tensor stored on the device.
 
 It is important to remember that ``x`` is a Python variable that holds an op.  Therefore, the following code:
 
@@ -163,7 +156,7 @@ On the other hand, to directly modify the value of the ``placeholder``, use:
 
     ng.SetItem(x, x + x)
 
-Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` is rarely used, except for updating variables at the end of a minibatch. Consider:
+Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
 
 .. code-block:: python
 
@@ -192,11 +185,14 @@ function:
     c = ng.dot((y - y0), (y - y0))
     d = ng.deriv(c, w)
 
-The python variable ``d`` will point to an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
+The python variable ``d`` will hold an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
 
 An important distinction to make here is that the ``deriv`` function does not perform symbolic or numeric differentiation. In fact it does not compute anything at all. Its sole job is to construct another computational graph using the existing upstream graph of ``c`` and return a handle to that new computational graph (``d``). No computation is therefore taking place at this point until a user evaluates a computation of ``d`` using a transformer.
 
-In some cases, it is convenient for a op-graph function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this The ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``schema`` to the ``DivideOp``:
+.. Note::
+  The following functionality is likely to be supplanted more composable abstractions involving op graph containers.
+
+In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this The ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``schema`` to the ``DivideOp``:
 
 .. code-block:: python
 
