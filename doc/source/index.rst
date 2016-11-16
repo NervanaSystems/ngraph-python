@@ -55,3 +55,9 @@
    neon.rst
    tensorflow.rst
 
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Reference API
+
+   api.rst
