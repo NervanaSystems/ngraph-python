@@ -83,7 +83,7 @@ In order to enforce these ordering semantics, Nervana Graph accounts for control
     >>> z.other_deps.pop() is a
     True
 
-All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured as data dependencies of that ``Op``*. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
+All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured* as data dependencies of that ``Op``. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
 
 Nervana graph also allows for contexts where the dependencies can be ignored, particularly when a variable has a self-assignment. For example, consider the following toy example:
 
@@ -108,9 +108,9 @@ Nervana graph also allows for contexts where the dependencies can be ignored, pa
     print(w_comp())
     print(w_comp())
 
-The above code will print ``1, 2, 3`. Even though the defined computation only retrieves the variable ``w``, the ``ng.assign`` dependencies get triggered such that the variable still updates with every call even though we simply want to retrieve the results.
+The above code will print ``1, 2, 3``. Even though the defined computation only retrieves the variable ``w``, the ``ng.assign`` dependencies get triggered such that the variable still updates with every call even though we simply want to retrieve the results.
 
-We can guard the `update_op` with a context `ng.Op.saved_user_deps` to make sure that this dependency exists outside of the main stream.
+We can guard the ``update_op`` with a context ``ng.Op.saved_user_deps`` to make sure that this dependency exists outside of the main stream.
 
 .. code-block:: python
 
@@ -123,7 +123,7 @@ This modification will then allow the `w_comp()` to properly print ``0, 0, 0`` f
 
     w_comp = transformer.computation([w, update_op])
 
-We see this context being used in the optimizer where velocities and parameters have a self-assignment with `ng.assign`.
+We see this context being used in the optimizer where velocities and parameters have a self-assignment with ``ng.assign``.
 
 General properties of ops
 =========================
