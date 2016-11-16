@@ -28,6 +28,7 @@ The Nervana Graph (ngraph) is a Python library for implementing programs that co
 3. Enabling all of this on any user's hardware whether one or multiple CPUs, GPUs, and/or Nervana Engines.
 
 To achieve these goals, the ngraph library has three layers:
+
 1. An API for creating computational ngraphs.
 
 2. Two higher level frontend APIs (TensorFlow and Neon) utilizing the ngraph API for common deep learning workflows.
@@ -66,7 +67,7 @@ Making sure that models execute quickly with minimal memory overhead is critical
 - Multiple data layouts
 - New hardware advancements (eg: Nervana Engine)
 
-With these realities in mind, we designed ngraph transformers to automate and abstract these details away from frontends through clean APIs, while allowing the power user room to tweak things all simultaneously while not limiting the flexible abstractions for model creation.  In ngraph, we believe the key to achieving these goals rests in standing on the shoulders of giants in [modern compiler design](http://www.aosabook.org/en/llvm.html) to promote flexibility and experimentation in choosing the set and order of compiler optimizations for a transformer to use.
+With these realities in mind, we designed ngraph transformers to automate and abstract these details away from frontends through clean APIs, while allowing the power user room to tweak things all simultaneously while not limiting the flexible abstractions for model creation.  In ngraph, we believe the key to achieving these goals rests in standing on the shoulders of giants in `modern compiler design <http://www.aosabook.org/en/llvm.html>`_ to promote flexibility and experimentation in choosing the set and order of compiler optimizations for a transformer to use.
 
 Each ngraph transformer (or backend in LLVM parlance) targets a particular hardware backend and acts as an interface to compile an ngraph into a computation that is ready to be evaluated by the user as a function handle.
 
@@ -74,7 +75,7 @@ Today ngraph ships with a transformer for GPU and CPU execution, but in the futu
 
 Example
 -------
-For an example of building and executing ngraphs, please see the [walkthrough](FIXME BROKEN LINK) in our documentation, but we include here from the walkthrough a "hello world" example, which will print the numbers ``1`` through ``5``.
+For an example of building and executing ngraphs, please see the :doc:`walkthrough<walk_throughs>` in our documentation, but we include here a "hello world" example, which will print the numbers ``1`` through ``5``.
 
 .. code:: python
 
@@ -106,14 +107,15 @@ of:
 - RNN's using Penn Treebank.
 
 We are actively working towards:
+
 - Graph serialization/deserialization.
 - Further improvements to graph composability for usability/optimization.
 - Add additional support for more popular frontends.
 - Distributed, heterogeneous backend target support.
 - C APIs for interoperability to enable other languages to create/execute graphs.
 - Modern, cloud native model deployment strategies
-- Reinforcement learning friendly [network construction](http://openreview.net/forum?id=r1Ue8Hcxg) frontends
+- Reinforcement learning friendly `network construction <http://openreview.net/forum?id=r1Ue8Hcxg>`_ frontends
 
 Join us
 -------
-With the rapid pace in the deep learning community we realize that a project like this won't succeed without community participation, which is what motivated us to put this preview release out there to get feedback and encourage people like you to come join us in defining the next wave of deep learning tooling. Feel free to make pull requests/suggestions/comments on [GitHub](https://github.com/NervanaSystems/ngraph) or reach out to us on our [mailing list](https://groups.google.com/forum/#!forum/neon-users). We are also hiring for full-time and internship positions.
+With the rapid pace in the deep learning community we realize that a project like this won't succeed without community participation, which is what motivated us to put this preview release out there to get feedback and encourage people like you to come join us in defining the next wave of deep learning tooling. Feel free to make pull requests/suggestions/comments on `Github <https://github.com/NervanaSystems/ngraph>`_) or reach out to us on our `mailing list <https://groups.google.com/forum/#!forum/neon-users>`_. We are also hiring for full-time and internship positions.
