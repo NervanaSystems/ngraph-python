@@ -55,7 +55,7 @@ Computation objects are created by the transformer and provide an interface to e
 Computation Creation
 --------------------
 
-Computations are created with the ``Transformer.computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be ngraph ``Op``s. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
+Computations are created with the ``Transformer.computation`` method. When creating a computation, the user must specify a list of results which should be evaluated by the computation. These results should be ngraph ``Op`` s. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes required to evaluate these results, so it is not necessary for the user to specify the entire subset of nodes to execute. The user must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the above code example, a simple graph and computation can be created:
 
 .. code-block:: python
 
@@ -76,7 +76,7 @@ After all computations are created, the ``Transformer.initialize`` method must b
 Computation Execution
 ---------------------
 
-This computation object can be executed with is ``__call__`` method by specifying the input ``c``.
+This computation object can be executed with its ``__call__`` method by specifying the input ``c``.
 
 .. code-block:: python
 
@@ -94,7 +94,7 @@ In real world cases, we often want computations that return multiple results. Fo
     example_comp2 = transformer.computation([d, e], b, c)
     result_d, result_e = example_comp2(2, 7)
 
-In addition to returning the final result as above, this example will also set result_d to the result of the d operation, which should be 8.
+In addition to returning the final result as above, this example will also set ``result_d`` to the result of the ``d`` operation, which should be 8.
 
 Transformed Graph State
 -----------------------
@@ -110,7 +110,7 @@ For convenience, an executor utility is provided in ngraph.util.utils. This exec
 
 .. code-block:: python
 
-    from ngraph.util.utils import executor 
+    from ngraph.util.utils import executor
     example_comp = executor(e, b, c)
     result_e = example_comp(2, 7)
 

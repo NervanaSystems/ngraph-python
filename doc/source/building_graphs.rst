@@ -116,7 +116,7 @@ We can guard the ``update_op`` with a context ``ng.Op.saved_user_deps`` to make 
     with ng.Op.saved_user_deps():
         update_op = ng.assign(w, w + 1)
 
-This modification will then allow the `w_comp()` to properly print ``0, 0, 0`` for each call. Ops that are defined inside the context are not included in the dependencies of the computation unless explicitly named. To recreate the ``1, 2, 3`` behavior now that the ``update_op`` is guarded, we would have to explicitly name the ``update_op`` in the computation:
+This modification will then allow the ``w_comp()`` to properly print ``0, 0, 0`` for each call. Ops that are defined inside the context are not included in the dependencies of the computation unless explicitly named. To recreate the ``1, 2, 3`` behavior now that the ``update_op`` is guarded, we would have to explicitly name the ``update_op`` in the computation:
 
 .. code-block:: python
 

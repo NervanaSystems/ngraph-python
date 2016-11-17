@@ -13,12 +13,7 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-
-|Geon|
-================
-
-:Release: |version|
-:Date: |today|
+.. include:: overview.rst
 
 .. toctree::
    :hidden:
