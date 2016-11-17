@@ -103,15 +103,16 @@
         <div class="wy-side-nav-search">
           {% block sidebartitle %}
 
-          {% if logo and theme_logo_only %}
+          {% if logo %}
             <a href="{{ pathto(master_doc) }}">
           {% else %}
-            <a href="{{ pathto(master_doc) }}" class="icon icon-home"> {{ project }}
+            <a href="{{ pathto(master_doc) }}" class="icon icon-home">
           {% endif %}
 
           {% if logo %}
             {# Not strictly valid HTML, but it's the only way to display/scale it properly, without weird scripting or heaps of work #}
             <img src="{{ pathto('_static/' + logo, 1) }}" class="logo" />
+	    {{ project }}
           {% endif %}
           </a>
 
