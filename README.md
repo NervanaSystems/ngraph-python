@@ -5,9 +5,11 @@ Nervana graph is Nervana's library for developing frameworks that can efficientl
 - Two higher level frontend APIs (TensorFlow and Neon) utilizing the `Nervana Graph` API for common deep learning workflows
 - A transformer API for compiling these graphs and executing them.
 
+For more information, please see the [blog post](https://www.nervanasys.com/intel-nervana-graph-preview-release/) announcing our preview release!
+
 ## Installation
 
-First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
+Installation documentation can be found [here](https://ngraph.nervanasys.com/docs/latest/installation.html).  First ensure you have [neon](https://github.com/NervanaSystems/neon) checked out and built.
 
 To install Nervana Graph into your neon virtual env:
 
