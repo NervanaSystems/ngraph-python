@@ -54,6 +54,7 @@ The ``Axis`` object represents one dimension of a tensor, and can be created wit
 For tensors with multiple dimensions, we create an ``Axes`` passing in a list of individual ``Axis`` objects. Note that
 the ordering does *not* matter in specifying the axes, and has no bearing on the eventual data layout during execution. See Properties
 for a full description of axes properties.
+
   ::
 
     axes = ng.make_axes([H, W])
@@ -125,7 +126,7 @@ We can also use ``ng.cast_axis`` to recast the axes of an already defined tensor
 Properties
 ----------
 
-1. The order of Axes does not matter. ::
+1. The order of Axes does not matter.
 
   - Two tensors ``x`` and ``y`` are considered having the same type if
 
@@ -166,6 +167,7 @@ Properties
   A set of standard neon axes are defined for neon frontends.
 
   - Axes roles
+
   ::
 
     ar = ng.make_name_scope(name="ar")
@@ -177,6 +179,7 @@ Properties
     ar.Time = ng.make_axis_role()
 
   - Image / feature map
+
   ::
 
     ax = ng.make_name_scope(name="ax")
@@ -187,6 +190,7 @@ Properties
     ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
   - Filter (convolution kernel)
+
   ::
 
     ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
@@ -196,6 +200,7 @@ Properties
     ax.K = ng.make_axis(roles=[ar.Channelout], docstring="number of output feature maps")
 
   - Output
+
   ::
 
     ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")
@@ -203,11 +208,13 @@ Properties
     ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")
 
   - Recurrent
+
   ::
 
     ax.REC = ng.make_axis(roles=[ar.Time], recurrent=True, docstring="recurrent axis")
 
   - Target
+
   ::
 
     ax.Y = ng.make_axis(docstring="target")
@@ -238,7 +245,7 @@ Elementwise Binary Ops
   (C,) + (H, W) -> (C, H, W)
   (H, W) + (C,) -> (H, W, C)
 
-  In the following example, `z` from left and right are equivalent, although
+  In the following example, ``z`` from left and right are equivalent, although
   the axis orders are different.
 
   ::

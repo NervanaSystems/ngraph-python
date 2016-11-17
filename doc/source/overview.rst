@@ -14,7 +14,10 @@
 .. ---------------------------------------------------------------------------
 
 Overview
-********
+========
+
+:Release: |version|
+:Date: |today|
 
 .. Note::
    Nervana Graph is currently a preview release and the API's and implementation are subject to change. We encourage you to contribute to the discussion and help shape the future Nervana Graph.
