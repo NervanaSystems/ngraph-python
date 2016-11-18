@@ -15,7 +15,7 @@
 
 Building graphs
 ***************
-Frontends (or users who require the flexibility of constructing Nervana Graph ``Op``'s directly) utilize a set of factory functions to construct Nervana Graphs. These factory functions are listed fully in :doc:`api`. But we walk through the common patterns and arguments here. We also discuss the underlying class structure of ``Op`` that is not typically a concern to users or frontends but gives a hierarchical structure that can be helpful.
+Frontends (or users who require the flexibility of constructing Nervana Graph ``Ops`` directly) utilize a set of graph construction functions to construct Nervana Graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op`` that is not typically a concern to users or frontends but gives a hierarchical structure that can be helpful.
 
 Nervana Graph Structure
 =======================
@@ -23,9 +23,9 @@ Nervana Graph Structure
 Data Dependencies
 -----------------
 
-``Op``'s primary role is to function as nodes in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph. 
+An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph.
 
-For example, 
+For example,
 
 .. code-block:: python
 
@@ -58,17 +58,17 @@ In addition to ``args``, there are two other types of edges in Nervana Graphs. E
 
 We see here that ``mysum`` doesn't have any initializers because its value is only known at runtime. ``x`` on the other hand is a constant and can and must be initialized before any computations occur. Initializer subgraphs (the ops in ``initializers`` and all upstream ops) themselves contain ``SetItem``, ``Fill``, ``Flatten``, ``ConstantOp`` and other ops to manipulate a tensor to get it ready for computation.
 
-Control Dependencies
---------------------
+Non-data Control Dependencies
+-----------------------------
 Finally, consider the following code:
 
 .. code-block:: python
 
-    >>> x = ng.placeholder(initial_value=0, axes=())
+    >>> x = ng.placeholder((), initial_value=0)
     >>> a = ng.assign(x, 5)
     >>> z = x + 1
 
-Here we create a scalar placeholder ``x``, then fill that placeholder with the value ``5``. Then we add one to ``x``. It is not clear initially if ``z`` when evaluated should equal ``1`` or ``6``. In Python at the last line of the previous code block, ``x`` still points to the initial ``placeholder`` with value ``0``. However, In Nervana Graph we believe most users intend the assign operation to occur before the final incrementing by one. Therefore the ordering semantics of ``ng.assign`` happen in accordance with the graph creation order.
+Here we create a scalar placeholder ``x``, then fill that placeholder with the value ``5``. Then we add one to ``x``. It is not clear initially if ``z`` when evaluated should equal ``1`` or ``6``. In Python at the last line of the previous code block, ``x`` still points to the initial ``placeholder`` with value ``0``. However, in Nervana Graph we believe most users intend the assign operation to occur before the final incrementing by one. Therefore the ordering semantics of ``ng.assign`` happen in accordance with the graph creation order.
 
 In order to enforce these ordering semantics, Nervana Graph accounts for control dependencies between ``Ops`` when ``AssignOps`` are involved. To illustrate:
 
@@ -83,20 +83,61 @@ In order to enforce these ordering semantics, Nervana Graph accounts for control
     >>> z.other_deps.pop() is a
     True
 
-All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured as data dependencies of that ``Op``*. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
+All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured* as data dependencies of that ``Op``. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
+
+Nervana graph also allows for contexts where the dependencies can be ignored, particularly when a variable has a self-assignment. For example, consider the following toy example:
+
+.. code-block:: python
+
+    import ngraph as ng
+    import numpy as np
+    from ngraph.transformers.nptransform import NumPyTransformer
+
+    # set w
+    w = ng.variable((), initial_value=0)
+
+    # update op
+    update_op = ng.assign(w, w + 1)
+
+    # transformer
+    transformer = NumPyTransformer()
+    w_comp = transformer.computation(w)
+
+    print(w_comp())
+    print(w_comp())
+    print(w_comp())
+
+The above code will print ``1, 2, 3``. Even though the defined computation only retrieves the variable ``w``, the ``ng.assign`` dependencies get triggered such that the variable still updates with every call even though we simply want to retrieve the results.
+
+We can guard the ``update_op`` with a context ``ng.Op.saved_user_deps`` to make sure that this dependency exists outside of the main stream.
+
+.. code-block:: python
+
+    with ng.Op.saved_user_deps():
+        update_op = ng.assign(w, w + 1)
+
+This modification will then allow the ``w_comp()`` to properly print ``0, 0, 0`` for each call. Ops that are defined inside the context are not included in the dependencies of the computation unless explicitly named. To recreate the ``1, 2, 3`` behavior now that the ``update_op`` is guarded, we would have to explicitly name the ``update_op`` in the computation:
+
+.. code-block:: python
+
+    w_comp = transformer.computation([w, update_op])
+
+We see this context being used in the optimizer where velocities and parameters have a self-assignment with ``ng.assign``.
+
+Note: The ``user_deps`` facility is likely to be replaced.
 
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which is a subclass of the class :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former providing ``Ops`` with automatically generated unique names and the latter providing debug info as to the line number and filename where this node was constructed.
+All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former provides ``Ops`` with automatically generated unique names and the latter provides debug info as to the line number and filename where this node was constructed.
 
-In addition to the three graph properties explained above (``args``, 
+In addition to the three graph properties explained above (``args``,
 ``initializers``, and ``other_deps``), all ops have the additional attributes:
 
 `axes`
-    The axes of the result of the computation. This only needs to be specified 
-    by the frontend or user during ``Op`` creation if the default result is not 
-    correct or not inferrable for a particular ``Op`` type. The `axes` are also 
+    The axes of the result of the computation. This only needs to be specified
+    by the frontend or user during ``Op`` creation if the default result is not
+    correct or not inferrable for a particular ``Op`` type. The `axes` are also
     available as a gettable property.
 
 `name`
@@ -104,8 +145,8 @@ In addition to the three graph properties explained above (``args``,
     Some front ends may also make use of the `name`.  The `name` is a settable property.
 
 `metadata`
-    A dictionary of key,value string pairs that can be used to select/filter 
-    ops when manipulating them. For example, ``stochastic=dropout`` may be used 
+    A dictionary of key,value string pairs that can be used to select/filter
+    ops when manipulating them. For example, ``stochastic=dropout`` may be used
     to indicate groups of trainable variables in conjunction with drop-out.
 
 Some useful properties of ops are:
@@ -122,44 +163,43 @@ Some useful properties of ops are:
 Op Hierarchy
 ============
 
-Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind factory functions.
+Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind graph construction functions.
 
-All Nervana Graph nodes are instances of subclasses of the class ``Op``. This class hierarchy:
-
-* ``Op``: Base class for all ops.
-* ``TensorOp (Op)``: Ops that produce a Tensor.
-* ``ReshapeOp (TensorOp)``: Ops that change the actual or perceived dimension of a tensor.
-* ``ReductionOp (TensorOp)``: Ops that reduce over some axes (e.g. sum).
-* ``ElementWise (TensorOp)``: Ops that perform element-wise calculations.
-* ``ElementWiseBoolean (ElementWise)``: Boolean element-wise ops.
-
-This is captured in the full class hierarchy in the following figure.
+All Nervana Graph nodes are instances of subclasses of the class ``Op`` which is captured in the full class hierarchy in the following figure.
 
 .. image:: assets/op_hierarchy.svg
 
-Graph evaluation
-================
+Ops influencing evaluation
+==========================
 
-During computation, the input and output values must be stored somewhere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``::
+During computation (covered in more detail in :doc:`transformer_usage`), the input and output values must be stored somewhere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``:
+
+.. code-block:: python
 
     import ngraph as ng
     from ngraph.frontends.neon as ax
 
-    x = ng.placeholder(axes=ng.make_axes(ax.C, ax.W, ax.H, ax.N))
+    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
 
-This will create an ``AllocationOp`` for a ``placeholder`` with the provided list of axes and assign the op to the python variable ``x``.  When the op is used in a graph, the op serves as a Python handle for the tensor stored in the device.
+This ``placeholder`` will create an ``AssignableTensorOp`` to trigger the necessary storage to be allocated on the host device and trigger values to be transferred between the device and host. When the op is used in a graph computation, the op serves as a Python handle for the tensor stored on the device.
 
-It is important to remember that ``x`` is a Python variable that holds an op.  Therefore, the following code::
+It is important to remember that ``x`` is a Python variable that holds an op.  Therefore, the following code:
+
+.. code-block:: python
 
     x = x + x
 
 does not directly double the value of the tensor in the ``placeholder``. Instead, the ``__add__`` method is called with
 both arguments pointing to the same ``placeholder`` object. This returns a new ``Op`` that is now stored as the python variable ``x``.
-On the other hand, to directly modify the value of the ``placeholder``, use::
+On the other hand, to directly modify the value of the ``placeholder``, use:
+
+.. code-block:: python
 
     ng.SetItem(x, x + x)
 
-Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` is rarely used, except for updating variables at the end of a minibatch. Consider::
+Constructing the graph consists mostly of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
+
+.. code-block:: python
 
     x1 = x + x
     y = x1 * x1 - x
@@ -171,41 +211,36 @@ Derivatives
 ===========
 
 Because ``Ops`` describe computations, we have enough information to compute derivatives, using the ``deriv``
-function::
+function:
+
+.. code-block:: python
 
     import ngraph as ng
-    from ngraph.frontends import ax
+    from ngraph.frontends.neon import ax
 
-    x = ng.placeholder(axes=ng.make_axes((ax.C, ax.W, ax.H, ax.N)))
-    y0 = ng.placeholder(axes=ng.make_axes((ax.Y, ax.N))
-    w = ng.Variable(axes=(ng.make_axes((ax.C, ax.W, ax.H, ax.Y))))
-    b = ng.Variable(axes=(ng.make_axes((ax.Y,)))
+    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
+    y0 = ng.placeholder((ax.Y, ax.N))
+    w = ng.variable((ax.C, ax.W, ax.H, ax.Y)))
+    b = ng.variable((ax.Y,))
     y = ng.tanh(dot(w, x) + b)
-    c = dot((y - y0), (y - y0))
-    d = deriv(c, w)
+    c = ng.squared_L2(y - y0)
+    d = ng.deriv(c, w)
 
-The op `d` will be the op for the derivative of the value of `dc/dw`.
+The python variable ``d`` will hold an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
 
-In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general
-optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would be the list ``[w, b]``.
+An important distinction to make here is that the ``deriv`` function does not perform symbolic or numeric differentiation. In fact it does not compute anything at all. Its sole job is to construct another computational graph using the existing upstream graph of ``c`` and return a handle to that new computational graph (``d``). No computation is therefore taking place at this point until a user evaluates a computation of ``d`` using a transformer.
 
-Graph execution
-===============
+.. Note::
+  The following functionality is likely to be supplanted more composable abstractions involving op graph containers.
 
-A *computation* is a subset of ops whose values are desired and corresponds to a callable procedure on a backend.
-Users define one or more computations by specifying sets of ops to be computed.  In addition, the transformer
-will define four additional procedures:
+In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this The ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``schema`` to the ``DivideOp``:
 
-`allocate`
-    Allocate required storage required for all computations.  This includes all allocations for all ops
-    marked as `in`.
+.. code-block:: python
 
-`initialize`
-    Run all initializations.  These are all the `initializers` for the ops needed for the computations.  These
-    are analogous to C++ static initializers.
+    >>> x = ng.placeholder((ng.make_axis(20, 'C')))
+    >>> s = ng.softmax(x)
+    >>> s.schemas
+    [<ngraph.op_graph.op_graph.Softmax at 0x10c5e2210>]
 
-`save`
-    Save all persistent state.  These are states with the `persistent` property set.
+More details about the mechanics of automatic differiantion and how ``deriv`` works are covered in :doc:`autodiff`.
 
-`restore`
-    Restore saved state.

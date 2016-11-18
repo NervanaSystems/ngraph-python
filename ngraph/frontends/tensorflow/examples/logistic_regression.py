@@ -38,10 +38,8 @@ cost = -tf.reduce_sum(log_likelihoods)
 init_op = tf.initialize_all_variables()
 
 # import graph_def
-with tf.Session() as sess:
-    graph_def = sess.graph_def
 importer = TFImporter()
-importer.parse_graph_def(graph_def)
+importer.parse_graph_def(tf.get_default_graph().as_graph_def())
 
 # get handle of ngraph ops
 x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init_op])

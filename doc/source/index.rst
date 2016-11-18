@@ -13,12 +13,7 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-
-|Geon|
-================
-
-:Release: |version|
-:Date: |today|
+.. include:: overview.rst
 
 .. toctree::
    :hidden:
@@ -28,7 +23,6 @@
    overview.rst
    installation.rst
    walk_throughs.rst
-   future_work.rst
 
 .. toctree::
    :hidden:
@@ -56,3 +50,9 @@
    neon.rst
    tensorflow.rst
 
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Reference API
+
+   api.rst
