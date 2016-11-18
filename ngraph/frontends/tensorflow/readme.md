@@ -15,7 +15,7 @@ f = x + y
 
 # import
 importer = TFImporter()
-importer.parse_graph_def(tf.Session().graph_def)
+importer.parse_graph_def(tf.get_default_graph().as_graph_def())
 
 # get handle
 f_ng = importer.get_op_handle(f)
