@@ -1,5 +1,6 @@
 from passes import PeepholeGraphPass
 from ngraph.op_graph.communication import Send
+from ngraph.op_graph.communication import Recv
 
 class DeviceAssignPass(PeepholeGraphPass):
     def __init__(self, default_device):
@@ -22,7 +23,7 @@ class CommunicationPass(PeepholeGraphPass):
         args = list()
         for arg in op.args:
             if op.metadata['device'] != arg.metadata['device']:
-                args.append(Send(arg, device=op.metadata['device']))
+	        args.append(Send(Recv(arg, device=arg.metadata['device']), device=op.metadata['device']))
             else:
                 args.append(arg)
 
