@@ -27,6 +27,7 @@ The adaptation includes
     initialize the weights and biases
   - being able to read out hashable values to compare with another recurrent
     implementation
+  - allow setting initial states
 """
 
 import numpy as np
@@ -41,14 +42,17 @@ class Recurrent(object):
         self.Whh = np.zeros((hidden_size, hidden_size))  # hidden to hidden
         self.bh = np.zeros((hidden_size, 1))  # hidden bias
 
-    def lossFun(self, inputs, errors):
+    def lossFun(self, inputs, errors, init_states=None):
         """
         inputs,errors are both list of integers.
         returns the hidden states and gradients on model parameters
         """
-
         xs, hs = {}, {}
-        hs[-1] = np.zeros((self.hidden_size, 1))
+        if init_states is not None:
+            assert init_states.shape == (self.hidden_size, 1)
+            hs[-1] = init_states
+        else:
+            hs[-1] = np.zeros((self.hidden_size, 1))
         seq_len = len(inputs)
         hs_list = np.zeros((self.hidden_size, seq_len))
         nin = inputs[0].shape[0]
@@ -74,7 +78,6 @@ class Recurrent(object):
         for t in reversed(range(seq_len)):
             dh = dh_list[t] + dhnext  # backprop into h
             dh_list_out[t] = dh
-            # import pdb;pdb.set_trace()
             # backprop through tanh nonlinearity
             dhraw = np.multiply(dh, (1 - np.square(hs[t])))
             dbh += dhraw

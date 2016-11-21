@@ -110,9 +110,10 @@ class ArrayIterator(object):
 
 class SequentialArrayIterator(ArrayIterator):
 
-    def __init__(self, data_arrays, batch_size, time_steps,
-                 total_iterations=None, get_prev_target=False):
+    def __init__(self, data_arrays, time_steps, batch_size,
+                 total_iterations=None, reverse_target=False, get_prev_target=False):
         self.get_prev_target = get_prev_target
+        self.reverse_target = reverse_target
 
         super(SequentialArrayIterator, self).__init__(
             data_arrays=data_arrays,
@@ -120,6 +121,7 @@ class SequentialArrayIterator(ArrayIterator):
             total_iterations=total_iterations,
             time_steps=time_steps,
         )
+
         self.make_batch_buffers()
 
     def make_batch_buffers(self):
@@ -130,12 +132,23 @@ class SequentialArrayIterator(ArrayIterator):
             self.shapes[k] = (1, self.time_steps)
             self.batch_bufs[k] = np.empty((1, self.time_steps, self.batch_size), dtype=np.int32)
 
+        if self.get_prev_target:
+            self.batch_bufs['prev_tgt'] = np.empty((1, self.time_steps, self.batch_size),
+                                                   dtype=np.int32)
+
     def __iter__(self):
         while self.index < self.total_iterations:
+            idx = self.index % self.nbatches
             for k in self.keys:
                 src, dst = self.data_arrays[k], self.batch_bufs[k]
-                idx = self.index % self.nbatches
                 dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
             self.index += 1
+
+            if self.reverse_target:
+                self.batch_bufs['tgt_txt'][:] = self.batch_bufs['tgt_txt'][:, ::-1, :]
+
+            if self.get_prev_target:
+                self.batch_bufs['prev_tgt'][:, 0] = 0
+                self.batch_bufs['prev_tgt'][:, 1:] = self.batch_bufs['tgt_txt'][:, :-1]
 
             yield self.batch_bufs

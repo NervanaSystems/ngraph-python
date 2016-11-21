@@ -31,13 +31,11 @@ The following are made sure to be the same in both recurrent layers
 
 import itertools as itt
 import numpy as np
-
 import ngraph as ng
 
 from ngraph.frontends.neon import Recurrent, GaussianInit, Tanh
-from recurrent_ref import Recurrent as RefRecurrent
-
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
+from recurrent_ref import Recurrent as RefRecurrent
 
 rng = RandomTensorGenerator()
 
@@ -70,10 +68,12 @@ def test_ref_compare_rand(refgruargs):
     seq_len, input_size, hidden_size, batch_size = refgruargs
     check_rnn(seq_len, input_size, hidden_size, batch_size,
               GaussianInit(0.0, 1.0))
+    check_rnn(seq_len, input_size, hidden_size, batch_size,
+              GaussianInit(0.0, 1.0), return_seq=False)
 
 
 # compare neon RNN to reference RNN implementation
-def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
+def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_seq=True):
     # init_func is the initializer for the model params
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -81,15 +81,20 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     Cin = ng.make_axis(input_size)
     REC = ng.make_axis(seq_len, recurrent=True)
     N = ng.make_axis(batch_size, batch=True)
+    H = ng.make_axis(hidden_size)
+    ax_s = ng.make_axes([H, N])
 
     ex = ExecutorFactory()
     np.random.seed(0)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh())
+    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
+                       reset_cells=True, return_sequence=return_seq)
+
     inp_ng = ng.placeholder([Cin, REC, N])
+    init_state_ng = ng.placeholder(ax_s)
 
     # fprop graph
-    out_ng = rnn_ng.train_outputs(inp_ng)
+    out_ng = rnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
     out_ng.input = True
 
     rnn_W_input = rnn_ng.W_input
@@ -99,7 +104,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     rnn_b = rnn_ng.b
     rnn_b.input = True
 
-    fprop_neon_fun = ex.executor(out_ng, inp_ng)
+    fprop_neon_fun = ex.executor(out_ng, inp_ng, init_state_ng)
+
     dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
     dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
     dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
@@ -109,7 +115,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
 
     # fprop on random inputs
     input_value = rng.uniform(-1, 1, inp_ng.axes)
-    fprop_neon = fprop_neon_fun(input_value).copy()
+    init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
+    fprop_neon = fprop_neon_fun(input_value, init_state_value).copy()
 
     # after the rnn graph has been executed, can get the W values. Get copies so
     # shared values don't confuse derivatives
@@ -151,10 +158,15 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
     rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
     (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-     dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref)
+        dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref,
+                                                  deltas_ref, init_states=init_state_value)
 
     # comparing outputs
-    np.testing.assert_allclose(fprop_neon[:, :, 0], h_ref_list, rtol=0.0, atol=1.0e-5)
+    if return_seq is False:
+        h_ref_list = h_ref_list[:, -1].reshape(-1, 1)
+    else:
+        fprop_neon = fprop_neon[:, :, 0]
+    np.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
 
     return
 
@@ -162,4 +174,4 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func):
 if __name__ == '__main__':
     seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
     init = GaussianInit(0.0, 0.1)
-    check_rnn(seq_len, input_size, hidden_size, batch_size, init)
+    check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)

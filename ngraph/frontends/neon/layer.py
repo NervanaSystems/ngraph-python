@@ -381,7 +381,8 @@ class Recurrent(Layer):
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
         reset_cells (bool): default to be False to make the layer stateful,
-                            set to True to be stateless
+                            set to True to be stateless.
+        return_sequence (bool): default to be True to return the whole sequence output.
         name (str, optional): name to refer to this layer as.
     Attributes:
         W_input (Tensor): weights from inputs to output units
@@ -392,41 +393,51 @@ class Recurrent(Layer):
     """
     metadata = {'layer_type': 'recurrent'}
 
-    def __init__(self, output_size, init, init_inner=None, activation=None, **kwargs):
+    def __init__(self, output_size, init, init_inner=None, activation=None,
+                 reset_cells=False, return_sequence=True, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
+
         self.nout = output_size
         self.activation = activation
         self.init = init
         self.init_inner = init_inner or init
+        self.reset_cells = reset_cells
+        self.return_sequence = return_sequence
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    def train_outputs(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
 
         Arguments:
-           in_obj (int, tuple, Layer or Tensor): object that provides shape
+            in_obj (int, tuple, Layer or Tensor): object that provides shape
                                                  information for layer
+            init_state (Tensor): object that provides initial state
 
         Returns:
            (Tensor): output
 
         """
-        in_axes = in_obj.axes
-        self.time_axis = in_axes.recurrent_axes()[0]
-
         def get_steps(x, time_axis):
             return [ng.slice_along_axis(x, time_axis, i) for i in range(time_axis.length)]
 
+        in_axes = in_obj.axes
+        self.time_axis = in_axes.recurrent_axes()[0]
+        self.time_axis_idx = in_axes.index(self.time_axis)
+
         if self.axes is not None:
             hidden_axes = self.axes - self.axes.recurrent_axes()
+        elif init_state:
+            hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
         else:
-            hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden_in')])
+            hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
 
         w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
                                    in_axes.recurrent_axes()]
         w_re_axes = hidden_axes + [axis - 1 for axis in hidden_axes]
+
+        hidden_state_axes = hidden_axes + in_axes.batch_axes()
 
         self.W_input = ng.variable(axes=w_in_axes,
                                    initial_value=self.init(w_in_axes.lengths)
@@ -436,12 +447,20 @@ class Recurrent(Layer):
                                    ).named("W_re")
         self.b = ng.variable(axes=hidden_axes, initial_value=0).named("bias")
 
-        h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
-        h_ff_s = get_steps(h_ff_buf, self.time_axis)
-        self.h_init = ng.constant(np.zeros(h_ff_s[0].axes.lengths),
-                                  axes=h_ff_s[0].axes).named('h_init')
+        if init_state:
+            self.h_init = init_state
+        else:
+            if self.reset_cells:
+                self.h_init = ng.constant(np.zeros(hidden_state_axes.lengths),
+                                          axes=hidden_state_axes).named('h_init')
+            else:
+                self.h_init = ng.variable(initial_value=np.zeros(hidden_state_axes.lengths),
+                                          axes=hidden_state_axes).named('h_init')
 
         hprev = [self.h_init]
+
+        h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
+        h_ff_s = get_steps(h_ff_buf, self.time_axis)
 
         for i in range(self.time_axis.length):
             with ng.metadata(recurrent_step=str(i)):
@@ -450,5 +469,9 @@ class Recurrent(Layer):
                 h.name = "activ{}".format(i)
                 hprev.append(h)
 
-        rnn_out = ng.stack(hprev[1:], self.time_axis, pos=1)
+        if self.return_sequence is True:
+            rnn_out = ng.stack(hprev[1:], self.time_axis, pos=self.time_axis_idx)
+        else:
+            rnn_out = hprev[-1]
+
         return rnn_out

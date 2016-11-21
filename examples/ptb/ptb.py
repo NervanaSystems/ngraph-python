@@ -22,15 +22,20 @@ class PTB(object):
     Penn Treebank data set from http://arxiv.org/pdf/1409.2329v5.pdf
 
     Arguments:
+        path (string): Data directory to find the data, if not existing, will
+                       download the data
+        shift_target (boolean): Set the target to be the same sequence of shifted
+                                version of the sequence. Default to be True, for
+                                language models.
 
     """
-    def __init__(self, path='.', reverse_target=False):
+    def __init__(self, path='.', shift_target=True):
         self.path = path
         self.url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data'
         self.filemap = dict(train=dict(filename='ptb.train.txt', size=5101618),
                             test=dict(filename='ptb.test.txt', size=449945),
                             valid=dict(filename='ptb.valid.txt', size=399782))
-        self.reverse_target = reverse_target
+        self.shift_target = shift_target
 
     def load_data(self):
         self.data_dict = {}
@@ -51,10 +56,10 @@ class PTB(object):
 
             # map tokens to indices
             X = np.asarray([self.token_to_index[t] for t in tokens], dtype=np.uint32)
-            if self.reverse_target:
-                y = X.copy()
-            else:
+            if self.shift_target:
                 y = np.concatenate((X[1:], X[:1]))
+            else:
+                y = X.copy()
 
             self.data_dict[phase] = {'inp_txt': X, 'tgt_txt': y}
 
