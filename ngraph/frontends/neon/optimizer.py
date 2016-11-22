@@ -92,7 +92,7 @@ class Schedule(object):
         return learning_rate * self.change ** self.steps
 
 
-def clip_gradient_norm(grad_list, clip_norm, bsz):
+def clip_gradient_norm(grad_list, bsz, clip_norm=None):
     """
     TODO.
 
@@ -104,15 +104,18 @@ def clip_gradient_norm(grad_list, clip_norm, bsz):
     Returns:
 
     """
-    s = None
-    for param in grad_list:
-        term = ng.squared_L2(param)
-        if s is None:
-            s = term
-        else:
-            s = s + term
-    s = s / bsz
-    return clip_norm / ng.max(s, clip_norm)
+    if clip_norm:
+        s = None
+        for param in grad_list:
+            term = ng.squared_L2(param)
+            if s is None:
+                s = term
+            else:
+                s = s + term
+        s = s / bsz
+        return clip_norm / ng.max(s, clip_norm)
+    else:
+        return 1
 
 
 def clip_gradient_value(grad, clip_value=None):
@@ -127,7 +130,7 @@ def clip_gradient_value(grad, clip_value=None):
 
     """
     if clip_value:
-        return ng.clip(grad, -abs(clip_value), abs(clip_value))
+        return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
     else:
         return grad
 
@@ -258,7 +261,7 @@ class RMSProp(Optimizer):
             batch_size = cost_func.axes.batch_axes()[0].length
 
             grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
-            scale_factor = clip_gradient_norm(grads) if self.gradient_clip_norm else 1
+            scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
 
             epsilon, decay = (self.epsilon, self.decay_rate)
             for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
