@@ -104,7 +104,9 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
     Returns:
 
     """
-    if clip_norm:
+    if clip_norm is None:
+        return 1
+    else:
         s = None
         for param in grad_list:
             term = ng.squared_L2(param)
@@ -114,8 +116,6 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
                 s = s + term
         s = s / bsz
         return clip_norm / ng.max(s, clip_norm)
-    else:
-        return 1
 
 
 def clip_gradient_value(grad, clip_value=None):
@@ -129,10 +129,10 @@ def clip_gradient_value(grad, clip_value=None):
     Returns:
 
     """
-    if clip_value:
-        return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
-    else:
+    if clip_value is None:
         return grad
+    else:
+        return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
 class Optimizer(object):
