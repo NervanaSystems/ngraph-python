@@ -88,7 +88,7 @@ For example, convolution kernels need to know which axes correspond to the chann
   ::
 
     role_channel = ng.make_axis_role(name="Channel")
-    axis_channel = ng.axis(length=3, roles=[role_channel], name="my_axis")
+    axis_channel = ng.make_axis(length=3, roles=[role_channel], name="my_axis")
 
 The neon frontend relies on several axis roles, specified by its name: ``Height``, ``Width``, ``Depth``, ``Channel``, ``Channelout``, and ``Time``. These roles are primarily used for automatic axes inference. For example, a convolution kernel can examine the input feature maps'``AxisRole`` to determine whether a dimshuffle shall be applied prior to convolution.
 
@@ -138,6 +138,7 @@ Properties
 
       import numpy as np
       import ngraph as ng
+      from ngraph.transformers.nptransform import NumPyTransformer
 
       H = ng.make_axis(length=2)
       W = ng.make_axis(length=3)
@@ -146,7 +147,7 @@ Properties
       y = ng.constant(np_val.T, [W, H])
       z = ng.equal(x, y)
 
-      trans = ng.NumPyTransformer()
+      trans = NumPyTransformer()
       comp = trans.computation([z])
       z_val = comp()[0]
       print(z_val)
@@ -254,7 +255,7 @@ Elementwise Binary Ops
     y = ng.constant(np.ones((3, 2)), [W, H]) | y = ng.constant(np.ones((3, 2)), [W, H])
     z = x + y                                | z = y + x  # <== changed order
                                              |
-    trans = ng.NumPyTransformer()            | trans = ng.NumPyTransformer()
+    trans = NumPyTransformer()               | trans = NumPyTransformer()
     comp = trans.computation([z])            | comp = trans.computation([z])
     z_val = comp()[0]                        | z_val = comp()[0]
     print(z_val)                             | print(z_val)
@@ -311,7 +312,7 @@ dimensions but different axes. Examples: ::
     sum_direct = hidden_1 + hidden_2  # sum_direct has axes: [C1, C2, N]
 
     # cast before sum
-    hidden_2_cast = ng.cast_axes(hidden_2_cast, [C1, N])
+    hidden_2_cast = ng.cast_axes(hidden_2, [C1, N])
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: [C1, N]
 
 

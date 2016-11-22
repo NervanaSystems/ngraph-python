@@ -5,6 +5,7 @@
 ```python
 from __future__ import print_function
 from tf_importer.tf_importer.importer import TFImporter
+from ngraph.transformers.nptransform import NumPyTransformer
 import tensorflow as tf
 import ngraph as ng
 
@@ -21,7 +22,7 @@ importer.parse_graph_def(tf.get_default_graph().as_graph_def())
 f_ng = importer.get_op_handle(f)
 
 # execute
-f_result = ng.NumPyTransformer().computation(f_ng)()
+f_result = NumPyTransformer().computation(f_ng)()
 print(f_result)
 ```
 
