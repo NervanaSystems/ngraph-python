@@ -208,32 +208,32 @@ In general, users can compose arbitrarily complex sets of containers:
          |       C1   C2        C3               |
          |        +   +          +               |
          |        |   |        +-+-----+         |
-         |        |   |   +---->       +--> O1   +----> CO1
+         |        |   |   +---->   2   +--> O1   +----> CO1
 CI1 +---->      +-+---+-+ |    +-------+         |
          | I1   |       +-+                      |
-         |  +--->       |----->  O2              +----> CO2
+         |  +--->   1   |----->  O2              +----> CO2
          |      |       +-+                      |
          |      +-------+ |         C4           |
          |                |         +            +----> CO3
          |                |     +---+---+        |
 CI2 +---->                +----->       |   O3   |
-         |                      |       +-->     |
+         |                      |   3   +-->     |
          |             I2 +----->       |        |
          |                      +-------+        |
          |                                       |
          +---------------------------------------+
 ```
 Here is a parent container with three children containers. This requires an API to allow for 
-'wiring' up the input and output ports arbitrarily between containers. This can be done with input 
-output label 'patch' pairs:
+'wiring' up the input and output ports arbitrarily between containers. This can 
+be done in this example with the following input output label 'patch' pairs:
 ```python
 Container.named_merge(
-    patches=[('image', 'image2'),
-             ('image', 'image3'),
-             ('class_label', 'input_4')],
+    patches=[('layer_1_o1', 'layer2_i1'),
+             ('layer_1_o3', 'layer_3_i1')],
     containers=[
-        fprop,
-        other_network
+        layer_1,
+        layer_2,
+        layer_3
         ]
     )
 ```
@@ -262,6 +262,36 @@ or metadata (key value attributes). Therefore queries such as (given in pure eng
 - Give me all `Dot` ops
 - Give me all ops flagged for debug in the inference path.
 - Give me all top level ops that aren't initializers
+
+### Traversal
+For graph passes we want to expose convenient ways to traverse the graph of containers. At the simplest, we want to make it easy to do things like:
+```python
+# In Python
+for op in my_container:
+  # do something with every op
+
+for op in my_container.sorted():
+  # every op starting with the inputs
+
+for op in my_container.sorted(skip_containers=lambda c: if 'rnn' in c.metadata):
+  # All ops in topological sorted order, but don't traverse into RNN cells
+```
+
+### Implementation Strategy
+To proceed iteratively I'm thinking of breaking containers into the following 
+PRs:
+
+#### Add Container class with tests
+Use it with MNIST (but without tie-ins to transformers or the factory functions 
+by taking the ngraph out of the container before passing to transformer.
+
+We'll leave ops connected across container boundaries for now instead of having 
+containers harbor edges between children. We can handle connectivity later.
+
+#### Traversal and graph passes
+Show how traversal works and have the graph passes use it.
+
+From there we'll decide the next most important steps.
 
 # Proposal 2
 A further extension of proposal 1 is that we unify the notion of an `Op` and `Container`. Op's after 
