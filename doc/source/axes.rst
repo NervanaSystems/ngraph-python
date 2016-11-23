@@ -138,7 +138,7 @@ Properties
 
       import numpy as np
       import ngraph as ng
-      from ngraph.transformers.nptransform import NumPyTransformer
+      import ngraph.transformers as ngt
 
       H = ng.make_axis(length=2)
       W = ng.make_axis(length=3)
@@ -147,7 +147,7 @@ Properties
       y = ng.constant(np_val.T, [W, H])
       z = ng.equal(x, y)
 
-      trans = NumPyTransformer()
+      trans = ngt.make_transformer()
       comp = trans.computation([z])
       z_val = comp()[0]
       print(z_val)
@@ -255,7 +255,7 @@ Elementwise Binary Ops
     y = ng.constant(np.ones((3, 2)), [W, H]) | y = ng.constant(np.ones((3, 2)), [W, H])
     z = x + y                                | z = y + x  # <== changed order
                                              |
-    trans = NumPyTransformer()               | trans = NumPyTransformer()
+    trans = ngt.make_transformer()           | trans = ngt.make_transformer()
     comp = trans.computation([z])            | comp = trans.computation([z])
     z_val = comp()[0]                        | z_val = comp()[0]
     print(z_val)                             | print(z_val)
