@@ -862,13 +862,11 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes == delta.axes:
             raise ValueError(
-                'A tensor and its adjoint must have the same axes.'
+                'delta axes {} do not match adjoint axes {}'
+                .format(delta.axes, self.axes)
             )
-        # Make sure delta's axes are in the right order
-        # tested by test_shuffled_deriv
-        delta = axes_with_order(delta, self.axes)
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -2650,7 +2648,7 @@ class Dimshuffle(TensorOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(
             adjoints,
-            delta
+            axes_with_order(delta, x.axes)
         )
 
 
@@ -2696,12 +2694,16 @@ class DotOp(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                dualed_axes(y, self.y_reduction_axes, -1, 0))
+            axes_with_order(
+                dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                    dualed_axes(y, self.y_reduction_axes, -1, 0)),
+                x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            dot(dualed_axes(x, self.x_out_axes, -1, +1), delta)
+            axes_with_order(
+                dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
+                y.axes)
         )
 
 

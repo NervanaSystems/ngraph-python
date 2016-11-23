@@ -299,7 +299,7 @@ def test_shuffled_deriv():
     v = ng.variable([ng.make_axis(_.length) for _ in axes])
     rsc = ng.cast_axes(v, axes)
     trsc = ng.expand_dims(rsc, ax.T, 0)
-    ctrs = ng.Dimshuffle(trsc, axes=[ax.C, ax.T, ax.R, ax.S])
+    ctrs = ng.axes_with_order(trsc, axes=[ax.C, ax.T, ax.R, ax.S])
     cost = ng.sum(ctrs, out_axes=None)
     grad = ng.deriv(cost, v)
 
