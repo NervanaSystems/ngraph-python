@@ -259,6 +259,9 @@ def test_cast_axes(transformer_factory):
 
     x = ng.placeholder((C, D))
 
+    with pytest.raises(ValueError):
+        ng.cast_axes(x, (D, C))
+
     x_slice = x[1, :]
     # Cast back to known axes
     x_cast = ng.cast_axes(x_slice, [D])
@@ -281,6 +284,28 @@ def test_cast_axes(transformer_factory):
         rtol=rtol,
         atol=atol
     )
+
+
+def test_shuffled_deriv():
+    # This gets the axes of a delta in a generate_add_delta in a different order than the
+    # value being updated
+    ax = ng.make_name_scope("ax")
+    ax.C = ng.make_axis(3)
+    ax.T = ng.make_axis(1)
+    ax.R = ng.make_axis(5)
+    ax.S = ng.make_axis(5)
+
+    axes = [ax.R, ax.S, ax.C]
+    v = ng.variable([ng.make_axis(_.length) for _ in axes])
+    rsc = ng.cast_axes(v, axes)
+    trsc = ng.expand_dims(rsc, ax.T, 0)
+    ctrs = ng.Dimshuffle(trsc, axes=[ax.C, ax.T, ax.R, ax.S])
+    cost = ng.sum(ctrs, out_axes=None)
+    grad = ng.deriv(cost, v)
+
+    ex = ExecutorFactory()
+    d_fun = ex.executor(grad)
+    d_fun()
 
 
 def test_slice_tensor_description(transformer_factory):

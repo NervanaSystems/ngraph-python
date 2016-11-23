@@ -866,6 +866,9 @@ class TensorOp(Op):
             raise ValueError(
                 'A tensor and its adjoint must have the same axes.'
             )
+        # Make sure delta's axes are in the right order
+        # tested by test_shuffled_deriv
+        delta = axes_with_order(delta, self.axes)
         if self not in adjoints:
             adjoints[self] = delta
         else:
@@ -1146,6 +1149,10 @@ class AxesCastOp(ReshapeOp):
 
     """
     def __init__(self, x, axes, **kwargs):
+        axes = make_axes(axes)
+        if not x.is_scalar and x.axes.lengths != axes.lengths:
+            raise ValueError("casting axes {} must have the same length as original axes {}"
+                             .format(axes, x.axes))
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1311,6 +1318,7 @@ def axes_with_order(x, axes):
         TensorOp: The new tensor.
 
     """
+    axes = make_axes(axes)
     if x.axes == axes:
         return x
     return ReorderAxes(x, axes)
