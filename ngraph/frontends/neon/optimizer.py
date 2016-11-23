@@ -94,15 +94,22 @@ class Schedule(object):
 
 def clip_gradient_norm(grad_list, bsz, clip_norm=None):
     """
-    TODO.
+    Returns a scaling factor to apply to the gradients.
+
+    The scaling factor is computed such that the root mean squared
+    average of the scaled gradients across all layers will be less than
+    or equal to the provided clip_norm value. This factor is always <1, so
+    never scales up the gradients.
 
     Arguments:
-      grad_list: TODO
-      clip_norm: TODO
-      bsz: TODO
+        param_list (list): List of layer parameters
+        clip_norm (float, optional): Target norm for the gradients. If not provided
+                                     the returned scale_factor will equal 1.
+        bsz: the batch size
+
 
     Returns:
-
+        Computed scale factor (float)
     """
     if clip_norm is None:
         return 1
@@ -115,18 +122,21 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
             else:
                 s = s + term
         s = s / bsz
-        return clip_norm / ng.max(s, clip_norm)
+        return clip_norm / ng.maximum(s, clip_norm)
 
 
 def clip_gradient_value(grad, clip_value=None):
     """
-    TODO.
+    Element-wise clip a gradient tensor to between ``-clip_value`` and ``+clip_value``.
 
     Arguments:
-      grad: TODO
-      clip_value: TODO
+        grad (Tensor): List of gradients for a single layer
+        clip_value (float, optional): Value to element-wise clip
+                                      gradients.
+                                      Defaults to None.
 
     Returns:
+        grad (list): List of clipped gradients.
 
     """
     if clip_value is None:
@@ -176,11 +186,12 @@ class GradientDescentMomentum(Optimizer):
             velocity_updates, param_updates = [], []
             batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
-            scale_factor = 1
 
-            for variable in batch_cost.variables():
-                grad = clip_gradient_value(ng.deriv(batch_cost, variable) / batch_size,
-                                           self.gradient_clip_value)
+            grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+            scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
+
+            for variable, grad in zip(batch_cost.variables(), grads):
+                grad = clip_gradient_value(grad, self.gradient_clip_value)
 
                 velocity = ng.persistent_tensor(axes=variable.axes,
                                                 initial_value=0.).named(variable.name + '_vel')
