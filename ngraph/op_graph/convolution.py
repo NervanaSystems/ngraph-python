@@ -76,7 +76,7 @@ class ConvolutionOp(op_graph.TensorOp):
         ConvolutionOp._index += 1
 
         super(ConvolutionOp, self).__init__(
-            args=(inputs, filters), *args, **kwargs
+            args=(op_graph.ContiguousOp(inputs), op_graph.ContiguousOp(filters)), *args, **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):

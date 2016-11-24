@@ -19,7 +19,7 @@ from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
-    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
+    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp, \
@@ -178,6 +178,11 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(BinaryElementWiseAxesOp)
     def visit(self, op):
         self.replace_op(op, op.reduce_to_oned())
+
+    @visit.on_type(ContiguousOp)
+    def visit(self, op):
+        if op.args[0].tensor_description().c_contiguous:
+            self.replace_op(op, op.args[0])
 
     @visit.on_type(AssignOp)
     def visit(self, op):

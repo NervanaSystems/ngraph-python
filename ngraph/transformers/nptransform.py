@@ -27,7 +27,7 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, Op, \
+    ContiguousOp, CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -452,6 +452,10 @@ class NumPyCodeGenerator(PyGen):
             "{}[()] = np.transpose({}, {})",
             out, x, op.old_axis_positions
         )
+
+    @generate_op.on_type(ContiguousOp)
+    def generate_op(self, op, out, x):
+        self.append("{}[()] = {}", out, x)
 
     @generate_op.on_type(DivideOneDim)
     def generate_op(self, op, out, x, y):

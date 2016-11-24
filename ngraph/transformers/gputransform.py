@@ -18,7 +18,7 @@ import atexit
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, Op, \
+    ContiguousOp, CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -463,6 +463,10 @@ class GPUKernelGroup():
         self.kernels.append(GEMMKernel(self.transformer, op))
 
     @add_kernel.on_type(Dimshuffle)
+    def add_kernel(self, op):
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
+
+    @add_kernel.on_type(ContiguousOp)
     def add_kernel(self, op):
         self.kernels.append(DimShuffleKernel(self.transformer, op))
 

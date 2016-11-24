@@ -1453,9 +1453,8 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if isinstance(x, ReshapeOp):
-            x = Dimshuffle(x, axes=x.axes)
-        assert Axes.check_flatten(x.axes, axes)
+        if not isinstance(x, AssignableTensorOp):
+            x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -2628,6 +2627,24 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
     = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
 
 
+class ContiguousOp(TensorOp):
+    """
+    Ensure that element layout is contiguous.
+
+    Parameters:
+        x (TensorOp): A possibly non-contiguous tensor.
+    """
+    def __init__(self, x, **kwargs):
+        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+
+    @property
+    def old_axis_positions(self):
+        return list(range(len(self.axes)))
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, delta)
+
+
 class Dimshuffle(TensorOp):
     def __init__(self, x, axes, **kwargs):
         if not x.axes.has_same_axes(axes):
@@ -2642,7 +2659,8 @@ class Dimshuffle(TensorOp):
 
         super(Dimshuffle, self).__init__(
             args=(x,),
-            axes=axes
+            axes=axes,
+            **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, x):
