@@ -2623,6 +2623,11 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
 
 
 class Dimshuffle(TensorOp):
+    """
+    Shuffle the axes of x so that they are in the order specified in axes.
+
+    All Axis in x.axes must also be present in axes.
+    """
     def __init__(self, x, axes, **kwargs):
         if not x.axes.has_same_axes(axes):
             raise ValueError(
@@ -2640,6 +2645,10 @@ class Dimshuffle(TensorOp):
         )
 
     def generate_adjoints(self, adjoints, delta, x):
+        """
+        The derivative of dimshuffle is a dimshuffle in the opposite order.
+        Dimshuffle the deltas back into same order as the input (x).
+        """
         x.generate_add_delta(
             adjoints,
             delta
