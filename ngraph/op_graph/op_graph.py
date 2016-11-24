@@ -2639,35 +2639,10 @@ class ContiguousOp(TensorOp):
 
     @property
     def old_axis_positions(self):
-        return list(range(len(self.axes)))
+        return tuple(range(len(self.axes)))
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
-
-
-class Dimshuffle(TensorOp):
-    def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
-            raise ValueError(
-                'The input and output axes must have the same elements.'
-            )
-        old_poss = []
-        for axis in axes:
-            old_pos = Axes.find_axis(x.axes, axis)
-            old_poss.append(old_pos)
-        self.old_axis_positions = tuple(old_poss)
-
-        super(Dimshuffle, self).__init__(
-            args=(x,),
-            axes=axes,
-            **kwargs
-        )
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            axes_with_order(delta, x.axes)
-        )
 
 
 class DotOp(TensorOp):

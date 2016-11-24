@@ -22,7 +22,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp, \
+    Multiply, Add, Divide, Op, Sum, UnaryElementwiseAxesOp, \
     negative, cast_axes
 
 from ngraph.util.generics import generic_method
@@ -203,27 +203,6 @@ class RequiredTensorShaping(PeepholeGraphPass):
         x_strides = x.tensor_description().strides
         if op.axes == x.axes or x_strides == (0,) * len(x_strides):
             self.replace_op(op, x)
-
-    @visit.on_type(Dimshuffle)
-    def visit(self, op):
-        x = op.args[0]
-        # TODO This is almost always a wasted shuffle, but sometimes it isn't
-        if False and op.old_axis_positions == tuple(range(len(op.old_axis_positions))):
-            self.replace_op(op, x)
-            return
-        if True or not isinstance(x, BroadcastOp) and not isinstance(x, ReorderAxes):
-            if isinstance(x, ReshapeOp):
-                return
-        x_tensor_description = x.tensor_description()
-        x_strides = x_tensor_description.strides
-        if x_strides == ():
-            self.replace_op(op, x)
-            return
-        shuffle_strides = tuple(x_strides[_] for _ in op.old_axis_positions)
-        if shuffle_strides == x_strides or x_strides == (0,) * len(x_strides):
-            self.replace_op(op, x)
-        else:
-            pass
 
 
 class SimplePrune(PeepholeGraphPass):

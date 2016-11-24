@@ -39,7 +39,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Dimshuffle, \
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, \
     SetItemOneDOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -445,13 +445,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(CosOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
-
-    @generate_op.on_type(Dimshuffle)
-    def generate_op(self, op, out, x):
-        self.append(
-            "{}[()] = np.transpose({}, {})",
-            out, x, op.old_axis_positions
-        )
 
     @generate_op.on_type(ContiguousOp)
     def generate_op(self, op, out, x):
