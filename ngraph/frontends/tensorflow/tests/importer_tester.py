@@ -20,7 +20,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import os
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
+import ngraph as ng
 import ngraph.transformers as ngt
 import pytest
 
@@ -110,8 +110,8 @@ class ImporterTester(object):
             ng_result
         """
         # init importer, transformer
-        importer = TFImporter()
-        importer.parse_protobuf(self.pb_txt_path, verbose=verbose)
+        importer = ng.make_tf_importer()
+        importer.import_protobuf(self.pb_txt_path, verbose=verbose)
         transformer = ngt.make_transformer()
 
         # set target node

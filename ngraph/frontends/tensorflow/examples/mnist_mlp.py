@@ -18,9 +18,9 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.examples.tutorials.mnist import input_data
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
 import tensorflow as tf
+import ngraph as ng
 import ngraph.transformers as ngt
 import argparse
 
@@ -37,8 +37,8 @@ def train_mnist(args):
     init = tf.initialize_all_variables()
 
     # import graph_def
-    importer = TFImporter()
-    importer.parse_graph_def(tf.get_default_graph().as_graph_def())
+    importer = ng.make_tf_importer()
+    importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
     # get handle of ngraph ops
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
