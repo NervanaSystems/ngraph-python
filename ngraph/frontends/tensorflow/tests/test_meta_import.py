@@ -17,7 +17,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import numpy as np
+
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -47,6 +49,32 @@ class TestMetaGraphWeightsImport(ImporterTester):
     @classmethod
     def setup_class(self):
         self.args = Args()  # default arguments
+
+    @classmethod
+    def teardown_method(self, method, delete_dump=True):
+        # clear sess.graph_def
+        tf.reset_default_graph()
+
+        # remove dumped protobuf
+        if delete_dump:
+            # e.g. dir/checkpoint
+            try:
+                dir_name = os.path.dirname(
+                    os.path.abspath(self.args.checkpoint_path))
+                checkpoint_file_path = os.path.join(dir_name, "checkpoint")
+                os.remove(checkpoint_file_path)
+            except:
+                print("[clean up] checkpoint does not exist")
+            # e.g. dir/model.ckpt
+            try:
+                os.remove(self.args.checkpoint_path)
+            except:
+                print("[clean up] checkpoint (weights) does not exist")
+            # e.g. dir/model.ckpt.meta
+            try:
+                os.remove(self.args.checkpoint_path + '.meta')
+            except:
+                print("[clean up] metagraph dump does not exist")
 
     def test_mnist_mlp_save_Load(self):
         # train

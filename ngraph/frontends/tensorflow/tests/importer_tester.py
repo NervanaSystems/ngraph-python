@@ -54,7 +54,7 @@ class ImporterTester(object):
             try:
                 os.remove(self.pb_txt_path)
             except:
-                print("test dump does not exist")  # disable capturing to print
+                print("[clean up] test dump does not exist")
 
     def run(self,
             tf_target_node,
