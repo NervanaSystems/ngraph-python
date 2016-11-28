@@ -33,7 +33,7 @@ args = parser.parse_args()
 args.batch_size = 50
 time_steps = 10
 hidden_size = 20
-gradient_clip_value = None
+gradient_clip_value = 15
 
 # download penn treebank
 tree_bank_data = PTB(path=args.data_dir)
@@ -61,7 +61,8 @@ ax.N.length = args.batch_size
 inputs = dict(inp_txt=ng.placeholder([ax.REC, ax.N]),
               tgt_txt=ng.placeholder([ax.REC, ax.N]))
 
-optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6)
+optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
+                    gradient_clip_value=gradient_clip_value)
 output_prob = seq1.train_outputs(inputs['inp_txt'])
 loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
