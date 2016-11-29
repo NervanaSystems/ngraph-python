@@ -38,7 +38,7 @@ def train_mnist(args):
 
     # import graph_def
     importer = TFImporter()
-    importer.parse_graph_def(tf.get_default_graph().as_graph_def())
+    importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
     # get handle of ngraph ops
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
