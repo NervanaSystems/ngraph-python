@@ -50,7 +50,8 @@ def test_wrong_input_shape_length():
     with pytest.raises(ValueError) as exinfo:
         ng.pooling(pool_params, inputs, {})
 
-    assert exinfo.value.message == 'pooling input shape must be length 5, found {}'.format(len(ax_i))
+    assert str(exinfo.value) == 'pooling input shape must be length 5, found {}' \
+        .format(len(ax_i))
 
 
 def test_wrong_number_of_batch_axes_at_input():
@@ -69,12 +70,12 @@ def test_wrong_number_of_batch_axes_at_input():
     with pytest.raises(ValueError) as exinfo:
         ng.pooling(pool_params, inputs, {})
 
-    assert exinfo.value.message == "Input must have one batch axis.  Found {n_batch_axes} batch axes: {batch_axes} " \
-                                   "and {n_sample_axes} sample axes: {sample_axes}.".format(
-                                    n_batch_axes=len(inputs.axes.batch_axes()),
-                                    batch_axes=inputs.axes.batch_axes(),
-                                    n_sample_axes=len(inputs.axes.sample_axes()),
-                                    sample_axes=inputs.axes.sample_axes())
+    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} batch" \
+        " axes: {batch_axes} and {n_sample_axes} sample axes: {sample_axes}.".format(
+            n_batch_axes=len(inputs.axes.batch_axes()),
+            batch_axes=inputs.axes.batch_axes(),
+            n_sample_axes=len(inputs.axes.sample_axes()),
+            sample_axes=inputs.axes.sample_axes())
 
 
 def test_wrong_op_name():
@@ -89,8 +90,8 @@ def test_wrong_op_name():
     with pytest.raises(ValueError) as exinfo:
         ng.pooling(pool_params, inputs, {})
 
-    assert exinfo.value.message == "Unsupported pooling type: {pooltype}.  Only max and avg pooling " \
-                                   "currently supported. ".format(pooltype=pooltype)
+    assert str(exinfo.value) == "Unsupported pooling type: {pooltype}.  Only max and avg " \
+        "pooling currently supported. ".format(pooltype=pooltype)
 
 
 def test_pooling():
