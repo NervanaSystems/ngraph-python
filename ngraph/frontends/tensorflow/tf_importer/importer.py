@@ -304,12 +304,8 @@ class TFImporter:
         return sorted(list(unimplemented_ops))
 
 
-def make_tf_importer():
-    return TFImporter()
-
-
 if __name__ == '__main__':
     # get unimplemented ops
-    importer = ng.make_tf_importer()
+    importer = TFImporter()
     ops = importer._get_unimplemented_ops(sys.argv[1])
     print(ops)

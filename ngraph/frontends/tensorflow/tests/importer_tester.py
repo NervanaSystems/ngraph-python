@@ -20,9 +20,9 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import os
-import ngraph as ng
 import ngraph.transformers as ngt
 import pytest
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
 
 @pytest.mark.usefixtures("transformer_factory")
@@ -110,7 +110,7 @@ class ImporterTester(object):
             ng_result
         """
         # init importer, transformer
-        importer = ng.make_tf_importer()
+        importer = TFImporter()
         importer.import_protobuf(self.pb_txt_path, verbose=verbose)
         transformer = ngt.make_transformer()
 

@@ -32,7 +32,6 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     square, sqrt, tensor_size, assign, batch_size, pad, sigmoid, \
     one_hot, stack
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
-from ngraph.frontends.tensorflow.tf_importer.importer import make_tf_importer
 
 __all__ = [
     'absolute',
@@ -55,7 +54,6 @@ __all__ = [
     'make_axis',
     'make_axis_role',
     'make_name_scope',
-    'make_tf_importer',
     'name_scope',
     'negative',
     'one_hot',

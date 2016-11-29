@@ -23,8 +23,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-import ngraph as ng
 import ngraph.transformers as ngt
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
 
 import pytest
@@ -148,7 +148,7 @@ class TestMetaGraphWeightsImport(ImporterTester):
             mnist.train.next_batch(args.batch_size)
 
         # init importer
-        importer = ng.make_tf_importer()
+        importer = TFImporter()
 
         # parse meta-graph and model checkpoint file
         importer.import_meta_graph(args.checkpoint_path + '.meta',

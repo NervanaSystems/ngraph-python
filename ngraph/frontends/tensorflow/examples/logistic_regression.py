@@ -15,10 +15,10 @@
 
 from __future__ import print_function
 
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
 import numpy as np
 import tensorflow as tf
-import ngraph as ng
 import ngraph.transformers as ngt
 
 # setups -> xs: (N, C), y: (N, 1)
@@ -38,7 +38,7 @@ cost = -tf.reduce_sum(log_likelihoods)
 init_op = tf.initialize_all_variables()
 
 # import graph_def
-importer = ng.make_tf_importer()
+importer = TFImporter()
 importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
 # get handle of ngraph ops

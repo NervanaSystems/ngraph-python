@@ -22,7 +22,7 @@ import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from tensorflow.examples.tutorials.mnist import input_data
 from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
-import ngraph as ng
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 import ngraph.transformers as ngt
 
 import pytest
@@ -47,7 +47,7 @@ class TestMnist(ImporterTester):
         init_op = tf.initialize_all_variables()
 
         # import graph_def
-        importer = ng.make_tf_importer()
+        importer = TFImporter()
         importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
         # get handle of ngraph ops

@@ -15,8 +15,8 @@
 
 from __future__ import print_function
 import tensorflow as tf
-import ngraph as ng
 import ngraph.transformers as ngt
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
 # tensorflow ops
 x = tf.constant(1.)
@@ -24,7 +24,7 @@ y = tf.constant(2.)
 f = x + y
 
 # import
-importer = ng.make_tf_importer()
+importer = TFImporter()
 importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
 # get handle
