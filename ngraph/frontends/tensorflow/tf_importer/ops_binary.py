@@ -239,7 +239,7 @@ class OpsBinary(OpsBase):
                 result_axes_map[re] for re in result_op.axes
             ]
             result_op = ng.cast_axes(result_op, trimmed_result_axes)
-            result_op = ng.Dimshuffle(result_op, axes=result_axes)
+            result_op = ng.axes_with_order(result_op, axes=result_axes)
 
         elif left_shape == right_shape:
             # cast right axes to be the same as left
