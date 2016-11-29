@@ -38,6 +38,7 @@ class DummyDeltaBuffers(object):
     def __init__(self):
         self.buffers = [None]
 
+
 def test_wrong_input_shape_length():
     """
     test wrong input shape length
@@ -50,6 +51,7 @@ def test_wrong_input_shape_length():
         ng.pooling(pool_params, inputs, {})
 
     assert exinfo.value.message == 'pooling input shape must be length 5, found {}'.format(len(ax_i))
+
 
 def test_wrong_number_of_batch_axes_at_input():
     """
@@ -69,10 +71,11 @@ def test_wrong_number_of_batch_axes_at_input():
 
     assert exinfo.value.message == "Input must have one batch axis.  Found {n_batch_axes} batch axes: {batch_axes} " \
                                    "and {n_sample_axes} sample axes: {sample_axes}.".format(
-        n_batch_axes=len(inputs.axes.batch_axes()),
-        batch_axes=inputs.axes.batch_axes(),
-        n_sample_axes=len(inputs.axes.sample_axes()),
-        sample_axes=inputs.axes.sample_axes())
+                                    n_batch_axes=len(inputs.axes.batch_axes()),
+                                    batch_axes=inputs.axes.batch_axes(),
+                                    n_sample_axes=len(inputs.axes.sample_axes()),
+                                    sample_axes=inputs.axes.sample_axes())
+
 
 def test_wrong_op_name():
     """
@@ -89,9 +92,10 @@ def test_wrong_op_name():
     assert exinfo.value.message == "Unsupported pooling type: {pooltype}.  Only max and avg pooling " \
                                    "currently supported. ".format(pooltype=pooltype)
 
+
 def test_pooling():
     """
-7    test pooling forward and backward path
+    test pooling forward and backward path
     """
     N = 128
     C = 3
