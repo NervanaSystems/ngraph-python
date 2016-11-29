@@ -39,6 +39,8 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
 
+from ngraph.transformers.passes.gpulayout import GPUTensorLayout
+
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
@@ -983,6 +985,8 @@ class GPUTransformer(Transformer):
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
+
+        self.graph_passes.insert(0, GPUTensorLayout())
 
         self.buffer_allocators = []
         self.kernel_groups = dict()

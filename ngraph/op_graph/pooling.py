@@ -84,6 +84,9 @@ class BpropPoolOp(op_graph.TensorOp):
         Arguments:
             inputs  : input tensor.
         """
+        self.inputs = inputs
+        self.fprop = fprop
+
         self.pool_params = fprop.pool_params
         self.index = fprop.index
 
