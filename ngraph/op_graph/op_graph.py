@@ -862,9 +862,10 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes == delta.axes:
             raise ValueError(
-                'A tensor and its adjoint must have the same axes.'
+                'delta axes {} do not match adjoint axes {}'
+                .format(delta.axes, self.axes)
             )
         if self not in adjoints:
             adjoints[self] = delta
@@ -1146,6 +1147,10 @@ class AxesCastOp(ReshapeOp):
 
     """
     def __init__(self, x, axes, **kwargs):
+        axes = make_axes(axes)
+        if not x.is_scalar and x.axes.lengths != axes.lengths:
+            raise ValueError("casting axes {} must have the same length as original axes {}"
+                             .format(axes, x.axes))
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1311,6 +1316,7 @@ def axes_with_order(x, axes):
         TensorOp: The new tensor.
 
     """
+    axes = make_axes(axes)
     if x.axes == axes:
         return x
     return ReorderAxes(x, axes)
@@ -1447,9 +1453,8 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if isinstance(x, ReshapeOp):
-            x = Dimshuffle(x, axes=x.axes)
-        assert Axes.check_flatten(x.axes, axes)
+        if not isinstance(x, AssignableTensorOp):
+            x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -2622,28 +2627,22 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
     = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
 
 
-class Dimshuffle(TensorOp):
-    def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
-            raise ValueError(
-                'The input and output axes must have the same elements.'
-            )
-        old_poss = []
-        for axis in axes:
-            old_pos = Axes.find_axis(x.axes, axis)
-            old_poss.append(old_pos)
-        self.old_axis_positions = tuple(old_poss)
+class ContiguousOp(TensorOp):
+    """
+    Ensure that element layout is contiguous.
 
-        super(Dimshuffle, self).__init__(
-            args=(x,),
-            axes=axes
-        )
+    Parameters:
+        x (TensorOp): A possibly non-contiguous tensor.
+    """
+    def __init__(self, x, **kwargs):
+        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+
+    @property
+    def old_axis_positions(self):
+        return tuple(range(len(self.axes)))
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            delta
-        )
+        x.generate_add_delta(adjoints, delta)
 
 
 class DotOp(TensorOp):
@@ -2688,12 +2687,16 @@ class DotOp(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                dualed_axes(y, self.y_reduction_axes, -1, 0))
+            axes_with_order(
+                dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                    dualed_axes(y, self.y_reduction_axes, -1, 0)),
+                x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            dot(dualed_axes(x, self.x_out_axes, -1, +1), delta)
+            axes_with_order(
+                dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
+                y.axes)
         )
 
 
