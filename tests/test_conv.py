@@ -23,7 +23,6 @@ from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Convolution
-import pytest
 
 rng = RandomTensorGenerator(0, np.float32)
 
