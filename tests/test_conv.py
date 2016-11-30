@@ -217,7 +217,6 @@ def test_convolution(transformer_factory):
     np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
 
 
-@pytest.mark.xfail(strict=True)
 def test_conv_flatten_deriv(transformer_factory):
     """
     Test deriv of conv followed by flatten
