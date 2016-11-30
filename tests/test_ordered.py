@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import itertools
 
 import pytest
 from ngraph.op_graph.op_graph import OrderedSet
