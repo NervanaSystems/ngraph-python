@@ -200,8 +200,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(BroadcastOp)
     def visit(self, op):
         x = op.args[0]
-        x_strides = x.tensor_description().strides
-        if op.axes == x.axes or x_strides == (0,) * len(x_strides):
+        if op.axes == x.axes:
             self.replace_op(op, x)
 
 
