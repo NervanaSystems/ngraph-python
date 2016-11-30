@@ -94,6 +94,9 @@ class update_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
+        self.filters = filters
+        self.fprop = fprop
+
         self.conv_params = fprop.conv_params
         self.index = fprop.index
 
@@ -109,6 +112,9 @@ class bprop_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
+        self.inputs = inputs
+        self.fprop = fprop
+
         self.conv_params = fprop.conv_params
         self.index = fprop.index
 
