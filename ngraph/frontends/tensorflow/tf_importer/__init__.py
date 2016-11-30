@@ -17,12 +17,12 @@ import ngraph as ng
 import ngraph.transformers as ngt
 
 # Build the graph
-x = ng.placeholder(())
-with ng.metadata(device='cpu'):
-    x_plus_one = x + 1
+with ng.metadata(device='numpy'):
+	x = ng.placeholder(())
+x_plus_one = x + 1
 
 # Select a transformer
-transformer = ngt.make_transformer()
+transformer = ngt.make_transformer_factory('hetr')()
 import ngraph.transformers.passes.nviz
 transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
 
