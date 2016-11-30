@@ -342,3 +342,17 @@ def test_idempotent_axes_c():
 
     assert cost_comp() == 6.0
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+
+
+@pytest.mark.xfail(strict=True)
+def test_scalar_broadcast():
+    """
+    Test broadcasting a scalar into a tensor
+    """
+    ex = ExecutorFactory()
+    x_axes = ng.make_axes()
+    broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
+    x = ng.constant(1., axes=x_axes)
+    z = ng.broadcast(x, axes=broadcast_axes)
+    z_comp = ex.executor(z)
+    assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
