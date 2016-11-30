@@ -13,127 +13,206 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-# TODO: This is not done yet. Make this a test or an example.
-"""
-Create a TensorFlow graph with variables.
-Test exporting and importing meta graph and checkpoints.
-"""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-from tensorflow.python.training.saver import read_meta_graph_file
+import os
 import numpy as np
 
-batch_size = 128
-input_dim = 10
-hidden_dim = 5
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+
+import ngraph.transformers as ngt
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
+from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
+
+import pytest
+from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 
 
-def create_variable_graph(graph_pbtxt, graph_pb, checkpoint):
+class Args:
     """
-    Create a sample graph with two variables. Save the graph in metagraph and
-    checkpoint.
-    """
-
-    x = tf.placeholder(tf.float32, shape=(batch_size, input_dim))
-
-    weight = tf.Variable(
-        tf.random_normal(
-            [input_dim, hidden_dim], stddev=0.35), name="weights")
-    biases = tf.Variable(tf.ones([hidden_dim]), name='biases')
-
-    result = tf.matmul(x, weight) + biases
-
-    init_op = tf.initialize_all_variables()
-
-    saver = tf.train.Saver([biases, weight])
-
-    with tf.Session() as sess:
-        sess.run(init_op)
-        sess.run(result, feed_dict={x: np.random.rand(batch_size, input_dim)})
-
-        # Saver saves variables into a checkpoint file.
-        # In addition, the save function implicitly calls tf.export_meta_graph(),
-        # which generates ckpt.meta file.
-        save_path = saver.save(sess, checkpoint)
-        print("Variables saved in file: %s" % save_path)
-
-        # Save the computation graph only
-        tf.train.write_graph(sess.graph_def, "./", graph_pbtxt,
-                             True)  # The graph is written as a text proto
-        tf.train.write_graph(sess.graph_def, "./", graph_pb,
-                             False)  # The graph is written as a binary proto
-        print("GraphDef saved in file: %s" % graph_pb)
-
-
-def restore_graph_pb(graph_pb):
-    """
-    Restore from the graph protobuf file and the checkpoint file.
-    This needs the original graph construction steps.
+    Default arguments
     """
 
-    biases = tf.Variable(tf.zeros([hidden_dim]), name='biases')
-    weight = tf.Variable(
-        tf.random_normal(
-            [input_dim, hidden_dim], stddev=0.35), name="weights")
-    saver = tf.train.Saver([biases, weight])
-
-    with tf.Session() as sess:
-        # Restore the computation graph
-        # the computation graph can also be restored from ckpt.meta file
-        print("loading graph")
-        graph_def = tf.GraphDef()
-        with open(graph_pb, 'rb') as f:
-            graph_def.ParseFromString(
-                f.read())  # read serialized binary file only
-            tf.import_graph_def(graph_def, name='')
-
-        # Restore variable value
-        ckpt = tf.train.get_checkpoint_state("./")
-        if ckpt and ckpt.model_checkpoint_path:
-            saver.restore(sess, ckpt.model_checkpoint_path)
-            print("variable restored.")
+    def __init__(self):
+        self.data_dir = '/tmp/data'
+        self.max_iter = 10
+        self.lrate = 0.1
+        self.batch_size = 128
+        self.checkpoint_path = 'model.ckpt'
 
 
-def restore_meta_graph(meta_graph):
-    """
-    Restore from the metagraph (.meta) file and the checkpoint file.
-    No need for building graph from scratch.
-    """
+@pytest.mark.usefixtures("transformer_factory")
+class TestMetaGraphWeightsImport(ImporterTester):
+    @classmethod
+    def setup_class(self):
+        self.args = Args()  # default arguments
 
-    with tf.Session() as sess:
-        meta_graph_def = read_meta_graph_file(meta_graph)
-        saver = tf.train.import_meta_graph(meta_graph_def)
-        print(meta_graph_def.graph_def)
+    @classmethod
+    def teardown_method(self, method, delete_dump=True):
+        # clear sess.graph_def
+        tf.reset_default_graph()
 
-        ckpt = tf.train.get_checkpoint_state("./")
-        if ckpt and ckpt.model_checkpoint_path:
-            saver.restore(sess, ckpt.model_checkpoint_path)
+        # remove dumped protobuf
+        if delete_dump:
+            # e.g. dir/checkpoint
+            try:
+                dir_name = os.path.dirname(
+                    os.path.abspath(self.args.checkpoint_path))
+                checkpoint_file_path = os.path.join(dir_name, "checkpoint")
+                os.remove(checkpoint_file_path)
+            except:
+                print("[clean up] checkpoint does not exist")
+            # e.g. dir/model.ckpt
+            try:
+                os.remove(self.args.checkpoint_path)
+            except:
+                print("[clean up] checkpoint (weights) does not exist")
+            # e.g. dir/model.ckpt.meta
+            try:
+                os.remove(self.args.checkpoint_path + '.meta')
+            except:
+                print("[clean up] metagraph dump does not exist")
 
-            for v in tf.all_variables():
-                print(v.name)
-                print(v.op)
-                shape = v.get_shape()
-                print(len(v.get_shape()))
-                for s in shape:
-                    print(s)
-                print(v.value)
-                tensor_value = v.eval()
-                print(tensor_value)
+    def test_mnist_mlp_save_Load(self):
+        # train
+        self.train_mnist(self.args)
+        # retrain
+        ng_costs = self.ng_retrain_mnist(self.args)
+        tf_costs = self.tf_retrain_mnist(self.args)
+        # check results
+        assert np.allclose(
+            np.asarray(tf_costs).astype(np.float32),
+            np.asarray(ng_costs).astype(np.float32))
 
+    def train_mnist(self, args):
+        """
+        Train in TF for max_iter, and save meta_graph / checkpoint
 
-def main(_):
-    graph_pbtxt = "variable_graph.pb.txt"
-    graph_pb = "variable_graph.pb"
-    checkpoint = "model.ckpt"
-    meta_graph = "model.ckpt.meta"
+        Args:
+            args: command line arguments
+        """
+        # dataset
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
 
-    create_variable_graph(graph_pbtxt, graph_pb, checkpoint)
-    restore_meta_graph(meta_graph)
+        graph = tf.Graph()
+        with graph.as_default():
+            # write tensorflow models
+            x = tf.placeholder(tf.float32, [args.batch_size, 784])
+            t = tf.placeholder(tf.float32, [args.batch_size, 10])
+            w = tf.Variable(tf.zeros([784, 10]))
+            b = tf.Variable(tf.zeros([10]))
+            y = tf.matmul(x, w) + b
+            cost = tf.reduce_mean(-tf.reduce_sum(
+                t * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
+            train_op = tf.train.GradientDescentOptimizer(args.lrate).minimize(
+                cost)
+            init_op = tf.initialize_all_variables()
 
+            # saver
+            saver = tf.train.Saver()
+            tf.add_to_collection('x', x)
+            tf.add_to_collection('t', t)
+            tf.add_to_collection('init_op', train_op)
+            tf.add_to_collection('train_op', train_op)
+            tf.add_to_collection('cost', cost)
 
-if __name__ == '__main__':
-    tf.app.run()
+            # train and save model
+            with tf.Session() as sess:
+                # init
+                sess.run(init_op)
+
+                # train
+                for idx in range(args.max_iter):
+                    batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
+                    cost_val, _ = sess.run([cost, train_op],
+                                           feed_dict={x: batch_xs, t: batch_ys})
+
+                # save
+                save_path = saver.save(sess, args.checkpoint_path)
+                print("Model saved in file: %s" % save_path)
+
+    def ng_retrain_mnist(self, args):
+        """
+        Load meta_graph / checkpoint and retrain in ng for max_iter
+
+        Args:
+            args: command line arguments
+        """
+
+        # dataset, with offset max_iter
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        for _ in range(args.max_iter):
+            mnist.train.next_batch(args.batch_size)
+
+        # init importer
+        importer = TFImporter()
+
+        # parse meta-graph and model checkpoint file
+        importer.import_meta_graph(args.checkpoint_path + '.meta',
+                                   checkpoint_path=args.checkpoint_path)
+
+        # get collections, must be specified by `tf.add_to_collection` before save
+        x_ng, t_ng, cost_ng, init_op_ng = importer.get_collection_handle(
+            ['x', 't', 'cost', 'init_op'])
+
+        # get variable restore op
+        restore_op_ng = importer.get_restore_op()
+
+        # transformer and computations
+        transformer = ngt.make_transformer()
+        updates = SGDOptimizer(args.lrate).minimize(cost_ng)
+        train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
+        init_comp = transformer.computation(init_op_ng)
+        restore_comp = transformer.computation(restore_op_ng)
+        transformer.initialize()
+
+        # train in ngraph
+        init_comp()
+        restore_comp()
+        costs = []
+        for idx in range(args.max_iter):
+            batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
+            cost_val, _ = train_comp(batch_xs, batch_ys)
+            print("[Iter %s] Cost = %s" % (idx, cost_val))
+            costs.append(float(cost_val))
+        return costs
+
+    def tf_retrain_mnist(self, args):
+        """
+        Load meta_graph / checkpoint and retrain in TF for max_iter (comparision)
+
+        Args:
+            args: command line arguments
+        """
+
+        # dataset, with offset max_iter
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        for _ in range(args.max_iter):
+            mnist.train.next_batch(args.batch_size)
+
+        # saver
+        saver = tf.train.import_meta_graph(args.checkpoint_path + '.meta')
+
+        # load model
+        with tf.Session() as sess:
+            # restore model
+            saver.restore(sess, args.checkpoint_path)
+
+            # get op handle
+            x = tf.get_collection('x')[0]
+            t = tf.get_collection('t')[0]
+            train_op = tf.get_collection('train_op')[0]
+            cost = tf.get_collection('cost')[0]
+
+            # train
+            costs = []
+            for idx in range(args.max_iter):
+                batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
+                cost_val, _ = sess.run([cost, train_op],
+                                       feed_dict={x: batch_xs, t: batch_ys})
+                print("[Iter %s] Cost = %s" % (idx, cost_val))
+                costs.append(float(cost_val))
+        return costs

@@ -113,7 +113,7 @@ def def_target_feed_dict():
     # placeholders
     train_data_node = tf.placeholder(
         tf.float32, shape=(bsz, image_size, image_size, 1))
-    train_labels_node = tf.placeholder(tf.int64, shape=(bsz, ))
+    train_labels_node = tf.placeholder(tf.int64, shape=(bsz,))
 
     # variables
     np.random.seed(0)
