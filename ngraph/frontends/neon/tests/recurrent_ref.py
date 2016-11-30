@@ -35,12 +35,13 @@ import numpy as np
 
 class Recurrent(object):
 
-    def __init__(self, in_size, hidden_size):
+    def __init__(self, in_size, hidden_size, return_sequence=True):
         self.hidden_size = hidden_size
         self.in_size = in_size
         self.Wxh = np.zeros((hidden_size, in_size))  # input to hidden
         self.Whh = np.zeros((hidden_size, hidden_size))  # hidden to hidden
         self.bh = np.zeros((hidden_size, 1))  # hidden bias
+        self.return_sequence = return_sequence
 
     def lossFun(self, inputs, errors, init_states=None):
         """
@@ -65,6 +66,8 @@ class Recurrent(object):
                 np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[t - 1]) + self.bh)
             hs_list[:, t] = hs[t].flatten()
 
+        hs_return = hs_list if self.return_sequence else hs_list[:, -1].reshape(-1, 1)
+
         # backward pass: compute gradients going backwards
         dhnext = np.zeros_like(hs[0])
         dWxh = np.zeros_like(self.Wxh)
@@ -87,4 +90,29 @@ class Recurrent(object):
             dout = np.dot(self.Wxh.T, dhraw)
             dout_list[:, t] = dout.flatten()
 
-        return dWxh, dWhh, dbh, hs_list, dh_list_out, dout_list
+        return dWxh, dWhh, dbh, hs_return, dh_list_out, dout_list
+
+    def fprop_backwards(self, inputs, init_states=None):
+        """
+        forward propagation by going through the input sequence backwards.
+        """
+        seq_len = len(inputs)
+
+        xs, hs = {}, {}
+        if init_states is not None:
+            assert init_states.shape == (self.hidden_size, 1)
+            hs[seq_len] = init_states
+        else:
+            hs[seq_len] = np.zeros((self.hidden_size, 1))
+
+        hs_list = np.zeros((self.hidden_size, seq_len))
+
+        for t in reversed(range(seq_len)):
+            xs[t] = np.matrix(inputs[t])
+            # hidden state
+            hs[t] = np.tanh(
+                np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[t + 1]) + self.bh)
+            hs_list[:, t] = hs[t].flatten()
+
+        hs_return = hs_list if self.return_sequence else hs_list[:, 0].reshape(-1, 1)
+        return hs_return
