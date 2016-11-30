@@ -680,6 +680,10 @@ class GPUDeviceTensor(DeviceTensor):
         return self.__tensor
 
     @property
+    def shape(self):
+        return self.tensor.shape
+
+    @property
     def ref_str(self):
         """
         :return: name to reference variable.
@@ -788,15 +792,17 @@ class GPUDeviceTensor(DeviceTensor):
                         gpudata=(self.tensor.gpudata + new_offset))
 
     def __setitem__(self, key, value):
+        sliced = self.__getitem__(key)
+
         # Use fill for scalar values
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif type(value) == np.int32 or type(value) == np.int64 or \
                 type(value) == int:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif np.sum(self.tensor.strides) == 0:
             view = GPUArray((1, ), dtype=self.tensor.dtype)
             view.fill(value)
@@ -807,29 +813,35 @@ class GPUDeviceTensor(DeviceTensor):
                 new_value[:] = value
                 value = new_value
 
-            sliced = self.__getitem__(key)
-
             # Reshape to satisfy pycuda if necessary
             if sliced.shape != value.shape:
                 sliced = self.tensor.reshape(value.shape)
 
-            if self.is_contiguous:
+            if self.is_contiguous and self.strides_contiguous(value):
                 sliced[:] = value
+            elif type(value) == GPUArray:
+                self.from_other(value, sliced)
             else:
                 contig_tensor = GPUArray(value.shape, self.tensor.dtype)
                 contig_tensor[:] = value
-                self.from_contiguous(contig_tensor)
+                self.from_other(contig_tensor, sliced)
 
     @property
     def is_contiguous(self):
-        if self.tensor.shape == ():
+        return self.strides_contiguous()
+
+    def strides_contiguous(self, tensor=None):
+        if tensor is None:
+            tensor = self.tensor
+
+        if tensor.shape == ():
             return True
 
         # Compute contiguous strides and compare with tensor strides
-        contiguous_strides = [self.tensor.dtype.itemsize]
-        for dim in reversed(self.tensor.shape[1:]):
+        contiguous_strides = [tensor.dtype.itemsize]
+        for dim in reversed(tensor.shape[1:]):
             contiguous_strides.insert(0, contiguous_strides[0] * dim)
-        return (tuple(contiguous_strides) == self.tensor.strides)
+        return (tuple(contiguous_strides) == tensor.strides)
 
     def as_contiguous(self):
         """
@@ -849,19 +861,23 @@ class GPUDeviceTensor(DeviceTensor):
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
         return contig_tensor
 
-    def from_contiguous(self, tensor):
+    def from_other(self, tensor, dest=None):
         """
-        Copies from a contiguous GPUArray with the same dimensions into this tensor
+        Copies from another GPUArray with the same dimensions into this tensor. Handles
+        discontiguous strides.
 
         Arguments:
             tensor (GPUArray): Contiguous tensor with same dimensions to use as source
         """
+        if dest is None:
+            dest = self.tensor
+
         src_strides = [s // tensor.dtype.itemsize for s in tensor.strides]
-        dst_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
+        dst_strides = [s // dest.dtype.itemsize for s in dest.strides]
         kernel = _get_copy_transpose_kernel(tensor.dtype,
                                             tensor.shape,
                                             range(len(tensor.shape)))
-        params = [self.tensor.gpudata, tensor.gpudata] + list(kernel.args)
+        params = [dest.gpudata, tensor.gpudata] + list(kernel.args)
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
