@@ -344,7 +344,6 @@ def test_idempotent_axes_c():
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
-@pytest.mark.xfail(strict=True)
 def test_scalar_broadcast():
     """
     Test broadcasting a scalar into a tensor
