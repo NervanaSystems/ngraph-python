@@ -3,6 +3,7 @@ from neon import NervanaObject  # noqa
 from ngraph.transformers.base import Transformer, Computation, make_transformer_factory, set_transformer_factory
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, CommunicationPass, ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
+from multiprocessing import Process
 
 
 class HetrComputation(Computation):
@@ -10,17 +11,27 @@ class HetrComputation(Computation):
     Lightweight wrapper class for handling runtime execution of child computations for HeTr
     """
 
-    def __init__(self, computations):
-        super(HetrComputation, self).__init__()
+    def __init__(self, transformer_obj, transformer_list , returns, *args, **kargs):
+        super(HetrComputation, self).__init__(transformer_obj, returns,*args,**kargs)
 
-        self.computations = computations
-
-    def __call__(self):
+        self.computation_list = []
+        #create computation object from corrosponding transformer list
+        for child_computations in transformer_list.keys():
+            self.computation_list.append(Computation(transformer_list[child_computations],returns,*args,**kargs))
+ 
+    def __call__(self, *args):
         """
         TODO
         Implement threading driver to call each of the computations in self.computations
         :return:
         """
+        process_list = []
+        for child_computations in self.computation_list:
+            # create seperate process for each child computations and pass the tensors in args?
+            p = Process(target=child_computations, args=(1,))
+            process_list.append(p)
+            p.start()
+
 
 
 class HeTrTransformer(Transformer):
@@ -85,8 +96,10 @@ class HeTrTransformer(Transformer):
 
         # Build child transformers
         self.build_transformers(self.all_results)
+        #create HeTr Computation Object
+        Hetr_object = HetrComputation(self, self.ChildTransformers, results, *parameters, **kwargs)
 
-        return result
+        return Hetr_object
 
     def build_transformers(self, results):
         """
