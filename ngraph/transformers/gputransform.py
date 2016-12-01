@@ -31,8 +31,8 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     RngOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, \
-    Function, SetItemOneDOp
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
+    Function, SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
@@ -47,7 +47,7 @@ from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    UnsliceKernel, RngFillKernel
+    RngFillKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -470,7 +470,7 @@ class GPUKernelGroup():
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.scalar))
+        self.kernels.append(FillKernel(self.transformer, op.call_info()[0], op.scalar))
 
     @add_kernel.on_type(RngOp)
     def add_kernel(self, op):
@@ -487,7 +487,7 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(SetItemOneDOp)
+    @add_kernel.on_type(SetItemOp)
     def add_kernel(self, op):
         self.kernels.append(SetItemKernel(self.transformer, op))
 
@@ -495,10 +495,6 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
                                        op.reduction_axes.size))
-
-    @add_kernel.on_type(Unslice)
-    def add_kernel(self, op):
-        self.kernels.append(UnsliceKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -755,17 +751,14 @@ class GPUDeviceTensor(DeviceTensor):
                 # Standard slicing (start:stop:step)
                 start, stop, idx_strides = index_entry.indices(shape[array_axis])
 
-                new_offset += (start * strides[array_axis] * dtype.itemsize)
+                new_offset += (start * strides[array_axis])
                 new_shape.append(-((start - stop) // idx_strides))
                 new_strides.append(idx_strides * strides[array_axis])
 
                 array_axis += 1
             elif isinstance(index_entry, (int, np.integer)):
                 # Single index value
-                new_offset += (index_entry * strides[array_axis] * dtype.itemsize)
-                new_shape.append(1)
-                new_strides.append(strides[array_axis])
-
+                new_offset += (index_entry * strides[array_axis])
                 array_axis += 1
             elif index_entry is Ellipsis:
                 # Use same shape as original for these axes
@@ -783,7 +776,7 @@ class GPUDeviceTensor(DeviceTensor):
                     new_strides.append(strides[array_axis])
                     array_axis += 1
             else:
-                raise IndexError("Invalid subindex in axis %d" % index_axis)
+                raise IndexError("Invalid subindex %s in axis %d" % (index_entry, index_axis))
 
         # Create view
         return GPUArray(new_shape,
@@ -818,7 +811,10 @@ class GPUDeviceTensor(DeviceTensor):
                 sliced = self.tensor.reshape(value.shape)
 
             if self.is_contiguous and self.strides_contiguous(value):
-                sliced[:] = value
+                if sliced.shape == ():
+                    sliced.reshape((1,))[:] = value.reshape((1,))
+                else:
+                    sliced[:] = value
             elif type(value) == GPUArray:
                 self.from_other(value, sliced)
             else:

@@ -320,8 +320,8 @@ def test_idempotent_axes_c():
 
     # slice
     axes_slice = [slice(None, None, None), slice(None, None, None)]
-    l_sliced = ng.Slice(l, axes_slice)
-    r_sliced = ng.Slice(r, axes_slice)
+    l_sliced = ng.tensor_slice(l, axes_slice)
+    r_sliced = ng.tensor_slice(r, axes_slice)
 
     # cast r
     r_sliced_casted = ng.cast_axes(r_sliced, axes)

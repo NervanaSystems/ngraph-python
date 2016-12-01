@@ -39,8 +39,8 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, \
-    SetItemOneDOp
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
+    SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
@@ -606,9 +606,9 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__((), {})", tensor, value)
 
-    @generate_op.on_type(SetItemOneDOp)
-    def generate_op(self, op, out, tensor, item, value):
-        self.append("{}.__setitem__({}, {})", tensor, item, value)
+    @generate_op.on_type(SetItemOp)
+    def generate_op(self, op, out, tensor, value):
+        self.append("{}.__setitem__({}, {})", tensor, tuple(op.item), value)
 
     @generate_op.on_type(SignOneDOp)
     def generate_op(self, op, out, x):
@@ -645,11 +645,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(TensorSizeOp)
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
-
-    @generate_op.on_type(Unslice)
-    def generate_op(self, op, out, out_sliced, x):
-        self.append("{}.fill(0)", out)
-        self.append("{}.__setitem__((), {})", out_sliced, x)
 
 
 class NumPyTransformer(Transformer):

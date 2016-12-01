@@ -75,6 +75,7 @@ __all__ = [
     'tanh',
     'temporary',
     'tensor_size',
+    'tensor_slice',
     'variable',
     'variance',
     'with_name_scope',

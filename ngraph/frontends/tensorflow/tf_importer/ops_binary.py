@@ -219,8 +219,8 @@ class OpsBinary(OpsBase):
                     right_slice.append(slice(None))
 
             # perform slicing
-            left_sliced = ng.Slice(left, left_slice)
-            right_sliced = ng.Slice(right, right_slice)
+            left_sliced = ng.tensor_slice(left, left_slice)
+            right_sliced = ng.tensor_slice(right, right_slice)
 
             # now cast the right_sliced to left_sliced from the axis map
             right_casted_axes = []

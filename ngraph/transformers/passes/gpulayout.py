@@ -16,8 +16,8 @@
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.op_graph import Op, ContiguousOp
 from ngraph.op_graph.convolution import ConvolutionOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, SetItemOp
 
 
 class GPUTensorLayout(PeepholeGraphPass):
@@ -67,3 +67,25 @@ class GPUTensorLayout(PeepholeGraphPass):
 
         if replace:
             self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, axes=op.axes))
+
+    @visit.on_type(SetItemOp)
+    def visit(self, op):
+        # PyCuda cannot copy in opposite directions
+        tensor = op.args[0]
+        value = op.args[1]
+        slices = op.item
+        new_slices = []
+        copy_slices = []
+        flip = False
+        for s in slices:
+            if isinstance(s, slice) and s.step is not None and s.step < 0:
+                new_slices.append(slice(s.start, s.stop, -s.step))
+                copy_slices.append(slice(None, None, -1))
+                flip = True
+            elif isinstance(s, slice):
+                copy_slices.append(slice(None))
+                new_slices.append(s)
+            else:
+                new_slices.append(s)
+        if flip:
+            self.replace_op(op, SetItemOp(tensor, new_slices, value.slice(copy_slices)))
