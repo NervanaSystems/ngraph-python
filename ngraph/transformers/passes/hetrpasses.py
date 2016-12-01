@@ -15,19 +15,19 @@ class DeviceAssignPass(PeepholeGraphPass):
             op.metadata['device'] = self.default_device
         if 'device_id' not in op.metadata:
             op.metadata['device_id'] = self.default_device_id
-        #print(op, op.metadata['device'])
 
 
 class CommunicationPass(PeepholeGraphPass):
-    def __init__(self):
+    def __init__(self, sendnodes):
         super(CommunicationPass, self).__init__()
+        self.send_nodes = sendnodes
 
     def visit(self, op):
         args = list()
         for arg in op.args:
             if op.metadata['device'] != arg.metadata['device']:
-                args.append(Send(Recv(arg, device=arg.metadata['device'], device_id=arg.metadata['device_id']), 
-                    device=op.metadata['device'], device_id=op.metadata['device_id']))
+                self.send_nodes.append(Send(from_node=arg, device=arg.metadata['device'], device_id=arg.metadata['device_id']))
+                args.append(Recv(axes=arg.axes, dtype=arg.dtype, device=op.metadata['device'], device_id=arg.metadata['device_id']))
             else:
                 args.append(arg)
 
@@ -61,4 +61,3 @@ class ChildTransformerPass(PeepholeGraphPass):
             op.metadata['transformer'] = transformer
             if transformer not in self.transformer_list:
                 self.transformer_list.append(transformer)
-

@@ -3,38 +3,51 @@ from neon import NervanaObject  # noqa
 from ngraph.transformers.base import Transformer, Computation, make_transformer_factory, set_transformer_factory
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, CommunicationPass, ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 
 class HetrComputation(Computation):
     """
-    Lightweight wrapper class for handling runtime execution of child computations for HeTr
+    Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
 
-    def __init__(self, transformer_obj, transformer_list , returns, *args, **kargs):
-        super(HetrComputation, self).__init__(transformer_obj, returns,*args,**kargs)
+    def __init__(self, transformer_obj, returns, *args, **kwargs):
+        super(HetrComputation, self).__init__(transformer_obj, returns, *args, **kwargs)
+        # TODO - this traverses all parent returns, prepares some internal state
+        #      - is any of this incorrect/conflicting with traversing it again
+        #        in the child transformer?
+        self.child_computations = []
 
-        self.computation_list = []
-        #create computation object from corrosponding transformer list
-        for child_computations in transformer_list.keys():
-            self.computation_list.append(Computation(transformer_list[child_computations],returns,*args,**kargs))
- 
-    def __call__(self, *args):
+    def add_child(self, t, returns, *args, **kwargs):
+        import ipdb; ipdb.set_trace()
+        self.child_computations.append(t.computation(returns, *args, **kwargs))
+
+    def __call__(self, *params):
         """
         TODO
         Implement threading driver to call each of the computations in self.computations
         :return:
         """
+
+        def w(c, a, r):
+            r.put(c(*a))
+
         process_list = []
-        for child_computations in self.computation_list:
+        return_list = []
+        for c in self.child_computations:
             # create seperate process for each child computations and pass the tensors in args?
-            p = Process(target=child_computations, args=(1,))
+            return_list.append(Queue())
+            p = Process(target=w, args=(c, params, return_list[-1]))
             process_list.append(p)
             p.start()
 
+        for p in process_list:
+            p.join()
+
+        return return_list[-1].get()
 
 
-class HeTrTransformer(Transformer):
+class HetrTransformer(Transformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -46,15 +59,15 @@ class HeTrTransformer(Transformer):
     transformer_name = "hetr"
 
     def __init__(self, **kwargs):
-        super(HeTrTransformer, self).__init__(**kwargs)
-
-        self.ChildTransformers = dict()
-        self.TransformerList = list()
-        self.HeTrPasses = [
-            DeviceAssignPass(default_device='numpy', default_device_id=0), 
-            CommunicationPass(), 
-            ChildTransformerPass(self.TransformerList)
-            ]
+        super(HetrTransformer, self).__init__(**kwargs)
+        
+        self.child_transformers = dict()
+        self.transformer_list = list()
+        self.send_nodes_list = list()
+        self.hetr_passes = [DeviceAssignPass(default_device='numpy', default_device_id=0), 
+                           # CommunicationPass(self.send_nodes_list)
+                           ChildTransformerPass(self.transformer_list)
+                           ]
 
     def computation(self, results, *parameters, **kwargs):
         """
@@ -87,19 +100,22 @@ class HeTrTransformer(Transformer):
         """
 
         # Initialize computation
-        result = Computation(self, results, *parameters, **kwargs)
+        result = HetrComputation(self, results, *parameters, **kwargs)
 
-        # Do HeTr passes
-        for graph_pass in self.HeTrPasses:
-            print ("HeTr run graph pass ", graph_pass)
+        # Do Hetr passes
+        for graph_pass in self.hetr_passes:
+            print ("Hetr run graph pass ", graph_pass)
             graph_pass.do_pass(self.all_results)
 
-        # Build child transformers
+        # Build child transformers 
         self.build_transformers(self.all_results)
-        #create HeTr Computation Object
-        Hetr_object = HetrComputation(self, self.ChildTransformers, results, *parameters, **kwargs)
 
-        return Hetr_object
+        #for tname, t in self.child_transformers.iteritems():
+            # TODO need to distinguish between parameters/kwargs for HetrC and childC's
+        t = self.child_transformers['numpy0']
+        result.add_child(t, results, *parameters, **kwargs)
+
+        return result
 
     def build_transformers(self, results):
         """
@@ -115,20 +131,13 @@ class HeTrTransformer(Transformer):
         :param results: the graph nodes that we care about, for the computation
         :return: the dictionary of transformers, with names matching the graph node hints
         """
-
-        # E.g.
-        # self.TransformerList = ['gpu0', 'numpy0']
-        # self.ChildTransformers =
-        #   {'numpy0': <ngraph.transformers.nptransform.NumPyTransformer object at 0x7f06fa605350>,
-        #    'numpy1': <ngraph.transformers.nptransform.NumPyTransformer object at 0x7f06fa5faad0>}
-      
-        for t in self.TransformerList:
+        for t in self.transformer_list:
             if 'numpy' in t:
-                self.ChildTransformers[t] = make_transformer_factory('numpy')()
+                self.child_transformers[t] = make_transformer_factory('numpy')()
             elif 'gpu' in t:
                 try:
                     from ngraph.transformers.gputransform import GPUTransformer
-                    self.ChildTransformers[t] = make_transformer_factory('gpu')()
+                    self.child_transformers[t] = make_transformer_factory('gpu')()
                 except ImportError:
                     assert False, "Fatal: Unable to initialize GPU, but GPU transformer was requested." 
             else:
@@ -200,4 +209,4 @@ class HeTrTransformer(Transformer):
         pass
 
 set_transformer_factory(
-    make_transformer_factory(HeTrTransformer.transformer_name))
+    make_transformer_factory(HetrTransformer.transformer_name))

@@ -96,6 +96,7 @@ class Computation(NameableValue):
             control_ops.update(op.user_deps)
         processed_ops = set()
         pending_ops = OrderedSet(self.ops)
+        import ipdb; ipdb.set_trace()
         while pending_ops:
             op = pending_ops.pop()
             if op in processed_ops:

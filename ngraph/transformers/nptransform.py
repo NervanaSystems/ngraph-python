@@ -49,6 +49,8 @@ from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, make_transformer_factory, set_transformer_factory
 
+from ngraph.op_graph.communication import Send, Recv
+
 
 class NumPyConvEngine(object):
     @staticmethod
@@ -646,6 +648,15 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
+    @generate_op.on_type(Send)
+    def generate_op(self, op, out, *args):
+        self.append("print self")
+        self.append("print \"Implement Send!\" ")
+
+    @generate_op.on_type(Recv)
+    def generate_op(self, op, out, *args):
+        self.append("print self")
+        self.append("print \"Implement Receive!\"")
 
 class NumPyTransformer(Transformer):
     """
