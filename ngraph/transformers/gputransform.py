@@ -590,11 +590,6 @@ class GPUTensorAllocator():
         self.tensor_name = tensor.name
         self.tensor_description = tensor.tensor_description
         self._tensor = None
-        # TODO: this doesn't feel super clean, but just to get something working...
-        if hasattr(transformer, 'use_flex_dtype'):
-            self.dtype = np.int16
-        else:
-            self.dtype = self.tensor_description.dtype
 
     def __call__(self, buffer_alloc):
         """
@@ -608,7 +603,7 @@ class GPUTensorAllocator():
 
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUArray(tensor_description.shape,
-                              self.dtype,
+                              self.transformer.storage_dtype(tensor_description),
                               gpudata=gpudata,
                               strides=tensor_description.strides)
 
@@ -1086,3 +1081,6 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
+
+    def storage_dtype(self, tensor_description):
+        return tensor_description.dtype

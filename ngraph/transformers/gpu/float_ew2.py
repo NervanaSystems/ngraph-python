@@ -269,7 +269,8 @@ class TensorDescriptionWrapper:
     shape and strides.
     """
     def __init__(self, tensor_description, max_dims=1, gemm=False):
-        self.dtype = tensor_description.dtype
+        # dtype is tensor_description.dtype if not flex, otherwise flex storage (i.e. int16)
+        self.dtype = tensor_description.transformer.storage_dtype(tensor_description)
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
         self.td = tensor_description
@@ -635,7 +636,6 @@ def _build_register_mapping(stages):
     register_inits = {}
     register_types = {}
     buffers = {}
-    buffer_types = {}
     last_write = {}
     constants = {}
     has_argmaxmin = False
@@ -671,15 +671,11 @@ def _build_register_mapping(stages):
                         if _is_buffer(inval):
                             buffername = "buf" + str(len(buffers))
                             buffers[inval] = buffername
-                            buffer_types[inval] = _get_register_type(inval.dtype, True)
 
                         # flex
                         if inval.is_flex():
                             flex_entry = inval.flex_entry()
                             flex_scale[regname] = (sclname, flex_entry, False)
-                            register_types[regname] = "short"  # TODO: move into _get_register_type
-                            buffer_types[inval] = "short"
-
 
             if op[3] not in register_mapping:
                 regname = "reg" + str(reg_count)
@@ -696,16 +692,14 @@ def _build_register_mapping(stages):
                 if _is_buffer(op[3]):
                     buffername = "buf" + str(len(buffers))
                     buffers[op[3]] = buffername
-                    buffer_types[op[3]] = _get_register_type(op[3].dtype, True)
 
                 # flex
                 if op[3].is_flex():
                     flex_entry = op[3].flex_entry()
                     flex_scale[regname] = (sclname, flex_entry, True)
                     flex_stats_ptr = flex_entry.ptr
-                    register_types[regname] = "float"  # TODO: move into _get_register_type
-                    if _is_buffer(op[3]):
-                        buffer_types[op[3]] = "short"
+                    register_types[regname] = "float"  # FLEX TODO: output intermediate value hard coded as float,
+                                                       # hard to move into _get_register_type
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
@@ -715,7 +709,6 @@ def _build_register_mapping(stages):
     ctx.register_inits = register_inits
     ctx.register_types = register_types
     ctx.buffers = buffers
-    ctx.buffer_types = buffer_types
     ctx.constants = constants
     ctx.last_write = last_write
     ctx.has_argmaxmin = has_argmaxmin
@@ -939,7 +932,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         params.append(ctx.constants[constant])
 
     for buf in ctx.buffers.keys():
-        args.append(ctx.buffer_types[buf] + "* " + ctx.buffers[buf])
+        args.append(_get_register_type(buf.dtype, True) + "*" + ctx.buffers[buf])
         args.append("unsigned int stridea_" + ctx.buffers[buf])
         arg_desc = arg_desc + "PI"
         params.append(buf.td)

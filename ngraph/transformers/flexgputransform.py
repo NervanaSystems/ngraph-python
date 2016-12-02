@@ -16,6 +16,7 @@
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.flex2 import FlexManager
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
+import numpy as np
 
 flex_verbose = False
 
@@ -31,7 +32,6 @@ class FlexGPUTransformer(GPUTransformer):
 
     def __init__(self, **kwargs):
         super(FlexGPUTransformer, self).__init__(**kwargs)
-        self.use_flex_dtype = True  # a hack so that GPUTensorAllocator knows to use int16
         self.flex_manager = FlexManager()
 
     def device_buffer_storage(self, bytes, dtype, name):
@@ -50,6 +50,9 @@ class FlexGPUTransformer(GPUTransformer):
         # self.flex_manager.dev_stats.append(drv.mem_alloc(num_flex_tensors*4))
 
         return ret_val
+
+    def storage_dtype(self, tensor_description):
+        return np.dtype(np.int16)  # for flex16
 
 
 class FlexGPUDeviceTensor(GPUDeviceTensor):
