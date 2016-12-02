@@ -18,7 +18,7 @@ import pytest
 
 import ngraph as ng
 from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
+from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
 from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
@@ -135,6 +135,60 @@ def test_wrong_number_of_batch_axes_at_input():
             sample_axes=inputs.axes.sample_axes())
 
 
+def test_convolution_backprop(transformer_factory):
+    """
+    test convolution backprop path
+    """
+    N = 128
+    C, K = 3, 2
+    D, T = 1, 1
+    H = W = 32
+    R = S = 2
+
+    padding = dict(pad_d=0, pad_h=0, pad_w=0)
+    strides = dict(str_d=1, str_h=1, str_w=1)
+    conv_params = padding.copy()
+    conv_params.update(strides)
+
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+    ax_i.set_shape((C, D, H, W, N))
+    ax_f.set_shape((C, T, R, S, K))
+    ax_o = ng.make_axes([
+        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
+        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
+        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
+        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ax.N
+    ])
+
+    inputs = ng.placeholder(axes=ax_i)
+    inputs.input = True
+    filters = ng.placeholder(axes=ax_f)
+    filters.input = True
+
+    # randomly initialize
+    input_value = rng.uniform(-1, 1, ax_i)
+    filter_value = rng.uniform(-1, 1, ax_f)
+
+    assert input_value.shape == ax_i.lengths
+    assert filter_value.shape == ax_f.lengths
+
+    inputs = ng.placeholder(ax_i)
+    filters = ng.placeholder(ax_f)
+
+    # output = ng.squared_L2(ng.convolution(conv_params, inputs, filters, axes=ax_o))
+    output = ng.sum(ng.convolution(conv_params, inputs, filters, axes=ax_o), out_axes=())
+
+    factory = ExecutorFactory()
+    dcdf_sym_fun = factory.derivative(output, filters, inputs)
+    dcdf_num_fun = factory.numeric_derivative(output, filters, .01, inputs)
+    dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
+    dcdf_num_val = dcdf_num_fun(filter_value, input_value)
+
+    np.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+
+
 def test_convolution(transformer_factory):
     """
     test convolution forward path
@@ -221,51 +275,107 @@ def test_conv_flatten_deriv(transformer_factory):
     """
     Test deriv of conv followed by flatten
     """
+    # TODO convert to use fixtures over the filter and output modes
+
+    filter_mode = 'rsck_prime'
+    output_mode = 'flattened'
+
     # set shape
-    C, D, H, W, N = (3, 1, 28, 28, 8)
-    C, T, R, S, K = (3, 1, 5, 5, 32)
+    N = 8
+    C, D, H, W = (3, 1, 28, 28)
+    T, R, S, K = (1, 5, 5, 8)
+
+    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1)
 
     # i, f, o axes
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_o = ng.make_axes([
-        ng.make_axis(32, roles=[ar.Channel]),
-        ng.make_axis(1, roles=[ar.Depth]),
-        ng.make_axis(24, roles=[ar.Height]),
-        ng.make_axis(24, roles=[ar.Width]),
-        ax.N
-    ])
+    ax_o = ng.make_axes([ax.K, ax.M, ax.P, ax.Q, ax.N])
+
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
-    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1)
+    ax_o.set_shape((K, D - T + 1, H - R + 1, W - S + 1, N))
     axes_rsck = ng.make_axes([ax.R, ax.S, ax.C, ax.K])
-    axes_rsck_prime = ng.make_axes([ng.make_axis(l) for l in axes_rsck.lengths])
+    axes_rsck_prime = ng.make_axes([ng.make_axis(axis.length).named(axis.name + 'p')
+                                    for axis in axes_rsck])
 
     # broadcast input / filter axes
-    image = ng.constant(np.ones(ax_i.lengths), ax_i)
-    filter = ng.variable(axes_rsck_prime,
-                         initial_value=np.ones((R, S, C, K)))
-    filter_casted = ng.cast_axes(filter, axes_rsck)
-    filter_casted = ng.expand_dims(filter_casted, ax.T, 0)
-    filter_casted = ng.axes_with_order(filter_casted, axes=ax_f)
+    input_var = ng.variable(ax_i).named('input')
+    input_var.input = True
+    input_val = np.ones(input_var.axes.lengths)
+
+    filter_var = None
+
+    filter_rsck_prime = None
+    if filter_mode == 'rsck_prime':
+        filter_rsck_prime = ng.variable(axes_rsck_prime)
+        filter_var = filter_rsck_prime
+
+    filter_rsck = None
+    if filter_var is None:
+        if filter_mode == 'rsck':
+            filter_rsck = ng.variable(axes_rsck).named('filter-rsck')
+            filter_var = filter_rsck
+    else:
+        filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
+
+    filter_trsck = None
+    if filter_var is None:
+        if filter_mode == 'trsck':
+            filter_trsck = ng.variable([ax.T, ax.R, ax.S, ax.C, ax.K])
+            filter_var = filter_trsck
+    else:
+        filter_trsck = ng.expand_dims(filter_rsck, ax.T, 0)
+
+    if filter_var is None:
+        filter_ctrsk = ng.variable(ax_f)
+        filter_var = filter_ctrsk
+    else:
+        filter_ctrsk = ng.axes_with_order(filter_trsck, axes=ax_f)
 
     # convolution
-    output = ng.convolution(params, image, filter_casted, axes=ax_o)
-    oC, oD, oH, oW, oN = output.axes
-    output = ng.axes_with_order(output, axes=ng.make_axes([oN, oD, oH, oW, oC]))
+    output_kmpqn = ng.convolution(params, input_var, filter_ctrsk, axes=ax_o)
+    output_nmpqk = ng.axes_with_order(output_kmpqn,
+                                      axes=ng.make_axes([ax.N, ax.M, ax.P, ax.Q, ax.K]))
 
     # slice away the oD
     out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-    conv = ng.Slice(output, out_slicing)
-    flatten = ng.flatten_at(conv, idx=1)
+    output_npqk = ng.Slice(output_nmpqk, out_slicing)
+
+    output_flattened = ng.flatten_at(output_npqk, idx=1)
+
+    if output_mode == 'kmpqn':
+        output = output_kmpqn
+    elif output_mode == 'nmpqk':
+        output = output_nmpqk
+    else:
+        output = output_flattened
 
     # cost and grad
-    cost = ng.sum(flatten, reduction_axes=flatten.axes)
-    grad = ng.deriv(cost, filter)
+    cost = ng.sum(output, out_axes=())
 
-    # compute
-    conv_grad_comp = executor([conv, grad])
-    conv_val, grad_val = conv_grad_comp()
+    filter_var.input = True
+    filter_var.named('filter')
+    filter_val = np.ones(filter_var.axes.lengths)
 
-    assert np.allclose(conv_val, np.zeros_like(conv_val) + 75.)
-    assert np.allclose(grad_val, np.zeros_like(grad_val) + 4608.)
+    factory = ExecutorFactory()
+
+    conv_comp = factory.executor(output, filter_var, input_var)
+    grad_filter_num_comp = factory.numeric_derivative(cost, filter_var, 1.0, input_var)
+    grad_filter_sym_comp = factory.derivative(cost, filter_var, input_var)
+
+    grad_input_num_comp = factory.numeric_derivative(cost, input_var, 1.0, filter_var)
+    grad_input_sym_comp = factory.derivative(cost, input_var, filter_var)
+
+    conv_val = conv_comp(filter_val, input_val)
+    conv_val_num = np.empty_like(conv_val)
+    conv_val_num.fill(C * T * R * S)
+    assert np.allclose(conv_val, conv_val_num)
+
+    grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
+    grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
+    assert np.allclose(grad_filter_num_val, grad_filter_sym_val)
+
+    grad_input_num_val = grad_input_num_comp(input_val, filter_val)
+    grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
+    assert np.allclose(grad_input_num_val, grad_input_sym_val)

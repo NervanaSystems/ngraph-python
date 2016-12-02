@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph import op_graph
+from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
 
 
 def convolution(conv_params, inputs, filters, axes, docstring=None):
@@ -32,10 +32,10 @@ def convolution(conv_params, inputs, filters, axes, docstring=None):
     return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 
 
-class ConvolutionOp(op_graph.TensorOp):
+class ConvolutionOp(TensorOp):
     _index = 0
 
-    def __init__(self, conv_params, inputs, filters, *args, **kwargs):
+    def __init__(self, conv_params, inputs, filters, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
@@ -76,7 +76,7 @@ class ConvolutionOp(op_graph.TensorOp):
         ConvolutionOp._index += 1
 
         super(ConvolutionOp, self).__init__(
-            args=(inputs, filters), *args, **kwargs
+            args=(ContiguousOp(inputs), ContiguousOp(filters)), **kwargs
         )
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
@@ -87,39 +87,35 @@ class ConvolutionOp(op_graph.TensorOp):
         inputs.generate_add_delta(adjoints, bprop_conv(delta, inputs, filters, self))
 
 
-class update_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, fprop, axes=None, *args, **kwargs):
+class update_conv(TensorOp):
+    def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.filters = filters
-        self.fprop = fprop
-
         self.conv_params = fprop.conv_params
         self.index = fprop.index
-        if axes is None:
-            axes = filters.axes
 
         super(update_conv, self).__init__(
-            args=(delta, inputs), *args, axes=axes, **kwargs
+            args=(ContiguousOp(delta), ContiguousOp(inputs)),
+            axes=filters.axes, **kwargs
         )
 
 
-class bprop_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
+class bprop_conv(TensorOp):
+    def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        self.inputs = inputs
         self.fprop = fprop
 
         self.conv_params = fprop.conv_params
         self.index = fprop.index
 
         super(bprop_conv, self).__init__(
-            args=(delta, filters), *args, axes=inputs.axes, **kwargs
+            args=(ContiguousOp(delta), ContiguousOp(filters)),
+            axes=inputs.axes, **kwargs
         )
