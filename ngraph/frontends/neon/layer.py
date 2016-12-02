@@ -428,18 +428,19 @@ class Recurrent(Layer):
             rnn_out (Tensor): output
 
         """
-
         # try to understand the axes from the input
         in_axes = in_obj.axes
         self.time_axis = in_axes.recurrent_axes()[0]
         self.time_axis_idx = in_axes.index(self.time_axis)
 
-        if self.axes is not None:
-            hidden_axes = self.axes - self.axes.recurrent_axes()
-        elif init_state:
+        # if init state is given, use that as hidden axes
+        if init_state:
             hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
         else:
-            hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
+            if self.axes is not None:
+                hidden_axes = self.axes - self.axes.recurrent_axes()
+            else:
+                hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
 
         # using the axes to create weight matrices
         w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
@@ -470,15 +471,14 @@ class Recurrent(Layer):
         h_list = [self.h_init]
 
         # feedforward computation
-        h_ff_buf = ng.dot(self.W_input, in_obj).named("W_in_dot_in")
-        h_ff_s = get_steps(h_ff_buf, self.time_axis, self.backward)
+        in_s = get_steps(in_obj, self.time_axis, self.backward)
 
         # recurrent computation
         for i in range(self.time_axis.length):
             with ng.metadata(recurrent_step=str(i)):
-                d = ng.dot(self.W_recur, h_list[i]).named("W_rec_dot_h{}".format(i))
-                h = self.activation(d + h_ff_s[i] + self.b)
-                h.name = "activ{}".format(i)
+                h_ff = ng.dot(self.W_input, in_s[i]).named("W_in_dot_in_{}".format(i))
+                h_rec = ng.dot(self.W_recur, h_list[i]).named("W_rec_dot_h_{}".format(i))
+                h = self.activation(h_rec + h_ff + self.b).named("h_{}".format(i))
                 h_list.append(h)
 
         if self.return_sequence is True:
@@ -506,6 +506,9 @@ class BiRNN(Layer):
         reset_cells (bool): default to be False to make the layer stateful,
                             set to True to be stateless.
         return_sequence (bool): default to be True to return the whole sequence output.
+        sum_out (bool): default to be False to return both directional outputs in a list.
+                        When True, sum the outputs from both directions, so it can go to
+                        following fully connected layers.
         name (str, optional): name to refer to this layer as.
     Attributes:
         W_input (Tensor): weights from inputs to output units
@@ -520,6 +523,7 @@ class BiRNN(Layer):
                  reset_cells=False, return_sequence=True, sum_out=False, **kwargs):
         super(BiRNN, self).__init__(**kwargs)
         self.sum_out = sum_out
+        self.nout = nout
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
                                  reset_cells=reset_cells, return_sequence=return_sequence)
         self.bwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
@@ -542,19 +546,29 @@ class BiRNN(Layer):
 
         """
         if isinstance(in_obj, list) and len(in_obj) == 2:
+            # make sure these 2 streams of inputs share axes
+            assert in_obj[0].axes == in_obj[1].axes
             fwd_in = in_obj[0]
             bwd_in = in_obj[1]
+            in_axes = in_obj[0].axes
         else:
             fwd_in = in_obj
             bwd_in = in_obj
+            in_axes = in_obj.axes
 
         if isinstance(init_state, list) and len(init_state) == 2:
+            assert init_state[0].axes == init_state[1].axes
             fwd_init = init_state[0]
             bwd_init = init_state[1]
         else:
             fwd_init = init_state
             bwd_init = init_state
 
+        # create the hidden axes here and set for both directions
+        rnn_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden'),
+                                in_axes.recurrent_axes()[0]])
+
+        self.fwd_rnn.axes = self.bwd_rnn.axes = rnn_axes
         fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
         bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
 

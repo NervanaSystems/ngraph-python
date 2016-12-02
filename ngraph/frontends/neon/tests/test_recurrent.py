@@ -64,7 +64,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('birnn_args', bi_fargs)
 
 
-def test_ref_compare_ones(rnn_args):
+def test_rnn_ones(rnn_args):
     # run comparison with reference code
     # for all ones init
     seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
@@ -72,7 +72,7 @@ def test_ref_compare_ones(rnn_args):
               batch_size, (lambda x: 1.0), return_seq=ret_seq, backward=bwd)
 
 
-def test_ref_compare_rand(rnn_args):
+def test_rnn_rand(rnn_args):
     # run comparison with reference code
     # for Gaussian random init
     seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
@@ -80,7 +80,7 @@ def test_ref_compare_rand(rnn_args):
               GaussianInit(0.0, 1.0), return_seq=ret_seq, backward=bwd)
 
 
-def test_ref_compare_birnn(birnn_args):
+def test_birnn(birnn_args):
     seq_len, input_size, hidden_size, batch_size, ret_seq, sum_out = birnn_args
     check_birnn(seq_len, input_size, hidden_size, batch_size,
                 GaussianInit(0.0, 1.0), return_seq=ret_seq, sum_out=sum_out)
@@ -278,6 +278,6 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
 if __name__ == '__main__':
     seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
     init = GaussianInit(0.0, 0.1)
-    check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
+    # check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
     check_birnn(seq_len, input_size, hidden_size, batch_size,
                 init, return_seq=True, sum_out=True)
