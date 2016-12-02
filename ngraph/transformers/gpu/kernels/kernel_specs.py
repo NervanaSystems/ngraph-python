@@ -22,6 +22,7 @@ from ngraph.transformers.gpu.util import get_cache_dir
 
 # helpful for kernel development
 debug = 0
+flex_verbose = False
 
 base_dir  = os.path.dirname(__file__)
 maxas_dir = os.path.join(base_dir, "maxas")
@@ -825,7 +826,7 @@ def get_kernel(base_name, options=None):
     kernel_spec = kernels[base_name]
     kernel_name = base_name
 
-    print "kernel_name", kernel_name
+    if flex_verbose: print "kernel_name", kernel_name
 
     if "args" in kernel_spec:
         for pair in kernel_spec["args"].items():

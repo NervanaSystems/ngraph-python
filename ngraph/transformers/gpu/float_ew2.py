@@ -1227,7 +1227,9 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     if flex_verbose: print params
 
     # flex function definitions
-    flex_defines = _common_fp32_to_int16 + _common_max_abs
+    flex_defines = ''
+    if ctx.flex_stats_ptr is not None:
+        flex_defines += _common_fp32_to_int16 + _common_max_abs
 
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
