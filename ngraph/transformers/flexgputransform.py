@@ -15,6 +15,7 @@
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.flex2 import FlexManager
+from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 
 flex_verbose = False
 
@@ -102,12 +103,12 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         Returns:
             list of flex ids corresponding to outputs of this kernel group
         """
+        # TODO better way of getting "output" tensors discussed in Thurs meeting
         output_ids = []
         for k in self.kernels:
-            assert hasattr(k, 'flex_params_info'), "{} kernel does not support flex".format(kernel)
-            for _, flex_entry, is_output in k.flex_params_info:
-                if is_output:
-                    output_ids.append(flex_entry.flex_id)
+            for p in k.params:
+                if isinstance(p, FlexScaleDescription) and p.is_output:
+                    output_ids.append(p.flex_entry.flex_id)
         return output_ids
 
     def setup_kernel_execute(self, kernel):
@@ -115,11 +116,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         Before a kernel call, tensor flex scales are adjusted
         and new values are used in kernel params
         """
-        # limited kernel support for now
-        # only working on elementwise and gemm while roughing out overall design
-        assert hasattr(kernel, 'flex_params_info'), "{} kernel does not support flex".format(kernel)
-
-        # TODO: name all of this something more descriptive (setup_flex_output_tensors)?
 
         # adjust scale of previously touched tensors (equivalent of neon flexsim output_flex)
         # TODO: is this a good assumption, that outputs of this kernel group are
@@ -128,12 +124,14 @@ class FlexGPUKernelGroup(GPUKernelGroup):
             self.transformer.flex_manager.flex_entries[flex_id].adjust_scale()
 
         # set flex scale kernel parameters
-        # GPUKernel flex_params_info contains a tuple record for every flex tensor
-        # (position in kernel parameter list, flex entry, whether it is an output)
-        # (unfortunately flex_params_info currently present for both flex and non-flex classes)
-        for index, flex_entry, is_output in kernel.flex_params_info:
-            scale = 1.0/flex_entry.scale if is_output else flex_entry.scale
-            kernel.params[index] = scale
+        # this is a "bind_flex_scales" method, move into a FlexGPUKernel subclass?
+        # (would that require lots of boilerplate)
+        for index in range(len(kernel.params)):
+            param = kernel.params[index]
+            if isinstance(param, FlexScaleDescription):
+                scale = param.flex_entry.scale
+                scale = 1.0/scale if param.is_output else scale
+                kernel.params[index] = scale
 
     def __call__(self):
         """

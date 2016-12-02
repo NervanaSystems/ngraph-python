@@ -361,8 +361,7 @@ class ElementWiseKernel(GPUKernel):
         if sourcefile is not None:
             # Code generation and compilation are only separate when a sourcefile is
             # provided
-            # FLEX TODO: adding flex_params_info into non-flex class is a quick and dirty solution
-            self.name, self.params, self.flex_params_info = sourcefile.add_kernel(self.ops_buffer)
+            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
 
         return True
 
@@ -375,8 +374,7 @@ class ElementWiseKernel(GPUKernel):
 
         if sourcefile is None:
             # Generate and compile single kernel
-            # FLEX TODO: adding flex_params_info into non-flex class is a quick and dirty solution
-            self.kernel, self.params, self.shared_size, self.flex_params_info = \
+            self.kernel, self.params, self.shared_size = \
                 _prepare_compound_kernel(self.ops_buffer)
         else:
             # Get kernel object from compiled sourcefile

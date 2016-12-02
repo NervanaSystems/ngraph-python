@@ -314,6 +314,12 @@ class GenerationContext:
         self.shared_buffers = None
 
 
+class FlexScaleDescription:
+    def __init__(self, flex_entry, is_output):
+        self.flex_entry = flex_entry
+        self.is_output = is_output
+
+
 def _is_buffer(value):
     """
     When looking at an op in the buffer, there are several fields for inputs
@@ -950,29 +956,19 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
             params.append(buf.strides[1])
             params.append(buf.strides[2])
 
-    # add flex scale arguments
-    # create flex_params_info for future use
-    #   - change kernel params as flex scale changes
-    #   - access flex ids of changed tensors
-    flex_params_info = []
+    # flex scale arguments
     for argname, flex_entry, is_output in ctx.flex_scale.values():
         args.append("float " + argname)
         arg_desc = arg_desc + "f"
-        # compute index into params of current scale arg
-        index = len(params)
-        index += 3  # 3 params are added in _prepare_compound_kernel - brittle code?
-        # add scale
-        scale = 1.0/flex_entry.scale if is_output else flex_entry.scale
-        params.append(scale)
-        # record info about this scale arg
-        flex_params_info.append((index, flex_entry, is_output))
+        # create description of flex scale parameters that will be bound later
+        params.append(FlexScaleDescription(flex_entry, is_output))
 
     if ctx.flex_stats_ptr is not None:
         args.append("int * flex_stats")
         arg_desc = arg_desc + "P"
         params.append(ctx.flex_stats_ptr)
 
-    return (args, arg_desc, params, flex_params_info)
+    return (args, arg_desc, params)
 
 def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     """
@@ -1221,7 +1217,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     kernel_name = kernel_name + '_'.join(op_names)
 
     # Compute arguments, parameters, and descriptor string
-    args, arg_desc, params, flex_params_info = _generate_kernel_args(ctx, axes_mapping, dims)
+    args, arg_desc, params = _generate_kernel_args(ctx, axes_mapping, dims)
     argstring = ', '.join(args)
 
     if flex_verbose: print params
@@ -1239,7 +1235,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
     if flex_verbose: print code
 
-    return (code, kernel_name, arg_desc, params, flex_params_info)
+    return (code, kernel_name, arg_desc, params)
 
 def _prepare_compound_kernel(ops):
     """
@@ -1254,7 +1250,7 @@ def _prepare_compound_kernel(ops):
 
     # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
-    code, kernel_name, arg_desc, params, flex_params_info = _get_compound_kernel(ops, axes_mapping, dims)
+    code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims)
 
     # Compile kernel
     code = _includes_template + code
@@ -1278,7 +1274,7 @@ def _prepare_compound_kernel(ops):
             griddim[2] = axis[2]
 
     params = [tuple(griddim), tuple(blockdim), None] + params
-    return (kernel, params, 128, flex_params_info)
+    return (kernel, params, 128)
 
 
 def _call_compound_kernel(ops):
@@ -1288,8 +1284,7 @@ def _call_compound_kernel(ops):
     ops (list): List of tuples describing ops to execute in kernel. Each tuple
         should be of the format (op_name, input0, input1, output, axis)
     """
-    # FLEX question: this function is unused? doesn't look like flex_params_info is needed here
-    kernel, params, shared_size, _ = _prepare_compound_kernel(ops)
+    kernel, params, shared_size = _prepare_compound_kernel(ops)
     kernel.prepared_async_call(*params, shared_size=shared_size)
 
 
@@ -1317,7 +1312,7 @@ class CudaSourceFile:
 
         # Generate kernel source code and block/grid mapping
         (axes_mapping, dims) = _get_axes_mapping(ops)
-        code, kernel_name, arg_desc, params, flex_params_info = _get_compound_kernel(ops, axes_mapping, dims,
+        code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims,
                                                                    str(self.num_kernels))
 
         # Calculate block and grid dims
@@ -1346,7 +1341,7 @@ class CudaSourceFile:
         self.num_kernels = self.num_kernels + 1
 
         # Return kernel name and params
-        return (kernel_name, params, flex_params_info)
+        return (kernel_name, params)
 
     def compile(self):
         assert not self.compiled
