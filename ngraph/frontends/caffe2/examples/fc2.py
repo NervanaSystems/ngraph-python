@@ -15,30 +15,25 @@
 
 from __future__ import print_function
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
-from caffe2.python import core, workspace
+from caffe2.python import core
 import ngraph.transformers as ngt
 
 # Caffe2 - network creation
-net = core.Net("my_second_net")
-X = net.ConstantFill([], ["X"], shape=[2,2], value=2.0, run_once=0)
-W = net.ConstantFill([], ["W"], shape=[2,2], value=3.0, run_once=0)
-b = net.ConstantFill([], ["b"], shape=[2,], value=1.0, run_once=0)
-Y = X.FC([W, b], ["Y"])
-
-# Execute via Caffe2
-workspace.ResetWorkspace()
-workspace.RunNetOnce(net)
+net = core.Net("net")
+X = net.GaussianFill([], ["X"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="X")
+W = net.GaussianFill([], ["W"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="W")
+b = net.ConstantFill([], ["b"], shape=[2, ], value=1.0, run_once=0, name="b")
+Y = X.FC([W, b], ["Y"], name="Y")
 
 # Import caffe2 network into ngraph
 importer = C2Importer()
-importer.parse_net_def(net.Proto(), False)
+importer.parse_net_def(net.Proto(), verbose=False)
 
 # Get handle
-f_ng = importer.get_op_handle(Y)
+f_ng = importer.get_op_handle("Y")
 
 # Execute
 f_result = ngt.make_transformer().computation(f_ng)()
 
-# compare Caffe2 and ngraph results
-print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
+# Print outputs
 print("ngraph result: {}:\n{}".format("Y", f_result))

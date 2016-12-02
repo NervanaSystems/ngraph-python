@@ -13,18 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-
-# basics
-import mimetypes
 import sys
-
-# caffe2
-from caffe2.python import core, workspace, test_util
-#from caffe2.proto import caffe2_pb2
-
 # importer
 from ngraph.frontends.caffe2.c2_importer.ops_bridge import OpsBridge
-#from ngraph.frontends.caffe2.c2_importer.utils import remove_c2_name_prefix
 
 
 class C2Importer:
@@ -42,48 +33,37 @@ class C2Importer:
         self.name_op_map = dict()
         self.ops_bridge = OpsBridge()
         self.init_ops = []
-        self.graph_def = None
+        self.net_def = None
 
-    def parse_net_def(self, graph_def, verbose=False):
+    def parse_net_def(self, net_def, verbose=False):
         """
-        Imports a graph_def to ngraph.
+        Imports a net_def to ngraph.
 
         Arguments:
-            graph_def: GraphDef object
-            verbose: Prints graph_def at each node if True.
+            net_def: GraphDef object
+            verbose: Prints net_def at each node if True.
         """
-        self.graph_def = graph_def
+        self.net_def = net_def
 
-        # pass 1: identify assigns connected to NoOps (hack around issue #373)
-        # TODO: just a temp fix for now
-#        for c2_node in graph_def.op:
-#            if c2_node.op == 'NoOp' and c2_node.name == 'init':
-#                assign_op_names = set(
-#                    [remove_c2_name_prefix(name) for name in c2_node.input])
-#                self.ops_bridge.init_assign_op_names |= assign_op_names
-
-        # pass 2: process nodes
-        for c2_node in graph_def.op:
+        # process nodes
+        for c2_op in net_def.op:
             # print node
             if verbose:
                 print("------")
-                print(c2_node) 
-
-            if c2_node.name == "":
-                c2_node.name = c2_node.output[0]
+                print(c2_op)
 
             # resolve inputs
             input_ops = [
-                self.get_op_handle_by_name(name) for name in c2_node.input
+                self.get_op_handle_by_name(name) for name in c2_op.input
             ]
-            
+
             # get output op
             if None in input_ops:
                 # ignored
                 output_op = None
             else:
                 # call bridge op
-                output_op = self.ops_bridge(c2_node, input_ops)
+                output_op = self.ops_bridge(c2_op, input_ops)
 
             # convert to list for convenience
             if isinstance(output_op, tuple):
@@ -101,14 +81,9 @@ class C2Importer:
             else:
                 output_op = output_op[0]
 
-            # save init node
-            if c2_node.type == 'NoOp' and c2_node.name == 'init':
-                self.init_ops.append(output_op)
-
-            if verbose:
-                print(">>>>> Output op:", output_op)
-
-            self.name_op_map[c2_node.name] = output_op
+            # TBD: what if some c2_op have more than one output?
+            #      or (output name) != (c2_op.name)
+            self.name_op_map[c2_op.name] = output_op
 
     def post_process_op(self, op):
         """
@@ -134,19 +109,17 @@ class C2Importer:
 
     def get_op_handle_by_name(self, name):
         """
-        Get ngraph op from TF Node's name, supports multiple output node.
+        Get ngraph op from Caffe2 Op's name
+        TODO: how support for multiple output node should work?
 
         Arguments:
-            name: TF Node's name. For example, `BroadcastGradientArguments1`
-                  retrieves the index 1 output of the op
-                  `gradients/mul_grad/BroadcastGradientArgs`
+            name: Caffe-2 name.
 
         Returns:
             Op: the corresponding ngraph op
         """
 
-        # remove prefix
-        # TBD
+        # TBD: remove prefix
         # name = remove_c2_name_prefix(name)
 
         # remove suffix of ":" for multiple output node
@@ -175,17 +148,15 @@ class C2Importer:
         Get the matching caffe2 op to ngraph op
 
         Arguments:
-            c2_op: caffe2 graph node or a list of nodes.
+            c2_op: caffe2 graph op name or a list of names.
 
         Returns:
             Op: the corresponding ngraph op or a list of ops.
         """
         if isinstance(c2_op, list):
-            return [self.get_op_handle_by_name(op.name) for op in c2_op]
+            return [self.get_op_handle_by_name(op) for op in c2_op]
         else:
-            # TBD: how to do it so it works for any caffe2 op
-            return self.get_op_handle_by_name(c2_op.__str__())
-            
+            return self.get_op_handle_by_name(c2_op)
 
     def _get_unimplemented_ops(self, pb_path):
         """

@@ -17,35 +17,29 @@ from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
 
 
-class OpsMatmul(OpsBase):
+class OpsNN(OpsBase):
     """
     Mix-in class for matrix multiplication ops:
     """
-# TBD: It probably doesn't fit here
-    def FC(self, c2_node, inputs):
+    def FC(self, c2_op, inputs):
         """
         Multiplies matrix `a` by matrix `b`. The inputs must be two-dimensional,
         the inner dimensions must match (possibly after transpose).
 
         Arguments:
-            c2_node: NodeDef object, the caffe2 node to convert.
+            c2_op: OperatorDef object, the caffe2 node to convert.
             inputs: List of ngraph Ops as inputs to this node.
 
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to c2_node:
+        Inputs to c2_op:
             a, b, transpose_a, transpose_b, a_is_sparse, b_is_sparse, name
         """
         # get inputs
         left, right, bias = inputs
-#        if c2_node.attr['transpose_a'].b:
-#            left = ng.Transpose(left)
-#        if c2_node.attr['transpose_b'].b:
-#            right = ng.Transpose(right)
 
         # check shape
-        assert len(left.axes) == len(right.axes) == 2
         assert left.axes[1].length == right.axes[0].length
 
         # cast axis
@@ -53,10 +47,10 @@ class OpsMatmul(OpsBase):
 
         # add op
         add_op = ng.dot(left_casted, right)
-        
+
         # cast bias axis
         bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
 
         # result op
-        result_op = ng.add(add_op, bias_casted, name=c2_node.name)
+        result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op

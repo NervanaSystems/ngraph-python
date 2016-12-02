@@ -14,10 +14,10 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.caffe2.c2_importer.ops_constant import OpsConstant
-from ngraph.frontends.caffe2.c2_importer.ops_matmul import OpsMatmul
+from ngraph.frontends.caffe2.c2_importer.ops_nn import OpsNN
 
 
-class OpsBridge(OpsConstant, OpsMatmul):
+class OpsBridge(OpsConstant, OpsNN):
     """
     Bridging op between Caffe2 / ngraph.
 
@@ -35,28 +35,27 @@ class OpsBridge(OpsConstant, OpsMatmul):
         |
     OpsBridge (contains mix-ins from OpsBinary, OpsUnary, ...)
 
-    TODO: Organize ops as in Caffe2's directory structure
     """
 
     def __init__(self):
         self.init_assign_op_names = set()
 
-    def __call__(self, c2_node, input_ops):
+    def __call__(self, c2_op, input_ops):
         """
-        Call Op based on `c2_node.name`. Mix-in functions must have same name
-        as the `c2_node.name`.
+        Call Op based on `c2_op.name`. Mix-in functions must have same name
+        as the `c2_op.name`.
 
         Arguments:
-            c2_node (NodeDef): a Caffe2 node
+            c2_op (OperatorDef): a Caffe2 node
             input_ops (List): list of ngraph op
 
         Returns:
             The resulting ngraph op
         """
-        op_name = c2_node.type
+        op_type = c2_op.type
 
-        if hasattr(self, op_name):
-            return getattr(self, op_name)(c2_node, input_ops)
+        if hasattr(self, op_type):
+            return getattr(self, op_type)(c2_op, input_ops)
         else:
-            # print(c2_node.name, "ignored.")
+            # print(c2_op.name, "ignored.")
             return None
