@@ -22,7 +22,7 @@ from pycuda.compiler import SourceModule
 
 import numpy as np
 
-flex_verbose = False
+flex_verbose = True
 
 
 _op_templates = {
@@ -85,6 +85,8 @@ _redop32_templates = {
 _conversion_templates = {
     ("half", "float"): r"%(out)s = __half2float(%(in)s);",
     ("float", "half"): r"%(out)s = __float2half(%(in)s);",
+    ("short", "float"): r"%(out)s = %(scale)s * %(in)s;",  # flex
+    ("float", "short"): r"%(out)s = fp32_to_int16(%(scale)s *%(in)s);", # flex
 }
 _default_conversion = r"%(out)s = %(in)s;"
 
@@ -114,11 +116,14 @@ _store_template = r"%(buffer)s[%(index)s]"
 
 _redstore_template = r"if(idx%(loopidx)s == 0) {%(store)s}"
 
+# FLEX TODO: ask Stewart how to avoid flex_maxabs (different from previous flex_define)
+# also for _red_template
 _red32_template = r"""
     #pragma unroll
     for (int i = 16; i > 0; i >>= 1)
     {
         %(statement)s
+        %(flex_maxabs)s
     }
 """
 
@@ -246,10 +251,9 @@ __device__ __forceinline__ float max_abs(int max_abs, int val)
 """
 
 # flex templates
-_flex_scale_template = "( %(reg)s * %(scale)s )"
-_flex_conversion_template = "reg_out = fp32_to_int16(%(scale)s * %(out)s);"
-_flex_maxabs_template1 = "flex_max = max_abs(flex_max, %(out)s);"
-_flex_maxabs_template2 = "atomicMax(flex_stats, flex_max);"
+# FLEX TODO: conversion is repeated in _flex_conversion_maxabs_template and output conversion_template
+_flex_conversion_maxabs_template = "flex_max = max_abs(flex_max, fp32_to_int16(%(scale)s * %(out)s));"
+_flex_maxabs_atomicmax = "atomicMax(flex_stats, flex_max);"
 
 indent_str = "    "
 
@@ -656,7 +660,13 @@ def _build_register_mapping(stages):
                         sclname = "scale" + str(reg_count)
                         reg_count = reg_count + 1
                         register_mapping[inval] = regname
-                        register_types[regname] = _get_register_type(inval.dtype, False)
+                        if inval.is_flex():
+                            # FLEX TODO: hard coded to np.float32 here
+                            # reinstate a (simpler) flex dtype?
+                            # integer input buffers will be converted to floats by flex scale
+                            register_types[regname] = _get_register_type(np.float32, False)
+                        else:
+                            register_types[regname] = _get_register_type(inval.dtype, False)
 
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
@@ -694,8 +704,8 @@ def _build_register_mapping(stages):
                     flex_entry = op[3].flex_entry()
                     flex_scale[regname] = (sclname, flex_entry, True)
                     flex_stats_ptr = flex_entry.ptr
-                    register_types[regname] = "float"  # FLEX TODO: output intermediate value hard coded as float,
-                                                       # hard to move into _get_register_type
+                    # FLEX TODO: again, hard coded to np.float32 here
+                    register_types[regname] = _get_register_type(np.float32, False)
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
@@ -714,7 +724,8 @@ def _build_register_mapping(stages):
 
 
 def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements,
-                         loop_axis, flex_ops, warp_reductions, reduction_stores):
+                         loop_axis, flex_ops, warp_reductions, reduction_stores,
+                         is_flex=False):
     """
     Generates CUDA C code for a single stage which can contain any number of
     elementwise operations followed by one or more reductions. This code takes
@@ -750,6 +761,8 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
         # All tensors are reduced, no item loop needed
         for statement in op_statements:
             code = code + "\n" + indent_str + statement
+        for statement in flex_ops:
+            code = code + "\n" + indent_str + statement
     else:
         # Build item loop
         item_loop_code = _item_loop_template % {
@@ -763,6 +776,9 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
         for statement in op_statements:
             code = code + "\n" + (indent_str * 2) + statement
 
+        for fop in flex_ops:
+            code = code + "\n" + (indent_str * 2) + fop
+
         for store in loop_stores:
             code = code + "\n" + (indent_str * 2) + store
 
@@ -772,16 +788,13 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
     for warp_red in warp_reductions:
         code = code + warp_red
 
-    # FLEX TODO: newlines when not flex
-    # flex - scale result and convert to int16, compute maxabs
-    code = code + "\n"
-    for fop in flex_ops:
-        code = code + "\n" + indent_str + fop
-    code = code + "\n"
-
     # Add reduction stores
     for store in reduction_stores:
         code = code + "\n" + indent_str + store
+
+    # flex maxabs
+    if is_flex:
+        code = code + "\n" + indent_str + _flex_maxabs_atomicmax
 
     return code
 
@@ -837,7 +850,6 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
 
     if ctx.flex_stats_ptr is not None:
        reg_decls = reg_decls + "\n    int flex_max = 0;"
-       reg_decls = reg_decls + "\n    short reg_out = 0;"
 
     smem_decls = ""
     smem_inits = ""
@@ -1034,10 +1046,12 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     reg_name = ctx.register_mapping[inval]
                     type_key = (_get_register_type(inval.dtype, True),
                                 ctx.register_types[reg_name])
+                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None  #??
                     if type_key in _conversion_templates:
                         load_code = _conversion_templates[type_key] % {
                             "out": reg_name,
-                            "in": load_code
+                            "in": load_code,
+                            "scale": scale
                         }
                     else:
                         load_code = _default_conversion % {
@@ -1068,55 +1082,51 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     buffers_in_reg[stage_index].add(inval)
 
-            # flex: code for scaling flex tensors
-            xreg = ctx.register_mapping[op[1]]
-            yreg = ctx.register_mapping[op[2]]  # may be None
-            x_code, y_code = xreg, yreg
-            if xreg in ctx.flex_scale:
-                x_code = _flex_scale_template % {
-                    "reg": xreg,
-                    "scale": ctx.flex_scale[xreg][0]
-                }
-            if yreg in ctx.flex_scale:
-                if yreg is not 'None':
-                    y_code = _flex_scale_template % {
-                        "reg": yreg,
-                        "scale": ctx.flex_scale[yreg][0]
-                    }
-
+            maxabs_applied = False  # FLEX TODO: change this to (op[0] not in _op_templates)
             if op[0] in _op_templates:
                 if op[0] == "onehot" and op[4] != loop_axis:
                     index = "idx" + str(loop_axis)
                 else:
                     index = "item"
-                op_code = _op_templates[op[0]] % {
-                    "x": x_code,
-                    "y": y_code,
+                op_code = _op_templates[op[0]] % {  # e.g. out = x + y, reg2 = reg0 + reg1
+                    "x": ctx.register_mapping[op[1]],
+                    "y": ctx.register_mapping[op[2]],
                     "out": ctx.register_mapping[op[3]],
                     "index": index
                 }
             else:
                 op_code = _redop_templates[op[0]] % {
-                    "x": x_code,
-                    "y": y_code,
+                    "x": ctx.register_mapping[op[1]],
+                    "y": ctx.register_mapping[op[2]],
                     "out": ctx.register_mapping[op[3]],
                     "index": "item"
                 }
-                # FLEX TODO modifications?
+                # FLEX TODO way of incorporating flex_maxabs
                 redop_code = _redop32_templates[op[0]] % {
                     "out": ctx.register_mapping[op[3]],
                     "y": ctx.register_mapping[op[2]],
                     "indent": (2 * indent_str)
                 }
+                out_reg = ctx.register_mapping[op[3]]
+                maxabs_code = ''
+                if op[3].is_flex():
+                    maxabs_code = _flex_conversion_maxabs_template % {  # FLEX TODO: only incorporate when not flex
+                            "out": out_reg,
+                            "scale": ctx.flex_scale[out_reg][0]
+                        }
+
                 if axes_mapping[loop_axis][1] <= 32:
                     warp_red_code = _red32_template % {
-                        "statement": redop_code
+                        "statement": redop_code,
+                        "flex_maxabs": maxabs_code
                     }
+                    maxabs_applied = True
                 else:
                     sbuf = "sbuffer" + str(len(shared_buffers))
                     shared_buffers.append(sbuf)
                     warp_red_code = _red_template % {
-                        "statement": redop_code,
+                        "statement": redop_code,  # FLEX TODO flex_maxabs
+                        "flex_maxabs": maxabs_code,
                         "out": ctx.register_mapping[op[3]],
                         "shared_buffer": sbuf
                     }
@@ -1126,14 +1136,13 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
             op_statements.append(op_code)
 
             flex_ops = []
-            reg = ctx.register_mapping[op[3]]
-            output_is_flex = reg in ctx.flex_scale
-            if output_is_flex:
-                op_statements.append(_flex_conversion_template % {
-                            "out": reg,
-                            "scale": ctx.flex_scale[reg][0]})
-                op_statements.append(_flex_maxabs_template1 % {"out": "reg_out"})
-                flex_ops.append(_flex_maxabs_template2)
+            if op[3].is_flex():  # safe assumption that op[3] is always output?
+                reg_name = ctx.register_mapping[op[3]]
+                if not maxabs_applied:
+                    # FLEX TODO: only append to loop_stores if no warp_reductions - in nicer way than maxabs_applied flag
+                    flex_ops.append(_flex_conversion_maxabs_template % {
+                        "out": reg_name,
+                        "scale": ctx.flex_scale[reg_name][0]})
 
             if _is_buffer(op[3]):
                 buffers_in_reg[stage_index].add(op[3])
@@ -1151,13 +1160,12 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # doesn't support data format
                     reg_name = ctx.register_mapping[op[3]]
                     type_key = (ctx.register_types[reg_name],
-                                _get_register_type(op[3].dtype, True))  # FLEX TODO: op[3].dtype if flex will be overridden
-                    if output_is_flex:
-                        reg_name = "reg_out"
+                                _get_register_type(op[3].dtype, True))
                     if type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
-                            "in": reg_name
+                            "in": reg_name,
+                            "scale": ctx.flex_scale[reg_name][0]
                         }
                     else:
                         store_code = _default_conversion % {
@@ -1192,9 +1200,19 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                         loop_stores.append(store_code)
 
         # Build stage code from collected statements
+        if False:
+            print "broadcast_loads", broadcast_loads
+            print "loop_loads", loop_loads
+            print "loop_stores", loop_stores
+            print "op_statements", op_statements
+            print "loop_axis", loop_axis
+            print "flex_ops", flex_ops
+            print "warp_reductions", warp_reductions
+            print "reduction_stores", reduction_stores
+        is_flex = ctx.flex_stats_ptr is not None
         code = code + _generate_stage_code(broadcast_loads, loop_loads, loop_stores,
                                            op_statements, loop_axis, flex_ops,
-                                           warp_reductions, reduction_stores)
+                                           warp_reductions, reduction_stores, is_flex)
 
     # Construct kernel name
     kernel_name = "float_ew" + kernel_identifier + "_"
@@ -1208,7 +1226,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     args, arg_desc, params = _generate_kernel_args(ctx, axes_mapping, dims)
     argstring = ', '.join(args)
 
-    if flex_verbose: print params
+    #if flex_verbose: print params
 
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers

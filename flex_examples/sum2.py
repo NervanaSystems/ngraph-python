@@ -13,40 +13,42 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
-import ngraph.op_graph.axes as ax
 from ngraph.frontends.neon import NgraphArgparser
 
-parser = NgraphArgparser(description='x + 1.5 example')
+import numpy as np
+
+parser = NgraphArgparser(description='sum example')
 args = parser.parse_args()
 transformer_name = args.backend
 
 # hard code flex transformer
-# transformer_name = 'flexgpu'
-# factory = ngt.make_transformer_factory(transformer_name)
-# ngt.set_transformer_factory(factory)
+#transformer_name = 'flexgpu'
+#factory = ngt.make_transformer_factory(transformer_name)
+#ngt.set_transformer_factory(factory)
 
 transformer = ngt.make_transformer()
 
-# Build the graph - scalar addition
-x = ng.placeholder(())
-x_plus_one = x + 1.5  # really: x_plus_one = ng.add(x, ng.constant(1))
-# Define a computation
-plus_one = transformer.computation(x_plus_one, x)  # computation, parameters
+nelems = 10
+H = ng.make_axis(length=nelems)
+x = ng.placeholder(H)
+
+z = ng.sum(x)
+comp = transformer.computation(z, x)
+
+#xval = np.arange(1,nelems+1))  # 1 to 10
+xval = np.array(list(range(1,10) + [-1]))
+xval[2] += + 1 + 10
+
+print(sum(xval))
+print(comp(xval))
+
 
 if transformer_name == 'flexgpu':
-    print("flex_manager.stat_ids before computations", transformer.flex_manager.stat_ids)
-
-# Run the computation
-for i in range(5):
-    print(plus_one(i))
-
-
-if transformer_name == 'flexgpu':
-    print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
     fm = transformer.flex_manager
+    print(fm.stat_ids)
 
+    # get maxabs
     fm.transfer_stats()
-    print("flex_manager.host_stats", fm.host_stats)
+    print(fm.host_stats)
