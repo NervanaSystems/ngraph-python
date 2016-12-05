@@ -1474,7 +1474,7 @@ def flatten(x, axes=None, **kwargs):
         if len(x.axes) == 1:
             return x
         else:
-            axes = Axes((FlattenedAxis(x.axes),))
+            axes = make_axes((FlattenedAxis(x.axes),))
 
     if x.is_scalar:
         return x
