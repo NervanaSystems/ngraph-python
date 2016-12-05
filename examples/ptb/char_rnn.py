@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.frontends.neon import Sequential, Preprocess, Recurrent, Affine, Softmax, Tanh
+from ngraph.frontends.neon import Sequential, Preprocess, BiRNN, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
@@ -26,13 +26,15 @@ from ptb import PTB
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
+parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
+                    help='type of recurrent layer to use (rnn or birnn)')
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 50
-time_steps = 10
-hidden_size = 20
+args.batch_size = 16
+time_steps = 5
+hidden_size = 10
 gradient_clip_value = 15
 
 # download penn treebank
@@ -47,9 +49,15 @@ valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_siz
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
+if args.layer_type == "rnn":
+    rlayer = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False)
+else:
+    rlayer = BiRNN(hidden_size, init, activation=Tanh(),
+                   reset_cells=False, return_sequence=True, sum_out=True)
+
 # model initialization
 seq1 = Sequential([Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y)),
-                   Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False),
+                   rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y, ax.REC))])
 
 # Bind axes lengths:
