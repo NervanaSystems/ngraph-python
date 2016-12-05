@@ -34,7 +34,7 @@ class Rectlin(object):
 
     def __call__(self, x):
         """
-        Returns the Exponential Linear activation
+        Returns the Rectified Linear activation
 
         Arguments:
             x (Tensor or optree): Input value
@@ -43,6 +43,31 @@ class Rectlin(object):
             Tensor or optree: output activation
         """
         return ng.maximum(x, 0) + self.slope * ng.minimum(0, x)
+
+
+class Rectlinclip(object):
+    """
+    Clipped ReLu activation function
+    Computes the function :math:`f(x) = min(max(0, x),cutoff)`
+    """
+
+    def __init__(self, slope=0.01, cutoff=20.0, name=None):
+
+        self.cutoff = cutoff
+        self.slope = slope
+
+    def __call__(self, x):
+        """
+        Returns the Clipped Rectified Linear activation
+
+        Arguments:
+            x (Tensor or optree): Input value
+
+        Returns:
+            Tensor or optree: output activation
+        """
+        return ng.minimum(ng.maximum(x, 0) + self.slope * ng.minimum(x, 0),
+                          self.cutoff)
 
 
 class Identity(object):
