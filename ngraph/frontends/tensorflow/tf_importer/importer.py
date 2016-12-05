@@ -48,8 +48,6 @@ class TFImporter:
         self._ops_bridge = OpsBridge()
         # checkpoint path for weight import
         self._checkpoint_path = None
-        # TODO: refactor this
-        self.init_ops = []
 
     def import_protobuf(self, pb_file, verbose=False):
         """
@@ -90,15 +88,7 @@ class TFImporter:
             graph_def: GraphDef object
             verbose: Prints graph_def at each node if True.
         """
-        # pass 1: identify assigns connected to NoOps (hack around issue #373)
-        # TODO: just a temp fix for now
-        for tf_node in graph_def.node:
-            if tf_node.op == 'NoOp' and tf_node.name == 'init':
-                assign_op_names = set(
-                    [remove_tf_name_prefix(name) for name in tf_node.input])
-                self._ops_bridge.init_assign_op_names |= assign_op_names
-
-        # pass 2: process nodes
+        # process nodes
         for tf_node in graph_def.node:
             # print node
             if verbose:
@@ -132,10 +122,6 @@ class TFImporter:
                 output_op = tuple(output_op)
             else:
                 output_op = output_op[0]
-
-            # save init node
-            if tf_node.op == 'NoOp' and tf_node.name == 'init':
-                self.init_ops.append(output_op)
 
             self._name_op_map[tf_node.name] = output_op
 
