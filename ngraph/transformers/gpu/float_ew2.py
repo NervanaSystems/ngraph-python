@@ -219,32 +219,21 @@ _defines_template3 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
 _header_template = r"""
 
 %(defines)s
-%(flex_defines)s
 __global__ void %(kernel_name)s(%(args)s)
 {"""
 
 _includes_template = r"""#include <float.h>
 #include <cuda_fp16.h>
 """
-
-# flex templates
-_flex_scale_template = "( %(reg)s * %(scale)s )"
-_flex_conversion_template = "reg_out = fp32_to_int16(%(scale)s * %(out)s);"
-_flex_maxabs_template1 = "flex_max = max_abs(flex_max, %(out)s);"
-_flex_maxabs_template2 = "atomicMax(flex_stats, flex_max);"
-
-
 # flex functions taken from neon flexsim neon/backends/cuda_templates.py
-_common_fp32_to_int16 = r"""
+_flex_includes_template = r"""
 __device__ __forceinline__ short fp32_to_int16(float val)
 {
     short ret;
     asm("cvt.rni.s16.f32 %0, %1;" : "=h"(ret) : "f"(val));
     return ret;
 }
-"""
 
-_common_max_abs = r"""
 __device__ __forceinline__ float max_abs(int max_abs, int val)
 {
     asm("{\n\t"
@@ -256,6 +245,11 @@ __device__ __forceinline__ float max_abs(int max_abs, int val)
 }
 """
 
+# flex templates
+_flex_scale_template = "( %(reg)s * %(scale)s )"
+_flex_conversion_template = "reg_out = fp32_to_int16(%(scale)s * %(out)s);"
+_flex_maxabs_template1 = "flex_max = max_abs(flex_max, %(out)s);"
+_flex_maxabs_template2 = "atomicMax(flex_stats, flex_max);"
 
 indent_str = "    "
 
@@ -320,6 +314,8 @@ class FlexScaleDescription:
         self.flex_entry = flex_entry
         self.is_output = is_output
 
+def _are_flex_params(params):
+    return any([isinstance(p, FlexScaleDescription) for p in params])
 
 def _is_buffer(value):
     """
@@ -792,7 +788,7 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
 
 def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
                           kernel_name, argstring, axes_mapping, loop_axis,
-                          kernel_identifier, flex_defines=""):
+                          kernel_identifier):
     """
     Generates entire kernel code which can be passed to the CUDA C compiler.
     Takes care of function header, defines, and initialization code.
@@ -823,7 +819,6 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         "defines": defines,
         "kernel_name": kernel_name,
         "args": argstring,
-        "flex_defines": flex_defines
     }
 
     # Initialization code
@@ -1215,18 +1210,13 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
     if flex_verbose: print params
 
-    # flex function definitions
-    flex_defines = ''
-    if ctx.flex_stats_ptr is not None:
-        flex_defines += _common_fp32_to_int16 + _common_max_abs
-
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
                                  kernel_name, argstring, axes_mapping, loop_axis,
-                                 kernel_identifier, flex_defines=flex_defines)
+                                 kernel_identifier)
 
-    if flex_verbose: print code
+    #if flex_verbose: print code
 
     return (code, kernel_name, arg_desc, params)
 
@@ -1246,7 +1236,10 @@ def _prepare_compound_kernel(ops):
     code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims)
 
     # Compile kernel
-    code = _includes_template + code
+    if _are_flex_params(params):
+        code = _includes_template + _flex_includes_template + code
+    else:
+        code = _includes_template + code
     module = SourceModule(code, options=[])
     kernel = module.get_function(kernel_name)
     kernel.name = kernel_name
@@ -1296,6 +1289,9 @@ class CudaSourceFile:
         self.f.write(_includes_template)
         self.f.flush()
 
+        if flex_verbose: print "CudaSourceFile temporary file", self.filename
+        self.flex_includes_written = False  # hack - relying on _get_compound_kernel processing of params to know if we have a flex kernel
+
     def add_kernel(self, ops):
         assert not self.compiled
 
@@ -1323,6 +1319,11 @@ class CudaSourceFile:
                 griddim[2] = axis[2]
 
         params = [tuple(griddim), tuple(blockdim), None] + params
+
+        # check if flex includes are needed/have been written
+        if _are_flex_params(params) and self.flex_includes_written is not True:
+            self.f.write(_flex_includes_template)
+            self.flex_includes_written = True
 
         # Add kernel code to source file
         self.f.write(code)
