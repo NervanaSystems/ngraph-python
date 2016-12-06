@@ -17,7 +17,8 @@ Test of the activation functions
 '''
 from math import tanh as true_tanh
 import numpy as np
-from ngraph.frontends.neon.activation import Identity, Rectlin, Rectlinclip, Softmax, Tanh, Logistic
+from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
+                                              Softmax, Tanh, Logistic)
 from ngraph.util.utils import ExecutorFactory
 import ngraph as ng
 import pytest
