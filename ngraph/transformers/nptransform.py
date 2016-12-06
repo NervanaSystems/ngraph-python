@@ -44,6 +44,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
+from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, make_transformer_factory, set_transformer_factory
@@ -674,6 +675,8 @@ class NumPyTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
+
+        self.graph_passes.insert(0, CPUTensorLayout())
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
