@@ -71,12 +71,6 @@ class OpsVariable(OpsBase):
         with ng.Op.saved_user_deps():
             return ng.assign(ref, value)
 
-        # if tf_node.name in self.init_assign_op_names:
-        #     with ng.Op.saved_user_deps():
-        #         return ng.assign(ref, value)
-        # else:
-        #     return ng.assign(ref, value)
-
     def AssignAdd(self, tf_node, inputs):
         """
         Assign `ref` + `value` to `ref`.
@@ -98,12 +92,6 @@ class OpsVariable(OpsBase):
 
         with ng.Op.saved_user_deps():
             return ng.assign(ref, value)
-
-        # if tf_node.name in self.init_assign_op_names:
-        #     with ng.Op.saved_user_deps():
-        #         return ng.assign(ref, ref + value)
-        # else:
-        #     return ng.assign(ref, ref + value)
 
     def NoOp(self, tf_node, inputs):
         """
