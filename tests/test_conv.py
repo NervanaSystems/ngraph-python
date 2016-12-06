@@ -174,11 +174,7 @@ def test_convolution_backprop(transformer_factory):
     assert input_value.shape == ax_i.lengths
     assert filter_value.shape == ax_f.lengths
 
-    inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
-
-    # output = ng.squared_L2(ng.convolution(conv_params, inputs, filters, axes=ax_o))
-    output = ng.sum(ng.convolution(conv_params, inputs, filters, axes=ax_o), out_axes=())
+    output = ng.sum(ng.convolution(conv_params, inputs, filters, ax_o), out_axes=())
 
     factory = ExecutorFactory()
     dcdf_sym_fun = factory.derivative(output, filters, inputs)
@@ -275,10 +271,6 @@ def test_conv_flatten_deriv(transformer_factory):
     """
     Test deriv of conv followed by flatten
     """
-    # TODO convert to use fixtures over the filter and output modes
-
-    filter_mode = 'rsck_prime'
-    output_mode = 'flattened'
 
     # set shape
     N = 8
@@ -304,34 +296,11 @@ def test_conv_flatten_deriv(transformer_factory):
     input_var.input = True
     input_val = np.ones(input_var.axes.lengths)
 
-    filter_var = None
-
-    filter_rsck_prime = None
-    if filter_mode == 'rsck_prime':
-        filter_rsck_prime = ng.variable(axes_rsck_prime)
-        filter_var = filter_rsck_prime
-
-    filter_rsck = None
-    if filter_var is None:
-        if filter_mode == 'rsck':
-            filter_rsck = ng.variable(axes_rsck).named('filter-rsck')
-            filter_var = filter_rsck
-    else:
-        filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
-
-    filter_trsck = None
-    if filter_var is None:
-        if filter_mode == 'trsck':
-            filter_trsck = ng.variable([ax.T, ax.R, ax.S, ax.C, ax.K])
-            filter_var = filter_trsck
-    else:
-        filter_trsck = ng.expand_dims(filter_rsck, ax.T, 0)
-
-    if filter_var is None:
-        filter_ctrsk = ng.variable(ax_f)
-        filter_var = filter_ctrsk
-    else:
-        filter_ctrsk = ng.axes_with_order(filter_trsck, axes=ax_f)
+    filter_rsck_prime = ng.variable(axes_rsck_prime)
+    filter_var = filter_rsck_prime
+    filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
+    filter_trsck = ng.expand_dims(filter_rsck, ax.T, 0)
+    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=ax_f)
 
     # convolution
     output_kmpqn = ng.convolution(params, input_var, filter_ctrsk, axes=ax_o)
@@ -342,14 +311,7 @@ def test_conv_flatten_deriv(transformer_factory):
     out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
     output_npqk = ng.Slice(output_nmpqk, out_slicing)
 
-    output_flattened = ng.flatten_at(output_npqk, idx=1)
-
-    if output_mode == 'kmpqn':
-        output = output_kmpqn
-    elif output_mode == 'nmpqk':
-        output = output_nmpqk
-    else:
-        output = output_flattened
+    output = ng.flatten_at(output_npqk, idx=1)
 
     # cost and grad
     cost = ng.sum(output, out_axes=())
