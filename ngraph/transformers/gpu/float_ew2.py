@@ -719,8 +719,7 @@ def _build_register_mapping(stages):
 
 
 def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements,
-                         loop_axis, flex_ops, warp_reductions, reduction_stores,
-                         is_flex=False):
+                         loop_axis, warp_reductions, reduction_stores):
     """
     Generates CUDA C code for a single stage which can contain any number of
     elementwise operations followed by one or more reductions. This code takes
@@ -756,8 +755,6 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
         # All tensors are reduced, no item loop needed
         for statement in op_statements:
             code = code + "\n" + indent_str + statement
-        for statement in flex_ops:
-            code = code + "\n" + indent_str + statement
     else:
         # Build item loop
         item_loop_code = _item_loop_template % {
@@ -771,9 +768,6 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
         for statement in op_statements:
             code = code + "\n" + (indent_str * 2) + statement
 
-        for fop in flex_ops:
-            code = code + "\n" + (indent_str * 2) + fop
-
         for store in loop_stores:
             code = code + "\n" + (indent_str * 2) + store
 
@@ -786,10 +780,6 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
     # Add reduction stores
     for store in reduction_stores:
         code = code + "\n" + indent_str + store
-
-    # flex maxabs
-    if is_flex:
-        code = code + "\n" + indent_str + _flex_maxabs_atomicmax
 
     return code
 
@@ -1042,7 +1032,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     reg_name = ctx.register_mapping[inval]
                     type_key = (_get_register_type(inval.dtype, True),
                                 ctx.register_types[reg_name])
-                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None  #??
+                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None  #?? better way to do this?
                     if type_key in _conversion_templates:
                         load_code = _conversion_templates[type_key] % {
                             "out": reg_name,
@@ -1121,8 +1111,6 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
             op_statements.append(op_code)
 
-            flex_ops = []
-
             if _is_buffer(op[3]):
                 buffers_in_reg[stage_index].add(op[3])
                 if op[0] in _redop_templates:
@@ -1200,21 +1188,14 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             loop_stores.extend(flex_stores)
                         loop_stores.append(index_code)
                         loop_stores.append(store_code)
+                    # flex collect max_abs across threads
+                    if op[3].is_flex():
+                        reduction_stores.append(_flex_maxabs_atomicmax)
 
         # Build stage code from collected statements
-        if False:
-            print "broadcast_loads", broadcast_loads
-            print "loop_loads", loop_loads
-            print "loop_stores", loop_stores
-            print "op_statements", op_statements
-            print "loop_axis", loop_axis
-            print "flex_ops", flex_ops
-            print "warp_reductions", warp_reductions
-            print "reduction_stores", reduction_stores
-        is_flex = ctx.flex_stats_ptr is not None
         code = code + _generate_stage_code(broadcast_loads, loop_loads, loop_stores,
-                                           op_statements, loop_axis, flex_ops,
-                                           warp_reductions, reduction_stores, is_flex)
+                                           op_statements, loop_axis, warp_reductions,
+                                           reduction_stores)
 
     # Construct kernel name
     kernel_name = "float_ew" + kernel_identifier + "_"
@@ -1228,15 +1209,11 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     args, arg_desc, params = _generate_kernel_args(ctx, axes_mapping, dims)
     argstring = ', '.join(args)
 
-    #if flex_verbose: print params
-
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
                                  kernel_name, argstring, axes_mapping, loop_axis,
                                  kernel_identifier)
-
-    #if flex_verbose: print code
 
     return (code, kernel_name, arg_desc, params)
 
