@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 import numpy as np
+import pytest
 
 import ngraph as ng
 from ngraph.util.utils import executor
@@ -36,6 +37,102 @@ class DummyDeltaBuffers(object):
     """
     def __init__(self):
         self.buffers = [None]
+
+
+def test_wrong_filters_shape_length():
+    """
+    test wrong filters shape length
+    """
+    padding = dict(pad_d=0, pad_h=0, pad_w=0)
+    strides = dict(str_d=1, str_h=1, str_w=1)
+    conv_params = padding.copy()
+    conv_params.update(strides)
+
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S])
+
+    inputs = ng.placeholder(ax_i)
+    filters = ng.placeholder(ax_f)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.convolution(conv_params, inputs, filters, {})
+    assert str(exinfo.value) == 'convolution filter shape must be length 5, found {}'\
+        .format(len(ax_f))
+
+
+def test_wrong_input_shape_length():
+    """
+    test wrong input shape length
+    """
+    padding = dict(pad_d=0, pad_h=0, pad_w=0)
+    strides = dict(str_d=1, str_h=1, str_w=1)
+    conv_params = padding.copy()
+    conv_params.update(strides)
+
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+
+    inputs = ng.placeholder(ax_i)
+    filters = ng.placeholder(ax_f)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.convolution(conv_params, inputs, filters, {})
+    assert str(exinfo.value) == 'convolution input shape must be length 5, found {}'\
+        .format(len(ax_i))
+
+
+def test_first_axes_not_same():
+    """
+    test first axes are not the same
+    """
+    padding = dict(pad_d=0, pad_h=0, pad_w=0)
+    strides = dict(str_d=1, str_h=1, str_w=1)
+    conv_params = padding.copy()
+    conv_params.update(strides)
+
+    ax_i = ng.make_axes([ax.D, ax.C, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+
+    inputs = ng.placeholder(ax_i)
+    filters = ng.placeholder(ax_f)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.convolution(conv_params, inputs, filters, {})
+    assert str(exinfo.value) == 'the first axis in input {inputs} and filter {filters} ' \
+        'are not the same.'.format(
+            inputs=inputs.axes[0],
+            filters=filters.axes[0])
+
+
+def test_wrong_number_of_batch_axes_at_input():
+    """
+    test wrong number of batch axes at input
+    """
+    padding = dict(pad_d=0, pad_h=0, pad_w=0)
+    strides = dict(str_d=1, str_h=1, str_w=1)
+    conv_params = padding.copy()
+    conv_params.update(strides)
+
+    C = 3
+    D = 1
+    ax_C = ng.make_axis(length=C, name='C', batch=True)
+    ax_D = ng.make_axis(length=D, name='D', batch=True)
+
+    ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax_C, ax.T, ax.R, ax.S, ax.K])
+
+    inputs = ng.placeholder(axes=ax_i)
+    filters = ng.placeholder(ax_f)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.convolution(conv_params, inputs, filters, {})
+
+    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} " \
+        "batch axes: {batch_axes} Found {n_sample_axes} sample axes: {sample_axes}.".format(
+            n_batch_axes=len(inputs.axes.batch_axes()),
+            batch_axes=inputs.axes.batch_axes(),
+            n_sample_axes=len(inputs.axes.sample_axes()),
+            sample_axes=inputs.axes.sample_axes())
 
 
 def test_convolution(transformer_factory):
@@ -118,3 +215,57 @@ def test_convolution(transformer_factory):
 
     # Compare update
     np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
+
+
+def test_conv_flatten_deriv(transformer_factory):
+    """
+    Test deriv of conv followed by flatten
+    """
+    # set shape
+    C, D, H, W, N = (3, 1, 28, 28, 8)
+    C, T, R, S, K = (3, 1, 5, 5, 32)
+
+    # i, f, o axes
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+    ax_o = ng.make_axes([
+        ng.make_axis(32, roles=[ar.Channel]),
+        ng.make_axis(1, roles=[ar.Depth]),
+        ng.make_axis(24, roles=[ar.Height]),
+        ng.make_axis(24, roles=[ar.Width]),
+        ax.N
+    ])
+    ax_i.set_shape((C, D, H, W, N))
+    ax_f.set_shape((C, T, R, S, K))
+    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1)
+    axes_rsck = ng.make_axes([ax.R, ax.S, ax.C, ax.K])
+    axes_rsck_prime = ng.make_axes([ng.make_axis(l) for l in axes_rsck.lengths])
+
+    # broadcast input / filter axes
+    image = ng.constant(np.ones(ax_i.lengths), ax_i)
+    filter = ng.variable(axes_rsck_prime,
+                         initial_value=np.ones((R, S, C, K)))
+    filter_casted = ng.cast_axes(filter, axes_rsck)
+    filter_casted = ng.expand_dims(filter_casted, ax.T, 0)
+    filter_casted = ng.axes_with_order(filter_casted, axes=ax_f)
+
+    # convolution
+    output = ng.convolution(params, image, filter_casted, axes=ax_o)
+    oC, oD, oH, oW, oN = output.axes
+    output = ng.axes_with_order(output, axes=ng.make_axes([oN, oD, oH, oW, oC]))
+
+    # slice away the oD
+    out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
+    conv = ng.Slice(output, out_slicing)
+    flatten = ng.flatten_at(conv, idx=1)
+
+    # cost and grad
+    cost = ng.sum(flatten, reduction_axes=flatten.axes)
+    grad = ng.deriv(cost, filter)
+
+    # compute
+    conv_grad_comp = executor([conv, grad])
+    conv_val, grad_val = conv_grad_comp()
+
+    assert np.allclose(conv_val, np.zeros_like(conv_val) + 75.)
+    assert np.allclose(grad_val, np.zeros_like(grad_val) + 4608.)

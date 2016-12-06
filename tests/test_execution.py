@@ -870,6 +870,28 @@ def test_onehot(transformer_factory):
     one_hot_comparison(ng.make_axes([C, W, H, N]), ng.make_axes([W, H, N]), C)
 
 
+def test_clip(transformer_factory):
+    W = ng.make_axis(name='W')
+    H = ng.make_axis(name='H')
+    W.length = 4
+    H.length = 5
+    axes = ng.make_axes([W, H])
+
+    p_x = ng.placeholder(axes)
+    x = (2 * rng.uniform(0, 1, axes) - 1) * 20
+    clip_value = 10
+
+    clip_func = ng.minimum(ng.maximum(p_x, -abs(clip_value)), abs(clip_value))
+
+    # numpy results as expected results
+    expected_result = np.clip(x, -abs(clip_value), abs(clip_value))
+
+    ex = ExecutorFactory()
+    costfunc = ex.executor(clip_func, p_x)
+    result = costfunc(x)
+    np.testing.assert_allclose(result, expected_result)
+
+
 def test_elementwise_fp16_in(transformer_factory):
     Y = ng.make_axis(name='Y')
     N = ng.make_axis(name='N')

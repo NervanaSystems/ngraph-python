@@ -648,8 +648,19 @@ class Axes(object):
         """
         return Axes(axis for axis in self if axis.has_role(role))
 
-    def flatten(self):
-        if len(self) == 1:
+    def flatten(self, force=False):
+        """
+        Produces flattened form of axes
+
+        Args:
+            force: Add a FlattenedAxis even when the axis is already flat. This is needed
+             when the flatten is balanced by a later unflatten, as in dot.
+
+        Returns:
+            A flat axis.
+
+        """
+        if not force and len(self) == 1:
             return self[0]
         return FlattenedAxis(self)
 

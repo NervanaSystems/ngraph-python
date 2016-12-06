@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 import numpy as np
+import pytest
 
 import ngraph as ng
 import ngraph.transformers as ngt
@@ -36,6 +37,61 @@ class DummyDeltaBuffers(object):
     """
     def __init__(self):
         self.buffers = [None]
+
+
+def test_wrong_input_shape_length():
+    """
+    test wrong input shape length
+    """
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
+    inputs = ng.placeholder(axes=ax_i)
+    pool_params = dict(op='max')
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.pooling(pool_params, inputs, {})
+
+    assert str(exinfo.value) == 'pooling input shape must be length 5, found {}' \
+        .format(len(ax_i))
+
+
+def test_wrong_number_of_batch_axes_at_input():
+    """
+    test wrong number of batch axes at input
+    """
+    C = 3
+    D = 1
+    ax_C = ng.make_axis(length=C, name='C', batch=True)
+    ax_D = ng.make_axis(length=D, name='D', batch=True)
+    pool_params = dict(op='max')
+
+    ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
+    inputs = ng.placeholder(axes=ax_i)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.pooling(pool_params, inputs, {})
+
+    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} batch" \
+        " axes: {batch_axes} and {n_sample_axes} sample axes: {sample_axes}.".format(
+            n_batch_axes=len(inputs.axes.batch_axes()),
+            batch_axes=inputs.axes.batch_axes(),
+            n_sample_axes=len(inputs.axes.sample_axes()),
+            sample_axes=inputs.axes.sample_axes())
+
+
+def test_wrong_op_name():
+    """
+    test wrong number of batch axes at input
+    """
+    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
+    inputs = ng.placeholder(axes=ax_i)
+    pooltype = 'min'
+    pool_params = dict(op=pooltype)
+
+    with pytest.raises(ValueError) as exinfo:
+        ng.pooling(pool_params, inputs, {})
+
+    assert str(exinfo.value) == "Unsupported pooling type: {pooltype}.  Only max and avg " \
+        "pooling currently supported. ".format(pooltype=pooltype)
 
 
 def test_pooling():

@@ -247,3 +247,36 @@ def test_tensor_dot_tensor(transformer_factory):
         deriv2_val_num = deriv2_fun_num(value2, value1)
         deriv2_val_sym = deriv2_fun_sym(value2, value1)
         np.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
+
+
+def test_flat_tensor_dot_tensor(transformer_factory):
+    """
+    Ensure that a flattened argument axis is not unflattend in the result.
+
+    Args:
+        transformer_factory:
+
+    Returns:
+
+    """
+    ax = ng.make_name_scope('ax')
+    ax.H = ng.make_axis(2)
+    ax.W = ng.make_axis(7)
+    ax.C = ng.make_axis(3)
+    ax.K = ng.make_axis(11)
+
+    axes_a = ng.make_axes([ax.H, ax.W, ax.C])
+    a = ng.constant(np.ones(axes_a.lengths), axes=axes_a)
+    flat_a = ng.flatten_at(a, 2)
+
+    axes_b = ng.make_axes([ax.C.get_dual(), ax.K])
+    b = ng.constant(np.ones(axes_b.lengths), axes=axes_b)
+
+    result = ng.dot(b, flat_a)
+
+    factory = ExecutorFactory()
+    result_fun = factory.executor(result)
+    result_val = result_fun()
+
+    result_correct = np.ones_like(result_val) * ax.C.length
+    np.testing.assert_allclose(result_val, result_correct)

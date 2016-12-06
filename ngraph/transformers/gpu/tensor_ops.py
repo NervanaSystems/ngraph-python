@@ -207,7 +207,7 @@ class SetItemKernel(GPUKernel):
         Get allocated GPU tensor for output and potentially source value
         """
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value.tensor
+            self.tensor = self.tensor.value
         if isinstance(self.value, TensorDescription):
             self.value = self.value.value.tensor
 
@@ -227,7 +227,7 @@ class SetItemKernel(GPUKernel):
             self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                             None, *self.params)
         elif self.tensor.shape == ():
-            self.tensor.fill(self.value)
+            self.tensor.tensor.fill(self.value)
         else:
             self.tensor.__setitem__(self.item, self.value)
 
@@ -270,7 +270,7 @@ class UnsliceKernel(GPUKernel):
         Get allocated GPU tensor for source and dest
         """
         if isinstance(self.out_sliced, TensorDescription):
-            self.out_sliced = self.out_sliced.value.tensor
+            self.out_sliced = self.out_sliced.value
         if isinstance(self.x, TensorDescription):
             self.x = self.x.value.tensor
         if isinstance(self.out, TensorDescription):
@@ -292,6 +292,6 @@ class UnsliceKernel(GPUKernel):
             self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                             None, *self.params)
         elif self.out_sliced.shape == ():
-            self.out_sliced.fill(self.x.get())
+            self.out_sliced.tensor.fill(self.x.get())
         else:
             self.out_sliced[:] = self.x

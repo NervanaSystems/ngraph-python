@@ -20,9 +20,9 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import os
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 import ngraph.transformers as ngt
 import pytest
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
 
 @pytest.mark.usefixtures("transformer_factory")
@@ -54,7 +54,7 @@ class ImporterTester(object):
             try:
                 os.remove(self.pb_txt_path)
             except:
-                print("test dump does not exist")  # disable capturing to print
+                print("[clean up] test dump does not exist")
 
     def run(self,
             tf_target_node,
@@ -111,7 +111,7 @@ class ImporterTester(object):
         """
         # init importer, transformer
         importer = TFImporter()
-        importer.parse_protobuf(self.pb_txt_path, verbose=verbose)
+        importer.import_protobuf(self.pb_txt_path, verbose=verbose)
         transformer = ngt.make_transformer()
 
         # set target node

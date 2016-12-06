@@ -88,17 +88,22 @@ class ConvolutionOp(op_graph.TensorOp):
 
 
 class update_conv(op_graph.TensorOp):
-    def __init__(self, delta, inputs, filters, fprop, *args, **kwargs):
+    def __init__(self, delta, inputs, filters, fprop, axes=None, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
+        self.filters = filters
+        self.fprop = fprop
+
         self.conv_params = fprop.conv_params
         self.index = fprop.index
+        if axes is None:
+            axes = filters.axes
 
         super(update_conv, self).__init__(
-            args=(delta, inputs), *args, axes=filters.axes, **kwargs
+            args=(delta, inputs), *args, axes=axes, **kwargs
         )
 
 
@@ -109,6 +114,9 @@ class bprop_conv(op_graph.TensorOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
+        self.inputs = inputs
+        self.fprop = fprop
+
         self.conv_params = fprop.conv_params
         self.index = fprop.index
 

@@ -328,12 +328,12 @@ of the original axes. The order of the new axes can be arbitrary. Examples: ::
     ng.broadcast(x, [ax.W, ax.H, ax.C])  -> [ax.W, ax.H, ax.C]
 
 
-.. Axes dim-shuffle
+.. Axes reordering
 .. ----------------
 ..
-.. Use ``ng.Dimshuffle`` to shuffle axes. The new axes must be the same set as the
+.. Use ``ng.axes_with_order`` to reorder axes. The new axes must be the same set as the
 .. original axes. Examples: ::
 ..
 ..     from ngraph.frontends.neon.axis import ax
 ..     x = ng.placeholder([ax.C, ax.H, ax.W])
-..     ng.Dimshuffle(x, ng.make_axes([ax.H, ax.W, ax.C])).axes
+..     ng.axes_with_order(x, [ax.H, ax.W, ax.C])
