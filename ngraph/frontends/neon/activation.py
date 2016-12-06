@@ -51,7 +51,7 @@ class Rectlinclip(object):
     Computes the function :math:`f(x) = min(max(0, x),cutoff)`
     """
 
-    def __init__(self, slope=0.01, cutoff=20.0, name=None):
+    def __init__(self, slope=0, cutoff=20.0, name=None):
 
         self.cutoff = cutoff
         self.slope = slope
