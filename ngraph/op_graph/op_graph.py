@@ -1136,7 +1136,7 @@ class ReshapeOp(TensorOp):
     @user_deps.setter
     def user_deps(self, deps):
         # A reshape of storage is shares the side-effects of the storage
-        self.args[0].user_depa = deps
+        self.args[0].user_deps = deps
 
 
 class Transpose(ReshapeOp):
