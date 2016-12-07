@@ -105,6 +105,8 @@ class Digraph(object):
         else:
             nexts = self.successors
 
+        # TODO This is almost identical to Op's visit_input_closure, which we should switch
+        # to using when we can.
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(list)

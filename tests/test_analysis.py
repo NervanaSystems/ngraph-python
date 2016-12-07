@@ -81,6 +81,3 @@ def test_topsort():
             assert arg in completed
         completed.add(op)
     print('pass topsort')
-
-
-test_topsort()

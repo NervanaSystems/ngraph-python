@@ -321,7 +321,7 @@ class Op(NameableValue, DebugInfo):
     @staticmethod
     def visit_input_closure(roots, fun):
         """
-        "Bottom-up" post-order traversal of root and their inputs.
+        Topological sort order traversal of root and their inputs.
 
         Nodes will only be visited once, even if there are multiple routes to the
         same Node.
