@@ -112,10 +112,14 @@ def ng_retrain_mnist(args):
     # train in ngraph
     init_comp()
     restore_comp()
+    ng_cost_vals = []
     for idx in range(args.max_iter):
         batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
         cost_val, _ = train_comp(batch_xs, batch_ys)
+        ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    return ng_cost_vals
 
 
 def tf_retrain_mnist(args):
@@ -146,11 +150,15 @@ def tf_retrain_mnist(args):
         cost = tf.get_collection('cost')[0]
 
         # train
+        tf_cost_vals = []
         for idx in range(args.max_iter):
             batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
             cost_val, _ = sess.run([cost, train_op],
                                    feed_dict={x: batch_xs, t: batch_ys})
+            tf_cost_vals.append(float(cost_val))
             print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    return tf_cost_vals
 
 
 if __name__ == "__main__":
