@@ -22,7 +22,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, UnaryElementwiseAxesOp, \
+    Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
     negative, cast_axes
 
 from ngraph.util.generics import generic_method
@@ -164,6 +164,18 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if op.must_reduce:
             self.replace_op(op, op.reduce_to_twod())
 
+    @visit.on_type(Prod)
+    def visit(self, op):
+        x = op.args[0]
+        if x.is_scalar:
+            # Sum of a scalar is just the scalar times the axes size rebroadcast
+            val = broadcast(cast_axes(x, ()) * op.reduction_axes.size, op.axes)
+            self.replace_op(op, val)
+            return
+        # call-next-method
+        if op.must_reduce:
+            self.replace_op(op, op.reduce_to_twod())
+
     @visit.on_type(OneHotOp)
     def visit(self, op):
         self.replace_op(op, op.as_two_dim())
@@ -285,6 +297,22 @@ class SimplePrune(PeepholeGraphPass):
             self.replace_op(op, rep)
 
     @visit.on_type(Sum)
+    def visit(self, op):
+        """
+        TODO.
+
+        Arguments:
+          op: TODO
+
+        Returns:
+          TODO
+        """
+        x, = op.args
+        if x.is_scalar and x.is_constant:
+            val = x.const * op.reduction_axes.size
+            self.replace_op(op, constant(val))
+
+    @visit.on_type(Prod)
     def visit(self, op):
         """
         TODO.

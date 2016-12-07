@@ -154,6 +154,7 @@ def test_reduction(transformer_factory):
     u = rng.uniform(-1.0, 1.0, axes)
 
     for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod'),
                               (np.max, ng.max, 'max'),
                               (np.min, ng.min, 'min')]:
         for reduction_axes in [[C],
@@ -186,7 +187,8 @@ def test_reduction_deriv(transformer_factory):
 
     # Need to test max/min differently since if two elements are extremums
     # and we modify one, the derivative will change.
-    for npred, bered, red in [(np.sum, ng.sum, 'sum')]:
+    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod')]:
         for reduction_axes in [[C],
                                [W],
                                [H],

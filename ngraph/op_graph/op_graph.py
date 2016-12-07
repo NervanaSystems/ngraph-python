@@ -3050,6 +3050,18 @@ Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
 )
 
 
+def prod_adjoints(self, adjoints, delta, x):
+    x.generate_add_delta(
+        adjoints,
+        broadcast(delta * self, x.axes) / x
+    )
+
+
+Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
+    'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
+)
+
+
 Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
     'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
 )
