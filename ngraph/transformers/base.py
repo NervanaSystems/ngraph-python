@@ -96,7 +96,7 @@ class Computation(NameableValue):
             control_ops.update(op.user_deps)
         processed_ops = set()
         pending_ops = OrderedSet(self.ops)
-        import ipdb; ipdb.set_trace()
+      #_c  import ipdb; ipdb.set_trace()
         while pending_ops:
             op = pending_ops.pop()
             if op in processed_ops:
@@ -130,7 +130,7 @@ class Computation(NameableValue):
                 expected=len(self.parameters),
                 called=len(args),
             ))
-
+ #       import ipdb;ipdb.set_trace()
         # TODO Should this be automatic?
         self.transformer.initialize()
 
@@ -595,6 +595,8 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             )
 
         result = Computation(self, results, *parameters, **kwargs)
+        import ipdb
+ #       ipdb.set_trace()
         self.computations.add(result)
         return result
 

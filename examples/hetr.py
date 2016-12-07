@@ -27,11 +27,11 @@ transformer = ngt.make_transformer_factory('hetr')()
 
 # visualize the graph
 transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
-import ipdb; ipdb.set_trace()
+#import ipdb; ipdb.set_trace()
 # Define a computation
 plus_one = transformer.computation(x_plus_one, x)
 
 # Run the computation
-for i in range(1):
+for i in range(3):
     print(plus_one(i))
 

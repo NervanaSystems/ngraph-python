@@ -13,38 +13,58 @@ class HetrComputation(Computation):
 
     def __init__(self, transformer_obj, returns, *args, **kwargs):
         super(HetrComputation, self).__init__(transformer_obj, returns, *args, **kwargs)
-        # TODO - this traverses all parent returns, prepares some internal state
-        #      - is any of this incorrect/conflicting with traversing it again
-        #        in the child transformer?
-        self.child_computations = []
+        self.child_computations = dict()
+        self.placeholder_ops_pos = dict()
+        self.child_results_map = dict()
+        self.num_results = 0 
 
-    def add_child(self, t, returns, *args, **kwargs):
-        import ipdb; ipdb.set_trace()
-        self.child_computations.append(t.computation(returns, *args, **kwargs))
+    def add_child(self, t, tname, returns, *args, **kwargs):
+        self.child_computations[tname] = (t.computation(returns, *args, **kwargs))
 
     def __call__(self, *params):
         """
-        TODO
-        Implement threading driver to call each of the computations in self.computations
-        :return:
+        Executes child computations in parallel. 
+        
+        :param params: list of values to the placeholders specified in __init__ *args
+        
+        :return: tuple of return values, one per return specified in __init__ returns list. 
         """
 
+        # Wrapper function that calls 'c' with args 'a' and puts the result on a queue 'r'.
         def w(c, a, r):
             r.put(c(*a))
 
         process_list = []
-        return_list = []
-        for c in self.child_computations:
-            # create seperate process for each child computations and pass the tensors in args?
-            return_list.append(Queue())
-            p = Process(target=w, args=(c, params, return_list[-1]))
+        return_list = [None for i in range(self.num_results)] 
+        child_result_q = dict()
+
+        # Map params to each child computation
+        # Run each child in a separate process
+        # Collect child results in multiprocess q
+        for tname, t in self.child_computations.iteritems():
+            q = Queue()
+            targs = [params[i] for i in self.placeholders_pos[tname]]
+
+            if tname in self.child_results_map.keys():
+                child_result_q[tname] = q
+            
+            p = Process(target=w, args=(t, targs, q))
             process_list.append(p)
             p.start()
 
+        # Wait for all child processes to finish
         for p in process_list:
             p.join()
 
-        return return_list[-1].get()
+        # Reverse map child results to flattend list of results
+        # in order expected by parent caller.
+        for tname, q_obj in child_result_q.iteritems():
+            child_results = q_obj.get()
+            for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
+                return_list[parent_idx] = child_results[child_idx]
+
+        return tuple(return_list)
+
 
 
 class HetrTransformer(Transformer):
@@ -64,58 +84,80 @@ class HetrTransformer(Transformer):
         self.child_transformers = dict()
         self.transformer_list = list()
         self.send_nodes_list = list()
-        self.hetr_passes = [DeviceAssignPass(default_device='numpy', default_device_id=0), 
-                           # CommunicationPass(self.send_nodes_list)
+        self.transformer_to_node = {t: list() for t in self.transformer_list}
+
+        self.hetr_passes = [DeviceAssignPass(default_device='numpy', default_device_id=0),
+                           CommunicationPass(self.send_nodes_list, self.transformer_to_node),
                            ChildTransformerPass(self.transformer_list)
                            ]
 
     def computation(self, results, *parameters, **kwargs):
+
         """
+       
+        Build a heterogeneous computation object that implements
+        communication and synchronization between subgraphs run
+        on child transformers.
+
+        :param results: list of required result nodes
+        :param parameters: list of placeholder nodes
+
         TODO
+        :param kwargs: - pass these on to child transformers or what?
 
-        run the HetrPasses here, instead of running them with the other graph passes.
-            * this is probably a bit of a hack, but lets go with it for now
-
-        once the HetrPasses have run, we know which device/transformer hints apply to each node
-
-        use the helper function (build_transformers) to construct child transformers for all the hinted ids in the graph
-
-        build a dictionary mapping from transformer hint_string to results
-            * sendnode should be included as a 'result', but recvnode should be ignored as it will be uncovered by traversal
-
-            i.e. {'numpy0': [x_plus_1, send1],
-                  'numpy1': [some_other_tensor]}
-
-        now, for each transformer in the child transformers, create a child computation, passing in the results for that transformer
-            * i skipped placeholders in the map of results; these need to be mapped in a corresponding way
-
-        Create a HetrComputation object, passing a list of child computations
-
-        return the HetrComputation
-
-        :param results:
-        :param parameters:
-        :param kwargs:
         :return: a HetrComputation object
         """
 
         # Initialize computation
-        result = HetrComputation(self, results, *parameters, **kwargs)
-
+        hc = HetrComputation(self, results, *parameters, **kwargs)
         # Do Hetr passes
         for graph_pass in self.hetr_passes:
             print ("Hetr run graph pass ", graph_pass)
             graph_pass.do_pass(self.all_results)
 
-        # Build child transformers 
+        # Build child transformers
         self.build_transformers(self.all_results)
 
-        #for tname, t in self.child_transformers.iteritems():
-            # TODO need to distinguish between parameters/kwargs for HetrC and childC's
-        t = self.child_transformers['numpy0']
-        result.add_child(t, results, *parameters, **kwargs)
+        self.transformer_to_node = {t: list() for t in self.child_transformers}
+        self.child_results_map = dict()
 
-        return result
+        if type(results) is list:
+            self.results_handlers_len = len(results)
+            for pos, op in enumerate(results):
+                tname  = op.metadata['device']
+                self.transformer_to_node[tname].append(op)
+                self.child_results_map.setdefault(tname,[]).append(pos)
+        else:
+            #if results is not a list, then its default pos = 0
+            tname  = results.metadata['device']
+            self.transformer_to_node[tname].append(results)
+            self.child_results_map.setdefault(tname,[]).append(0)
+            self.results_handlers_len = 1
+
+
+        self.placeholders = {t: list() for t in self.child_transformers}
+        self.placeholders_pos = {t: list() for t in self.child_transformers}
+        self.placeholder_inverse = []
+        for i, p in enumerate(parameters):
+            tname = p.metadata['device']
+            self.placeholders[tname].append(p)
+            self.placeholders_pos[tname].append(i)
+            self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
+
+        # TODO - Refactored to move this part of code to __init__ method in HetrComputation
+        # set the place holder pos in the hetr computation object
+        hc.placeholders_pos = self.placeholders_pos
+        hc.child_results_map = self.child_results_map
+        hc.num_results = self.results_handlers_len
+
+        #create child-computations for all unique keys in child_transformers dict
+        for tname, t in self.child_transformers.iteritems():
+            #result.add_child(val,self.transformer_to_node[key], *parameters, **kwargs)
+            child_ops = self.transformer_to_node[tname]
+            child_placeholders = self.placeholders[tname]
+            hc.add_child(t, tname, child_ops, *child_placeholders)
+
+        return hc
 
     def build_transformers(self, results):
         """

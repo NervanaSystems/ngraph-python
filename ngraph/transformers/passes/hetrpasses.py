@@ -18,16 +18,22 @@ class DeviceAssignPass(PeepholeGraphPass):
 
 
 class CommunicationPass(PeepholeGraphPass):
-    def __init__(self, sendnodes):
+    def __init__(self, sendnodes, dict_transformer_to_op):
         super(CommunicationPass, self).__init__()
         self.send_nodes = sendnodes
+        self.dict_transformer_to_op = dict_transformer_to_op
 
     def visit(self, op):
         args = list()
         for arg in op.args:
             if op.metadata['device'] != arg.metadata['device']:
                 self.send_nodes.append(Send(from_node=arg, device=arg.metadata['device'], device_id=arg.metadata['device_id']))
+                
+                # TODO build a dict to map tarnsformer with the send node
+                #      remove the hardcoded numpy1
+                self.dict_transformer_to_op['numpy1'] = self.send_nodes[-1]  #workaround till wei, add this device attribute to send Op
                 args.append(Recv(axes=arg.axes, dtype=arg.dtype, device=op.metadata['device'], device_id=arg.metadata['device_id']))
+
             else:
                 args.append(arg)
 
