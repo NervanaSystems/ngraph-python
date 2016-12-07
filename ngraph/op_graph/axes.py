@@ -1425,7 +1425,7 @@ class TensorDescription(NameableValue):
         num_dimensions_out = len([s for s in slices if isinstance(s, slice)])
         if len(new_axes) != num_dimensions_out:
             raise ValueError((
-                'in a slice operation, the number of axes pass in to '
+                'in a slice operation, the number of axes passed in to '
                 'new_axes ({num_new_axes}) must be the same as the number of '
                 'slice objects in slices ({num_slices}).'
             ).format(
