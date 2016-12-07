@@ -309,7 +309,7 @@ def test_conv_flatten_deriv(transformer_factory):
 
     # slice away the oD
     out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-    output_npqk = output_nmpqk.slice(out_slicing)
+    output_npqk = ng.tensor_slice(output_nmpqk, out_slicing)
 
     output = ng.flatten_at(output_npqk, idx=1)
 

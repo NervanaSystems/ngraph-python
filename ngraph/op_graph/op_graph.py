@@ -854,20 +854,6 @@ class TensorOp(Op):
 
         self.scale = scale
 
-    def slice(self, slices, axes=None):
-        """
-        Creates a sliced version of a tensor.
-
-        Args:
-            x: The tensor.
-            slices: One slice for each dimension in x.
-            axes: Axes for the result.  If not specified, axes will be generated.
-
-        Returns:
-            A sliced view of the tensor.
-        """
-        return tensor_slice(self, slices, axes)
-
     def generate_add_delta(self, adjoints, delta):
         """
         Adds delta to the backprop contribution..

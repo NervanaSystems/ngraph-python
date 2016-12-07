@@ -17,7 +17,7 @@ from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp
-from ngraph.op_graph.op_graph import Op, ContiguousOp, SetItemOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, SetItemOp, tensor_slice
 
 
 class GPUTensorLayout(PeepholeGraphPass):
@@ -88,4 +88,4 @@ class GPUTensorLayout(PeepholeGraphPass):
             else:
                 new_slices.append(s)
         if flip:
-            self.replace_op(op, SetItemOp(tensor, new_slices, value.slice(copy_slices)))
+            self.replace_op(op, SetItemOp(tensor, new_slices, tensor_slice(value, copy_slices)))
