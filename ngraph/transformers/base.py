@@ -115,15 +115,6 @@ class Computation(NameableValue):
         """
         self.ops = {op.forwarded for op in self.ops}
         ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-
-        executed_ops = set()
-        for op in ordered_ops:
-            for arg in op.args:
-                assert arg in executed_ops
-            for o in op.other_deps:
-                assert o in executed_ops
-            executed_ops.add(op)
-
         self.computation_name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
