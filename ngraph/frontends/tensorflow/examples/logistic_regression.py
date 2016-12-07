@@ -20,49 +20,65 @@ from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
 import numpy as np
 import tensorflow as tf
 import ngraph.transformers as ngt
+import argparse
 
-# setups -> xs: (N, C), y: (N, 1)
-xs_np = np.array([[0.52, 1.12, 0.77], [0.88, -1.08, 0.15],
-                  [0.52, 0.06, -1.30], [0.74, -2.49, 1.39]])
-ys_np = np.array([[1], [1], [0], [1]])
-max_iter = 10
-lrate = 0.1
 
-# placeholders
-x = tf.placeholder(tf.float32, shape=(4, 3))
-t = tf.placeholder(tf.float32, shape=(4, 1))
-w = tf.Variable(tf.zeros([3, 1]))
-y = tf.nn.sigmoid(tf.matmul(x, w))
-log_likelihoods = tf.log(y) * t + tf.log(1 - y) * (1 - t)
-cost = -tf.reduce_sum(log_likelihoods)
-init_op = tf.initialize_all_variables()
+def logistic_regression(args):
+    # setups -> xs: (N, C), y: (N, 1)
+    xs_np = np.array([[0.52, 1.12, 0.77], [0.88, -1.08, 0.15],
+                      [0.52, 0.06, -1.30], [0.74, -2.49, 1.39]])
+    ys_np = np.array([[1], [1], [0], [1]])
 
-# import graph_def
-importer = TFImporter()
-importer.import_graph_def(tf.get_default_graph().as_graph_def())
+    # placeholders
+    x = tf.placeholder(tf.float32, shape=(4, 3))
+    t = tf.placeholder(tf.float32, shape=(4, 1))
+    w = tf.Variable(tf.zeros([3, 1]))
+    y = tf.nn.sigmoid(tf.matmul(x, w))
+    log_likelihoods = tf.log(y) * t + tf.log(1 - y) * (1 - t)
+    cost = -tf.reduce_sum(log_likelihoods)
+    init_op = tf.initialize_all_variables()
 
-# get handle of ngraph ops
-x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init_op])
+    # import graph_def
+    importer = TFImporter()
+    importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
-# transformer and computations
-transformer = ngt.make_transformer()
-updates = SGDOptimizer(lrate).minimize(cost_ng)
-train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
-init_comp = transformer.computation(init_op_ng)
-transformer.initialize()
+    # get handle of ngraph ops
+    x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init_op])
 
-# train
-init_comp()
-for idx in range(max_iter):
-    loss_val, _ = train_comp(xs_np, ys_np)
-    print("[Iter %s] Cost = %s" % (idx, loss_val))
+    # transformer and computations
+    transformer = ngt.make_transformer()
+    updates = SGDOptimizer(args.lrate).minimize(cost_ng)
+    train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
+    init_comp = transformer.computation(init_op_ng)
+    transformer.initialize()
 
-with tf.Session() as sess:
-    train_step = tf.train.GradientDescentOptimizer(lrate).minimize(cost)
-    sess.run(init_op)
-
-    for idx in range(max_iter):
-        cost_val, _ = sess.run([cost, train_step],
-                               feed_dict={x: xs_np,
-                                          t: ys_np})
+    # train
+    init_comp()
+    ng_cost_vals = []
+    for idx in range(args.max_iter):
+        cost_val, _ = train_comp(xs_np, ys_np)
+        ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    # tensorflow for comparison
+    with tf.Session() as sess:
+        train_step = tf.train.GradientDescentOptimizer(args.lrate).minimize(cost)
+        sess.run(init_op)
+        tf_cost_vals = []
+        for idx in range(args.max_iter):
+            cost_val, _ = sess.run([cost, train_step],
+                                   feed_dict={x: xs_np,
+                                              t: ys_np})
+            tf_cost_vals.append(float(cost_val))
+            print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    return ng_cost_vals, tf_cost_vals
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--max_iter', type=int, default=10)
+    parser.add_argument('-l', '--lrate', type=float, default=0.1,
+                        help="Learning rate")
+    args = parser.parse_args()
+    logistic_regression(args)
