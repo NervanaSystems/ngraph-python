@@ -19,7 +19,7 @@ import ngraph as ng
 
 class OpsNN(OpsBase):
     """
-    Mix-in class for matrix multiplication ops:
+    Mix-in class for NN ops:
     """
     def FC(self, c2_op, inputs):
         """

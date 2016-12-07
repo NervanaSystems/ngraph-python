@@ -13,9 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-import sys
 # importer
 from ngraph.frontends.caffe2.c2_importer.ops_bridge import OpsBridge
+from caffe2.python import workspace
 
 
 class C2Importer:
@@ -158,41 +158,47 @@ class C2Importer:
         else:
             return self.get_op_handle_by_name(c2_op)
 
-    def _get_unimplemented_ops(self, pb_path):
+    def _get_supported_ops(self):
         """
-        Returns a list of unimplemented ops' names.
+        Returns a list of supported ops' names.
 
         Arguments:
-            pb_path: Protobuf file path.
 
         Returns:
-            List of unimplemented ops' names.
+            List of supported ops' names.
         """
-        # get required op
-        with open(pb_path) as f:
-            lines = f.readlines()
-            lines = [l.strip() for l in lines]
-
-            required_ops = set()
-            for line in lines:
-                if line[:3] == 'op:':
-                    op_name = line.split(' ')[1][1:-1]
-                    required_ops.add(op_name)
-
-        # get supported ops
         ob = OpsBridge()
         supported_ops = set([
             name for name in dir(ob)
             if name[:1] != "_" and name not in ob.__dict__
         ])
+        return sorted(list(supported_ops))
+
+    def _get_unimplemented_ops(self):
+        """
+        Returns a list of unimplemented ops' names.
+
+        Arguments:
+
+        Returns:
+            List of unimplemented ops' names.
+        """
+        # get required op
+        ops = workspace.RegisteredOperators()
+        required_ops = set(ops)
 
         # get unimplemented ops
-        unimplemented_ops = required_ops - supported_ops
+        unimplemented_ops = required_ops - set(self._get_supported_ops())
         return sorted(list(unimplemented_ops))
-
 
 if __name__ == '__main__':
     # get unimplemented ops
     importer = C2Importer()
-    ops = importer._get_unimplemented_ops(sys.argv[1])
-    print(ops)
+    supported_ops = importer._get_supported_ops()
+    unimplemented_ops = importer._get_unimplemented_ops()
+
+    for op in supported_ops:
+        print("+ {}".format(op))
+
+    for op in unimplemented_ops:
+        print("- {}".format(op))
