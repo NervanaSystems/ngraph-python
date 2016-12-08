@@ -112,39 +112,36 @@ kernels = {
     "hgemm_nn_16x64": {"threads": 128, "sass": "hgemm_nn_16x64", "params": "gemm", "share": "(16*64 + 32)*2 + 64*64*2 + 4" },
 
     # RNN kernels
-    "sgemm_rnn_nn_128x32":    {"threads": 128, "sass": "sgemm_nn_rnn_128x32",       "params": "gemm_rnn",   "share": "(128*16 + 32)*2 + 32*16*2 + 4"},
-    "sgemm_rnn_nn_vec_128x32":    {"threads": 128, "sass": "sgemm_nn_rnn_128x32",       "params": "gemm_rnn",   "share": "(128*16 + 32)*2 + 32*16*2 + 4", "args": {"vec": "1"}},
-
-    "sgemm_rnn_bprop_tn_128x32":    {"threads": 128, "sass": "sgemm_tn_rnn_bprop_128x32",       "params": "gemm_rnn_bprop",   "share": "(128*16 + 32)*2 + 32*16*2 + 4"},
-    "sgemm_rnn_bprop_tn_vec_128x32":    {"threads": 128, "sass": "sgemm_tn_rnn_bprop_128x32",       "params": "gemm_rnn_bprop",   "share": "(128*16 + 32)*2 + 32*16*2 + 4", "args": {"vec": "1"}},
-
-    "persistent_rnn_fprop": {"threads": 256, "sass": "persistent_rnn_fprop", "params": "rnn_fprop", "share": "(64*48) + 4"},
-    "persistent_rnn_bprop": {"threads": 256, "sass": "persistent_rnn_bprop", "params": "rnn_bprop", "share": "(64*48) + 4"},
+    "sgemm_rnn_nn_128x32":           {"threads": 128, "sass": "sgemm_nn_rnn_128x32",       "params": "gemm_rnn",       "share": "(128*16 + 32)*2 + 32*16*2 + 4"},
+    "sgemm_rnn_nn_vec_128x32":       {"threads": 128, "sass": "sgemm_nn_rnn_128x32",       "params": "gemm_rnn",       "share": "(128*16 + 32)*2 + 32*16*2 + 4", "args": {"vec": "1"}},
+    "sgemm_rnn_bprop_tn_128x32":     {"threads": 128, "sass": "sgemm_tn_rnn_bprop_128x32", "params": "gemm_rnn_bprop", "share": "(128*16 + 32)*2 + 32*16*2 + 4"},
+    "sgemm_rnn_bprop_tn_vec_128x32": {"threads": 128, "sass": "sgemm_tn_rnn_bprop_128x32", "params": "gemm_rnn_bprop", "share": "(128*16 + 32)*2 + 32*16*2 + 4", "args": {"vec": "1"}},
+    "persistent_rnn_fprop":          {"threads": 256, "sass": "persistent_rnn_fprop",      "params": "rnn_fprop",      "share": "(64*48) + 4"},
+    "persistent_rnn_bprop":          {"threads": 256, "sass": "persistent_rnn_bprop",      "params": "rnn_bprop",      "share": "(64*48) + 4"},
 
     # Flex conv
-    #"fconv_bprop_C1_N64":   {"threads":  32, "sass": "hconv_bprop_C1_N64",    "params": "bprop1", "share": " 32*8*2 +  64*8*2", "args": {"int16": 1}},  # I don't think this kernel exists!
-    "fconv_bprop_C128_N128":  {"threads": 256, "sass": "hconv_xprop_X128_N128", "params": "bprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C128_N64":   {"threads": 128, "sass": "hconv_xprop_X128_N64",  "params": "bprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C32_N128":   {"threads":  64, "sass": "hconv_xprop_X32_N128",  "params": "bprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C64_N128":   {"threads": 128, "sass": "hconv_xprop_X64_N128",  "params": "bprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C64_N64":    {"threads":  64, "sass": "hconv_xprop_X64_N64",   "params": "bprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_fprop_K128_N128":  {"threads": 256, "sass": "hconv_xprop_X128_N128", "params": "fprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K128_N64":   {"threads": 128, "sass": "hconv_xprop_X128_N64",  "params": "fprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K32_N128":   {"threads":  64, "sass": "hconv_xprop_X32_N128",  "params": "fprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K64_N128":   {"threads": 128, "sass": "hconv_xprop_X64_N128",  "params": "fprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K64_N64":    {"threads":  64, "sass": "hconv_xprop_X64_N64",   "params": "fprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_updat_C128_K128":  {"threads": 256, "sass": "hconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
-    "fconv_updatD_C128_K128": {"threads": 256, "sass": "hconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
-    "fconv_updat_C128_K64":   {"threads": 128, "sass": "hconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
-    "fconv_updatD_C128_K64":  {"threads": 128, "sass": "hconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
+    "fconv_bprop_C128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "bprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "bprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_fprop_K128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "fprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "fprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "fprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "fprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "fprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_updat_C128_K128":  {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
+    "fconv_updatD_C128_K128": {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
+    "fconv_updat_C128_K64":   {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
+    "fconv_updatD_C128_K64":  {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
 
     # Flex gemm
-    "fgemm_nn_128x128":       {"threads": 256, "sass": "hgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
-    "fgemm_nt_128x128":       {"threads": 256, "sass": "hgemm_nt_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
-    "fgemm_tn_128x128":       {"threads": 256, "sass": "hgemm_tn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
-    "fgemm_nn_vec_128x128":   {"threads": 256, "sass": "hgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
-    "fgemm_nt_vec_128x128":   {"threads": 256, "sass": "hgemm_nt_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
-    "fgemm_tn_vec_128x128":   {"threads": 256, "sass": "hgemm_tn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
+    "fgemm_nn_128x128":       {"threads": 256, "sass": "fgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
+    "fgemm_nt_128x128":       {"threads": 256, "sass": "fgemm_nt_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
+    "fgemm_tn_128x128":       {"threads": 256, "sass": "fgemm_tn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
+    "fgemm_nn_vec_128x128":   {"threads": 256, "sass": "fgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
+    "fgemm_nt_vec_128x128":   {"threads": 256, "sass": "fgemm_nt_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
+    "fgemm_tn_vec_128x128":   {"threads": 256, "sass": "fgemm_tn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"vec": "1", "int16": 1}},
 
 }
 
