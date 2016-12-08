@@ -204,31 +204,24 @@ class GEMMKernel(GPUKernel):
         else:
             raise TypeError("Only floating point dot currently supported.")
 
-        # TODO: Flex may not have all "size" options
+        # TODO: Flex may not have all "size" options (Urs)
         self.kernel = kernel_specs.get_kernel("_".join((clss, op, size)), vec_opt)
-        if clss is not "fgemm":
-            self.params = [
-                (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
-                C.td, A.td, B.td, 1.0, 0.0, 0, int(lda), int(ldb), int(ldc),
-                int(m), int(n), int(k),
-                0, 0, 0, 0]
-        else:
+        # alpha, beta, and flex params if fgemm
+        alpha, beta = 1.0, 0.0
+        if clss == "fgemm":
             scaleAB = A.flex_entry().scale * B.flex_entry().scale
             flex_entry_C = C.flex_entry()
             scaleC = flex_entry_C.scale
-            self.params = [
-                (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
-                C.td, A.td, B.td, 1.0 * scaleAB, 0.0 * scaleC, 0, int(lda), int(ldb), int(ldc),
-                int(m), int(n), int(k),
-                0, 0, 0, 0,
-                flex_entry_C.ptr, 1. / scaleC]
-            # flex_params_info: (index into params, flex_entry, is_output (invert))
-            # so basically take every parameter that is related to scale and make a tuple - yuck
-            # for example:
-            self.flex_params_info = [(20, flex_entry_C, True)]  # FLEX TODO rest of the scale related params
-            # TODO talk to stewart about this
-            # alpha and beta are hard coded?
-            # what to do about scaleAB?
+            alpha *= scaleAB
+            beta *= scaleC
+        # create params
+        self.params = [
+            (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
+            C.td, A.td, B.td, alpha, beta, 0, int(lda), int(ldb), int(ldc),
+            int(m), int(n), int(k),
+            0, 0, 0, 0]
+        if clss == "fgemm":
+            self.params += [flex_entry_C.ptr, 1. / scaleC]
 
     def bind_buffers(self):
         """

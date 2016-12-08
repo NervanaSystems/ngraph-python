@@ -22,7 +22,7 @@ from pycuda.compiler import SourceModule
 
 import numpy as np
 
-flex_verbose = True
+flex_verbose = False
 
 
 _op_templates = {
@@ -815,7 +815,7 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     header = _header_template % {
         "defines": defines,
         "kernel_name": kernel_name,
-        "args": argstring,
+        "args": argstring
     }
 
     # Initialization code
@@ -888,8 +888,6 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     return code
 
 
-
-
 def _generate_kernel_args(ctx, axes_mapping, dims):
     """
     Generates a list of parameters which need to be passed to the CUDA kernel
@@ -924,7 +922,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         params.append(ctx.constants[constant])
 
     for buf in ctx.buffers.keys():
-        args.append(_get_register_type(buf.dtype, True) + "*" + ctx.buffers[buf])
+        args.append(_get_register_type(buf.dtype, True) + "* " + ctx.buffers[buf])
         args.append("unsigned int stridea_" + ctx.buffers[buf])
         arg_desc = arg_desc + "PI"
         params.append(buf.td)
@@ -1072,7 +1070,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     index = "idx" + str(loop_axis)
                 else:
                     index = "item"
-                op_code = _op_templates[op[0]] % {  # e.g. out = x + y, reg2 = reg0 + reg1
+                op_code = _op_templates[op[0]] % {
                     "x": ctx.register_mapping[op[1]],
                     "y": ctx.register_mapping[op[2]],
                     "out": ctx.register_mapping[op[3]],
@@ -1085,7 +1083,6 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     "out": ctx.register_mapping[op[3]],
                     "index": "item"
                 }
-                # FLEX TODO way of incorporating flex_maxabs
                 redop_code = _redop32_templates[op[0]] % {
                     "out": ctx.register_mapping[op[3]],
                     "y": ctx.register_mapping[op[2]],
@@ -1095,7 +1092,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                 if axes_mapping[loop_axis][1] <= 32:
                     warp_red_code = _red32_template % {
-                        "statement": redop_code,
+                        "statement": redop_code
                     }
                 else:
                     sbuf = "sbuffer" + str(len(shared_buffers))
@@ -1149,7 +1146,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     elif type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
-                            "in": reg_name,
+                            "in": reg_name
                         }
                     else:
                         store_code = _default_conversion % {
@@ -1215,6 +1212,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                                  kernel_identifier)
 
     return (code, kernel_name, arg_desc, params)
+
 
 def _prepare_compound_kernel(ops):
     """
@@ -1286,7 +1284,7 @@ class CudaSourceFile:
         self.f.flush()
 
         if flex_verbose: print "CudaSourceFile temporary file", self.filename
-        self.flex_includes_written = False  # hack - relying on _get_compound_kernel processing of params to know if we have a flex kernel
+        self.flex_includes_written = False  # FLEX TODO hack - relying on _get_compound_kernel processing of params to know if we have a flex kernel
 
     def add_kernel(self, ops):
         assert not self.compiled
