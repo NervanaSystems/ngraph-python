@@ -603,7 +603,7 @@ class GPUTensorAllocator():
 
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUArray(tensor_description.shape,
-                              self.transformer.storage_dtype(tensor_description),
+                              tensor_description.dtype, #self.transformer.storage_dtype(),  # conversion templates in float_ew
                               gpudata=gpudata,
                               strides=tensor_description.strides)
 
@@ -1082,5 +1082,5 @@ class GPUTransformer(Transformer):
         for alloc in self.buffer_allocators:
             alloc()
 
-    def storage_dtype(self, tensor_description):
-        return tensor_description.dtype
+    def storage_dtype(self):
+        return np.dtype(np.float32)  # current implementation, i.e. what default_dtype currently returns

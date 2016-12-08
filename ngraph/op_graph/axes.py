@@ -1161,7 +1161,11 @@ class TensorDescription(NameableValue):
         self.__buffer = None
         self.__register = None
         self.__base = base
-        self.dtype = default_dtype(dtype)
+        self.dtype = np.dtype(np.int16)  # HARD CODED FOR FLEX
+                                         # 1. TensorDescription refactor needs to address setting dtype before transformer is known
+                                         # 2. meaning of default_dtype (abstract versus a device specific storage type)
+                                         # 3. attributes derived from dtype that is set here, that prevent
+                                         #    self.dtype = transformer.storage_dtype()   in initialization method
         self.offset = offset
         self.ndim = len(self.axes)
         self.__read_only = False

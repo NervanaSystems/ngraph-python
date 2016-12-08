@@ -51,8 +51,8 @@ class FlexGPUTransformer(GPUTransformer):
 
         return ret_val
 
-    def storage_dtype(self, tensor_description):
-        return np.dtype(np.int16)  # for flex16
+    def storage_dtype(self):
+        return np.dtype(np.int16)  # for flex16, TODO derive from FlexEntry (i.e. future flex8)
 
 
 class FlexGPUDeviceTensor(GPUDeviceTensor):

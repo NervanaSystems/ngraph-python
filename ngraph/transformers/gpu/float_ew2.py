@@ -262,8 +262,7 @@ class TensorDescriptionWrapper:
     shape and strides.
     """
     def __init__(self, tensor_description, max_dims=1, gemm=False):
-        # dtype is tensor_description.dtype if not flex, otherwise flex storage (i.e. int16)
-        self.dtype = tensor_description.transformer.storage_dtype(tensor_description)
+        self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
         self.td = tensor_description
