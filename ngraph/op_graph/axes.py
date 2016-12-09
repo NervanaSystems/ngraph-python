@@ -552,13 +552,6 @@ class CastingAxis(Axis):
         """
         self.annotated_axis.add(axis_role)
 
-    def __eq__(self, other):
-        if not isinstance(other, Axis):
-            return False
-        elif self.match_on_length or other.match_on_length:
-            return self.length == other.length
-        return self.annotated_axis is other.annotated_axis
-
     def __repr__(self):
         return 'CastingAxis({name}={cname}: {length})'.format(name=self.annotated_axis.name,
                                                               cname=self.cast_axis.name,
