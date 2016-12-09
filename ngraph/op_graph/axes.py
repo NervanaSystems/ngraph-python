@@ -1503,16 +1503,35 @@ class TensorDescription(NameableValue):
             The unflattened tensor description.
         """
         def find_axis_stride_and_length(axis):
+            """
+            Find the stride and length for an axis.
+
+            Start at the current tensor description and then work back
+            through reshapings of it looking for a mention of the axis
+            that can be used to determine the storage stride and offset.
+
+            Args:
+                axis: The axis.
+
+            Returns:
+                stride, length of axis
+
+            """
             td = self
             while td is not None:
                 for idx, a in enumerate(td.axes):
+                    # Try to find a match for axis in this td
                     full_strides = td.full_strides[idx]
                     full_sizes = td.full_sizes[idx]
                     if a == axis:
                         return full_strides, full_sizes
 
                     if a.is_flattened:
+                        # Can be embedded ina a flattened axis description
                         if not isinstance(full_strides, tuple):
+                            # An axis cast can lose striding info, so need to
+                            # recreate it from the axis lengths. Being flattened
+                            # implies C-contiguous
                             stride = full_strides
                             full_strides = []
                             full_sizes = []
@@ -1521,15 +1540,20 @@ class TensorDescription(NameableValue):
                                 full_strides.insert(0, stride)
                                 stride = stride * s.length
 
+                        # Now search for axis in the flattened axis
                         for sub_idx, b in enumerate(a.axes):
                             if b == axis:
                                 return full_strides[sub_idx], full_sizes[sub_idx]
 
                     if a.is_casting_axis:
+                        # The axis is a cast of some other axis pulled in through some
+                        # operation like dot. Try to work down through what it was
+                        # casting.
                         cast_axis = a.cast_axis
                         if cast_axis == axis:
                             return full_strides, full_sizes
 
+                # Move on to the next tensor description in the reshaping chain
                 td = td.next_tensor_description
 
             raise ValueError()
