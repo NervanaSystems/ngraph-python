@@ -222,6 +222,9 @@ class GEMMKernel(GPUKernel):
             0, 0, 0, 0]
         if clss == "fgemm":
             self.params += [flex_entry_C.ptr, 1. / scaleC]
+            self.output_flex_ids = [flex_entry_C.flex_id]
+            # FLEX TODO:
+            #self.flex_scale_info = [(index into params, FlexScaleDescription)] # currently unsupported for scaleAB
 
     def bind_buffers(self):
         """

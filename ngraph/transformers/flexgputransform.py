@@ -13,12 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage
+from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
 from ngraph.transformers.flex2 import FlexManager, Flex
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
-flex_verbose = False
+flex_verbose = True
 
 class FlexGPUTransformer(GPUTransformer):
     """
@@ -104,18 +104,32 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def __init__(self, transformer, name):
         super(FlexGPUKernelGroup, self).__init__(transformer, name)
 
-    def get_output_flex_ids(self):
-        """
-        Returns:
-            list of flex ids corresponding to outputs of this kernel group
-        """
-        # TODO better way of getting "output" tensors discussed in Thurs meeting
+    def compile_all(self):
+
+        super(FlexGPUKernelGroup, self).compile_all()
+
+        # store output tensor flex ids
+        # "output" tensors: tensors that will be modified by this kernel group
         output_ids = []
-        for k in self.kernels:
-            for p in k.params:
-                if isinstance(p, FlexScaleDescription) and p.is_output:
-                    output_ids.append(p.flex_entry.flex_id)
-        return output_ids
+        for kernel in self.kernels:
+            if isinstance(kernel, ElementWiseKernel):
+                # look for FlexScaleDescription.is_output
+                # at compile time scales have not been bound yet so this still exists
+                for p in kernel.params:
+                    if isinstance(p, FlexScaleDescription) and p.is_output:
+                        output_ids.append(p.flex_entry.flex_id)
+            else:
+                # all other kernels (gemm, conv) required to have output_flex_ids list attribute
+                output_ids.extend(kernel.output_flex_ids)
+        self.output_flex_ids = output_ids
+
+        # store index and description of flex scale params that need to be changed each call
+        for kernel in self.kernels:
+            if isinstance(kernel, ElementWiseKernel):
+                scale_info = [(i, p) for i, p in enumerate(kernel.params) if isinstance(p, FlexScaleDescription)]
+                kernel.flex_scale_info = scale_info
+            else:
+                raise NotImplementedError  # TODO gemm and conv
 
     def setup_kernel_execute(self, kernel):
         """
@@ -124,20 +138,15 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         """
 
         # adjust scale of previously touched tensors (equivalent of neon flexsim output_flex)
-        # TODO: is this a good assumption, that outputs of this kernel group are
-        # the "previously touched tensors"?
-        for flex_id in self.get_output_flex_ids():
+        for flex_id in self.output_flex_ids:
             self.transformer.flex_manager.flex_entries[flex_id].adjust_scale()
 
-        # set flex scale kernel parameters
-        # this is a "bind_flex_scales" method, move into a FlexGPUKernel subclass?
-        # (would that require lots of boilerplate)
-        for index in range(len(kernel.params)):
-            param = kernel.params[index]
-            if isinstance(param, FlexScaleDescription):
-                scale = param.flex_entry.scale
-                scale = 1.0/scale if param.is_output else scale
-                kernel.params[index] = scale
+        # bind flex scale kernel parameters
+        # make a method (would that require lots of boilerplate)
+        for index, flex_scale_desc in kernel.flex_scale_info:
+            scale = flex_scale_desc.flex_entry.scale
+            scale = 1.0/scale if flex_scale_desc.is_output else scale
+            kernel.params[index] = scale
 
     def __call__(self):
         """
@@ -147,10 +156,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         super(FlexGPUKernelGroup, self).__call__()
 
         # autoflex after calling GPUKernelGroup that is executor for computation
-        touched_flex_ids = self.get_output_flex_ids()
-        if flex_verbose: print "touched_flex_ids", touched_flex_ids
+        if flex_verbose: print "calling autoflex, autoflexing flex_ids:", self.output_flex_ids
 
-        if flex_verbose: print "calling autoflex, autoflexing flex_ids:", touched_flex_ids
         # autoflex sets up everything needed to adjust_scale before next use of these output tensors
         # if try to do it right away, scale for this computation is nonsensical
-        self.transformer.flex_manager.autoflex(touched_flex_ids)
+        self.transformer.flex_manager.autoflex(self.output_flex_ids)

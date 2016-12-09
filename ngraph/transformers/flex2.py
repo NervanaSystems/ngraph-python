@@ -1,6 +1,7 @@
 import pycuda.driver as drv
 from collections import deque
 from math import sqrt
+from struct import pack, unpack
 
 import numpy as np
 
@@ -10,18 +11,22 @@ DEFAULT_DEC = 8  # use DEFAULT_DEC = 8 for 8.8 fixed point
 # initialization
 
 
-fixed_point = True
-flex_verbose = False
-SUPERVERBOSE = True
+fixed_point = False
+flex_verbose = True
+flex_verbose1 = True
 autoflex_config = {'stats_queue_len': 16,
                    'num_std': 3,  # 6,
                    'offset': 100,  # 16384,
                    'stale_threshold': 1200,  # existing, arbitrary
                   }
 
-# methods copied from neon flexsim
 class Flex(object):
+    """
+    Flex data type
+        flex16 = Flex(storage_bits=16)
 
+    strip_mantissa and get_scale methods copied from neon flexsim
+    """
     def __init__(self, storage_bits):
 
         if storage_bits % 8 != 0:
@@ -39,9 +44,12 @@ class Flex(object):
         else:
             raise NotImplementedError
 
-        # TODO: refactor this
-        self.expmax = float(1 << self.high_bit - 1)
-        self.rExpmax = 1.0/self.expmax
+        # following neon flexsim naming
+        expmax = float(1 << self.high_bit - 1)  # TODO: check if neon __str__ is obsolete (assumptions)
+        self.rExpmax = 1.0/expmax  # in neon flexsim, effectively only used in get_scale
+        # set
+        self.pclip = float(1 << self.high_bit) - 1.0
+        self.nclip = -float(1 << self.high_bit)
 
     @staticmethod
     def strip_mantissa(val):
@@ -53,7 +61,7 @@ class Flex(object):
         f = unpack('f', pack('I', i))[0]
         return f
 
-    def get_scale(maxval):
+    def get_scale(self, maxval):
         scl = Flex.strip_mantissa(maxval) * self.rExpmax
         if scl == 0:
             # an all zero tensor provides no magnitude hint; scl=1 avoids div/0
@@ -72,36 +80,50 @@ class FlexEntry(object):
     """
 
     def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=flex16, is_flex=True):
+
         # TODO: add name?
         self.is_flex = is_flex   # unused, stub for turning off flex selectively (by keeping dec fixed)
 
-        #self.dtype = np.dtype(dtype)  # when dtype was np.int16
-        #self.bits = self.dtype.itemsize * 8
         self.dtype = dtype  # flex16 or future flex8
-        self.high_bit = dtype.storage_bits - 1  # 15, was called self.bits in neon
 
-        self.dec = dec
+        # dynamically adjusted dec
         self.scale = 1./2**dec
-        self.stat_idx = stat_idx  # index into maxabs device buffer
-        self.ptr = stat_ptr  # pointer to maxabs in device buffer
+
+        # tensor maxabs returned by device
+        self.stat_idx = stat_idx    # index into maxabs device buffer
+        self.ptr = stat_ptr         # pointer to maxabs in device buffer
+
+        # adjust dec using this information
         self.stats = deque(maxlen=autoflex_config['stats_queue_len'])
-        self.adjust_count = 0
         self.overflows = 0
-        self.dirty = False  # whether to adjust_scale
+
+        # bookkeeping
+        self.initialized = False    # TODO: initialization of flex tensors
+        self.adjust_count = 0       # how many times adjust_count has been called,
+                                    # not how many times actually adjusted
+                                    # TODO interaction with age
+        self.do_adjust = False    # whether scale adjustment may be necessary b/c
+                                        # tensor was touched
 
         # for storing diagnostic info (scale, maxabs, overflows)
         self.flex_manager = flex_manager
 
-
     @property
     def flex_id(self):
         return self.stat_idx
+
+    @property
+    def dec(self):
+        return int(np.log2(1.0/self.scale))
 
     def refresh(self, maxabs, age):
         """
         Always happens when a flex tensor is touched
         functionality of neon flexsim FlexData update and parts of adjust_scale methods
         """
+
+        if flex_verbose1: print "  refresh"
+
         # record most recent stats for this tensor
         self.maxabs = maxabs
         self.age = age
@@ -119,18 +141,26 @@ class FlexEntry(object):
         self.record_data()
 
         # mark for future scale adjustment before next use
-        self.dirty = True
+        self.do_adjust = True
 
     def adjust_scale(self):
+
+        if flex_verbose1: print "  adjust_scale"
 
         # if fixed point, don't adjust scale
         if fixed_point:
             return
 
+        # initialization if needed
+        if not self.initialized:
+            print "initializing flex tensor scale (current a no-op)"
+            self._initialize()
+            self.initialized = True
+            return
+
         # check if we actually want to adjust scale
-        if not self.dirty:
-            # TODO: **** this is where INITIALIZATION should happen? ****
-            print "you tried to adjust_scale for a not dirty flex entry"
+        if not self.do_adjust:
+            print "adjust_scale not needed, tensor has not been modified"
             return
 
         # used in autoflex algorithm
@@ -140,18 +170,10 @@ class FlexEntry(object):
         stats = self.stats
         rN = 1.0 / len(stats)
         self.mean = mean = sum(stats) * rN
-        self.std = std = sqrt(sum(xm*xm for xm in (x - mean for x in stats)) * rN)
+        self.std = sqrt(sum(xm*xm for xm in (x - mean for x in stats)) * rN)
 
+        # actually adjustment (if necessary)
         self._adjust_scale_helper()
-
-        # TODO adjust if necessary
-        # hard code for testing for now
-        # if test_autoflex:
-        #    # decide that adjustment is needed, and what new value should be (timing of latter)
-        #    if self.stat_idx == 2:
-        #        self.dec = 1
-        #    print 'old scale {}, new scale {}'.format(self.scale, 1.0/2**self.dec)
-        #    self.scale = 1.0/2**self.dec
 
         # Impose a lower bound for small exponents
         if np.log2(self.scale) < -32:  #
@@ -161,13 +183,17 @@ class FlexEntry(object):
         if np.log2(self.scale) > 0:  #
             self.scale = 1  # self.dtype.rExpmax
 
-        self.dirty = False  # RP: self.dirty is basically self.adjust in neon flexsim
+        self.do_adjust = False  # RP: self.do_adjust is basically self.adjust in neon flexsim
+
+    def _initialize(self):
+        # TODO
+        pass
 
     def _adjust_scale_helper(self):
-        # RP: this method exists to help me isloate the sprawl from neon flexsim
-        # TODO: convert from neon dtype.bits to gflex dtype.storage_bits
 
-        # copied from neon flexsim:
+        # RP: this method exists to help me isloate the sprawl from neon flexsim
+
+        # RP: explanation copied from neon flexsim:
         # Estimate the maximum possible value for the next output and use that
         # to set the scale. We take the max of the most recent stats then add 3
         # standard deviations. We also add on the size of the previous scale to
@@ -175,27 +201,28 @@ class FlexEntry(object):
         # scale value is the magnitude of a number with a flex value of 1. This
         # should ensure over 99% accuracy in not overflowing, while at the same
         # time keeping bit utilization as high as possible.
-        if self.adjust_count > (self.age >> 4):  # TODO: CLEANUP figure out how to change/parameterize this
+
+        # TODO: CLEANUP figure out how to change/parameterize this
+        if self.adjust_count > (self.age >> 4):
             # was 100. going to a full bit worth of buffer (only fill half of the 32k available values)
-            maxval = max(stats) + autoflex_config['num_std']*std + self.scale*autoflex_config['offset']
+            maxval = max(self.stats) + autoflex_config['num_std']*self.std + self.scale*autoflex_config['offset']
         else:
             # for infrequently updated tensors, use the most recent values instead of the full history.
             # also tack on a healthy safety margin.
-            maxval = max(deque(stats, maxlen=2)) + self.scale * (1 << self.high_bit - 3)
+            maxval = max(deque(self.stats, maxlen=2)) + self.scale * (1 << self.dtype.high_bit - 3)
 
         # convert maxval to scale
-        old_scale = self.scale
-        #self.scale = self.dtype.get_scale(maxval)
-        self.scale = self.dtype.get_scale(maxval)  # TODO clean up Flex dtype, get_scale, bits, etc
-        if SUPERVERBOSE: print "(from {} to {})".format(old_scale, self.scale)
+        old_dec = self.dec
+        self.scale = self.dtype.get_scale(maxval)
+        if flex_verbose: print "(adjusting DEC from {} to {})".format(old_dec, self.dec)
 
     def detect_overflow(self):
-        if self.maxabs >= (1 << self.high_bit) - 1:
+        if self.maxabs >= (1 << self.dtype.high_bit) - 1:  # copied from neon, check
             # update count
             self.overflows += 1
 
             # record overflow
-            self.transformer.record_diagnostics(['overflow'], self,
+            self.flex_manager.record_diagnostics(['overflow'], self,
                     [self.flex_manager.autoflex_count], record_timestamp=False)
 
             # clear the deque
@@ -211,7 +238,7 @@ class FlexEntry(object):
         For visualizations
         """
         # TODO test
-        self.transformer.record_diagnostics(['maxabs', 'scale'],
+        self.flex_manager.record_diagnostics(['maxabs', 'scale'],
                 self,
                 [self.maxabs, self.scale],
                 record_timestamp=True)
@@ -274,7 +301,7 @@ class FlexManager(object):
 
     def autoflex(self, flex_ids):
         """
-        Autoflex without double buffer, dirty buffer.
+        Autoflex without double buffer, dirty (do_adjust) buffer.
         Scale adjustment delayed until next use of output tensor.
 
         Arguments:
@@ -306,9 +333,10 @@ class FlexManager(object):
         # TODO old flex vis code has individual dictionaries,
         # can break them out as in maxabs_record = records['maxabs']
 
+        all_records = diagnostic_records
         if record_timestamp:
-            all_records = diagnostic_records + ['timestamp']
-            values = values + [self.autoflex_count]
+            all_records += ['timestamp']
+            values += [self.autoflex_count]
 
         key = flex_entry.flex_id
         for record_type, val in zip(all_records, values):

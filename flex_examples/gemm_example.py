@@ -51,8 +51,10 @@ def test_gemm(n, c):
 
     w = np.ones(c)*0.1
     xs = np.ones(n*c).reshape(c, n)
-    y_hat_val = update_fun(xs)
-    print("Y: %s" % y_hat_val)
+
+    for ii in range(3):
+        y_hat_val = update_fun(xs)
+        print("Y: %s" % y_hat_val)
 
     return transformer
 
