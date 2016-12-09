@@ -44,6 +44,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
@@ -151,6 +152,26 @@ class NumPyConvEngine(object):
                 else:
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
+    
+        def fprop_lut(self, lut, idx, axis, output):
+            V, F = lut.shape
+            T, N = idx.shape
+            idx = idx.reshape(T*N, -1).squeeze().astype(int)
+            output[:] = lut.take(idx, axis).reshape(output.shape)
+
+        def update_lut(self, error, idx, pad_idx, axis, dW):
+            dW[:] = 0
+            T, N = idx.shape
+            F, Te, Ne = error.shape
+            error = error.reshape(F, -1)
+            assert (Te == T and Ne == N), "lookup indices shape and error shape are not compatible"
+            idx = idx.reshape(T*N, -1).squeeze().astype(int)
+            unqidx, inv = np.unique(idx, return_inverse=True)
+            groups = [np.where(inv == i) for i in range(len(unqidx))]
+            for (wrd_id, group) in zip(unqidx, groups):
+                if wrd_id != pad_idx:
+                    dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
+
         """
         return pycode
 
@@ -412,6 +433,7 @@ class NumPyCodeGenerator(PyGen):
         self.conv_params[op.index] = op.conv_params
         self.conv_slices[op.index] = \
             NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
+        import ipdb; ipdb.set_trace()
         self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, inputs, filters, outputs)
 
@@ -436,6 +458,16 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta):
         self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
                     op.index, delta, outputs)
+
+    @generate_op.on_type(LookupTableOp)
+    def generatea_op(self, op, outputs, lut, idx):
+        self.append("self.fprop_lut(lut={}, idx={}, axis={}, output={})",
+                    lut, idx, op.lut_axis, outputs)
+
+    @generate_op.on_type(update_lut)
+    def generatea_op(self, op, outputs, delta, idx):
+        self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
+                    delta, idx, op.pad_idx, op.bprop_sum_axis, outputs)
 
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):
@@ -789,3 +821,4 @@ class NumPyTransformer(Transformer):
 
 set_transformer_factory(
     make_transformer_factory(NumPyTransformer.transformer_name))
+
