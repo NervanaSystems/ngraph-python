@@ -60,10 +60,14 @@ class C2Importer:
             # get output op
             if None in input_ops:
                 # ignored
+                print("!!! IGNORED:{} !!!".format(c2_op.name))
                 output_op = None
             else:
                 # call bridge op
                 output_op = self.ops_bridge(c2_op, input_ops)
+                if output_op is None:
+                    print("!!! Unknown Operation '{}' of type '{}' !!!"
+                          .format(c2_op.name, c2_op.type))
 
             # convert to list for convenience
             if isinstance(output_op, tuple):

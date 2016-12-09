@@ -15,9 +15,10 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_constant import OpsConstant
 from ngraph.frontends.caffe2.c2_importer.ops_nn import OpsNN
+from ngraph.frontends.caffe2.c2_importer.ops_binary import OpsBinary
 
 
-class OpsBridge(OpsConstant, OpsNN):
+class OpsBridge(OpsConstant, OpsNN, OpsBinary):
     """
     Bridging op between Caffe2 / ngraph.
 
