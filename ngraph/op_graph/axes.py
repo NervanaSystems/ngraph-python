@@ -1556,6 +1556,7 @@ class TensorDescription(NameableValue):
                 # Move on to the next tensor description in the reshaping chain
                 td = td.next_tensor_description
 
+            # Sometimes we just don't have enough information.
             raise ValueError()
 
         new_axes = Axes(new_axes)
