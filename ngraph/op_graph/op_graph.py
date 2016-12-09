@@ -3268,13 +3268,15 @@ def sigmoid(x):
     """
     sigmoid(x)
 
-        :math:`\frac{1}{1+exp(-x)}`
+    .. math::
+        \\frac{1}{1+e^{-x}}
 
     Arguments:
         x: A tensor
 
     Returns:
         TensorOp: sigmoid(x).
+
     """
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))
