@@ -17,6 +17,7 @@ import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.transformers.gpu.util import _get_sm_count
+from ngraph.transformers.flex2 import Flex, flex16
 
 from pycuda.compiler import SourceModule
 
@@ -85,8 +86,8 @@ _redop32_templates = {
 _conversion_templates = {
     ("half", "float"): r"%(out)s = __half2float(%(in)s);",
     ("float", "half"): r"%(out)s = __float2half(%(in)s);",
-    ("short", "float"): r"%(out)s = %(scale)s * %(in)s;",  # FLEX TODO: (flex storage type, "float")
-    ("float", "short"): r"%(out)s = fp32_to_int16(%(scale)s * %(in)s);", # FLEX TODO ("float", flex storage type)
+    ("flex", "float"): r"%(out)s = %(scale)s * %(in)s;",
+    ("float", "flex"): r"%(out)s = fp32_to_int16(%(scale)s * %(in)s);",
 }
 _default_conversion = r"%(out)s = %(in)s;"
 
@@ -575,6 +576,19 @@ def _preprocess_ops(ops, loop_axis_len):
 
 
 def _get_register_type(dtype, memory=False):
+    if isinstance(dtype, Flex):
+        # short buffers will be converted to float registers by flex scale
+        if memory:
+            if dtype == flex16:
+                return "short"
+            else:
+                raise NotImplementedError
+        else:
+            return "float"
+        # FLEX TODO:
+        # need a case to return "flex" string for _conversion_templates
+        # or push this case to calling code
+            #return dtype.dtype_name
     if dtype == np.float32:
         return "float"
     elif dtype == np.float16:
@@ -654,13 +668,7 @@ def _build_register_mapping(stages):
                         sclname = "scale" + str(reg_count)
                         reg_count = reg_count + 1
                         register_mapping[inval] = regname
-                        if inval.is_flex():
-                            # FLEX TODO: hard coded to np.float32 here
-                            # reinstate a (simpler) flex dtype?
-                            # integer input buffers will be converted to floats by flex scale
-                            register_types[regname] = _get_register_type(np.float32, False)
-                        else:
-                            register_types[regname] = _get_register_type(inval.dtype, False)
+                        register_types[regname] = _get_register_type(inval.dtype, False)
 
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
@@ -698,8 +706,6 @@ def _build_register_mapping(stages):
                     flex_entry = op[3].flex_entry()
                     flex_scale[regname] = (sclname, flex_entry, True)
                     flex_stats_ptr = flex_entry.ptr
-                    # FLEX TODO: again, hard coded to np.float32 here
-                    register_types[regname] = _get_register_type(np.float32, False)
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
@@ -1027,9 +1033,13 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # Check if explicit type conversion is needed for load because ALU
                     # doesn't support data format
                     reg_name = ctx.register_mapping[inval]
-                    type_key = (_get_register_type(inval.dtype, True),
-                                ctx.register_types[reg_name])
-                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None  #?? better way to do this?
+                    if isinstance(inval.dtype, Flex):
+                        type_key = (inval.dtype.dtype_name,  # FLEX TODO: see _conversion_template note
+                                    ctx.register_types[reg_name])
+                    else:
+                        type_key = (_get_register_type(inval.dtype, True),
+                                    ctx.register_types[reg_name])
+                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
                     if type_key in _conversion_templates:
                         load_code = _conversion_templates[type_key] % {
                             "out": reg_name,
@@ -1119,8 +1129,12 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     }
 
                     reg_name = ctx.register_mapping[op[3]]
-                    type_key = (ctx.register_types[reg_name],
-                                _get_register_type(op[3].dtype, True))
+                    if isinstance(op[3].dtype, Flex):
+                        type_key = (ctx.register_types[reg_name],
+                                    op[3].dtype.dtype_name)  # FLEX TODO: see conversion_template note
+                    else:
+                        type_key = (ctx.register_types[reg_name],
+                                    _get_register_type(op[3].dtype, True))
 
                     # Check if explicit type conversion is needed for store because ALU
                     # doesn't support data format

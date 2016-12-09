@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage
-from ngraph.transformers.flex2 import FlexManager
+from ngraph.transformers.flex2 import FlexManager, Flex
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
@@ -51,8 +51,11 @@ class FlexGPUTransformer(GPUTransformer):
 
         return ret_val
 
-    def storage_dtype(self):
-        return np.dtype(np.int16)  # for flex16, TODO derive from FlexEntry (i.e. future flex8)
+    def storage_dtype(self, dtype):
+        if isinstance (dtype, Flex):
+            return dtype.storage_dtype
+        else:
+            raise NotImplementedError
 
 
 class FlexGPUDeviceTensor(GPUDeviceTensor):

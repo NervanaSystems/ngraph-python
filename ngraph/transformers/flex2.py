@@ -19,12 +19,29 @@ autoflex_config = {'stats_queue_len': 16,
                    'stale_threshold': 1200,  # existing, arbitrary
                   }
 
-# methods copied from neon flexsim except changed get_scale to static method
+# methods copied from neon flexsim
 class Flex(object):
 
-    bits = 16 - 1  # as set up in neon flexsim
-    expmax = float(1 << bits - 1)
-    rExpmax = 1.0/expmax
+    def __init__(self, storage_bits):
+
+        if storage_bits % 8 != 0:
+            raise TypeError('Flex storage bits must be integral number of bytes')
+        self.storage_bits = storage_bits  # 16
+        self.high_bit = storage_bits - 1  # 15
+
+        # quick fixes to get EW kernels working:
+        self.itemsize = storage_bits / 8  # needed by TensorDescriptionWrapper
+        self.dtype_name = 'flex'          # needed by float_ew2 _conversion_template
+
+        # only flex16 is supported right now
+        if self.storage_bits == 16:
+            self.storage_dtype = np.dtype(np.int16)  # used by GPUTensorAllocator
+        else:
+            raise NotImplementedError
+
+        # TODO: refactor this
+        self.expmax = float(1 << self.high_bit - 1)
+        self.rExpmax = 1.0/self.expmax
 
     @staticmethod
     def strip_mantissa(val):
@@ -36,13 +53,15 @@ class Flex(object):
         f = unpack('f', pack('I', i))[0]
         return f
 
-    @staticmethod
     def get_scale(maxval):
-        scl = Flex.strip_mantissa(maxval) * Flex.rExpmax
+        scl = Flex.strip_mantissa(maxval) * self.rExpmax
         if scl == 0:
             # an all zero tensor provides no magnitude hint; scl=1 avoids div/0
             scl = 1
         return scl
+
+flex16 = Flex(storage_bits=16)
+
 
 class FlexEntry(object):
     """
@@ -52,11 +71,15 @@ class FlexEntry(object):
         --whether to keep scale constant (act as fixed point)
     """
 
-    def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=np.int16, is_flex=True):
+    def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=flex16, is_flex=True):
         # TODO: add name?
         self.is_flex = is_flex   # unused, stub for turning off flex selectively (by keeping dec fixed)
-        self.dtype = np.dtype(dtype)  # currently unused
-        self.bits = self.dtype.itemsize * 8
+
+        #self.dtype = np.dtype(dtype)  # when dtype was np.int16
+        #self.bits = self.dtype.itemsize * 8
+        self.dtype = dtype  # flex16 or future flex8
+        self.high_bit = dtype.storage_bits - 1  # 15, was called self.bits in neon
+
         self.dec = dec
         self.scale = 1./2**dec
         self.stat_idx = stat_idx  # index into maxabs device buffer
@@ -142,6 +165,7 @@ class FlexEntry(object):
 
     def _adjust_scale_helper(self):
         # RP: this method exists to help me isloate the sprawl from neon flexsim
+        # TODO: convert from neon dtype.bits to gflex dtype.storage_bits
 
         # copied from neon flexsim:
         # Estimate the maximum possible value for the next output and use that
@@ -157,16 +181,16 @@ class FlexEntry(object):
         else:
             # for infrequently updated tensors, use the most recent values instead of the full history.
             # also tack on a healthy safety margin.
-            maxval = max(deque(stats, maxlen=2)) + self.scale * (1 << self.dtype.bits - 3)
+            maxval = max(deque(stats, maxlen=2)) + self.scale * (1 << self.high_bit - 3)
 
         # convert maxval to scale
         old_scale = self.scale
         #self.scale = self.dtype.get_scale(maxval)
-        self.scale = Flex.get_scale(maxval)  # TODO clean up Flex dtype, get_scale, bits, etc
+        self.scale = self.dtype.get_scale(maxval)  # TODO clean up Flex dtype, get_scale, bits, etc
         if SUPERVERBOSE: print "(from {} to {})".format(old_scale, self.scale)
 
     def detect_overflow(self):
-        if self.maxabs >= (1 << self.bits) - 1:
+        if self.maxabs >= (1 << self.high_bit) - 1:
             # update count
             self.overflows += 1
 

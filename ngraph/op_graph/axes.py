@@ -1546,6 +1546,13 @@ class TensorDescription(NameableValue):
         """Called by transformer to set up value."""
         assert self.__value is None
         self.transformer = transformer
+
+        # FLEX hack to make things work, will be fixed with TensorDescription issue
+        from ngraph.transformers.flexgputransform import FlexGPUTransformer
+        if isinstance(transformer, FlexGPUTransformer):
+            from ngraph.transformers.flex2 import flex16
+            self.dtype = flex16
+
         # If the TensorDescription requires heap storage
         if self.buffer is not None:
             if self.buffer.data is None:
