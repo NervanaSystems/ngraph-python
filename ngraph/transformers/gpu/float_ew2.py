@@ -85,8 +85,8 @@ _redop32_templates = {
 _conversion_templates = {
     ("half", "float"): r"%(out)s = __half2float(%(in)s);",
     ("float", "half"): r"%(out)s = __float2half(%(in)s);",
-    ("short", "float"): r"%(out)s = %(scale)s * %(in)s;",  # flex
-    ("float", "short"): r"%(out)s = fp32_to_int16(%(scale)s * %(in)s);", # flex
+    ("short", "float"): r"%(out)s = %(scale)s * %(in)s;",  # FLEX TODO: (flex storage type, "float")
+    ("float", "short"): r"%(out)s = fp32_to_int16(%(scale)s * %(in)s);", # FLEX TODO ("float", flex storage type)
 }
 _default_conversion = r"%(out)s = %(in)s;"
 
@@ -1088,7 +1088,6 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     "y": ctx.register_mapping[op[2]],
                     "indent": (2 * indent_str)
                 }
-                out_reg = ctx.register_mapping[op[3]]
 
                 if axes_mapping[loop_axis][1] <= 32:
                     warp_red_code = _red32_template % {
@@ -1123,9 +1122,11 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     type_key = (ctx.register_types[reg_name],
                                 _get_register_type(op[3].dtype, True))
 
-                    # for flex, store conversion in reg_out, which is reused for
-                    # max_abs besides loop or reduction store
+                    # Check if explicit type conversion is needed for store because ALU
+                    # doesn't support data format
                     if op[3].is_flex():
+                        # for flex, store conversion in reg_out, which is reused for
+                        # max_abs besides loop or reduction store
                         flex_stores = []  # flex statements for both loop and reduction stores
                         flex_conversion = _conversion_templates[type_key] % {
                             "out": "reg_out",
@@ -1134,15 +1135,10 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                         }
                         flex_stores.append(flex_conversion)
                         flex_stores.append("flex_max = max_abs(flex_max, reg_out);")
-
-                    # for flex, conversion has already been done above, and stored in reg_out
-                    if op[3].is_flex():
                         store_code = _default_conversion % {
                             "out": store_code,
                             "in": "reg_out"
                         }
-                    # Check if explicit type conversion is needed for store because ALU
-                    # doesn't support data format
                     elif type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
