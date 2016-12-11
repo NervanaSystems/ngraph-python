@@ -16,6 +16,8 @@
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
 from ngraph.transformers.flex2 import FlexManager, Flex
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
+from ngraph.transformers.gpu.gemm import GEMMKernel
+from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 import numpy as np
 
 flex_verbose = True
@@ -124,12 +126,11 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         self.output_flex_ids = output_ids
 
         # store index and description of flex scale params that need to be changed each call
+        # elementwise only, other kernels use bind_flex_scales
         for kernel in self.kernels:
             if isinstance(kernel, ElementWiseKernel):
                 scale_info = [(i, p) for i, p in enumerate(kernel.params) if isinstance(p, FlexScaleDescription)]
                 kernel.flex_scale_info = scale_info
-            else:
-                raise NotImplementedError  # TODO gemm and conv
 
     def setup_kernel_execute(self, kernel):
         """
@@ -142,11 +143,20 @@ class FlexGPUKernelGroup(GPUKernelGroup):
             self.transformer.flex_manager.flex_entries[flex_id].adjust_scale()
 
         # bind flex scale kernel parameters
-        # make a method (would that require lots of boilerplate)
-        for index, flex_scale_desc in kernel.flex_scale_info:
-            scale = flex_scale_desc.flex_entry.scale
-            scale = 1.0/scale if flex_scale_desc.is_output else scale
-            kernel.params[index] = scale
+        # elementwise is defined in gputransform, not adding flex specific code there
+        if isinstance(kernel, ElementWiseKernel):
+            for index, flex_scale_desc in kernel.flex_scale_info:
+                scale = flex_scale_desc.flex_entry.scale
+                scale = 1.0/scale if flex_scale_desc.is_output else scale
+                kernel.params[index] = scale
+        # TODO: when all cases are covered:
+        #elif hasattr(kernel, 'bind_flex_scales'): kernel.bind_flex_scales()
+        elif isinstance(kernel, GEMMKernel) or \
+             isinstance(kernel, [ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel]):
+            kernel.bind_flex_scales()
+        else:
+            # TODO: handle other cases? (e.g. fill?)
+            raise NotImplementedError
 
     def __call__(self):
         """

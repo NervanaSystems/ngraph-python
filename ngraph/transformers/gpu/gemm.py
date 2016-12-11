@@ -206,25 +206,37 @@ class GEMMKernel(GPUKernel):
 
         # TODO: Flex may not have all "size" options (Urs)
         self.kernel = kernel_specs.get_kernel("_".join((clss, op, size)), vec_opt)
-        # alpha, beta, and flex params if fgemm
-        alpha, beta = 1.0, 0.0
-        if clss == "fgemm":
-            scaleAB = A.flex_entry().scale * B.flex_entry().scale
-            flex_entry_C = C.flex_entry()
-            scaleC = flex_entry_C.scale
-            alpha *= scaleAB
-            beta *= scaleC
+        # alpha, beta
+        self.alpha = 1.0
+        self.beta = 0.0
         # create params
+        # if params list changes, indices in bind_flex_scales may need updating
         self.params = [
             (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
-            C.td, A.td, B.td, alpha, beta, 0, int(lda), int(ldb), int(ldc),
+            C.td, A.td, B.td, self.alpha, self.beta, 0, int(lda), int(ldb), int(ldc),
             int(m), int(n), int(k),
             0, 0, 0, 0]
         if clss == "fgemm":
-            self.params += [flex_entry_C.ptr, 1. / scaleC]
-            self.output_flex_ids = [flex_entry_C.flex_id]
-            # FLEX TODO:
-            #self.flex_scale_info = [(index into params, FlexScaleDescription)] # currently unsupported for scaleAB
+            # save flex entries for bind_flex_scales
+            self.flex_entry_A = A.flex_entry()
+            self.flex_entry_B = B.flex_entry()
+            self.flex_entry_C = C.flex_entry()
+            # flex params
+            self.params += [self.flex_entry_C.ptr, 1.0]  # maxabs ptr, output scale
+            # record output flex id for autoflex
+            self.output_flex_ids = [self.flex_entry_C.flex_id]
+            # bind param values that depend on flex scales
+            self.bind_flex_scales()
+
+    def bind_flex_scales(self):
+        scaleAB = self.flex_entry_A.scale * self.flex_entry_B.scale
+        scaleC = self.flex_entry_C.scale
+        alpha = self.alpha * scaleAB
+        beta = self.beta * scaleC
+        # TODO: hardcoding these sucks
+        self.params[6] = alpha
+        self.params[7] = beta
+        self.params[20] = 1. / scaleC
 
     def bind_buffers(self):
         """
