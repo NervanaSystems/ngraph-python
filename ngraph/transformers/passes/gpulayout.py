@@ -37,7 +37,6 @@ class GPUTensorLayout(PeepholeGraphPass):
         inputs = op.args[0]
         if not isinstance(inputs, ContiguousOp):
             new_op = PoolingOp(op.pool_params, ContiguousOp(inputs), axes=op.axes)
-            new_op.index = op.index
             self.replace_op(op, new_op)
 
     @visit.on_type(BpropPoolOp)
