@@ -4,7 +4,7 @@ from ngraph.transformers.base import Transformer, Computation, make_transformer_
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, CommunicationPass, ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
 
-import pdb
+
 class HetrComputation(Computation):
     """
     Lightweight wrapper class for handling runtime execution of child computations for HeTr
@@ -19,8 +19,9 @@ class HetrComputation(Computation):
         """
         TODO
         Implement threading driver to call each of the computations in self.computations
-        :return: 
+        :return:
         """
+
 
 class HeTrTransformer(Transformer):
     """
@@ -35,10 +36,14 @@ class HeTrTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(HeTrTransformer, self).__init__(**kwargs)
-        
+
         self.ChildTransformers = dict()
         self.TransformerList = list()
-        self.HeTrPasses = [DeviceAssignPass(default_device='gpu0'), CommunicationPass(), ChildTransformerPass(self.TransformerList)]
+        self.HeTrPasses = [
+            DeviceAssignPass(default_device='numpy', default_device_id=0), 
+            CommunicationPass(), 
+            ChildTransformerPass(self.TransformerList)
+            ]
 
     def computation(self, results, *parameters, **kwargs):
         """
@@ -70,10 +75,6 @@ class HeTrTransformer(Transformer):
         :return: a HetrComputation object
         """
 
-        #pdb.set_trace()
-        
-        # deep recursion error with self.initialize()
-        
         # Initialize computation
         result = Computation(self, results, *parameters, **kwargs)
 
@@ -81,12 +82,11 @@ class HeTrTransformer(Transformer):
         for graph_pass in self.HeTrPasses:
             print ("HeTr run graph pass ", graph_pass)
             graph_pass.do_pass(self.all_results)
-        
-        # Build child transformers 
+
+        # Build child transformers
         self.build_transformers(self.all_results)
 
         return result
-
 
     def build_transformers(self, results):
         """
@@ -102,29 +102,24 @@ class HeTrTransformer(Transformer):
         :param results: the graph nodes that we care about, for the computation
         :return: the dictionary of transformers, with names matching the graph node hints
         """
-        
+
         # E.g.
         # self.TransformerList = ['gpu0', 'numpy0']
-        # self.ChildTransformers = 
-        #   {'numpy0': <ngraph.transformers.nptransform.NumPyTransformer object at 0x7f06fa605350>, 
+        # self.ChildTransformers =
+        #   {'numpy0': <ngraph.transformers.nptransform.NumPyTransformer object at 0x7f06fa605350>,
         #    'numpy1': <ngraph.transformers.nptransform.NumPyTransformer object at 0x7f06fa5faad0>}
-
-        #for i in range(sum('numpy' in item for item in self.TransformerList)):
-        #    self.ChildTransformers['numpy' + str(i)] = make_transformer_factory('numpy')()
-
-        if any('numpy' in item for item in self.TransformerList):
-            self.ChildTransformers['numpy0'] = make_transformer_factory('numpy')()
-            self.ChildTransformers['numpy1'] = make_transformer_factory('numpy')()
-
-        if any('gpu' in item for item in self.TransformerList):
-            try:
-                from ngraph.transformers.gputransform import GPUTransformer
-                self.ChildTransformers['gpu0'] = make_transformer_factory('gpu')()
-                self.ChildTransformers['gpu1'] = make_transformer_factory('gpu')()            
-            except ImportError:
-                pass   
-
-        #print self.TransformerList, self.ChildTransformers
+      
+        for t in self.TransformerList:
+            if 'numpy' in t:
+                self.ChildTransformers[t] = make_transformer_factory('numpy')()
+            elif 'gpu' in t:
+                try:
+                    from ngraph.transformers.gputransform import GPUTransformer
+                    self.ChildTransformers[t] = make_transformer_factory('gpu')()
+                except ImportError:
+                    assert False, "Fatal: Unable to initialize GPU, but GPU transformer was requested." 
+            else:
+                assert False, "Unknown device!"
 
     def get_transformer(self, hint_string):
         """
@@ -166,7 +161,6 @@ class HeTrTransformer(Transformer):
         print("device_buffer_storage")
         return []
 
-
     def device_buffer_reference(self):
         """
         Make a DeviceBufferReference.
@@ -175,7 +169,6 @@ class HeTrTransformer(Transformer):
         """
         print("device_buffer_reference")
         return None
-
 
     def start_transform_allocate(self):
         print("start_transform_allocate")
@@ -187,10 +180,8 @@ class HeTrTransformer(Transformer):
         print(name, ordered_ops)
         return name + 1
 
-
     def finish_transform(self):
         pass
-
 
     def allocate_storage(self):
         pass
