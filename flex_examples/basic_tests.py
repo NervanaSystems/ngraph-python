@@ -25,7 +25,7 @@ transformer_name = args.backend
 
 
 def print_fm_stats(transformer):
-    if transformer_name == 'flexgpu':
+    if transformer_name == 'flexgpu' and transformer.flex_manager.num_flex_tensors < 20:
         print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
         fm = transformer.flex_manager
 

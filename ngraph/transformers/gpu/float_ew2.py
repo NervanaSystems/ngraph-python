@@ -670,6 +670,7 @@ def _build_register_mapping(stages):
                         register_mapping[inval] = regname
                         register_types[regname] = _get_register_type(inval.dtype, False)
 
+                        # FLEX TODO: other ops without scale?
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
                                 "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
@@ -680,8 +681,14 @@ def _build_register_mapping(stages):
                             buffername = "buf" + str(len(buffers))
                             buffers[inval] = buffername
 
+                        from ngraph.transformers.gputransform import GPURegister
+                        if isinstance(inval, GPURegister) and not (op[0] == "argmax" or op[0] == "argmin"):
+                            print "according to Stewart, this should not happen in current graph without fusing"
+                            import ipdb; ipdb.set_trace()
+
                         # flex
-                        if inval.is_flex():
+                        # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper
+                        if not (op[0] == "argmax" or op[0] == "argmin") and inval.is_flex():
                             flex_entry = inval.flex_entry()
                             flex_scale[regname] = (sclname, flex_entry, False)
 
@@ -1039,7 +1046,12 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     else:
                         type_key = (_get_register_type(inval.dtype, True),
                                     ctx.register_types[reg_name])
-                    scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
+                    if op[0] == 'argmax' or op[0] == 'argmin':  # FLEX TODO: others?
+                        # there should not be a conversion performed, even though type_key is currently (flex, float)
+                        # FLEX TODO: fix this more systematically
+                        type_key = (float, float)
+                    else:
+                        scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
                     if type_key in _conversion_templates:
                         load_code = _conversion_templates[type_key] % {
                             "out": reg_name,

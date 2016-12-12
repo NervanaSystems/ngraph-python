@@ -196,7 +196,6 @@ class GEMMKernel(GPUKernel):
         # nt and nn are more efficient with k%16==0
         if C.is_flex():
             clss = "fgemm"
-            print "set class to fgemm"
         elif C.dtype.type is np.float16:
             clss = "hgemm"
         elif C.dtype.type is np.float32:

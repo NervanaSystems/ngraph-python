@@ -2,18 +2,18 @@ import pycuda.driver as drv
 from collections import deque
 from math import sqrt
 from struct import pack, unpack
-
 import numpy as np
+
+from ngraph.transformers.neonautoflex import init_scale_algorithm
 
 
 DEFAULT_DEC = 8  # use DEFAULT_DEC = 8 for 8.8 fixed point
-# Autoflex TODO:
-# initialization
 
 
 fixed_point = False
 flex_verbose = True
-flex_verbose1 = True
+flex_verbose1 = False
+indent1 = '  '
 autoflex_config = {'stats_queue_len': 16,
                    'num_std': 3,  # 6,
                    'offset': 100,  # 16384,
@@ -45,6 +45,7 @@ class Flex(object):
             raise NotImplementedError
 
         # following neon flexsim naming
+        # rExpmax, pclip, nclip only used by old Flex.set method
         expmax = float(1 << self.high_bit - 1)  # TODO: check if neon __str__ is obsolete (assumptions)
         self.rExpmax = 1.0/expmax  # in neon flexsim, effectively only used in get_scale
         # set
@@ -104,6 +105,7 @@ class FlexEntry(object):
                                     # TODO interaction with age
         self.do_adjust = False    # whether scale adjustment may be necessary b/c
                                         # tensor was touched
+        self.init_count = 0
 
         # for storing diagnostic info (scale, maxabs, overflows)
         self.flex_manager = flex_manager
@@ -122,9 +124,10 @@ class FlexEntry(object):
         functionality of neon flexsim FlexData update and parts of adjust_scale methods
         """
 
-        if flex_verbose1: print "  refresh"
+        if flex_verbose1: print indent1 + "refresh"
 
         # record most recent stats for this tensor
+        if flex_verbose1: print indent1 + "maxabs {}".format(maxabs)
         self.maxabs = maxabs
         self.age = age
 
@@ -136,6 +139,7 @@ class FlexEntry(object):
 
         # add the max value to the deque
         self.stats.append(self.maxabs*self.scale)
+        if flex_verbose: print self.stats
 
         # record visualization data for analysis
         self.record_data()
@@ -145,17 +149,10 @@ class FlexEntry(object):
 
     def adjust_scale(self):
 
-        if flex_verbose1: print "  adjust_scale"
+        if flex_verbose1: print indent1 + "adjust_scale"
 
         # if fixed point, don't adjust scale
         if fixed_point:
-            return
-
-        # initialization if needed
-        if not self.initialized:
-            print "initializing flex tensor scale (current a no-op)"
-            self._initialize()
-            self.initialized = True
             return
 
         # check if we actually want to adjust scale
@@ -175,6 +172,7 @@ class FlexEntry(object):
         # actually adjustment (if necessary)
         self._adjust_scale_helper()
 
+        # TODO: clean this up
         # Impose a lower bound for small exponents
         if np.log2(self.scale) < -32:  #
             self.scale = 2**-32  # self.dtype.rExpmax
@@ -185,9 +183,31 @@ class FlexEntry(object):
 
         self.do_adjust = False  # RP: self.do_adjust is basically self.adjust in neon flexsim
 
-    def _initialize(self):
-        # TODO
-        pass
+    def initialize(self, kernel):
+        """
+        neon flexsim init_scale functionality
+        """
+
+        if flex_verbose1: print indent1 + "initialize"
+
+        # bind flex scales and execute kernel
+        from ngraph.transformers.flexgpuutil import bind_flex_params  # TODO: circular import
+        bind_flex_params(kernel)
+        kernel.execute()
+
+        # get maxabs from just executed kernel computation
+        # allocate a host side buffer in pageable memory
+        maxbuf = np.empty((1, ), np.int32)
+        # because maxbuf is not pagelocked, this is actually a synchronous op
+        drv.memcpy_dtoh_async(maxbuf, self.ptr, stream=None)
+        # now zero the memory
+        drv.memset_d32_async(self.ptr, 0, 1, stream=None)
+        # RP: not sure neon comment below about +1 for adjust_scale consistency is true
+        self.maxabs = int(maxbuf[0]) + 1  # Added +1 here to be consistent with adjust_scale.
+
+        # initialize scale
+        self.scale, self.init_count, self.initialized = init_scale_algorithm(self.maxabs,
+                self.scale, self.init_count, self.dtype.high_bit)
 
     def _adjust_scale_helper(self):
 
@@ -217,6 +237,8 @@ class FlexEntry(object):
         if flex_verbose: print "(adjusting DEC from {} to {})".format(old_dec, self.dec)
 
     def detect_overflow(self):
+        if flex_verbose1: print indent1 + "detect_overflow called"
+
         if self.maxabs >= (1 << self.dtype.high_bit) - 1:  # copied from neon, check
             # update count
             self.overflows += 1
@@ -232,6 +254,8 @@ class FlexEntry(object):
             # simulate a bit buffer of 1 for the next deque.maxlen iterations
             # this allows the scale to grow beyond the saturation point
             self.maxabs <<= 1
+
+            if flex_verbose1: print indent1 + "detect_overflow maxabs adjusted to {}".format(self.maxabs)
 
     def record_data(self):
         """
@@ -256,7 +280,7 @@ class FlexManager(object):
               --see comments in FlexGPUTransformer.transform_ordered_ops
         2. Reuse double buffered design?
     """
-    def __init__(self, num_flex_tensors=16):  # set to 16 for testing
+    def __init__(self, num_flex_tensors=16384):  # TODO: set this default max number of tensors appropriately, or other soln
 
         self.num_flex_tensors = num_flex_tensors  # max number of allowed flex tensors
         self.stat_ids = list(range(num_flex_tensors))[::-1]  # id assigned to each
@@ -298,6 +322,7 @@ class FlexManager(object):
         Transfer flex stats (maxabs) from device to host
         """
         drv.memcpy_dtoh_async(self.host_stats, self.dev_stats, stream=None)
+        drv.memset_d32_async(self.dev_stats, 0, self.num_flex_tensors, stream=None)
 
     def autoflex(self, flex_ids):
         """

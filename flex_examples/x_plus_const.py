@@ -30,23 +30,23 @@ transformer_name = args.backend
 
 transformer = ngt.make_transformer()
 
+
+def print_fm_stats(transformer):
+    if transformer_name == 'flexgpu' and transformer.flex_manager.num_flex_tensors < 20:
+        print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
+        fm = transformer.flex_manager
+
+        fm.transfer_stats()
+        print("flex_manager.host_stats", fm.host_stats)
+
 # Build the graph - scalar addition
 x = ng.placeholder(())
 x_plus_one = x + 1.5  # really: x_plus_one = ng.add(x, ng.constant(1))
 # Define a computation
 plus_one = transformer.computation(x_plus_one, x)  # computation, parameters
 
-if transformer_name == 'flexgpu':
-    print("flex_manager.stat_ids before computations", transformer.flex_manager.stat_ids)
-
 # Run the computation
 for i in range(5):
     print(plus_one(i))
 
-
-if transformer_name == 'flexgpu':
-    print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
-    fm = transformer.flex_manager
-
-    fm.transfer_stats()
-    print("flex_manager.host_stats", fm.host_stats)
+print_fm_stats(transformer)

@@ -15,9 +15,8 @@
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
 from ngraph.transformers.flex2 import FlexManager, Flex
+from ngraph.transformers.flexgpuutil import bind_flex_params
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
-from ngraph.transformers.gpu.gemm import GEMMKernel
-from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 import numpy as np
 
 flex_verbose = True
@@ -112,6 +111,7 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
         # store output tensor flex ids
         # "output" tensors: tensors that will be modified by this kernel group
+        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel  # TODO hack for now
         output_ids = []
         for kernel in self.kernels:
             if isinstance(kernel, ElementWiseKernel):
@@ -120,7 +120,7 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                 for p in kernel.params:
                     if isinstance(p, FlexScaleDescription) and p.is_output:
                         output_ids.append(p.flex_entry.flex_id)
-            else:
+            elif not isinstance(kernel, (FillKernel, DimShuffleKernel)):
                 # all other kernels (gemm, conv) required to have output_flex_ids list attribute
                 output_ids.extend(kernel.output_flex_ids)
         self.output_flex_ids = output_ids
@@ -134,29 +134,20 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def setup_kernel_execute(self, kernel):
         """
-        Before a kernel call, tensor flex scales are adjusted
-        and new values are used in kernel params
+        Before a kernel call, flex tensor scales are adjusted
+        and new values are bound to kernel params
         """
 
-        # adjust scale of previously touched tensors (equivalent of neon flexsim output_flex)
+        # adjust scale of previously touched tensors
         for flex_id in self.output_flex_ids:
-            self.transformer.flex_manager.flex_entries[flex_id].adjust_scale()
+            flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
+            if not flex_entry.initialized:
+                flex_entry.initialize(kernel)
+            else:
+                flex_entry.adjust_scale()
 
         # bind flex scale kernel parameters
-        # elementwise is defined in gputransform, not adding flex specific code there
-        if isinstance(kernel, ElementWiseKernel):
-            for index, flex_scale_desc in kernel.flex_scale_info:
-                scale = flex_scale_desc.flex_entry.scale
-                scale = 1.0/scale if flex_scale_desc.is_output else scale
-                kernel.params[index] = scale
-        # TODO: when all cases are covered:
-        #elif hasattr(kernel, 'bind_flex_scales'): kernel.bind_flex_scales()
-        elif isinstance(kernel, GEMMKernel) or \
-             isinstance(kernel, [ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel]):
-            kernel.bind_flex_scales()
-        else:
-            # TODO: handle other cases? (e.g. fill?)
-            raise NotImplementedError
+        bind_flex_params(kernel)
 
     def __call__(self):
         """
