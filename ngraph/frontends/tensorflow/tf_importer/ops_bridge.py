@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import print_function
 from ngraph.frontends.tensorflow.tf_importer.ops_variable import OpsVariable
 from ngraph.frontends.tensorflow.tf_importer.ops_binary import OpsBinary
 from ngraph.frontends.tensorflow.tf_importer.ops_constant import OpsConstant
@@ -64,8 +65,8 @@ class OpsBridge(OpsConstant, OpsBinary, OpsPlaceholder, OpsUnary, OpsMatmul,
         """
         op_name = tf_node.op
 
-        if hasattr(self, op_name):
+        try:
             return getattr(self, op_name)(tf_node, input_ops)
-        else:
-            # print(tf_node.name, "ignored.")
+        except:
+            print(tf_node.name, "ignored.")
             return None

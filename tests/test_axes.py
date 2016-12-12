@@ -273,6 +273,9 @@ def test_idempotent_axes_a():
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
+test_idempotent_axes_a()
+
+
 def test_idempotent_axes_b():
     """
     Test test axes transformations with autodiff, case b, with broadcast applied
@@ -328,7 +331,7 @@ def test_idempotent_axes_c():
 
     # cast / dimshuffle
     result = ng.cast_axes(result, result_axes)
-    result = ng.Dimshuffle(result, axes=result_axes)
+    result = ng.axes_with_order(result, result_axes)
 
     # cost and grad
     cost = ng.sum(result, reduction_axes=result.axes)
@@ -339,3 +342,16 @@ def test_idempotent_axes_c():
 
     assert cost_comp() == 6.0
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+
+
+def test_scalar_broadcast():
+    """
+    Test broadcasting a scalar into a tensor
+    """
+    ex = ExecutorFactory()
+    x_axes = ng.make_axes()
+    broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
+    x = ng.constant(1., axes=x_axes)
+    z = ng.broadcast(x, axes=broadcast_axes)
+    z_comp = ex.executor(z)
+    assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))

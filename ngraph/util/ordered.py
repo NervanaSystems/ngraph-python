@@ -82,7 +82,7 @@ class OrderedSet(set, collections.MutableSequence):
         Remove all elements from the set.
         """
         super(OrderedSet, self).clear()
-        self.elt_list.clear()
+        del self.elt_list[:]
 
     def union(self, values):
         """
