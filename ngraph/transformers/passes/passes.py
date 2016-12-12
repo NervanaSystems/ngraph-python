@@ -26,6 +26,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     negative, cast_axes
 
 from ngraph.util.generics import generic_method
+from ngraph.util.ordered import OrderedSet
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, object)):
@@ -46,7 +47,7 @@ class PeepholeGraphPass(GraphPass):
         has_work = True
         while has_work:
             self.replacement_list = []
-            ops = set(op.forwarded for op in ops)
+            ops = OrderedSet(op.forwarded for op in ops)
             for op in Op.ordered_ops(ops):
                 op.update_forwards()
                 self.visit(op)

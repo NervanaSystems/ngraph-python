@@ -16,7 +16,7 @@
 from __future__ import division
 from collections import defaultdict
 from ngraph.util.graph import Digraph
-from ngraph.op_graph.op_graph import TensorOp, OrderedSet
+from ngraph.op_graph.op_graph import TensorOp, OrderedSet, Op
 
 
 def base_tensor_descriptions(ops):
@@ -44,29 +44,16 @@ class DataFlowGraph(Digraph):
         super(DataFlowGraph, self).__init__(defaultdict(OrderedSet))
         self.transformer = transformer
         self.stack = set()
-        for w in results:
-            self._fill_successors(w)
+
+        todo = OrderedSet()
+        todo.update(results)
+        for w in todo:
+            for v in w.all_deps:
+                self.successors[v].add(w)
+                todo.add(v)
+            self.successors[w]
         self.results = results
-
-    def _fill_successors(self, w):
-        """
-        Walk through provided results to build the successors map.
-
-        Arguments:
-          results(dict): Results of the desired computation
-        """
-        if w not in self.successors:
-            self.successors[w] = OrderedSet()
-        for v in w.other_deps + list(w.args):
-            if v not in self.successors:
-                self._fill_successors(v)
-            self.successors[v].add(w)
-
-    @property
-    def instructions(self):
-        """Returns the ordered instructions to execute the dataflow graph."""
-
-        return self.topsort()
+        self.instructions = Op.ordered_ops(results)
 
     def liveness(self):
         """

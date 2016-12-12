@@ -197,7 +197,7 @@ class OpsNN(OpsBase):
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.Slice(output, out_slicing)
+        output = ng.tensor_slice(output, out_slicing)
 
         return output
 
@@ -299,7 +299,7 @@ class OpsNN(OpsBase):
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.Slice(output, out_slicing)
+        output = ng.tensor_slice(output, out_slicing)
 
         return output
 

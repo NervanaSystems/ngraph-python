@@ -97,7 +97,7 @@ def test_slice_nop():
 
     x = ng.variable([N, M])
 
-    s = ng.Slice(x, [
+    s = ng.tensor_slice(x, [
         slice(None, None, None),
         slice(None, None, -1),
     ])

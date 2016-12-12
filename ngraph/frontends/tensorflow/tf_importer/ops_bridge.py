@@ -47,10 +47,6 @@ class OpsBridge(OpsConstant, OpsBinary, OpsPlaceholder, OpsUnary, OpsMatmul,
 
     TODO: Organize ops as in TensorFlow's directory structure
     """
-
-    def __init__(self):
-        self.init_assign_op_names = set()
-
     def __call__(self, tf_node, input_ops):
         """
         Call Op based on `tf_node.name`. Mix-in functions must have same name
