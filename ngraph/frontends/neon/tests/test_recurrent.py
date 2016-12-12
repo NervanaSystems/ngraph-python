@@ -28,12 +28,11 @@ The following are made sure to be the same in both recurrent layers
     -   the data shape inside recurrent_ref is seq_len, input_size, 1
     -   the data shape inside recurrent (neon) is feature, seq_len * batch_size
 """
-
 import itertools as itt
 import numpy as np
 import ngraph as ng
 
-from ngraph.frontends.neon import Recurrent, GaussianInit, Tanh
+from ngraph.frontends.neon import Recurrent, BiRNN, GaussianInit, Tanh
 from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
 from recurrent_ref import Recurrent as RefRecurrent
 
@@ -46,34 +45,137 @@ rtol = atol = 1e-2
 def pytest_generate_tests(metafunc):
     bsz_rng = [1]
 
-    if 'refgruargs' in metafunc.fixturenames:
+    if 'rnn_args' in metafunc.fixturenames:
         seq_rng = [3]
         inp_rng = [5, 10]
         out_rng = [10, 32]
-        fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng)
-        metafunc.parametrize('refgruargs', fargs)
+        ret_seq = [True, False]
+        bwd = [True, False]
+        fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng, ret_seq, bwd)
+        metafunc.parametrize('rnn_args', fargs)
+
+    if 'birnn_args' in metafunc.fixturenames:
+        seq_rng = [3]
+        inp_rng = [5]
+        out_rng = [10]
+        ret_seq = [True, False]
+        sum_out = [True, False]
+        bi_fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng, ret_seq, sum_out)
+        metafunc.parametrize('birnn_args', bi_fargs)
 
 
-def test_ref_compare_ones(refgruargs):
+def test_rnn_ones(rnn_args):
     # run comparison with reference code
     # for all ones init
-    seq_len, input_size, hidden_size, batch_size = refgruargs
+    seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
     check_rnn(seq_len, input_size, hidden_size,
-              batch_size, (lambda x: 1.0))
+              batch_size, (lambda x: 1.0), return_seq=ret_seq, backward=bwd)
 
 
-def test_ref_compare_rand(refgruargs):
+def test_rnn_rand(rnn_args):
     # run comparison with reference code
     # for Gaussian random init
-    seq_len, input_size, hidden_size, batch_size = refgruargs
+    seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
     check_rnn(seq_len, input_size, hidden_size, batch_size,
-              GaussianInit(0.0, 1.0))
-    check_rnn(seq_len, input_size, hidden_size, batch_size,
-              GaussianInit(0.0, 1.0), return_seq=False)
+              GaussianInit(0.0, 1.0), return_seq=ret_seq, backward=bwd)
+
+
+def test_birnn(birnn_args):
+    seq_len, input_size, hidden_size, batch_size, ret_seq, sum_out = birnn_args
+    check_birnn(seq_len, input_size, hidden_size, batch_size,
+                GaussianInit(0.0, 1.0), return_seq=ret_seq, sum_out=sum_out)
+
+
+def check_birnn(seq_len, input_size, hidden_size, batch_size,
+                init_func, return_seq, sum_out):
+    # init_func is the initializer for the model params
+    assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+
+    # ========== neon model ==========
+    Cin = ng.make_axis(input_size)
+    REC = ng.make_axis(seq_len, recurrent=True)
+    N = ng.make_axis(batch_size, batch=True)
+    H = ng.make_axis(hidden_size)
+    ax_s = ng.make_axes([H, N])
+
+    ex = ExecutorFactory()
+    np.random.seed(0)
+
+    birnn_ng = BiRNN(hidden_size, init_func, activation=Tanh(),
+                     reset_cells=True, return_sequence=return_seq, sum_out=sum_out)
+
+    inp_ng = ng.placeholder([Cin, REC, N])
+    init_state_ng = ng.placeholder(ax_s)
+
+    # fprop graph
+    out_ng = birnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
+    # out_ng.input = True
+
+    rnn_W_input = birnn_ng.fwd_rnn.W_input
+    rnn_W_input.input = True
+    rnn_W_recur = birnn_ng.fwd_rnn.W_recur
+    rnn_W_recur.input = True
+    rnn_b = birnn_ng.fwd_rnn.b
+    rnn_b.input = True
+
+    fprop_neon_fun = ex.executor(out_ng, inp_ng, init_state_ng)
+
+    # fprop on random inputs
+    input_value = rng.uniform(-1, 1, inp_ng.axes)
+    init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
+    fprop_neon = fprop_neon_fun(input_value, init_state_value)
+
+    if sum_out is True:
+        fprop_neon = fprop_neon.copy()
+    else:
+        fprop_neon_fwd = fprop_neon[0].copy()
+        fprop_neon_bwd = fprop_neon[1].copy()
+
+    # ========= reference model ==========
+    output_shape = (hidden_size, seq_len * batch_size)
+
+    # generate random deltas tensor
+    deltas = np.random.randn(*output_shape)
+
+    # the reference code expects these shapes:
+    # input_shape: (seq_len, input_size, batch_size)
+    # output_shape: (seq_len, hidden_size, batch_size)
+    deltas_ref = deltas.copy().T.reshape(
+        seq_len, batch_size, hidden_size).swapaxes(1, 2)
+
+    inp_ref = input_value.transpose([1, 0, 2])
+
+    # reference numpy RNN
+    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
+    rnn_ref.Wxh[:] = birnn_ng.fwd_rnn.W_input.value.get(None).copy()
+    rnn_ref.Whh[:] = birnn_ng.fwd_rnn.W_recur.value.get(None).copy()
+    rnn_ref.bh[:] = birnn_ng.fwd_rnn.b.value.get(None).copy().reshape(rnn_ref.bh.shape)
+    (dWxh_ref, dWhh_ref, db_ref, h_ref_fwd,
+        dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
+                                                  init_states=init_state_value)
+
+    rnn_ref.Wxh[:] = birnn_ng.bwd_rnn.W_input.value.get(None).copy()
+    rnn_ref.Whh[:] = birnn_ng.bwd_rnn.W_recur.value.get(None).copy()
+    rnn_ref.bh[:] = birnn_ng.bwd_rnn.b.value.get(None).copy().reshape(rnn_ref.bh.shape)
+    h_ref_bwd = rnn_ref.fprop_backwards(inp_ref, init_state_value)
+
+    if sum_out is True:
+        h_ref = h_ref_bwd + h_ref_fwd
+        if return_seq is True:
+            fprop_neon = fprop_neon[:, :, 0]
+        np.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
+    else:
+        if return_seq is True:
+            fprop_neon_fwd = fprop_neon_fwd[:, :, 0]
+            fprop_neon_bwd = fprop_neon_bwd[:, :, 0]
+        np.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
+        np.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
+    return
 
 
 # compare neon RNN to reference RNN implementation
-def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_seq=True):
+def check_rnn(seq_len, input_size, hidden_size, batch_size,
+              init_func, return_seq=True, backward=False):
     # init_func is the initializer for the model params
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -88,7 +190,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_se
     np.random.seed(0)
 
     rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
-                       reset_cells=True, return_sequence=return_seq)
+                       reset_cells=True, return_sequence=return_seq,
+                       backward=backward)
 
     inp_ng = ng.placeholder([Cin, REC, N])
     init_state_ng = ng.placeholder(ax_s)
@@ -152,19 +255,20 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_se
     inp_ref = input_value.transpose([1, 0, 2])
 
     # reference numpy RNN
-    rnn_ref = RefRecurrent(input_size, hidden_size)
+    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
     rnn_ref.Wxh[:] = Wxh_neon
     rnn_ref.Whh[:] = Whh_neon
     rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
-    (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-        dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref,
-                                                  deltas_ref, init_states=init_state_value)
+    if backward:
+        h_ref_list = rnn_ref.fprop_backwards(inp_ref, init_state_value)
+    else:
+        (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
+            dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
+                                                      init_states=init_state_value)
 
     # comparing outputs
-    if return_seq is False:
-        h_ref_list = h_ref_list[:, -1].reshape(-1, 1)
-    else:
+    if return_seq is True:
         fprop_neon = fprop_neon[:, :, 0]
     np.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
 
@@ -174,4 +278,6 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size, init_func, return_se
 if __name__ == '__main__':
     seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
     init = GaussianInit(0.0, 0.1)
-    check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
+    # check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
+    check_birnn(seq_len, input_size, hidden_size, batch_size,
+                init, return_seq=True, sum_out=True)
