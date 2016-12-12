@@ -72,8 +72,12 @@ def test_coloring():
 
 def test_topsort():
     """TODO."""
-    edges = {(u, v) for u, vs in iter(list(dataflow.successors.items())) for v in vs}
-    order = dataflow.topsort()
-    for u, v in edges:
-        assert(order.index(u) < order.index(v))
+    ordered = dataflow.topsort()
+    completed = set()
+    for op in ordered:
+        for pre in op.other_deps:
+            assert pre in completed
+        for arg in op.args:
+            assert arg in completed
+        completed.add(op)
     print('pass topsort')

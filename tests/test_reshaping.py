@@ -163,7 +163,7 @@ def test_slice(transformer_factory):
         s = test['slice']
         s_axes = test['sliced_axes']
 
-        sliced = ng.Slice(tensor, s, s_axes)
+        sliced = ng.tensor_slice(tensor, s, s_axes)
         sliced_val_fun = ex.executor(sliced, tensor)
 
         num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)

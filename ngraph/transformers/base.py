@@ -358,7 +358,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             need to be computed.
         finalized (bool): True when transformation has been performed.
         initialized (bool): True when variables have been initialized/restored.
-        opids (dict): TODO
         fusion (bool): True when fusion was enabled.
         device_buffers (set): Set of handles for storage allocations.
         cpu_initializations (list): Initializations to be performed from the CPU after
@@ -373,7 +372,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.opids = dict()
         self.fusion = fusion
         self.device_buffers = OrderedSet()
         self.cpu_initializations = []
@@ -410,11 +408,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # create computation which initializes values (called once per session)
         init_op.update_forwards()
         self.init_computation = self.computation(init_op, name="init")
-
-        # Give ids
-        for op in all_ops:
-            if op not in self.opids:
-                self.opids[op] = len(self.opids)
 
         self.dataflow, self.memory = assign_buffers(self, all_ops, self.fusion)
 

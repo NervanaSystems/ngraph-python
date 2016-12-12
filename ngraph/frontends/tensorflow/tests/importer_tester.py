@@ -85,6 +85,7 @@ class ImporterTester(object):
         # run NG
         ng_result = self.ng_run(
             tf_target_node=tf_target_node,
+            tf_init_op=tf_init_op,
             tf_feed_dict=tf_feed_dict,
             print_ng_result=print_ng_result,
             verbose=verbose)
@@ -95,6 +96,7 @@ class ImporterTester(object):
 
     def ng_run(self,
                tf_target_node,
+               tf_init_op=None,
                tf_feed_dict=None,
                print_ng_result=False,
                verbose=False):
@@ -118,6 +120,10 @@ class ImporterTester(object):
         ng_target_node = importer.get_op_handle_by_name(
             tf_target_node.name[:-2])
 
+        # init op
+        ng_init_op = importer.get_op_handle(tf_init_op) if tf_init_op else None
+        ng_init_comp = transformer.computation(ng_init_op)
+
         # evaluate ngraph
         if tf_feed_dict is not None:
             # get targeting nodes for ng, convert tf's feed dict to list
@@ -132,16 +138,13 @@ class ImporterTester(object):
             # evaluate ngraph result
             ng_result_comp = transformer.computation([ng_target_node],
                                                      *ng_placeholder_nodes)
-            if importer.init_ops:
-                init_comp = transformer.computation(importer.init_ops)
-                init_comp()
-
+            if ng_init_op:
+                ng_init_comp()
             ng_result = ng_result_comp(*ng_placeholder_vals)[0]
         else:
             ng_result_comp = transformer.computation([ng_target_node])
-            if importer.init_ops:
-                init_comp = transformer.computation(importer.init_ops)
-                init_comp()
+            if ng_init_op:
+                ng_init_comp()
             ng_result = ng_result_comp()[0]
         if print_ng_result:
             print(ng_result)
