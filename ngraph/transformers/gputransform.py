@@ -32,7 +32,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    Function, SetItemOp
+    Function, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
@@ -275,6 +275,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Power)
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
+
+    @add_op.on_type(Prod)
+    def add_op(self, op, out, x):
+        self._buffer_op("prod", x=x, axis=0, out=out)
 
     @add_op.on_type(ReciprocalOneDOp)
     def add_op(self, op, out, x):
