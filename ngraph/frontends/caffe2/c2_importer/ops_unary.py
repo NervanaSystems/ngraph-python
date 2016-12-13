@@ -21,18 +21,3 @@ class OpsUnary(OpsBase):
     """
     Mix-in class for unary ops
     """
-    def Square(self, c2_op, inputs):
-        """
-        Performs the x^2 on the each element of input.
-
-        Arguments:
-            c2_op: NodeDef object, the caffe2 op to convert.
-            inputs: List of ngraph Ops as inputs to this node.
-
-        Returns:
-            A ngraph Op corresponding to the tensorflow node.
-
-        Inputs to tf_node:
-            input
-        """
-        return ng.square(inputs[0])
