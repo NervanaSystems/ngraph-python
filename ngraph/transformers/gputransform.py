@@ -797,17 +797,23 @@ class GPUDeviceTensor(DeviceTensor):
         sliced = self.__getitem__(key)
 
         # Use fill for scalar values
+        # convert value to numpy
+        if type(value) == float:
+            value = np.float64(value)
+        elif type(value) == int:
+            value = np.int64(value)
+        # FLEX TODO: added astype to deal with GPUArray dtype int16, assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif type(value) == np.int32 or type(value) == np.int64 or \
                 type(value) == int:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif np.sum(self.tensor.strides) == 0:
             view = GPUArray((1, ), dtype=self.tensor.dtype)
-            view.fill(value)
+            view.fill(value.astype(sliced.dtype))
         else:
             # Convert to correct dtype if necessary
             if value.dtype != self.tensor.dtype:
