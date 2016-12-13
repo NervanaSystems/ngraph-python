@@ -10,8 +10,8 @@ from ngraph.transformers.neonautoflex import init_scale_algorithm
 DEFAULT_DEC = 8  # use DEFAULT_DEC = 8 for 8.8 fixed point
 
 
-fixed_point = False
-flex_verbose = True
+fixed_point = True
+flex_verbose = False
 flex_verbose1 = False
 indent1 = '  '
 autoflex_config = {'stats_queue_len': 16,
@@ -157,7 +157,7 @@ class FlexEntry(object):
 
         # check if we actually want to adjust scale
         if not self.do_adjust:
-            print "adjust_scale not needed, tensor has not been modified"
+            if flex_verbose: print "adjust_scale not needed, tensor has not been modified"
             return
 
         # used in autoflex algorithm

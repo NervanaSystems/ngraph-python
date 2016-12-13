@@ -19,7 +19,8 @@ from ngraph.transformers.flexgpuutil import bind_flex_params
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
-flex_verbose = True
+fixed_point = True
+flex_verbose = False
 
 class FlexGPUTransformer(GPUTransformer):
     """
@@ -142,7 +143,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         for flex_id in self.output_flex_ids:
             flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
             if not flex_entry.initialized:
-                flex_entry.initialize(kernel)
+                if not fixed_point:
+                    flex_entry.initialize(kernel)
             else:
                 flex_entry.adjust_scale()
 
