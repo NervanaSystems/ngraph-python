@@ -49,7 +49,7 @@ def to_nested_tuple(axes):
         FlattenedAxis are replaced with tuple
     """
     return tuple(
-        to_nested_tuple(axis.axes) if isinstance(axis, FlattenedAxis) else axis
+        to_nested_tuple(axis.axes) if axis.is_flattened else axis
         for axis in axes
     )
 

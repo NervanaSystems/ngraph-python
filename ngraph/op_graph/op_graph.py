@@ -24,7 +24,7 @@ from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, casting_axis
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -1181,6 +1181,12 @@ class AxesCastOp(ReshapeOp):
         if not x.is_scalar and x.axes.lengths != axes.lengths:
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
+        if len(x.axes) > 0:
+            aliasing_axes = []
+            for new_axis, old_axis in zip(axes, x.axes):
+                aliasing_axes.append(casting_axis(new_axis, old_axis))
+            axes = make_axes(aliasing_axes)
+
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1499,8 +1505,7 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if not isinstance(x, AssignableTensorOp):
-            x = ContiguousOp(axes_with_order(x, x.axes))
+        x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -3262,13 +3267,15 @@ def sigmoid(x):
     """
     sigmoid(x)
 
-        :math:`\frac{1}{1+exp(-x)}`
+    .. math::
+        \\frac{1}{1+e^{-x}}
 
     Arguments:
         x: A tensor
 
     Returns:
         TensorOp: sigmoid(x).
+
     """
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))
