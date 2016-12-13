@@ -176,6 +176,8 @@ class C2Importer:
             name for name in dir(ob)
             if name[:1] != "_" and name not in ob.__dict__
         ])
+        # common set
+        supported_ops &= set(workspace.RegisteredOperators())
         return sorted(list(supported_ops))
 
     def _get_unimplemented_ops(self):
