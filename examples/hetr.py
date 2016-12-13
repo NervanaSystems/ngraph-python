@@ -18,16 +18,16 @@ import ngraph.transformers as ngt
 import ngraph.transformers.passes.nviz
 
 # Build the graph
-with ng.metadata(device='numpy1'):
+with ng.metadata(device_id='1'):
     x = ng.placeholder(())
 x_plus_one = x + 1
 
 # Select a transformer
 transformer = ngt.make_transformer_factory('hetr')()
 
-# visualize the graph
+# Visualize the graph
 transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
-#import ipdb; ipdb.set_trace()
+
 # Define a computation
 plus_one = transformer.computation(x_plus_one, x)
 

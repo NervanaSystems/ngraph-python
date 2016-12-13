@@ -112,7 +112,6 @@ class HetrTransformer(Transformer):
         hc = HetrComputation(self, results, *parameters, **kwargs)
         # Do Hetr passes
         for graph_pass in self.hetr_passes:
-            print ("Hetr run graph pass ", graph_pass)
             graph_pass.do_pass(self.all_results)
 
         # Build child transformers
@@ -124,12 +123,12 @@ class HetrTransformer(Transformer):
         if type(results) is list:
             self.results_handlers_len = len(results)
             for pos, op in enumerate(results):
-                tname  = op.metadata['device']
+                tname  = op.metadata['transformer']
                 self.transformer_to_node[tname].append(op)
                 self.child_results_map.setdefault(tname,[]).append(pos)
         else:
             #if results is not a list, then its default pos = 0
-            tname  = results.metadata['device']
+            tname  = results.metadata['transformer']
             self.transformer_to_node[tname].append(results)
             self.child_results_map.setdefault(tname,[]).append(0)
             self.results_handlers_len = 1
@@ -139,7 +138,7 @@ class HetrTransformer(Transformer):
         self.placeholders_pos = {t: list() for t in self.child_transformers}
         self.placeholder_inverse = []
         for i, p in enumerate(parameters):
-            tname = p.metadata['device']
+            tname = p.metadata['transformer']
             self.placeholders[tname].append(p)
             self.placeholders_pos[tname].append(i)
             self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
