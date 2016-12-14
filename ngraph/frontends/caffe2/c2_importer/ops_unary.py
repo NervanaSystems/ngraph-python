@@ -21,3 +21,39 @@ class OpsUnary(OpsBase):
     """
     Mix-in class for unary ops
     """
+    def _element_wise_unary(self, ng_op, c2_op, inputs):
+        """
+        Element-wise unary operation.
+
+        Args:
+            ng_op: ngraph Op to be applied.
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        # get inputs
+        left = inputs[0]
+
+        # result
+        result_op = ng_op(left).named(c2_op.name)
+
+        # return op
+        return result_op
+
+    def Tanh(self, c2_op, inputs):
+        """
+        Computes hyperbolic tangent of `x` element-wise.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caff2 node.
+
+        Inputs to tf_node:
+            x, name
+        """
+        return self._element_wise_unary(ng.tanh, c2_op, inputs)
