@@ -14,13 +14,22 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
-from ngraph.transformers.flex2 import FlexManager, Flex
-from ngraph.transformers.flexgpuutil import bind_flex_params
+from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
 fixed_point = True
 flex_verbose = False
+
+
+# create and attach bind_flex_scales method to EW kernel (avoid editing gputransform)
+def _ew_bind_flex_scales(kernel):
+    for index, flex_scale_desc in kernel.flex_scale_info:
+        scale = flex_scale_desc.flex_entry.scale
+        scale = 1.0/scale if flex_scale_desc.is_output else scale
+        kernel.params[index] = scale
+ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
+
 
 class FlexGPUTransformer(GPUTransformer):
     """
@@ -107,27 +116,60 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         super(FlexGPUKernelGroup, self).__init__(transformer, name)
 
     def compile_all(self):
+        """
+        subclass deals with ElementWiseKernel flex interface here in order to
+        isolate from gputransform
+        """
 
         super(FlexGPUKernelGroup, self).compile_all()
 
-        # store output tensor flex ids
-        # "output" tensors: tensors that will be modified by this kernel group
-        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel  # TODO hack for now
-        output_ids = []
+        self._create_output_flex_ids()
+        self._create_ew_flex_scale_info()
+
+    def _create_output_flex_ids(self):
+        """
+        TODO: cleanup docstring, esp about EW
+
+        This method creates output_flex_ids attribute for the kernel group FlexGPUKernelGroup
+        It also creates output_flex_ids for ElementWiseKernel to avoid modifying gputransform
+
+        Kernels that actually modify tensor values should have output_flex_ids attribute
+        Kernel group output_flex_ids attribute is the set of all output_flex_ids of
+        its component kernels
+
+        "output" tensors: tensors that will be modified by this kernel group
+        """
+
+        # create output_flex_ids for both ElementWiseKernel and overall kernel group
+        group_output_ids = []
         for kernel in self.kernels:
+            # have to create output_flex_ids here for EW
             if isinstance(kernel, ElementWiseKernel):
                 # look for FlexScaleDescription.is_output
                 # at compile time scales have not been bound yet so this still exists
+                kernel_output_ids = []
                 for p in kernel.params:
                     if isinstance(p, FlexScaleDescription) and p.is_output:
-                        output_ids.append(p.flex_entry.flex_id)
-            elif not isinstance(kernel, (FillKernel, DimShuffleKernel)):
-                # all other kernels (gemm, conv) required to have output_flex_ids list attribute
-                output_ids.extend(kernel.output_flex_ids)
-        self.output_flex_ids = output_ids
+                        kernel_output_ids.append(p.flex_entry.flex_id)
+                kernel.output_flex_ids = kernel_output_ids
 
-        # store index and description of flex scale params that need to be changed each call
-        # elementwise only, other kernels use bind_flex_scales
+            # now append output_flex_ids to kernel group list of output ids
+            from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel  # TODO hack for now
+            if not isinstance(kernel, (FillKernel, DimShuffleKernel)):  # explicit list for now to catch others
+                # all other kernels (gemm, conv) required to have output_flex_ids list attribute
+                group_output_ids.extend(kernel.output_flex_ids)
+
+        # kernel group output_flex_ids is combined list over all kernels
+        self.output_flex_ids = group_output_ids
+
+    def _create_ew_flex_scale_info(self):
+        """
+        TODO: cleanup docstring
+        Set up EW bind_flex_scales method
+        Avoid modifying gputransform
+        """
+
+        # EW store index and description of flex scale params that need to be changed each call
         for kernel in self.kernels:
             if isinstance(kernel, ElementWiseKernel):
                 scale_info = [(i, p) for i, p in enumerate(kernel.params) if isinstance(p, FlexScaleDescription)]
@@ -139,14 +181,12 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         and new values are bound to kernel params
         """
 
-        # adjust scale of previously touched tensors
-        for flex_id in self.output_flex_ids:
+        # both kernel group and component kernels have output_flex_ids
+        # iterative over output_flex_ids specific to this kernel
+        for flex_id in kernel.output_flex_ids:
+            # adjust scale of previously touched tensors
             flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
-            if not flex_entry.initialized:
-                if not fixed_point:
-                    flex_entry.initialize(kernel)
-            else:
-                flex_entry.adjust_scale()
+            flex_entry.manage_before_computation(kernel)
 
         # bind flex scale kernel parameters
         bind_flex_params(kernel)

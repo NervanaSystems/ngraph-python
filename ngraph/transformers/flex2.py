@@ -20,6 +20,21 @@ autoflex_config = {'stats_queue_len': 16,
                    'stale_threshold': 1200,  # existing, arbitrary
                   }
 
+def bind_flex_params(kernel):
+    """
+    bind flex scale kernel parameters
+    """
+    #if hasattr(kernel, 'bind_flex_scales'):
+    #    kernel.bind_flex_scales()
+
+    # for now explicitly list kernels not expected to have method
+    from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel
+    if isinstance(kernel, (FillKernel, DimShuffleKernel)):
+        pass
+    else:
+        # EW gets this method attached in flexgputransform
+        kernel.bind_flex_scales()
+
 class Flex(object):
     """
     Flex data type
@@ -151,10 +166,6 @@ class FlexEntry(object):
 
         if flex_verbose1: print indent1 + "adjust_scale"
 
-        # if fixed point, don't adjust scale
-        if fixed_point:
-            return
-
         # check if we actually want to adjust scale
         if not self.do_adjust:
             if flex_verbose: print "adjust_scale not needed, tensor has not been modified"
@@ -183,15 +194,14 @@ class FlexEntry(object):
 
         self.do_adjust = False  # RP: self.do_adjust is basically self.adjust in neon flexsim
 
-    def initialize(self, kernel):
+    def init_scale(self, kernel):
         """
         neon flexsim init_scale functionality
         """
 
-        if flex_verbose1: print indent1 + "initialize"
+        if flex_verbose1: print indent1 + "init_scale"
 
         # bind flex scales and execute kernel
-        from ngraph.transformers.flexgpuutil import bind_flex_params  # TODO: circular import
         bind_flex_params(kernel)
         kernel.execute()
 
@@ -256,6 +266,15 @@ class FlexEntry(object):
             self.maxabs <<= 1
 
             if flex_verbose1: print indent1 + "detect_overflow maxabs adjusted to {}".format(self.maxabs)
+
+    def manage_before_computation(self, kernel):  # INTERFACE: kernel is GPU specific of course
+
+        # if fixed point, do not adjust scale
+        if not fixed_point:
+            if not self.initialized:
+                self.init_scale(kernel)
+            else:
+                self.adjust_scale()
 
     def record_data(self):
         """
