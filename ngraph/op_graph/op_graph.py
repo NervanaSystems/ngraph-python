@@ -1505,8 +1505,7 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if not isinstance(x, AssignableTensorOp):
-            x = ContiguousOp(axes_with_order(x, x.axes))
+        x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
