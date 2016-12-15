@@ -41,7 +41,7 @@ Here's a minimal example for the TensorFlow importer.
 
     # import
     importer = TFImporter()
-    importer.parse_graph_def(tf.Session().graph_def)
+    importer.import_graph_def(tf.Session().graph_def)
 
     # get handle
     f_ng = importer.get_op_handle(f)
@@ -79,12 +79,12 @@ In the example, we need to explicitly set ``init`` to
 ::
 
     importer = TFImporter()
-    importer.parse_graph_def(tf.Session().graph_def)
+    importer.import_graph_def(tf.Session().graph_def)
 
-- We use the ``TFImporter.parse_graph_def()`` function to import from
+- We use the ``TFImporter.import_graph_def()`` function to import from
   TensorFlow sessions's ``graph_def``.
 - The importer also support importing from a ``graph_def`` protobuf file
-  using ``TFImporter.parse_protobuf()``. For example, a ``graph_def`` file can
+  using ``TFImporter.import_protobuf()``. For example, a ``graph_def`` file can
   be dumped by ``tf.train.SummaryWriter()``.
 
 3. Get handles of corresponding ngraph ops

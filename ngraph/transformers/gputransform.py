@@ -18,7 +18,7 @@ import atexit
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, Op, \
+    ContiguousOp, CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -31,13 +31,15 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     RngOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Dimshuffle, \
-    Function, SetItemOneDOp
+    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
+    Function, SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 # TODO: re-enable fusion
 # from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
+
+from ngraph.transformers.passes.gpulayout import GPUTensorLayout
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
@@ -45,7 +47,7 @@ from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    UnsliceKernel, RngFillKernel
+    RngFillKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -462,13 +464,13 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
-    @add_kernel.on_type(Dimshuffle)
+    @add_kernel.on_type(ContiguousOp)
     def add_kernel(self, op):
         self.kernels.append(DimShuffleKernel(self.transformer, op))
 
     @add_kernel.on_type(Fill)
     def add_kernel(self, op):
-        self.kernels.append(FillKernel(self.transformer, op.tensor_description(), op.scalar))
+        self.kernels.append(FillKernel(self.transformer, op.call_info()[0], op.scalar))
 
     @add_kernel.on_type(RngOp)
     def add_kernel(self, op):
@@ -485,7 +487,7 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(SetItemOneDOp)
+    @add_kernel.on_type(SetItemOp)
     def add_kernel(self, op):
         self.kernels.append(SetItemKernel(self.transformer, op))
 
@@ -493,10 +495,6 @@ class GPUKernelGroup():
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
                                        op.reduction_axes.size))
-
-    @add_kernel.on_type(Unslice)
-    def add_kernel(self, op):
-        self.kernels.append(UnsliceKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -678,6 +676,10 @@ class GPUDeviceTensor(DeviceTensor):
         return self.__tensor
 
     @property
+    def shape(self):
+        return self.tensor.shape
+
+    @property
     def ref_str(self):
         """
         :return: name to reference variable.
@@ -749,17 +751,14 @@ class GPUDeviceTensor(DeviceTensor):
                 # Standard slicing (start:stop:step)
                 start, stop, idx_strides = index_entry.indices(shape[array_axis])
 
-                new_offset += (start * strides[array_axis] * dtype.itemsize)
+                new_offset += (start * strides[array_axis])
                 new_shape.append(-((start - stop) // idx_strides))
                 new_strides.append(idx_strides * strides[array_axis])
 
                 array_axis += 1
             elif isinstance(index_entry, (int, np.integer)):
                 # Single index value
-                new_offset += (index_entry * strides[array_axis] * dtype.itemsize)
-                new_shape.append(1)
-                new_strides.append(strides[array_axis])
-
+                new_offset += (index_entry * strides[array_axis])
                 array_axis += 1
             elif index_entry is Ellipsis:
                 # Use same shape as original for these axes
@@ -777,7 +776,7 @@ class GPUDeviceTensor(DeviceTensor):
                     new_strides.append(strides[array_axis])
                     array_axis += 1
             else:
-                raise IndexError("Invalid subindex in axis %d" % index_axis)
+                raise IndexError("Invalid subindex %s in axis %d" % (index_entry, index_axis))
 
         # Create view
         return GPUArray(new_shape,
@@ -786,15 +785,17 @@ class GPUDeviceTensor(DeviceTensor):
                         gpudata=(self.tensor.gpudata + new_offset))
 
     def __setitem__(self, key, value):
+        sliced = self.__getitem__(key)
+
         # Use fill for scalar values
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif type(value) == np.int32 or type(value) == np.int64 or \
                 type(value) == int:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
-            self.tensor.fill(value)
+            sliced.fill(value)
         elif np.sum(self.tensor.strides) == 0:
             view = GPUArray((1, ), dtype=self.tensor.dtype)
             view.fill(value)
@@ -805,29 +806,38 @@ class GPUDeviceTensor(DeviceTensor):
                 new_value[:] = value
                 value = new_value
 
-            sliced = self.__getitem__(key)
-
             # Reshape to satisfy pycuda if necessary
             if sliced.shape != value.shape:
                 sliced = self.tensor.reshape(value.shape)
 
-            if self.is_contiguous:
-                sliced[:] = value
+            if self.is_contiguous and self.strides_contiguous(value):
+                if sliced.shape == ():
+                    sliced.reshape((1,))[:] = value.reshape((1,))
+                else:
+                    sliced[:] = value
+            elif type(value) == GPUArray:
+                self.from_other(value, sliced)
             else:
                 contig_tensor = GPUArray(value.shape, self.tensor.dtype)
                 contig_tensor[:] = value
-                self.from_contiguous(contig_tensor)
+                self.from_other(contig_tensor, sliced)
 
     @property
     def is_contiguous(self):
-        if self.tensor.shape == ():
+        return self.strides_contiguous()
+
+    def strides_contiguous(self, tensor=None):
+        if tensor is None:
+            tensor = self.tensor
+
+        if tensor.shape == ():
             return True
 
         # Compute contiguous strides and compare with tensor strides
-        contiguous_strides = [self.tensor.dtype.itemsize]
-        for dim in reversed(self.tensor.shape[1:]):
+        contiguous_strides = [tensor.dtype.itemsize]
+        for dim in reversed(tensor.shape[1:]):
             contiguous_strides.insert(0, contiguous_strides[0] * dim)
-        return (tuple(contiguous_strides) == self.tensor.strides)
+        return (tuple(contiguous_strides) == tensor.strides)
 
     def as_contiguous(self):
         """
@@ -847,19 +857,23 @@ class GPUDeviceTensor(DeviceTensor):
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
         return contig_tensor
 
-    def from_contiguous(self, tensor):
+    def from_other(self, tensor, dest=None):
         """
-        Copies from a contiguous GPUArray with the same dimensions into this tensor
+        Copies from another GPUArray with the same dimensions into this tensor. Handles
+        discontiguous strides.
 
         Arguments:
             tensor (GPUArray): Contiguous tensor with same dimensions to use as source
         """
+        if dest is None:
+            dest = self.tensor
+
         src_strides = [s // tensor.dtype.itemsize for s in tensor.strides]
-        dst_strides = [s // self.tensor.dtype.itemsize for s in self.tensor.strides]
+        dst_strides = [s // dest.dtype.itemsize for s in dest.strides]
         kernel = _get_copy_transpose_kernel(tensor.dtype,
                                             tensor.shape,
                                             range(len(tensor.shape)))
-        params = [self.tensor.gpudata, tensor.gpudata] + list(kernel.args)
+        params = [dest.gpudata, tensor.gpudata] + list(kernel.args)
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
@@ -983,6 +997,8 @@ class GPUTransformer(Transformer):
         # TODO: Re-enable fusion
         # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
+
+        self.graph_passes.insert(0, GPUTensorLayout())
 
         self.buffer_allocators = []
         self.kernel_groups = dict()

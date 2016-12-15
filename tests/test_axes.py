@@ -49,7 +49,7 @@ def to_nested_tuple(axes):
         FlattenedAxis are replaced with tuple
     """
     return tuple(
-        to_nested_tuple(axis.axes) if isinstance(axis, FlattenedAxis) else axis
+        to_nested_tuple(axis.axes) if axis.is_flattened else axis
         for axis in axes
     )
 
@@ -252,6 +252,22 @@ def test_sliced_batch_axis():
     assert s.is_batch is True
 
 
+def test_sliced_recurrent_axis():
+    """ slicing a recurrent axis should result in a recurrent axis """
+    a = ng.make_axis(10, recurrent=True)
+    s = SlicedAxis(a, slice(0, 5))
+    assert s.is_recurrent is True
+
+
+def test_sliced_axis_roles():
+    """ slicing an axis should result in the same roles as the parent axis """
+    role1 = ng.make_axis_role()
+    role2 = ng.make_axis_role()
+    a = ng.make_axis(10, roles=[role1, role2])
+    s = SlicedAxis(a, slice(0, 5))
+    assert all(r in s.roles for r in a.roles)
+
+
 def test_idempotent_axes_a():
     """
     Test test axes transformations with autodiff, case a, reference test
@@ -317,8 +333,8 @@ def test_idempotent_axes_c():
 
     # slice
     axes_slice = [slice(None, None, None), slice(None, None, None)]
-    l_sliced = ng.Slice(l, axes_slice)
-    r_sliced = ng.Slice(r, axes_slice)
+    l_sliced = ng.tensor_slice(l, axes_slice)
+    r_sliced = ng.tensor_slice(r, axes_slice)
 
     # cast r
     r_sliced_casted = ng.cast_axes(r_sliced, axes)
@@ -328,7 +344,7 @@ def test_idempotent_axes_c():
 
     # cast / dimshuffle
     result = ng.cast_axes(result, result_axes)
-    result = ng.Dimshuffle(result, axes=result_axes)
+    result = ng.axes_with_order(result, result_axes)
 
     # cost and grad
     cost = ng.sum(result, reduction_axes=result.axes)
@@ -339,3 +355,16 @@ def test_idempotent_axes_c():
 
     assert cost_comp() == 6.0
     assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+
+
+def test_scalar_broadcast():
+    """
+    Test broadcasting a scalar into a tensor
+    """
+    ex = ExecutorFactory()
+    x_axes = ng.make_axes()
+    broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
+    x = ng.constant(1., axes=x_axes)
+    z = ng.broadcast(x, axes=broadcast_axes)
+    z_comp = ex.executor(z)
+    assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
