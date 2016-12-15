@@ -1,7 +1,11 @@
 from neon import NervanaObject  # noqa
 
-from ngraph.transformers.base import Transformer, Computation, make_transformer_factory, set_transformer_factory
-from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, CommunicationPass, ChildTransformerPass
+from ngraph.transformers.base import Transformer, Computation
+from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.base import set_transformer_factory
+from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
+from ngraph.transformers.passes.hetrpasses import CommunicationPass
+from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
 from multiprocessing import Process, Queue
 
@@ -16,18 +20,18 @@ class HetrComputation(Computation):
         self.child_computations = dict()
         self.placeholder_ops_pos = dict()
         self.child_results_map = dict()
-        self.num_results = 0 
+        self.num_results = 0
 
     def add_child(self, t, tname, returns, *args, **kwargs):
         self.child_computations[tname] = (t.computation(returns, *args, **kwargs))
 
     def __call__(self, *params):
         """
-        Executes child computations in parallel. 
-        
+        Executes child computations in parallel.
+
         :param params: list of values to the placeholders specified in __init__ *args
-        
-        :return: tuple of return values, one per return specified in __init__ returns list. 
+
+        :return: tuple of return values, one per return specified in __init__ returns list.
         """
 
         # Wrapper function that calls 'c' with args 'a' and puts the result on a queue 'r'.
@@ -35,7 +39,7 @@ class HetrComputation(Computation):
             r.put(c(*a))
 
         process_list = []
-        return_list = [None for i in range(self.num_results)] 
+        return_list = [None for i in range(self.num_results)]
         child_result_q = dict()
 
         # Map params to each child computation
@@ -47,7 +51,7 @@ class HetrComputation(Computation):
 
             if tname in self.child_results_map.keys():
                 child_result_q[tname] = q
-            
+
             p = Process(target=w, args=(t, targs, q))
             process_list.append(p)
             p.start()
@@ -63,8 +67,7 @@ class HetrComputation(Computation):
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 return_list[parent_idx] = child_results[child_idx]
 
-        return tuple(return_list)
-
+        return tuple(return_list)[0]
 
 
 class HetrTransformer(Transformer):
@@ -80,21 +83,19 @@ class HetrTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
-        
+
         self.child_transformers = dict()
         self.transformer_list = list()
         self.send_nodes_list = list()
-        self.transformer_to_node = {t: list() for t in self.transformer_list}
-
-        self.hetr_passes = [DeviceAssignPass(default_device='numpy', default_device_id=0),
-                           CommunicationPass(self.send_nodes_list, self.transformer_to_node),
-                           ChildTransformerPass(self.transformer_list)
-                           ]
+        self.hetr_passes = [DeviceAssignPass(default_device='numpy',
+                                             default_device_id=0),
+                            CommunicationPass(self.send_nodes_list),
+                            ChildTransformerPass(self.transformer_list)]
 
     def computation(self, results, *parameters, **kwargs):
 
         """
-       
+
         Build a heterogeneous computation object that implements
         communication and synchronization between subgraphs run
         on child transformers.
@@ -118,21 +119,25 @@ class HetrTransformer(Transformer):
         self.build_transformers(self.all_results)
 
         self.transformer_to_node = {t: list() for t in self.child_transformers}
+
+        # update the transformer to send node mappings
+        for tname, send_op in self.hetr_passes[1].dict_transformer_to_op.iteritems():
+            self.transformer_to_node[tname].append(send_op)
+
         self.child_results_map = dict()
 
         if type(results) is list:
             self.results_handlers_len = len(results)
             for pos, op in enumerate(results):
-                tname  = op.metadata['transformer']
+                tname = op.metadata['transformer']
                 self.transformer_to_node[tname].append(op)
-                self.child_results_map.setdefault(tname,[]).append(pos)
+                self.child_results_map.setdefault(tname, []).append(pos)
         else:
-            #if results is not a list, then its default pos = 0
-            tname  = results.metadata['transformer']
+            # if results is not a list, then its default pos = 0
+            tname = results.metadata['transformer']
             self.transformer_to_node[tname].append(results)
-            self.child_results_map.setdefault(tname,[]).append(0)
+            self.child_results_map.setdefault(tname, []).append(0)
             self.results_handlers_len = 1
-
 
         self.placeholders = {t: list() for t in self.child_transformers}
         self.placeholders_pos = {t: list() for t in self.child_transformers}
@@ -149,9 +154,9 @@ class HetrTransformer(Transformer):
         hc.child_results_map = self.child_results_map
         hc.num_results = self.results_handlers_len
 
-        #create child-computations for all unique keys in child_transformers dict
+        # create child-computations for all unique keys in child_transformers dict
         for tname, t in self.child_transformers.iteritems():
-            #result.add_child(val,self.transformer_to_node[key], *parameters, **kwargs)
+            # result.add_child(val,self.transformer_to_node[key], *parameters, **kwargs)
             child_ops = self.transformer_to_node[tname]
             child_placeholders = self.placeholders[tname]
             hc.add_child(t, tname, child_ops, *child_placeholders)
@@ -162,7 +167,8 @@ class HetrTransformer(Transformer):
         """
         TODO
 
-        implement one more graph traversal, which builds a set of transformer hints (i.e. numpy0, numpy1)
+        implement one more graph traversal, which builds a set of transformer
+        hints (i.e. numpy0, numpy1)
         ===> note this is done in ChildTransformerPass
 
         then, for each string in the set, build a real transformer and put them in a dictionary
@@ -180,7 +186,7 @@ class HetrTransformer(Transformer):
                     from ngraph.transformers.gputransform import GPUTransformer
                     self.child_transformers[t] = make_transformer_factory('gpu')()
                 except ImportError:
-                    assert False, "Fatal: Unable to initialize GPU, but GPU transformer was requested." 
+                    assert False, "Fatal: Unable to initialize GPU, but GPU transformer was requested."
             else:
                 assert False, "Unknown device!"
 
@@ -192,7 +198,8 @@ class HetrTransformer(Transformer):
             {'numpy': NumpyTransformer,
              'gpu': GPUTransformer}
 
-        then do a string compare on the hint_string, and return whichever one of the mapped transformers
+        then do a string compare on the hint_string, and return whichever one of
+        the mapped transformers
         matches the beginning of the hint string
 
         :param hint_string: a string such as 'numpy0'

@@ -18,21 +18,26 @@ class DeviceAssignPass(PeepholeGraphPass):
 
 
 class CommunicationPass(PeepholeGraphPass):
-    def __init__(self, sendnodes, dict_transformer_to_op):
+    def __init__(self, sendnodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = sendnodes
-        self.dict_transformer_to_op = dict_transformer_to_op
+        self.dict_transformer_to_op = dict()
 
     def visit(self, op):
         args = list()
         for arg in op.args:
-            if op.metadata['device'] != arg.metadata['device']:
-                self.send_nodes.append(Send(from_node=arg, device=arg.metadata['device'], device_id=arg.metadata['device_id']))
-                
+            if op.metadata['device_id'] != arg.metadata['device_id']:
+                self.send_nodes.append(Send(from_node=arg,
+                                            device=arg.metadata['device'],
+                                            device_id=arg.metadata['device_id']))
+
                 # TODO build a dict to map tarnsformer with the send node
                 #      remove the hardcoded numpy1
-                self.dict_transformer_to_op['numpy1'] = self.send_nodes[-1]  #workaround till wei, add this device attribute to send Op
-                args.append(Recv(axes=arg.axes, dtype=arg.dtype, device=op.metadata['device'], device_id=arg.metadata['device_id']))
+                tname = arg.metadata['device'] + arg.metadata['device_id']
+                self.dict_transformer_to_op[tname] = self.send_nodes[-1]
+                args.append(Recv(axes=arg.axes, dtype=arg.dtype,
+                                 device=op.metadata['device'],
+                                 device_id=arg.metadata['device_id']))
 
             else:
                 args.append(arg)
@@ -53,7 +58,7 @@ class ChildTransformerPass(PeepholeGraphPass):
         if 'parallel' in op.metadata:
             print "axis:", op.metadata['parallel'].name, "==> length:", op.metadata['parallel'].length
             assert(isinstance(op.metadata['device_id'], (list, tuple)))
-            #TODO: implement scatter/gather
+            # TODO: implement scatter/gather
 
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = list()

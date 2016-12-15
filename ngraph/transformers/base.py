@@ -96,7 +96,6 @@ class Computation(NameableValue):
             control_ops.update(op.user_deps)
         processed_ops = set()
         pending_ops = OrderedSet(self.ops)
-
         while pending_ops:
             op = pending_ops.pop()
             if op in processed_ops:
@@ -384,7 +383,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
     def run_registered_graph_passes(self, ops):
         for graph_pass in self.graph_passes:
-            print ("run graph pass ", graph_pass)
+            # print ("run graph pass ", graph_pass)
             graph_pass.do_pass(ops)
 
     def _transform_computations(self):

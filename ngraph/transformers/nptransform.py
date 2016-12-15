@@ -388,7 +388,7 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(AbsoluteOneDOp)
     def generate_op(self, op, out, x):
-        self.append("np.abs({}, out={}", x, out)
+        self.append("np.abs({}, out={})", x, out)
 
     @generate_op.on_type(AddOneDim)
     def generate_op(self, op, out, x, y):
@@ -650,13 +650,62 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Send)
     def generate_op(self, op, out, *args):
-        self.append("print self")
-        self.append("print \"Implement Send!\" ")
+        self.append("{} = {}", out, op.args[0].value.ref_str)
+        # import packages required for sockets and data transfer
+        self.append("import socket")
+        self.append("import sys")
+        self.append("import binascii")
+        self.append("import struct")
+        self.append("sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)")
+        # todo: hard code socket num could be problematic
+        self.append("server_address = ('localhost', 32109)")
+        # try until connected
+        self.append("connected = False")
+        self.append("while not connected:")
+        with indenting(self):
+            self.append("try:")
+            with indenting(self):
+                self.append("sock.connect(server_address)")
+                self.append("connected = True")
+            self.append("except Exception as e:")
+            with indenting(self):
+                self.append("pass")
+        self.append("values = ({})", out)
+        self.append("packer = struct.Struct('f')")
+        self.append("packed_data = packer.pack(values)")
+        self.append("sock.sendall(packed_data)")
+        self.append("sock.close()")
 
     @generate_op.on_type(Recv)
     def generate_op(self, op, out, *args):
-        self.append("print self")
-        self.append("print \"Implement Receive!\"")
+        self.append("def recv_from_send():")
+        with indenting(self):
+            # import packages required for sockets and data transfer
+            self.append("import socket")
+            self.append("import sys")
+            self.append("import binascii")
+            self.append("import struct")
+            self.append("sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)")
+            # todo: hard code socket num could be problematic
+            self.append("server_address = ('localhost', 32109)")
+            self.append("sock.bind(server_address)")
+            self.append("sock.listen(1)")
+            self.append("unpacker = struct.Struct('f')")
+            self.append("connection, client_address = sock.accept()")
+            # Wait till data is received, then close connection
+            self.append("while True:")
+            with indenting(self):
+                self.append("data = connection.recv(unpacker.size)")
+                self.append("if data:")
+                with indenting(self):
+                    self.append("break")
+            self.append("unpacked_data = unpacker.unpack(data)")
+            self.append("connection.close()")
+            self.append("sock.close()")
+
+            self.append("return unpacked_data[0]")
+        self.append("{} = recv_from_send()", out)
+
 
 class NumPyTransformer(Transformer):
     """
@@ -738,7 +787,6 @@ class NumPyTransformer(Transformer):
     def finish_transform(self):
         if self.model is not None:
             return
-
         self.code.append(" class Model(object):")
         with indenting(self.code):
             if len(self.device_buffers) == 0:
