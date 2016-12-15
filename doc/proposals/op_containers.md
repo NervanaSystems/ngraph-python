@@ -115,12 +115,46 @@ functional programming person), these computations can include subsets of ops as
       |                 |
       +-----------------+
 ```
+
+Additionally, instead of a container maintaining the dependency edges to its upstream parents, we
+find it more natural and powerful for a container to own the connectivity information (edges)
+between all of its children. These edges themselves can contain information such as type and
+orderings.
+
 And finally, computations have attributes/metadata in the form of string key value pairs. This metadata is 
 understood to apply to all children (which will be explained shortly) recursively. Examples include:
 - `debug: true`
 - `model_name: adversarial`
 - `recurrent_cell_unroll: 4`
 - `cudnn_recurrent_cell_standard_type: lstm`
+
+#### Addressing Challenges:
+
+##### Challenge 1 (C1) - Container Composition (Dataflow)
+Containers naturally address this.
+
+##### C2 - Computation Composition in the face of side effecting containers
+Control ports allow for explicit control and reasoning about side effecting computations occuring
+inside a container.
+
+##### C3 - Skip Connections
+By replacing the chain container, you can maintain all of the individual layers while adding skip
+connections. This is reasonably nice.
+
+##### C4 - Batchnorm
+See C2.
+
+##### C5 - Op Fusion
+This is naturally handled by containers.
+
+##### C6 - Metadata
+Check.
+
+##### C7 - Serialized weight pairings
+By giving containers UUIDs, we should be able to match things up pretty easily.
+
+##### C8 - Ergonomics
+This is work in progress.
 
 ### Implementation
 
@@ -131,10 +165,9 @@ proper datatypes and types)::
 
 ```python
 class Container(object):
-    inputs: dict<str, Op>,
-    outputs: dict<str, Op>,
-    computations: dict<str, [Op]>
+    ports: dict<str, Port>,
     children: [Container],
+    edges: [Edge],
     metadata: dict<str, str>,
 ```
 Here the inputs and outputs are merely string handles to Ops, and the computations are handles to 
