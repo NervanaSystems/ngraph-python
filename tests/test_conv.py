@@ -15,15 +15,14 @@
 
 import numpy as np
 import pytest
-
-import ngraph as ng
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from ngraph.op_graph.axes import spatial_axis
-from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Convolution
+
+import ngraph as ng
+from ngraph.frontends.neon import ax, ar
+from ngraph.op_graph.axes import spatial_axis
+from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -182,7 +181,7 @@ def test_convolution_backprop(transformer_factory):
     dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
     dcdf_num_val = dcdf_num_fun(filter_value, input_value)
 
-    np.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+    ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
 def test_convolution(transformer_factory):
@@ -258,13 +257,13 @@ def test_convolution(transformer_factory):
     gradF_ne = neon_layer.dW.get().reshape(ax_f.lengths)
 
     # Compare fprop
-    np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
     # Compare bprop
-    np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
 
     # Compare update
-    np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
+    ng.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
 
 
 def test_conv_flatten_deriv(transformer_factory):
@@ -332,12 +331,12 @@ def test_conv_flatten_deriv(transformer_factory):
     conv_val = conv_comp(filter_val, input_val)
     conv_val_num = np.empty_like(conv_val)
     conv_val_num.fill(C * T * R * S)
-    assert np.allclose(conv_val, conv_val_num)
+    assert ng.testing.allclose(conv_val, conv_val_num)
 
     grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
     grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
-    assert np.allclose(grad_filter_num_val, grad_filter_sym_val)
+    assert ng.testing.allclose(grad_filter_num_val, grad_filter_sym_val)
 
     grad_input_num_val = grad_input_num_comp(input_val, filter_val)
     grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
-    assert np.allclose(grad_input_num_val, grad_input_sym_val)
+    assert ng.testing.allclose(grad_input_num_val, grad_input_sym_val)

@@ -15,16 +15,15 @@
 
 import numpy as np
 import pytest
-
-import ngraph as ng
-import ngraph.transformers as ngt
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
-from ngraph.op_graph.axes import spatial_axis
-from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Pooling
+
+import ngraph as ng
+import ngraph.transformers as ngt
+from ngraph.frontends.neon import ax, ar
+from ngraph.op_graph.axes import spatial_axis
+from ngraph.testing import RandomTensorGenerator, executor
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -163,7 +162,7 @@ def test_pooling():
     gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
 
     # Compare fprop
-    np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
     # Compare bprop
-    np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)

@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
+import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 import pytest
 
@@ -51,7 +52,7 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)
 
     @pytest.mark.xfail(strict=True)
     def test_ref_assign_add(self):
@@ -70,4 +71,4 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)

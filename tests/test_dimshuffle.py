@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
 import numpy as np
+import pytest
 
 import ngraph as ng
-from ngraph.util.derivative_check import check_derivative
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
+from ngraph.testing import check_derivative, RandomTensorGenerator, executor
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -43,7 +41,7 @@ def test_dimshuffle_fprop(transformer_factory):
 
     result = executor(output, x)(x_value)
 
-    np.testing.assert_allclose(result, x_value.T)
+    ng.testing.assert_allclose(result, x_value.T)
 
 
 def test_dimshuffle_bprop(transformer_factory):

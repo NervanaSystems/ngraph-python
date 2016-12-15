@@ -20,6 +20,7 @@ import re
 import time
 import atexit
 import numpy as np
+import ngraph as ng
 
 cmd_kill = 'pid=`lsof -t -i:6006`; if [ $pid ] ; then kill -9 $pid; fi'
 cmd_browser = 'open http://0.0.0.0:6006/#graphs'
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     ng_results = tester.ng_run(
         target, tf_feed_dict=feed_dict, print_ng_result=False, verbose=False)
     print(tf_results, ng_results)
-    assert np.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
+    assert ng.testing.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
     tester.teardown(delete_dump=False)
 
     # start tensorboard (optional)
