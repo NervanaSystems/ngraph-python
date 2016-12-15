@@ -13,11 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-
 import ngraph as ng
-from ngraph.util.derivative_check import check_derivative
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
+from ngraph.testing import check_derivative, executor, RandomTensorGenerator
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -58,7 +55,7 @@ def test_print_op_fprop(capfd):
     output = ng.PrintOp(x, 'prefix')
     result = executor(output, x)(x_value)
 
-    np.testing.assert_allclose(result, x_value)
+    ng.testing.assert_allclose(result, x_value)
 
     out, err = capfd.readouterr()
     assert str(x_value[0]) in out

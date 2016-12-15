@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 import argparse
 
@@ -43,7 +44,7 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = logistic_regression(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
@@ -61,7 +62,7 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = mnist_mlp(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
@@ -82,7 +83,7 @@ class TestExamples(ImporterTester):
         tf_cost_vals = tf_retrain_mnist(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
