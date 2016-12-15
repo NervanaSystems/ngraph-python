@@ -985,6 +985,9 @@ class TensorOp(Op):
         return assign(self, self / val)
 
     def __getitem__(self, item):
+        if isinstance(item, slice) and len(self.axes) > 1:
+            item = (item,)
+        item += tuple(slice(None) for _ in range(len(self.axes) - len(item)))
         return tensor_slice(self, item)
 
     def __axes__(self):
