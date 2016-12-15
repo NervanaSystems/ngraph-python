@@ -25,7 +25,7 @@ import ngraph.transformers as ngt
 import argparse
 
 
-def train_mnist(args):
+def mnist_mlp(args):
     # write tensorflow models
     x = tf.placeholder(tf.float32, [args.batch_size, 784])
     t = tf.placeholder(tf.float32, [args.batch_size, 10])
@@ -38,7 +38,7 @@ def train_mnist(args):
 
     # import graph_def
     importer = TFImporter()
-    importer.parse_graph_def(tf.get_default_graph().as_graph_def())
+    importer.import_graph_def(tf.get_default_graph().as_graph_def())
 
     # get handle of ngraph ops
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
@@ -53,9 +53,11 @@ def train_mnist(args):
     # train
     mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
     init_comp()
+    ng_cost_vals = []
     for idx in range(args.max_iter):
         batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
         cost_val, _ = train_comp(batch_xs, batch_ys)
+        ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
     # train in tensorflow as comparison
@@ -63,13 +65,16 @@ def train_mnist(args):
         # train in tensorflow
         train_step = tf.train.GradientDescentOptimizer(args.lrate).minimize(cost)
         sess.run(init)
-
         mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        tf_cost_vals = []
         for idx in range(args.max_iter):
             batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
             cost_val, _ = sess.run([cost, train_step],
                                    feed_dict={x: batch_xs, t: batch_ys})
+            tf_cost_vals.append(float(cost_val))
             print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    return ng_cost_vals, tf_cost_vals
 
 
 if __name__ == "__main__":
@@ -80,4 +85,4 @@ if __name__ == "__main__":
                         help="Learning rate")
     parser.add_argument('-b', '--batch_size', type=int, default=128)
     args = parser.parse_args()
-    train_mnist(args)
+    mnist_mlp(args)

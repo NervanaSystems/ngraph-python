@@ -38,7 +38,7 @@ args = parser.parse_args()
 args.batch_size = 50
 time_steps = 5
 hidden_size = 10
-gradient_clip_value = None
+gradient_clip_value = 15
 
 # download penn treebank
 # set shift_target to be False, since it is going to predict the same sequence

@@ -34,14 +34,6 @@ class OpsBase(object):
     OpsBridge (contains mix-ins from OpsBinary, OpsUnary, ...)
     """
 
-    def __init__(self):
-        """
-        TODO: see if init_op and update_op are needed explicitly, alternative
-              is to pass in init and update node name to importer
-        """
-        self.init_op = None
-        self.update_op = None
-
     def DummyOp(self, input_ops):
         """
         An example of how actual op function shall be added

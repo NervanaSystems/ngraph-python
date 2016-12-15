@@ -15,7 +15,6 @@
 
 from __future__ import print_function
 
-from ngraph.op_graph.axes_ops import dimshuffle
 import ngraph.transformers as transformers
 from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, spatial_axis
 
@@ -64,7 +63,6 @@ __all__ = [
     'pooling',
     'reciprocal',
     'safelog',
-    'set_item',
     'sigmoid',
     'sign',
     'sin',
@@ -76,6 +74,7 @@ __all__ = [
     'tanh',
     'temporary',
     'tensor_size',
+    'tensor_slice',
     'variable',
     'variance',
     'with_name_scope',

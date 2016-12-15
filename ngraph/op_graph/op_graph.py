@@ -20,10 +20,11 @@ import cachetools
 import numpy as np
 from builtins import object
 from functools import wraps
+from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, casting_axis
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -320,7 +321,7 @@ class Op(NameableValue, DebugInfo):
     @staticmethod
     def visit_input_closure(roots, fun):
         """
-        "Bottom-up" post-order traversal of root and their inputs.
+        Topological sort order traversal of root and their inputs.
 
         Nodes will only be visited once, even if there are multiple routes to the
         same Node.
@@ -332,28 +333,38 @@ class Op(NameableValue, DebugInfo):
         Returns:
             None
         """
-        visited = set()
+        available = OrderedSet()
+        counts = dict()
+        parents = defaultdict(list)
+        ready = OrderedSet()
 
-        def visit(node):
-            """
-            Recursively visit all nodes used to compute this node.
-
-            Arguments:
-                node: the node to visit
-
-            Returns:
-                None
-            """
-            node = node.forwarded
+        available.update(root.forwarded for root in roots)
+        while available:
+            node = available.pop()
             node.update_forwards()
-            if node not in visited:
-                for n in node.other_deps + list(node.args):
-                    visit(n)
-                fun(node)
-                visited.add(node)
 
-        for node in roots:
-            visit(node)
+            if node in counts:
+                continue
+
+            children = [child.forwarded for child in node.all_deps]
+            if children:
+                counts[node] = len(children)
+                for child in children:
+                    parents[child].append(node)
+                available.update(children)
+            else:
+                ready.add(node)
+
+        while ready:
+            node = ready.pop()
+            fun(node)
+            for p in parents.get(node, []):
+                count = counts[p] - 1
+                if count == 0:
+                    ready.add(p)
+                    del counts[p]
+                else:
+                    counts[p] = count
 
     @property
     def forward(self):
@@ -393,6 +404,15 @@ class Op(NameableValue, DebugInfo):
     def add_other_dep(self, dep):
         # Add the dep to the op that actually does the work.
         self.device_op.other_deps.add(dep.forwarded)
+
+    @property
+    def all_deps(self):
+        """
+
+        Returns:
+            Ops that must execute before this one can.
+        """
+        return self.device_op.other_deps + self.args
 
     def add_initializer(self, init):
         self.initializers.add(init)
@@ -764,7 +784,7 @@ def assign(lvalue, rvalue):
     return AssignOp(lvalue, rvalue)
 
 
-class SetItemOneDOp(Op):
+class SetItemOp(Op):
     """
     tensor[item] = val
 
@@ -777,7 +797,8 @@ class SetItemOneDOp(Op):
 
     """
     def __init__(self, tensor, item, val, **kwargs):
-        super(SetItemOneDOp, self).__init__(args=(tensor, item, val), **kwargs)
+        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
+        self.item = tuple(item)
         tensor.user_deps = OrderedSet([self])
 
 
@@ -791,10 +812,8 @@ class doall(Op):
     """
 
     def __init__(self, all, **kwargs):
-        super(doall, self).__init__(args=all, **kwargs)
-
-    def call_info(self):
-        return []
+        super(doall, self).__init__(args=(), **kwargs)
+        self.other_deps = OrderedSet(all)
 
     @property
     def is_device_op(self):
@@ -832,6 +851,7 @@ class Fill(Op):
             scalar = npscalar[()]
 
         self.scalar = scalar
+        tensor.user_deps = OrderedSet([self])
 
 
 class TensorOp(Op):
@@ -862,9 +882,10 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes == delta.axes:
             raise ValueError(
-                'A tensor and its adjoint must have the same axes.'
+                'delta axes {} do not match adjoint axes {}'
+                .format(delta.axes, self.axes)
             )
         if self not in adjoints:
             adjoints[self] = delta
@@ -964,7 +985,10 @@ class TensorOp(Op):
         return assign(self, self / val)
 
     def __getitem__(self, item):
-        return Slice(self, item)
+        if isinstance(item, slice) and len(self.axes) > 1:
+            item = (item,)
+        item += tuple(slice(None) for _ in range(len(self.axes) - len(item)))
+        return tensor_slice(self, item)
 
     def __axes__(self):
         return self.axes
@@ -1113,6 +1137,16 @@ class ReshapeOp(TensorOp):
         """
         return self.args[0].device_op
 
+    @property
+    def user_deps(self):
+        # A reshape of storage is shares the side-effects of the storage
+        return self.args[0].user_deps
+
+    @user_deps.setter
+    def user_deps(self, deps):
+        # A reshape of storage is shares the side-effects of the storage
+        self.args[0].user_deps = deps
+
 
 class Transpose(ReshapeOp):
     """
@@ -1146,6 +1180,16 @@ class AxesCastOp(ReshapeOp):
 
     """
     def __init__(self, x, axes, **kwargs):
+        axes = make_axes(axes)
+        if not x.is_scalar and x.axes.lengths != axes.lengths:
+            raise ValueError("casting axes {} must have the same length as original axes {}"
+                             .format(axes, x.axes))
+        if len(x.axes) > 0:
+            aliasing_axes = []
+            for new_axis, old_axis in zip(axes, x.axes):
+                aliasing_axes.append(casting_axis(new_axis, old_axis))
+            axes = make_axes(aliasing_axes)
+
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1311,6 +1355,7 @@ def axes_with_order(x, axes):
         TensorOp: The new tensor.
 
     """
+    axes = make_axes(axes)
     if x.axes == axes:
         return x
     return ReorderAxes(x, axes)
@@ -1353,7 +1398,22 @@ class ReorderAxes(ReshapeOp):
         ))
 
 
-class Slice(ReshapeOp):
+def tensor_slice(x, slices, axes=None):
+    """
+    Creates a sliced version of a tensor.
+
+    Args:
+        x: The tensor.
+        slices: One slice for each dimension in x.
+        axes: Axes for the result.  If not specified, axes will be generated.
+
+    Returns:
+        A sliced view of the tensor.
+    """
+    return TensorSliceOp(x, slices, axes)
+
+
+class TensorSliceOp(ReshapeOp):
     """
     Creates a sliced version of a tensor.
 
@@ -1364,6 +1424,7 @@ class Slice(ReshapeOp):
     """
 
     def __init__(self, x, slices, axes=None, **kwargs):
+        slices = tuple(slices)
         if len(slices) != len(x.shape):
             raise ValueError((
                 'There should be one slice in slices for each dimension in '
@@ -1388,7 +1449,7 @@ class Slice(ReshapeOp):
 
             axes = make_axes(axes)
 
-        super(Slice, self).__init__(
+        super(TensorSliceOp, self).__init__(
             x,
             axes=axes,
             **kwargs
@@ -1423,7 +1484,7 @@ class Slice(ReshapeOp):
         """
         x.generate_add_delta(
             adjoints,
-            Unslice(delta, self.slices, axes=x.axes)
+            _unslice(delta, self.slices, x.axes)
         )
 
 
@@ -1442,14 +1503,12 @@ def slice_along_axis(x, axis, idx):
     pos = x.axes.index(axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
     axes = x.axes[:pos] + x.axes[pos + 1:]
-    return Slice(x, ss, axes=axes)
+    return tensor_slice(x, ss, axes=axes)
 
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if isinstance(x, ReshapeOp):
-            x = Dimshuffle(x, axes=x.axes)
-        assert Axes.check_flatten(x.axes, axes)
+        x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1469,7 +1528,7 @@ def flatten(x, axes=None, **kwargs):
         if len(x.axes) == 1:
             return x
         else:
-            axes = Axes((FlattenedAxis(x.axes),))
+            axes = make_axes((FlattenedAxis(x.axes),))
 
     if x.is_scalar:
         return x
@@ -1577,6 +1636,18 @@ class AssignableTensorOp(TensorOp):
 
         """
         return False
+
+    def add_other_dep(self, op):
+        """
+        Allocations happen before executed ops, so other_deps are ignored.
+
+        Args:
+            op:
+
+        Returns:
+
+        """
+        pass
 
 
 def constant(const, axes=None, dtype=None):
@@ -1827,7 +1898,7 @@ class StackOp(AssignableTensorOp):
         for i, arg in enumerate(self.args):
             slices = list(flat_slices)
             slices[flat_pos] = i
-            slice_op = Slice(flat_self, slices)
+            slice_op = tensor_slice(flat_self, slices)
             # Make sure the args are in the same order as our axes
             ordered_arg = axes_with_order(arg, arg_axes)
             # Arg is now 1d or 2d, depending on pos
@@ -1843,7 +1914,7 @@ class StackOp(AssignableTensorOp):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
-                Slice(delta, tuple(s), axes=x.axes)
+                tensor_slice(delta, tuple(s), axes=x.axes)
             )
 
 
@@ -1862,13 +1933,20 @@ def stack(x_list, axis, pos=0):
     return StackOp(x_list, axis, pos)
 
 
-class Unslice(TensorOp):
+class UnsliceSchema(object):
+    def __init__(self, x, slices):
+        self.x = x
+        self.slices = slices
+
+    def generate_adjoints(self, adjoints, delta, op):
+        self.x.generate_add_delta(adjoints, tensor_slice(delta, self.slices, axes=self.x.axes))
+
+
+def _unslice(x, slices, axes):
     """
     A computation to reverse a slicing operation.
-    Primarily used internally to implement expansions of tensors
+    Used internally to implement expansions of tensors
     such as the derivative of a slice and a padding function.
-    However, there is no reason why this operation should not be used
-    by a higher-level module or the end user.
 
     Arguments:
         x: The tensor.
@@ -1879,35 +1957,11 @@ class Unslice(TensorOp):
         slices: The slices.
         input_axes: The axes of the input x.
     """
-
-    def __init__(self, x, slices, **kwargs):
-        super(Unslice, self).__init__(args=(x,), **kwargs)
-        self.slices = slices
-        self.input_axes = x.axes
-
-    @cachetools.cached({})
-    def call_info(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = super(Unslice, self).call_info()
-        return [self.tensor_description().slice(self.slices, self.input_axes, self.name), x]
-
-    def generate_adjoints(self, adjoints, delta, x):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
-        """
-        x.generate_add_delta(adjoints, Slice(delta, self.slices, axes=x.axes))
+    op = temporary(axes=axes, dtype=x.dtype).named('unslice')
+    op.add_schema(UnsliceSchema(x, slices))
+    Fill(op, 0)
+    SetItemOp(op, slices, x)
+    return op
 
 
 class RNG(object):
@@ -2622,28 +2676,22 @@ LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
     = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
 
 
-class Dimshuffle(TensorOp):
-    def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
-            raise ValueError(
-                'The input and output axes must have the same elements.'
-            )
-        old_poss = []
-        for axis in axes:
-            old_pos = Axes.find_axis(x.axes, axis)
-            old_poss.append(old_pos)
-        self.old_axis_positions = tuple(old_poss)
+class ContiguousOp(TensorOp):
+    """
+    Ensure that element layout is contiguous.
 
-        super(Dimshuffle, self).__init__(
-            args=(x,),
-            axes=axes
-        )
+    Parameters:
+        x (TensorOp): A possibly non-contiguous tensor.
+    """
+    def __init__(self, x, **kwargs):
+        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+
+    @property
+    def old_axis_positions(self):
+        return tuple(range(len(self.axes)))
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(
-            adjoints,
-            delta
-        )
+        x.generate_add_delta(adjoints, delta)
 
 
 class DotOp(TensorOp):
@@ -2688,12 +2736,16 @@ class DotOp(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                dualed_axes(y, self.y_reduction_axes, -1, 0))
+            axes_with_order(
+                dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                    dualed_axes(y, self.y_reduction_axes, -1, 0)),
+                x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            dot(dualed_axes(x, self.x_out_axes, -1, +1), delta)
+            axes_with_order(
+                dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
+                y.axes)
         )
 
 
@@ -3116,7 +3168,7 @@ def pad(x, paddings, axes=None):
         s = tuple(None if p == 0 else p for p in s)
         return slice(s[0], s[1], 1)
     slices = tuple(to_slice(p) for p in paddings)
-    return Unslice(x, axes=axes, slices=slices)
+    return _unslice(x, slices, axes)
 
 
 class OneHotOp(TensorOp):
@@ -3218,13 +3270,15 @@ def sigmoid(x):
     """
     sigmoid(x)
 
-        :math:`\frac{1}{1+exp(-x)}`
+    .. math::
+        \\frac{1}{1+e^{-x}}
 
     Arguments:
         x: A tensor
 
     Returns:
         TensorOp: sigmoid(x).
+
     """
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))

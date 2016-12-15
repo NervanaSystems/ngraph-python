@@ -106,17 +106,17 @@ class FillKernel(GPUKernel):
         value : Scalar value to fill tensor
         out (GPUTensor): Tensor to fill with value
     """
-    def __init__(self, transformer, td, value):
+    def __init__(self, transformer, tensor, value):
         super(FillKernel, self).__init__(transformer)
 
         self.value = value
-        self.out = td
+        self.tensor = tensor
 
     def bind_buffers(self):
         """
         Get allocated GPU tensor for output
         """
-        self.out = self.out.value.tensor
+        self.tensor = self.tensor.value.tensor
         super(FillKernel, self).bind_buffers()
 
     def execute(self):
@@ -124,7 +124,7 @@ class FillKernel(GPUKernel):
         Use memset driver functions to fill tensor with scalar
         Temporarily uses neon GPUTensor's fill method
         """
-        self.out.fill(self.value)
+        self.tensor.fill(self.value)
 
 
 class RngFillKernel(GPUKernel):
@@ -207,7 +207,7 @@ class SetItemKernel(GPUKernel):
         Get allocated GPU tensor for output and potentially source value
         """
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value.tensor
+            self.tensor = self.tensor.value
         if isinstance(self.value, TensorDescription):
             self.value = self.value.value.tensor
 
@@ -227,71 +227,6 @@ class SetItemKernel(GPUKernel):
             self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                             None, *self.params)
         elif self.tensor.shape == ():
-            self.tensor.fill(self.value)
+            self.tensor.tensor.fill(self.value)
         else:
             self.tensor.__setitem__(self.item, self.value)
-
-
-class UnsliceKernel(GPUKernel):
-    """
-    Kernel used for Unslice op
-
-    Arguments:
-        transformer (GPUTransformer): GPU transformer containing instance of
-            NervanaGPU
-        op (Unslice): Graph op being transformed into this kernel
-
-    Attributes:
-        out (GPUTensor): Full dest tensor
-        out_sliced (GPUTensor): Slice of dest tensor which is the same shape as
-            the source tensor
-        value (GPUTensor: Source tensor
-    """
-    def __init__(self, transformer, op):
-        super(UnsliceKernel, self).__init__(transformer)
-
-        self.out_sliced, self.x = (_ for _ in op.call_info())
-        self.out = op.tensor_description()
-
-        # Use copy transpose kernel for unsupported cases
-        if len(self.out_sliced.strides) > 0 and np.min(self.out_sliced.strides) < 0:
-            dtype = self.out_sliced.dtype
-            shape = self.out_sliced.shape
-            axes = range(len(self.out_sliced.shape))
-
-            self.kernel, self.params = get_dimshuffle(dtype, shape, tuple(axes),
-                                                      TensorDescriptionWrapper(self.x),
-                                                      TensorDescriptionWrapper(self.out_sliced))
-        else:
-            self.kernel = None
-
-    def bind_buffers(self):
-        """
-        Get allocated GPU tensor for source and dest
-        """
-        if isinstance(self.out_sliced, TensorDescription):
-            self.out_sliced = self.out_sliced.value.tensor
-        if isinstance(self.x, TensorDescription):
-            self.x = self.x.value.tensor
-        if isinstance(self.out, TensorDescription):
-            self.out = self.out.value.tensor
-
-        if self.kernel is not None:
-            for index in range(len(self.params)):
-                if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = pointer_from_td(self.params[index])
-
-        super(UnsliceKernel, self).bind_buffers()
-
-    def execute(self):
-        """
-        Run fill and SetItem kernel to execute the Unslice operation
-        """
-        self.out.fill(0)
-        if self.kernel is not None:
-            self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
-                                            None, *self.params)
-        elif self.out_sliced.shape == ():
-            self.out_sliced.fill(self.x.get())
-        else:
-            self.out_sliced[:] = self.x
