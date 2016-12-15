@@ -21,18 +21,25 @@ We want composition of computional graphs to extend straightforwardly to composi
 optimizers, and models.
 
 ### C2 - Computation Composition in the face of side effecting containers
-Because op graphs (currently) support side-effects through `SetItemOp`s what does the composition of 
-computations look like (in addition to dataflow outlined in `C1`)?  It's reasonable to see how 
-inputs and outputs can be stitched together automatically by name, but what about computations?
+Because op graphs (currently) support side-effects through `SetItemOp`s,
+pseudo-random number generators, and initializers what does the composition of
+computations look like (in addition to dataflow outlined in `C1`)?  It's
+reasonable to see how inputs and outputs can be stitched together automatically
+by name, but what about computations?
 
 ### C3 - Skip Connections
-How do you connect resnet style skip connections between connectors? It feels ugly that they 
-silently go between container boundaries
+Consider you may have already existing layers connected in a sequential chain.
+You then load this chain into your model and now want to connect skip
+connections between layers. Certainly you can modify the connections and add
+sum ops between layers, but can we do this in a non-mutating way with tombstone
+edges etc?
 
 ### C4 - Batchnorm
-You get two computations (one for training and one for inference), how do you hook
-these up? Do you force the choice at construction time, or allow 'late binding' for the choice to
-be made later?
+In a batchnorm layer you want to describe two computations (one for training
+and one for inference), that both represent a batchnorm, but each occurs during
+a different phase of training. How do we represent this in a single logical
+container? Do you force the choice at construction time, or allow 'late
+binding' for the choice to be made later?
 
 ### C5 - Op Fusion
 A transformer can replace some ops with a container to indicate a fused kernel. It'd be nice to be 
@@ -75,34 +82,40 @@ arguments in its functional API, but I think named arguments are probably better
 syntax easy enough to work with. We can consider the addressing of input/output arguments as 
 *DECISION 1 (D1)*.
 
-Now we must diverge from functions as we know them in most programming languages because with 
-computational graphs, it is commonly the case that we only care about a subset of outputs (and thus 
-inputs) for a given container. Consider C4 (batchnorm) where computation one wishes to do at 
-training time is different than at test time for the same logical functionality.
+To make this model a little more flexible we introduce the notion of a container's `ports`. We have
+already witnessed two types of ports so far: input and output ports. They simply refer to some type
+of handle of a container (in this case, data input and output handles). Input and output ports are a
+natural place for tensor-like attributes to belong such as axes, shape information, striding, etc.
 
-I believe that this need can be handled by adding _computations_ to containers as named handles to 
-subsets of outputs of that container. 
-
+We can also consider another container port type: a `control` port. A control port is a handle to
+reason about a set of side-effecting computations that can occur inside a container. Thus a
+BatchNorm container would have a single output port (the input tensor after normalization) but have
+one control ports for the updates to its internal state during training. Then when a user or
+framework executed this layer during training, it would request the output (for the next block in
+the dataflow graph) and then execute the training control port to update its state. This way the
+ordering between dataflow computations and side effecting computations _can_ be explicitly
+controlled (and defaults can be applied otherwise) and reasoned about independently (such as weight
+reinitialization etc).
 
 Also because of we need to reason about side effects (C2 or imperative mutations if you aren't a 
 functional programming person), these computations can include subsets of ops as well.
 ```
-       Computations
+       Control ports
 
      (train)  (inference)
          +       +
          |       |
       +-----------------+
       |  |       v      |
-      |  |       1      +-->  1
+      |  | side effect  +-->  1
       |  |              |
 +----->  |              +-->  2
       |  v              |
-      | (2 & 3)         +-->  3
+      | side effect     +-->  3
       |                 |
       +-----------------+
 ```
-And finally, computations have metadata in the form of string key value pairs. This metadata is 
+And finally, computations have attributes/metadata in the form of string key value pairs. This metadata is 
 understood to apply to all children (which will be explained shortly) recursively. Examples include:
 - `debug: true`
 - `model_name: adversarial`
@@ -110,6 +123,9 @@ understood to apply to all children (which will be explained shortly) recursivel
 - `cudnn_recurrent_cell_standard_type: lstm`
 
 ### Implementation
+
+_NOTE: Most of this is now deprecated by work with Evren on the serialization/containers joint effort_
+
 Let's look at an example container implementation in Python (or at least, Python if Python had 
 proper datatypes and types)::
 
@@ -300,7 +316,13 @@ all can be considered as Containers with a single output, a single computation, 
 This has a very nice unifying property to computational graphs, but the full ramifications are 
 unclear.
 
+After further discussion, this is underway in our serialization/container joint
+implementation plan (since both affect the op_graph definition so much).
+
 # Proposal 3
+
+_NOTE: This has not garnered much interest and is not currently being pursued._
+
 A further extension of proposal 1 (independent of proposal 2) is to stop storing edge information in 
 the Op's themselves, but instead store them in the Containers. Combining this with `tombstone` edges 
 (phantom edges marking deletion) we could support non mutating graph modifications (just layer 
