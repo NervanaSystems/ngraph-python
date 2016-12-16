@@ -62,7 +62,7 @@ clean:
 test:
 	@echo Running unit tests...
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
-	@-coverage xml
+	@coverage xml -i
 
 style:
 	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
