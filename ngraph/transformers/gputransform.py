@@ -27,8 +27,8 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
-    RngOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, PowerZeroDim, \
+    ReciprocalOneDOp, RngOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
@@ -273,6 +273,10 @@ class ElementWiseKernel(GPUKernel):
         self._buffer_op("onehot", x=x, out=out)
 
     @add_op.on_type(Power)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("pow", x=x, y=y, out=out)
+
+    @add_op.on_type(PowerZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
 

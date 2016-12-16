@@ -36,12 +36,12 @@ class Tester(ImporterTester):
 
         # test
         for reduction_indices in reduction_indices_list:
-            f = tf.reduce_sum(a, reduction_indices=reduction_indices)
-            self.run(f, tf_feed_dict=feed_dict)
-            f = tf.reduce_prod(a, reduction_indices=reduction_indices)
-            self.run(f, tf_feed_dict=feed_dict)
-            f = tf.reduce_mean(a, reduction_indices=reduction_indices)
-            self.run(f, tf_feed_dict=feed_dict)
+            f_sum = tf.reduce_sum(a, reduction_indices=reduction_indices)
+            self.run(f_sum, tf_feed_dict=feed_dict)
+            f_prod = tf.reduce_prod(a, reduction_indices=reduction_indices)
+            self.run(f_prod, tf_feed_dict=feed_dict)
+            f_mean = tf.reduce_mean(a, reduction_indices=reduction_indices)
+            self.run(f_mean, tf_feed_dict=feed_dict)
 
     def test_sum_prod_broadcast(self):
         # placeholder

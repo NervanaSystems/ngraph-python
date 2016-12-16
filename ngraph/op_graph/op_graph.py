@@ -3051,9 +3051,33 @@ Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
 
 
 def prod_adjoints(self, adjoints, delta, x):
+    # axes
+    axes = x.axes
+    reduction_axes = self.reduction_axes
+
+    # x_equal_zero
+    x_equal_zero = equal(x, 0)
+
+    # count 0's occurrence by reduction axes
+    x_zero_count = sum(x_equal_zero, reduction_axes=reduction_axes)
+
+    # create mask for zero count 0 and 1
+    mask_zero = broadcast(equal(x_zero_count, 0), axes=axes)
+    mask_one = broadcast(equal(x_zero_count, 1), axes=axes)
+
+    # replace all 0 to 1
+    x_replaced = equal(x, 0.) * 1. + (1. - equal(x, 0.)) * x
+
+    # do product of x_replace and gradient
+    x_replaced_prod = prod(x_replaced, reduction_axes=reduction_axes)
+    x_replaced_grad = x_replaced_prod / x_replaced
+
+    # multiply mask with mask for the two cases
+    x_grad = mask_zero * x_replaced_grad + mask_one * x_equal_zero * x_replaced_grad
+
     x.generate_add_delta(
         adjoints,
-        broadcast(delta * self, x.axes) / x
+        broadcast(delta, x.axes) * x_grad
     )
 
 

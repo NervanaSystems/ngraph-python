@@ -36,7 +36,8 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
+    Power, PowerZeroDim, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, Prod, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
@@ -583,7 +584,11 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
-        self.append("np.power({}, {}, out={}", x, y, out)
+        self.append("np.power({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(PowerZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.power({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(PrintOp)
     def generate_op(self, op, out, x):
