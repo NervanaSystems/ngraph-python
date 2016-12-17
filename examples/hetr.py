@@ -24,9 +24,13 @@ parser.add_argument("--visualize", "-v", action="store_true", help="enable graph
 args = parser.parse_args()
 
 # Build the graph
-with ng.metadata(device_id='1'):
+
+with ng.metadata(device='numpy'):
     x = ng.placeholder(())
-x_plus_one = x + 1
+    x_plus_one = x + 1
+
+with ng.metadata(device='gpu'):
+    x_plus_two = x_plus_one + 1
 
 # Select a transformer
 hetr = ngt.make_transformer_factory('hetr')()
@@ -36,8 +40,8 @@ if args.visualize:
     hetr.vizpass = ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True)
 
 # Define a computation
-plus_one = hetr.computation(x_plus_one, x)
+plus_two = hetr.computation(x_plus_two, x)
 
 # Run the computation
 for i in range(args.iter_count):
-    print(plus_one(i))
+    print(plus_two(i))

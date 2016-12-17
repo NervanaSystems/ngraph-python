@@ -21,6 +21,7 @@ def build_transformer(name):
     :param results: the graph nodes that we care about, for the computation
     :return: the dictionary of transformers, with names matching the graph node hints
     """
+    print("build_transformer", name)
     if 'numpy' in name:
         transformer = make_transformer_factory('numpy')()
     elif 'gpu' in name:
@@ -197,6 +198,7 @@ class HetrComputation(object):
             self.placeholders[tname].append(p)
             self.placeholders_pos[tname].append(i)
 
+        print self.send_nodes_list
         self.child_computations = dict()
         for tname in self.transformer_name_list:
             # request asynctransformer from HT
@@ -255,9 +257,11 @@ class HetrTransformer(Transformer):
 
         self.child_transformers = dict()
         self.transformer_list = list()
+        self.transformers = set()
         self.send_nodes_list = list()
         self.hetr_passes = [DeviceAssignPass(default_device='numpy',
-                                             default_device_id=0),
+                                             default_device_id=0,
+                                             transformers=self.transformers),
                             CommunicationPass(self.send_nodes_list),
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None

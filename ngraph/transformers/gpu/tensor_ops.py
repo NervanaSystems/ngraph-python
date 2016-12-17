@@ -127,6 +127,33 @@ class FillKernel(GPUKernel):
         self.tensor.fill(self.value)
 
 
+class SendKernel(GPUKernel):
+    def __init__(self, transformer, send_op):
+        super(SendKernel, self).__init__(transformer)
+        self.send_op = send_op
+
+    def bind_buffers(self):
+        pass
+
+    def execute(self):
+        tensor = self.send_op.args[0].value
+        value = tensor.get(None)
+        q = self.send_op.shared_q
+        q.put(value)
+
+
+class RecvKernel(GPUKernel):
+    def __init__(self, transformer, tensor):
+        super(RecvKernel, self).__init__(transformer)
+        self.tensor = tensor
+
+    def bind_buffers(self):
+        pass
+
+    def execute(self):
+        pass
+
+
 class RngFillKernel(GPUKernel):
     """
     Kernel used to fill a tensor with a random distribution value.
