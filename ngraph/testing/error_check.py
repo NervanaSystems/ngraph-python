@@ -54,7 +54,7 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
         desired: array_like, desired value
         rtol: float, relative tolerance
         atol: float, relative tolerance
-        equal_nan: bool, whether to compare NaN’s as equal
+        equal_nan: bool, whether to compare NaNs as equal
         err_msg: str, error message to be printed in case of failure.
         verbose: bool, if True, the conflicting values are appended to the error message
         transofrmer_overwrite: when True, use transformer's atol / rtol if they
@@ -80,7 +80,7 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False,
         b: array_like, desired value
         rtol: float, relative tolerance
         atol: float, relative tolerance
-        equal_nan: bool, whether to compare NaN’s as equal
+        equal_nan: bool, whether to compare NaNs as equal
         transofrmer_overwrite: when True, use transformer's atol / rtol if they
                                are less strict than atol / rtol
 
