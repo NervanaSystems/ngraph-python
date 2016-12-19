@@ -106,6 +106,22 @@ def test_slice_nop():
     assert s.axes[1] != x.axes[1]
 
 
+def test_tensor_slice():
+    """
+    slicing a tensor should work like numpy
+    """
+
+    M = ng.make_axis(10)
+    N = ng.make_axis(20)
+    O = ng.make_axis(5)
+
+    x = ng.placeholder(axes=[M, N, O])
+
+    assert x[:5].axes.full_lengths == (5, 20, 5)
+    assert x[:, 2:7].axes.full_lengths == (10, 5, 5)
+    assert x[:5, :, :-1].axes.full_lengths == (5, 20, 4)
+
+
 def test_setting():
     ex = ExecutorFactory()
     X = ng.make_axis(name='X', length=3)
