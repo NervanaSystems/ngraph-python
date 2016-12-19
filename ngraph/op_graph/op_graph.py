@@ -985,6 +985,9 @@ class TensorOp(Op):
         return assign(self, self / val)
 
     def __getitem__(self, item):
+        if isinstance(item, slice) and len(self.axes) > 1:
+            item = (item,)
+        item += tuple(slice(None) for _ in range(len(self.axes) - len(item)))
         return tensor_slice(self, item)
 
     def __axes__(self):
@@ -1505,8 +1508,7 @@ def slice_along_axis(x, axis, idx):
 
 class Flatten(ReshapeOp):
     def __init__(self, x, axes, **kwargs):
-        if not isinstance(x, AssignableTensorOp):
-            x = ContiguousOp(axes_with_order(x, x.axes))
+        x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
