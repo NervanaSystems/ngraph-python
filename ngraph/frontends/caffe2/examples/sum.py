@@ -17,28 +17,42 @@ from __future__ import print_function
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 from caffe2.python import core, workspace
 import ngraph.transformers as ngt
+import numpy as np
 
 # Caffe2 - network creation
 net = core.Net("net")
-A = net.ConstantFill([], ["A"], shape=[2, 2, 2], value=2.5, run_once=0, name="A")
-B = net.ConstantFill([], ["B"], shape=[2, 2, 2], value=3.5, run_once=0, name="B")
-C = net.ConstantFill([], ["C"], shape=[2, 2, 2], value=1.5, run_once=0, name="C")
+shape = (2, 2, 2)
+
+A = net.GivenTensorFill([], "A", shape=shape, values=np.random.uniform(-5, 5, shape), name="A")
+B = net.GivenTensorFill([], "B", shape=shape, values=np.random.uniform(-5, 5, shape), name="B")
+C = net.GivenTensorFill([], "C", shape=shape, values=np.random.uniform(-5, 5, shape), name="C")
 Y = A.Sum([B, C], ["Y"], name="Y")
 
 # Execute via Caffe2
 workspace.ResetWorkspace()
 workspace.RunNetOnce(net)
 
+# Execute in numpy
+a = workspace.FetchBlob("A")
+b = workspace.FetchBlob("B")
+c = workspace.FetchBlob("C")
+
+np_result = np.sum([a, b, c], axis=0)
+
 # Import caffe2 network into ngraph
 importer = C2Importer()
-importer.parse_net_def(net.Proto(), verbose=True)
+importer.parse_net_def(net.Proto(), verbose=False)
 
 # Get handle
 f_ng = importer.get_op_handle("Y")
 
-# Execute
+# Execute in ngraph
 f_result = ngt.make_transformer().computation(f_ng)()
 
-# compare Caffe2 and ngraph results
-print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
-print("ngraph result: {}:\n{}".format("Y", f_result))
+# compare numpy, Caffe2 and ngraph results
+print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
+print("ngraph result: \n{}\n".format(f_result))
+print("numpy result: \n{}\n".format(np_result))
+
+assert(np.allclose(f_result, workspace.FetchBlob("Y")))
+assert(np.allclose(f_result, np_result))
