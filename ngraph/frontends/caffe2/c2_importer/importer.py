@@ -86,8 +86,8 @@ class C2Importer:
                 output_op = output_op[0]
 
             # TBD: what if some c2_op have more than one output?
-            #      or (output name) != (c2_op.name)
-            self.name_op_map[c2_op.name] = output_op
+            key = c2_op.name if c2_op.name != '' else c2_op.output[0]
+            self.name_op_map[key] = output_op
 
     def post_process_op(self, op):
         """

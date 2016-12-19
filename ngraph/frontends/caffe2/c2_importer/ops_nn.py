@@ -40,10 +40,10 @@ class OpsNN(OpsBase):
         left, right, bias = inputs
 
         # check shape
-        assert left.axes[1].length == right.axes[0].length
+        assert left.axes[1].length == right.axes[1].length
 
         # cast axis
-        left_casted = ng.cast_axes(left, [left.axes[0], right.axes[0] - 1])
+        left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
 
         # add op
         add_op = ng.dot(left_casted, right)

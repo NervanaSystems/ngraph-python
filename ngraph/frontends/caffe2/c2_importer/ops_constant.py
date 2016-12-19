@@ -108,6 +108,31 @@ class OpsConstant(OpsBase):
                             shape_to_axes(np_val.shape)).named(c2_op.name)
         return ng_op
 
+    def UniformIntFill(self, c2_op, inputs):
+        """
+        Creates a constant tensor with uniform fill.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            value, dtype, shape, name
+        """
+
+        # parse protobuf arguments
+        args = {arg.name: arg for arg in c2_op.arg}
+
+        # convert to numpy value
+        np_val = np.random.random_integers(args["min"].i, args["max"].i,
+                                           tuple(args["shape"].ints))
+        ng_op = ng.constant(np_val,
+                            shape_to_axes(np_val.shape)).named(c2_op.name)
+        return ng_op
+
     def GivenTensorFill(self, c2_op, inputs):
         """
         Creates a constant tensor with values provided.
@@ -122,11 +147,14 @@ class OpsConstant(OpsBase):
         Inputs to c2_op:
             value, dtype, shape, name
         """
-        # convert to numpy value
+        # parse arguments
         args = {arg.name: arg for arg in c2_op.arg}
-        # TODO: correct value parsing
+        # convert to numpy value
         values = [v for v in args["values"].floats]
-        np_val = np.array(values)
+        shape = [s for s in args["shape"].ints]
+        np_init = np.array(values)
+        np_val = np.ndarray(shape)
+        np_val[:] = np_init.reshape(shape)[:]
 
         ng_op = ng.constant(np_val,
                             shape_to_axes(np_val.shape)).named(c2_op.name)
