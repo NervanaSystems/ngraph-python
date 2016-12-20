@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import ngraph as ng
 import numpy as np
 import pytest
-from ngraph.util.utils import executor
+
+import ngraph as ng
+from ngraph.testing import executor
 
 
 def test_evalutaion_twice(transformer_factory):
