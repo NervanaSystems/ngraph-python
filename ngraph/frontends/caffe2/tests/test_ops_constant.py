@@ -21,15 +21,13 @@ import numpy as np
 import random as random
 
 
-def test_relu():
+def test_constant():
     workspace.ResetWorkspace()
 
     shape = [10, 10]
-    data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
-
+    val = random.random()
     net = core.Net("net")
-    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
-    net.Relu(["X"], ["Y"], name="Y")
+    net.ConstantFill([], ["Y"], shape=shape, value=val, run_once=0, name="Y")
 
     # Execute via Caffe2
     workspace.RunNetOnce(net)
@@ -45,18 +43,32 @@ def test_relu():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")) and f_result[0] == val)
 
 
-def test_tanh():
+def test_gausianfill():
+    # TODO: how to check it? Meybe we can omit this test
+    pass
+
+
+def test_uniformfill():
+    # TODO: how to check it? Meybe we can omit this test
+    pass
+
+
+def test_uniformintfill():
+    # TODO: how to check it? Meybe we can omit this test
+    pass
+
+
+def test_giventensorfill():
     workspace.ResetWorkspace()
 
-    shape = [1, 10]
-    data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+    shape = [10, 10]
+    data1 = np.random.random(shape)
 
     net = core.Net("net")
-    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
-    net.Tanh(["X"], ["Y"], name="Y")
+    net.GivenTensorFill([], ["Y"], shape=shape, values=data1, name="Y")
 
     # Execute via Caffe2
     workspace.RunNetOnce(net)
@@ -72,4 +84,4 @@ def test_tanh():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))
+    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))

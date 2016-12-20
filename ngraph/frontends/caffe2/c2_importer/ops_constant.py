@@ -14,10 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
-# TODO: temporary(?) dependency on tf_importer
-from ngraph.frontends.tensorflow.tf_importer.utils import shape_to_axes
 import caffe2.python.core as c2core
-import ngraph as ng
 import numpy as np
 from utils import make_const_op
 
