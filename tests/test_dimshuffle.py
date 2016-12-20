@@ -17,13 +17,13 @@ import pytest
 
 import ngraph as ng
 from ngraph.testing import check_derivative, RandomTensorGenerator, executor
-from ngraph.testing.flexutil import xfail_if_flexgpu
+from ngraph.testing.flexutil import xfail_transformer_type
 
 
 rng = RandomTensorGenerator(0, np.float32)
 
 
-@xfail_if_flexgpu(reason='conv kernels not integrated for flex', run=False)
+@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
 def test_dimshuffle_fprop(transformer_factory):
     """
     dimshuffle a 2d array and make sure fprop works
@@ -46,7 +46,7 @@ def test_dimshuffle_fprop(transformer_factory):
     ng.testing.assert_allclose(result, x_value.T)
 
 
-@xfail_if_flexgpu(reason='conv kernels not integrated for flex', run=False)
+@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
 def test_dimshuffle_bprop(transformer_factory):
     """
     dimshuffle a 2d array and make sure bprop works
