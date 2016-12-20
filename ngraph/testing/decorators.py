@@ -12,26 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
 
-import ngraph as ng
-import ngraph.transformers as ngt
+import decorator
 import numpy as np
 
 
-def test_exit_condition(transformer_factory):
-    bsz = 16
-    class_num = 10
+def with_error_settings(**new_settings):
+    """
+    TODO.
 
-    N, Y = ng.make_axis(bsz), ng.make_axis(class_num)
-    y_val = np.absolute(np.random.randn(bsz, class_num))
-    y = ng.constant(y_val, ng.make_axes([N, Y]))
+    Arguments:
+      **new_settings: TODO
 
-    likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
+    Returns:
 
-    transformer = ngt.make_transformer()
-    comp = transformer.computation(likelihood)
+    """
+    @decorator.decorator
+    def dec(f, *args, **kwargs):
+        old_settings = np.geterr()
 
-    val1 = comp()
-    val2 = comp()
-    ng.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+        np.seterr(**new_settings)
+        ret = f(*args, **kwargs)
+
+        np.seterr(**old_settings)
+
+        return ret
+
+    return dec
+
+
+def raise_all_numpy_errors(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
+    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
+    return with_error_settings(**settings)(f)

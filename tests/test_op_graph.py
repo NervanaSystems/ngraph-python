@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import numpy as np
 import pytest
 
-import numpy as np
 import ngraph as ng
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 
 def test_variable_init(transformer_factory):
@@ -28,7 +28,7 @@ def test_variable_init(transformer_factory):
 
     ex = ExecutorFactory()
     result = ex.executor(W)()
-    np.testing.assert_allclose(result, w_init)
+    ng.testing.assert_allclose(result, w_init)
 
 
 def test_deriv_missing_connection():
@@ -144,8 +144,8 @@ def test_setting():
     f_v2 = ex.executor(v)
 
     e_v = f_v().copy()
-    assert np.allclose(e_v, np_x)
+    assert ng.testing.allclose(e_v, np_x)
     e_v1 = f_v1().copy()
-    assert np.allclose(e_v1, np_x + np_y)
+    assert ng.testing.allclose(e_v1, np_x + np_y)
     e_v2 = f_v2().copy()
-    assert np.allclose(e_v2, np_x + np_y)
+    assert ng.testing.allclose(e_v2, np_x + np_y)

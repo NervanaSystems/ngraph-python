@@ -986,6 +986,8 @@ class GPUTransformer(Transformer):
     __runtime = None
 
     transformer_name = "gpu"
+    default_rtol = 1e-05
+    default_atol = 1e-08
 
     @staticmethod
     def close_gpu():

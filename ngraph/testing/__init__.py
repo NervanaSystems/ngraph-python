@@ -12,26 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
 
-import ngraph as ng
-import ngraph.transformers as ngt
-import numpy as np
+from __future__ import print_function
 
+from ngraph.testing.decorators import with_error_settings, raise_all_numpy_errors
+from ngraph.testing.error_check import assert_allclose, allclose
+from ngraph.testing.random import RandomTensorGenerator
+from ngraph.testing.execution import executor, ExecutorFactory, \
+    numeric_derivative, check_derivative
 
-def test_exit_condition(transformer_factory):
-    bsz = 16
-    class_num = 10
-
-    N, Y = ng.make_axis(bsz), ng.make_axis(class_num)
-    y_val = np.absolute(np.random.randn(bsz, class_num))
-    y = ng.constant(y_val, ng.make_axes([N, Y]))
-
-    likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
-
-    transformer = ngt.make_transformer()
-    comp = transformer.computation(likelihood)
-
-    val1 = comp()
-    val2 = comp()
-    ng.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+__all__ = [
+    'with_error_settings',
+    'raise_all_numpy_errors',
+    'assert_allclose',
+    'allclose',
+    'RandomTensorGenerator',
+    'executor',
+    'ExecutorFactory',
+    'numeric_derivative',
+    'check_derivative',
+]
