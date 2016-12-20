@@ -899,7 +899,7 @@ def get_kernel(base_name, options=None):
     if kernel_name[0] == "f":
         sig += "Qf"  # stats pointer and scale float.
 
-    print "kernel_specs_flex: get_kernel:", kernel_name, "with sig", sig
+    if flex_verbose: print "kernel_specs_flex: get_kernel:", kernel_name, "with sig", sig
 
     module = drv.module_from_file(os.path.join(cubin_dir, kernel_name + ".cubin"))
     func   = module.get_function(kernel_name)
