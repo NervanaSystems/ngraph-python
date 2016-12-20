@@ -1411,11 +1411,10 @@ class TensorDescription(NameableValue):
         self.__buffer = None
         self.__register = None
         self.__base = base
-        self.dtype = np.dtype(np.int16)  # HARD CODED FOR FLEX, was default_dtype(dtype)
-                                         # 1. TensorDescription refactor needs to address setting dtype before transformer is known
-                                         # 2. meaning of default_dtype (abstract versus a device specific storage type)
-                                         # 3. attributes derived from dtype that is set here, that prevent
-                                         #    self.dtype = transformer.storage_dtype()   in initialization method
+        self.dtype = default_dtype(dtype)  # 1. flex passes overwrite this before init_tensor_description
+                                           # 2. meaning of default_dtype (user facing versus a device specific storage type)
+                                           # 3. attributes derived from dtype that is set here, that prevent
+                                           #    self.dtype = transformer.storage_dtype()   in initialization method
         self.offset = offset
         self.ndim = len(self.axes)
         self.__read_only = False
@@ -1854,13 +1853,6 @@ class TensorDescription(NameableValue):
         """Called by transformer to set up value."""
         assert self.__value is None
         self.transformer = transformer
-
-        # FLEX hack to make things work, will be fixed with TensorDescription issue
-        from ngraph.transformers.flexgputransform import FlexGPUTransformer
-        if isinstance(transformer, FlexGPUTransformer):
-            from ngraph.transformers.flex2 import flex16
-            self.dtype = flex16
-
         # If the TensorDescription requires heap storage
         if self.buffer is not None:
             if self.buffer.data is None:

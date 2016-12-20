@@ -16,6 +16,7 @@
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
 from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
 from ngraph.transformers.flex2 import DEFAULT_DEC
+from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
@@ -41,13 +42,21 @@ class FlexGPUTransformer(GPUTransformer):
     """
 
     transformer_name = "flexgpu"
+
     # TODO not sure how these should be set
     fixed_point_res = 1.0 / 2**DEFAULT_DEC
     default_rtol = fixed_point_res
     default_atol = fixed_point_res
 
     def __init__(self, **kwargs):
+
         super(FlexGPUTransformer, self).__init__(**kwargs)
+
+        # flex passes for setting Op dtypes to flex
+        self.register_graph_pass(ClearTensorDescriptions())
+        self.register_graph_pass(FlexPass())
+
+        # flex manager manages autoflex mechanics
         self.flex_manager = FlexManager()
 
     def device_buffer_storage(self, bytes, dtype, name):
