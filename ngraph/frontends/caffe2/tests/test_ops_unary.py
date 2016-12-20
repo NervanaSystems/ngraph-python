@@ -20,11 +20,12 @@ import ngraph.transformers as ngt
 import numpy as np
 import pytest
 
+
 @pytest.mark.xfail(strict=True, reason="c2 and ngraph generates own data")
 def test_relu():
     net = core.Net("net")
     X = net.GaussianFill([], ["X"], shape=[5, 5], mean=0.0, std=1.0, run_once=0, name="X")
-    Y = X.Relu([], ["Y"], name="Y")
+    X.Relu([], ["Y"], name="Y")
 
     # Execute via Caffe2
     workspace.ResetWorkspace()
@@ -41,4 +42,4 @@ def test_relu():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert( np.array_equal(f_result, workspace.FetchBlob("Y")))
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))

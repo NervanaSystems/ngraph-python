@@ -20,7 +20,9 @@ import ngraph.transformers as ngt
 import numpy as np
 import pytest
 
-#TODO: how to use the same data for both transformers
+# TODO: how to use the same data for both transformers
+
+
 @pytest.mark.xfail(strict=True, reason="c2 and ngraph generates own data")
 def test_fc():
     # Caffe2 - network creation
@@ -28,7 +30,7 @@ def test_fc():
     X = net.GaussianFill([], ["X"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="X")
     W = net.GaussianFill([], ["W"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="W")
     b = net.ConstantFill([], ["b"], shape=[2, ], value=1.0, run_once=0, name="b")
-    Y = X.FC([W, b], ["Y"], name="Y")
+    X.FC([W, b], ["Y"], name="Y")
 
     # Execute via Caffe2
     workspace.ResetWorkspace()
@@ -45,4 +47,4 @@ def test_fc():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert( np.array_equal(f_result, workspace.FetchBlob("Y")))
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
