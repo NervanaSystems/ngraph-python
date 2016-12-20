@@ -36,10 +36,11 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
+    Power, PowerZeroDim, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
+    Sum, Prod, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
     SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -583,7 +584,11 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
-        self.append("np.power({}, {}, out={}", x, y, out)
+        self.append("np.power({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(PowerZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.power({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(PrintOp)
     def generate_op(self, op, out, x):
@@ -637,6 +642,10 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(Sum)
     def generate_op(self, op, out, x):
         self.append("np.sum({}, axis=0, out={})", x, out)
+
+    @generate_op.on_type(Prod)
+    def generate_op(self, op, out, x):
+        self.append("np.prod({}, axis=0, out={})", x, out)
 
     @generate_op.on_type(TanhOneDOp)
     def generate_op(self, op, out, x):
