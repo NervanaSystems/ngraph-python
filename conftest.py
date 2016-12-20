@@ -17,7 +17,9 @@ import ngraph.transformers as ngt
 
 
 @pytest.fixture(scope="module",
-                params=['flexgpu'])  #params=ngt.transformer_choices())
+                #params=ngt.transformer_choices())
+                #params=['numpy', 'gpu'])
+                params=['flexgpu'])
 def transformer_factory(request):
     factory = ngt.make_transformer_factory(request.param)
     ngt.set_transformer_factory(factory)
