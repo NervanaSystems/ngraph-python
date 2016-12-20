@@ -141,7 +141,6 @@ class OpsUnary(OpsBase):
         """
         return ng.negative(inputs[0]).named(tf_node.name)
 
-
     def Square(self, tf_node, inputs):
         """
         Performs the x^2 on the each element of input.
