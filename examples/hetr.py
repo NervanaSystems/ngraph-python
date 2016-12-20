@@ -16,22 +16,28 @@ from __future__ import print_function
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.transformers.passes.nviz
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--iter_count", "-i", type=int, default=5, help="num iterations to run")
+parser.add_argument("--visualize", "-v", action="store_true", help="enable graph visualization")
+args = parser.parse_args()
 
 # Build the graph
 with ng.metadata(device_id='1'):
     x = ng.placeholder(())
-x_plus_one = x + 1 
+x_plus_one = x + 1
 
 # Select a transformer
-transformer = ngt.make_transformer_factory('hetr')()
+hetr = ngt.make_transformer_factory('hetr')()
 
 # Visualize the graph
-transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
+if args.visualize:
+    hetr.vizpass = ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True)
 
 # Define a computation
-plus_one = transformer.computation(x_plus_one, x)
+plus_one = hetr.computation(x_plus_one, x)
 
 # Run the computation
-for i in range(5):
+for i in range(args.iter_count):
     print(plus_one(i))
-

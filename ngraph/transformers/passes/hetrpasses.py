@@ -56,7 +56,8 @@ class ChildTransformerPass(PeepholeGraphPass):
 
     def visit(self, op):
         if 'parallel' in op.metadata:
-            print "axis:", op.metadata['parallel'].name, "==> length:", op.metadata['parallel'].length
+            print "axis:", op.metadata['parallel'].name, \
+                  "==> length:", op.metadata['parallel'].length
             assert(isinstance(op.metadata['device_id'], (list, tuple)))
             # TODO: implement scatter/gather
 

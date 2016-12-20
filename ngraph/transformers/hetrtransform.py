@@ -91,6 +91,7 @@ class HetrTransformer(Transformer):
                                              default_device_id=0),
                             CommunicationPass(self.send_nodes_list),
                             ChildTransformerPass(self.transformer_list)]
+        self.vizpass = None
 
     def computation(self, results, *parameters, **kwargs):
 
@@ -114,6 +115,10 @@ class HetrTransformer(Transformer):
         # Do Hetr passes
         for graph_pass in self.hetr_passes:
             graph_pass.do_pass(self.all_results)
+
+        if self.vizpass:
+            vis_results = self.all_results + self.send_nodes_list
+            self.vizpass.do_pass(vis_results)
 
         # Build child transformers
         self.build_transformers(self.all_results)
@@ -183,10 +188,11 @@ class HetrTransformer(Transformer):
                 self.child_transformers[t] = make_transformer_factory('numpy')()
             elif 'gpu' in t:
                 try:
-                    from ngraph.transformers.gputransform import GPUTransformer
+                    from ngraph.transformers.gputransform import GPUTransformer # noqa
                     self.child_transformers[t] = make_transformer_factory('gpu')()
                 except ImportError:
-                    assert False, "Fatal: Unable to initialize GPU, but GPU transformer was requested."
+                    assert False, "Fatal: Unable to initialize GPU, " \
+                                  "but GPU transformer was requested."
             else:
                 assert False, "Unknown device!"
 
