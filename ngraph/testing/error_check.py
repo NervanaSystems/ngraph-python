@@ -17,6 +17,10 @@ import numpy as np
 import ngraph as ng
 
 
+def transformer_name():
+    return ng.transformers.base.__transformer_factory.name
+
+
 def __overwrite_rtol_atol(rtol, atol):
     """
     Overwrite atol, rtol by the transformer's default atol rtol if the default
@@ -31,7 +35,7 @@ def __overwrite_rtol_atol(rtol, atol):
     """
     try:
         # get transformer name
-        name = ng.transformers.base.__transformer_factory.name
+        name = transformer_name()
         # get transformer class
         tr = ng.transformers.Transformer.transformers[name]
         # rewrite rtol, atol if default is coarser
