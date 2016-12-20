@@ -144,8 +144,12 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
         "output" tensors: tensors that will be modified by this kernel group
         """
+        # TODO: explicitly list kernels for now to catch any missing
+        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel, RngFillKernel
+        no_output_id_kernels = (FillKernel, DimShuffleKernel, RngFillKernel)
 
-        # create output_flex_ids for both ElementWiseKernel and overall kernel group
+        # create output_flex_ids for overall kernel group and
+        # create output_flex_ids for kernels that don't already have them
         group_output_ids = []
         for kernel in self.kernels:
             # have to create output_flex_ids here for EW
@@ -157,12 +161,11 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                     if isinstance(p, FlexScaleDescription) and p.is_output:
                         kernel_output_ids.append(p.flex_entry.flex_id)
                 kernel.output_flex_ids = kernel_output_ids
+            elif isinstance(kernel, no_output_id_kernels):
+                kernel.output_flex_ids = []
 
-            # now append output_flex_ids to kernel group list of output ids
-            from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel  # TODO hack for now
-            if not isinstance(kernel, (FillKernel, DimShuffleKernel)):  # explicit list for now to catch others
-                # all other kernels (gemm, conv) required to have output_flex_ids list attribute
-                group_output_ids.extend(kernel.output_flex_ids)
+            # now add kernel output_flex_ids to kernel group list of output ids
+            group_output_ids.extend(kernel.output_flex_ids)
 
         # kernel group output_flex_ids is combined list over all kernels
         self.output_flex_ids = group_output_ids

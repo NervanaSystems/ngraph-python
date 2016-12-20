@@ -28,8 +28,8 @@ def bind_flex_params(kernel):
     #    kernel.bind_flex_scales()
 
     # for now explicitly list kernels not expected to have method
-    from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel
-    if isinstance(kernel, (FillKernel, DimShuffleKernel)):
+    from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel, RngFillKernel
+    if isinstance(kernel, (FillKernel, DimShuffleKernel, RngFillKernel)):
         pass
     else:
         # EW gets this method attached in flexgputransform
