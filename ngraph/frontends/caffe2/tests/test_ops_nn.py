@@ -48,4 +48,4 @@ def test_fc():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))
+    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
