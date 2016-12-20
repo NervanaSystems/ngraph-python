@@ -17,9 +17,13 @@ from functools import wraps
 import ngraph as ng
 
 
-def shape_to_axes(pos):
+def shape_to_axes(shape):
+    return [ng.make_axis(s) for s in shape] if shape else ng.make_axis()
+
+
+def args_shape_to_axes(pos):
     """
-    Decorator ot convert shape to axes.
+    Decorator to convert shape to axes.
 
     Arguments:
         pos: Ordinal position of shape in args tuple
@@ -31,7 +35,7 @@ def shape_to_axes(pos):
             if pos is None:
                 return func(*args, **kw)
             shape = args[pos]
-            axes = [ng.make_axis(s) for s in shape] if shape else ng.make_axis()
+            axes = shape_to_axes(shape)
             temp = list(args)
             temp[pos] = axes
             args = tuple(temp)
@@ -40,6 +44,6 @@ def shape_to_axes(pos):
     return outer
 
 
-@shape_to_axes(1)
+@args_shape_to_axes(1)
 def make_const_op(const, axes=None, name=None):
     return ng.constant(const, axes).named(name)

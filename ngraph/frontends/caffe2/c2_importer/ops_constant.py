@@ -51,8 +51,6 @@ class OpsConstant(OpsBase):
         # convert to numpy value
         np_val = np.full(tuple(args["shape"].ints), value)
 
-        # ng_op = ng.constant(np_val,
-        #                     shape_to_axes(np_val.shape)).named(c2_op.name)
         ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
 
         return ng_op
@@ -81,8 +79,7 @@ class OpsConstant(OpsBase):
         np_val = np.random.normal(mean, std,
                                   tuple(args["shape"].ints))
 
-        ng_op = ng.constant(np_val,
-                            shape_to_axes(np_val.shape)).named(c2_op.name)
+        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
         return ng_op
 
     def UniformFill(self, c2_op, inputs):
@@ -107,9 +104,8 @@ class OpsConstant(OpsBase):
         np_val = np.random.uniform(args["min"].f, args["max"].f,
                                    tuple(args["shape"].ints))
 
-        # ng_op = ng.constant(np_val,
-        #                     shape_to_axes(np_val.shape)).named(c2_op.name)
         ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
+
         return ng_op
 
     def UniformIntFill(self, c2_op, inputs):
@@ -133,8 +129,8 @@ class OpsConstant(OpsBase):
         # convert to numpy value
         np_val = np.random.random_integers(args["min"].i, args["max"].i,
                                            tuple(args["shape"].ints))
-        ng_op = ng.constant(np_val,
-                            shape_to_axes(np_val.shape)).named(c2_op.name)
+        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
+
         return ng_op
 
     def GivenTensorFill(self, c2_op, inputs):
@@ -160,7 +156,6 @@ class OpsConstant(OpsBase):
         np_val = np.ndarray(shape)
         np_val[:] = np_init.reshape(shape)[:]
 
-        ng_op = ng.constant(np_val,
-                            shape_to_axes(np_val.shape)).named(c2_op.name)
+        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
 
         return ng_op
