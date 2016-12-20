@@ -16,11 +16,13 @@
 Test of the mlp/linear layer
 '''
 import itertools as itt
+
 import numpy as np
+
 import ngraph as ng
-from ngraph.frontends.neon import Linear, UniformInit
-from ngraph.util.utils import executor
 import ngraph.transformers as ngt
+from ngraph.frontends.neon import Linear, UniformInit
+from ngraph.testing.execution import executor
 
 
 def pytest_generate_tests(metafunc):
@@ -81,4 +83,4 @@ def test_linear_ones(basic_linargs, transformer_factory):
     out, w = executor([fprop, layer.W], inp)(x)
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 
-    assert np.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))
+    assert ng.testing.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))

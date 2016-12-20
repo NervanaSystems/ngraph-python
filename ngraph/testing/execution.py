@@ -15,153 +15,9 @@
 from __future__ import division
 from builtins import object
 
-import math
 import numpy as np
-
 import ngraph as ng
 import ngraph.transformers as ngt
-import decorator
-
-
-class RandomTensorGenerator(object):
-    """
-    Generate various pseudo-random values from a seed.
-
-    Arguments:
-        seed: The seed for the random number generator.
-        dtype: The type of the generated values.
-    """
-
-    def __init__(self, seed=0, dtype=np.float32):
-        self.dtype = dtype
-        self.seed = 0
-        self.reset(seed)
-
-    def reset(self, seed=None):
-        """
-        Restart generation from the seed.
-
-        Arguments:
-            seed: If supplied, a new seed for generation, otherwise the original seed.
-        """
-        if seed is not None:
-            self.seed = seed
-        self.rng = np.random.RandomState(seed=self.seed)
-
-    def uniform(self, low, high, axes, dtype=None):
-        """
-        Returns a tensor initialized with a uniform distribution from low to high with axes.
-
-        Arguments:
-            low: The lower limit of the distribution.
-            high: The upper limit of the distribution.
-            axes: The axes of the tensor.
-            dtype: If supplied, the type of the values.
-
-        Returns:
-            The initialized tensor.
-
-        """
-        if dtype is None:
-            dtype = self.dtype
-
-        return np.array(
-            self.rng.uniform(
-                low,
-                high,
-                ng.make_axes(axes).lengths),
-            dtype=dtype)
-
-    def discrete_uniform(self, low, high, quantum, axes, dtype=None):
-        """
-        Returns a tensor initialized with a discrete uniform distribution.
-
-        Arguments:
-            low: The lower limit of the values.
-            high: The upper limit of the values.
-            quantum: Distance between values.
-            axes: The axes of the tensor.
-
-        Returns:
-            The tensor.
-
-        """
-        if dtype is None:
-            dtype = self.dtype
-
-        n = math.floor((high - low) / quantum)
-        result = np.array(self.rng.random_integers(
-            0, n, ng.make_axes(axes).lengths), dtype=dtype)
-        np.multiply(result, quantum, result)
-        np.add(result, low, result)
-        return result
-
-    def random_integers(self, low, high, axes, dtype=np.int8):
-        """
-        Returns a tensor initialized with random integers.
-
-        Arguments:
-            low: The lower limit of values.
-            high: the upper limit of values.
-            axes: The axes of the tensors.
-            dtype: The dtype of the values.
-
-        Returns:
-            The tensor.
-        """
-        return self.rng.random_integers(low, high, ng.make_axes(axes).lengths).astype(dtype)
-
-
-def with_error_settings(**new_settings):
-    """
-    TODO.
-
-    Arguments:
-      **new_settings: TODO
-
-    Returns:
-
-    """
-    @decorator.decorator
-    def dec(f, *args, **kwargs):
-        old_settings = np.geterr()
-
-        np.seterr(**new_settings)
-        ret = f(*args, **kwargs)
-
-        np.seterr(**old_settings)
-
-        return ret
-
-    return dec
-
-
-def raise_all_numpy_errors(f):
-    """
-    TODO.
-
-    Arguments:
-      f: TODO
-
-    Returns:
-
-    """
-    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
-    return with_error_settings(**settings)(f)
-
-
-def executor(results, *parameters):
-    """
-    Generate a single-entry transformer that computes results from parameters
-
-    Arguments:
-      results: TODO
-      parameters: TODO
-
-    Returns:
-      Function of placeholders in parameters
-    """
-    return ngt.make_transformer().computation(results, *parameters)
 
 
 class ExecutorFactory(object):
@@ -239,6 +95,20 @@ class ExecutorFactory(object):
             return helper
 
 
+def executor(results, *parameters):
+    """
+    Generate a single-entry transformer that computes results from parameters
+
+    Arguments:
+      results: TODO
+      parameters: TODO
+
+    Returns:
+      Function of placeholders in parameters
+    """
+    return ExecutorFactory().executor(results, *parameters)
+
+
 def numeric_derivative(f, x, dx):
     """
     Computer df/dx at x numerically.
@@ -287,3 +157,30 @@ def numeric_derivative(f, x, dx):
         d[tuple(dindex)] = (dy / dx)
         xiter[...] = old_x
     return d
+
+
+def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], **kwargs):
+    """
+    Check that the numeric and symbol derivatives of f with respect to x are
+    the same when x has value x_value.
+
+    Arguments:
+        f: function to take the derivative of
+        x: variable to take the derivative with respect to
+        delta: distance to perturn x in numeric derivative
+        x_value: the value of x we are going to compute the derivate of f at
+        parameters: extra parameters to f
+        parameter_values: value of extra parameters to f
+        kwargs: passed to assert_allclose.  Useful for atol/rtol.
+    """
+
+    ex = ExecutorFactory()
+
+    dfdx_numeric = ex.numeric_derivative(f, x, delta, *parameters)
+    dfdx_symbolic = ex.derivative(f, x, *parameters)
+
+    ng.testing.assert_allclose(
+        dfdx_numeric(x_value, *parameter_values),
+        dfdx_symbolic(x_value, *parameter_values),
+        **kwargs
+    )

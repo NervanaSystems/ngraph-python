@@ -657,6 +657,8 @@ class NumPyTransformer(Transformer):
     """
 
     transformer_name = "numpy"
+    default_rtol = 1e-05
+    default_atol = 1e-08
 
     def __init__(self, **kwargs):
         super(NumPyTransformer, self).__init__(**kwargs)
