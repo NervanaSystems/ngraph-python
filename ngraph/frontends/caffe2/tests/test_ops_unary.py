@@ -18,17 +18,20 @@ from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 import ngraph.transformers as ngt
 import numpy as np
-import pytest
+import random as random
 
 
-@pytest.mark.xfail(strict=True, reason="c2 and ngraph generates own data")
 def test_relu():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
     net = core.Net("net")
-    X = net.GaussianFill([], ["X"], shape=[5, 5], mean=0.0, std=1.0, run_once=0, name="X")
-    X.Relu([], ["Y"], name="Y")
+    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
+    net.Relu(["X"], ["Y"], name="Y")
 
     # Execute via Caffe2
-    workspace.ResetWorkspace()
     workspace.RunNetOnce(net)
 
     # Import caffe2 network into ngraph

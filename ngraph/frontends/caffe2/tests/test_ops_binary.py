@@ -18,21 +18,21 @@ from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 import ngraph.transformers as ngt
 import numpy as np
-import pytest
-
-# TODO: how to use the same data for both transformers
+import random as random
 
 
-@pytest.mark.xfail(strict=True, reason="c2 and ngraph generates own data")
 def test_sum():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+    data2 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
     net = core.Net("net")
-    X = net.GaussianFill([], ["X"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="X")
-    W = net.GaussianFill([], ["W"], shape=[2, 2], mean=0.0, std=1.0, run_once=0, name="W")
-    b = net.ConstantFill([], ["b"], shape=[2, ], value=1.0, run_once=0, name="b")
-    X.FC([W, b], ["Y"], name="Y")
+    X1 = net.GivenTensorFill([], "X1", shape=shape, values=data1, name="X1")
+    X2 = net.GivenTensorFill([], "X2", shape=shape, values=data2, name="X2")
+    net.Sum([X1, X2], ["Y"], name="Y")
 
     # Execute via Caffe2
-    workspace.ResetWorkspace()
     workspace.RunNetOnce(net)
 
     # Import caffe2 network into ngraph
