@@ -466,8 +466,9 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(update_lut)
     def generatea_op(self, op, outputs, delta, idx):
-        self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
-                    delta, idx, op.pad_idx, op.bprop_sum_axis, outputs)
+        if op.update:
+            self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
+                        delta, idx, op.pad_idx, op.bprop_sum_axis, outputs)
 
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):

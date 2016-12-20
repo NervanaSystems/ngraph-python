@@ -14,7 +14,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.frontends.neon import Sequential, Preprocess, BiRNN, Recurrent, Affine, Softmax, Tanh
+from ngraph.frontends.neon import (Sequential, Preprocess, BiRNN, Recurrent, Affine,
+                                   Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, ar, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
@@ -28,6 +29,8 @@ from ptb import PTB
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
+parser.add_argument('--use_lut', action='store_true',
+                    help='choose to use lut as first layer')
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
@@ -65,8 +68,13 @@ else:
     rlayer = BiRNN(hidden_size, init, activation=Tanh(), reset_cells=False,
                    return_sequence=True, sum_out=True)
 
+if args.use_lut:
+    layer_0 = LookupTable(50, 100, init, update=False)
+else:
+    layer_0 = Preprocess(functor=expand_onehot
+
 # model initialization
-seq1 = Sequential([Preprocess(functor=expand_onehot),
+seq1 = Sequential([layer_0,
                    rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))])
 

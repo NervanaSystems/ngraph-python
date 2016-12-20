@@ -16,7 +16,7 @@ from __future__ import division
 from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
 
 
-def lookuptable(lut, idx, axes, pad_idx=None, docstring=None):
+def lookuptable(lut, idx, axes, update=True, pad_idx=None, docstring=None):
     """
     An operation to do the lookup from lut using the idx.
     Output axes are given as well, so from lut and idx axes, it indicates which
@@ -33,12 +33,12 @@ def lookuptable(lut, idx, axes, pad_idx=None, docstring=None):
         TensorOp: The result of the lookup.
 
     """
-    return LookupTableOp(lut, idx, axes=axes, pad_idx=pad_idx, docstring=docstring)
+    return LookupTableOp(lut, idx, axes=axes, update=True, pad_idx=pad_idx, docstring=docstring)
 
 
 class LookupTableOp(TensorOp):
 
-    def __init__(self, lut, idx, axes, pad_idx, **kwargs):
+    def __init__(self, lut, idx, axes, update=True, pad_idx=None, **kwargs):
         """
         Arguments:
             lut  : lookup tensor.
@@ -90,6 +90,7 @@ class LookupTableOp(TensorOp):
         self.lut_axis = 0 if lut.axes[1] in axes else 1
         self.bprop_sum_axis = idx.axes.index(batch_axes[0])
         self.pad_idx = pad_idx
+        self.update = update
         super(LookupTableOp, self).__init__(args=(lut, idx),
                                             axes=axes,
                                             **kwargs)
@@ -99,7 +100,6 @@ class LookupTableOp(TensorOp):
         TODO
         """
         lut.generate_add_delta(adjoints, update_lut(delta, lut, idx, self))
-        # idx.generate_add_delta(adjoints, bprop_lut(delta, lut, idx, self))
 
 
 class LutDerivOp(TensorOp):
@@ -114,6 +114,7 @@ class LutDerivOp(TensorOp):
         self.fprop = fprop
         self.bprop_sum_axis = self.fprop.forwarded.bprop_sum_axis
         self.pad_idx = self.fprop.forwarded.pad_idx
+        self.update = self.fprop.forwarded.update
 
 class update_lut(LutDerivOp):
     def __init__(self, delta, lut, idx, fprop, **kwargs):

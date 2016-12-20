@@ -87,6 +87,45 @@ class Linear(Layer):
         return ng.dot(self.W, in_obj)
 
 
+class LookupTable(Layer):
+    """
+    Lookup table layer that often is used as word embedding layer
+
+    Args:
+
+    """
+    metadata = {'layer_type': 'lookuptable'}
+
+    def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None, **kwargs):
+        super(LookupTable, self).__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.init = init
+        self.update = update
+        self.pad_idx = pad_idx
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        """
+
+        Arguments:
+            in_obj (Tensor): object that provides the lookup indices
+
+        """
+        in_axes = in_obj.axes
+        self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
+        self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
+
+        self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes
+
+        self.W = ng.variable(axes=self.w_axes,
+                             initial_value=self.init(self.w_axes.lengths)
+                            ).named('W')
+        return ng.lookuptable(self.W, in_obj, self.o_axes, update=self.update)
+
+
 class ConvBase(Layer):
     """
     Convolutional layer that requires explicit binding of all spatial roles

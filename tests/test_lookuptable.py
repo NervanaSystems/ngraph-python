@@ -22,7 +22,6 @@ from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
-from neon.layers.layer import Convolution
 
 rng = RandomTensorGenerator(0, np.float32)
 
