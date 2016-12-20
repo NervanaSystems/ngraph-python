@@ -140,3 +140,19 @@ class OpsUnary(OpsBase):
             x, name
         """
         return ng.negative(inputs[0]).named(tf_node.name)
+
+    def Square(self, tf_node, inputs):
+        """
+        Performs the x^2 on the each element of input.
+
+        Arguments:
+            tf_node: NodeDef object, the tensorflow node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the tensorflow node.
+
+        Inputs to tf_node:
+            input
+        """
+        return ng.square(inputs[0]).named(tf_node.name)
