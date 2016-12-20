@@ -32,6 +32,7 @@ from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
     square, sqrt, tensor_size, assign, batch_size, pad, sigmoid, \
     one_hot, stack
 from ngraph.util.names import name_scope, with_name_scope, make_name_scope
+import ngraph.testing as testing
 
 __all__ = [
     'absolute',
@@ -73,6 +74,7 @@ __all__ = [
     'stack',
     'tanh',
     'temporary',
+    'testing',
     'tensor_size',
     'tensor_slice',
     'variable',

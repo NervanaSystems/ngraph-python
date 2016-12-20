@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import numpy as np
+import ngraph as ng
 import os
 import ngraph.transformers as ngt
 import pytest
@@ -92,7 +92,7 @@ class ImporterTester(object):
 
         # assert
         assert tf_result.shape == ng_result.shape
-        assert np.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
+        assert ng.testing.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
 
     def ng_run(self,
                tf_target_node,

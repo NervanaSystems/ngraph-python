@@ -674,5 +674,5 @@ def allocate_transformer(name, **kargs):
 def make_transformer_factory(name, **kargs):
     def factory():
         return allocate_transformer(name, **kargs)
-
+    factory.name = name
     return factory

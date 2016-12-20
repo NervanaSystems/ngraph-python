@@ -17,11 +17,11 @@ Test the graph analysis functions.
 """
 
 from __future__ import print_function
+from builtins import range, zip
 
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.analysis as an
-from builtins import range, zip
 
 
 def build_graphs(L, BS):

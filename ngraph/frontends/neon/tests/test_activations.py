@@ -16,12 +16,14 @@
 Test of the activation functions
 '''
 from math import tanh as true_tanh
+
 import numpy as np
+import pytest
+
+import ngraph as ng
 from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
                                               Softmax, Tanh, Logistic)
-from ngraph.util.utils import ExecutorFactory
-import ngraph as ng
-import pytest
+from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
@@ -44,7 +46,7 @@ def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
         result = result[0:result.size:(C.length * N.length + 1)]
         result = result.reshape(inputs.shape)
 
-    np.testing.assert_allclose(result, expected_result, rtol=tol)
+    ng.testing.assert_allclose(result, expected_result, rtol=tol)
 
 
 """Identity

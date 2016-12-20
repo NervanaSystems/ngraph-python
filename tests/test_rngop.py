@@ -17,9 +17,10 @@ Test the usage of ng.constant
 """
 from __future__ import print_function
 
-import ngraph as ng
 import numpy as np
-from ngraph.util.utils import executor
+
+import ngraph as ng
+from ngraph.testing import executor
 
 
 def test_uniform_range_pos(transformer_factory):

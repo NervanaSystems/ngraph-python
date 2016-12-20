@@ -614,14 +614,25 @@ class FunctionAxis(Axis):
 
     def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1,
-                                           batch=parent.is_batch,
-                                           recurrent=parent.is_recurrent,
                                            **kwargs)
+        self.parent = parent
         self.length_fun = length_fun
 
     @property
     def length(self):
         return self.length_fun()
+
+    @property
+    def is_recurrent(self):
+        return self.parent.is_recurrent
+
+    @property
+    def roles(self):
+        return self.parent.roles
+
+    @property
+    def is_batch(self):
+        return self.parent.is_batch
 
 
 def _sliced_length(s, incoming_length):
@@ -664,9 +675,8 @@ class SlicedAxis(FunctionAxis):
     exception instead?
     """
     def __init__(self, parent, s, **kwargs):
-        self.parent = parent
-        self.slice = s
 
+        self.slice = s
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
@@ -695,7 +705,6 @@ class PaddedAxis(FunctionAxis):
         pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
-        self.parent = parent
         self.pad = pad
 
         def padded_length():
