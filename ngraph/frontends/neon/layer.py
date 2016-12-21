@@ -120,10 +120,15 @@ class LookupTable(Layer):
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
         self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes
 
+        # missing the part to set 0 for pad_idx lookup
         self.W = ng.variable(axes=self.w_axes,
                              initial_value=self.init(self.w_axes.lengths)
-                            ).named('W')
-        return ng.lookuptable(self.W, in_obj, self.o_axes, update=self.update)
+                             ).named('W')
+        if self.pad_idx is not None:
+            ng.Fill(ng.slice_along_axis(self.W, self.lut_v_axis, self.pad_idx), 0)
+
+        return ng.lookuptable(self.W, in_obj, self.o_axes, update=self.update,
+                              pad_idx=self.pad_idx)
 
 
 class ConvBase(Layer):

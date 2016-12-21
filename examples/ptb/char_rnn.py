@@ -62,6 +62,11 @@ def expand_onehot(x):
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
+if args.use_lut:
+    layer_0 = LookupTable(50, 100, init, update=True, pad_idx=0)
+else:
+    layer_0 = Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y))
+
 if args.layer_type == "rnn":
     rlayer = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False)
 else:
@@ -71,7 +76,7 @@ else:
 if args.use_lut:
     layer_0 = LookupTable(50, 100, init, update=False)
 else:
-    layer_0 = Preprocess(functor=expand_onehot
+    layer_0 = Preprocess(functor=expand_onehot)
 
 # model initialization
 seq1 = Sequential([layer_0,

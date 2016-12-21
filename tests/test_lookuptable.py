@@ -16,12 +16,8 @@ import itertools as itt
 import numpy as np
 
 import ngraph as ng
-from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from ngraph.op_graph.axes import spatial_axis
-from ngraph.frontends.neon import ax, ar
-from neon import NervanaObject
-from neon.backends import gen_backend
+from ngraph.frontends.neon import ax
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -60,7 +56,7 @@ def test_lut(lut_args):
     lut = ng.placeholder(ax_lut)
     idx = ng.placeholder(ax_idx)
 
-    lut_out_ng = ng.lookuptable(lut, idx, ax_out)
+    lut_out_ng = ng.lookuptable(lut, idx, ax_out, pad_idx=0)
 
     ex = ExecutorFactory()
 
@@ -75,12 +71,12 @@ def test_lut(lut_args):
     # provide actual inputs and execute the graph
     lut_value = rng.uniform(-1, 1, lut.axes)
     idx_value = rng.random_integers(0, vocab_size - 1, idx.axes)
+
     fprop_lut = fprop_fun(lut_value, idx_value).copy()
     dlut_s = dW_lut_s_fun(lut_value, idx_value)
     dlut_n = dW_lut_n_fun(lut_value, idx_value)
-    # np.testing.assert_allclose(dlut_s, dlut_n, rtol=rtol, atol=atol)
 
 if __name__ == '__main__':
-    lut_args = (10, 3, 4, 10)
-    # lut_args = (3, 3, 1, 1)
+    # lut_args = (10, 3, 4, 10)
+    lut_args = (3, 3, 1, 1)
     test_lut(lut_args)

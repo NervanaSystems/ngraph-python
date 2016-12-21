@@ -116,6 +116,7 @@ class LutDerivOp(TensorOp):
         self.pad_idx = self.fprop.forwarded.pad_idx
         self.update = self.fprop.forwarded.update
 
+
 class update_lut(LutDerivOp):
     def __init__(self, delta, lut, idx, fprop, **kwargs):
         """

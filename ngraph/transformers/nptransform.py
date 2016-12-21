@@ -152,25 +152,6 @@ class NumPyConvEngine(object):
                 else:
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
-    
-        def fprop_lut(self, lut, idx, axis, output):
-            V, F = lut.shape
-            T, N = idx.shape
-            idx = idx.reshape(T*N, -1).squeeze().astype(int)
-            output[:] = lut.take(idx, axis).reshape(output.shape)
-
-        def update_lut(self, error, idx, pad_idx, axis, dW):
-            dW[:] = 0
-            T, N = idx.shape
-            F, Te, Ne = error.shape
-            error = error.reshape(F, -1)
-            assert (Te == T and Ne == N), "lookup indices shape and error shape are not compatible"
-            idx = idx.reshape(T*N, -1).squeeze().astype(int)
-            unqidx, inv = np.unique(idx, return_inverse=True)
-            groups = [np.where(inv == i) for i in range(len(unqidx))]
-            for (wrd_id, group) in zip(unqidx, groups):
-                if wrd_id != pad_idx:
-                    dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
 
         """
         return pycode
@@ -254,6 +235,33 @@ class NumPyPoolEngine(object):
                     firstI = x
                 lastI = x
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
+
+
+class NumPyCodeEngine(object):
+    @staticmethod
+    def all_code():
+        pycode = """
+        def fprop_lut(self, lut, idx, axis, output):
+            V, F = lut.shape
+            T, N = idx.shape
+            idx = idx.reshape(T*N, -1).squeeze().astype(int)
+            output[:] = lut.take(idx, axis).T.reshape(output.shape)
+
+        def update_lut(self, error, idx, pad_idx, axis, dW):
+            dW[:] = 0
+            T, N = idx.shape
+            F, Te, Ne = error.shape
+            error = error.reshape(F, -1)
+            assert (Te == T and Ne == N), "lookup indices shape and error shape are not compatible"
+            idx = idx.reshape(T*N, -1).squeeze().astype(int)
+            unqidx, inv = np.unique(idx, return_inverse=True)
+            groups = [np.where(inv == i) for i in range(len(unqidx))]
+            for (wrd_id, group) in zip(unqidx, groups):
+                if wrd_id != pad_idx:
+                    dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
+
+        """
+        return pycode
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -433,7 +441,6 @@ class NumPyCodeGenerator(PyGen):
         self.conv_params[op.index] = op.conv_params
         self.conv_slices[op.index] = \
             NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        import ipdb; ipdb.set_trace()
         self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, inputs, filters, outputs)
 
@@ -460,7 +467,7 @@ class NumPyCodeGenerator(PyGen):
                     op.index, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
-    def generatea_op(self, op, outputs, lut, idx):
+    def generate_op(self, op, outputs, lut, idx):
         self.append("self.fprop_lut(lut={}, idx={}, axis={}, output={})",
                     lut, idx, op.lut_axis, outputs)
 
@@ -782,6 +789,7 @@ class NumPyTransformer(Transformer):
             self.code.endl()
 
             self.code.append(NumPyConvEngine.all_conv_code())
+            self.code.append(NumPyCodeEngine.all_code())
             self.code.endl()
 
             self.code.append(self.allocate_storage_code.code)
@@ -822,4 +830,3 @@ class NumPyTransformer(Transformer):
 
 set_transformer_factory(
     make_transformer_factory(NumPyTransformer.transformer_name))
-
