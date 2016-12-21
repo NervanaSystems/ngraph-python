@@ -33,19 +33,6 @@ def print_fm_stats(transformer):
         print("flex_manager.host_stats", fm.host_stats)
 
 
-# x + 1.5
-x = ng.placeholder(())
-x_plus_const = x + 1.5
-
-transformer1 = ngt.make_transformer()
-plus_const = transformer1.computation(x_plus_const, x)
-
-for i in range(5):
-    assert plus_const(i) == i + 1.5
-    print(plus_const(i))
-
-print_fm_stats(transformer1)
-
 # absolute value of matrix
 n, m = 2, 3
 N = ng.make_axis(length=n)
@@ -59,8 +46,9 @@ abs_func = transformer2.computation(Zout, Zin)
 Xval = np.array([5, 1, 0, -2, 3, 4]).reshape(n, m).astype(np.float32)
 Xval[0,1] = -Xval[0,1]
 print(Xval)
-print(abs_func(Xval))
-assert np.allclose(abs_func(Xval), abs(Xval))
+result2 = abs_func(Xval)
+print(result2)
+assert np.allclose(result2, abs(Xval))
 
 print_fm_stats(transformer2)
 
@@ -77,8 +65,23 @@ xval = np.array(list(range(1,10) + [-1]))
 xval[2] += + 1 + 10
 
 print(sum(xval))
-print(sum_func(xval))
-assert(sum_func(xval) == sum(xval))
+result3 = sum_func(xval)
+print(result3)
+assert(result3 == sum(xval))
 
 print_fm_stats(transformer3)
+
+# x + 1.5
+x = ng.placeholder(())
+x_plus_const = x + 1.5
+
+transformer1 = ngt.make_transformer()
+plus_const = transformer1.computation(x_plus_const, x)
+
+for i in range(5):
+    result1 = plus_const(i)
+    print(result1)
+    assert result1 == i + 1.5
+
+print_fm_stats(transformer1)
 

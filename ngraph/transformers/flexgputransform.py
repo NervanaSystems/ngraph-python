@@ -20,7 +20,6 @@ from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescription
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
 
-fixed_point = True
 flex_verbose = False
 
 
