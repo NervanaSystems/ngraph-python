@@ -58,11 +58,12 @@ class Linear(Layer):
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
         out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
-        in_axes = in_obj.axes.sample_axes()
-        in_axes = in_axes - in_axes.recurrent_axes()
+        in_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()
+        out_axes -= out_axes.recurrent_axes()
+
         w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
         if self.W is None:
-            self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+            self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes))
 
         return ng.dot(self.W, in_obj)
 
@@ -103,20 +104,34 @@ class ConvBase(Layer):
         cpm = self.convparams.copy()
         in_axes = in_obj.axes
         if self.f_axes is None:
-            self.f_axes = in_axes.role_axes(ar.Channel)
+            self.f_axes = in_axes.role_axes(ar.FeatureMap_inum)
             for _ax in (ax.T, ax.R, ax.S, ax.K):
                 self.f_axes += ng.make_axis(roles=_ax.roles).named(_ax.short_name)
             self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
 
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes.lengths))
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes))
 
-        # TODO: clean this up
+        def in_out_feature_map_axis(filter):
+            ax_i = filter.role_axes(ar.FeatureMap_inum)
+            ax_o = filter.role_axes(ar.FeatureMap_onum)
+
+            if (len(ax_i) == 0):
+                raise ValueError("Missing number of input feature maps in filter axes")
+
+            if (len(ax_o) == 0):
+                raise ValueError("Missing number of output feature maps in filter axes")
+
+            return ng.make_axis(ax_o[0].length, ax_i[0].short_name, roles=[ar.FeatureMap_inum])
+
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(self.f_axes[4].length, roles=[ar.Channel]).named('C'),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'], role=ar.Depth),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'], role=ar.Height),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'], role=ar.Width),
+                in_out_feature_map_axis(self.f_axes),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'],
+                                role=ar.FeatureMap_dim0),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'],
+                                role=ar.FeatureMap_dim1),
+                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'],
+                                role=ar.FeatureMap_dim2),
                 ax.N
             ])
 
@@ -187,14 +202,16 @@ class PoolBase(Layer):
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
         ppm = self.poolparams.copy()
-        in_axes = in_obj.axes
-        # TODO: clean this up
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.spatial_axis(in_axes, ppm['J'], ppm['pad_c'], ppm['str_c'], role=ar.Channel),
-                ng.spatial_axis(in_axes, ppm['T'], ppm['pad_d'], ppm['str_d'], role=ar.Depth),
-                ng.spatial_axis(in_axes, ppm['R'], ppm['pad_h'], ppm['str_h'], role=ar.Height),
-                ng.spatial_axis(in_axes, ppm['S'], ppm['pad_w'], ppm['str_w'], role=ar.Width),
+                ng.spatial_axis(in_obj.axes, ppm['J'], ppm['pad_c'], ppm['str_c'],
+                                role=ar.FeatureMap_inum),
+                ng.spatial_axis(in_obj.axes, ppm['T'], ppm['pad_d'], ppm['str_d'],
+                                role=ar.FeatureMap_dim0),
+                ng.spatial_axis(in_obj.axes, ppm['R'], ppm['pad_h'], ppm['str_h'],
+                                role=ar.FeatureMap_dim1),
+                ng.spatial_axis(in_obj.axes, ppm['S'], ppm['pad_w'], ppm['str_w'],
+                                role=ar.FeatureMap_dim2),
                 ax.N
             ])
 
@@ -240,10 +257,10 @@ class Bias(Layer):
     def train_outputs(self, in_obj):
         if self.init:
             w_axes = in_obj.axes.sample_axes()
-            if self.shared and len(in_obj.axes.role_axes(ar.Channel)) != 0:
-                w_axes = in_obj.axes.role_axes(ar.Channel)
+            if self.shared and len(in_obj.axes.role_axes(ar.FeatureMap_inum)) != 0:
+                w_axes = in_obj.axes.role_axes(ar.FeatureMap_inum)
 
-            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init(w_axes.lengths))
+            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init(w_axes))
             return in_obj + self.W
         else:
             return in_obj
@@ -321,8 +338,8 @@ class BatchNorm(Layer):
     def train_outputs(self, in_obj):
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
-        if len(in_axes.role_axes(ar.Channel)) != 0:
-            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.Channel)
+        if len(in_axes.role_axes(ar.FeatureMap_inum)) != 0:
+            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.FeatureMap_inum)
         red_axes += in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
@@ -450,10 +467,10 @@ class Recurrent(Layer):
         hidden_state_axes = hidden_axes + in_axes.batch_axes()
 
         self.W_input = ng.variable(axes=w_in_axes,
-                                   initial_value=self.init(w_in_axes.lengths)
+                                   initial_value=self.init(w_in_axes)
                                    ).named("W_in")
         self.W_recur = ng.variable(axes=w_re_axes,
-                                   initial_value=self.init_inner(w_re_axes.lengths)
+                                   initial_value=self.init_inner(w_re_axes)
                                    ).named("W_re")
         self.b = ng.variable(axes=hidden_axes, initial_value=0).named("bias")
 

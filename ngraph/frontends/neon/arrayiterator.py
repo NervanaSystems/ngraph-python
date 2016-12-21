@@ -13,6 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
+import ngraph as ng
+from ngraph.frontends.neon import ax
+import collections
 
 
 class ArrayIterator(object):
@@ -33,13 +36,19 @@ class ArrayIterator(object):
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
         self.time_steps = time_steps
+        self.axis_names = None
         if isinstance(data_arrays, dict):
-            self.data_arrays = data_arrays
-        elif isinstance(data_arrays, (list, tuple)):
+            self.data_arrays = {k: v['data'] for k, v in data_arrays.items()}
+            self.axis_names = {k: v['axes'] for k, v in data_arrays.items()}
+        elif isinstance(data_arrays, collections.Sequence):
             self.data_arrays = {k: x for k, x in enumerate(data_arrays)}
         else:
             self.data_arrays = {0: data_arrays}
+
         self.keys = list(self.data_arrays.keys())
+
+        if not self.axis_names:
+            self.axis_names = {k: None for k in self.keys}
 
         # just get an arbitrary element for len
         self.ndata = len(self.data_arrays[self.keys[0]])
@@ -54,13 +63,6 @@ class ArrayIterator(object):
         self.index = 0
 
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
-        self.make_batch_buffers()
-
-    def make_batch_buffers(self):
-        self.shapes, self.batch_bufs = dict(), dict()
-        for k, x in self.data_arrays.items():
-            self.shapes[k] = x.shape[1:]
-            self.batch_bufs[k] = np.empty(x.shape[1:] + (self.batch_size,), x.dtype)
 
     @property
     def nbatches(self):
@@ -68,6 +70,17 @@ class ArrayIterator(object):
         Return the number of minibatches in this dataset.
         """
         return -((self.start - self.ndata) // self.batch_size)
+
+    def make_placeholders(self):
+        placeholders = {}
+        ax.N.length = self.batch_size
+        for k, axnm in self.axis_names.items():
+            p_axes = ng.make_axes([ax.N])
+            for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
+                name = axnm[i] if axnm else None
+                p_axes += ng.make_axis(name=name, length=sz)
+            placeholders[k] = ng.placeholder(p_axes)
+        return placeholders
 
     def reset(self):
         """
@@ -89,21 +102,16 @@ class ArrayIterator(object):
         while self.index < self.total_iterations:
             i1 = (self.start + self.index * self.batch_size) % self.ndata
             bsz = min(self.batch_size, self.ndata - i1)
-            islice1, oslice1 = slice(0, bsz), slice(i1, i1 + bsz)
-            islice2, oslice2 = None, None
+            oslice1 = slice(i1, i1 + bsz)
             self.index += 1
 
             if self.batch_size > bsz:
-                islice2, oslice2 = slice(bsz, None), slice(0, self.batch_size - bsz)
+                batch_bufs = {k: np.concatenate([src[oslice1], src[:self.batch_size - bsz]])
+                              for k, src in self.data_arrays.viewitems()}
+            else:
+                batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.viewitems()}
 
-            for k in self.keys:
-                src, dst = self.data_arrays[k], self.batch_bufs[k]
-
-                dst[..., islice1] = np.rollaxis(src[oslice1], 0, src.ndim)
-                if oslice2:
-                    dst[..., islice2] = np.rollaxis(src[oslice2], 0, src.ndim)
-
-            yield self.batch_bufs
+            yield batch_bufs
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
@@ -139,10 +147,11 @@ class SequentialArrayIterator(ArrayIterator):
     def __iter__(self):
         while self.index < self.total_iterations:
             idx = self.index % self.nbatches
+            self.index += 1
+
             for k in self.keys:
                 src, dst = self.data_arrays[k], self.batch_bufs[k]
                 dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
-            self.index += 1
 
             if self.reverse_target:
                 self.batch_bufs['tgt_txt'][:] = self.batch_bufs['tgt_txt'][:, ::-1, :]

@@ -30,7 +30,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
+from ngraph.frontends.neon import ax, ar, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
@@ -46,14 +46,31 @@ np.random.seed(args.rng_seed)
 train_data, valid_data = CIFAR10(args.data_dir).load_data()
 train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 valid_set = ArrayIterator(valid_data, args.batch_size)
+
+inputs = train_set.make_placeholders()
+ax.Y.length = 10
+
 ######################
 # Model specification
 
-
 def cifar_mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104., 119., 127.]]))
-    y = ng.expand_dims((x - bgr_mean) / 255., ax.D, 1)
-    return y
+    # Put data in batch minor order for neon
+    name_order = ('channel', 'height', 'width')
+    neon_axes = ng.make_axes([x.axes.find_by_short_name(nm) for nm in name_order])
+    neon_axes += ax.N
+
+    # Assign roles
+    neon_axes[0].add_role(ar.FeatureMap_inum)
+    neon_axes[1].add_role(ar.FeatureMap_dim1)
+    neon_axes[2].add_role(ar.FeatureMap_dim2)
+
+    # Insert depth axis for conformity to 3d conv args
+    ax.D.length = 1
+    x_neon = ng.expand_dims(ng.axes_with_order(x, neon_axes), ax.D, 1)
+    bgr_mean = ng.persistent_tensor(
+        axes=x_neon.axes[0], initial_value=np.array([[104., 119., 127.]]))
+    return (x_neon - bgr_mean) / 255.
+
 
 init_uni = UniformInit(-0.1, 0.1)
 
@@ -64,18 +81,6 @@ seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Pool2D(2, strides=2),
                    Affine(nout=500, weight_init=init_uni, activation=Rectlin()),
                    Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
-
-######################
-# Input specification
-ax.C.length, ax.H.length, ax.W.length = train_set.shapes['image']
-ax.D.length = 1
-ax.N.length = args.batch_size
-ax.Y.length = 10
-
-
-# placeholders with descriptive names
-inputs = dict(image=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
-              label=ng.placeholder([ax.N]))
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
 output_prob = seq1.train_outputs(inputs['image'])

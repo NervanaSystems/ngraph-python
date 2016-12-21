@@ -846,6 +846,14 @@ class Axes(object):
         return tuple(x.name for x in self)
 
     @property
+    def short_names(self):
+        """
+        Returns:
+            tuple: The names without indices of the outer axes.
+        """
+        return tuple(x.short_name for x in self)
+
+    @property
     def lengths(self):
         """
         Returns:
@@ -897,23 +905,6 @@ class Axes(object):
             return self[0]
         return FlattenedAxis(self)
 
-    def shape_dict(self):
-        """
-        Retuns:
-            dict: A dictionary with names of the axes as keys and
-            lengths as values
-        """
-        names = [axis.name for axis in self._axes]
-        # TODO: get rid of this temporary hack.
-        names = [name.split('_')[0] for name in names]
-        short_names = []
-        for name in names:
-            if name.find('.') != -1:
-                name = name.split('.')[1]
-            short_names.append(name)
-        vals = [axis.length for axis in self._axes]
-        return dict(zip(short_names, vals))
-
     def set_shape(self, shape):
         axes = self._axes
         diff = len(axes) - len(shape)
@@ -933,6 +924,9 @@ class Axes(object):
             return
         raise ValueError('Number of axes %d too low for shape %s' % (
                          len(axes), shape))
+
+    def find_by_short_name(self, short_name):
+        return Axes(axis for axis in self if axis.short_name == short_name)
 
     def __iter__(self):
         return self._axes.__iter__()

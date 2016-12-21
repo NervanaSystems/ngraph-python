@@ -20,21 +20,21 @@ class GaussianInit(object):
     def __init__(self, mean=0.0, var=0.01):
         self.functor = partial(np.random.normal, mean, var)
 
-    def __call__(self, out_shape):
-        return self.functor(out_shape)
+    def __call__(self, out_axes):
+        return self.functor(out_axes.lengths)
 
 
 class UniformInit(object):
     def __init__(self, low=-0.01, high=0.01):
         self.functor = partial(np.random.uniform, low, high)
 
-    def __call__(self, out_shape):
-        return self.functor(out_shape)
+    def __call__(self, out_axes):
+        return self.functor(out_axes.lengths)
 
 
 class ConstantInit(object):
     def __init__(self, val=0.0):
         self.val = val
 
-    def __call__(self, out_shape):
+    def __call__(self, out_axes):
         return self.val
