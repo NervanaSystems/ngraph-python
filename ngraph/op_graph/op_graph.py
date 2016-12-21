@@ -3326,9 +3326,8 @@ class Function(Op):
 
     def __init__(self, ops):
         super(Function, self).__init__()
-        from ngraph.analysis import Digraph
-        self.ops = Digraph(ops)
-        self.instructions = self.ops.topsort()
+        self.ops = ops
+        self.instructions = Op.ordered_ops(self.ops)
         args, defs = set(), set()
         for op in self.instructions:
             # Kernel defines the def of each operation
@@ -3360,8 +3359,7 @@ class Function(Op):
 class Buffer(object):
     """TODO."""
 
-    def __init__(self, color, size):
-        self.color = color
+    def __init__(self, size):
         self.size = size
         self.data = None
         self.views = OrderedSet()

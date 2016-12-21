@@ -1417,7 +1417,6 @@ class TensorDescription(NameableValue):
         self.__read_only = False
         self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
-        self.style = {}
         self.next_tensor_description = next_tensor_description
 
         for axis in axes:
@@ -1792,6 +1791,13 @@ class TensorDescription(NameableValue):
         """The allocated sizes for each axis."""
         return tuple(_reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
+
+    @property
+    def tensor_size(self):
+        result = self.dtype.itemsize
+        for s in self.sizes:
+            result = result * s
+        return result
 
     @property
     def c_contiguous(self):

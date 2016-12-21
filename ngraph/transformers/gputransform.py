@@ -35,8 +35,6 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     Function, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-# TODO: re-enable fusion
-# from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout
@@ -1004,8 +1002,6 @@ class GPUTransformer(Transformer):
             GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):
-        # TODO: Re-enable fusion
-        # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
 
         self.graph_passes.insert(0, GPUTensorLayout())
