@@ -15,15 +15,16 @@
 from __future__ import print_function
 import ngraph as ng
 import ngraph.transformers as ngt
+import ngraph.transformers.passes.nviz
 
 # Build the graph
 with ng.metadata(device='numpy'):
-	x = ng.placeholder(())
+    x = ng.placeholder(())
 x_plus_one = x + 1
 
 # Select a transformer
 transformer = ngt.make_transformer_factory('hetr')()
-import ngraph.transformers.passes.nviz
+
 transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
 
 # Define a computation

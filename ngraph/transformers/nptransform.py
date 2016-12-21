@@ -366,6 +366,8 @@ class NumPyCodeGenerator(PyGen):
         self.conv_slices = dict()
         self.pool_params = dict()
         self.pool_slices = dict()
+        self.send_nodes = dict()
+        self.recv_nodes = dict()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -650,61 +652,15 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Send)
     def generate_op(self, op, out, *args):
-        self.append("{} = {}", out, op.args[0].value.ref_str)
-        # import packages required for sockets and data transfer
-        self.append("import socket")
-        self.append("import sys")
-        self.append("import binascii")
-        self.append("import struct")
-        self.append("sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)")
-        # todo: hard code socket num could be problematic
-        self.append("server_address = ('localhost', 32109)")
-        # try until connected
-        self.append("connected = False")
-        self.append("while not connected:")
-        with indenting(self):
-            self.append("try:")
-            with indenting(self):
-                self.append("sock.connect(server_address)")
-                self.append("connected = True")
-            self.append("except Exception as e:")
-            with indenting(self):
-                self.append("pass")
-        self.append("values = ({})", out)
-        self.append("packer = struct.Struct('f')")
-        self.append("packed_data = packer.pack(values)")
-        self.append("sock.sendall(packed_data)")
-        self.append("sock.close()")
+        send_id = len(self.send_nodes)
+        self.send_nodes[send_id] = op
+        self.append("self.send({})", send_id)
 
     @generate_op.on_type(Recv)
     def generate_op(self, op, out, *args):
-        self.append("def recv_from_send():")
-        with indenting(self):
-            # import packages required for sockets and data transfer
-            self.append("import socket")
-            self.append("import sys")
-            self.append("import binascii")
-            self.append("import struct")
-            self.append("sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)")
-            # todo: hard code socket num could be problematic
-            self.append("server_address = ('localhost', 32109)")
-            self.append("sock.bind(server_address)")
-            self.append("sock.listen(1)")
-            self.append("unpacker = struct.Struct('f')")
-            self.append("connection, client_address = sock.accept()")
-            # Wait till data is received, then close connection
-            self.append("while True:")
-            with indenting(self):
-                self.append("data = connection.recv(unpacker.size)")
-                self.append("if data:")
-                with indenting(self):
-                    self.append("break")
-            self.append("unpacked_data = unpacker.unpack(data)")
-            self.append("connection.close()")
-            self.append("sock.close()")
-
-            self.append("return unpacked_data[0]")
-        self.append("{} = recv_from_send()", out)
+        recv_id = len(self.recv_nodes)
+        self.recv_nodes[recv_id] = op
+        self.append("{} = self.recv_from_send({})", out, recv_id)
 
 
 class NumPyTransformer(Transformer):
@@ -809,7 +765,34 @@ class NumPyTransformer(Transformer):
             # print(self.code.filename)
 
         r = self.code.compile("op", globals())
-        self.model = r['Model']()
+
+        self.model = r['Model']
+
+        def send(self, send_id):
+            send_op = self.send_nodes[send_id]
+            q = send_op.shared_q
+
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            q.put(x_nparr)
+
+        def recv(self, recv_id):
+            recv_op = self.recv_nodes[recv_id]
+            q = recv_op.shared_q
+            x = q.get()
+            return x
+
+        self.model.recv_from_send = recv
+        self.model.send = send
+
+        self.model = self.model()
+
+        self.model.send_nodes = self.compute_code.send_nodes
+        self.model.recv_nodes = self.compute_code.recv_nodes
+
         self.model.conv_params = self.compute_code.conv_params
         self.model.pool_params = self.compute_code.pool_params
         self.model.conv_slices = self.compute_code.conv_slices

@@ -225,42 +225,26 @@ class HetrTransformer(Transformer):
                 return TrMapping.get(key)
 
     def device_buffer_storage(self, bytes, dtype, name):
-        """
-        Make a DeviceBuffer.
-
-        Arguments:
-            bytes: Size of buffer.
-            alignment: Alignment of buffer.
-
-        Returns: A DeviceBuffer.
-        """
-        print("device_buffer_storage")
-        return []
+        assert False, "Should not be used, TODO cleanup"
 
     def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-        print("device_buffer_reference")
-        return None
+        assert False, "Should not be used, TODO cleanup"
 
     def start_transform_allocate(self):
-        print("start_transform_allocate")
+        assert False, "Should not be used, TODO cleanup"
 
     def finish_transform_allocate(self):
-        print("finish_transform_allocate")
+        assert False, "Should not be used, TODO cleanup"
 
     def transform_ordered_ops(self, ordered_ops, name):
         print(name, ordered_ops)
         return name + 1
 
     def finish_transform(self):
-        pass
+        assert False, "Should not be used, TODO cleanup"
 
     def allocate_storage(self):
-        pass
+        assert False, "Should not be used, TODO cleanup"
 
 set_transformer_factory(
     make_transformer_factory(HetrTransformer.transformer_name))

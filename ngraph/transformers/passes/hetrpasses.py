@@ -1,9 +1,11 @@
 from passes import PeepholeGraphPass
 from ngraph.op_graph.communication import Send
 from ngraph.op_graph.communication import Recv
+import multiprocessing
 
 
 class DeviceAssignPass(PeepholeGraphPass):
+
     def __init__(self, default_device, default_device_id):
         super(DeviceAssignPass, self).__init__()
 
@@ -18,6 +20,7 @@ class DeviceAssignPass(PeepholeGraphPass):
 
 
 class CommunicationPass(PeepholeGraphPass):
+
     def __init__(self, sendnodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = sendnodes
@@ -27,28 +30,28 @@ class CommunicationPass(PeepholeGraphPass):
         args = list()
         for arg in op.args:
             if op.metadata['device_id'] != arg.metadata['device_id']:
-                self.send_nodes.append(Send(from_node=arg,
+                shared_q = multiprocessing.Queue()
+                self.send_nodes.append(Send(from_node=arg, q=shared_q,
                                             device=arg.metadata['device'],
                                             device_id=arg.metadata['device_id']))
 
-                # TODO build a dict to map tarnsformer with the send node
-                #      remove the hardcoded numpy1
                 tname = arg.metadata['device'] + arg.metadata['device_id']
                 self.dict_transformer_to_op[tname] = self.send_nodes[-1]
-                args.append(Recv(axes=arg.axes, dtype=arg.dtype,
+                args.append(Recv(axes=arg.axes, dtype=arg.dtype, q=shared_q,
                                  device=op.metadata['device'],
                                  device_id=arg.metadata['device_id']))
 
             else:
                 args.append(arg)
 
-        if type(op.args) == tuple:
+        if isinstance(op.args, tuple):
             op.args = tuple(args)
         else:
             op.args(args)  # setter is called args
 
 
 class ChildTransformerPass(PeepholeGraphPass):
+
     def __init__(self, transformer_list):
         super(ChildTransformerPass, self).__init__()
 
