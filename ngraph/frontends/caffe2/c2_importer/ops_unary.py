@@ -74,10 +74,9 @@ class OpsUnary(OpsBase):
         """
         return ng.maximum(inputs[0], 0.).named(c2_op.name)
 
-
     def Softmax(self, c2_op, inputs):
         """
-        Computes rectified linear: `max(features, 0)`.
+        Computes softmax: `exp(x)/sum(exp(x)`.
 
         Arguments:
             c2_op: NodeDef object, the caffe2 node to convert.
@@ -85,8 +84,8 @@ class OpsUnary(OpsBase):
 
         Returns:
             A ngraph Op corresponding to the caffe2 node.
-
-        Inputs to tf_node:
-            features, name
         """
-        return ng.softmax(inputs[0], normalization_axes=[inputs[0].axes[1]]).named(c2_op.name)
+        # get input
+        left = inputs[0]
+
+        return ng.softmax(left, normalization_axes=[left.axes[1]]).named(c2_op.name)
