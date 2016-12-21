@@ -14,22 +14,21 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function
-import tensorflow as tf
-import ngraph.transformers as ngt
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
-# tensorflow ops
-x = tf.constant(1.)
-y = tf.constant(2.)
-f = x + y
+from ngraph.testing.decorators import with_error_settings, raise_all_numpy_errors
+from ngraph.testing.error_check import assert_allclose, allclose
+from ngraph.testing.random import RandomTensorGenerator
+from ngraph.testing.execution import executor, ExecutorFactory, \
+    numeric_derivative, check_derivative
 
-# import
-importer = TFImporter()
-importer.import_graph_def(tf.get_default_graph().as_graph_def())
-
-# get handle
-f_ng = importer.get_op_handle(f)
-
-# execute
-f_result = ngt.make_transformer().computation(f_ng)()
-print(f_result)
+__all__ = [
+    'with_error_settings',
+    'raise_all_numpy_errors',
+    'assert_allclose',
+    'allclose',
+    'RandomTensorGenerator',
+    'executor',
+    'ExecutorFactory',
+    'numeric_derivative',
+    'check_derivative',
+]

@@ -13,12 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import random
+from builtins import range
+
+import numpy as np
 
 import ngraph as ng
-import numpy as np
-from builtins import range
-from ngraph.util.utils import ExecutorFactory, executor
-from ngraph.util.utils import raise_all_numpy_errors
+from ngraph.testing import ExecutorFactory, executor
+from ngraph.testing import raise_all_numpy_errors
 
 """
 Test ngraph's implementation of the dot product.
@@ -131,29 +132,29 @@ def test_dot_sum_backprop(transformer_factory):
     # assert outputs are equal
     d_np = x_np.T.dot(y_np)
     d_val = d_fun(x_np, y_np)
-    np.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
 
     dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
     dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
-    np.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
 
     dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
     dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
-    np.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
 
     s_np = np.sum(d_np)
     s_val = s_fun(x_np, y_np)
-    np.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
 
     # assert derivative wrt to both tensors is the same when computed
     # symbolically by ngraph and numerically
     ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
     ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
-    np.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
 
     ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
     ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
-    np.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
 @raise_all_numpy_errors
@@ -242,8 +243,41 @@ def test_tensor_dot_tensor(transformer_factory):
         # symbolically by ngraph and numerically
         deriv1_val_num = deriv1_fun_num(value1, value2)
         deriv1_val_sym = deriv1_fun_sym(value1, value2)
-        np.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
+        ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
 
         deriv2_val_num = deriv2_fun_num(value2, value1)
         deriv2_val_sym = deriv2_fun_sym(value2, value1)
-        np.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
+        ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
+
+
+def test_flat_tensor_dot_tensor(transformer_factory):
+    """
+    Ensure that a flattened argument axis is not unflattend in the result.
+
+    Args:
+        transformer_factory:
+
+    Returns:
+
+    """
+    ax = ng.make_name_scope('ax')
+    ax.H = ng.make_axis(2)
+    ax.W = ng.make_axis(7)
+    ax.C = ng.make_axis(3)
+    ax.K = ng.make_axis(11)
+
+    axes_a = ng.make_axes([ax.H, ax.W, ax.C])
+    a = ng.constant(np.ones(axes_a.lengths), axes=axes_a)
+    flat_a = ng.flatten_at(a, 2)
+
+    axes_b = ng.make_axes([ax.C.get_dual(), ax.K])
+    b = ng.constant(np.ones(axes_b.lengths), axes=axes_b)
+
+    result = ng.dot(b, flat_a)
+
+    factory = ExecutorFactory()
+    result_fun = factory.executor(result)
+    result_val = result_fun()
+
+    result_correct = np.ones_like(result_val) * ax.C.length
+    ng.testing.assert_allclose(result_val, result_correct)

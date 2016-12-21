@@ -128,6 +128,6 @@ def test_logreg(transformer_factory):
     ng_loss, ng_grad, ng_thetas = ngraph_logreg(xs, ys, max_iter, alpha)
 
     # asserts
-    assert np.allclose(np_loss, ng_loss)
-    assert np.allclose(np.asarray(np_grad), np.asarray(ng_grad))
-    assert np.allclose(np.asarray(np_thetas), np.asarray(ng_thetas))
+    assert ng.testing.allclose(np_loss, ng_loss)
+    assert ng.testing.allclose(np.asarray(np_grad), np.asarray(ng_grad))
+    assert ng.testing.allclose(np.asarray(np_thetas), np.asarray(ng_thetas))

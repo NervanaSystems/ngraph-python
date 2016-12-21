@@ -20,6 +20,7 @@ import re
 import time
 import atexit
 import numpy as np
+import ngraph as ng
 
 cmd_kill = 'pid=`lsof -t -i:6006`; if [ $pid ] ; then kill -9 $pid; fi'
 cmd_browser = 'open http://0.0.0.0:6006/#graphs'
@@ -113,7 +114,7 @@ def def_target_feed_dict():
     # placeholders
     train_data_node = tf.placeholder(
         tf.float32, shape=(bsz, image_size, image_size, 1))
-    train_labels_node = tf.placeholder(tf.int64, shape=(bsz, ))
+    train_labels_node = tf.placeholder(tf.int64, shape=(bsz,))
 
     # variables
     np.random.seed(0)
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     ng_results = tester.ng_run(
         target, tf_feed_dict=feed_dict, print_ng_result=False, verbose=False)
     print(tf_results, ng_results)
-    assert np.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
+    assert ng.testing.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
     tester.teardown(delete_dump=False)
 
     # start tensorboard (optional)

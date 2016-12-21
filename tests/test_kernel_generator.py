@@ -34,4 +34,4 @@ def test_exit_condition(transformer_factory):
 
     val1 = comp()
     val2 = comp()
-    np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+    ng.testing.assert_allclose(val1, val2, atol=0, rtol=0)

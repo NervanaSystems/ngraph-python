@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
 import numpy as np
+import pytest
 
 import ngraph as ng
-from ngraph.util.derivative_check import check_derivative
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
+from ngraph.testing import check_derivative, RandomTensorGenerator, executor
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -34,7 +32,7 @@ def test_dimshuffle_fprop(transformer_factory):
     x = ng.placeholder(ng.make_axes([A, B]))
 
     # compute convolution with graph
-    output = ng.Dimshuffle(x, axes=ng.make_axes([B, A]))
+    output = ng.axes_with_order(x, [B, A])
 
     assert output.axes == ng.make_axes([B, A])
 
@@ -43,7 +41,7 @@ def test_dimshuffle_fprop(transformer_factory):
 
     result = executor(output, x)(x_value)
 
-    np.testing.assert_allclose(result, x_value.T)
+    ng.testing.assert_allclose(result, x_value.T)
 
 
 def test_dimshuffle_bprop(transformer_factory):
@@ -59,7 +57,7 @@ def test_dimshuffle_bprop(transformer_factory):
     x_value = rng.uniform(-1, 1, x.axes)
 
     check_derivative(
-        ng.Dimshuffle(x, axes=ng.make_axes([B, A])),
+        ng.axes_with_order(x, [B, A]),
         x, 0.001, x_value,
         atol=1e-3, rtol=1e-3
     )
@@ -87,19 +85,19 @@ def x(A, B, C):
 
 def test_fail_on_missing(transformer_factory, x, B):
     with pytest.raises(ValueError):
-        ng.Dimshuffle(x, axes=ng.make_axes([B, B]))
+        ng.axes_with_order(x, [B, B])
 
 
 def test_fail_on_extra_axis(transformer_factory, x, A, B, C):
     with pytest.raises(ValueError):
-        ng.Dimshuffle(x, axes=ng.make_axes([A, B, C]))
+        ng.axes_with_order(x, [A, B, C])
 
 
 def test_fail_on_missing_and_extra_axis(transformer_factory, x, A, C):
     with pytest.raises(ValueError):
-        ng.Dimshuffle(x, axes=ng.make_axes([A, C]))
+        ng.axes_with_order(x, [A, C])
 
 
 def test_fail_on_axis_reuse(transformer_factory, x, A, B):
     with pytest.raises(ValueError):
-        ng.Dimshuffle(x, axes=ng.make_axes([A, B, B]))
+        ng.axes_with_order(x, [A, B, B])

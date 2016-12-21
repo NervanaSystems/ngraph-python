@@ -20,3 +20,4 @@ requests
 jupyter
 nbconvert
 nbformat
+setuptools>=18.5

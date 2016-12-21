@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import ngraph as ng
 import numpy as np
 import pytest
+
+import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -86,7 +87,7 @@ def test_expand_dims(transformer_factory):
                 # Test backpropagation
                 numeric_deriv = num_deriv_fun(tensor_np)
                 sym_deriv = sym_deriv_fun(tensor_np)
-                assert np.allclose(
+                assert ng.testing.allclose(
                     numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                 )
 
@@ -163,7 +164,7 @@ def test_slice(transformer_factory):
         s = test['slice']
         s_axes = test['sliced_axes']
 
-        sliced = ng.Slice(tensor, s, s_axes)
+        sliced = ng.tensor_slice(tensor, s, s_axes)
         sliced_val_fun = ex.executor(sliced, tensor)
 
         num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
@@ -176,7 +177,7 @@ def test_slice(transformer_factory):
         numeric_deriv = num_deriv_fun(tensor_np)
         sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert np.allclose(
+        assert ng.testing.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
 
@@ -243,7 +244,7 @@ def test_padding(transformer_factory):
         numeric_deriv = numeric_deriv_fun(tensor_np)
         sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert np.allclose(
+        assert ng.testing.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
 
@@ -259,6 +260,9 @@ def test_cast_axes(transformer_factory):
 
     x = ng.placeholder((C, D))
 
+    with pytest.raises(ValueError):
+        ng.cast_axes(x, (D, C))
+
     x_slice = x[1, :]
     # Cast back to known axes
     x_cast = ng.cast_axes(x_slice, [D])
@@ -270,17 +274,39 @@ def test_cast_axes(transformer_factory):
     sym_deriv_fun = ex.derivative(y, x)
 
     x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
-    assert np.allclose(
+    assert ng.testing.allclose(
         y_fun(x_np),
         np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
     )
 
-    assert np.allclose(
+    assert ng.testing.allclose(
         num_deriv_fun(x_np),
         sym_deriv_fun(x_np),
         rtol=rtol,
         atol=atol
     )
+
+
+def test_shuffled_deriv():
+    # This gets the axes of a delta in a generate_add_delta in a different order than the
+    # value being updated
+    ax = ng.make_name_scope("ax")
+    ax.C = ng.make_axis(3)
+    ax.T = ng.make_axis(1)
+    ax.R = ng.make_axis(5)
+    ax.S = ng.make_axis(5)
+
+    axes = [ax.R, ax.S, ax.C]
+    v = ng.variable([ng.make_axis(_.length) for _ in axes])
+    rsc = ng.cast_axes(v, axes)
+    trsc = ng.expand_dims(rsc, ax.T, 0)
+    ctrs = ng.axes_with_order(trsc, axes=[ax.C, ax.T, ax.R, ax.S])
+    cost = ng.sum(ctrs, out_axes=None)
+    grad = ng.deriv(cost, v)
+
+    ex = ExecutorFactory()
+    d_fun = ex.executor(grad)
+    d_fun()
 
 
 def test_slice_tensor_description(transformer_factory):

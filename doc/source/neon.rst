@@ -26,7 +26,7 @@ The neon frontend to ngraph provides common deep learning primitives, such as ac
 We currently have support for the following sets of deep learning primitives:
 
 - Layers: ``Linear``, ``Bias``, ``Conv2D``, ``Pool2D``, ``BatchNorm``, ``Dropout``, ``Recurrent``
-- Activations: ``Rectlin``, ``Identity``, ``Explin``, ``Normalizer``, ``Softmax``, ``Tanh``, ``Logistic``
+- Activations: ``Rectlin``, ``Rectlinclip``, ``Identity``, ``Explin``, ``Normalizer``, ``Softmax``, ``Tanh``, ``Logistic``
 - Initializers: ``GaussianInit``, ``UniformInit``, ``ConstantInit``
 - Optimizers: ``GradientDescentMomentum``, ``RMSprop``
 - Callbacks: ``TrainCostCallback``, ``RunTimerCallback``, ``ProgressCallback``, ``TrainLoggerCallback``, ``LossCallback``

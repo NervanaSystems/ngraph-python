@@ -15,7 +15,6 @@
 
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
 import ngraph as ng
-import numpy as np
 
 
 class OpsReduction(OpsBase):
@@ -109,32 +108,4 @@ class OpsReduction(OpsBase):
         Inputs to tf_node:
             input_tensor, reduction_indices, keep_dims, name
         """
-        # TODO: currently don't have native support in ngraph, can only handle
-        #       static case
-
-        # get inputs
-        input_tensor, reduction_indices = inputs
-        reduction_indices = [int(ind) for ind in reduction_indices.const]
-
-        # can only handle constant case for now
-        try:
-            # check is constant
-            assert input_tensor.const is not None
-
-            # compute output numpy result
-            input_np_tensor = input_tensor.const
-            np_result = np.prod(input_np_tensor, axis=tuple(reduction_indices))
-
-            # get output axis
-            out_axes = [
-                ng.make_axis(input_tensor.axes[i].length)
-                for i in range(len(input_tensor.axes))
-                if i not in reduction_indices
-            ]
-
-            # broadcast for safety
-            result_op = ng.constant(np_result, out_axes)
-            return result_op
-        except:
-            raise NotImplementedError("reduce_prod currently not supported in "
-                                      "ngraph, can only handle constant case.")
+        return self._apply_reduction_op(ng.prod, tf_node, inputs)

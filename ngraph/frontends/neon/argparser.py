@@ -64,7 +64,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.add_argument('-z', '--batch_size', type=int, default=128)
         self.add_argument('-b', '--backend', choices=['gpu', 'numpy'], default='numpy',
                           help='backend type')
-        self.add_argument('--num_iterations', type=int, default=2000)
+        self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)
         self.add_argument('-r', '--rng_seed', type=int,
                           default=self.defaults.get('rng_seed', None),

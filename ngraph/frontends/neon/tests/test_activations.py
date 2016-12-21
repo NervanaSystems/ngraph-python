@@ -16,11 +16,14 @@
 Test of the activation functions
 '''
 from math import tanh as true_tanh
+
 import numpy as np
-from ngraph.frontends.neon.activation import Identity, Rectlin, Softmax, Tanh, Logistic
-from ngraph.util.utils import ExecutorFactory
-import ngraph as ng
 import pytest
+
+import ngraph as ng
+from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
+                                              Softmax, Tanh, Logistic)
+from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
@@ -43,7 +46,7 @@ def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
         result = result[0:result.size:(C.length * N.length + 1)]
         result = result.reshape(inputs.shape)
 
-    np.testing.assert_allclose(result, expected_result, rtol=tol)
+    ng.testing.assert_allclose(result, expected_result, rtol=tol)
 
 
 """Identity
@@ -60,6 +63,7 @@ def test_identity_derivative(transformer_factory):
     inputs = np.array([[0, 1, -2], [1, 5, 6]]).reshape((3, 2))
     outputs = np.ones(inputs.shape)
     compare_tensors(Identity(), inputs, outputs, deriv=True)
+
 
 """Rectified Linear unit
 """
@@ -148,6 +152,48 @@ def test_leaky_rectlin_derivative_mixed(transformer_factory):
     inputs = np.array([[4, 0], [-2, 9]], dtype=np.float32)
     outputs = np.array([[1, 0], [slope, 1]])
     compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
+
+
+"""Clipped Rectified Linear unit
+"""
+
+
+def test_rectlinclip_positives(transformer_factory):
+    inputs = np.array([1, 3, 2]).reshape((3, 1))
+    outputs = np.array([1, 3, 2]).reshape((3, 1))
+    compare_tensors(Rectlinclip(), inputs, outputs)
+
+
+def test_rectlinclip_negatives(transformer_factory):
+    inputs = np.array([[-1, -3], [-2, -4]])
+    outputs = np.array([[0, 0], [0, 0]])
+    compare_tensors(Rectlinclip(), inputs, outputs)
+
+
+def test_rectlinclip_mixed(transformer_factory):
+    cutoff = 20
+    inputs = np.array([[4, 0], [-2, 24]])
+    outputs = np.array([[4, 0], [0, cutoff]])
+    compare_tensors(Rectlinclip(cutoff=cutoff), inputs, outputs)
+
+
+def test_rectlinclip_derivative_positives(transformer_factory):
+    inputs = np.array([1, 3, 2]).reshape((3, 1))
+    outputs = np.array([1, 1, 1]).reshape((3, 1))
+    compare_tensors(Rectlinclip(), inputs, outputs, deriv=True)
+
+
+def test_rectlinclip_derivative_negatives(transformer_factory):
+    inputs = np.array([[-1, -3], [-2, -4]])
+    outputs = np.array([[0, 0], [0, 0]])
+    compare_tensors(Rectlinclip(), inputs, outputs, deriv=True)
+
+
+def test_rectlinclip_derivative_mixed(transformer_factory):
+    cutoff = 20
+    inputs = np.array([[4, 0], [-2, 24]])
+    outputs = np.array([[1, 0], [0, 0]])
+    compare_tensors(Rectlinclip(cutoff=cutoff), inputs, outputs, deriv=True)
 
 
 """Softmax

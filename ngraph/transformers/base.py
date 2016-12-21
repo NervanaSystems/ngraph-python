@@ -21,9 +21,8 @@ import abc
 from builtins import object
 from future.utils import with_metaclass
 
-from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensorOp, tensor_descriptions, \
-    Function, doall, ResultHandle
+    Function, doall, ResultHandle, Buffer
 from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
@@ -114,7 +113,7 @@ class Computation(NameableValue):
         Transforms the computation so that it can be run.
         """
         self.ops = {op.forwarded for op in self.ops}
-        ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
+        ordered_ops = Op.ordered_ops(self.ops)
         self.computation_name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
@@ -358,7 +357,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             need to be computed.
         finalized (bool): True when transformation has been performed.
         initialized (bool): True when variables have been initialized/restored.
-        opids (dict): TODO
         fusion (bool): True when fusion was enabled.
         device_buffers (set): Set of handles for storage allocations.
         cpu_initializations (list): Initializations to be performed from the CPU after
@@ -366,15 +364,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         init_computation (Computation): The computation that performs initialization
             after allocation.  This happens once per training session, not once per-minibatch.
     """
-    def __init__(self, fusion=None, **kwargs):
+    def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.computations = OrderedSet()
         self.all_results = OrderedSet()
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.opids = dict()
-        self.fusion = fusion
         self.device_buffers = OrderedSet()
         self.cpu_initializations = []
         self.init_computation = None
@@ -411,18 +407,16 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         init_op.update_forwards()
         self.init_computation = self.computation(init_op, name="init")
 
-        # Give ids
-        for op in all_ops:
-            if op not in self.opids:
-                self.opids[op] = len(self.opids)
-
-        self.dataflow, self.memory = assign_buffers(self, all_ops, self.fusion)
+        self.ops = Op.ordered_ops(all_ops)
+        for op in self.ops:
+            if isinstance(op, TensorOp):
+                tensor_description = op.tensor_description()
+                if tensor_description.base.buffer is None:
+                    tensor_description.base.buffer = Buffer(tensor_description.base.tensor_size)
 
         # Initialize tensor descriptions
-        for op in all_ops:
+        for op in self.ops:
             self.initialize_tensor_descriptions(op)
-
-        self.ops = self.dataflow.instructions
 
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
@@ -681,5 +675,5 @@ def allocate_transformer(name, **kargs):
 def make_transformer_factory(name, **kargs):
     def factory():
         return allocate_transformer(name, **kargs)
-
+    factory.name = name
     return factory

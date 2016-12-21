@@ -18,11 +18,11 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import numpy as np
+import ngraph as ng
 import os
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 import ngraph.transformers as ngt
 import pytest
+from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
 
 @pytest.mark.usefixtures("transformer_factory")
@@ -54,7 +54,7 @@ class ImporterTester(object):
             try:
                 os.remove(self.pb_txt_path)
             except:
-                print("test dump does not exist")  # disable capturing to print
+                print("[clean up] test dump does not exist")
 
     def run(self,
             tf_target_node,
@@ -85,16 +85,18 @@ class ImporterTester(object):
         # run NG
         ng_result = self.ng_run(
             tf_target_node=tf_target_node,
+            tf_init_op=tf_init_op,
             tf_feed_dict=tf_feed_dict,
             print_ng_result=print_ng_result,
             verbose=verbose)
 
         # assert
         assert tf_result.shape == ng_result.shape
-        assert np.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
+        assert ng.testing.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
 
     def ng_run(self,
                tf_target_node,
+               tf_init_op=None,
                tf_feed_dict=None,
                print_ng_result=False,
                verbose=False):
@@ -111,12 +113,16 @@ class ImporterTester(object):
         """
         # init importer, transformer
         importer = TFImporter()
-        importer.parse_protobuf(self.pb_txt_path, verbose=verbose)
+        importer.import_protobuf(self.pb_txt_path, verbose=verbose)
         transformer = ngt.make_transformer()
 
         # set target node
         ng_target_node = importer.get_op_handle_by_name(
             tf_target_node.name[:-2])
+
+        # init op
+        ng_init_op = importer.get_op_handle(tf_init_op) if tf_init_op else None
+        ng_init_comp = transformer.computation(ng_init_op)
 
         # evaluate ngraph
         if tf_feed_dict is not None:
@@ -132,16 +138,13 @@ class ImporterTester(object):
             # evaluate ngraph result
             ng_result_comp = transformer.computation([ng_target_node],
                                                      *ng_placeholder_nodes)
-            if importer.init_ops:
-                init_comp = transformer.computation(importer.init_ops)
-                init_comp()
-
+            if ng_init_op:
+                ng_init_comp()
             ng_result = ng_result_comp(*ng_placeholder_vals)[0]
         else:
             ng_result_comp = transformer.computation([ng_target_node])
-            if importer.init_ops:
-                init_comp = transformer.computation(importer.init_ops)
-                init_comp()
+            if ng_init_op:
+                ng_init_comp()
             ng_result = ng_result_comp()[0]
         if print_ng_result:
             print(ng_result)

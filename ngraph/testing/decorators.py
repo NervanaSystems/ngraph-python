@@ -12,6 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.analysis.dataflow import *
-from ngraph.analysis.fusion import *
-from ngraph.analysis.memory import *
+
+import decorator
+import numpy as np
+
+
+def with_error_settings(**new_settings):
+    """
+    TODO.
+
+    Arguments:
+      **new_settings: TODO
+
+    Returns:
+
+    """
+    @decorator.decorator
+    def dec(f, *args, **kwargs):
+        old_settings = np.geterr()
+
+        np.seterr(**new_settings)
+        ret = f(*args, **kwargs)
+
+        np.seterr(**old_settings)
+
+        return ret
+
+    return dec
+
+
+def raise_all_numpy_errors(f):
+    """
+    TODO.
+
+    Arguments:
+      f: TODO
+
+    Returns:
+
+    """
+    settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
+    return with_error_settings(**settings)(f)

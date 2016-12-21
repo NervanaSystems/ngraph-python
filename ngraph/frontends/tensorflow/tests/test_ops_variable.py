@@ -19,7 +19,9 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
+import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
+import pytest
 
 
 class Tester(ImporterTester):
@@ -33,7 +35,12 @@ class Tester(ImporterTester):
         # test
         self.run(result, tf_init_op=init_op)
 
-    def test_assign(self):
+    @pytest.mark.xfail(strict=True)
+    def test_ref_assign(self):
+        # Currently ngraph and tf have different assign semantics
+        # eval(ng.assign(a, 1)) resturns None, but eval(tf.assign(a, 1)) returns
+        # a which is 1.
+        # TODO: fix this test after assign op / user_deps are fixed in ngraph
         # TODO: double assignments fails
 
         # tf placeholder
@@ -45,9 +52,14 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)
 
-    def test_assign_add(self):
+    @pytest.mark.xfail(strict=True)
+    def test_ref_assign_add(self):
+        # Currently ngraph and tf have different assign semantics
+        # eval(ng.assign(a, 1)) resturns None, but eval(tf.assign(a, 1)) returns
+        # a which is 1.
+        # TODO: fix this test after assign op / user_deps are fixed in ngraph
         # TODO: double assignments fails
 
         # tf placeholder
@@ -59,4 +71,4 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)

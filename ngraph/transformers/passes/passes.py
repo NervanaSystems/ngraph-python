@@ -19,13 +19,14 @@ from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
-    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
+    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, Dimshuffle, UnaryElementwiseAxesOp, \
-    negative, cast_axes
+    Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
+    negative, cast_axes, power
 
 from ngraph.util.generics import generic_method
+from ngraph.util.ordered import OrderedSet
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, object)):
@@ -46,7 +47,7 @@ class PeepholeGraphPass(GraphPass):
         has_work = True
         while has_work:
             self.replacement_list = []
-            ops = set(op.forwarded for op in ops)
+            ops = OrderedSet(op.forwarded for op in ops)
             for op in Op.ordered_ops(ops):
                 op.update_forwards()
                 self.visit(op)
@@ -131,8 +132,8 @@ class RequiredTensorShaping(PeepholeGraphPass):
                 out = DotTwoByOne(x, y, axes=x.axes[0])
             else:
                 out = DotTwoDimensional(x, y,
-                                        axes=([op.x_out_axes.flatten(),
-                                               op.y_out_axes.flatten()]))
+                                        axes=([op.x_out_axes.flatten(True),
+                                               op.y_out_axes.flatten(True)]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
@@ -163,6 +164,19 @@ class RequiredTensorShaping(PeepholeGraphPass):
         if op.must_reduce:
             self.replace_op(op, op.reduce_to_twod())
 
+    @visit.on_type(Prod)
+    def visit(self, op):
+        x = op.args[0]
+        if x.is_scalar:
+            # Prod of a scalar is just the scalar raised to the power of the
+            # axes size rebroadcast
+            val = broadcast(power(cast_axes(x, ()), op.reduction_axes.size), op.axes)
+            self.replace_op(op, val)
+            return
+        # call-next-method
+        if op.must_reduce:
+            self.replace_op(op, op.reduce_to_twod())
+
     @visit.on_type(OneHotOp)
     def visit(self, op):
         self.replace_op(op, op.as_two_dim())
@@ -178,6 +192,11 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(BinaryElementWiseAxesOp)
     def visit(self, op):
         self.replace_op(op, op.reduce_to_oned())
+
+    @visit.on_type(ContiguousOp)
+    def visit(self, op):
+        if op.args[0].tensor_description().c_contiguous:
+            self.replace_op(op, op.args[0])
 
     @visit.on_type(AssignOp)
     def visit(self, op):
@@ -195,30 +214,8 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(BroadcastOp)
     def visit(self, op):
         x = op.args[0]
-        x_strides = x.tensor_description().strides
-        if op.axes == x.axes or x_strides == (0,) * len(x_strides):
+        if op.axes == x.axes:
             self.replace_op(op, x)
-
-    @visit.on_type(Dimshuffle)
-    def visit(self, op):
-        x = op.args[0]
-        # TODO This is almost always a wasted shuffle, but sometimes it isn't
-        if False and op.old_axis_positions == tuple(range(len(op.old_axis_positions))):
-            self.replace_op(op, x)
-            return
-        if True or not isinstance(x, BroadcastOp) and not isinstance(x, ReorderAxes):
-            if isinstance(x, ReshapeOp):
-                return
-        x_tensor_description = x.tensor_description()
-        x_strides = x_tensor_description.strides
-        if x_strides == ():
-            self.replace_op(op, x)
-            return
-        shuffle_strides = tuple(x_strides[_] for _ in op.old_axis_positions)
-        if shuffle_strides == x_strides or x_strides == (0,) * len(x_strides):
-            self.replace_op(op, x)
-        else:
-            pass
 
 
 class SimplePrune(PeepholeGraphPass):
@@ -314,6 +311,22 @@ class SimplePrune(PeepholeGraphPass):
         x, = op.args
         if x.is_scalar and x.is_constant:
             val = x.const * op.reduction_axes.size
+            self.replace_op(op, constant(val))
+
+    @visit.on_type(Prod)
+    def visit(self, op):
+        """
+        TODO.
+
+        Arguments:
+          op: TODO
+
+        Returns:
+          TODO
+        """
+        x, = op.args
+        if x.is_scalar and x.is_constant:
+            val = power(x.const, op.reduction_axes.size)
             self.replace_op(op, constant(val))
 
     @visit.on_type(LogOp)

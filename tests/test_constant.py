@@ -17,9 +17,10 @@ Test the usage of ng.constant
 """
 from __future__ import print_function
 
-import ngraph as ng
 import numpy as np
-from ngraph.util.utils import executor
+
+import ngraph as ng
+from ngraph.testing import executor
 
 
 def test_constant_init(transformer_factory):
@@ -34,7 +35,7 @@ def test_constant_init(transformer_factory):
     nparray = np.array(range(5))
     a = ng.constant(nparray)
     result = executor(a)()
-    np.testing.assert_allclose(result, nparray)
+    ng.testing.assert_allclose(result, nparray)
 
 
 def test_constant_add(transformer_factory):

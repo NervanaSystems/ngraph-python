@@ -27,7 +27,7 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    CosOneDOp, Op, \
+    ContiguousOp, CosOneDOp, Op, \
     DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
     ModOneDim, ModZeroDim, \
     EqualOneDim, EqualZeroDim, ExpOneDOp, \
@@ -36,14 +36,16 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
+    Power, PowerZeroDim, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
     SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, Unslice, Dimshuffle, \
-    SetItemOneDOp
+    Sum, Prod, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
+    SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.debug import PrintOp
+from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, make_transformer_factory, set_transformer_factory
@@ -446,12 +448,9 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
-    @generate_op.on_type(Dimshuffle)
+    @generate_op.on_type(ContiguousOp)
     def generate_op(self, op, out, x):
-        self.append(
-            "{}[()] = np.transpose({}, {})",
-            out, x, op.old_axis_positions
-        )
+        self.append("{}[()] = {}", out, x)
 
     @generate_op.on_type(DivideOneDim)
     def generate_op(self, op, out, x, y):
@@ -585,7 +584,11 @@ class NumPyCodeGenerator(PyGen):
 
     @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
-        self.append("np.power({}, {}, out={}", x, y, out)
+        self.append("np.power({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(PowerZeroDim)
+    def generate_op(self, op, out, x, y):
+        self.append("np.power({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(PrintOp)
     def generate_op(self, op, out, x):
@@ -608,9 +611,9 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__((), {})", tensor, value)
 
-    @generate_op.on_type(SetItemOneDOp)
-    def generate_op(self, op, out, tensor, item, value):
-        self.append("{}.__setitem__({}, {})", tensor, item, value)
+    @generate_op.on_type(SetItemOp)
+    def generate_op(self, op, out, tensor, value):
+        self.append("{}.__setitem__({}, {})", tensor, tuple(op.item), value)
 
     @generate_op.on_type(SignOneDOp)
     def generate_op(self, op, out, x):
@@ -640,6 +643,10 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.sum({}, axis=0, out={})", x, out)
 
+    @generate_op.on_type(Prod)
+    def generate_op(self, op, out, x):
+        self.append("np.prod({}, axis=0, out={})", x, out)
+
     @generate_op.on_type(TanhOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
@@ -647,11 +654,6 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(TensorSizeOp)
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
-
-    @generate_op.on_type(Unslice)
-    def generate_op(self, op, out, out_sliced, x):
-        self.append("{}.fill(0)", out)
-        self.append("{}.__setitem__((), {})", out_sliced, x)
 
 
 class NumPyTransformer(Transformer):
@@ -664,6 +666,8 @@ class NumPyTransformer(Transformer):
     """
 
     transformer_name = "numpy"
+    default_rtol = 1e-05
+    default_atol = 1e-08
 
     def __init__(self, **kwargs):
         super(NumPyTransformer, self).__init__(**kwargs)
@@ -677,6 +681,8 @@ class NumPyTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
+
+        self.graph_passes.insert(0, CPUTensorLayout())
 
     def device_buffer_storage(self, bytes, dtype, name):
         """

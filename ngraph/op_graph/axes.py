@@ -193,6 +193,14 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             self.roles.update(roles)
 
     @property
+    def is_flattened(self):
+        """
+        Returns:
+            True if this is a flattened axis.
+        """
+        return False
+
+    @property
     def is_batch(self):
         """
         Tests if an axis is a batch axis.
@@ -286,6 +294,10 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     @property
     def primary_axis(self):
+        """
+        Returns:
+            The origin axis for a dual axis.
+        """
         return self
 
     @property
@@ -320,6 +332,18 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         """
         self.roles.add(axis_role)
 
+    @property
+    def annotated_axis(self):
+        """
+        Returns:
+            The actual axis.
+        """
+        return self
+
+    @property
+    def is_casting_axis(self):
+        return False
+
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
@@ -328,10 +352,210 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             return False
         elif self.match_on_length or other.match_on_length:
             return self.length == other.length
-        return self is other
+        return self.annotated_axis is other.annotated_axis
 
     def __hash__(self):
         return id(self)
+
+
+def casting_axis(annotated_axis, aliased_axis):
+    """
+    When an op casts an axis, we need to be able to determine the original axis.
+    We cannot associate this with the axis, since it is dependent on where the
+    axis was cast. For example, in one tensor A might be cast to X and in another
+    A might be cast to Y.
+
+    Arguments:
+        annotated_axis: The new axis in the cast.
+        aliased_axis: The previous axis.
+
+    Returns:
+        A CastingAxis.
+
+    """
+    if annotated_axis == aliased_axis:
+        return annotated_axis
+    else:
+        return CastingAxis(annotated_axis, aliased_axis)
+
+
+class CastingAxis(Axis):
+    """
+    Associates the original axis with a cast axis.
+
+    Arguments:
+        annotated_axis: The new axis in the cast.
+        aliased_axis: The previous axis.
+    """
+    def __init__(self, annotated_axis, cast_axis):
+        self.__annotated_axis = annotated_axis.annotated_axis
+        super(CastingAxis, self).__init__(annotated_axis, name=annotated_axis.name)
+        self.__cast_axis = cast_axis
+
+    @property
+    def cast_axis(self):
+        """
+
+        Returns:
+            The axis this axis renames.
+        """
+        return self.__cast_axis
+
+    @property
+    def is_casting_axis(self):
+        """
+
+        Returns:
+            True if this is a casting axis.
+        """
+        return True
+
+    @property
+    def annotated_axis(self):
+        return self.__annotated_axis
+
+    @property
+    def is_flattened(self):
+        return self.annotated_axis.is_flattened
+
+    @property
+    def name(self):
+        return self.annotated_axis.name
+
+    @name.setter
+    def name(self, name):
+        pass
+
+    @property
+    def is_batch(self):
+        """
+        Tests if an axis is a batch axis.
+
+        Returns:
+            bool: True if the axis is a batch axis.
+
+        """
+        return self.annotated_axis.is_batch
+
+    @property
+    def is_recurrent(self):
+        """
+        Tests if an axis is a recurrent axis.
+
+        Returns:
+            bool: True if the axis is a recurrent axis.
+
+        """
+        return self.annotated_axis.is_recurrent
+
+    @property
+    def match_on_length(self):
+        """
+
+        Returns:
+            bool: True if this axis matches axes with the same length.
+        """
+        return self.annotated_axis.match_on_length
+
+    @property
+    def length(self):
+        """
+        Returns:
+            The length of the axis.
+        """
+        return self.annotated_axis.length
+
+    @length.setter
+    def length(self, value):
+        self.annotated_axis.length = value
+
+    @property
+    def axes(self):
+        return self.annotated_axis.axes
+
+    @property
+    def dual_level(self):
+        """
+
+        Returns:
+            Axis displacement for dot.
+
+            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
+            the dual space of level n.
+
+        """
+        return self.annotated_axis.dual_level()
+
+    def __add__(self, offset):
+        return CastingAxis(self.annotated_axis.get_dual(offset),
+                           self.cast_axis.get_dual(offset))
+
+    def __sub__(self, offset):
+        return CastingAxis(self.annotated_axis.get_dual(-offset),
+                           self.cast_axis.get_dual(-offset))
+
+    def get_dual(self, offset=-1):
+        """
+        Returns a dual for an axis.
+
+        The dual of an axis in the left side of a dot product matches the axis in the right side.
+
+        Args:
+            axis (Axis):
+            offset (int, optional): The dual offset from axis. Defaults to -1.
+
+        Returns:
+            (Axis): The dual of the axis.
+
+        """
+        return CastingAxis(self.annotated_axis.get_dual(offset),
+                           self.cast_axis.get_dual(offset))
+
+    @property
+    def T(self):
+        return CastingAxis(self.annotated_axis.T, self.casting_axis.T)
+
+    @property
+    def primary_axis(self):
+        return CastingAxis(self.annotated_axis.primary_axis,
+                           self.cast_axis.primary_axis)
+
+    @property
+    def roles(self):
+        """
+
+        Returns: The AxisRoles of this axis.
+
+        """
+        return self.annotated_axis.roles
+
+    def has_role(self, axis_role):
+        """
+
+        Args:
+            axis_role: A role to test.
+
+        Returns:
+            True if this axis has the role.
+
+        """
+        return self.annotated_axis.has_role(axis_role)
+
+    def add_role(self, axis_role):
+        """
+
+        Args:
+            axis_role:
+
+        Returns:
+
+        """
+        self.annotated_axis.add(axis_role)
+
+    def __repr__(self):
+        return 'CastingAxis({name}={cname}: {length})'.format(name=self.annotated_axis.name,
+                                                              cname=self.cast_axis.name,
+                                                              length=self.length)
 
 
 class DualAxis(Axis):
@@ -390,14 +614,25 @@ class FunctionAxis(Axis):
 
     def __init__(self, parent, length_fun, **kwargs):
         super(FunctionAxis, self).__init__(length=-1,
-                                           batch=parent.is_batch,
-                                           recurrent=parent.is_recurrent,
                                            **kwargs)
+        self.parent = parent
         self.length_fun = length_fun
 
     @property
     def length(self):
         return self.length_fun()
+
+    @property
+    def is_recurrent(self):
+        return self.parent.is_recurrent
+
+    @property
+    def roles(self):
+        return self.parent.roles
+
+    @property
+    def is_batch(self):
+        return self.parent.is_batch
 
 
 def _sliced_length(s, incoming_length):
@@ -440,9 +675,8 @@ class SlicedAxis(FunctionAxis):
     exception instead?
     """
     def __init__(self, parent, s, **kwargs):
-        self.parent = parent
-        self.slice = s
 
+        self.slice = s
         _validate_slice(s)
 
         super(SlicedAxis, self).__init__(
@@ -471,7 +705,6 @@ class PaddedAxis(FunctionAxis):
         pad: A two-element array of pre and post padding.
     """
     def __init__(self, parent, pad, **kwargs):
-        self.parent = parent
         self.pad = pad
 
         def padded_length():
@@ -601,7 +834,7 @@ class Axes(object):
         Returns:
             tuple: A nested tuple with the axis lengths.
         """
-        return tuple(x.axes.full_lengths if isinstance(x, FlattenedAxis)
+        return tuple(x.axes.full_lengths if x.is_flattened
                      else x.length for x in self)
 
     @property
@@ -648,8 +881,19 @@ class Axes(object):
         """
         return Axes(axis for axis in self if axis.has_role(role))
 
-    def flatten(self):
-        if len(self) == 1:
+    def flatten(self, force=False):
+        """
+        Produces flattened form of axes
+
+        Args:
+            force: Add a FlattenedAxis even when the axis is already flat. This is needed
+             when the flatten is balanced by a later unflatten, as in dot.
+
+        Returns:
+            A flat axis.
+
+        """
+        if not force and len(self) == 1:
             return self[0]
         return FlattenedAxis(self)
 
@@ -830,7 +1074,14 @@ class Axes(object):
             True if axes has the same elements,
             False otherwise.
         """
-        return set(self) == set(make_axes(axes))
+        axes = make_axes(axes)
+        for x in self:
+            if x not in axes:
+                return False
+        for x in axes:
+            if x not in self:
+                return False
+        return True
 
     @staticmethod
     @with_args_as_axes
@@ -907,7 +1158,7 @@ class Axes(object):
             if axis == new_axes[idx]:
                 idx += 1
             else:
-                check(isinstance(axis, FlattenedAxis))
+                check(axis.is_flattened)
                 new_idx = idx + len(axis.axes)
                 check(axis.axes == new_axes[idx:new_idx])
                 idx = new_idx
@@ -982,11 +1233,19 @@ class FlattenedAxis(Axis):
 
     def __init__(self, axes, **kwargs):
         axes = Axes(axes)
-        if len(axes) == 1 and isinstance(axes[0], FlattenedAxis):
+        if len(axes) == 1 and axes[0].is_flattened:
             pass
         length = reduce(operator.mul, axes.lengths, 1)
         super(FlattenedAxis, self).__init__(length=length, **kwargs)
         self.__axes = axes
+
+    @property
+    def is_flattened(self):
+        """
+        Returns:
+            True is this is a FlattendAxis.
+        """
+        return True
 
     @property
     def empty(self):
@@ -1013,7 +1272,7 @@ class FlattenedAxis(Axis):
         return self.__axes
 
     def __eq__(self, other):
-        return isinstance(other, FlattenedAxis)\
+        return other.is_flattened\
             and all(l == r for l, r in zip(self.axes, other.axes))
 
     def __hash__(self):
@@ -1087,7 +1346,7 @@ def _make_stride(inner_size, axis, fsz):
         inner_size: The total size of this axis and all smaller dimensions.
         stride: The stride given to the axis.
     """
-    if isinstance(axis, FlattenedAxis):
+    if axis.is_flattened:
         return _make_strides(inner_size, axis.axes, fsz)
     else:
         stride = inner_size
@@ -1132,6 +1391,7 @@ class TensorDescription(NameableValue):
         full_strides: The strides of each axis.
         full_sizes: The allocated size of each axis (may be larger than the axis).
         offset: An offset into the viewed tensor.
+        next_tensor_decription: In a reshape, tensor description of reshaped tensor.
         **kwargs: Additional args for related classes.
 
     """
@@ -1139,6 +1399,7 @@ class TensorDescription(NameableValue):
     def __init__(self, axes, base=None,
                  dtype=None,
                  full_strides=None, full_sizes=None, offset=0,
+                 next_tensor_description=None,
                  **kwargs):
         super(TensorDescription, self).__init__(**kwargs)
         # TODO: get the default type from the backend. May not always be numpy.
@@ -1156,7 +1417,7 @@ class TensorDescription(NameableValue):
         self.__read_only = False
         self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
-        self.style = {}
+        self.next_tensor_description = next_tensor_description
 
         for axis in axes:
             if axis.length is None:
@@ -1226,6 +1487,7 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
+            next_tensor_description=self,
             name=name
         )
 
@@ -1241,21 +1503,72 @@ class TensorDescription(NameableValue):
         Returns:
             The unflattened tensor description.
         """
+        def find_axis_stride_and_length(axis):
+            """
+            Find the stride and length for an axis.
+
+            Start at the current tensor description and then work back
+            through reshapings of it looking for a mention of the axis
+            that can be used to determine the storage stride and offset.
+
+            Args:
+                axis: The axis.
+
+            Returns:
+                stride, length of axis
+
+            """
+            td = self
+            while td is not None:
+                for idx, a in enumerate(td.axes):
+                    # Try to find a match for axis in this td
+                    full_strides = td.full_strides[idx]
+                    full_sizes = td.full_sizes[idx]
+                    if a == axis:
+                        return full_strides, full_sizes
+
+                    if a.is_flattened:
+                        # Can be embedded ina a flattened axis description
+                        if not isinstance(full_strides, tuple):
+                            # An axis cast can lose striding info, so need to
+                            # recreate it from the axis lengths. Being flattened
+                            # implies C-contiguous
+                            stride = full_strides
+                            full_strides = []
+                            full_sizes = []
+                            for s in reversed(a.axes):
+                                full_sizes.insert(0, s.length)
+                                full_strides.insert(0, stride)
+                                stride = stride * s.length
+
+                        # Now search for axis in the flattened axis
+                        for sub_idx, b in enumerate(a.axes):
+                            if b == axis:
+                                return full_strides[sub_idx], full_sizes[sub_idx]
+
+                    if a.is_casting_axis:
+                        # The axis is a cast of some other axis pulled in through some
+                        # operation like dot. Try to work down through what it was
+                        # casting.
+                        cast_axis = a.cast_axis
+                        if cast_axis == axis:
+                            return full_strides, full_sizes
+
+                # Move on to the next tensor description in the reshaping chain
+                td = td.next_tensor_description
+
+            # Sometimes we just don't have enough information.
+            raise ValueError()
+
         new_axes = Axes(new_axes)
         assert Axes.check_unflatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
-        idx = 0
-        for axis, fst, fsz in zip(self.axes, self.full_strides, self.full_sizes):
-            if axis == new_axes[idx]:
-                new_strides.append(fst)
-                new_sizes.append(fsz)
-                idx += 1
-            else:
-                new_strides.extend(fst)
-                new_sizes.extend(fsz)
-                idx += len(axis.axes)
+        for new_axis in new_axes:
+            stride, size = find_axis_stride_and_length(new_axis)
+            new_strides.append(stride)
+            new_sizes.append(size)
 
         return TensorDescription(
             new_axes,
@@ -1264,6 +1577,7 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
+            next_tensor_description=self,
             name=name
         )
 
@@ -1283,6 +1597,7 @@ class TensorDescription(NameableValue):
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=self.offset,
+                                 next_tensor_description=self,
                                  name=name)
 
     def broadcast(self, new_axes, name=None):
@@ -1342,7 +1657,7 @@ class TensorDescription(NameableValue):
                 idx = Axes.find_axis(self.axes, axis)
                 new_strides.append(self.full_strides[idx])
                 new_sizes.append(self.full_sizes[idx])
-            elif isinstance(axis, FlattenedAxis):
+            elif axis.is_flattened:
                 lengths = axis.axes.full_lengths
                 new_strides.append(zero_in_shape(lengths))
                 new_sizes.append(lengths)
@@ -1357,6 +1672,7 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
+            next_tensor_description=self,
             name=name
         )
 
@@ -1384,6 +1700,7 @@ class TensorDescription(NameableValue):
             full_strides=full_strides,
             full_sizes=full_sizes,
             offset=self.offset,
+            next_tensor_description=self,
             name=name
         )
 
@@ -1414,7 +1731,7 @@ class TensorDescription(NameableValue):
         num_dimensions_out = len([s for s in slices if isinstance(s, slice)])
         if len(new_axes) != num_dimensions_out:
             raise ValueError((
-                'in a slice operation, the number of axes pass in to '
+                'in a slice operation, the number of axes passed in to '
                 'new_axes ({num_new_axes}) must be the same as the number of '
                 'slice objects in slices ({num_slices}).'
             ).format(
@@ -1454,6 +1771,7 @@ class TensorDescription(NameableValue):
                                  full_strides=tuple(full_strides),
                                  full_sizes=tuple(full_sizes),
                                  offset=offset,
+                                 next_tensor_description=self,
                                  name=name)
 
     @property
@@ -1473,6 +1791,13 @@ class TensorDescription(NameableValue):
         """The allocated sizes for each axis."""
         return tuple(_reduce_nested(_, 1, operator.mul)
                      for _ in self.full_sizes)
+
+    @property
+    def tensor_size(self):
+        result = self.dtype.itemsize
+        for s in self.sizes:
+            result = result * s
+        return result
 
     @property
     def c_contiguous(self):

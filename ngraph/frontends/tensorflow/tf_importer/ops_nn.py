@@ -183,10 +183,10 @@ class OpsNN(OpsBase):
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
         image = ng.expand_dims(image, ax_D, 1)  # NHWC -> NDHWC
-        image = ng.Dimshuffle(image, axes=ax_i)  # NDHWC -> CDHWN
+        image = ng.axes_with_order(image, axes=ax_i)  # NDHWC -> CDHWN
         weight = ng.cast_axes(weight, ng.make_axes([ax_R, ax_S, ax_C, ax_K]))
         weight = ng.expand_dims(weight, ax_T, 0)  # RSCK -> TRSCK
-        weight = ng.Dimshuffle(weight, axes=ax_f)  # TRSCK -> CTRSK
+        weight = ng.axes_with_order(weight, axes=ax_f)  # TRSCK -> CTRSK
 
         # convolution
         output = ng.convolution(params, image, weight, axes=ax_o)
@@ -197,7 +197,7 @@ class OpsNN(OpsBase):
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.Slice(output, out_slicing)
+        output = ng.tensor_slice(output, out_slicing)
 
         return output
 
@@ -288,7 +288,7 @@ class OpsNN(OpsBase):
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
         image = ng.expand_dims(image, ax_D, 1)  # NHWC -> NDHWC
-        image = ng.Dimshuffle(image, axes=ax_i)  # NDHWC -> CDHWN
+        image = ng.axes_with_order(image, axes=ax_i)  # NDHWC -> CDHWN
 
         # pooling
         output = ng.pooling(params, image, axes=ax_o)
@@ -299,7 +299,7 @@ class OpsNN(OpsBase):
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.Slice(output, out_slicing)
+        output = ng.tensor_slice(output, out_slicing)
 
         return output
 
@@ -344,7 +344,7 @@ class OpsNN(OpsBase):
         # dim-shuffle / cast to (Y1, N1)
         predicts_axes = ng.make_axes(
             [axis for axis in reversed(predicts.axes)])
-        predicts = ng.Dimshuffle(predicts, axes=predicts_axes)
+        predicts = ng.axes_with_order(predicts, axes=predicts_axes)
         labels_one_hot = ng.cast_axes(labels_one_hot, predicts_axes)
 
         # cross_entropy: (N1,)

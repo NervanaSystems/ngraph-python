@@ -13,8 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
+
 import ngraph as ng
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
@@ -25,7 +26,7 @@ def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     t = ng.placeholder([N])
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
-    np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
+    ng.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
 
 
 """
