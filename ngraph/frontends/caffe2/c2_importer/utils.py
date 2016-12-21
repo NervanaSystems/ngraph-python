@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from functools import wraps
-
 import ngraph as ng
 
 
