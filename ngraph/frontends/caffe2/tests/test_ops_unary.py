@@ -73,3 +73,82 @@ def test_tanh():
 
     # compare Caffe2 and ngraph results
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))
+
+
+def test_softmax():
+    workspace.ResetWorkspace()
+
+    shape = [3, 20]
+    # data = [[1., 2.], [1., 2.]]
+    data = [float(i) for i in range(np.prod(shape))]
+    # data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+    # data = [
+    #     2., 2.,
+    #     2., 2.,
+    #     2., 2.,
+    #     3., 3.,
+    #     5., 5.,
+    #     4., 4.,
+    #     3., 3.,
+    #     2., 2.,
+    #     2., 2.,
+    #     2., 2.,
+    #
+    #     2., 2.,
+    #     2., 2.,
+    #     2., 2.,
+    #     3., 3.,
+    #     5., 5.,
+    #     4., 4.,
+    #     3., 3.,
+    #     2., 2.,
+    #     2., 2.,
+    #     2., 2.
+    # ]
+    # expected = [
+    #     [0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #      0.069858674, 0.069858674,
+    #      0.516189665, 0.516189665,
+    #      0.189895565, 0.189895565,
+    #      0.069858674, 0.069858674,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957],
+    #
+    #     [0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #
+    #      0.069858674, 0.069858674,
+    #      0.516189665, 0.516189665,
+    #      0.189895565, 0.189895565,
+    #      0.069858674, 0.069858674,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957,
+    #      0.02569957, 0.02569957],
+    # ]
+
+    net = core.Net("net")
+    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
+    net.Softmax(["X"], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=True)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    f_result = ngt.make_transformer().computation(f_ng)()
+    print('ngraph f_result', f_result)
+    # compare Caffe2 and ngraph results
+    Y = workspace.FetchBlob("Y")
+    print('caffe2 Y', Y)
+    assert(np.allclose(f_result, Y, atol=1e-4, rtol=0, equal_nan=False))
+#    assert(np.allclose(f_result, expected, atol=1e-4, rtol=0, equal_nan=False))
