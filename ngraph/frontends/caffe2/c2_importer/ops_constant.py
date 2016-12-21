@@ -130,6 +130,44 @@ class OpsConstant(OpsBase):
 
         return ng_op
 
+    def XavierFill(self, c2_op, inputs):
+        """
+        Creates a constant tensor with xavier fill.
+        Implementation is the same as in caffe2. Thera are other implementations in caffe or TF.
+        Xavier fill is uniform fill with variance (range) depending on number of
+        input/output neurons.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            value, dtype, shape, name
+        """
+
+        # parse protobuf arguments
+        args = {arg.name: arg for arg in c2_op.arg}
+
+        # calculate scale like in caffe2
+        input_neurons = np.prod(args["shape"].ints)
+        scale = np.sqrt(3. / input_neurons)
+
+        # mock class
+        class augumented_args:
+            def __init__(self, scale, name):
+                self.f = scale
+                self.name = name
+
+        # add arguments for uniform fill to list
+        c2_op.arg._values.extend([augumented_args(-scale, "min"), augumented_args(scale, "max")])
+
+        ng_op = self.UniformFill(c2_op=c2_op, inputs=inputs)
+
+        return ng_op
+
     def GivenTensorFill(self, c2_op, inputs):
         """
         Creates a constant tensor with values provided.

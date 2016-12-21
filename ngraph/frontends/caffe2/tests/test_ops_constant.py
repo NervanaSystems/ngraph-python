@@ -43,20 +43,118 @@ def test_constant():
     f_result = ngt.make_transformer().computation(f_ng)()
 
     # compare Caffe2 and ngraph results
-    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")) and f_result[0] == val)
+    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+    assert(np.isclose(f_result[0][0], val, atol=1e-6, rtol=0))
 
 
 def test_gausianfill():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    net = core.Net("net")
+    net.GaussianFill([], ["Y"], shape=shape, mean=0.0, std=1.0, name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    # f_result =
+    ngt.make_transformer().computation(f_ng)()
+
+    # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
+    # print("ngraph result: \n{}\n".format(f_result))
+
     # TODO: how to check it? Meybe we can omit this test
     pass
 
 
 def test_uniformfill():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    net = core.Net("net")
+    net.UniformFill([], ["Y"], shape=shape, min=-2., max=2., name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    # f_result =
+    ngt.make_transformer().computation(f_ng)()
+
+    # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
+    # print("ngraph result: \n{}\n".format(f_result))
+
     # TODO: how to check it? Meybe we can omit this test
     pass
 
 
 def test_uniformintfill():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    net = core.Net("net")
+    net.UniformIntFill([], ["Y"], shape=shape, min=-2, max=2, name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    # f_result =
+    ngt.make_transformer().computation(f_ng)()
+
+    # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
+    # print("ngraph result: \n{}\n".format(f_result))
+
+    # TODO: how to check it? Meybe we can omit this test
+    pass
+
+
+def test_xavierfill():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    net = core.Net("net")
+    net.XavierFill([], ["Y"], shape=shape, name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    # f_result =
+    ngt.make_transformer().computation(f_ng)()
+
+    # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
+    # print("ngraph result: \n{}\n".format(f_result))
+
     # TODO: how to check it? Meybe we can omit this test
     pass
 
@@ -85,3 +183,4 @@ def test_giventensorfill():
 
     # compare Caffe2 and ngraph results
     assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+    assert(np.ma.allclose(f_result, data1, atol=1e-6, rtol=0))
