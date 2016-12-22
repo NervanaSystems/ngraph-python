@@ -16,7 +16,7 @@
 from __future__ import print_function
 from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
-import ngraph.transformers as ngt
+from ngraph.testing import ExecutorFactory
 import numpy as np
 import random as random
 
@@ -24,7 +24,7 @@ import random as random
 def test_sum():
     workspace.ResetWorkspace()
 
-    shape = [10, 10]
+    shape = [2, 10]
     data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
     data2 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
     net = core.Net("net")
@@ -43,7 +43,8 @@ def test_sum():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
 
     # compare Caffe2 and ngraph results
     assert(np.array_equal(f_result, workspace.FetchBlob("Y")))

@@ -16,7 +16,7 @@
 from __future__ import print_function
 from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
-import ngraph.transformers as ngt
+from ngraph.testing import ExecutorFactory
 import numpy as np
 import random as random
 
@@ -42,7 +42,8 @@ def test_relu():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
 
     # compare Caffe2 and ngraph results
     assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
@@ -69,7 +70,8 @@ def test_tanh():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
 
     # compare Caffe2 and ngraph results
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))

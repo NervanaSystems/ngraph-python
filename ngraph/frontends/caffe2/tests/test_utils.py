@@ -60,4 +60,3 @@ def test_args_shape_to_axes_wrong_pos():
         expected_shape_to_axes(axes, shape)
         assert name == name_val
     funct(const_val, shape, name_val)
-
