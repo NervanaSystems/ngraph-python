@@ -220,6 +220,7 @@ class GEMMKernel(GPUKernel):
             self.flex_entry_A = A.flex_entry()
             self.flex_entry_B = B.flex_entry()
             self.flex_entry_C = C.flex_entry()
+
             # flex params
             self.params += [self.flex_entry_C.ptr, 1.0]  # maxabs ptr, output scale
             # record output flex id for autoflex

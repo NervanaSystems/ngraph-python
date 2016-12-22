@@ -1,5 +1,5 @@
 # algorithm copied from neon flexsim
-  
+
 def init_scale_algorithm(maxabs, scale, init_count, high_bit):
 
     initialized = False
