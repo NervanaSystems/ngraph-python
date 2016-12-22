@@ -130,34 +130,52 @@ class SequentialArrayIterator(ArrayIterator):
             time_steps=time_steps,
         )
 
-        self.make_batch_buffers()
+        self.data_arrays = {k: x[:self.ntokens].reshape(
+                                self.batch_size,
+                                self.nbatches,
+                                self.time_steps
+                            ) for k, x in self.data_arrays.viewitems()}
 
-    def make_batch_buffers(self):
-        self.shapes, self.batch_bufs = dict(), dict()
-        for k, x in self.data_arrays.items():
-            self.data_arrays[k] = x[:self.ntokens].reshape(
-                self.batch_size, self.nbatches, self.time_steps)
-            self.shapes[k] = (1, self.time_steps)
-            self.batch_bufs[k] = np.empty((1, self.time_steps, self.batch_size), dtype=np.int32)
+        if self.reverse_target:
+            self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
 
-        if self.get_prev_target:
-            self.batch_bufs['prev_tgt'] = np.empty((1, self.time_steps, self.batch_size),
-                                                   dtype=np.int32)
+        # if self.get_prev_target:
+        #     self.data_arrays['prev_tgt'] =
+
+    def make_placeholders(self):
+        placeholders = {}
+        ax.N.length = self.batch_size
+        for k, axnm in self.data_arrays.items():
+            p_axes = ng.make_axes([ax.N])
+            # p_axes += ng.make_axis(name=)
+            for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
+                name = axnm[i] if axnm else None
+                p_axes += ng.make_axis(name=name, length=sz)
+            placeholders[k] = ng.placeholder(p_axes)
+        return placeholders
+
+    #     self.make_batch_buffers()
+
+    # def make_batch_buffers(self):
+    #     self.shapes, self.batch_bufs = dict(), dict()
+    #     for k, x in self.data_arrays.items():
+    #         self.data_arrays[k] = x[:self.ntokens].reshape(
+    #             self.batch_size, self.nbatches, self.time_steps)
+    #         self.shapes[k] = (1, self.time_steps)
+    #         self.batch_bufs[k] = np.empty((1, self.time_steps, self.batch_size), dtype=np.int32)
 
     def __iter__(self):
         while self.index < self.total_iterations:
             idx = self.index % self.nbatches
             self.index += 1
 
-            for k in self.keys:
-                src, dst = self.data_arrays[k], self.batch_bufs[k]
-                dst[:] = src[:, idx:(idx + 1), :].transpose(1, 2, 0)
-
-            if self.reverse_target:
-                self.batch_bufs['tgt_txt'][:] = self.batch_bufs['tgt_txt'][:, ::-1, :]
+            batch_bufs = {k: x[:, idx:(idx + 1), :] for k, x in self.data_arrays.viewitems()}
 
             if self.get_prev_target:
-                self.batch_bufs['prev_tgt'][:, 0] = 0
-                self.batch_bufs['prev_tgt'][:, 1:] = self.batch_bufs['tgt_txt'][:, :-1]
+                batch_bufs['prev_tgt'] = np.concatenate(
+                    np.zeros((self.batch_size, 1, 1), dtype=np.int32),
+                    batch_bufs['tgt_txt'][:, :, 1:],
+                    axis=2
+                )
 
-            yield self.batch_bufs
+            yield batch_bufs

@@ -20,7 +20,27 @@ import numpy as np
 from operator import itemgetter
 
 
+def output_dim(X, S, padding, strides, pooling=False):
+    """
+    Compute along 1 dimension, with these sizes, what will be the output dimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+        pooling (bool): flag for setting pooling layer size
+    """
+    size = ((X - S + 2 * padding) // strides) + 1
+
+    if pooling and padding >= S:
+        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
+
+    return size
+
+
 class Layer(object):
+
     def __init__(self, name=None, inputs=None, outputs=None, axes=None):
         self.name = name
         self.inputs = inputs
@@ -35,6 +55,7 @@ class Layer(object):
 
 
 class Preprocess(Layer):
+
     def __init__(self, functor, **kwargs):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
@@ -94,6 +115,10 @@ class ConvBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing conv keys: {}".format(missing_keys))
 
+        self.role_order = (ar.features_input, ar.features_0,
+                           ar.features_1, ar.features_2, ar.batch)
+        self.filter_roles = self.role_order[:-1] + (ar.features_output,)
+
         self.init = init
         self.f_axes = None
         self.o_axes = None
@@ -102,43 +127,34 @@ class ConvBase(Layer):
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
         cpm = self.convparams.copy()
+        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_axes = in_obj.axes
+
         if self.f_axes is None:
-            self.f_axes = in_axes.role_axes(ar.FeatureMap_inum)
-            for _ax in (ax.T, ax.R, ax.S, ax.K):
-                self.f_axes += ng.make_axis(roles=_ax.roles).named(_ax.short_name)
-            self.f_axes[1:].set_shape(itemgetter(*'TRSK')(cpm))
-
+            self.f_axes = ng.make_axes([in_axes[0]])
+            for nm, role in zip('TRSK', self.filter_roles[1:]):
+                self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes))
-
-        def in_out_feature_map_axis(filter):
-            ax_i = filter.role_axes(ar.FeatureMap_inum)
-            ax_o = filter.role_axes(ar.FeatureMap_onum)
-
-            if (len(ax_i) == 0):
-                raise ValueError("Missing number of input feature maps in filter axes")
-
-            if (len(ax_o) == 0):
-                raise ValueError("Missing number of output feature maps in filter axes")
-
-            return ng.make_axis(ax_o[0].length, ax_i[0].short_name, roles=[ar.FeatureMap_inum])
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                in_out_feature_map_axis(self.f_axes),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_d'], cpm['str_d'],
-                                role=ar.FeatureMap_dim0),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_h'], cpm['str_h'],
-                                role=ar.FeatureMap_dim1),
-                ng.spatial_axis(in_axes, self.f_axes, cpm['pad_w'], cpm['str_w'],
-                                role=ar.FeatureMap_dim2),
-                ax.N
+                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
             ])
+            # set lengths
+            out_shape = [
+                self.f_axes[-1].length,
+                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d']),
+                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h']),
+                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'])
+            ]
+            self.o_axes.set_shape(out_shape)
+            self.o_axes += in_axes.batch_axes()
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
 
 class Conv2D(ConvBase):
+
     def __init__(self, fshape, init, strides, padding, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
@@ -197,28 +213,35 @@ class PoolBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing pooling keys: {}".format(missing_keys))
 
+        self.role_order = (ar.features_input, ar.features_0,
+                           ar.features_1, ar.features_2, ar.batch)
         self.o_axes = None
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
         ppm = self.poolparams.copy()
+        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_axes = in_obj.axes
+
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.spatial_axis(in_obj.axes, ppm['J'], ppm['pad_c'], ppm['str_c'],
-                                role=ar.FeatureMap_inum),
-                ng.spatial_axis(in_obj.axes, ppm['T'], ppm['pad_d'], ppm['str_d'],
-                                role=ar.FeatureMap_dim0),
-                ng.spatial_axis(in_obj.axes, ppm['R'], ppm['pad_h'], ppm['str_h'],
-                                role=ar.FeatureMap_dim1),
-                ng.spatial_axis(in_obj.axes, ppm['S'], ppm['pad_w'], ppm['str_w'],
-                                role=ar.FeatureMap_dim2),
-                ax.N
+                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
             ])
+            # set lengths
+            out_shape = [
+                output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
+                output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
+                output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
+                output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
+            ]
+            self.o_axes.set_shape(out_shape)
+            self.o_axes += in_axes.batch_axes()
 
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
 
 class Pool2D(PoolBase):
+
     def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
         if isinstance(fshape, int):
@@ -257,8 +280,8 @@ class Bias(Layer):
     def train_outputs(self, in_obj):
         if self.init:
             w_axes = in_obj.axes.sample_axes()
-            if self.shared and len(in_obj.axes.role_axes(ar.FeatureMap_inum)) != 0:
-                w_axes = in_obj.axes.role_axes(ar.FeatureMap_inum)
+            if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
+                w_axes = in_obj.axes.role_axes(ar.features_input)
 
             self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init(w_axes))
             return in_obj + self.W
@@ -267,6 +290,7 @@ class Bias(Layer):
 
 
 class Affine(Layer):
+
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
         self.linear = Linear(init=weight_init, nout=nout, **kwargs)
@@ -290,6 +314,7 @@ class Affine(Layer):
 
 
 class Convolution(Layer):
+
     def __init__(self, fshape, filter_init, strides=1, padding=0, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
         self.conv = Conv2D(fshape, filter_init, strides, padding, **kwargs)
@@ -338,8 +363,8 @@ class BatchNorm(Layer):
     def train_outputs(self, in_obj):
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
-        if len(in_axes.role_axes(ar.FeatureMap_inum)) != 0:
-            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.FeatureMap_inum)
+        if len(in_axes.role_axes(ar.features_input)) != 0:
+            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
         red_axes += in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
@@ -583,7 +608,7 @@ class BiRNN(Layer):
 
         # create the hidden axes here and set for both directions
         rnn_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden'),
-                                in_axes.recurrent_axes()[0]])
+                                 in_axes.recurrent_axes()[0]])
 
         self.fwd_rnn.axes = self.bwd_rnn.axes = rnn_axes
         fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)

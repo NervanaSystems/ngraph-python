@@ -696,6 +696,7 @@ class InitTensorOp(Op):
         valfun: A CPU function that produces the initial value for the tensor.
 
     """
+
     def __init__(self, tensor, valfun, **kwargs):
         super(InitTensorOp, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
@@ -754,6 +755,7 @@ class AssignOneDOp(Op):
         tensor (AssignableTensorOp): The value to assign to.
         value (TensorOp): The value.
     """
+
     def __init__(self, tensor, val, force=False, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
@@ -796,6 +798,7 @@ class SetItemOp(Op):
         val (TensorOp): A value to assign.
 
     """
+
     def __init__(self, tensor, item, val, **kwargs):
         super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
         self.item = tuple(item)
@@ -1097,6 +1100,7 @@ class TensorOp(Op):
 
 
 class ReshapeOp(TensorOp):
+
     def __init__(self, x, **kwargs):
         super(ReshapeOp, self).__init__(
             args=(x,),
@@ -1155,6 +1159,7 @@ class Transpose(ReshapeOp):
     Arguments:
         x: A tensor.
     """
+
     def __init__(self, x, **kwargs):
         super(Transpose, self).__init__(
             x,
@@ -1179,6 +1184,7 @@ class AxesCastOp(ReshapeOp):
         axes: The new axes.
 
     """
+
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
         if not x.is_scalar and x.axes.lengths != axes.lengths:
@@ -1272,6 +1278,7 @@ def expand_dims(x, axis, dim):
 
 
 class ResultHandle(ReshapeOp):
+
     def __init__(self, x, **kwargs):
         super(ResultHandle, self).__init__(
             x, **kwargs
@@ -1343,6 +1350,44 @@ def broadcast(x, axes):
     return BroadcastOp(x, axes)
 
 
+def axes_with_role_order(x, roles):
+    """
+    Return a tensor with a different axes order according to
+    specified roles.  Will expand dims as necessary with inferred
+    axes for missing roles
+
+    Args:
+        x (TensorOp): The tensor.
+        roles (sequence, AxisRoles): A permutation of the roles
+                                     of axes of the tensor.
+
+    Returns:
+        TensorOp: The new tensor.
+
+    """
+    reordered_axes = make_axes()
+    y = x
+    for r in roles:
+        ax_i = y.axes.role_axes(r)
+        if len(ax_i) == 0:
+            ax_i = make_axis(length=1, roles=[r])
+        elif len(ax_i) == 1:
+            ax_i = ax_i[0]
+        else:
+            raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
+        reordered_axes += ax_i
+        # This will only add the missing axes to the front
+        y = expand_dims(y, ax_i, 0)
+
+    # Ensure that axes of x are a subset of y
+    if not x.axes.intersect(y.axes).has_same_axes(x.axes):
+        raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
+            x.axes - x.axes.intersect(y.axes)
+        ))
+
+    return axes_with_order(y, reordered_axes)
+
+
 def axes_with_order(x, axes):
     """
     Return a tensor with a different axes order.
@@ -1369,6 +1414,7 @@ class ReorderAxes(ReshapeOp):
         x: The tensor whose axes to reorder.
         axes: The new axes.
     """
+
     def __init__(self, x, axes, **kwargs):
         if not x.axes.has_same_axes(axes):
             raise ValueError(
@@ -1507,6 +1553,7 @@ def slice_along_axis(x, axis, idx):
 
 
 class Flatten(ReshapeOp):
+
     def __init__(self, x, axes, **kwargs):
         x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
@@ -1549,6 +1596,7 @@ def flatten_at(x, idx):
 
 
 class Unflatten(ReshapeOp):
+
     def __init__(self, x, axes=None, **kwargs):
         if axes is None:
             axes = []
@@ -1863,6 +1911,7 @@ class StackOp(AssignableTensorOp):
     Parameters:
         pos: The position of the join axis.
     """
+
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
@@ -1934,6 +1983,7 @@ def stack(x_list, axis, pos=0):
 
 
 class UnsliceSchema(object):
+
     def __init__(self, x, slices):
         self.x = x
         self.slices = slices
@@ -2112,6 +2162,7 @@ class UnaryElementwiseOneDOp(ElementWise):
     """
     Handles initialization for unary operations.
     """
+
     def __init__(self, x):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
 
@@ -2466,6 +2517,7 @@ def sqrt(x):
 
 
 class BinaryElementWiseAxesOp(ElementWise):
+
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
@@ -2491,6 +2543,7 @@ class BinaryElementWiseAxesOp(ElementWise):
 
 
 class BinaryElementWiseLowDOp(ElementWise):
+
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
 
@@ -2683,6 +2736,7 @@ class ContiguousOp(TensorOp):
     Parameters:
         x (TensorOp): A possibly non-contiguous tensor.
     """
+
     def __init__(self, x, **kwargs):
         super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
 
@@ -2695,6 +2749,7 @@ class ContiguousOp(TensorOp):
 
 
 class DotOp(TensorOp):
+
     def __init__(self, x, y, **kwargs):
         self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
         self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
@@ -2809,11 +2864,13 @@ def squared_L2(x):
 
 
 class LowDimensionalDot(TensorOp):
+
     def __init__(self, x, y, axes, **kwargs):
         super(LowDimensionalDot, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
 class DotOneDimensional(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 1 and len(y.axes) == 1
         super(DotOneDimensional, self).__init__(
@@ -2822,6 +2879,7 @@ class DotOneDimensional(LowDimensionalDot):
 
 
 class DotTwoDimensional(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 2
         super(DotTwoDimensional, self).__init__(
@@ -2830,6 +2888,7 @@ class DotTwoDimensional(LowDimensionalDot):
 
 
 class DotTwoByOne(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 1
         super(DotTwoByOne, self).__init__(
@@ -3082,6 +3141,7 @@ class TensorSizeOp(TensorOp):
             of these axes instead.
         kwargs: options, including name
     """
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         if reduction_axes is None and out_axes is None:
             reduction_axes = x.axes.sample_axes()
@@ -3185,6 +3245,7 @@ class OneHotOp(TensorOp):
         axis: The axis along which to construct the onehot form. It should not be
         in x and should have length equal to the number of classes.
     """
+
     def __init__(self, x, axis, **kwargs):
         self.axis = axis
         super(OneHotOp, self).__init__(
@@ -3238,6 +3299,7 @@ class OneHotTwoDimOp(OneHotOp):
         axis: The axis along which to construct the onehot form. It should not be
         in x and should have length equal to the number of classes.
     """
+
     def __init__(self, x, axis, **kwargs):
         assert len(x.axes) == 1
         super(OneHotTwoDimOp, self).__init__(x, axis, **kwargs)

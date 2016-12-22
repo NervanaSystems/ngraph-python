@@ -54,22 +54,16 @@ ax.Y.length = 10
 # Model specification
 
 def cifar_mean_subtract(x):
-    # Put data in batch minor order for neon
-    name_order = ('channel', 'height', 'width')
-    neon_axes = ng.make_axes([x.axes.find_by_short_name(nm) for nm in name_order])
-    neon_axes += ax.N
-
     # Assign roles
-    neon_axes[0].add_role(ar.FeatureMap_inum)
-    neon_axes[1].add_role(ar.FeatureMap_dim1)
-    neon_axes[2].add_role(ar.FeatureMap_dim2)
+    x.axes.find_by_short_name('channel').add_role(ar.features_input)
+    x.axes.find_by_short_name('height').add_role(ar.features_1)
+    x.axes.find_by_short_name('width').add_role(ar.features_2)
 
-    # Insert depth axis for conformity to 3d conv args
-    ax.D.length = 1
-    x_neon = ng.expand_dims(ng.axes_with_order(x, neon_axes), ax.D, 1)
     bgr_mean = ng.persistent_tensor(
-        axes=x_neon.axes[0], initial_value=np.array([[104., 119., 127.]]))
-    return (x_neon - bgr_mean) / 255.
+        axes=x.axes.find_by_short_name('channel'),
+        initial_value=np.array([[104., 119., 127.]]))
+
+    return (x - bgr_mean) / 255.
 
 
 init_uni = UniformInit(-0.1, 0.1)

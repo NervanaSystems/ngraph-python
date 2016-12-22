@@ -46,28 +46,22 @@ np.random.seed(args.rng_seed)
 train_data, valid_data = CIFAR10(args.data_dir).load_data()
 train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 valid_set = ArrayIterator(valid_data, args.batch_size)
+
+inputs = train_set.make_placeholders()
+ax.Y.length = 10
+
 ######################
 # Model specification
 
-
 def cifar_mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(axes=x.axes[0], initial_value=np.array([[104, 119, 127]]))
+    bgr_mean = ng.persistent_tensor(
+        axes=x.axes.find_by_short_name('channel'),
+        initial_value=np.array([[104., 119., 127.]]))
     return (x - bgr_mean) / 255.
 
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Affine(nout=200, weight_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
                    Affine(axes=ax.Y, weight_init=UniformInit(-0.1, 0.1), activation=Softmax())])
-
-######################
-# Input specification
-ax.C.length, ax.H.length, ax.W.length = train_set.shapes['image']
-ax.N.length = args.batch_size
-ax.Y.length = 10
-
-
-# placeholders with descriptive names
-inputs = dict(image=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
-              label=ng.placeholder([ax.N]))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 output_prob = seq1.train_outputs(inputs['image'])

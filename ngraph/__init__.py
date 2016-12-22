@@ -16,13 +16,14 @@
 from __future__ import print_function
 
 import ngraph.transformers as transformers
-from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes, spatial_axis
+from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes
 
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
-from ngraph.op_graph.op_graph import axes_with_order, broadcast, cast_axes, \
+from ngraph.op_graph.op_graph import axes_with_order, axes_with_role_order, \
+    broadcast, cast_axes, \
     is_constant, is_constant_scalar, constant_value, constant_storage, \
     persistent_tensor, placeholder, init_tensor, \
     slice_along_axis, temporary, \
