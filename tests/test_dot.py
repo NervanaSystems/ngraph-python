@@ -282,6 +282,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     result_correct = np.ones_like(result_val) * ax.C.length
     ng.testing.assert_allclose(result_val, result_correct)
 
+
 def test_squared_L2(transformer_factory):
     ax = ng.make_name_scope('ax')
     ax.H = ng.make_axis(2)
