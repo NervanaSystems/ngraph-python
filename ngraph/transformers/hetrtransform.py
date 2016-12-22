@@ -9,6 +9,56 @@ from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
 from multiprocessing import Process, Queue
 import collections
+import ripdb,os
+
+def build_transformer(name):
+    """
+
+    :param results: the graph nodes that we care about, for the computation
+    :return: the dictionary of transformers, with names matching the graph node hints
+    """
+    if 'numpy' in name:
+        transformer = make_transformer_factory('numpy')()
+    elif 'gpu' in name:
+        try:
+            from ngraph.transformers.gputransform import GPUTransformer # noqa
+            transformer = make_transformer_factory('gpu')()
+        except ImportError:
+            assert False, "Fatal: Unable to initialize GPU, " \
+                          "but GPU transformer was requested."
+    else:
+        assert False, "Unknown device!"
+
+    return transformer
+
+        # execute a helper function
+def process_helper(child_transformer_name, in_q, out_q, child_ops, args):
+   
+    #TODO
+    # pass in child_transformer_name, not obj
+    # then create obj in process, since creation has some state 
+    # debugger = ripdb.Rpdb(port=os.getpid()+12345) 
+    # debugger.set_trace()
+ 
+    child_transformer_obj = build_transformer(child_transformer_name)
+    computation = child_transformer_obj.computation(child_ops, *args)
+    EXIT_PERIOD_S = 0.5
+    while True:
+        # wait for input and then return output
+        # TODO clean way to exit (while !should_exit)
+        try: 
+            inputs = in_q.get(timeout=EXIT_PERIOD_S) # This is a blocking call!
+
+            # computation
+            outputs = computation(*inputs)
+
+            out_q.put(outputs)
+        except Exception:
+            pass
+            
+
+    # TODO how do we terminate processes?
+    
 
 class HetrComputation(Computation):
     """
@@ -19,11 +69,12 @@ class HetrComputation(Computation):
         super(HetrComputation, self).__init__(transformer_obj, results, *parameters, **kwargs)
         self.child_computations = dict()
         self.child_results_map = dict()
-        self.child_transformers = transformer_obj.child_transformers
-        self.transformer_list = transformer_obj.transformer_list
+        self.transformer_name_list = transformer_obj.transformer_list
         self.send_nodes_list = transformer_obj.send_nodes_list
         self.hetr_passes = transformer_obj.hetr_passes
         self.num_results = 0
+        self.in_dict = dict()
+        self.out_dict = dict()
 
         # Do Hetr passes
         for graph_pass in self.hetr_passes:
@@ -33,10 +84,7 @@ class HetrComputation(Computation):
             vis_results = transformer_obj.all_results + transformer_obj.send_nodes_list
             transformer_obj.vizpass.do_pass(vis_results)
 
-        # Build child transformers
-        transformer_obj.build_transformers(transformer_obj.all_results)
-
-        self.transformer_to_node = {t: list() for t in self.child_transformers}
+        self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
         # update the transformer to send node mappings
         for s in self.send_nodes_list:
@@ -57,8 +105,8 @@ class HetrComputation(Computation):
             self.child_results_map.setdefault(tname, []).append(0)
             self.num_results = 1
 
-        self.placeholders = {t: list() for t in self.child_transformers}
-        self.placeholders_pos = {t: list() for t in self.child_transformers}
+        self.placeholders = {t: list() for t in self.transformer_name_list}
+        self.placeholders_pos = {t: list() for t in self.transformer_name_list}
         self.placeholder_inverse = []
         for i, p in enumerate(parameters):
             tname = p.metadata['transformer']
@@ -66,15 +114,36 @@ class HetrComputation(Computation):
             self.placeholders_pos[tname].append(i)
             self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
 
+        # TODO move this loop down to process start. 
+        #      create processes in place of .add_child()
+        #      delete add_child function
+        #      keep list of processes, dict of in_q and out_q by t_name
         # create child-computations for all unique keys in child_transformers dict
-        for tname, t in self.child_transformers.iteritems():
+        #create process for each child computations and maps its inq and outq
+        for tname in self.transformer_name_list:
             child_ops = self.transformer_to_node[tname]
             child_placeholders = self.placeholders[tname]
-            self.add_child(t, tname, child_ops, *child_placeholders)
+            self.in_dict[tname] = Queue()
+            self.out_dict[tname] = Queue()
 
-    def add_child(self, t, tname, returns, *args, **kwargs):
-        self.child_computations[tname] = (t.computation(returns, *args, **kwargs))
+            p = Process(target=process_helper, 
+                        args=(tname,
+                              self.in_dict[tname], 
+                              self.out_dict[tname],
+                              child_ops, tuple(child_placeholders)))
+            
+            # TODO use a cleaner exit, this kills all children on exit
+            p.daemon = True
+            
+            p.start() 
 
+
+
+#    def map_child_to_tranformer(self, t, tname, returns, *args, **kwargs):
+#        self.child_computations[tname] = (t, returns, *args, **kwargs)
+        #self.child_computations[tname] = (t.computation(returns, *args, **kwargs)
+
+    
     def __call__(self, *params):
         """
         Executes child computations in parallel.
@@ -84,35 +153,26 @@ class HetrComputation(Computation):
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
 
-        # Wrapper function that calls 'c' with args 'a' and puts the result on a queue 'r'.
-        def w(c, a, r):
-            r.put(c(*a))
-
-        process_list = []
         return_list = [None for i in range(self.num_results)]
         child_result_q = dict()
 
-        # Map params to each child computation
-        # Run each child in a separate process
-        # Collect child results in multiprocess q
-        for tname, t in self.child_computations.iteritems():
-            q = Queue()
+        # Map params to each child transformer
+        # Run each child in a separate process in process_helper
+        # Collect child results from multiprocess queue mapped by out_dict 
+        for tname in self.transformer_name_list:
             targs = [params[i] for i in self.placeholders_pos[tname]]
             if tname in self.child_results_map.keys():
-                child_result_q[tname] = q
-
-            p = Process(target=w, args=(t, targs, q))
-            process_list.append(p)
-            p.start()
-
-        # Wait for all child processes to finish
-        for p in process_list:
-            p.join()
+                child_result_q[tname] = self.out_dict[tname]
+            # TODO don't start process;
+            #      find in_q and out_q for t_name
+            #      place targs into in_q and get result back from out_q
+            self.in_dict[tname].put(targs)
 
         # Reverse map child results to flattend list of results
         # in order expected by parent caller.
         for tname, q_obj in child_result_q.iteritems():
             child_results = q_obj.get()
+            # TODO maybe, child_results_map becomes the out_q map you made in __init__?
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 return_list[parent_idx] = child_results[child_idx]
 
@@ -166,61 +226,6 @@ class HetrTransformer(Transformer):
 
         return hc
 
-    def build_transformers(self, results):
-        """
-        TODO
-
-        implement one more graph traversal, which builds a set of transformer
-        hints (i.e. numpy0, numpy1)
-        ===> note this is done in ChildTransformerPass
-
-        then, for each string in the set, build a real transformer and put them in a dictionary
-            i.e. {'numpy0': NumpyTransformer(),
-                  'numpy1': NumpyTransformer()}
-
-        :param results: the graph nodes that we care about, for the computation
-        :return: the dictionary of transformers, with names matching the graph node hints
-        """
-        for t in self.transformer_list:
-            if 'numpy' in t:
-                self.child_transformers[t] = make_transformer_factory('numpy')()
-            elif 'gpu' in t:
-                try:
-                    from ngraph.transformers.gputransform import GPUTransformer # noqa
-                    self.child_transformers[t] = make_transformer_factory('gpu')()
-                except ImportError:
-                    assert False, "Fatal: Unable to initialize GPU, " \
-                                  "but GPU transformer was requested."
-            else:
-                assert False, "Unknown device!"
-
-    def get_transformer(self, hint_string):
-        """
-        TODO
-
-        for now, implement a basic mapping.
-            {'numpy': NumpyTransformer,
-             'gpu': GPUTransformer}
-
-        then do a string compare on the hint_string, and return whichever one of
-        the mapped transformers
-        matches the beginning of the hint string
-
-        :param hint_string: a string such as 'numpy0'
-        :return: The NumpyTransformer class, in this case
-
-        """
-        TrMapping = {'numpy': NumPyTransformer}
-
-        try:
-            from ngraph.transformers.gputransform import GPUTransformer
-            TrMapping['gpu'] = GPUTransformer
-        except ImportError:
-            pass
-
-        for key in TrMapping.keys():
-            if hint_string[0:2] in key:
-                return TrMapping.get(key)
 
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"
