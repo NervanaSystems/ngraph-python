@@ -86,6 +86,8 @@ class OpsUnary(OpsBase):
             A ngraph Op corresponding to the caffe2 node.
         """
         # get input
-        left = inputs[0]
+        x = inputs[0]
+        # normalization axes
+        norm_axes = x.axes[1]
 
-        return ng.softmax(left, normalization_axes=[left.axes[1]]).named(c2_op.name)
+        return ng.softmax(x, norm_axes).named(c2_op.name)

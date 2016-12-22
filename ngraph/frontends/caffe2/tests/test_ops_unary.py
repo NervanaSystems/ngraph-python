@@ -105,9 +105,10 @@ def test_softmax():
     # Execute
     f_result = ngt.make_transformer().computation(f_ng)()
     # print('ngraph f_result', f_result)
-    Y = workspace.FetchBlob("Y")
+    c2_y = workspace.FetchBlob("Y")
+    # print('caffe2 Y', Y)
 
     # compare Caffe2 and ngraph results
-    # print('caffe2 Y', Y)
-    assert(np.allclose(f_result, Y, atol=1e-4, rtol=0, equal_nan=False))
+    assert(np.allclose(f_result, c2_y, atol=1e-4, rtol=0, equal_nan=False))
+    # compare expected results and ngraph results
     assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
