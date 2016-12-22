@@ -281,3 +281,26 @@ def test_flat_tensor_dot_tensor(transformer_factory):
 
     result_correct = np.ones_like(result_val) * ax.C.length
     ng.testing.assert_allclose(result_val, result_correct)
+
+def test_squared_L2(transformer_factory):
+    ax = ng.make_name_scope('ax')
+    ax.H = ng.make_axis(2)
+    ax.W = ng.make_axis(3)
+    ax.N = ng.make_axis(5, batch=True)
+
+    axes = ng.make_axes([ax.H, ax.W, ax.N])
+    a = ng.constant(np.ones(axes.lengths), axes=axes)
+
+    factory = ExecutorFactory()
+    l2_samples_fun = factory.executor(ng.squared_L2(a))
+    l2_samples_val = np.ones([ax.N.length]) * ax.H.length * ax.W.length
+    l2_all_fun = factory.executor(ng.squared_L2(a, out_axes=[]))
+    l2_all_val = np.ones([]) * ax.W.length * ax.H.length * ax.N.length
+    l2_W_fun = factory.executor(ng.squared_L2(a, reduction_axes=[ax.H, ax.N]))
+    l2_W_val = np.ones([ax.W.length]) * ax.H.length * ax.N.length
+    l2_samples_result = l2_samples_fun()
+    l2_all_result = l2_all_fun()
+    l2_W_result = l2_W_fun()
+    ng.testing.assert_allclose(l2_samples_val, l2_samples_result)
+    ng.testing.assert_allclose(l2_all_val, l2_all_result)
+    ng.testing.assert_allclose(l2_W_val, l2_W_result)

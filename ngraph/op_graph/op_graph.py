@@ -2867,7 +2867,7 @@ def dot(x, y, name=None):
     return DotOp(x, y, name=name)
 
 
-def squared_L2(x):
+def squared_L2(x, out_axes=None, reduction_axes=None):
     """
     Returns the dot of x and y, with the axes of x set to their dual offset.
 
@@ -2879,7 +2879,12 @@ def squared_L2(x):
         TensorOp: The result.
 
     """
-    return dot(dualed_axes(x, x.axes, -1, 0), x)
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
 class LowDimensionalDot(TensorOp):
