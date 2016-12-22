@@ -164,14 +164,17 @@ class Op(NameableValue, DebugInfo):
     """
 
     # Default is to not collect Ops as they are created
-    get_thread_state().ops = [None]
-
     @staticmethod
     def _get_thread_ops():
         """
         :return: The stack of Ops being collected.
         """
-        return get_thread_state().ops
+        try:
+            ops = get_thread_state().ops
+        except AttributeError:
+            ops = [None]
+            get_thread_state().ops = ops
+        return ops
 
     @staticmethod
     @contextmanager
@@ -187,10 +190,17 @@ class Op(NameableValue, DebugInfo):
         finally:
             Op._get_thread_ops().pop()
 
+    @staticmethod
+    def get_all_ops():
+        try:
+            all_ops = get_thread_state().all_ops
+        except AttributeError:
+            all_ops = [None]
+            get_thread_state().all_ops = all_ops
+        return all_ops
+
     # We need to create another stack here because all_ops and captured_ops
     # have different semantics that don't work with a shared stack
-    get_thread_state().all_ops = [None]
-
     @staticmethod
     @contextmanager
     def all_ops():
@@ -200,7 +210,7 @@ class Op(NameableValue, DebugInfo):
         """
         ops = []
         try:
-            all_ops = get_thread_state().all_ops
+            all_ops = Op.get_all_ops()
             all_ops.append(ops)
             yield (ops)
         finally:
@@ -210,11 +220,14 @@ class Op(NameableValue, DebugInfo):
                 parent.extend(ops)
 
     # The thread's global user_deps map
-    get_thread_state().user_deps = [dict()]
-
     @staticmethod
     def _get_thread_user_deps():
-        return get_thread_state().user_deps
+        try:
+            user_deps = get_thread_state().user_deps
+        except AttributeError:
+            user_deps = [dict()]
+            get_thread_state().user_deps = user_deps
+        return user_deps
 
     @staticmethod
     @contextmanager
@@ -294,7 +307,7 @@ class Op(NameableValue, DebugInfo):
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
-        all_ops = get_thread_state().all_ops[-1]
+        all_ops = Op.get_all_ops()[-1]
         if all_ops is not None:
             all_ops.append(self)
 
