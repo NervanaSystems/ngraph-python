@@ -16,6 +16,7 @@
 from __future__ import print_function
 from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
+from ngraph.testing import ExecutorFactory
 import ngraph.transformers as ngt
 import numpy as np
 import random as random
@@ -93,8 +94,9 @@ def test_uniformfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
+    ex = ExecutorFactory()
     # f_result =
-    ngt.make_transformer().computation(f_ng)()
+    ex.executor(f_ng)()
 
     # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
     # print("ngraph result: \n{}\n".format(f_result))
@@ -121,8 +123,9 @@ def test_uniformintfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
+    ex = ExecutorFactory()
     # f_result =
-    ngt.make_transformer().computation(f_ng)()
+    ex.executor(f_ng)()
 
     # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
     # print("ngraph result: \n{}\n".format(f_result))
@@ -149,8 +152,9 @@ def test_xavierfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
+    ex = ExecutorFactory()
     # f_result =
-    ngt.make_transformer().computation(f_ng)()
+    ex.executor(f_ng)()
 
     # print("Caffe2 result: \n{}\n".format(workspace.FetchBlob("Y")))
     # print("ngraph result: \n{}\n".format(f_result))
@@ -179,7 +183,8 @@ def test_giventensorfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
 
     # compare Caffe2 and ngraph results
     assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
