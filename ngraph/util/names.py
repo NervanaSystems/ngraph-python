@@ -20,16 +20,17 @@ from builtins import next, object
 from ngraph.util.threadstate import get_thread_state
 
 
-get_thread_state().name_scope = [None]
-
-
 def _get_thread_name_scope():
     """
 
     Returns:
          NameScope: Thread-local NameScope.
     """
-    return get_thread_state().name_scope
+    try:
+        name_scope = get_thread_state().name_scope
+    except AttributeError:
+        name_scope = [None]
+    return name_scope
 
 
 def get_current_name_scope():
