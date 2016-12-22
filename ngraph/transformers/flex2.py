@@ -10,7 +10,7 @@ from ngraph.transformers.neonautoflex import init_scale_algorithm
 DEFAULT_DEC = 8  # use DEFAULT_DEC = 8 for 8.8 fixed point
 
 
-fixed_point = False
+fixed_point = True
 flex_verbose = True
 flex_verbose1 = False
 indent1 = '  '
@@ -38,6 +38,10 @@ class Flex(object):
         self.itemsize = storage_bits / 8  # needed by TensorDescriptionWrapper
         self.dtype_name = 'flex'          # needed by float_ew2 _conversion_template
 
+        # quick fixes to get CONV working
+        self.str = "<i2"
+        self.type = "flex"
+
         # only flex16 is supported right now
         if self.storage_bits == 16:
             self.storage_dtype = np.dtype(np.int16)  # used by GPUTensorAllocator
@@ -51,6 +55,11 @@ class Flex(object):
         # set
         self.pclip = float(1 << self.high_bit) - 1.0
         self.nclip = -float(1 << self.high_bit)
+
+    def __eq__(self, other):
+        return ((type(self) is type(other)) and
+                (self.type is other.type) and
+                (self.storage_bits == other.storage_bits))
 
     @staticmethod
     def strip_mantissa(val):
@@ -157,7 +166,7 @@ class FlexEntry(object):
 
         # check if we actually want to adjust scale
         if not self.do_adjust:
-            print "adjust_scale not needed, tensor has not been modified"
+            # print "adjust_scale not needed, tensor has not been modified"
             return
 
         # used in autoflex algorithm
@@ -188,11 +197,16 @@ class FlexEntry(object):
         neon flexsim init_scale functionality
         """
 
+        # if fixed point, don't adjust scale
+        if fixed_point:
+            return
+
         if flex_verbose1: print indent1 + "initialize"
 
         # bind flex scales and execute kernel
         from ngraph.transformers.flexgpuutil import bind_flex_params  # TODO: circular import
         bind_flex_params(kernel)
+        print "flex init kernel call"
         kernel.execute()
 
         # get maxabs from just executed kernel computation
@@ -310,6 +324,7 @@ class FlexManager(object):
         """
         Create a new FlexEntry when a new DeviceTensor is created
         """
+        assert len(self.stat_ids), "You ran out of flex ids, increase num_flex_tensors"
         stat_idx = self.stat_ids.pop()  # need stat_idx so it can be returned to stat_ids when deleted
         stat_ptr = int(self.dev_stats) + 4*stat_idx  # pointer to maxabs in device memory
         flex_entry = FlexEntry(self, stat_idx, stat_ptr, dec=dec, is_flex=True)

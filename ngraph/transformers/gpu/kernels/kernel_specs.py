@@ -120,20 +120,23 @@ kernels = {
     "persistent_rnn_bprop":          {"threads": 256, "sass": "persistent_rnn_bprop",      "params": "rnn_bprop",      "share": "(64*48) + 4"},
 
     # Flex conv
-    "fconv_bprop_C128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "bprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_bprop_C64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "bprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_fprop_K128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "fprop",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "fprop",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "fprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "fprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_fprop_K64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "fprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_updat_C128_K128":  {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
-    "fconv_updatD_C128_K128": {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
-    "fconv_updat_C128_K64":   {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
-    "fconv_updatD_C128_K64":  {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
+    "fconv_direct_bprop_128x128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_direct_bprop_128x64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    # "fconv_direct_bprop_32x128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    # "fconv_direct_bprop_64x128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "bprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    # "fconv_direct_bprop_64x64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "bprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+
+    "fconv_direct_fprop_128x128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "fprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_direct_fprop_128x64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "fprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    # "fconv_direct_fprop_32x128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "fprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    # "fconv_direct_fprop_64x128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "fprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    # "fconv_direct_fprop_64x64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "fprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+
+    "fconv_direct_updat_128x128":  {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
+    # deterministic kernel not tested:
+    "fconv_direct_updatD_128x128": {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
+    # "fconv_direct_updat_128x64":   {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
+    # "fconv_direct_updatD_128x64":  {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
 
     # Flex gemm
     "fgemm_nn_128x128":       {"threads": 256, "sass": "fgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
@@ -146,6 +149,7 @@ kernels = {
 }
 
 _params = {
+    # large N direct convolution (multiples of 64)
     "fprop": [
         "float* param_Sum",
         "float* param_X",
@@ -199,6 +203,108 @@ _params = {
         "unsigned param_gridPQN",
         "unsigned param_gridMPQN",
     ],
+    # old interface for flex  -- this creates the sig
+    "fprop_flex": [
+        "float* param_Sum",
+        "float* param_O",
+        "float* param_I",
+        "float* param_F",
+        "float param_alpha",
+        "float param_beta",
+        "unsigned param_flags",
+        "unsigned param_offset_K",
+        "unsigned param_N",
+        "unsigned param_K",
+        "unsigned param_D",
+        "unsigned param_H",
+        "unsigned param_W",
+        "unsigned param_WN",
+        "unsigned param_HWN",
+        "unsigned param_DHWN",
+        "unsigned param_C",
+        "unsigned param_CRST",
+        "unsigned param_RST",
+        "unsigned param_RS",
+        "unsigned param_magic_RS",
+        "unsigned param_shift_RS",
+        "unsigned param_S",
+        "unsigned param_magic_S",
+        "unsigned param_shift_S",
+        # dont' think flex kernels support negative pad
+        "unsigned param_pad_d",
+        "unsigned param_pad_h",
+        "unsigned param_pad_w",
+        # "int param_pad_d",
+        # "int param_pad_h",
+        # "int param_pad_w",
+        "unsigned param_str_d",
+        "unsigned param_str_h",
+        "unsigned param_str_w",
+        "unsigned param_Q",
+        "unsigned param_PQ",
+        "unsigned param_QN",
+        "unsigned param_PQN",
+        "unsigned param_MPQN",
+        "unsigned param_magic_Q",
+        "unsigned param_shift_Q",
+        "unsigned param_magic_PQ",
+        "unsigned param_shift_PQ",
+    ],
+    # old interface for flex  -- this creates the sig
+    "updat_flex": [
+        "float* param_Sum",
+        "float* param_F",
+        "float* param_I",
+        "float* param_E",
+        "float param_alpha",
+        "float param_beta",
+        "unsigned param_flags",
+        "unsigned param_offset_K",
+        "unsigned param_N",
+        "unsigned param_K",
+        "unsigned param_D",
+        "unsigned param_H",
+        "unsigned param_W",
+        "unsigned param_WN",
+        "unsigned param_HWN",
+        "unsigned param_DHWN",
+        "unsigned param_C",
+        "unsigned param_CRST",
+        "unsigned param_RST",
+        "unsigned param_magic_RST",
+        "unsigned param_shift_RST",
+        "unsigned param_RS",
+        "unsigned param_magic_RS",
+        "unsigned param_shift_RS",
+        "unsigned param_S",
+        "unsigned param_magic_S",
+        "unsigned param_shift_S",
+        # dont' think flex kernels support negative pad
+        "unsigned param_pad_d",
+        "unsigned param_pad_h",
+        "unsigned param_pad_w",
+        # "int param_pad_d",
+        # "int param_pad_h",
+        # "int param_pad_w",
+        "unsigned param_str_d",
+        "unsigned param_str_h",
+        "unsigned param_str_w",
+        "unsigned param_P",
+        "unsigned param_Q",
+        "unsigned param_PQ",
+        "unsigned param_QN",
+        "unsigned param_PQN",
+        "unsigned param_MPQN",
+        "unsigned param_magic_Q",
+        "unsigned param_shift_Q",
+        "unsigned param_magic_PQ",
+        "unsigned param_shift_PQ",
+        "unsigned param_part_P",
+        "unsigned param_part_Q",
+        "unsigned param_part_PQ",
+        #"int param_CRSTK",
+    ],
+    # small N direct convolution (superblocking for N<64)
     "fprop2": [
         "float* param_Sum",
         "float* param_X",
@@ -271,6 +377,7 @@ _params = {
         "unsigned param_SuperQ",
         "unsigned param_SuperN",
     ],
+    # small N direct convolution (superblocking)
     "updat2": [
         "float* param_F",
         "float* param_I",
@@ -413,6 +520,7 @@ _params = {
         "int   param_numBlks",
         "int   param_numAblks"
     ],
+    # Winograd convolution (2x2 output tile size)
     "fpropw": [
         "float* param_S",
         "float* param_X",
@@ -457,6 +565,7 @@ _params = {
         "unsigned param_shiftQ",
         "unsigned param_shiftN",
     ],
+    # Winograd convolution (4x4 output tile size)
     "fpropw4X": [
         "float* param_S",
         "float* param_X",
@@ -535,6 +644,7 @@ _params = {
         "unsigned param_gridQN",
         "unsigned param_gridPQN",
     ],
+    # Winograd convolution (5x5 input tile size)
     "fpropw5": [
         "float* param_O",
         "float* param_I",
@@ -706,6 +816,18 @@ _params["bprop"] = _params["fprop"] + [
         "unsigned param_magic_str_w",
         "unsigned param_shift_str_w",
     ]
+
+_params["bprop_flex"] = _params["fprop_flex"] + [
+        "unsigned param_R",
+        "unsigned param_T",
+        "unsigned param_magic_str_w",
+        "unsigned param_shift_str_w",
+        "unsigned param_magic_str_h",
+        "unsigned param_shift_str_h",
+        "unsigned param_magic_str_d",
+        "unsigned param_shift_str_d",
+    ]
+
 _params["bprop2"] = _params["fprop2"] + [
         "unsigned param_magic_str_d",
         "unsigned param_shift_str_d",
@@ -899,7 +1021,7 @@ def get_kernel(base_name, options=None):
     if kernel_name[0] == "f":
         sig += "Qf"  # stats pointer and scale float.
 
-    print "kernel_specs_flex: get_kernel:", kernel_name, "with sig", sig
+    print "\nkernel_specs: get_kernel:", kernel_name, "with sig", sig
 
     module = drv.module_from_file(os.path.join(cubin_dir, kernel_name + ".cubin"))
     func   = module.get_function(kernel_name)
@@ -907,4 +1029,31 @@ def get_kernel(base_name, options=None):
     func.threads = kernel_spec["threads"]
     return func
 
+
+# added for old flex kenrnels
+from math import ceil
+def update_grid(kernel_name, base_blocks, P, Q, SM_count):
+
+    threads   = kernels[kernel_name]["threads"]
+    occupancy = kernels[kernel_name]["occupancy"]
+
+    # warps per scheduler for one block
+    occ_per_block = threads / (32.0 * 4.0 * SM_count)
+
+    grid = []
+    for p in range(1, P+1):
+        for q in range(1, Q+1):
+
+            occup  = p*q*base_blocks * occ_per_block
+            groups = occup / occupancy
+            slots  = ceil(groups)
+
+            # This is a heuristic that keeps the balance of work accross the SMs
+            # while also maximizing the work that each block does
+            heuristic = min(abs(x - slots) for x in range(4, 8)) + (slots - groups) / 100.0
+
+            grid.append((p, q, heuristic))
+
+    grid.sort(key=lambda x: x[-1])
+    return (grid[0][0], grid[0][1], threads)
 
