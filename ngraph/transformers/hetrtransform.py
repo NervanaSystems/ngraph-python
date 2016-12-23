@@ -8,19 +8,69 @@ from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
 from multiprocessing import Process, Queue
-
+import collections
 
 class HetrComputation(Computation):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
 
-    def __init__(self, transformer_obj, returns, *args, **kwargs):
-        super(HetrComputation, self).__init__(transformer_obj, returns, *args, **kwargs)
+    def __init__(self, transformer_obj, results, *parameters, **kwargs):
+        super(HetrComputation, self).__init__(transformer_obj, results, *parameters, **kwargs)
         self.child_computations = dict()
-        self.placeholder_ops_pos = dict()
         self.child_results_map = dict()
+        self.child_transformers = transformer_obj.child_transformers
+        self.transformer_list = transformer_obj.transformer_list
+        self.send_nodes_list = transformer_obj.send_nodes_list
+        self.hetr_passes = transformer_obj.hetr_passes
         self.num_results = 0
+
+        # Do Hetr passes
+        for graph_pass in self.hetr_passes:
+            graph_pass.do_pass(transformer_obj.all_results)
+
+        if transformer_obj.vizpass:
+            vis_results = transformer_obj.all_results + transformer_obj.send_nodes_list
+            transformer_obj.vizpass.do_pass(vis_results)
+
+        # Build child transformers
+        transformer_obj.build_transformers(transformer_obj.all_results)
+
+        self.transformer_to_node = {t: list() for t in self.child_transformers}
+
+        # update the transformer to send node mappings
+        for s in self.send_nodes_list:
+            tname = s.metadata['device'] + str(s.metadata['device_id'])
+            self.transformer_to_node[tname].append(s)
+
+        self.child_results_map = dict()
+        if isinstance(results, list):
+            self.num_results = len(results)
+            for pos, op in enumerate(results):
+                tname = op.metadata['transformer']
+                self.transformer_to_node[tname].append(op)
+                self.child_results_map.setdefault(tname, []).append(pos)
+        else:
+            # if results is not a list, then its default pos = 0
+            tname = results.metadata['transformer']
+            self.transformer_to_node[tname].append(results)
+            self.child_results_map.setdefault(tname, []).append(0)
+            self.num_results = 1
+
+        self.placeholders = {t: list() for t in self.child_transformers}
+        self.placeholders_pos = {t: list() for t in self.child_transformers}
+        self.placeholder_inverse = []
+        for i, p in enumerate(parameters):
+            tname = p.metadata['transformer']
+            self.placeholders[tname].append(p)
+            self.placeholders_pos[tname].append(i)
+            self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
+
+        # create child-computations for all unique keys in child_transformers dict
+        for tname, t in self.child_transformers.iteritems():
+            child_ops = self.transformer_to_node[tname]
+            child_placeholders = self.placeholders[tname]
+            self.add_child(t, tname, child_ops, *child_placeholders)
 
     def add_child(self, t, tname, returns, *args, **kwargs):
         self.child_computations[tname] = (t.computation(returns, *args, **kwargs))
@@ -48,7 +98,6 @@ class HetrComputation(Computation):
         for tname, t in self.child_computations.iteritems():
             q = Queue()
             targs = [params[i] for i in self.placeholders_pos[tname]]
-
             if tname in self.child_results_map.keys():
                 child_result_q[tname] = q
 
@@ -67,7 +116,11 @@ class HetrComputation(Computation):
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 return_list[parent_idx] = child_results[child_idx]
 
-        return tuple(return_list)[0]
+        if isinstance(return_list, collections.Sequence):
+            if len(return_list) > 1:
+                return tuple(return_list)
+            else:
+                return return_list[0]
 
 
 class HetrTransformer(Transformer):
@@ -94,9 +147,7 @@ class HetrTransformer(Transformer):
         self.vizpass = None
 
     def computation(self, results, *parameters, **kwargs):
-
         """
-
         Build a heterogeneous computation object that implements
         communication and synchronization between subgraphs run
         on child transformers.
@@ -112,59 +163,6 @@ class HetrTransformer(Transformer):
 
         # Initialize computation
         hc = HetrComputation(self, results, *parameters, **kwargs)
-        # Do Hetr passes
-        for graph_pass in self.hetr_passes:
-            graph_pass.do_pass(self.all_results)
-
-        if self.vizpass:
-            vis_results = self.all_results + self.send_nodes_list
-            self.vizpass.do_pass(vis_results)
-
-        # Build child transformers
-        self.build_transformers(self.all_results)
-
-        self.transformer_to_node = {t: list() for t in self.child_transformers}
-
-        # update the transformer to send node mappings
-        for tname, send_op in self.hetr_passes[1].dict_transformer_to_op.iteritems():
-            self.transformer_to_node[tname].append(send_op)
-
-        self.child_results_map = dict()
-
-        if type(results) is list:
-            self.results_handlers_len = len(results)
-            for pos, op in enumerate(results):
-                tname = op.metadata['transformer']
-                self.transformer_to_node[tname].append(op)
-                self.child_results_map.setdefault(tname, []).append(pos)
-        else:
-            # if results is not a list, then its default pos = 0
-            tname = results.metadata['transformer']
-            self.transformer_to_node[tname].append(results)
-            self.child_results_map.setdefault(tname, []).append(0)
-            self.results_handlers_len = 1
-
-        self.placeholders = {t: list() for t in self.child_transformers}
-        self.placeholders_pos = {t: list() for t in self.child_transformers}
-        self.placeholder_inverse = []
-        for i, p in enumerate(parameters):
-            tname = p.metadata['transformer']
-            self.placeholders[tname].append(p)
-            self.placeholders_pos[tname].append(i)
-            self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
-
-        # TODO - Refactored to move this part of code to __init__ method in HetrComputation
-        # set the place holder pos in the hetr computation object
-        hc.placeholders_pos = self.placeholders_pos
-        hc.child_results_map = self.child_results_map
-        hc.num_results = self.results_handlers_len
-
-        # create child-computations for all unique keys in child_transformers dict
-        for tname, t in self.child_transformers.iteritems():
-            # result.add_child(val,self.transformer_to_node[key], *parameters, **kwargs)
-            child_ops = self.transformer_to_node[tname]
-            child_placeholders = self.placeholders[tname]
-            hc.add_child(t, tname, child_ops, *child_placeholders)
 
         return hc
 

@@ -24,7 +24,6 @@ class CommunicationPass(PeepholeGraphPass):
     def __init__(self, sendnodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = sendnodes
-        self.dict_transformer_to_op = dict()
 
     def visit(self, op):
         args = list()
@@ -35,12 +34,9 @@ class CommunicationPass(PeepholeGraphPass):
                                             device=arg.metadata['device'],
                                             device_id=arg.metadata['device_id']))
 
-                tname = arg.metadata['device'] + arg.metadata['device_id']
-                self.dict_transformer_to_op[tname] = self.send_nodes[-1]
                 args.append(Recv(axes=arg.axes, dtype=arg.dtype, q=shared_q,
                                  device=op.metadata['device'],
                                  device_id=arg.metadata['device_id']))
-
             else:
                 args.append(arg)
 
