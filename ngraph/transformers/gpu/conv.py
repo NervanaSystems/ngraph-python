@@ -54,7 +54,7 @@ class ConvFpropKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
+        enable_winograd = False  # transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
@@ -162,7 +162,7 @@ class ConvBpropKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
+        enable_winograd = False  # transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
@@ -270,7 +270,7 @@ class ConvUpdateKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
+        enable_winograd = False  # transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----

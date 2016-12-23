@@ -345,7 +345,7 @@ class XpropDirect(KernelGroup):
             pad_d, pad_h, pad_w, str_d, str_h, str_w, bprop)
 
         print "calling XpropDirect __init__ with bprop", bprop,
-        if (N % 64 == 0 and K % self.vec_size == 0) or (self.clss is 'fconv'):
+        if N % 64 == 0 and K % self.vec_size == 0 or (self.clss is 'fconv'):
             self.init_largeN(op)
         else:
             self.init_smallN(op)
@@ -452,6 +452,8 @@ class XpropDirect(KernelGroup):
         self.bsum   = BatchNormSum(self.lib, K, gridMPQNw)
 
     def init_smallN(self, op):
+
+        assert False, "avoiding small N for debug"
 
         (N, C, K, D, H, W, T, R, S, M, P, Q,
         pad_d, pad_h, pad_w, str_d, str_h, str_w) = self.params
@@ -575,6 +577,8 @@ class XpropDirect(KernelGroup):
         self.lib.scratch_buffer_init()
         self.F = F
         self.I = I
+        print "binding I to ", self.I.get()[:,0,3,3,63]
+        assert False
         self.O = O
         O.fill(0)
         filter_data = self.filter_trans.bind_params(F)
@@ -655,11 +659,16 @@ execute with args [( 961, 1, 1), (256, 1, 1), None, 0, 30074732544L, 30073683968
             self.filter_trans.execute()
             drv.Context.synchronize()
             print "\n<<<\nxprop execute with args", self.kernel_args
-            # print "before", self.O.get()[:,0,29,29,127]
+            # import ipdb; ipdb.set_trace()
+            print "before self.F", self.F.get()[:,0,2,2,7]  #  f (3, 1, 3, 3, 8) b (3, 1, 3, 3, 8)
+            print "before self.I", self.I.get()[:,0,3,3,63]  # f (3, 1, 6, 6, 64) b (8, 1, 4, 4, 64)  ## wrong for bprop
+            print "before self.O", self.O.get()[:,0,3,3,63]  # f (8, 1, 4, 4, 64) b (3, 1, 6, 6, 64)
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
             drv.Context.synchronize()
-            # print "executed xProp succsfully"
-            print "after", self.O.get()[:,0,29,29,127], "\n>>>\n"  # at this point, int16 pycuda GPUArray
+            print "after self.F", self.F.get()[:,0,2,2,7]
+            print "after self.I", self.I.get()[:,0,3,3,63]
+            print "after self.O", self.O.get()[:,0,3,3,63]
+            print  "\n>>>\n"  # at this point, int16 pycuda GPUArray
             # import ipdb; ipdb.set_trace()
             self.bsum.execute()
 
@@ -1069,9 +1078,10 @@ class UpdateDirect(KernelGroup):
             print "flexpoint."
             self.kernel_args[2:7] = (self.lib.stream, 0, O.gpudata, I.gpudata, E.gpudata)
             # Just added these for debugging
-            self.I = I
-            self.E = E
-            self.O = O  # filter
+
+        self.I = I  # TODO: Added these for debugging, to be removed again.
+        self.E = E
+        self.O = O  # filter
 
     """
 At this point, we have:  steam sum    F     I     E    alp  bet flags | of_K | N    K
@@ -1140,7 +1150,7 @@ and old flex version
             kernel.prepared_async_call(*self.kernel_args)
             drv.Context.synchronize()
             #import ipdb; ipdb.set_trace()
-            print "after", self.O.get()[2,0,:,:,7],"\n>>>\n"
+            #print "after", self.O.get()[2,0,:,:,7],"\n>>>\n"
             if self.clss is not 'fconv':
                 self.output_trans.execute()
             else:

@@ -135,8 +135,7 @@ def test_wrong_number_of_batch_axes_at_input():
             sample_axes=inputs.axes.sample_axes())
 
 
-@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
-def test_convolution_backprop(transformer_factory):
+makedef test_convolution_backprop(transformer_factory):
     """
     test convolution backprop path
     """
