@@ -116,7 +116,7 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
     else:
         s = None
         for param in grad_list:
-            term = ng.squared_L2(param)
+            term = ng.squared_L2(param, out_axes=None)
             if s is None:
                 s = term
             else:
