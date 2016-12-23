@@ -82,7 +82,7 @@ class Linear(Layer):
         in_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()
         out_axes -= out_axes.recurrent_axes()
 
-        w_axes = out_axes - out_axes.recurrent_axes() + [axis - 1 for axis in in_axes]
+        w_axes = out_axes + [axis - 1 for axis in in_axes]
         if self.W is None:
             self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes))
 
@@ -504,11 +504,9 @@ class Recurrent(Layer):
             self.h_init = init_state
         else:
             if self.reset_cells:
-                self.h_init = ng.constant(np.zeros(hidden_state_axes.lengths),
-                                          axes=hidden_state_axes).named('h_init')
+                self.h_init = ng.constant(const=0, axes=hidden_state_axes).named('h_init')
             else:
-                self.h_init = ng.variable(initial_value=np.zeros(hidden_state_axes.lengths),
-                                          axes=hidden_state_axes).named('h_init')
+                self.h_init = ng.variable(initial_value=0, axes=hidden_state_axes).named('h_init')
 
         h_list = [self.h_init]
 
