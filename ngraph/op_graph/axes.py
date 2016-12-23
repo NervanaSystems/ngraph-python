@@ -1406,7 +1406,6 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
-        self.transformer = None
         self.__value = None
         self.__buffer = None
         self.__register = None
@@ -1848,18 +1847,10 @@ class TensorDescription(NameableValue):
         """A device handle to the value."""
         return self.__value
 
+    @value.setter
+    def value(self, value):
+        self.__value = value
+
     def is_base(self):
         """This tensor provides its own storage."""
         return self.__base is None
-
-    def initialize(self, transformer):
-        """Called by transformer to set up value."""
-        assert self.__value is None
-        self.transformer = transformer
-        # If the TensorDescription requires heap storage
-        if self.buffer is not None:
-            if self.buffer.data is None:
-                self.buffer.data = self.transformer.device_buffer_storage(
-                    self.buffer.size, self.dtype, self.name
-                )
-            self.__value = self.buffer.data.device_tensor(self)
