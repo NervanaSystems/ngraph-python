@@ -14,7 +14,14 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
-from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
+
+#from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
+from ngraph.transformers.flexgpu import gpu_bind_flex_params
+from ngraph.transformers.flexgpu import GPUFlex
+
+#from ngraph.transformers.flex2 import FlexManager as GPUFlexManager
+from ngraph.transformers.flexgpu import GPUFlexManager
+
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
@@ -42,7 +49,7 @@ class FlexGPUTransformer(GPUTransformer):
     transformer_name = "flexgpu"
 
     # set global override tolerances for unit tests
-    fixed_point_res = FlexManager.fixed_point_resolution()
+    fixed_point_res = GPUFlexManager.fixed_point_resolution()   # TODO!!! is this FlexManager or GPUFlexManager? overriding a static class attribute
     # TODO not sure how these should be set
     default_rtol = 2*fixed_point_res
     default_atol = 2*fixed_point_res
@@ -56,7 +63,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.register_graph_pass(FlexPass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = FlexManager()
+        self.flex_manager = GPUFlexManager()
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -76,7 +83,7 @@ class FlexGPUTransformer(GPUTransformer):
         return ret_val
 
     def storage_dtype(self, dtype):
-        if isinstance (dtype, Flex):
+        if isinstance (dtype, GPUFlex):
             return dtype.storage_dtype
         else:
             raise NotImplementedError
@@ -204,8 +211,9 @@ class FlexGPUKernelGroup(GPUKernelGroup):
             flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
             flex_entry.manage_before_computation(kernel)
 
+        # TODO: move this inside manage_before_computation?
         # bind flex scale kernel parameters
-        bind_flex_params(kernel)
+        gpu_bind_flex_params(kernel)
 
     def __call__(self):
         """

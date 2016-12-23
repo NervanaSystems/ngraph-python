@@ -17,7 +17,9 @@ import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.transformers.gpu.util import _get_sm_count
-from ngraph.transformers.flex2 import Flex, flex16
+#from ngraph.transformers.flex2 import Flex, flex16
+from ngraph.transformers.flexgpu import GPUFlex
+from ngraph.transformers.flexgpu import gpuflex16
 
 from pycuda.compiler import SourceModule
 
@@ -579,10 +581,10 @@ def _preprocess_ops(ops, loop_axis_len):
 
 
 def _get_register_type(dtype, memory=False):
-    if isinstance(dtype, Flex):
+    if isinstance(dtype, GPUFlex):
         # short buffers will be converted to float registers by flex scale
         if memory:
-            if dtype == flex16:
+            if dtype == gpuflex16:
                 return "short"
             else:
                 raise NotImplementedError
@@ -1043,7 +1045,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # Check if explicit type conversion is needed for load because ALU
                     # doesn't support data format
                     reg_name = ctx.register_mapping[inval]
-                    if isinstance(inval.dtype, Flex):
+                    if isinstance(inval.dtype, GPUFlex):
                         type_key = (inval.dtype.dtype_name,  # FLEX TODO: see _conversion_template note
                                     ctx.register_types[reg_name])
                     else:
@@ -1144,7 +1146,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     }
 
                     reg_name = ctx.register_mapping[op[3]]
-                    if isinstance(op[3].dtype, Flex):
+                    if isinstance(op[3].dtype, GPUFlex):
                         type_key = (ctx.register_types[reg_name],
                                     op[3].dtype.dtype_name)  # FLEX TODO: see conversion_template note
                     else:

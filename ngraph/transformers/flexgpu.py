@@ -5,7 +5,9 @@ from struct import pack, unpack
 import numpy as np
 
 from ngraph.transformers.neonautoflex import init_scale_algorithm
+from ngraph.transformers.flexbase import Flex, FlexEntry, FlexManager
 
+DEFAULT_DEC_TEMP = 8
 
 fixed_point = True
 flex_verbose = True
@@ -17,7 +19,7 @@ autoflex_config = {'stats_queue_len': 16,
                    'stale_threshold': 1200,  # existing, arbitrary
                   }
 
-def bind_flex_params(kernel):
+def gpu_bind_flex_params(kernel):
     """
     bind flex scale kernel parameters
     """
@@ -32,7 +34,7 @@ def bind_flex_params(kernel):
         # EW gets this method attached in flexgputransform
         kernel.bind_flex_scales()
 
-class Flex(object):
+class GPUFlex(Flex):
     """
     Flex data type
         flex16 = Flex(storage_bits=16)
@@ -44,13 +46,17 @@ class Flex(object):
 
         if storage_bits % 8 != 0:
             raise TypeError('Flex storage bits must be integral number of bytes')
-        self.storage_bits = storage_bits  # 16
+
+        super(GPUFlex, self).__init__(storage_bits)
+
+        # current implementation details TODO: refactor out high_bit, ugh
         self.high_bit = storage_bits - 1  # 15
 
-        # quick fixes to get EW kernels working:
-        self.itemsize = storage_bits / 8  # needed by TensorDescriptionWrapper
-        self.dtype_name = 'flex'          # needed by float_ew2 _conversion_template
+        # attributes in base class 
+        # self.itemsize = storage_bits / 8  # needed by TensorDescriptionWrapper
 
+        # GPU implementation specific
+        self.dtype_name = 'flex'          # needed by float_ew2 _conversion_template
         # only flex16 is supported right now
         if self.storage_bits == 16:
             self.storage_dtype = np.dtype(np.int16)  # used by GPUTensorAllocator
@@ -58,10 +64,10 @@ class Flex(object):
             raise NotImplementedError
 
         # following neon flexsim naming
-        # rExpmax, pclip, nclip only used by old Flex.set method
         expmax = float(1 << self.high_bit - 1)  # TODO: check if neon __str__ is obsolete (assumptions)
         self.rExpmax = 1.0/expmax  # in neon flexsim, effectively only used in get_scale
-        # set
+        # TODO: set
+        # pclip, nclip only used by old Flex.set method
         self.pclip = float(1 << self.high_bit) - 1.0
         self.nclip = -float(1 << self.high_bit)
 
@@ -82,31 +88,32 @@ class Flex(object):
             scl = 1
         return scl
 
-flex16 = Flex(storage_bits=16)
+gpuflex16 = GPUFlex(storage_bits=16)
 
 
-class FlexEntry(object):
+class GPUFlexEntry(FlexEntry):
     """
-    Associated with every (flex) DeviceTensor
+    Associated with every flex tensor (DeviceTensor)
     Contains tensor scale (dec), maxabs, and overflow information.
     Future settings:
         --whether to keep scale constant (act as fixed point)
     """
+    def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=gpuflex16, is_flex=True):
 
-    def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=flex16, is_flex=True):
+        super(GPUFlexEntry, self).__init__(_id=stat_idx, init_dec=dec, dtype=dtype)
+
+        # attributes inherited from Flex:
+        # _id
+        # dtype
+        # scale 
 
         # TODO: add name?
         self.is_flex = is_flex   # unused, stub for turning off flex selectively (by keeping dec fixed)
 
-        self.dtype = dtype  # flex16 or future flex8
-
-        # dynamically adjusted dec
-        self.scale = 1./2**dec
-
         # tensor maxabs returned by device
         self.stat_idx = stat_idx    # index into maxabs device buffer
         self.ptr = stat_ptr         # pointer to maxabs in device buffer
-
+    
         # adjust dec using this information
         self.stats = deque(maxlen=autoflex_config['stats_queue_len'])
         self.overflows = 0
@@ -123,42 +130,46 @@ class FlexEntry(object):
         # for storing diagnostic info (scale, maxabs, overflows)
         self.flex_manager = flex_manager
 
-    @property
-    def flex_id(self):
-        return self.stat_idx
+    # properties inherited from Flex:
+    # flex_id, dec
 
-    @property
-    def dec(self):
-        return int(np.log2(1.0/self.scale))
-
-    def refresh(self, maxabs, age):
+    def manage_before_computation(self, kernel): # TODO: base class signature
         """
-        Always happens when a flex tensor is touched
-        functionality of neon flexsim FlexData update and parts of adjust_scale methods
+        Sets the values of flex scales (but doesn't bind kernel params)
+        TODO: maybe gpu_bind_flex_params should be in this method as well
         """
 
-        if flex_verbose1: print indent1 + "refresh"
+        # if fixed point, do not adjust scale
+        if not fixed_point:
+            if not self.initialized:
+                self.init_scale(kernel)
+            else:
+                self.adjust_scale()
 
-        # record most recent stats for this tensor
-        if flex_verbose1: print indent1 + "maxabs {}".format(maxabs)
-        self.maxabs = maxabs
-        self.age = age
+    def init_scale(self, kernel):
+        """
+        neon flexsim init_scale functionality
+        """
 
-        # for recording flex stats and overflows in callback for analysis
-        # record_key = '{}/{}:{}'.format(self.name, self.flex_id, self.printkey)
+        if flex_verbose1: print indent1 + "init_scale"
 
-        # detect overflows
-        self.detect_overflow()
+        # bind flex scales and execute kernel
+        gpu_bind_flex_params(kernel)
+        kernel.execute()
 
-        # add the max value to the deque
-        self.stats.append(self.maxabs*self.scale)
-        if flex_verbose: print self.stats
+        # get maxabs from just executed kernel computation
+        # allocate a host side buffer in pageable memory
+        maxbuf = np.empty((1, ), np.int32)
+        # because maxbuf is not pagelocked, this is actually a synchronous op
+        drv.memcpy_dtoh_async(maxbuf, self.ptr, stream=None)
+        # now zero the memory
+        drv.memset_d32_async(self.ptr, 0, 1, stream=None)
+        # RP: not sure neon comment below about +1 for adjust_scale consistency is true
+        self.maxabs = int(maxbuf[0]) + 1  # Added +1 here to be consistent with adjust_scale.
 
-        # record visualization data for analysis
-        self.record_data()
-
-        # mark for future scale adjustment before next use
-        self.do_adjust = True
+        # initialize scale
+        self.scale, self.init_count, self.initialized = init_scale_algorithm(self.maxabs,
+                self.scale, self.init_count, self.dtype.high_bit)
 
     def adjust_scale(self):
 
@@ -192,30 +203,34 @@ class FlexEntry(object):
 
         self.do_adjust = False  # RP: self.do_adjust is basically self.adjust in neon flexsim
 
-    def init_scale(self, kernel):
+    def refresh(self, maxabs, age):
         """
-        neon flexsim init_scale functionality
+        Always happens when a flex tensor is touched
+        functionality of neon flexsim FlexData update and parts of adjust_scale methods
         """
 
-        if flex_verbose1: print indent1 + "init_scale"
+        if flex_verbose1: print indent1 + "refresh"
 
-        # bind flex scales and execute kernel
-        bind_flex_params(kernel)
-        kernel.execute()
+        # record most recent stats for this tensor
+        if flex_verbose1: print indent1 + "maxabs {}".format(maxabs)
+        self.maxabs = maxabs
+        self.age = age
 
-        # get maxabs from just executed kernel computation
-        # allocate a host side buffer in pageable memory
-        maxbuf = np.empty((1, ), np.int32)
-        # because maxbuf is not pagelocked, this is actually a synchronous op
-        drv.memcpy_dtoh_async(maxbuf, self.ptr, stream=None)
-        # now zero the memory
-        drv.memset_d32_async(self.ptr, 0, 1, stream=None)
-        # RP: not sure neon comment below about +1 for adjust_scale consistency is true
-        self.maxabs = int(maxbuf[0]) + 1  # Added +1 here to be consistent with adjust_scale.
+        # for recording flex stats and overflows in callback for analysis
+        # record_key = '{}/{}:{}'.format(self.name, self.flex_id, self.printkey)
 
-        # initialize scale
-        self.scale, self.init_count, self.initialized = init_scale_algorithm(self.maxabs,
-                self.scale, self.init_count, self.dtype.high_bit)
+        # detect overflows
+        self.detect_overflow()
+
+        # add the max value to the deque
+        self.stats.append(self.maxabs*self.scale)
+        if flex_verbose: print self.stats
+
+        # record visualization data for analysis
+        self.record_data()
+
+        # mark for future scale adjustment before next use
+        self.do_adjust = True
 
     def _adjust_scale_helper(self):
 
@@ -265,15 +280,6 @@ class FlexEntry(object):
 
             if flex_verbose1: print indent1 + "detect_overflow maxabs adjusted to {}".format(self.maxabs)
 
-    def manage_before_computation(self, kernel):  # INTERFACE: kernel is GPU specific of course
-
-        # if fixed point, do not adjust scale
-        if not fixed_point:
-            if not self.initialized:
-                self.init_scale(kernel)
-            else:
-                self.adjust_scale()
-
     def record_data(self):
         """
         For visualizations
@@ -285,7 +291,7 @@ class FlexEntry(object):
                 record_timestamp=True)
 
 
-class FlexManager(object):
+class GPUFlexManager(FlexManager):
     """
     manages FlexEntry associated with every flex tensor
     autoflex algorithm
@@ -297,17 +303,15 @@ class FlexManager(object):
               --see comments in FlexGPUTransformer.transform_ordered_ops
         2. Reuse double buffered design?
     """
+    # TODO: default dec
+    # TODO: fixed_point_resolution
+    # TODO: set this default max number of tensors appropriately, or other soln
+    def __init__(self, default_init_dec=None, num_flex_tensors=16384):  
 
-    default_dec = 8  # determines fixed point resolution and default initial dec
-
-    @staticmethod
-    def fixed_point_resolution():
-        return 1.0 / 2**FlexManager.default_dec
-
-    def __init__(self, default_init_dec=None, num_flex_tensors=16384):  # TODO: set this default max number of tensors appropriately, or other soln
+        super(GPUFlexManager, self).__init__()
 
         if default_init_dec is None:
-            default_init_dec = FlexManager.default_dec
+            default_init_dec = DEFAULT_DEC_TEMP  #FlexManager.default_dec
         self.default_init_dec = default_init_dec  # if not specified
 
         self.num_flex_tensors = num_flex_tensors  # max number of allowed flex tensors
@@ -344,7 +348,7 @@ class FlexManager(object):
 
         stat_idx = self.stat_ids.pop()  # need stat_idx so it can be returned to stat_ids when deleted
         stat_ptr = int(self.dev_stats) + 4*stat_idx  # pointer to maxabs in device memory
-        flex_entry = FlexEntry(self, stat_idx, stat_ptr, dec=init_dec, is_flex=True)
+        flex_entry = GPUFlexEntry(self, stat_idx, stat_ptr, dec=init_dec, is_flex=True)
         self.flex_entries[stat_idx] = flex_entry
 
         return flex_entry
