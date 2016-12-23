@@ -4,13 +4,12 @@ from math import sqrt
 from struct import pack, unpack
 import numpy as np
 
-from ngraph.transformers.neonautoflex import init_scale_algorithm
+from ngraph.transformers.autoflex import init_scale_algorithm
 from ngraph.transformers.flexbase import Flex, FlexEntry, FlexManager
 
-DEFAULT_DEC_TEMP = 8
 
 fixed_point = True
-flex_verbose = False
+flex_verbose = True
 flex_verbose1 = False
 indent1 = '  '
 autoflex_config = {'stats_queue_len': 16,
@@ -52,7 +51,7 @@ class GPUFlex(Flex):
         # current implementation details TODO: refactor out high_bit, ugh
         self.high_bit = storage_bits - 1  # 15
 
-        # attributes in base class 
+        # attributes in base class
         # self.itemsize = storage_bits / 8  # needed by TensorDescriptionWrapper
 
         # GPU implementation specific
@@ -100,20 +99,19 @@ class GPUFlexEntry(FlexEntry):
     """
     def __init__(self, flex_manager, stat_idx, stat_ptr, dec, dtype=gpuflex16, is_flex=True):
 
-        super(GPUFlexEntry, self).__init__(_id=stat_idx, init_dec=dec, dtype=dtype)
+        super(GPUFlexEntry, self).__init__(_id=stat_idx, dtype=dtype, init_dec=dec)
 
-        # attributes inherited from Flex:
-        # _id
-        # dtype
-        # scale 
+        # FlexEntry attributes: _id, dtype, scale
+        #           properties: flex_id, dec
 
         # TODO: add name?
-        self.is_flex = is_flex   # unused, stub for turning off flex selectively (by keeping dec fixed)
+        self.is_flex = is_flex   # unused, stub for turning off flex selectively
+                                 # (by keeping dec fixed)
 
         # tensor maxabs returned by device
         self.stat_idx = stat_idx    # index into maxabs device buffer
         self.ptr = stat_ptr         # pointer to maxabs in device buffer
-    
+
         # adjust dec using this information
         self.stats = deque(maxlen=autoflex_config['stats_queue_len'])
         self.overflows = 0
@@ -123,15 +121,12 @@ class GPUFlexEntry(FlexEntry):
         self.adjust_count = 0       # how many times adjust_count has been called,
                                     # not how many times actually adjusted
                                     # TODO interaction with age
-        self.do_adjust = False    # whether scale adjustment may be necessary b/c
-                                        # tensor was touched
+        self.do_adjust = False      # whether scale adjustment may be necessary b/c
+                                    # tensor was touched
         self.init_count = 0
 
         # for storing diagnostic info (scale, maxabs, overflows)
         self.flex_manager = flex_manager
-
-    # properties inherited from Flex:
-    # flex_id, dec
 
     def manage_before_computation(self, kernel): # TODO: base class signature
         """
@@ -235,6 +230,7 @@ class GPUFlexEntry(FlexEntry):
     def _adjust_scale_helper(self):
 
         # RP: this method exists to help me isloate the sprawl from neon flexsim
+        # TODO: move it into autoflex.py
 
         # RP: explanation copied from neon flexsim:
         # Estimate the maximum possible value for the next output and use that
@@ -303,15 +299,16 @@ class GPUFlexManager(FlexManager):
               --see comments in FlexGPUTransformer.transform_ordered_ops
         2. Reuse double buffered design?
     """
-    # TODO: default dec
-    # TODO: fixed_point_resolution
+
+    default_dec = 8
+
     # TODO: set this default max number of tensors appropriately, or other soln
-    def __init__(self, default_init_dec=None, num_flex_tensors=16384):  
+    def __init__(self, default_init_dec=None, num_flex_tensors=16384):
 
         super(GPUFlexManager, self).__init__()
 
         if default_init_dec is None:
-            default_init_dec = DEFAULT_DEC_TEMP  #FlexManager.default_dec
+            default_init_dec = GPUFlexManager.default_dec
         self.default_init_dec = default_init_dec  # if not specified
 
         self.num_flex_tensors = num_flex_tensors  # max number of allowed flex tensors
@@ -357,7 +354,14 @@ class GPUFlexManager(FlexManager):
         """
         Transfer flex stats (maxabs) from device to host
         """
+        # TODO: this is where double buffer stuff would go
+        # without double buffering, current code sets up an async transfer that it immediately waits for
+
+        # transfer maxabs from device to host
         drv.memcpy_dtoh_async(self.host_stats, self.dev_stats, stream=None)
+        # wait for data from transfer
+        self.event.synchronize()
+        # clear device buffer
         drv.memset_d32_async(self.dev_stats, 0, self.num_flex_tensors, stream=None)
 
     def autoflex(self, flex_ids):
@@ -373,14 +377,8 @@ class GPUFlexManager(FlexManager):
         # separate counter for each computation?
         self.autoflex_count += 1
 
-        # TODO: this is where double buffer stuff would go
-        # without double buffering, current code sets up an async transfer that it immediately waits for
-
         # transfer maxabs stats from device to host
         self.transfer_stats()
-
-        # wait for data from transfer
-        self.event.synchronize()
 
         # refresh all specified flex tensors
         for flex_id in flex_ids:

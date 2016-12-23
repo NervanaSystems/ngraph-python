@@ -46,11 +46,12 @@ class FlexGPUTransformer(GPUTransformer):
     --uses flex subclass GPUKernelGroup
     """
 
-    transformer_name = "flexgpu"
+    transformer_name = "gpuflex"
 
     # set global override tolerances for unit tests
-    fixed_point_res = GPUFlexManager.fixed_point_resolution()   # TODO!!! is this FlexManager or GPUFlexManager? overriding a static class attribute
-    # TODO not sure how these should be set
+    fixed_point_res = GPUFlexManager.fixed_point_resolution()
+
+    # TODO haven't investigated how these should be set, start with small tol
     default_rtol = 2*fixed_point_res
     default_atol = 2*fixed_point_res
 

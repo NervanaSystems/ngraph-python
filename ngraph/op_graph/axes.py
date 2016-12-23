@@ -1410,10 +1410,7 @@ class TensorDescription(NameableValue):
         self.__buffer = None
         self.__register = None
         self.__base = base
-        self.dtype = default_dtype(dtype)  # 1. flex passes overwrite this before init_tensor_description
-                                           # 2. meaning of default_dtype (user facing versus a device specific storage type)
-                                           # 3. attributes derived from dtype that is set here, that prevent
-                                           #    self.dtype = transformer.storage_dtype()   in initialization method
+        self.dtype = default_dtype(dtype)
         self.offset = offset
         self.ndim = len(self.axes)
         self.__read_only = False
