@@ -43,6 +43,7 @@ __all__ = [
     'batch_size',
     'broadcast',
     'cast_axes',
+    'computation',
     'constant',
     'constant_value',
     'convolution',

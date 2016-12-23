@@ -14,6 +14,7 @@
 from __future__ import division
 
 from contextlib import contextmanager
+import collections
 
 import inspect
 import cachetools
@@ -163,14 +164,17 @@ class Op(NameableValue, DebugInfo):
     """
 
     # Default is to not collect Ops as they are created
-    get_thread_state().ops = [None]
-
     @staticmethod
     def _get_thread_ops():
         """
         :return: The stack of Ops being collected.
         """
-        return get_thread_state().ops
+        try:
+            ops = get_thread_state().ops
+        except AttributeError:
+            ops = [None]
+            get_thread_state().ops = ops
+        return ops
 
     @staticmethod
     @contextmanager
@@ -186,10 +190,17 @@ class Op(NameableValue, DebugInfo):
         finally:
             Op._get_thread_ops().pop()
 
+    @staticmethod
+    def get_all_ops():
+        try:
+            all_ops = get_thread_state().all_ops
+        except AttributeError:
+            all_ops = [None]
+            get_thread_state().all_ops = all_ops
+        return all_ops
+
     # We need to create another stack here because all_ops and captured_ops
     # have different semantics that don't work with a shared stack
-    get_thread_state().all_ops = [None]
-
     @staticmethod
     @contextmanager
     def all_ops():
@@ -199,7 +210,7 @@ class Op(NameableValue, DebugInfo):
         """
         ops = []
         try:
-            all_ops = get_thread_state().all_ops
+            all_ops = Op.get_all_ops()
             all_ops.append(ops)
             yield (ops)
         finally:
@@ -209,11 +220,14 @@ class Op(NameableValue, DebugInfo):
                 parent.extend(ops)
 
     # The thread's global user_deps map
-    get_thread_state().user_deps = [dict()]
-
     @staticmethod
     def _get_thread_user_deps():
-        return get_thread_state().user_deps
+        try:
+            user_deps = get_thread_state().user_deps
+        except AttributeError:
+            user_deps = [dict()]
+            get_thread_state().user_deps = user_deps
+        return user_deps
 
     @staticmethod
     @contextmanager
@@ -277,9 +291,7 @@ class Op(NameableValue, DebugInfo):
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
-        for arg in self.args:
-            for dep in arg.user_deps:
-                self.add_other_dep(dep)
+        self.require_user_deps(self.args)
         self.schemas = []
         self.const = const
         self.is_constant = constant
@@ -295,13 +307,18 @@ class Op(NameableValue, DebugInfo):
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
-        all_ops = get_thread_state().all_ops[-1]
+        all_ops = Op.get_all_ops()[-1]
         if all_ops is not None:
             all_ops.append(self)
 
         self.style = {}
         self.ops = []
         self.__forward = None
+
+    def require_user_deps(self, args):
+        for arg in args:
+            for dep in arg.user_deps:
+                self.add_other_dep(dep)
 
     @property
     def args(self):
@@ -802,18 +819,12 @@ class SetItemOp(Op):
         tensor.user_deps = OrderedSet([self])
 
 
-class doall(Op):
+class ControlBlockOp(Op):
     """
-    Compute every Op in all.
-
-    Arguments:
-        all: Ops to be computed.
-        **kwargs: Args for related classes.
+    An Op that affects execution sequencing.
     """
-
-    def __init__(self, all, **kwargs):
-        super(doall, self).__init__(args=(), **kwargs)
-        self.other_deps = OrderedSet(all)
+    def __init__(self, **kwargs):
+        super(ControlBlockOp, self).__init__(**kwargs)
 
     @property
     def is_device_op(self):
@@ -823,6 +834,101 @@ class doall(Op):
             False, because this is handled by the transformer.
         """
         return False
+
+
+class ParallelOp(ControlBlockOp):
+    """
+    Compute every Op in all in any order.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
+    def __init__(self, all, **kwargs):
+        super(ParallelOp, self).__init__(**kwargs)
+        self.other_deps.update(all)
+        self.require_user_deps(all)
+
+
+def doall(all):
+    return ParallelOp(all)
+
+
+class ComputationOp(ParallelOp):
+    """
+    Represents a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Parameters:
+        returns: Ops returned.
+        parameters: Parameter ops.
+    """
+    def __init__(self, returns, *args, **kwargs):
+        for arg in args:
+            if not isinstance(arg, Op) or not arg.input:
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
+        if isinstance(returns, collections.Container):
+            all = returns
+        elif isinstance(returns, Op):
+            all = [returns]
+        elif returns is not None:
+            raise ValueError()
+        else:
+            all = []
+
+        super(ComputationOp, self).__init__(all=all, **kwargs)
+        self.returns = returns
+        self.parameters = args
+        for arg in args:
+            self.add_other_dep(arg)
+
+
+def computation(returns, *args):
+    """
+    Defines a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Returns:
+        A computation op.
+    """
+
+    return ComputationOp(returns, *args)
+
+
+class SequentialOp(ControlBlockOp):
+    """
+    Compute every Op in all in sequential order.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
+    def __init__(self, all, **kwargs):
+        super(SequentialOp, self).__init__(**kwargs)
+        self.require_user_deps(all)
+        tails = all[1:]
+        tails.append(self)
+        for last_op, op in zip(all, all[1:]):
+            op.add_other_dep(last_op)
+
+
+def sequential(all):
+    return SequentialOp(all)
 
 
 class Fill(Op):
@@ -1269,25 +1375,6 @@ def expand_dims(x, axis, dim):
     if axis in x.axes:
         return x
     return ExpandDims(x, axis, dim)
-
-
-class ResultHandle(ReshapeOp):
-    def __init__(self, x, **kwargs):
-        super(ResultHandle, self).__init__(
-            x, **kwargs
-        )
-
-    @property
-    def device_op(self):
-        return self
-
-    @tdcache()
-    def tensor_description(self):
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(td.axes, self.name)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(delta)
 
 
 class BroadcastOp(ReshapeOp):
@@ -3050,6 +3137,42 @@ Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
 )
 
 
+def prod_adjoints(self, adjoints, delta, x):
+    # axes
+    axes = x.axes
+    reduction_axes = self.reduction_axes
+
+    # x_equal_zero
+    x_equal_zero = equal(x, 0)
+
+    # count 0's occurrence by reduction axes
+    x_zero_count = sum(x_equal_zero, reduction_axes=reduction_axes)
+
+    # create mask for zero count 0 and 1
+    mask_zero = broadcast(equal(x_zero_count, 0), axes=axes)
+    mask_one = broadcast(equal(x_zero_count, 1), axes=axes)
+
+    # replace all 0 to 1
+    x_replaced = equal(x, 0.) * 1. + (1. - equal(x, 0.)) * x
+
+    # do product of x_replace and gradient
+    x_replaced_prod = prod(x_replaced, reduction_axes=reduction_axes)
+    x_replaced_grad = x_replaced_prod / x_replaced
+
+    # multiply mask with mask for the two cases
+    x_grad = mask_zero * x_replaced_grad + mask_one * x_equal_zero * x_replaced_grad
+
+    x.generate_add_delta(
+        adjoints,
+        broadcast(delta, x.axes) * x_grad
+    )
+
+
+Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
+    'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
+)
+
+
 Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
     'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
 )
@@ -3290,9 +3413,8 @@ class Function(Op):
 
     def __init__(self, ops):
         super(Function, self).__init__()
-        from ngraph.analysis import Digraph
-        self.ops = Digraph(ops)
-        self.instructions = self.ops.topsort()
+        self.ops = ops
+        self.instructions = Op.ordered_ops(self.ops)
         args, defs = set(), set()
         for op in self.instructions:
             # Kernel defines the def of each operation
@@ -3319,16 +3441,6 @@ class Function(Op):
     def inputs(self):
         """TODO."""
         return self.use
-
-
-class Buffer(object):
-    """TODO."""
-
-    def __init__(self, color, size):
-        self.color = color
-        self.size = size
-        self.data = None
-        self.views = OrderedSet()
 
 
 def mean(x, reduction_axes=None, out_axes=None):

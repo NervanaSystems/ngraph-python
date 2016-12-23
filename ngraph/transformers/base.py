@@ -21,9 +21,8 @@ import abc
 from builtins import object
 from future.utils import with_metaclass
 
-from ngraph.analysis.memory import assign_buffers
 from ngraph.op_graph.op_graph import Op, TensorOp, InitTensorOp, tensor_descriptions, \
-    Function, doall, ResultHandle
+    doall, computation
 from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
@@ -43,90 +42,23 @@ class Computation(NameableValue):
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, transformer, returns, *args, **kwargs):
+    def __init__(self, transformer, computation, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
+        self.computation = computation
         self.computation_name = None
-
-        def wrap_op(op):
-            if isinstance(op, TensorOp):
-                return ResultHandle(op)
-            else:
-                return op
-
-        def wrap_ops(ops):
-            return [wrap_op(op) for op in ops]
-
-        self.ops = OrderedSet()
-        if isinstance(returns, collections.Set):
-            returns = set(wrap_ops(returns))
-            self.ops.update(returns)
-        elif isinstance(returns, collections.Sequence):
-            returns = wrap_ops(returns)
-            self.ops.update(returns)
-        elif isinstance(returns, Op):
-            returns = wrap_op(returns)
-            self.ops.add(returns)
-        elif returns is not None:
-            raise ValueError()
-        self.returns = returns
-
-        self.parameters = []
-        for arg in args:
-            if arg.input:
-                self.parameters.append(arg)
-            else:
-                raise ValueError((
-                    'The arguments to a computation must all have property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
-                    '{op} was passed in, of type {op_type}.'
-                ).format(
-                    op=arg,
-                    op_type=arg.__class__.__name__,
-                ))
-
-            if isinstance(arg, Op):
-                self.ops.add(arg)
-            else:
-                raise ValueError()
-
-        control_ops = OrderedSet()
-        for op in self.ops:
-            control_ops.update(op.user_deps)
-        processed_ops = set()
-        pending_ops = OrderedSet(self.ops)
-        while pending_ops:
-            op = pending_ops.pop()
-            if op in processed_ops:
-                continue
-            control_ops.update(op.other_deps)
-            pending_ops.update(op.other_deps)
-            pending_ops.update(op.args)
-            processed_ops.add(op)
-
-        self.ops.update(control_ops)
-        self.transformer.all_results.update(self.ops)
         self.executor = None
-
-    def transform(self):
-        """
-        Transforms the computation so that it can be run.
-        """
-        self.ops = {op.forwarded for op in self.ops}
-        ordered_ops = self.transformer.dataflow.can_reach(self.ops, order=self.transformer.ops)
-        self.computation_name = self.transformer.transform_ordered_ops(ordered_ops, name=self.name)
 
     def __call__(self, *args):
         """
         Executes the computation passing args in to the function.
         """
-        if len(args) != len(self.parameters):
+        if len(args) != len(self.computation.parameters):
             raise ValueError((
                 'Computation was expecting {expected} arguments, but was '
                 'called with {called}.'
             ).format(
-                expected=len(self.parameters),
+                expected=len(self.computation.parameters),
                 called=len(args),
             ))
 
@@ -134,7 +66,7 @@ class Computation(NameableValue):
         self.transformer.initialize()
 
         # Get the parameters to the device
-        for param, arg in zip(self.parameters, args):
+        for param, arg in zip(self.computation.parameters, args):
             param.value[()] = arg
 
         self.executor()
@@ -154,16 +86,16 @@ class Computation(NameableValue):
             else:
                 return None
 
-        if isinstance(self.returns, Op):
-            return value(self.returns)
-        elif isinstance(self.returns, collections.Set):
+        if isinstance(self.computation.returns, Op):
+            return value(self.computation.returns)
+        elif isinstance(self.computation.returns, collections.Set):
             result = dict()
-            for op in self.returns:
+            for op in self.computation.returns:
                 dict[op] = value(op)
             return result
 
-        elif isinstance(self.returns, collections.Sequence):
-            return tuple(value(op) for op in self.returns)
+        elif isinstance(self.computation.returns, collections.Sequence):
+            return tuple(value(op) for op in self.computation.returns)
 
         else:
             return None
@@ -185,7 +117,6 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         """
         super(DeviceBuffer, self).__init__(**kwargs)
         self.transformer = transformer
-        self.transformer.device_buffers.add(self)
         self.__views = weakref.WeakValueDictionary()
 
     @property
@@ -365,14 +296,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         init_computation (Computation): The computation that performs initialization
             after allocation.  This happens once per training session, not once per-minibatch.
     """
-    def __init__(self, fusion=None, **kwargs):
+    def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.computations = OrderedSet()
         self.all_results = OrderedSet()
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.fusion = fusion
         self.device_buffers = OrderedSet()
         self.cpu_initializations = []
         self.init_computation = None
@@ -392,6 +322,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         # with Op.saved_user_deps():
         # Run passes on the computation graphs
+        for computation in self.computations:
+            self.all_results.add(computation.computation)
+
         self.run_registered_graph_passes(self.all_results)
 
         # Collect up all ops from the graph and obtain the init graph
@@ -407,15 +340,21 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         # create computation which initializes values (called once per session)
         init_op.update_forwards()
-        self.init_computation = self.computation(init_op, name="init")
+        self.init_computation = self.computation(init_op).named("init")
 
-        self.dataflow, self.memory = assign_buffers(self, all_ops, self.fusion)
-
-        # Initialize tensor descriptions
-        for op in all_ops:
-            self.initialize_tensor_descriptions(op)
-
-        self.ops = self.dataflow.instructions
+        self.ops = Op.ordered_ops(all_ops)
+        for op in self.ops:
+            if isinstance(op, TensorOp):
+                tensor_description = op.tensor_description()
+                if tensor_description.buffer is None:
+                    tensor_description.buffer = self.device_buffer_storage(
+                        tensor_description.base.tensor_size,
+                        tensor_description.dtype,
+                        tensor_description.name
+                    )
+                    self.device_buffers.add(tensor_description.buffer)
+                tensor_description.value = \
+                    tensor_description.buffer.device_tensor(tensor_description)
 
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
@@ -424,39 +363,11 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         # Compile the computations now that we know their storage
         for computation in self.computations:
-            computation.transform()
+            computation.computation_name = \
+                self.transform_ordered_ops(Op.ordered_ops([computation.computation]),
+                                           name=computation.name)
         self.finish_transform()
         self.finalized = True
-
-    @generic_method(Op)
-    def initialize_tensor_descriptions(self, op):
-        """
-        Ensures that tensor descriptions associated with op are initialized.
-
-        Arguments:
-            op (class:`ngraph.op_graph.op_graph.Op`): Initialize the tensor description for op.
-        """
-        # op
-        tensor_description = op.tensor_description()
-        if tensor_description is not None and tensor_description.transformer is None:
-            tensor_description.initialize(self)
-
-        # Call info for op
-        for tensor_description in op.call_info():
-            if tensor_description.transformer is None:
-                tensor_description.initialize(self)
-
-    @initialize_tensor_descriptions.on_type(Function)
-    def initialize_tensor_descriptions(self, op):
-        """
-        For Function, recurse into instructions
-
-        Arguments:
-            op: The function.
-        :return:
-        """
-        for inst in op.instructions:
-            self.initialize_tensor_descriptions(inst)
 
     @abc.abstractmethod
     def start_transform_allocate(self):
@@ -574,25 +485,36 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns: A DeviceBufferReference.
         """
 
-    # User API follows
-    def computation(self, results, *parameters, **kwargs):
+    # Old interface
+    def computation(self, results, *parameters):
         """
         Adds a computation to the transformer.
 
         Arguments:
             results: Values to be computed
             *parameters: Values to be set as arguments to evaluate
-            name: Name for function.  Defaults to None.
 
         Returns:
-            Dictionary from results to their values
+            Callable.
+        """
+
+        return self.add_computation(computation(results, *parameters))
+
+    def add_computation(self, computation):
+        """
+        Adds a computation to the transformer.
+
+        Arguments:
+            computation: A computation Op.
+
+        Returns:
+            Callable.
         """
         if self.finalized:
             raise ValueError(
                 'Cannot create computations from a finalized transformer'
             )
-
-        result = Computation(self, results, *parameters, **kwargs)
+        result = Computation(self, computation)
         self.computations.add(result)
         return result
 

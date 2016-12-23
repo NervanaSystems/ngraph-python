@@ -154,6 +154,7 @@ def test_reduction(transformer_factory):
     u = rng.uniform(-1.0, 1.0, axes)
 
     for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod'),
                               (np.max, ng.max, 'max'),
                               (np.min, ng.min, 'min')]:
         for reduction_axes in [[C],
@@ -171,6 +172,109 @@ def test_reduction(transformer_factory):
                 red=red, axes=reduction_axes)
 
 
+def test_prod_constant(transformer_factory):
+    """
+    Test reduce product of constants
+    """
+    A0 = ng.make_axis(2, name='C')
+    A1 = ng.make_axis(3, name='W')
+    A2 = ng.make_axis(4, name='H')
+
+    # ngrpah ops
+    const_3d = ng.broadcast(ng.constant(2., axes=[]), axes=[A0, A1, A2])
+    prod_0 = ng.prod(const_3d, reduction_axes=[A0])
+    prod_1 = ng.prod(const_3d, reduction_axes=[A1])
+    prod_2 = ng.prod(const_3d, reduction_axes=[A2])
+    prod_0_1 = ng.prod(const_3d, reduction_axes=[A0, A1])
+    prod_0_2 = ng.prod(const_3d, reduction_axes=[A0, A2])
+    prod_1_2 = ng.prod(const_3d, reduction_axes=[A1, A2])
+    prod_0_1_2 = ng.prod(const_3d, reduction_axes=[A0, A1, A2])
+
+    # numpy results
+    np_const_3d = np.ones((2, 3, 4)) * 2.
+    np_res_0 = np.prod(np_const_3d, axis=(0))
+    np_res_1 = np.prod(np_const_3d, axis=(1))
+    np_res_2 = np.prod(np_const_3d, axis=(2))
+    np_res_0_1 = np.prod(np_const_3d, axis=(0, 1))
+    np_res_0_2 = np.prod(np_const_3d, axis=(0, 2))
+    np_res_1_2 = np.prod(np_const_3d, axis=(1, 2))
+    np_res_0_1_2 = np.prod(np_const_3d, axis=(0, 1, 2))
+
+    # define comp
+    ex = ExecutorFactory()
+    comps = ex.executor([prod_0, prod_1, prod_2, prod_0_1, prod_0_2, prod_1_2,
+                         prod_0_1_2])
+
+    # compare results
+    for ng_res, np_res in zip(comps(), [np_res_0, np_res_1, np_res_2, np_res_0_1,
+                                        np_res_0_2, np_res_1_2, np_res_0_1_2]):
+        np.testing.assert_allclose(ng_res, np_res)
+
+
+def test_prod_deriv(transformer_factory):
+    """
+    Test reduce product's gradient
+    """
+    def power_set(lst):
+        """
+        power_set([0, 1, 2]) is:
+        [[], [0], [1], [0, 1], [2], [0, 2], [1, 2], [0, 1, 2]]
+        """
+        result = [[]]
+        for x in lst:
+            result.extend([subset + [x] for subset in result])
+        return result
+
+    def get_all_reduction_axes(axes):
+        """
+        Get all possible reduction axes
+        """
+        ndim = len(axes.lengths)
+        if ndim == 0:
+            return axes
+        else:
+            results = []
+            all_indices = power_set(range(ndim))
+            for indices in all_indices:
+                if not indices:
+                    results.append(ng.make_axes([]))
+                else:
+                    results.append(ng.make_axes([axes[index] for index in indices]))
+            return results
+
+    def shape_to_axes(shape):
+        """
+        Convert shape to axes
+        """
+        if not shape:
+            return ng.make_axes()
+        axes = ng.make_axes([ng.make_axis(length=s) for s in shape])
+        return axes
+
+    # test cases
+    test_cases = [
+        np.array([[[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]],
+                  [[1., 2., 3.], [4., 5., 6.], [7., 8., 0.]]]),
+        np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]]),
+        np.array([1., 2., 3.]),
+        np.array([0., 2., 3.]),
+        np.array([0., 0., 3.]),
+        np.array([0., 0., 0.]),
+        np.array([0.]),
+        np.array([2.]),
+        np.array(0.),
+        np.array(2.),
+    ]
+
+    for x_val in test_cases:
+        axes = shape_to_axes(x_val.shape)
+        all_reduction_axes = get_all_reduction_axes(axes)
+        for reduction_axes in all_reduction_axes:
+            x = ng.placeholder(axes=axes)
+            x_prod = ng.prod(x, reduction_axes)
+            check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
+
+
 def test_reduction_deriv(transformer_factory):
     C = ng.make_axis(name='C')
     W = ng.make_axis(name='W')
@@ -186,7 +290,8 @@ def test_reduction_deriv(transformer_factory):
 
     # Need to test max/min differently since if two elements are extremums
     # and we modify one, the derivative will change.
-    for npred, bered, red in [(np.sum, ng.sum, 'sum')]:
+    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod')]:
         for reduction_axes in [[C],
                                [W],
                                [H],

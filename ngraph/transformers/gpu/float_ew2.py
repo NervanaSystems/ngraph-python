@@ -63,6 +63,7 @@ _op_templates = {
 }
 
 _redop_templates = {
+    "prod": r"%(out)s = %(out)s * %(x)s;",
     "sum": r"%(out)s = %(out)s + %(x)s;",
     "max": r"%(out)s = fmaxf(%(out)s, %(x)s);",
     "min": r"%(out)s = fminf(%(out)s, %(x)s);",
@@ -71,6 +72,7 @@ _redop_templates = {
 }
 
 _redop32_templates = {
+    "prod": r"%(out)s = %(out)s * __shfl_xor(%(out)s, i);",
     "sum": r"%(out)s = %(out)s + __shfl_xor(%(out)s, i);",
     "max": r"%(out)s = fmaxf(%(out)s, __shfl_xor(%(out)s, i));",
     "min": r"%(out)s = fminf(%(out)s, __shfl_xor(%(out)s, i));",
@@ -92,6 +94,7 @@ _conversion_templates = {
 _default_conversion = r"%(out)s = %(in)s;"
 
 _redop_inits = {
+    "prod": "1.0f",
     "sum": "0.0f",
     "max": "-FLT_MAX",
     "min": "FLT_MAX",

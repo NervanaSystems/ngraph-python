@@ -1406,7 +1406,6 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
-        self.transformer = None
         self.__value = None
         self.__buffer = None
         self.__register = None
@@ -1420,7 +1419,6 @@ class TensorDescription(NameableValue):
         self.__read_only = False
         self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
-        self.style = {}
         self.next_tensor_description = next_tensor_description
 
         for axis in axes:
@@ -1797,6 +1795,13 @@ class TensorDescription(NameableValue):
                      for _ in self.full_sizes)
 
     @property
+    def tensor_size(self):
+        result = self.dtype.itemsize
+        for s in self.sizes:
+            result = result * s
+        return result
+
+    @property
     def c_contiguous(self):
         """
 
@@ -1845,18 +1850,10 @@ class TensorDescription(NameableValue):
         """A device handle to the value."""
         return self.__value
 
+    @value.setter
+    def value(self, value):
+        self.__value = value
+
     def is_base(self):
         """This tensor provides its own storage."""
         return self.__base is None
-
-    def initialize(self, transformer):
-        """Called by transformer to set up value."""
-        assert self.__value is None
-        self.transformer = transformer
-        # If the TensorDescription requires heap storage
-        if self.buffer is not None:
-            if self.buffer.data is None:
-                self.buffer.data = self.transformer.device_buffer_storage(
-                    self.buffer.size, self.dtype, self.name
-                )
-            self.__value = self.buffer.data.device_tensor(self)
