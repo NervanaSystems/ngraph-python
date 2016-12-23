@@ -472,6 +472,7 @@ class Recurrent(Layer):
         """
         # try to understand the axes from the input
         in_axes = in_obj.axes
+
         self.time_axis = in_axes.recurrent_axes()[0]
         self.time_axis_idx = in_axes.index(self.time_axis)
 

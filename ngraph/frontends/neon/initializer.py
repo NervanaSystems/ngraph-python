@@ -19,6 +19,7 @@ from ngraph.frontends.neon import ar
 
 
 class GaussianInit(object):
+
     def __init__(self, mean=0.0, var=0.01):
         self.functor = partial(np.random.normal, mean, var)
 
@@ -27,6 +28,7 @@ class GaussianInit(object):
 
 
 class UniformInit(object):
+
     def __init__(self, low=-0.01, high=0.01):
         self.functor = partial(np.random.uniform, low, high)
 
@@ -35,6 +37,7 @@ class UniformInit(object):
 
 
 class ConstantInit(object):
+
     def __init__(self, val=0.0):
         self.val = val
 
@@ -60,12 +63,15 @@ def get_input_output_axes(w_axes):
 
 
 class GlorotInit(object):
+
     def __call__(self, out_axes):
         ax_i, ax_o = get_input_output_axes(out_axes)
         scale = np.sqrt(6. / (np.prod(ax_i.lengths) + np.prod(ax_o.lengths)))
         return np.random.uniform(-scale, scale, out_axes.lengths)
 
+
 class XavierInit(object):
+
     def __call__(self, out_axes):
         ax_i, _ = get_input_output_axes(out_axes)
         scale = np.sqrt(3. / np.prod(ax_i.lengths))
@@ -73,8 +79,8 @@ class XavierInit(object):
 
 
 class KaimingInit(object):
+
     def __call__(self, out_axes):
         ax_i, _ = get_input_output_axes(out_axes)
         scale = np.sqrt(2. / np.prod(ax_i.lengths))
         return np.random.normal(0, scale, out_axes.lengths)
-

@@ -20,7 +20,7 @@ import collections
 
 class ArrayIterator(object):
 
-    def __init__(self, data_arrays, batch_size, total_iterations=None, time_steps=1):
+    def __init__(self, data_arrays, batch_size, total_iterations=None):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -35,7 +35,6 @@ class ArrayIterator(object):
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
-        self.time_steps = time_steps
         self.axis_names = None
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v['data'] for k, v in data_arrays.items()}
@@ -52,9 +51,6 @@ class ArrayIterator(object):
 
         # just get an arbitrary element for len
         self.ndata = len(self.data_arrays[self.keys[0]])
-        if self.time_steps != 1:
-            self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
-        self.ntokens = self.ndata * self.time_steps
 
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
@@ -116,19 +112,32 @@ class ArrayIterator(object):
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
 
-class SequentialArrayIterator(ArrayIterator):
+class SequentialArrayIterator(object):
 
     def __init__(self, data_arrays, time_steps, batch_size,
                  total_iterations=None, reverse_target=False, get_prev_target=False):
         self.get_prev_target = get_prev_target
         self.reverse_target = reverse_target
 
-        super(SequentialArrayIterator, self).__init__(
-            data_arrays=data_arrays,
-            batch_size=batch_size,
-            total_iterations=total_iterations,
-            time_steps=time_steps,
-        )
+        self.batch_size = batch_size
+        self.time_steps = time_steps
+        self.index = 0
+
+        if isinstance(data_arrays, dict):
+            self.data_arrays = {k: v for k, v in data_arrays.viewitems()}
+        else:
+            raise ValueError("Must provide dict as input")
+
+        # just get an arbitrary element for len
+        self.ndata = len(self.data_arrays[self.data_arrays.keys()[0]])
+        self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
+        self.ntokens = self.ndata * self.time_steps
+        self.nbatches = self.ndata / self.batch_size
+
+        if self.ndata < self.batch_size:
+            raise ValueError('Number of examples is smaller than the batch size')
+
+        self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
         self.data_arrays = {k: x[:self.ntokens].reshape(
                                 self.batch_size,
@@ -139,43 +148,23 @@ class SequentialArrayIterator(ArrayIterator):
         if self.reverse_target:
             self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
 
-        # if self.get_prev_target:
-        #     self.data_arrays['prev_tgt'] =
+        if self.get_prev_target:
+            self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
+            # populate the first column with -1's to result in all-zero onehot
+            self.data_arrays['prev_tgt'][:, :, :1] = -1
 
     def make_placeholders(self):
-        placeholders = {}
         ax.N.length = self.batch_size
-        for k, axnm in self.data_arrays.items():
-            p_axes = ng.make_axes([ax.N])
-            # p_axes += ng.make_axis(name=)
-            for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
-                name = axnm[i] if axnm else None
-                p_axes += ng.make_axis(name=name, length=sz)
-            placeholders[k] = ng.placeholder(p_axes)
-        return placeholders
+        time_axis = ng.make_axis(length=self.time_steps, name='time')
+        p_axes = ng.make_axes([ax.N, time_axis])
+        return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
 
-    #     self.make_batch_buffers()
-
-    # def make_batch_buffers(self):
-    #     self.shapes, self.batch_bufs = dict(), dict()
-    #     for k, x in self.data_arrays.items():
-    #         self.data_arrays[k] = x[:self.ntokens].reshape(
-    #             self.batch_size, self.nbatches, self.time_steps)
-    #         self.shapes[k] = (1, self.time_steps)
-    #         self.batch_bufs[k] = np.empty((1, self.time_steps, self.batch_size), dtype=np.int32)
+    def reset(self):
+        self.index = 0
 
     def __iter__(self):
         while self.index < self.total_iterations:
             idx = self.index % self.nbatches
             self.index += 1
 
-            batch_bufs = {k: x[:, idx:(idx + 1), :] for k, x in self.data_arrays.viewitems()}
-
-            if self.get_prev_target:
-                batch_bufs['prev_tgt'] = np.concatenate(
-                    np.zeros((self.batch_size, 1, 1), dtype=np.int32),
-                    batch_bufs['tgt_txt'][:, :, 1:],
-                    axis=2
-                )
-
-            yield batch_bufs
+            yield {k: np.squeeze(x[:, idx:(idx + 1), :]) for k, x in self.data_arrays.viewitems()}

@@ -186,6 +186,10 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
         """
         return self.__is_recurrent
 
+    @is_recurrent.setter
+    def is_recurrent(self, value):
+        self.__is_recurrent = value
+
     @property
     def match_on_length(self):
         """

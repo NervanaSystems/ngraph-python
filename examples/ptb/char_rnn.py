@@ -16,7 +16,7 @@
 import ngraph as ng
 from ngraph.frontends.neon import Sequential, Preprocess, BiRNN, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
+from ngraph.frontends.neon import ax, ar, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
@@ -46,28 +46,28 @@ train_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_siz
 valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_size,
                                     time_steps=time_steps)
 
+inputs = train_set.make_placeholders()
+ax.Y.length = len(tree_bank_data.vocab)
+
+def expand_onehot(x):
+    # Assign roles
+    x.axes.find_by_short_name('time')[0].add_role(ar.time)
+    x.axes.find_by_short_name('time')[0].is_recurrent = True
+    return ng.one_hot(x, axis=ax.Y)
+
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "rnn":
     rlayer = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False)
 else:
-    rlayer = BiRNN(hidden_size, init, activation=Tanh(),
-                   reset_cells=False, return_sequence=True, sum_out=True)
+    rlayer = BiRNN(hidden_size, init, activation=Tanh(), reset_cells=False,
+                   return_sequence=True, sum_out=True)
 
 # model initialization
-seq1 = Sequential([Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y)),
+seq1 = Sequential([Preprocess(functor=expand_onehot),
                    rlayer,
-                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y, ax.REC))])
-
-# Bind axes lengths:
-ax.Y.length = len(tree_bank_data.vocab)
-ax.REC.length = time_steps
-ax.N.length = args.batch_size
-
-# placeholders with descriptive names
-inputs = dict(inp_txt=ng.placeholder([ax.REC, ax.N]),
-              tgt_txt=ng.placeholder([ax.REC, ax.N]))
+                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))])
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)

@@ -578,7 +578,7 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(OneHotOp)
     def generate_op(self, op, out, x):
         self.append("""
-        {o}[:] = np.eye({o}.shape[0])[:, {x}.astype(np.int32)]
+        {o}[:] = np.eye({o}.shape[0], {o}.shape[0]+1)[:, {x}.astype(np.int32)]
         """, x=x, o=out)
 
     @generate_op.on_type(Power)
