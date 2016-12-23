@@ -1,4 +1,4 @@
-# --------------------------------------------------------------------------- classes)
+# ---------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
 from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
-from ngraph.transformers.flex2 import DEFAULT_DEC
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 import numpy as np
@@ -42,10 +41,11 @@ class FlexGPUTransformer(GPUTransformer):
 
     transformer_name = "flexgpu"
 
+    # set global override tolerances for unit tests
+    fixed_point_res = FlexManager.fixed_point_resolution()
     # TODO not sure how these should be set
-    fixed_point_res = 1.0 / 2**DEFAULT_DEC
-    default_rtol = fixed_point_res
-    default_atol = fixed_point_res
+    default_rtol = 2*fixed_point_res
+    default_atol = 2*fixed_point_res
 
     def __init__(self, **kwargs):
 

@@ -7,9 +7,6 @@ import numpy as np
 from ngraph.transformers.neonautoflex import init_scale_algorithm
 
 
-DEFAULT_DEC = 8  # use DEFAULT_DEC = 8 for 8.8 fixed point
-
-
 fixed_point = True
 flex_verbose = True
 flex_verbose1 = False
@@ -42,6 +39,7 @@ class Flex(object):
 
     strip_mantissa and get_scale methods copied from neon flexsim
     """
+
     def __init__(self, storage_bits):
 
         if storage_bits % 8 != 0:
@@ -299,7 +297,18 @@ class FlexManager(object):
               --see comments in FlexGPUTransformer.transform_ordered_ops
         2. Reuse double buffered design?
     """
-    def __init__(self, num_flex_tensors=16384):  # TODO: set this default max number of tensors appropriately, or other soln
+
+    default_dec = 8  # determines fixed point resolution and default initial dec
+
+    @staticmethod
+    def fixed_point_resolution():
+        return 1.0 / 2**FlexManager.default_dec
+
+    def __init__(self, default_init_dec=None, num_flex_tensors=16384):  # TODO: set this default max number of tensors appropriately, or other soln
+
+        if default_init_dec is None:
+            default_init_dec = FlexManager.default_dec
+        self.default_init_dec = default_init_dec  # if not specified
 
         self.num_flex_tensors = num_flex_tensors  # max number of allowed flex tensors
         self.stat_ids = list(range(num_flex_tensors))[::-1]  # id assigned to each
@@ -325,13 +334,17 @@ class FlexManager(object):
                        'timestamp': {}
         }
 
-    def new_flex(self, dec=DEFAULT_DEC, is_flex=True):
+    def new_flex(self, init_dec=None, is_flex=True):
         """
         Create a new FlexEntry when a new DeviceTensor is created
         """
+
+        if init_dec is None:
+            init_dec = self.default_init_dec
+
         stat_idx = self.stat_ids.pop()  # need stat_idx so it can be returned to stat_ids when deleted
         stat_ptr = int(self.dev_stats) + 4*stat_idx  # pointer to maxabs in device memory
-        flex_entry = FlexEntry(self, stat_idx, stat_ptr, dec=dec, is_flex=True)
+        flex_entry = FlexEntry(self, stat_idx, stat_ptr, dec=init_dec, is_flex=True)
         self.flex_entries[stat_idx] = flex_entry
 
         return flex_entry
