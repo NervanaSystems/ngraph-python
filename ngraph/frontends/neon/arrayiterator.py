@@ -150,8 +150,6 @@ class SequentialArrayIterator(object):
 
         if self.get_prev_target:
             self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
-            # populate the first column with -1's to result in all-zero onehot
-            self.data_arrays['prev_tgt'][:, :, :1] = -1
 
     def make_placeholders(self):
         ax.N.length = self.batch_size

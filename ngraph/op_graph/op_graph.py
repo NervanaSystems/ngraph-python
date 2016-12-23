@@ -1715,10 +1715,14 @@ def constant(const, axes=None, dtype=None):
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
                              graph_label_type=graph_label_type, dtype=dtype)
+
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
         val.axes = make_axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
+
+    if np.isscalar(const):
+        nptensor = np.zeros(val.axes.lengths, dtype=val.dtype) + const
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((
