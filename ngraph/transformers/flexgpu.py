@@ -10,7 +10,7 @@ from ngraph.transformers.flexbase import Flex, FlexEntry, FlexManager
 DEFAULT_DEC_TEMP = 8
 
 fixed_point = True
-flex_verbose = True
+flex_verbose = False
 flex_verbose1 = False
 indent1 = '  '
 autoflex_config = {'stats_queue_len': 16,

@@ -30,6 +30,7 @@ STYLE_CHECK_DIRS := ngraph tests examples
 # pytest options
 TEST_OPTS :=
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
+TEST_DIRS_FLEX := tests/
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -62,6 +63,11 @@ clean:
 test:
 	@echo Running unit tests...
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+testflex:
+	@echo Running flex unit tests...
+	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS_FLEX)
 	@coverage xml -i
 
 style:
