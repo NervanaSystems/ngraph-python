@@ -42,19 +42,38 @@ class PeepholeGraphPass(GraphPass):
     def __init__(self):
         super(PeepholeGraphPass, self).__init__()
 
-    def do_pass(self, ops):
+    def find_initializers(self, ops):
+        did_work = False
+        ops = Op.ordered_ops(ops)
+        while True:
+            new_inits = OrderedSet()
+            for op in ops:
+                if op.initializers:
+                    new_inits.update(op.initializers)
+            for init in new_inits:
+                init = init.forwarded
+                if init not in self.inits:
+                    self.inits = OrderedSet(Op.ordered_ops(new_inits + self.inits))
+                    ops = self.inits
+                    did_work = True
+                    break
+            else:
+                return did_work
+
+    def do_pass(self, ops, inits):
+        self.inits = inits
         assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
-        while has_work:
+        while has_work or self.find_initializers(ops):
             self.replacement_list = []
-            ops = OrderedSet(op.forwarded for op in ops)
+            ops = OrderedSet(op.forwarded for op in self.inits + ops)
             for op in Op.ordered_ops(ops):
                 op.update_forwards()
                 self.visit(op)
             for old, rep in self.replacement_list:
                 old.forwarded.replace_self(rep.forwarded)
             has_work = len(self.replacement_list) > 0
-        return ops
+        return ops, self.inits
 
     def replace_op(self, op, replacement):
         """
