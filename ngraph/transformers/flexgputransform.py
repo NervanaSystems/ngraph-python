@@ -14,16 +14,9 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
-
-#from ngraph.transformers.flex2 import FlexManager, Flex, bind_flex_params
-from ngraph.transformers.flexgpu import gpu_bind_flex_params
-from ngraph.transformers.flexgpu import GPUFlex
-
-#from ngraph.transformers.flex2 import FlexManager as GPUFlexManager
-from ngraph.transformers.flexgpu import GPUFlexManager
-
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
+from autoflex.flexgpu import GPUFlexManager, GPUFlex, gpu_bind_flex_params
 import numpy as np
 
 flex_verbose = False
@@ -52,8 +45,8 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     # TODO haven't investigated how these should be set, start with small tol
-    default_rtol = 2*fixed_point_res
-    default_atol = 2*fixed_point_res
+    default_rtol = 1e-05
+    default_atol = 20*fixed_point_res
 
     def __init__(self, **kwargs):
 
@@ -64,7 +57,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.register_graph_pass(FlexPass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = GPUFlexManager()
+        self.flex_manager = GPUFlexManager(fixed_point=False, verbose=True)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -106,11 +99,13 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
         return self.flex_entry.scale
 
     def get(self, tensor):
+        #import ipdb; ipdb.set_trace()
         tensor = super(FlexGPUDeviceTensor, self).get(tensor)
         tensor = tensor * self.scale
         return tensor
 
     def __setitem__(self, key, value):
+        #import ipdb; ipdb.set_trace()
         value = value / self.scale
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
 

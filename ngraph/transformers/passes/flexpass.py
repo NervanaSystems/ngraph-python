@@ -1,9 +1,7 @@
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, tdcache
-#from ngraph.transformers.flex2 import flex16
-#from ngraph.transformers.flex2 import flex16 as gpuflex16
-from ngraph.transformers.flexgpu import gpuflex16
+from autoflex.flexgpu import gpuflex16
 
 class FlexPass(PeepholeGraphPass):
     @generic_method(dispatch_base_type=Op)
