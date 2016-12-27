@@ -69,8 +69,8 @@ def test_conv():
     filters = ng.placeholder(axes=ax_f)
 
     # randomly initialize
-    input_value = rng.uniform(-1, 1, ax_i)
-    filter_value = rng.uniform(-1, 1, ax_f)
+    input_value = rng.uniform(-.1, .1, ax_i)
+    filter_value = rng.uniform(-.1, .1, ax_f)
 
     assert input_value.shape == ax_i.lengths
     assert filter_value.shape == ax_f.lengths
@@ -81,9 +81,8 @@ def test_conv():
     output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
     targets = ng.placeholder(axes=output.axes)
 
-    # costs = ng.cross_entropy_binary(ng.sigmoid(output), targets) / 1.  # scaling to avoid overflow
-    # error = ng.sum(costs, out_axes=()) / ng.batch_size(costs) / 1. # this is the scalar 7064.72 that gets propped back. WHY?
-    error = ng.variable(axes=(), initial_value=0.1)
+    costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
+    error = ng.sum(costs, reduction_axes=costs.axes) / ng.batch_size(costs)
     d_inputs = ng.deriv(error, inputs)
     d_filters = ng.deriv(error, filters)
 
@@ -93,10 +92,10 @@ def test_conv():
     conv_executor = trafo.computation([output, error, d_inputs, d_filters], inputs, filters, targets)
     result_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
 
-    print ("conv result", result_ng[:,0,3,3,63])  # fprop [-0.39 -1.6
-    print ("conv error", err_ng)  # 126.310 vs 128 o/f!  If this saturates, we give the wrong input to bprop.
-    print ("conv gradI", gradI_ng[:,0,3,3,63])  # bprop [-0.0389419   0.02817498
-    print ("conv gradF", gradF_ng[2,0,:,:,7])  # updat [[ 0.68818629  0.01008024
+    print ("conv result", result_ng[:,0,3,3,63])
+    print ("conv error", err_ng)
+    print ("conv gradI", gradI_ng[:,0,3,3,63])
+    print ("conv gradF", gradF_ng[2,0,:,:,7])
 
     return trafo
 

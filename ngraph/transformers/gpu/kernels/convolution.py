@@ -363,6 +363,13 @@ class XpropDirect(KernelGroup):
         K_tiles = (128, 64, 32) if blockN == 128 else (128, 64)
         if self.clss is 'fconv':
             K_tiles = (128, )  # TODO: enable other tile sizes again
+
+            # invert padding back, TODO: check
+            pad_db = T - pad_d - 1
+            pad_hb = R - pad_h - 1
+            pad_wb = S - pad_w - 1
+
+
         for blockK in K_tiles:
             mod = K % blockK
             if mod == 0 or mod > blockK - 32:
@@ -386,7 +393,7 @@ class XpropDirect(KernelGroup):
         PQN = P * Q * N
         MPQN = M * P * Q * N
         PQ = P * Q  # added for flex
-        CRST = C * R * S * T
+        KRST = K * R * S * T
         RST = R * S * T
         RS = R * S
         HW = H * W
@@ -401,11 +408,11 @@ class XpropDirect(KernelGroup):
         magic_S = _magic32(RS  + 32,  S)
         magic_Q = _magic64(Q)  # added for flex fprop
         magic_PQ = _magic64(PQ)
-        magic_W = _magic64(W)  # added for flex bprop
-        magic_HW = _magic64(HW)
-        magic_str_w = _magic32(W + S, str_w)
-        magic_str_h = _magic32(H + R, str_h)
-        magic_str_d = _magic32(D + T, str_d)
+        #magic_W = _magic64(W)  # added for flex bprop
+        #magic_HW = _magic64(HW)
+        magic_str_w = _magic32(Q + S, str_w)  # was W
+        magic_str_h = _magic32(P + R, str_h)  # was H
+        magic_str_d = _magic32(M + T, str_d)  # was D
 
         bsum_warps = blockN // 64
         gridNw = gridN * bsum_warps
@@ -440,12 +447,26 @@ class XpropDirect(KernelGroup):
                     # 28 args here + 4 magic = 32
             if op is "bprop":
                 # this assumes tile, grid size computation is still the same
+
+                # self.kernel_args.extend(_flatten([
+                #     N, C, M, P, Q, QN, PQN, MPQN,  # already different. wow!
+                #     K, CRST, RST, RS, magic_RS, S, magic_S,
+                #     pad_d, pad_h, pad_w, str_d, str_h, str_w,
+                #     W, HW, WN, HWN, DHWN, magic_W, magic_HW,
+                #     R, T, magic_str_w, magic_str_h, magic_str_d]))
+                #     # 33 args here + 7 magic = 40 (8 more than fprop.)
+
+                # KDHW for CMPQ swap:
+                # In old neon, pass in KDHW for fprop and CMPQ for bprop.
+                # This is because CMPQ is the effective KDHW, and takes the KDHW spots in the kernel args
+                # In nu-graph, the flip happens in the call invoking init, so pass in KDHW directly!
                 self.kernel_args.extend(_flatten([
-                    N, C, M, P, Q, QN, PQN, MPQN,  # already different. wow!
-                    K, CRST, RST, RS, magic_RS, S, magic_S,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w,
-                    W, HW, WN, HWN, DHWN, magic_W, magic_HW,
-                    R, T, magic_str_w, magic_str_h, magic_str_d]))
+                    N, K, D, H, W, WN, HWN, DHWN,  # was C, M, P, Q, QN, PQN, MPQN,
+                    C, KRST, RST, RS,
+                    magic_RS, S, magic_S,  # was K, CRST, RST, RS,
+                    pad_db, pad_hb, pad_wb, str_d, str_h, str_w,  # restored pad. strides probably always 1
+                    Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ,  # was W, HW, WN, HWN, DHWN, magic_W, magic_HW,
+                    R, T, magic_str_w, magic_str_h, magic_str_d]))  # str probably ok?
                     # 33 args here + 7 magic = 40 (8 more than fprop.)
 
         self.shared = TRS * 4 * 2
@@ -578,14 +599,14 @@ class XpropDirect(KernelGroup):
         self.F = F
         self.I = I
         print "binding I to ", self.I.get()[:,0,3,3,63]
-        assert False
+        # assert False
         self.O = O
         O.fill(0)
-        filter_data = self.filter_trans.bind_params(F)
+        self.filter_data = self.filter_trans.bind_params(F)
         bsum_data, x_data = self.xprop_params(O, X, bias, bsum, beta, relu, brelu, slope)
 
         self.kernel_args[2:11] = (self.lib.stream, bsum_data, x_data,
-                                  O.gpudata, I.gpudata, filter_data, alpha, beta or slope, no_op)
+                                  O.gpudata, I.gpudata, self.filter_data, alpha, beta or slope, no_op)
 
         if self.clss is 'fconv':
             del self.kernel_args[4]  # kernels don't have x_data
@@ -653,17 +674,45 @@ execute with args [( 961, 1, 1), (256, 1, 1), None, 0, 30074732544L, 30073683968
 
     def execute(self, repeat=1, unbind=True):
         # TODO: Why does this run 17 times? And produce only zeros after the first one?
+
+        ## shuffle is now taken care of by filter_trans
+        # if "bprop" in self.kernel_name:
+        #     # shuffle seems to be needed for bprop. Not sure if this belongs in init or execute.
+        #     # from neon.backends.float_ew2 import _get_shuffle_kernel
+        #     shuffle_kernel = _get_shuffle_kernel(self.I.dtype.str[1:], self.I.dtype.str[1:])  # can point to transpose or dimshuffle kernel
+        #     shuffle_args = [layer.shuffle_grid, layer.shuffle_block, self.stream,
+        #                     B_gpudata, B.gpudata] + layer.shuffle_args
+        #     shuffle_kernel.prepared_async_call(*shuffle_args)
+
+        # if "bprop" in self.kernel_name:
+        #     for i,k in enumerate(self.kernel_args): print i, k
+
+
         import pycuda.driver as drv
         kernel = kernel_specs.get_kernel(self.kernel_name, self.kernel_options)
         for r in range(repeat):
-            self.filter_trans.execute()
+            drv.Context.synchronize()
+            print "trans self.F", self.F.get()[:,0,2,2,7]
+            print "trans self.I", self.I.get()[:,0,3,3,63]
+            print "trans self.O", self.O.get()[:,0,3,3,63]
+
+            print "performing filter_trans ", self.filter_trans.args
+            print "trans self.filter_data", self.filter_data
+            print "filter shape before trans", self.F.shape  # note F is a GPUArray
+            self.filter_trans.execute()  ## TODO: IS THIS SHUFFLE KERNEL??
+            print "filter shape after trans", self.F.shape
+            # import ipdb; ipdb.set_trace()
+
             drv.Context.synchronize()
             print "\n<<<\nxprop execute with args", self.kernel_args
-            # import ipdb; ipdb.set_trace()
+            print "--- HARD-CODING ERRORS FOR BPROP ---"
+            #self.I.fill(1.0)  # for float
+            self.I.fill(256)  # for flex
             print "before self.F", self.F.get()[:,0,2,2,7]  #  f (3, 1, 3, 3, 8) b (3, 1, 3, 3, 8)
             print "before self.I", self.I.get()[:,0,3,3,63]  # f (3, 1, 6, 6, 64) b (8, 1, 4, 4, 64)  ## wrong for bprop
             print "before self.O", self.O.get()[:,0,3,3,63]  # f (8, 1, 4, 4, 64) b (3, 1, 6, 6, 64)
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
+
             drv.Context.synchronize()
             print "after self.F", self.F.get()[:,0,2,2,7]
             print "after self.I", self.I.get()[:,0,3,3,63]
@@ -689,6 +738,7 @@ class FpropDirect(XpropDirect):
 
         # The filters may still be in fp32 so we potentially need to dynamically quantize
         if dtype.itemsize != 4:
+            # print "\n\nfprop setting up filter_trans, converting", dtype, "\n\n"
             self.filter_trans = ConvertDataType(lib, dtype, C * T * R * S * K, out_mode=False)
         # if kernel is sconv then no need for any transform in fprop.
         else:
@@ -1084,29 +1134,29 @@ class UpdateDirect(KernelGroup):
         self.O = O  # filter
 
     """
-At this point, we have:  steam sum    F     I     E    alp  bet flags | of_K | N    K
-[(1, 1, 0), (256, 1, 1), None, None, None, None, None, 1.0, 0.0, 0,     0,     128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 27, 9, 29, 8, 9, 29, 8, 3, 43, 7, 0, 0, 0, 1, 1, 1, 30, 30, 900, 3840, 115200, 115200, 1, 0, 1, 0, 1, 1, 1]
+    At this point, we have:  steam sum    F     I     E    alp  bet flags | of_K | N    K
+    [(1, 1, 0), (256, 1, 1), None, None, None, None, None, 1.0, 0.0, 0,     0,     128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 27, 9, 29, 8, 9, 29, 8, 3, 43, 7, 0, 0, 0, 1, 1, 1, 30, 30, 900, 3840, 115200, 115200, 1, 0, 1, 0, 1, 1, 1]
 
-style proto-args that need to be put in the correct list format. We are missing the
+    style proto-args that need to be put in the correct list format. We are missing the
 
-initial values
-    None            None            None            None
-SASS args
-    param_Sum[0]    param_F[0]      param_I[0]      param_E[0]      param_alpha     param_beta      param_flags     param_offset_K  param_N         param_K         param_D         param_H         param_W         param_WN        param_HWN       param_DHWN      param_C         param_CRST      param_RST       param_magic_RST param_shift_RST param_RS        param_magic_RS  param_shift_RS  param_S         param_magic_S   param_shift_S   param_pad_d     param_pad_h     param_pad_w     param_str_d     param_str_h     param_str_w     param_P         param_Q         param_PQ        param_QN        param_PQN       param_MPQN      param_magic_Q   param_shift_Q   param_magic_PQ  param_shift_PQ  param_grid_P    param_grid_Q    param_grid_PQ   param_Stats[0]  param_scale
+    initial values
+        None            None            None            None
+    SASS args
+        param_Sum[0]    param_F[0]      param_I[0]      param_E[0]      param_alpha     param_beta      param_flags     param_offset_K  param_N         param_K         param_D         param_H         param_W         param_WN        param_HWN       param_DHWN      param_C         param_CRST      param_RST       param_magic_RST param_shift_RST param_RS        param_magic_RS  param_shift_RS  param_S         param_magic_S   param_shift_S   param_pad_d     param_pad_h     param_pad_w     param_str_d     param_str_h     param_str_w     param_P         param_Q         param_PQ        param_QN        param_PQN       param_MPQN      param_magic_Q   param_shift_Q   param_magic_PQ  param_shift_PQ  param_grid_P    param_grid_Q    param_grid_PQ   param_Stats[0]  param_scale
 
-sum does not appear to be used
+    sum does not appear to be used
 
 
 
-old update in nervana_gpu (float)
+    old update in nervana_gpu (float)
 
-            kernels.append([                      #       grid        block                 0 (null pointer)
-                kernel_specs_flex.get_kernel(kernel[0]), kernel[1], kernel[2], self.stream, batch_sum_data, C_gpudata, A_gpudata, B_gpudata, alpha, beta, flags, kernel[3]] + kernel[4])
+                kernels.append([                      #       grid        block                 0 (null pointer)
+                    kernel_specs_flex.get_kernel(kernel[0]), kernel[1], kernel[2], self.stream, batch_sum_data, C_gpudata, A_gpudata, B_gpudata, alpha, beta, flags, kernel[3]] + kernel[4])
 
-and old flex version
+    and old flex version
 
-            kernel.extend((flexC.ptr, 1.0 / flexC.scale))
-"""
+                kernel.extend((flexC.ptr, 1.0 / flexC.scale))
+    """
 
     def bind_flex_scales(self, I_scale, F_scale, O_scale):
         """
@@ -1160,16 +1210,18 @@ and old flex version
             self.zero_args = None
             self.kernel_args[2:6] = (None,) * 4
 
-"""
-                               Q  Q             Q             Q             f                  f    I  I  I    I  I  I   I   I     I       I       I  I   I  I   I  I  I   I  I  I   I  I  I  I  I  I  I  I   I   I    I     I       I       I  I  I  I  I  I  I  Q             f
-[(1, 1, 0), (256, 1, 1), None, 0, 30072640512L, 30073683968L, 30100291584L, 1.52587890625e-05, 0.0, 0, 0, 128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 27, 9, 29, 8, 9, 29, 8, 3, 43, 7, 0, 0, 0, 1, 1, 1, 30, 30, 900, 3840, 115200, 115200, 1, 0, 1, 0, 1, 1, 1, 30072642048L, 256.0]
-"""
+    """
+                                   Q  Q             Q             Q             f                  f    I  I  I    I  I  I   I   I     I       I       I  I   I  I   I  I  I   I  I  I   I  I  I  I  I  I  I  I   I   I    I     I       I       I  I  I  I  I  I  I  Q             f
+    [(1, 1, 0), (256, 1, 1), None, 0, 30072640512L, 30073683968L, 30100291584L, 1.52587890625e-05, 0.0, 0, 0, 128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 27, 9, 29, 8, 9, 29, 8, 3, 43, 7, 0, 0, 0, 1, 1, 1, 30, 30, 900, 3840, 115200, 115200, 1, 0, 1, 0, 1, 1, 1, 30072642048L, 256.0]
+    """
 
-# Magic numbers and shift amounts for integer division
-# Suitable for when nmax*magic fits in 32 bits
-# Shamelessly pulled directly from:
-# http://www.hackersdelight.org/hdcodetxt/magicgu.py.txt
 def _magic32(nmax, d):
+    """
+    Magic numbers and shift amounts for integer division
+    Suitable for when nmax*magic fits in 32 bits
+    Shamelessly pulled directly from:
+    http://www.hackersdelight.org/hdcodetxt/magicgu.py.txt
+    """
     nc = ((nmax + 1) // d) * d - 1
     nbits = len(bin(nmax)) - 2
     for p in range(0, 2 * nbits + 1):
@@ -1179,14 +1231,17 @@ def _magic32(nmax, d):
     raise ValueError("Can't find magic number for division")
 
 
-# Magic numbers and shift amounts for integer division
-# Suitable for when nmax*magic fits in 64 bits and the shift
-# lops off the lower 32 bits
 def _magic64(d):
-    # 3 is a special case that only ends up in the high bits
-    # if the nmax is 0xffffffff
-    # we can't use 0xffffffff for all cases as some return a 33 bit
-    # magic number
+    """
+    Magic numbers and shift amounts for integer division
+    Suitable for when nmax*magic fits in 64 bits and the shift
+    lops off the lower 32 bits
+
+    3 is a special case that only ends up in the high bits
+    if the nmax is 0xffffffff
+    we can't use 0xffffffff for all cases as some return a 33 bit
+    magic number
+    """
     nmax = 0xffffffff if d == 3 else 0x7fffffff
     magic, shift = _magic32(nmax, d)
     if magic != 1:
