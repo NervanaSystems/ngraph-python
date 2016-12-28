@@ -55,7 +55,7 @@ def test_fc():
 def test_maxpool():
     workspace.ResetWorkspace()
 
-    shape = [2, 3, 10, 10] # NCHW
+    shape = [2, 3, 10, 10]  # NCHW
     data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
 
     net = core.Net("net")
@@ -83,7 +83,7 @@ def test_maxpool():
 def test_avgpool():
     workspace.ResetWorkspace()
 
-    shape = [2, 3, 10, 10] # NCHW
+    shape = [2, 3, 10, 10]  # NCHW
     data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
 
     net = core.Net("net")

@@ -19,6 +19,7 @@ from ngraph.op_graph.axes import spatial_axis
 import ngraph as ng
 import numpy as np
 
+
 class OpsNN(OpsBase):
     """
     Mix-in class for NN ops:
@@ -77,7 +78,7 @@ class OpsNN(OpsBase):
         Inputs to c2_op:
             input
         """
-        supported_pooling = {'MaxPool' : 'max', 'AveragePool' : 'avg'}
+        supported_pooling = {'MaxPool': 'max', 'AveragePool': 'avg'}
 
         image = inputs[0]
 
@@ -113,7 +114,7 @@ class OpsNN(OpsBase):
         # padding = (image_size - kernel_size) % stride_size
         padding = np.mod(np.array(image.axes.lengths) - np.array([1, 1, kernel_h, kernel_w]),
                          np.array([1, 1, stride_size[0], stride_size[0]]))
-        if not np.array_equal(padding, [0]*len(padding)):
+        if not np.array_equal(padding, [0] * len(padding)):
             raise NotImplementedError("Max pooling does not support padding yet")
 
         pad_t = pad_b = pad_l = pad_r = 0
@@ -125,7 +126,7 @@ class OpsNN(OpsBase):
                                       (pad_t, pad_b, pad_l, pad_r))
 
         # pooling params
-        params = dict(op = supported_pooling[c2_op.type],
+        params = dict(op=supported_pooling[c2_op.type],
                       pad_d=0, pad_h=pad_t, pad_w=pad_l, pad_c=0,
                       str_d=1, str_h=stride_h, str_w=stride_w, str_c=1,
                       J=kernel_c, T=kernel_d, R=kernel_h, S=kernel_w)
