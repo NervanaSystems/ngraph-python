@@ -29,39 +29,39 @@ from imdb import IMDB
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
-parser.add_argument('--use_lut', action='store_true',
-                    help='choose to use lut as first layer')
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 16
-time_steps = 5
+args.batch_size = 128
+time_steps = 128
 hidden_size = 10
 gradient_clip_value = 15
-embed_size = 100
+embed_size = 128
 vocab_size = 20000
 
 # download IMDB
 imdb_dataset = IMDB(path=args.data_dir, sentence_length=time_steps)
 imdb_data = imdb_dataset.load_data()
 
-train_set = ArrayIterator(imdb_data['train'], batch_size=args.batch_size)
+train_set = ArrayIterator(imdb_data['train'], batch_size=args.batch_size,
+                          total_iterations=args.num_iterations)
 valid_set = ArrayIterator(imdb_data['valid'], batch_size=args.batch_size)
 
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "rnn":
-    rlayer = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=False)
+    rlayer = Recurrent(hidden_size, init, activation=Tanh(),
+                       reset_cells=True, return_sequence=False)
 else:
     rlayer = BiRNN(hidden_size, init, activation=Tanh(),
-                   reset_cells=False, return_sequence=True, sum_out=True)
+                   reset_cells=True, return_sequence=False, sum_out=True)
 
 # model initialization
-seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_idx=0),
+seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True),
                    rlayer,
-                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y, ax.REC))])
+                   Affine(init, activation=Softmax(), bias_init=init, axes=ax.Y)])
 
 # Bind axes lengths:
 ax.Y.length = imdb_dataset.nclass
@@ -70,11 +70,12 @@ ax.N.length = args.batch_size
 
 # placeholders with descriptive names
 inputs = dict(inp_txt=ng.placeholder([ax.REC, ax.N]),
-              tgt_txt=ng.placeholder([ax.REC, ax.N]))
+              tgt_txt=ng.placeholder([ax.N]))
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 output_prob = seq1.train_outputs(inputs['inp_txt'])
+
 loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
