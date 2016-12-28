@@ -158,3 +158,99 @@ class OpsNN(OpsBase):
         output = ng.tensor_slice(output, out_slicing)
 
         return output
+
+    def Conv(self, c2_op, inputs):
+        """
+        Computes a 2-D convolution given 4D input and filter tensors.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to tf_node:
+            input, filter
+
+        TODO: assume default caffe2 layout NHWC, RSCK,
+              need to support NCHW as well
+              need to clean up / merge with maxpool
+        """
+        image, weight = inputs
+
+        # TODO: currently NHWC only
+        assert c2_op.attr['data_format'].s.decode("ascii") == "NHWC"
+
+        # set axes shape
+        ax_N = ng.make_axis(batch=True)
+        ax_C = ng.make_axis(roles=[ar.Channel])
+        ax_D = ng.make_axis(roles=[ar.Depth])
+        ax_H = ng.make_axis(roles=[ar.Height])
+        ax_W = ng.make_axis(roles=[ar.Width])
+
+        ax_T = ng.make_axis(roles=[ar.Depth])
+        ax_R = ng.make_axis(roles=[ar.Height])
+        ax_S = ng.make_axis(roles=[ar.Width])
+        ax_K = ng.make_axis(roles=[ar.Channelout])
+
+        ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
+        ng.make_axes([ax_R, ax_S, ax_C, ax_K]).set_shape(weight.axes.lengths)
+        ax_D.length = 1
+        ax_T.length = 1
+
+        # strides params
+        tf_strides = [int(s) for s in list(c2_op.attr['strides'].list.i)]
+        if len(tf_strides) != 4:
+            raise ValueError("Length of strides my be 4.")
+        if tf_strides[0] != 1:
+            raise NotImplementedError('Strides on batch axis (N) must be 1.')
+        if tf_strides[3] != 1:
+            raise NotImplementedError('Strides on channel axis (C) must be 1.')
+        str_h, str_w = tf_strides[1], tf_strides[2]
+
+        # padding params
+        padding = c2_op.attr['padding'].s.decode("ascii")
+        pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding(
+            image.axes.lengths, weight.axes.lengths, tf_strides, padding)
+        if pad_t != pad_b or pad_l != pad_r:
+            raise NotImplementedError("Requires symmetric padding in ngraph:"
+                                      "pad_t(%s) == pad_b(%s) and"
+                                      "pad_l(%s) == pad_r(%s)" %
+                                      (pad_t, pad_b, pad_l, pad_r))
+
+        # conv params
+        params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
+                      str_d=1, str_h=str_h, str_w=str_w)
+
+        # i, f, o axes
+        ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
+        ax_f = ng.make_axes([ax_C, ax_T, ax_R, ax_S, ax_K])
+        ax_o = ng.make_axes([
+            ng.make_axis(ax_K.length, name='C', roles=[ar.Channel]),
+            spatial_axis(ax_i, ax_f, params['pad_d'], params['str_d'], ar.Depth),
+            spatial_axis(ax_i, ax_f, params['pad_h'], params['str_h'], ar.Height),
+            spatial_axis(ax_i, ax_f, params['pad_w'], params['str_w'], ar.Width),
+            ax_N
+        ])
+
+        # broadcast input / filter axes
+        image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
+        image = ng.expand_dims(image, ax_D, 1)  # NHWC -> NDHWC
+        image = ng.axes_with_order(image, axes=ax_i)  # NDHWC -> CDHWN
+        weight = ng.cast_axes(weight, ng.make_axes([ax_R, ax_S, ax_C, ax_K]))
+        weight = ng.expand_dims(weight, ax_T, 0)  # RSCK -> TRSCK
+        weight = ng.axes_with_order(weight, axes=ax_f)  # TRSCK -> CTRSK
+
+        # convolution
+        output = ng.convolution(params, image, weight, axes=ax_o)
+
+        # cast back to NHWC
+        oC, oD, oH, oW, oN = output.axes
+        output = ng.broadcast(output, ng.make_axes([oN, oD, oH, oW, oC]))
+
+        # slice away the oD
+        out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
+        output = ng.tensor_slice(output, out_slicing)
+
+        return output
