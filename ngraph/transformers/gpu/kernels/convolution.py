@@ -652,7 +652,7 @@ class XpropDirect(KernelGroup):
             print "trans self.I", self.I.get()[:,0,3,3,63]
             print "trans self.O", self.O.get()[:,0,3,3,63]
 
-            print "performing filter_trans ", self.filter_trans.args,
+            print "performing filter_trans ", getattr(self.filter_trans, 'args', None),
             print "changes shape from", self.F.shape,
             self.filter_trans.execute()
             print "to", self.F.shape
