@@ -109,7 +109,7 @@ class Tester(ImporterTester):
         # flatten to 1d or 2d
         x = tf.Variable(
             np.random.randn(3, 4, 5, 6).astype(np.float32), dtype=tf.float32)
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         for shape in shapes:
             x_reshaped = tf.reshape(x, shape)
             self.run(x_reshaped, tf_init_op=init_op, tf_feed_dict={})
