@@ -50,3 +50,59 @@ def test_fc():
 
     # compare Caffe2 and ngraph results
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+
+
+def test_maxpool():
+    workspace.ResetWorkspace()
+
+    shape = [2, 3, 10, 10] # NCHW
+    data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    net.MaxPool(X, 'Y', kernel=2, stride=2)
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+
+
+def test_avgpool():
+    workspace.ResetWorkspace()
+
+    shape = [2, 3, 10, 10] # NCHW
+    data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    net.AveragePool(X, 'Y', kernel=2, stride=2)
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
