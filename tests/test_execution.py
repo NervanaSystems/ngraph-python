@@ -192,23 +192,28 @@ def test_prod_constant(transformer_factory):
 
     # numpy results
     np_const_3d = np.ones((2, 3, 4)) * 2.
-    np_res_0 = np.prod(np_const_3d, axis=(0))
-    np_res_1 = np.prod(np_const_3d, axis=(1))
-    np_res_2 = np.prod(np_const_3d, axis=(2))
-    np_res_0_1 = np.prod(np_const_3d, axis=(0, 1))
-    np_res_0_2 = np.prod(np_const_3d, axis=(0, 2))
-    np_res_1_2 = np.prod(np_const_3d, axis=(1, 2))
-    np_res_0_1_2 = np.prod(np_const_3d, axis=(0, 1, 2))
+    res_0_np = np.prod(np_const_3d, axis=(0))
+    res_1_np = np.prod(np_const_3d, axis=(1))
+    res_2_np = np.prod(np_const_3d, axis=(2))
+    res_0_1_np = np.prod(np_const_3d, axis=(0, 1))
+    res_0_2_np = np.prod(np_const_3d, axis=(0, 2))
+    res_1_2_np = np.prod(np_const_3d, axis=(1, 2))
+    res_0_1_2_np = np.prod(np_const_3d, axis=(0, 1, 2))
 
     # define comp
     ex = ExecutorFactory()
     comps = ex.executor([prod_0, prod_1, prod_2, prod_0_1, prod_0_2, prod_1_2,
                          prod_0_1_2])
 
-    # compare results
-    for ng_res, np_res in zip(comps(), [np_res_0, np_res_1, np_res_2, np_res_0_1,
-                                        np_res_0_2, np_res_1_2, np_res_0_1_2]):
-        np.testing.assert_allclose(ng_res, np_res)
+    res_0_ng, res_1_ng, res_2_ng, res_0_1_ng, res_0_2_ng, res_1_2_ng, res_0_1_2_ng = comps()
+
+    np.testing.assert_allclose(res_0_np, res_0_ng)
+    np.testing.assert_allclose(res_1_np, res_1_ng)
+    np.testing.assert_allclose(res_2_np, res_2_ng)
+    np.testing.assert_allclose(res_0_1_np, res_0_1_ng)
+    np.testing.assert_allclose(res_0_2_np, res_0_2_ng)
+    np.testing.assert_allclose(res_1_2_np, res_1_2_ng)
+    np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
 
 
 def test_prod_deriv(transformer_factory):
