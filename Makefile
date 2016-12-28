@@ -60,6 +60,8 @@ clean:
 	@echo
 
 test:
+	@echo Running flex unit tests...
+	@py.test --enable_flex --$(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
 	@echo Running unit tests...
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
