@@ -15,10 +15,8 @@
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-# from ngraph.util.utils import executor
 from ngraph.testing.random import RandomTensorGenerator
 import ngraph.transformers as ngt
-# import ngraph.op_graph.axes as ax
 from ngraph.op_graph.axes import spatial_axis
 
 from ngraph.frontends.neon import ax, ar
@@ -29,23 +27,21 @@ rng = RandomTensorGenerator(0, np.float32)
 
 
 # Select a transformer
-parser = NgraphArgparser(description='simple gemm example')
+parser = NgraphArgparser(description='simple conv example')
 args = parser.parse_args()
 transformer_name = args.backend
 
 factory = ngt.make_transformer_factory(transformer_name)
 ngt.set_transformer_factory(factory)
 
-print("\n--------- conv -----------\n")
-
-# matrix multiply
+print("\n--------- conv example using ", transformer_name, "-----------\n")
 
 def test_conv():
-    # This configuration has been tweaked to not overflow an 8.8 fixed point.
-    N = 64  # 128
-    C, K = 4, 8  # 3, 8. TODO: We may not have the ability to bprop C=3 with flex? C=4 becomes K, needs to divide vec_size
+    # This configuration has been tweaked to minimize overflow with 8.8 fixed point.
+    N = 64  # 64 is the smallest possible for large N
+    C, K = 4, 8  # C and K exchanged for f/bprop,  4 is the minimum that divides vec_size
     D, T = 1, 1
-    H = W = 6  # 32
+    H = W = 6  # for a 4x4 output feature map
     R = S = 3
 
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
@@ -86,7 +82,7 @@ def test_conv():
     d_inputs = ng.deriv(error, inputs)
     d_filters = ng.deriv(error, filters)
 
-    targets_value = rng.uniform(.1, 0.9, output.axes)  # numpy arrays
+    targets_value = rng.uniform(.1, 0.9, output.axes)
 
     trafo = ngt.make_transformer()
     conv_executor = trafo.computation([output, error, d_inputs, d_filters], inputs, filters, targets)

@@ -344,7 +344,6 @@ class XpropDirect(KernelGroup):
             N, C, K, D, H, W, T, R, S, M, P, Q,
             pad_d, pad_h, pad_w, str_d, str_h, str_w, bprop)
 
-        print "calling XpropDirect __init__ with bprop", bprop,
         if N % 64 == 0 and K % self.vec_size == 0 or (self.clss is 'fconv'):
             self.init_largeN(op)
         else:
@@ -376,7 +375,6 @@ class XpropDirect(KernelGroup):
                 break
 
         kname   = "%s_direct_%s_%dx%d" % (self.clss, op, blockK, blockN)
-        print "init kernel:", kname
         threads = kernel_specs.kernels[kname]["threads"]
 
         gridK = _ceil_div(K, blockK)
@@ -435,7 +433,6 @@ class XpropDirect(KernelGroup):
                 P2, Q, PQk, Qk, k, magic_PQk, magic_Qk, magic_k,
                 Q * N, P * Q * N, M * P * Q * N, gridNw, gridQNw, gridPQNw, gridMPQNw ]))
         else:
-            print "XpropDirect.init_largeN using old style kernel args for", op
             # old style fprop:
             if op is "fprop":
                 self.kernel_args.extend(_flatten([
@@ -598,8 +595,6 @@ class XpropDirect(KernelGroup):
         self.lib.scratch_buffer_init()
         self.F = F
         self.I = I
-        print "binding I to ", self.I.get()[:,0,3,3,63]
-        # assert False
         self.O = O
         O.fill(0)
         self.filter_data = self.filter_trans.bind_params(F)
@@ -615,110 +610,68 @@ class XpropDirect(KernelGroup):
 
     def bind_flex_scales(self, I_scale, F_scale, O_scale):
         """
-        flex stuff: this would come from the flex_entry once it's attached.
-         0             1          2                    3                    4                 5                 6                 7                 8                    9                    10                  11
-        args at this point are:   None,                None,                None,             None,             None,             None,             None,                None,                None                                N,            K, D, H,  W,  W * N, H * W * N, D * H * W * N,
-        [(961, 1, 1), (64, 1, 1), None,                0,                   30074732544L,     30074732544L,     30073683968L,     30072637952L,     1.0,                 0.0,                 0,                                  128,          8, 1, 32, 32, 4096,  131072,    131072,        3, 32, 4, 4, 1, 2, 2, 1, 2, 1, 1, 0, 0, 0, 1, 1, 1, 15, 31, 961, 62, 1, 2288265615, 9, 2216757315, 5, 1, 0, 3968, 123008, 123008, 2, 62, 1922, 1922]
-                                                       "float* param_Sum",  "float* param_X", "float* param_O", "float* param_I", "float* param_F", "float param_alpha", "float param_beta",
-                                                       Q                    Q                 Q                 Q                 Q                 f                    f                    I                                   I             I  IIIIIIIIIIIIIIIIIiiiIIIIIIIIIIIIIIIIIIIIIQf
-                                            From SASS
-                                                       param_Sum[0]                           param_O[0]        param_I[0]        param_F[0]        param_alpha          param_beta           param_flags         param_offset_K  param_N       param_K       param_D       param_H       param_W       param_WN      param_HWN     param_DHWN    param_C       param_KRST    param_RST     param_RS      param_magic_RSparam_shift_RSparam_S       param_magic_S param_shift_S param_pad_d   param_pad_h   param_pad_w   param_str_d   param_str_h   param_str_w   param_Q       param_PQ      param_QN      param_PQN     param_MPQN    param_magic_Q param_shift_Q param_magic_PQparam_shift_PQ
-                                                       Q                                      Q                 Q                 Q                 f                    f                    I                   I               I             I  IIIIIIIIIIIIIIIIIiiiIIIIIIIIIIIIIIIIIIIIIQf
-
         Stewart: Simplify the logic from old layer_flex to use a single tile size. Maybe the 128x128 tile is good because
         it will be the fastest for large networks. Then param_offset_K will always be zero, because we are not e.g. splitting
         a 192 into 128 tile and a 64 tile that would have an offset.
         """
 
-        # faking a flex statistics pointer: This has been validated with gemm, it's expected to break autoflex.
+        # dummy flex statistics pointer: Expected to break autoflex, just for fixed point testing.
         import pycuda.driver as drv
-        self.dummy_dev_stats = drv.mem_alloc(4 * 32)  # DeviceAllocation object, bytes, 4 per flex tensor
-        dummy_stat_prt = int(self.dummy_dev_stats)  # This has been validated with GEMM.
+        self.dummy_dev_stats = drv.mem_alloc(4 * 32)
+        dummy_stat_prt = int(self.dummy_dev_stats)
         scale_ab = I_scale * F_scale
         scale_c = np.float(O_scale)
 
         # TODO: just recreate the whole args to clean this up?
         self.kernel_args[7] *= scale_ab  # alpha
         self.kernel_args[8] *= scale_c  # beta
-        print "XpropDirect.bind_flex_scales", len(self.kernel_args),
         if len(self.kernel_args) == 43:  # first fprop call. 11 variable + 28 constants + 4 magic = 43
-            print "first fprop"
-            print self.kernel_args
-            self.kernel_args.extend((dummy_stat_prt, scale_c))  #dummy pointer
+            self.kernel_args.extend((dummy_stat_prt, scale_c))
         elif len(self.kernel_args) == 45:  # repeated fprop calls
-            print "repeated fprop", "alpha=", self.kernel_args[7]
             self.kernel_args[43:45] = [dummy_stat_prt, scale_c]
         elif len(self.kernel_args) == 51:  # first bprop call. 11 variable + 33 const + 7 magic = 51
-            print "first bprop"
-            print self.kernel_args
-            #import ipdb; ipdb.set_trace()
-            self.kernel_args.extend((dummy_stat_prt, scale_c))  #dummy pointer
+            self.kernel_args.extend((dummy_stat_prt, scale_c))
         elif len(self.kernel_args) == 53:  # repeated bprop calls
-            print "repeated bprop"
             self.kernel_args[51:53] = [dummy_stat_prt, scale_c]
         else:
             assert False, "Weird number of kernel args"
-        """
-[(1024, 1, 1), (256, 1, 1), None, 0, 30104092672L, 30101995520L, 30105141248L, 1.52587890625e-05, 0.0, 0, 0, 128, 3, 1, 31, 31, 3968, 123008, 123008, 8, 12, 4, 4, 1, 2, 2, 1, 1, 0, 1, 1, 1,  1,  1, 32, 1024, 4096, 131072, 131072, 1, 5, 1, 10, 1, 0, 1, 0, 1, 0]         ends here |
-
-Ke rnel launch
-fc onv_direct_bprop_128x128 with sig                 Q  Q             Q             Q             f                  f    I  I  I    I  I  I   I   I     I       I       I  I   I  I  I  I  I  I   I  I  I  I  I  I  I  I   I     I     I       I       I  I  I  I   I  I  I  I  I  I  | I             I     Q  f                 (require 50)
-execute with args [(1024, 1, 1), (256, 1, 1), None, 0, 30104092672L, 30101995520L, 30105141248L, 1.52587890625e-05, 0.0, 0, 0, 128, 3, 1, 31, 31, 3968, 123008, 123008, 8, 12, 4, 4, 1, 2, 2,  1,  1, 0, 1, 1, 1, 1, 1, 32, 1024, 4096, 131072, 131072, 1, 5, 1, 10, 1, 0, 1, 0, 1, 0, | ???           ???   30072641536L, 256.0  (get only 48 + grid/block/context)
-latest args       [(1024, 1, 1), (256, 1, 1), None, 0, 30102257664L, 30100291584L, 30103306240L, 1.52587890625e-05, 0.0, 0, 0, 128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 72, 9, 9, 29, 8, 3, 43, 7, 0, 2, 2, 1, 1, 1, 30, 900,  3840, 115200, 115200, 2290649225, 4, 2443359173, 9, 3, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-
-cf fprop
-execute with args [( 961, 1, 1), (256, 1, 1), None, 0, 30074732544L, 30073683968L, 30072637952L, 1.31777474293e-82, 0.0, 0, 0, 128, 8, 1, 32, 32, 4096, 131072, 131072, 3, 32, 4, 4, 1, 2, 2, 1, 1, 0, 0, 0, 1, 1, 1, 31,  961, 3968, 123008, 123008, 2216757315, 4, 2288265615, 9, 30072641024L, 256.0]  # missing the extra magic numbers?!
-
-"""
 
 
     def execute(self, repeat=1, unbind=True):
-        # TODO: Why does this run 17 times? And produce only zeros after the first one?
 
-        ## shuffle is now taken care of by filter_trans
-        # if "bprop" in self.kernel_name:
-        #     # shuffle seems to be needed for bprop. Not sure if this belongs in init or execute.
-        #     # from neon.backends.float_ew2 import _get_shuffle_kernel
-        #     shuffle_kernel = _get_shuffle_kernel(self.I.dtype.str[1:], self.I.dtype.str[1:])  # can point to transpose or dimshuffle kernel
-        #     shuffle_args = [layer.shuffle_grid, layer.shuffle_block, self.stream,
-        #                     B_gpudata, B.gpudata] + layer.shuffle_args
-        #     shuffle_kernel.prepared_async_call(*shuffle_args)
-
+        # Handy way to print all the kernel args:
         # if "bprop" in self.kernel_name:
         #     for i,k in enumerate(self.kernel_args): print i, k
-
 
         import pycuda.driver as drv
         kernel = kernel_specs.get_kernel(self.kernel_name, self.kernel_options)
         for r in range(repeat):
+            print "\n<<<\nxprop execute with args", self.kernel_args
             drv.Context.synchronize()
             print "trans self.F", self.F.get()[:,0,2,2,7]
             print "trans self.I", self.I.get()[:,0,3,3,63]
             print "trans self.O", self.O.get()[:,0,3,3,63]
 
-            print "performing filter_trans ", self.filter_trans.args
-            print "trans self.filter_data", self.filter_data
-            print "filter shape before trans", self.F.shape  # note F is a GPUArray
-            self.filter_trans.execute()  ## TODO: IS THIS SHUFFLE KERNEL??
-            print "filter shape after trans", self.F.shape
-            # import ipdb; ipdb.set_trace()
+            print "performing filter_trans ", self.filter_trans.args,
+            print "changes shape from", self.F.shape,
+            self.filter_trans.execute()
+            print "to", self.F.shape
 
             drv.Context.synchronize()
-            print "\n<<<\nxprop execute with args", self.kernel_args
             print "--- HARD-CODING ERRORS FOR BPROP ---"
             #self.I.fill(1.0)  # for float
             self.I.fill(256)  # for flex
             print "before self.F", self.F.get()[:,0,2,2,7]  #  f (3, 1, 3, 3, 8) b (3, 1, 3, 3, 8)
-            print "before self.I", self.I.get()[:,0,3,3,63]  # f (3, 1, 6, 6, 64) b (8, 1, 4, 4, 64)  ## wrong for bprop
+            print "before self.I", self.I.get()[:,0,3,3,63]  # f (3, 1, 6, 6, 64) b (8, 1, 4, 4, 64)
             print "before self.O", self.O.get()[:,0,3,3,63]  # f (8, 1, 4, 4, 64) b (3, 1, 6, 6, 64)
+            print ""
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
 
             drv.Context.synchronize()
             print "after self.F", self.F.get()[:,0,2,2,7]
             print "after self.I", self.I.get()[:,0,3,3,63]
             print "after self.O", self.O.get()[:,0,3,3,63]
-            print  "\n>>>\n"  # at this point, int16 pycuda GPUArray
-            # import ipdb; ipdb.set_trace()
+            print  ">>>\n"  # at this point, int16 pycuda GPUArray
             self.bsum.execute()
 
         if unbind:
@@ -738,7 +691,6 @@ class FpropDirect(XpropDirect):
 
         # The filters may still be in fp32 so we potentially need to dynamically quantize
         if dtype.itemsize != 4:
-            # print "\n\nfprop setting up filter_trans, converting", dtype, "\n\n"
             self.filter_trans = ConvertDataType(lib, dtype, C * T * R * S * K, out_mode=False)
         # if kernel is sconv then no need for any transform in fprop.
         else:
@@ -771,7 +723,6 @@ class BpropDirect(XpropDirect):
             pad_d, pad_h, pad_w, str_d, str_h, str_w, bprop=True)
 
         if self.clss is not 'fconv':
-            print "extending proto-args for bprop"
             self.kernel_args.extend(_flatten([
                 _magic32(D + T, str_d),
                 _magic32(H + R, str_h),
