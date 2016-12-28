@@ -39,7 +39,7 @@ print("\n--------- conv example using ", transformer_name, "-----------\n")
 def test_conv():
     # This configuration has been tweaked to minimize overflow with 8.8 fixed point.
     N = 64  # 64 is the smallest possible for large N
-    C, K = 4, 8  # C and K exchanged for f/bprop,  4 is the minimum that divides vec_size
+    C, K = 16, 8  # C and K exchanged for f/bprop,  4 is the minimum that divides vec_size (or is it 8?)
     D, T = 1, 1
     H = W = 6  # for a 4x4 output feature map
     R = S = 3

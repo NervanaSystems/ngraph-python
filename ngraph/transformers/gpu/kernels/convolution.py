@@ -607,7 +607,6 @@ class XpropDirect(KernelGroup):
             del self.kernel_args[4]  # kernels don't have x_data
             self.kernel_args.insert(10, 0)  # offset_K at position 11
 
-
     def bind_flex_scales(self, I_scale, F_scale, O_scale):
         """
         Stewart: Simplify the logic from old layer_flex to use a single tile size. Maybe the 128x128 tile is good because
@@ -635,7 +634,6 @@ class XpropDirect(KernelGroup):
             self.kernel_args[51:53] = [dummy_stat_prt, scale_c]
         else:
             assert False, "Weird number of kernel args"
-
 
     def execute(self, repeat=1, unbind=True):
 
@@ -679,6 +677,7 @@ class XpropDirect(KernelGroup):
             self.bsum.unbind()
             self.kernel_args[2:11] = (None,) * 9
 
+
 class FpropDirect(XpropDirect):
 
     def __init__(self, lib, dtype,
@@ -699,6 +698,7 @@ class FpropDirect(XpropDirect):
         super(FpropDirect, self).__init__("fprop", lib, dtype,
             N, C, K, D, H, W, T, R, S, M, P, Q,
             pad_d, pad_h, pad_w, str_d, str_h, str_w)
+
 
 class BpropDirect(XpropDirect):
 
