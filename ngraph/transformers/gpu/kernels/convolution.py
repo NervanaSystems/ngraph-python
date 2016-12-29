@@ -578,7 +578,7 @@ class XpropDirect(KernelGroup):
         self.F = F
         self.I = I
         self.O = O
-        O.fill(0)
+        O.fill(0)  # init with zeros because un-initialized mem often retains previous results
         self.filter_data = self.filter_trans.bind_params(F)
         bsum_data, x_data = self.xprop_params(O, X, bias, bsum, beta, relu, brelu, slope)
 
@@ -626,8 +626,8 @@ class XpropDirect(KernelGroup):
             self.filter_trans.execute()
 
             drv.Context.synchronize()
-            print "--- HARD-CODING ERRORS FOR BPROP ---"
-            #self.I.fill(1.0)  # for float
+            print "--- HARD-CODING ERRORS FOR", self.kernel_name,  " ---"
+            # self.I.fill(1.0)  # for float
             self.I.fill(256)  # for flex
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
 
@@ -1045,6 +1045,7 @@ class UpdateDirect(KernelGroup):
         self.I = I  # TODO: Added these for debugging, to be removed again.
         self.E = E
         self.O = O  # filter
+        O.fill(0)  # init with zeros because un-initialized mem often retains previous results
 
     """
     At this point, we have:  steam sum    F     I     E    alp  bet flags | of_K | N    K
@@ -1113,16 +1114,34 @@ class UpdateDirect(KernelGroup):
             if self.zero:
                 drv.memset_d32_async(*self.zero_args)
 
-            drv.Context.synchronize()
             print "\n<<<\nupdat execute with args", self.kernel_args
+            drv.Context.synchronize()
+            print "before self.I", self.I.get()[:,0,5,5,63]
+            print "before self.E", self.E.get()[:,0,3,3,63]
+            print "before self.O", self.O.get()[:,0,2,2,7]
+            print ""
+
             kernel.prepared_async_call(*self.kernel_args)
             drv.Context.synchronize()
+            print "after self.I", self.I.get()[:,0,5,5,63]
+            print "after self.E", self.E.get()[:,0,3,3,63]
+            print "after self.O", self.O.get()[:,0,2,2,7]
+            print ""
+
             #import ipdb; ipdb.set_trace()
-            #print "after", self.O.get()[2,0,:,:,7],"\n>>>\n"
+
             if self.clss is not 'fconv':
                 self.output_trans.execute()
             else:
-                print "skipping output transform for flex"
+                print "TODO: skipping output transform for flex. What's the correct output transform?"
+
+            drv.Context.synchronize()
+            print "trans self.I", self.I.get()[:,0,5,5,63]
+            print "trans self.E", self.E.get()[:,0,3,3,63]
+            print "trans self.O", self.O.get()[:,0,2,2,7]
+
+            print "\n>>>\n"
+
         if unbind:
             self.output_trans.unbind()
             self.zero_args = None
