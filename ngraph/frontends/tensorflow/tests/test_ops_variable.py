@@ -29,7 +29,7 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         result = tf.add(a, b) * 3
 
         # test
@@ -46,7 +46,7 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         a_update = tf.assign(a, b)
 
         # test
@@ -65,7 +65,7 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         a_update = tf.assign_add(a, b)
 
         # test
