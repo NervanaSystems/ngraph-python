@@ -406,8 +406,6 @@ class XpropDirect(KernelGroup):
         magic_S = _magic32(RS  + 32,  S)
         magic_Q = _magic64(Q)  # added for flex fprop
         magic_PQ = _magic64(PQ)
-        #magic_W = _magic64(W)  # added for flex bprop
-        #magic_HW = _magic64(HW)
         magic_str_w = _magic32(Q + S, str_w)  # was W
         magic_str_h = _magic32(P + R, str_h)  # was H
         magic_str_d = _magic32(M + T, str_d)  # was D
@@ -437,34 +435,18 @@ class XpropDirect(KernelGroup):
             if op is "fprop":
                 self.kernel_args.extend(_flatten([
                     N, K, D, H, W, W * N, H * W * N, D * H * W * N,
-                    C, TRSK, TRS, RS,  # same up to here
+                    C, TRSK, TRS, RS,
                     magic_RS, S, magic_S,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w,
-                    Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ]))  # from flex kernels
-                    # 28 args here + 4 magic = 32
+                    Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ]))
             if op is "bprop":
-                # this assumes tile, grid size computation is still the same
-
-                # self.kernel_args.extend(_flatten([
-                #     N, C, M, P, Q, QN, PQN, MPQN,  # already different. wow!
-                #     K, CRST, RST, RS, magic_RS, S, magic_S,
-                #     pad_d, pad_h, pad_w, str_d, str_h, str_w,
-                #     W, HW, WN, HWN, DHWN, magic_W, magic_HW,
-                #     R, T, magic_str_w, magic_str_h, magic_str_d]))
-                #     # 33 args here + 7 magic = 40 (8 more than fprop.)
-
-                # KDHW for CMPQ swap:
-                # In old neon, pass in KDHW for fprop and CMPQ for bprop.
-                # This is because CMPQ is the effective KDHW, and takes the KDHW spots in the kernel args
-                # In nu-graph, the flip happens in the call invoking init, so pass in KDHW directly!
                 self.kernel_args.extend(_flatten([
-                    N, K, D, H, W, WN, HWN, DHWN,  # was C, M, P, Q, QN, PQN, MPQN,
+                    N, K, D, H, W, WN, HWN, DHWN,
                     C, KRST, RST, RS,
-                    magic_RS, S, magic_S,  # was K, CRST, RST, RS,
-                    pad_db, pad_hb, pad_wb, str_d, str_h, str_w,  # restored pad. strides probably always 1
-                    Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ,  # was W, HW, WN, HWN, DHWN, magic_W, magic_HW,
-                    R, T, magic_str_w, magic_str_h, magic_str_d]))  # str probably ok?
-                    # 33 args here + 7 magic = 40 (8 more than fprop.)
+                    magic_RS, S, magic_S,
+                    pad_db, pad_hb, pad_wb, str_d, str_h, str_w,
+                    Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ,
+                    R, T, magic_str_w, magic_str_h, magic_str_d]))
 
         self.shared = TRS * 4 * 2
         self.bsum   = BatchNormSum(self.lib, K, gridMPQNw)
@@ -637,39 +619,19 @@ class XpropDirect(KernelGroup):
 
     def execute(self, repeat=1, unbind=True):
 
-        # Handy way to print all the kernel args:
-        # if "bprop" in self.kernel_name:
-        #     for i,k in enumerate(self.kernel_args): print i, k
-
         import pycuda.driver as drv
         kernel = kernel_specs.get_kernel(self.kernel_name, self.kernel_options)
         for r in range(repeat):
-            print "\n<<<\nxprop execute with args", self.kernel_args
             drv.Context.synchronize()
-            print "trans self.F", self.F.get()[:,0,2,2,7]
-            print "trans self.I", self.I.get()[:,0,3,3,63]
-            print "trans self.O", self.O.get()[:,0,3,3,63]
-
-            print "performing filter_trans ", getattr(self.filter_trans, 'args', None),
-            print "changes shape from", self.F.shape,
             self.filter_trans.execute()
-            print "to", self.F.shape
 
             drv.Context.synchronize()
             print "--- HARD-CODING ERRORS FOR BPROP ---"
             #self.I.fill(1.0)  # for float
             self.I.fill(256)  # for flex
-            print "before self.F", self.F.get()[:,0,2,2,7]  #  f (3, 1, 3, 3, 8) b (3, 1, 3, 3, 8)
-            print "before self.I", self.I.get()[:,0,3,3,63]  # f (3, 1, 6, 6, 64) b (8, 1, 4, 4, 64)
-            print "before self.O", self.O.get()[:,0,3,3,63]  # f (8, 1, 4, 4, 64) b (3, 1, 6, 6, 64)
-            print ""
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
 
             drv.Context.synchronize()
-            print "after self.F", self.F.get()[:,0,2,2,7]
-            print "after self.I", self.I.get()[:,0,3,3,63]
-            print "after self.O", self.O.get()[:,0,3,3,63]
-            print  ">>>\n"  # at this point, int16 pycuda GPUArray
             self.bsum.execute()
 
         if unbind:
@@ -1137,6 +1099,11 @@ class UpdateDirect(KernelGroup):
 
 
     def execute(self, repeat=1, unbind=True):
+
+        # Handy way to print all the kernel args:
+        # if "bprop" in self.kernel_name:
+        #     for i,k in enumerate(self.kernel_args): print i, k
+
         import pycuda.driver as drv
         print "updat execute name", self.kernel_name
         print "updat execute opts", self.kernel_opts
