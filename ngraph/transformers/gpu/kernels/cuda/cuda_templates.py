@@ -288,6 +288,7 @@ _ew_types = {
     "i2": {
         "type": "short",
         "cvt": "(float)",
+        "cvt_out": "",
     },
     "u2": {
         "type": "unsigned short",

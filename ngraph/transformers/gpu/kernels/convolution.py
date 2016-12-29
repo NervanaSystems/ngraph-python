@@ -627,8 +627,10 @@ class XpropDirect(KernelGroup):
 
             drv.Context.synchronize()
             print "--- HARD-CODING ERRORS FOR", self.kernel_name,  " ---"
-            # self.I.fill(1.0)  # for float
-            self.I.fill(256)  # for flex
+            if self.I.dtype == np.float32:
+                self.I.fill(1.0)  # for float
+            else:
+                self.I.fill(256)  # for flex
             kernel.prepared_async_call(*self.kernel_args, shared_size=self.shared)
 
             drv.Context.synchronize()
@@ -1029,18 +1031,15 @@ class UpdateDirect(KernelGroup):
 
         self.lib.scratch_buffer_init()
 
+        output_data = self.output_trans.bind_params(O, alpha, beta, no_op)
+        if self.zero:
+            self.zero_args = ( output_data, 0, O.size, self.lib.stream )
+
         if self.clss is not 'fconv':
-            # Flex does not currently have deterministic kernels, hence no output transform
-            output_data = self.output_trans.bind_params(O, alpha, beta, no_op)
-
-            if self.zero:
-                self.zero_args = ( output_data, 0, O.size, self.lib.stream )
-
             self.kernel_args[2:6] = (self.lib.stream, output_data, I.gpudata, E.gpudata)
         else:
             print "flexpoint."
-            self.kernel_args[2:7] = (self.lib.stream, 0, O.gpudata, I.gpudata, E.gpudata)
-            # Just added these for debugging
+            self.kernel_args[2:7] = (self.lib.stream, 0, output_data, I.gpudata, E.gpudata)
 
         self.I = I  # TODO: Added these for debugging, to be removed again.
         self.E = E
@@ -1129,11 +1128,7 @@ class UpdateDirect(KernelGroup):
             print ""
 
             #import ipdb; ipdb.set_trace()
-
-            if self.clss is not 'fconv':
-                self.output_trans.execute()
-            else:
-                print "TODO: skipping output transform for flex. What's the correct output transform?"
+            self.output_trans.execute()
 
             drv.Context.synchronize()
             print "trans self.I", self.I.get()[:,0,5,5,63]
