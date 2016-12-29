@@ -23,21 +23,27 @@ def pytest_addoption(parser):
 @pytest.fixture(scope="module",
                 params=ngt.transformer_choices())
 def transformer_factory(request):
+    def set_and_get_factory(transformer_name):
+        factory = ngt.make_transformer_factory(transformer_name)
+        ngt.set_transformer_factory(factory)
+        return factory
+
+    transformer_name = request.param
+
     if pytest.config.getoption("--enable_flex"):
-        # Only yield flex if flex is available
-        if 'gpuflex' in ngt.transformer_choices():
-            factory = ngt.make_transformer_factory('gpuflex')
-            ngt.set_transformer_factory(factory)
-            yield factory
+        if transformer_name == 'gpuflex':
+            if 'gpuflex' in ngt.transformer_choices():
+                yield set_and_get_factory(transformer_name)
+            else:
+                raise ValueError("GPU not found, should not set --enable_flex"
+                                 "flag for py.test.")
         else:
-            raise ValueError("GPU not found, should not set --enable_flex"
-                             "flag for py.test.")
+            pytest.skip('Skip all other transformers since --enable_flex is set.')
     else:
-        # Skip flex if it's in request.param
-        if request.param != 'gpuflex':
-            factory = ngt.make_transformer_factory(request.param)
-            ngt.set_transformer_factory(factory)
-            yield factory
+        if transformer_name == 'gpuflex':
+            pytest.skip('Skip flex test since --enable_flex is not set.')
+        else:
+            yield set_and_get_factory(transformer_name)
 
     # Reset transformer factory to default
     ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))
