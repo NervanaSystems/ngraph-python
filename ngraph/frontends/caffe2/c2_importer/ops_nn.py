@@ -186,7 +186,8 @@ class OpsNN(OpsBase):
             raise ValueError("Multiple order values in convolution")
         order = order[0]
 
-        assert order in ("NHWC",)
+        if order not in ("NHWC", "NCHW")
+            raise NotImplementedError("Unsupported order in convolution: {}", order)
 
         # set input axes shape
         ax_N = ng.make_axis(batch=True)
@@ -255,7 +256,12 @@ class OpsNN(OpsBase):
             input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)HWC -> D(ofm)HWC
             input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=ax_dict['W']) # kernel: D(ofm)HWC -> CDHW(ofm)
         else:  # "NCHW"
-            raise NotImplementedError("NCHW is not supported in convolution")
+            input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
+            input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NCHW -> NDCHW
+            input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=ax_dict['X'])  # NDCHW -> CDHWN
+            input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes([ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]))
+            input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)CHW -> D(ofm)CHW
+            input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=ax_dict['W']) # kernel: D(ofm)CHW -> CDHW(ofm)
 
         # convolution
         output_dict = {'Y' : ng.convolution(params, input_dict['X'], input_dict['W'], axes=ax_dict['Y'])}
