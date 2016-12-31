@@ -2788,8 +2788,14 @@ class DotOp(TensorOp):
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
-        if len(self.x_out_axes.intersect(self.y_out_axes)):
-            raise ValueError("Intersection in out axes for dot.")
+        intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
+        if len(intersection_axes):
+            raise ValueError(("Both arguments to a DotOp contained {axes}. "
+                              "In order to dot two tensors with the same Axis together, one "
+                              "of the Axes must be a dual. See: "
+                              "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
+                              ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+
         axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
@@ -2880,7 +2886,7 @@ def dot(x, y, name=None):
     return DotOp(x, y, name=name)
 
 
-def squared_L2(x):
+def squared_L2(x, out_axes=None, reduction_axes=None):
     """
     Returns the dot of x and y, with the axes of x set to their dual offset.
 
@@ -2892,7 +2898,12 @@ def squared_L2(x):
         TensorOp: The result.
 
     """
-    return dot(dualed_axes(x, x.axes, -1, 0), x)
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
 class LowDimensionalDot(TensorOp):

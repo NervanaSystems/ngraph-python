@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import argparse
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
@@ -47,7 +48,7 @@ def train_mnist(args):
         cost = tf.reduce_mean(-tf.reduce_sum(
             t * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
         train_op = tf.train.GradientDescentOptimizer(args.lrate).minimize(cost)
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
 
         # saver
         saver = tf.train.Saver()
@@ -141,7 +142,7 @@ def tf_retrain_mnist(args):
     # load model
     with tf.Session() as sess:
         # restore model
-        saver.restore(sess, args.checkpoint_path)
+        saver.restore(sess, os.path.join(os.getcwd(), 'model.ckpt'))
 
         # get op handle
         x = tf.get_collection('x')[0]

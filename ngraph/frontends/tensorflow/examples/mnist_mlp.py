@@ -34,7 +34,7 @@ def mnist_mlp(args):
     y = tf.matmul(x, w) + b
     cost = tf.reduce_mean(-tf.reduce_sum(
         t * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
 
     # import graph_def
     importer = TFImporter()

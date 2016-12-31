@@ -299,7 +299,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.computations = OrderedSet()
-        self.all_results = OrderedSet()
         self.finalized = False
         self.allocated = False
         self.initialized = False
@@ -312,35 +311,27 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.graph_passes.append(graph_pass)
 
     def run_registered_graph_passes(self, ops):
+        inits = OrderedSet()
         for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops)
+            ops, inits = graph_pass.do_pass(ops, inits)
+        return ops, inits
 
     def _transform_computations(self):
         """
         Transform computation graphs to a form that can be run.
         """
 
-        # with Op.saved_user_deps():
         # Run passes on the computation graphs
-        for computation in self.computations:
-            self.all_results.add(computation.computation)
+        all_results = []
+        for comp in self.computations:
+            all_results.append(comp.computation)
 
-        self.run_registered_graph_passes(self.all_results)
+        all_ops, inits = self.run_registered_graph_passes(all_results)
+        self.init_computation = self.add_computation(computation(doall(inits)).named('init'))
+        all_ops.add(self.init_computation.computation)
 
         # Collect up all ops from the graph and obtain the init graph
-        all_ops = OrderedSet(Op.ordered_ops(self.all_results))
-        init_op = doall(self.ordered_initializers(all_ops))
-
-        # Run passes on the initialization graphs
-        self.run_registered_graph_passes([init_op])
-
-        # Union the init and computation graphs
-        self.inits = Op.ordered_ops([init_op])
-        all_ops.update(self.inits)
-
-        # create computation which initializes values (called once per session)
-        init_op.update_forwards()
-        self.init_computation = self.computation(init_op).named("init")
+        all_ops = OrderedSet(Op.ordered_ops(all_ops))
 
         self.ops = Op.ordered_ops(all_ops)
         for op in self.ops:
@@ -362,10 +353,10 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
-        for computation in self.computations:
-            computation.computation_name = \
-                self.transform_ordered_ops(Op.ordered_ops([computation.computation]),
-                                           name=computation.name)
+        for comp in self.computations:
+            comp.computation_name = \
+                self.transform_ordered_ops(Op.ordered_ops([comp.computation]),
+                                           name=comp.name)
         self.finish_transform()
         self.finalized = True
 
@@ -413,56 +404,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         tensor_description, = tensor_descriptions(op.args)
         value = op.valfun(tensor_description)
         tensor_description.value[()] = value
-
-    def ordered_initializers(self, ordered_ops):
-        """
-        TODO.
-
-        Arguments:
-          ordered_ops: TODO
-
-        Returns:
-
-        """
-        initializers = OrderedSet()
-        todo = OrderedSet(ordered_ops)
-        while todo:
-            these_ops = todo
-            todo = OrderedSet()
-            for op in these_ops:
-                op = op.forwarded
-                op.update_forwards()
-                initializers.update(op.initializers)
-                todo.update(op.initializers)
-
-        ordered_initializer_ops = []
-        visited = set()
-        inits = OrderedSet()
-
-        def visit(node):
-            node = node.forwarded
-            node.update_forwards()
-            if node not in visited:
-                if node.initializers:
-                    if node in inits:
-                        if node not in visited:
-                            ordered_initializer_ops.append(node)
-                            visited.add(node)
-                    else:
-                        inits.add(node)
-                        for n in node.initializers:
-                            visit(n)
-                else:
-                    for n in node.args:
-                        visit(n)
-                if node not in visited:
-                    ordered_initializer_ops.append(node)
-                    visited.add(node)
-
-        for node in initializers:
-            visit(node)
-
-        return ordered_initializer_ops
 
     @abc.abstractmethod
     def device_buffer_storage(self, bytes, dtype, name):
@@ -535,7 +476,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
             self.allocate_storage()
 
-            for op in OrderedSet(self.inits + self.ops):
+            for op in OrderedSet(self.ops):
                 self.initialize_constant(op)
 
         self.allocated = True
