@@ -24,7 +24,6 @@ import ngraph.transformers as ngt
 from ngraph.frontends.neon import ax, ar
 from ngraph.op_graph.axes import spatial_axis
 from ngraph.testing import RandomTensorGenerator, executor
-from ngraph.testing.flexutil import xfail_transformer_type
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -94,7 +93,6 @@ def test_wrong_op_name():
         "pooling currently supported. ".format(pooltype=pooltype)
 
 
-@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
 def test_pooling():
     """
     test pooling forward and backward path

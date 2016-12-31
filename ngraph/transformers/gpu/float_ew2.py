@@ -316,8 +316,10 @@ class FlexScaleDescription:
         self.flex_entry = flex_entry
         self.is_output = is_output
 
+
 def _are_flex_params(params):
     return any([isinstance(p, FlexScaleDescription) for p in params])
+
 
 def _is_buffer(value):
     """
@@ -685,7 +687,9 @@ def _build_register_mapping(stages):
                             buffers[inval] = buffername
 
                         from ngraph.transformers.gputransform import GPURegister
-                        if isinstance(inval, GPURegister) and not (op[0] == "argmax" or op[0] == "argmin"):
+                        #FIXME FLEX
+                        if isinstance(inval, GPURegister) and \
+                            not (op[0] == "argmax" or op[0] == "argmin"):
                             print "according to Stewart, this should not happen in current graph without fusing"
                             import ipdb; ipdb.set_trace()
 
@@ -849,8 +853,8 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         reg_decls = reg_decls + "\n    unsigned int temp_idx = 0;"
 
     if ctx.flex_stats_ptr is not None:
-       reg_decls = reg_decls + "\n    int flex_max = 0;"
-       reg_decls = reg_decls + "\n    short reg_out = 0;"
+        reg_decls = reg_decls + "\n    int flex_max = 0;"
+        reg_decls = reg_decls + "\n    short reg_out = 0;"
 
     smem_decls = ""
     smem_inits = ""
@@ -1051,7 +1055,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                                     ctx.register_types[reg_name])
                     if op[0] == 'argmax' or op[0] == 'argmin':  # FLEX TODO: others?
                         # there should not be a conversion performed, even though type_key is currently (flex, float)
-                        # FLEX TODO: fix this more systematically
+                        # FLEX FIXME: fix this more systematically
                         type_key = (float, float)
                     else:
                         scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
@@ -1309,7 +1313,9 @@ class CudaSourceFile:
         self.f.flush()
 
         if flex_verbose: print "CudaSourceFile temporary file", self.filename
-        self.flex_includes_written = False  # FLEX TODO hack - relying on _get_compound_kernel processing of params to know if we have a flex kernel
+        # FLEX TODO this is a hack:
+        # relying on _get_compound_kernel processing of params to know if we have a flex kernel
+        self.flex_includes_written = False
 
     def add_kernel(self, ops):
         assert not self.compiled

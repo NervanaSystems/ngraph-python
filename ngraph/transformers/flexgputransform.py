@@ -13,20 +13,19 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup, GPUDeviceTensor, GPUDeviceBufferStorage, ElementWiseKernel
-from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
+from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
+from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
+from ngraph.transformers.gputransform import ElementWiseKernel
+from ngraph.transformers.passes.flexpass import FlexPass
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 from autoflex.flexgpu import GPUFlexManager, GPUFlex, gpu_bind_flex_params
-import numpy as np
-
-flex_verbose = False
 
 
 # create and attach bind_flex_scales method to EW kernel (avoid editing gputransform)
 def _ew_bind_flex_scales(kernel):
     for index, flex_scale_desc in kernel.flex_scale_info:
         scale = flex_scale_desc.flex_entry.scale
-        scale = 1.0/scale if flex_scale_desc.is_output else scale
+        scale = 1.0 / scale if flex_scale_desc.is_output else scale
         kernel.params[index] = scale
 ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
 
@@ -46,14 +45,15 @@ class FlexGPUTransformer(GPUTransformer):
 
     # TODO haven't investigated how these should be set, start with small tol
     default_rtol = 1e-05
-    default_atol = 20*fixed_point_res
+    default_atol = 20 * fixed_point_res
 
     def __init__(self, **kwargs):
 
         super(FlexGPUTransformer, self).__init__(**kwargs)
 
         # flex passes for setting Op dtypes to flex
-        self.register_graph_pass(ClearTensorDescriptions())
+        # TODO: verify ClearTensorDescription pass not needed with core graph team
+        # self.register_graph_pass(ClearTensorDescriptions())
         self.register_graph_pass(FlexPass())
 
         # flex manager manages autoflex mechanics
@@ -77,7 +77,7 @@ class FlexGPUTransformer(GPUTransformer):
         return ret_val
 
     def storage_dtype(self, dtype):
-        if isinstance (dtype, GPUFlex):
+        if isinstance(dtype, GPUFlex):
             return dtype.storage_dtype
         else:
             raise NotImplementedError
@@ -88,8 +88,10 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
     Scale-aware device tensor class.
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
-        super(FlexGPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
-                                              **kwargs)
+        super(FlexGPUDeviceTensor, self).__init__(transformer,
+                                                  device_buffer,
+                                                  tensor_description,
+                                                  **kwargs)
 
         # create flex entry
         self.flex_entry = self.transformer.flex_manager.new_flex()
@@ -99,13 +101,11 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
         return self.flex_entry.scale
 
     def get(self, tensor):
-        #import ipdb; ipdb.set_trace()
         tensor = super(FlexGPUDeviceTensor, self).get(tensor)
         tensor = tensor * self.scale
         return tensor
 
     def __setitem__(self, key, value):
-        #import ipdb; ipdb.set_trace()
         value = value / self.scale
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
 
@@ -118,7 +118,7 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
         return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                               name="v_" + tensor_description.name + "_" + shape_str)
+                                   name="v_" + tensor_description.name + "_" + shape_str)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):
@@ -191,7 +191,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         # EW store index and description of flex scale params that need to be changed each call
         for kernel in self.kernels:
             if isinstance(kernel, ElementWiseKernel):
-                scale_info = [(i, p) for i, p in enumerate(kernel.params) if isinstance(p, FlexScaleDescription)]
+                scale_info = [(i, p) for i, p in enumerate(kernel.params)
+                              if isinstance(p, FlexScaleDescription)]
                 kernel.flex_scale_info = scale_info
 
     def setup_kernel_execute(self, kernel):
@@ -219,8 +220,13 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         super(FlexGPUKernelGroup, self).__call__()
 
         # autoflex after calling GPUKernelGroup that is executor for computation
-        if flex_verbose: print "calling autoflex, autoflexing flex_ids:", self.output_flex_ids
+        flex_manager = self.transformer.flex_manager
+        if flex_manager.fixed_point is False:
 
-        # autoflex sets up everything needed to adjust_scale before next use of these output tensors
-        # if try to do it right away, scale for this computation is nonsensical
-        self.transformer.flex_manager.autoflex(self.output_flex_ids)
+            # autoflex
+            # set up everything needed before next use of these output tensors
+
+            if flex_manager.verbose:
+                print "autoflexing flex_ids:", self.output_flex_ids
+
+            self.transformer.flex_manager.autoflex(self.output_flex_ids)

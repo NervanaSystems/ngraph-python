@@ -65,6 +65,7 @@ test:
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
+# TODO this will be solved by Yixing's test branch and conv integration
 testflex:
 	@echo Running flex unit tests...
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS_FLEX)

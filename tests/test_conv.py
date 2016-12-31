@@ -23,7 +23,6 @@ import ngraph as ng
 from ngraph.frontends.neon import ax, ar
 from ngraph.op_graph.axes import spatial_axis
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
-from ngraph.testing.flexutil import xfail_transformer_type
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -135,7 +134,6 @@ def test_wrong_number_of_batch_axes_at_input():
             sample_axes=inputs.axes.sample_axes())
 
 
-@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
 def test_convolution_backprop(transformer_factory):
     """
     test convolution backprop path
@@ -186,7 +184,6 @@ def test_convolution_backprop(transformer_factory):
     ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
-@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
 def test_convolution(transformer_factory):
     """
     test convolution forward path
@@ -268,7 +265,7 @@ def test_convolution(transformer_factory):
     # Compare update
     ng.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
 
-@xfail_transformer_type('flexgpu', reason='conv kernels not integrated for flex', run=False)
+
 def test_conv_flatten_deriv(transformer_factory):
     """
     Test deriv of conv followed by flatten

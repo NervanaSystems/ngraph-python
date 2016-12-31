@@ -808,7 +808,8 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
-        # FLEX TODO: added astype to deal with GPUArray dtype int16, assumed same behavior for all cases
+        # flex: added astype to deal with GPUArray dtype int16
+        # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
             sliced.fill(value.astype(sliced.dtype))
