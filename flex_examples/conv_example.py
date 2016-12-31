@@ -23,6 +23,7 @@ from ngraph.frontends.neon import ax, ar
 from ngraph.frontends.neon import NgraphArgparser
 
 
+# This is currently unused
 rng = RandomTensorGenerator(0, np.float32)
 
 
@@ -35,6 +36,46 @@ factory = ngt.make_transformer_factory(transformer_name)
 ngt.set_transformer_factory(factory)
 
 print("\n--------- conv example using ", transformer_name, "-----------\n")
+
+
+def get_dimvals(inputs, filters):
+    C, T, R, S, K = filters.shape
+    _, D, H, W, N = inputs.shape
+    P = H - R + 1
+    Q = W - S + 1
+    assert T == D == 1
+    return C, T, R, S, K, D, H, W, N, P, Q
+
+
+def np_fprop(inputs, filters):
+    # Convolve inputs with filters
+    C, T, R, S, K, D, H, W, N, P, Q = get_dimvals(inputs, filters)
+    result = np.zeros((K, 1, P, Q, N), dtype=np.float32)
+    for p, q in np.ndindex(P, Q):
+        data = inputs[:, 0, p:p+R, q:q+S].reshape((C*R*S, N))
+        result[:, 0, p, q] = np.dot(filters.reshape((C*R*S, K)).T, data)
+    return result
+
+
+def np_bprop(delta, filters, inputs):
+    # Propagate gradients backwards
+    C, T, R, S, K, D, H, W, N, P, Q = get_dimvals(inputs, filters)
+    result = np.zeros(inputs.shape, dtype=np.float32)
+    for p, q in np.ndindex(P, Q):
+        data = delta[:, 0, p, q].reshape((K, N))
+        result[:, 0:1, p:p+R, q:q+S] += np.dot(filters, data).reshape((C, 1, R, S, N))
+    return result
+
+
+def np_update(delta, filters, inputs):
+    # Compute gradient of weights
+    C, T, R, S, K, D, H, W, N, P, Q = get_dimvals(inputs, filters)
+    result = np.zeros(filters.shape, dtype=np.float32)
+    for p, q in np.ndindex(P, Q):
+        data = delta[:, 0, p, q].reshape((K, N))
+        result += np.dot(inputs[:, 0, p:p+R, q:q+S].reshape((C*R*S, N)), data.T).reshape(result.shape)
+    return result
+
 
 def test_conv():
     # This configuration has been tweaked to minimize overflow with 8.8 fixed point.
@@ -64,10 +105,11 @@ def test_conv():
     inputs = ng.placeholder(axes=ax_i)
     filters = ng.placeholder(axes=ax_f)
 
-    # randomly initialize
-    input_value = rng.uniform(-.1, .1, ax_i)
-    filter_value = rng.uniform(-.1, .1, ax_f)
+    input_value = np.empty(ng.make_axes(ax_i).lengths, dtype=np.float32)
+    filter_value = np.ones(ng.make_axes(ax_f).lengths, dtype=np.float32)
+    input_value[:] = 0.5
 
+    result_value = np_fprop(input_value, filter_value)
     assert input_value.shape == ax_i.lengths
     assert filter_value.shape == ax_f.lengths
 
@@ -77,21 +119,36 @@ def test_conv():
     output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
     targets = ng.placeholder(axes=output.axes)
 
-    costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
-    error = ng.sum(costs, reduction_axes=costs.axes) / ng.batch_size(costs)
+    diffs = output - targets
+    costs = diffs * diffs
+    error = ng.sum(costs, reduction_axes=costs.axes)
     d_inputs = ng.deriv(error, inputs)
     d_filters = ng.deriv(error, filters)
 
-    targets_value = rng.uniform(.1, 0.9, output.axes)
+    # This makes all cost elements 0.0025
+    targets_value = result_value - 0.05
 
     trafo = ngt.make_transformer()
-    conv_executor = trafo.computation([output, error, d_inputs, d_filters], inputs, filters, targets)
-    result_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
+    conv_executor = trafo.computation([output, costs, error, d_inputs, d_filters], inputs, filters, targets)
+    result_ng, costs_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
 
-    print ("conv result", result_ng[:,0,3,3,63])
-    print ("conv error", err_ng)
-    print ("conv gradI", gradI_ng[:,0,3,3,63])
-    print ("conv gradF", gradF_ng[2,0,:,:,7])
+    diffs_value = result_value - targets_value
+    costs_value = diffs_value * diffs_value
+    # The derivative of costs with respect to the output
+    delta_value = 2 * diffs_value
+    gradI = np_bprop(delta_value, filter_value, input_value)
+    gradF = np_update(delta_value, filter_value, input_value)
+    print ("   fprop result", result_ng[:,0,3,3,63])
+    print ("np fprop result", result_value[:,0,3,3,63])
+    print ("   costs", costs_ng[:,0,3,3,63])
+    print ("np costs", costs_value[:,0,3,3,63])
+    print ("   error", err_ng)
+    print ("np error", np.sum(costs_value))
+
+    print ("   gradI", gradI_ng[:,0,3,3,63])
+    print ("np gradI", gradI[:,0,3,3,63])
+    print ("   gradF", gradF_ng[2,0,:,:,7])
+    print ("np gradF", gradF[2,0,:,:,7])
 
     return trafo
 
