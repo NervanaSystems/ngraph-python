@@ -58,6 +58,12 @@ class OpsNN(OpsBase):
         result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op
 
+    def SquaredL2Distance(self, c2_op, inputs):
+        x, y = inputs
+
+        y = ng.cast_axes(y, x.axes)
+        return ng.squared_L2(x - y) / 2
+
     def MaxPool(self, c2_op, inputs):
         return self.Pool(c2_op, inputs)
 
