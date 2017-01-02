@@ -18,7 +18,7 @@ from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferSto
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.passes.flexpass import FlexPass
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
-from autoflex.flexgpu import GPUFlexManager, GPUFlex, gpu_bind_flex_params
+from autoflex.flexgpu import GPUFlexManager, GPUFlex
 
 
 # create and attach bind_flex_scales method to EW kernel (avoid editing gputransform)
@@ -57,7 +57,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.register_graph_pass(FlexPass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = GPUFlexManager(fixed_point=False, verbose=True)
+        self.flex_manager = GPUFlexManager(fixed_point=True, verbose=True)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -210,7 +210,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
         # TODO: move this inside manage_before_computation?
         # bind flex scale kernel parameters
-        gpu_bind_flex_params(kernel)
+        #gpu_bind_flex_params(kernel)
+        kernel.bind_flex_scales()
 
     def __call__(self):
         """
