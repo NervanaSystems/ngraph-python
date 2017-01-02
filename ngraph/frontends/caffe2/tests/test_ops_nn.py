@@ -65,7 +65,7 @@ def test_AveragedLoss():
 
     # Import caffe2 network into ngraph
     importer = C2Importer()
-    importer.parse_net_def(net.Proto(), verbose=True)
+    importer.parse_net_def(net.Proto(), verbose=False)
 
     # Get handle
     f_ng = importer.get_op_handle("loss")
