@@ -21,7 +21,8 @@ from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
 from autoflex.gpu import GPUFlexManager, GPUFlex
 
 
-# create and attach bind_flex_scales method to EW kernel (avoid editing gputransform)
+# create and attach bind_flex_scales method to EW kernel
+# done this way to avoid editing gputransform
 def _ew_bind_flex_scales(kernel):
     for index, flex_scale_desc in kernel.flex_scale_info:
         scale = flex_scale_desc.flex_entry.scale
@@ -202,12 +203,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         and new values are bound to kernel params
         """
 
-        # both kernel group and its component kernels have output_flex_ids
-        # iterate over output_flex_ids specific to kernel
-        for flex_id in kernel.output_flex_ids:
-            # adjust scale of previously touched tensors
-            flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
-            flex_entry.manage_before_computation(kernel)
+        # flex management
+        self.transformer.flex_manager.manage_before_computation(kernel)
 
         # bind flex scale kernel parameters
         kernel.bind_flex_scales()
@@ -219,10 +216,12 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
         super(FlexGPUKernelGroup, self).__call__()
 
+        # flex management
+        # set up everything needed before next use of modified flex tensors
         flex_manager = self.transformer.flex_manager
         if flex_manager.fixed_point is False:
-            # autoflex after executing computation
+
             if flex_manager.verbose:
-                print "autoflexing flex_ids:", self.output_flex_ids
-            # set up everything needed before next use of these output tensors
-            flex_manager.autoflex(self.output_flex_ids)  # TODO: rename to manage_after_computation?
+                print "managing flex_ids:", self.output_flex_ids
+
+            flex_manager.manage_after_computation(self.output_flex_ids)
