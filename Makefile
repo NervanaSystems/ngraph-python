@@ -40,7 +40,7 @@ ifndef VIRTUAL_ENV
    $(error You must activate the neon virtual environment before continuing)
 endif
 
-.PHONY: env default install uninstall clean test style lint lint3k check doc viz_install
+.PHONY: env default install uninstall clean test testflex style lint lint3k check doc viz_install
 
 default: install
 
@@ -60,16 +60,14 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-test:
+test: testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-# TODO this will be solved by Yixing's test branch and conv integration
 testflex:
 	@echo Running flex unit tests...
-	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS_FLEX)
-	@coverage xml -i
+	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
 
 style:
 	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
