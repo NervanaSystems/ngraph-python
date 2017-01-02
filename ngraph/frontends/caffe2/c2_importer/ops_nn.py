@@ -58,6 +58,19 @@ class OpsNN(OpsBase):
         result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op
 
+    def AveragedLoss(self, c2_op, inputs):
+        """
+        Computes average loss for the batch.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        return ng.mean(inputs[0], reduction_axes=inputs[0].axes.batch_axes())
+
     def MaxPool(self, c2_op, inputs):
         return self.Pool(c2_op, inputs)
 

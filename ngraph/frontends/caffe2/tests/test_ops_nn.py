@@ -52,6 +52,31 @@ def test_fc():
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
+def test_AveragedLoss():
+    workspace.ResetWorkspace()
+    shape = (32,)
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], "Y", shape=shape, values=np.random.uniform(-1, 1, shape))
+    X.AveragedLoss([], ["loss"])
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=True)
+
+    # Get handle
+    f_ng = importer.get_op_handle("loss")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    assert(np.allclose(f_result, workspace.FetchBlob("loss"), equal_nan=False))
+
+
 def test_maxpool():
     workspace.ResetWorkspace()
 
