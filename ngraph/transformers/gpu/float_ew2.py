@@ -17,7 +17,7 @@ import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.transformers.gpu.util import _get_sm_count
-from autoflex.flexgpu import GPUFlex, gpuflex16
+from autoflex.gpu import GPUFlex, gpuflex16
 
 from pycuda.compiler import SourceModule
 

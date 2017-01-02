@@ -18,7 +18,7 @@ from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferSto
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.passes.flexpass import FlexPass
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
-from autoflex.flexgpu import GPUFlexManager, GPUFlex
+from autoflex.gpu import GPUFlexManager, GPUFlex
 
 
 # create and attach bind_flex_scales method to EW kernel (avoid editing gputransform)
@@ -33,9 +33,9 @@ ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
 class FlexGPUTransformer(GPUTransformer):
     """
     Flex specific functions:
-    --creates flex manager
-    --uses flex subclass GPUDeviceBufferStorage, which uses flex GPUDeviceTensor
-    --uses flex subclass GPUKernelGroup
+     - creates flex manager
+     - uses flex subclass GPUDeviceBufferStorage, which uses flex GPUDeviceTensor
+     - uses flex subclass GPUKernelGroup
     """
 
     transformer_name = "gpuflex"
@@ -69,7 +69,8 @@ class FlexGPUTransformer(GPUTransformer):
 
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
 
-        # TODO: allocate dev and host stat buffers associated with this computation?
+        # TODO: this is a placeholder; notes below may be outdated, talk with graph team
+        # allocate dev and host stat buffers associated with this computation?
         # tensor descriptions have already been initialized so device tensors have been created
         # create relation between computation and organization of device_buffers?
         # self.flex_manager.dev_stats.append(drv.mem_alloc(num_flex_tensors*4))
@@ -85,7 +86,7 @@ class FlexGPUTransformer(GPUTransformer):
 
 class FlexGPUDeviceTensor(GPUDeviceTensor):
     """
-    Scale-aware device tensor class.
+    Flex scale-aware device tensor class.
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(FlexGPUDeviceTensor, self).__init__(transformer,
@@ -201,33 +202,27 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         and new values are bound to kernel params
         """
 
-        # both kernel group and component kernels have output_flex_ids
-        # iterative over output_flex_ids specific to this kernel
+        # both kernel group and its component kernels have output_flex_ids
+        # iterate over output_flex_ids specific to kernel
         for flex_id in kernel.output_flex_ids:
             # adjust scale of previously touched tensors
             flex_entry = self.transformer.flex_manager.flex_entries[flex_id]
             flex_entry.manage_before_computation(kernel)
 
-        # TODO: move this inside manage_before_computation?
         # bind flex scale kernel parameters
-        #gpu_bind_flex_params(kernel)
         kernel.bind_flex_scales()
 
     def __call__(self):
         """
-        Calls autoflex on touched tensors after KernelGroup call.
+        Calls autoflex on touched tensors after GPUKernelGroup call.
         """
 
         super(FlexGPUKernelGroup, self).__call__()
 
-        # autoflex after calling GPUKernelGroup that is executor for computation
         flex_manager = self.transformer.flex_manager
         if flex_manager.fixed_point is False:
-
-            # autoflex
-            # set up everything needed before next use of these output tensors
-
+            # autoflex after executing computation
             if flex_manager.verbose:
                 print "autoflexing flex_ids:", self.output_flex_ids
-
-            self.transformer.flex_manager.autoflex(self.output_flex_ids)
+            # set up everything needed before next use of these output tensors
+            flex_manager.autoflex(self.output_flex_ids)  # TODO: rename to manage_after_computation?
