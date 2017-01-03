@@ -20,8 +20,8 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator
-from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
+from ngraph.frontends.neon.layer import output_dim
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Pooling
@@ -121,13 +121,19 @@ def test_pooling():
     inputs = ng.placeholder(axes=ax_i)
 
     ax_o = ng.make_axes([
-        spatial_axis(ax_i, J, padding['pad_c'], strides['str_c'], role=ar.Channel),
-        spatial_axis(ax_i, T, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, R, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, S, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
 
+    ax_o[:-1].set_shape((
+        output_dim(C, J, padding['pad_c'], strides['str_c']),
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
     # randomly initialize
     input_value = rng.uniform(-1, 1, ax_i)
 

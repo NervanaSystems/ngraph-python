@@ -53,6 +53,7 @@ ax.Y.length = 10
 ######################
 # Model specification
 
+
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
         axes=x.axes.find_by_short_name('channel'),

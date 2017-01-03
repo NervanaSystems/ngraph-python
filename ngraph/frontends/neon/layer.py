@@ -15,9 +15,7 @@
 from __future__ import division, print_function
 from builtins import object
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar, ax
-import numpy as np
-from operator import itemgetter
+from ngraph.frontends.neon.axis import ar
 
 
 def output_dim(X, S, padding, strides, pooling=False):

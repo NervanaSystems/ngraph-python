@@ -30,8 +30,8 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, ar, loop_train, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import ArrayIterator
 
 from cifar10 import CIFAR10
@@ -52,6 +52,7 @@ ax.Y.length = 10
 
 ######################
 # Model specification
+
 
 def cifar_mean_subtract(x):
     # Assign roles

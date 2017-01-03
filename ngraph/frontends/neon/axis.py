@@ -46,7 +46,8 @@ ax.REC = ng.make_axis(roles=[ar.time], recurrent=True, docstring="recurrent axis
 ax.T = ng.make_axis(roles=[ar.features_0], docstring="filter depth")
 ax.R = ng.make_axis(roles=[ar.features_1], docstring="filter height")
 ax.S = ng.make_axis(roles=[ar.features_2], docstring="filter width")
-ax.J = ng.make_axis(roles=[ar.features_input], docstring="filter channel size (for crossmap pooling)")
+ax.J = ng.make_axis(roles=[ar.features_input],
+                    docstring="filter channel size (for crossmap pooling)")
 ax.K = ng.make_axis(roles=[ar.features_output], docstring="number of output feature maps")
 
 ax.Y = ng.make_axis(docstring="target")

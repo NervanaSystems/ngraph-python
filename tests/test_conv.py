@@ -19,8 +19,8 @@ import pytest
 import ngraph as ng
 from ngraph.util.utils import executor
 from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ax, ar
+from ngraph.frontends.neon.layer import output_dim
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Convolution
@@ -35,6 +35,7 @@ class DummyDeltaBuffers(object):
     """
     Dummy class for delta buffers needed by neon
     """
+
     def __init__(self):
         self.buffers = [None]
 
@@ -155,17 +156,22 @@ def test_convolution_backprop(transformer_factory):
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
     ax_o = ng.make_axes([
-        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
-        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
 
+    ax_o[:-1].set_shape((
+        K,
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
+
     inputs = ng.placeholder(axes=ax_i)
-    inputs.input = True
     filters = ng.placeholder(axes=ax_f)
-    filters.input = True
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, ax_i)
@@ -204,13 +210,21 @@ def test_convolution(transformer_factory):
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
+
     ax_o = ng.make_axes([
-        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
-        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
+
+    ax_o[:-1].set_shape((
+        K,
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
 
     inputs = ng.placeholder(axes=ax_i)
     filters = ng.placeholder(axes=ax_f)
@@ -282,7 +296,13 @@ def test_conv_flatten_deriv(transformer_factory):
     # i, f, o axes
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_o = ng.make_axes([ax.K, ax.M, ax.P, ax.Q, ax.N])
+    ax_o = ng.make_axes([
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
+        ax.N
+    ])
 
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
@@ -290,6 +310,7 @@ def test_conv_flatten_deriv(transformer_factory):
     axes_rsck = ng.make_axes([ax.R, ax.S, ax.C, ax.K])
     axes_rsck_prime = ng.make_axes([ng.make_axis(axis.length).named(axis.name + 'p')
                                     for axis in axes_rsck])
+    axes_nmpqk = ng.make_axes([ax_o[-1], ax_o[1], ax_o[2], ax_o[3], ax_o[0]])
 
     # broadcast input / filter axes
     input_var = ng.variable(ax_i).named('input')
@@ -304,8 +325,7 @@ def test_conv_flatten_deriv(transformer_factory):
 
     # convolution
     output_kmpqn = ng.convolution(params, input_var, filter_ctrsk, axes=ax_o)
-    output_nmpqk = ng.axes_with_order(output_kmpqn,
-                                      axes=ng.make_axes([ax.N, ax.M, ax.P, ax.Q, ax.K]))
+    output_nmpqk = ng.axes_with_order(output_kmpqn, axes=axes_nmpqk)
 
     # slice away the oD
     out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]

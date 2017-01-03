@@ -22,8 +22,8 @@ the same sequence in reverse order.
 import ngraph as ng
 from ngraph.frontends.neon import Preprocess, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, ar, loop_train, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 

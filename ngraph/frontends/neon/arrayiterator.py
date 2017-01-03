@@ -103,9 +103,9 @@ class ArrayIterator(object):
 
             if self.batch_size > bsz:
                 batch_bufs = {k: np.concatenate([src[oslice1], src[:self.batch_size - bsz]])
-                              for k, src in self.data_arrays.viewitems()}
+                              for k, src in self.data_arrays.items()}
             else:
-                batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.viewitems()}
+                batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.items()}
 
             yield batch_bufs
 
@@ -132,7 +132,7 @@ class SequentialArrayIterator(object):
         self.ndata = len(self.data_arrays[self.data_arrays.keys()[0]])
         self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
         self.ntokens = self.ndata * self.time_steps
-        self.nbatches = self.ndata / self.batch_size
+        self.nbatches = self.ndata // self.batch_size
 
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
@@ -140,10 +140,10 @@ class SequentialArrayIterator(object):
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
         self.data_arrays = {k: x[:self.ntokens].reshape(
-                                self.batch_size,
-                                self.nbatches,
-                                self.time_steps
-                            ) for k, x in self.data_arrays.viewitems()}
+            self.batch_size,
+            self.nbatches,
+            self.time_steps
+        ) for k, x in self.data_arrays.viewitems()}
 
         if self.reverse_target:
             self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
