@@ -50,3 +50,102 @@ def test_fc():
 
     # compare Caffe2 and ngraph results
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+
+
+def test_SquaredL2Distance():
+    workspace.ResetWorkspace()
+    shape = (10, 10)
+
+    net = core.Net("net")
+    Y = net.GivenTensorFill([], "Y", shape=shape, values=np.random.uniform(-1, 1, shape))
+    T = net.GivenTensorFill([], "T", shape=shape, values=np.random.uniform(-1, 1, shape))
+    net.SquaredL2Distance([Y, T], "dist")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("dist")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    assert(np.allclose(f_result, workspace.FetchBlob("dist"), equal_nan=False))
+
+
+def test_maxpool():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [[shape], kernel, stride] #TODO: add padding
+    param_list = [[[1, 3, 10, 10], 2, 2],
+                  [[2, 3, 5, 5], 1, 1],
+                  [[2, 2, 7, 7], 3, 2],
+                  [[8, 5, 8, 8], 4, 4]]
+
+    for param_iter in param_list:
+        shape, kernel, stride = param_iter
+        data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
+        net = core.Net("net")
+        X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+        net.MaxPool(X, 'Y', kernel=kernel, stride=stride)
+
+        # Execute via Caffe2
+        workspace.RunNetOnce(net)
+
+        # Import caffe2 network into ngraph
+        importer = C2Importer()
+        importer.parse_net_def(net.Proto(), verbose=False)
+
+        # Get handle
+        f_ng = importer.get_op_handle("Y")
+
+        # Execute
+        ex = ExecutorFactory()
+        f_result = ex.executor(f_ng)()
+
+        # compare Caffe2 and ngraph results
+        assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+
+
+def test_avgpool():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [[shape], kernel, stride] #TODO: add padding
+    param_list = [[[1, 3, 10, 10], 2, 2],
+                  [[2, 3, 5, 5], 1, 1],
+                  [[2, 2, 7, 7], 3, 2],
+                  [[8, 5, 8, 8], 4, 4]]
+
+    for param_iter in param_list:
+        shape, kernel, stride = param_iter
+        data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
+        net = core.Net("net")
+        X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+        net.AveragePool(X, 'Y', kernel=kernel, stride=stride)
+
+        # Execute via Caffe2
+        workspace.RunNetOnce(net)
+
+        # Import caffe2 network into ngraph
+        importer = C2Importer()
+        importer.parse_net_def(net.Proto(), verbose=False)
+
+        # Get handle
+        f_ng = importer.get_op_handle("Y")
+
+        # Execute
+        ex = ExecutorFactory()
+        f_result = ex.executor(f_ng)()
+
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"),
+                           atol=1e-4, rtol=1e-3, equal_nan=False))

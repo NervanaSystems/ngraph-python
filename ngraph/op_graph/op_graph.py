@@ -14,6 +14,7 @@
 from __future__ import division
 
 from contextlib import contextmanager
+import collections
 
 import inspect
 import cachetools
@@ -163,14 +164,17 @@ class Op(NameableValue, DebugInfo):
     """
 
     # Default is to not collect Ops as they are created
-    get_thread_state().ops = [None]
-
     @staticmethod
     def _get_thread_ops():
         """
         :return: The stack of Ops being collected.
         """
-        return get_thread_state().ops
+        try:
+            ops = get_thread_state().ops
+        except AttributeError:
+            ops = [None]
+            get_thread_state().ops = ops
+        return ops
 
     @staticmethod
     @contextmanager
@@ -186,10 +190,17 @@ class Op(NameableValue, DebugInfo):
         finally:
             Op._get_thread_ops().pop()
 
+    @staticmethod
+    def get_all_ops():
+        try:
+            all_ops = get_thread_state().all_ops
+        except AttributeError:
+            all_ops = [None]
+            get_thread_state().all_ops = all_ops
+        return all_ops
+
     # We need to create another stack here because all_ops and captured_ops
     # have different semantics that don't work with a shared stack
-    get_thread_state().all_ops = [None]
-
     @staticmethod
     @contextmanager
     def all_ops():
@@ -199,7 +210,7 @@ class Op(NameableValue, DebugInfo):
         """
         ops = []
         try:
-            all_ops = get_thread_state().all_ops
+            all_ops = Op.get_all_ops()
             all_ops.append(ops)
             yield (ops)
         finally:
@@ -209,11 +220,14 @@ class Op(NameableValue, DebugInfo):
                 parent.extend(ops)
 
     # The thread's global user_deps map
-    get_thread_state().user_deps = [dict()]
-
     @staticmethod
     def _get_thread_user_deps():
-        return get_thread_state().user_deps
+        try:
+            user_deps = get_thread_state().user_deps
+        except AttributeError:
+            user_deps = [dict()]
+            get_thread_state().user_deps = user_deps
+        return user_deps
 
     @staticmethod
     @contextmanager
@@ -277,9 +291,7 @@ class Op(NameableValue, DebugInfo):
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
-        for arg in self.args:
-            for dep in arg.user_deps:
-                self.add_other_dep(dep)
+        self.require_user_deps(self.args)
         self.schemas = []
         self.const = const
         self.is_constant = constant
@@ -295,13 +307,18 @@ class Op(NameableValue, DebugInfo):
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
-        all_ops = get_thread_state().all_ops[-1]
+        all_ops = Op.get_all_ops()[-1]
         if all_ops is not None:
             all_ops.append(self)
 
         self.style = {}
         self.ops = []
         self.__forward = None
+
+    def require_user_deps(self, args):
+        for arg in args:
+            for dep in arg.user_deps:
+                self.add_other_dep(dep)
 
     @property
     def args(self):
@@ -802,18 +819,12 @@ class SetItemOp(Op):
         tensor.user_deps = OrderedSet([self])
 
 
-class doall(Op):
+class ControlBlockOp(Op):
     """
-    Compute every Op in all.
-
-    Arguments:
-        all: Ops to be computed.
-        **kwargs: Args for related classes.
+    An Op that affects execution sequencing.
     """
-
-    def __init__(self, all, **kwargs):
-        super(doall, self).__init__(args=(), **kwargs)
-        self.other_deps = OrderedSet(all)
+    def __init__(self, **kwargs):
+        super(ControlBlockOp, self).__init__(**kwargs)
 
     @property
     def is_device_op(self):
@@ -823,6 +834,101 @@ class doall(Op):
             False, because this is handled by the transformer.
         """
         return False
+
+
+class ParallelOp(ControlBlockOp):
+    """
+    Compute every Op in all in any order.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
+    def __init__(self, all, **kwargs):
+        super(ParallelOp, self).__init__(**kwargs)
+        self.other_deps.update(all)
+        self.require_user_deps(all)
+
+
+def doall(all):
+    return ParallelOp(all)
+
+
+class ComputationOp(ParallelOp):
+    """
+    Represents a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Parameters:
+        returns: Ops returned.
+        parameters: Parameter ops.
+    """
+    def __init__(self, returns, *args, **kwargs):
+        for arg in args:
+            if not isinstance(arg, Op) or not arg.input:
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
+        if isinstance(returns, collections.Container):
+            all = returns
+        elif isinstance(returns, Op):
+            all = [returns]
+        elif returns is not None:
+            raise ValueError()
+        else:
+            all = []
+
+        super(ComputationOp, self).__init__(all=all, **kwargs)
+        self.returns = returns
+        self.parameters = args
+        for arg in args:
+            self.add_other_dep(arg)
+
+
+def computation(returns, *args):
+    """
+    Defines a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Returns:
+        A computation op.
+    """
+
+    return ComputationOp(returns, *args)
+
+
+class SequentialOp(ControlBlockOp):
+    """
+    Compute every Op in all in sequential order.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
+    def __init__(self, all, **kwargs):
+        super(SequentialOp, self).__init__(**kwargs)
+        self.require_user_deps(all)
+        tails = all[1:]
+        tails.append(self)
+        for last_op, op in zip(all, all[1:]):
+            op.add_other_dep(last_op)
+
+
+def sequential(all):
+    return SequentialOp(all)
 
 
 class Fill(Op):
@@ -1269,25 +1375,6 @@ def expand_dims(x, axis, dim):
     if axis in x.axes:
         return x
     return ExpandDims(x, axis, dim)
-
-
-class ResultHandle(ReshapeOp):
-    def __init__(self, x, **kwargs):
-        super(ResultHandle, self).__init__(
-            x, **kwargs
-        )
-
-    @property
-    def device_op(self):
-        return self
-
-    @tdcache()
-    def tensor_description(self):
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(td.axes, self.name)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(delta)
 
 
 class BroadcastOp(ReshapeOp):
@@ -2701,8 +2788,14 @@ class DotOp(TensorOp):
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
-        if len(self.x_out_axes.intersect(self.y_out_axes)):
-            raise ValueError("Intersection in out axes for dot.")
+        intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
+        if len(intersection_axes):
+            raise ValueError(("Both arguments to a DotOp contained {axes}. "
+                              "In order to dot two tensors with the same Axis together, one "
+                              "of the Axes must be a dual. See: "
+                              "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
+                              ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+
         axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
@@ -2793,7 +2886,7 @@ def dot(x, y, name=None):
     return DotOp(x, y, name=name)
 
 
-def squared_L2(x):
+def squared_L2(x, out_axes=None, reduction_axes=None):
     """
     Returns the dot of x and y, with the axes of x set to their dual offset.
 
@@ -2805,7 +2898,12 @@ def squared_L2(x):
         TensorOp: The result.
 
     """
-    return dot(dualed_axes(x, x.axes, -1, 0), x)
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
 class LowDimensionalDot(TensorOp):
@@ -3354,15 +3452,6 @@ class Function(Op):
     def inputs(self):
         """TODO."""
         return self.use
-
-
-class Buffer(object):
-    """TODO."""
-
-    def __init__(self, size):
-        self.size = size
-        self.data = None
-        self.views = OrderedSet()
 
 
 def mean(x, reduction_axes=None, out_axes=None):
