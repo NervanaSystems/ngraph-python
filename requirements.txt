@@ -1,23 +1,22 @@
 # tensorflow & protobuf
-https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0rc0-cp27-none-linux_x86_64.whl; sys_platform == 'linux2' and python_version <= '2.7'
-https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0rc0-cp34-cp34m-linux_x86_64.whl; sys_platform == 'linux' and python_version == '3.4'
-https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0rc0-cp35-cp35m-linux_x86_64.whl; sys_platform == 'linux' and python_version == '3.5'
-https://storage.googleapis.com/tensorflow/mac/cpu/tensorflow-0.11.0rc0-py2-none-any.whl; sys_platform == 'darwin' and python_version <= '2.7'
-https://storage.googleapis.com/tensorflow/mac/cpu/tensorflow-0.11.0rc0-py3-none-any.whl; sys_platform == 'darwin' and python_version >='3.4,<=3.5'
+tensorflow==0.12.0
 # scipy (temporary add)
-scipy
+scipy==0.18.1
 # autopep8 (temporary add)
 autopep8==1.2.4
 # other requirements
 tqdm==4.8.4
 enum34==1.1.6
-cachetools
-decorator
-requests
+future==0.15.2
+configargparse==0.11.0
+h5py==2.6.0
+cachetools==2.0.0
+decorator==4.0.10
+requests==2.12.4
 # aeon (for examples using aeon only without neon)
 #-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon
 # notebooks
-jupyter
-nbconvert
-nbformat
+jupyter==1.0.0
+nbconvert==5.0.0
+nbformat==4.2.0
 setuptools>=18.5

@@ -131,7 +131,7 @@ def def_target_feed_dict():
     fc2_weights = tf.Variable(
         0.1 * np.random.randn(512, num_labels).astype(np.float32))
     fc2_biases = tf.Variable(np.zeros((num_labels)).astype(np.float32))
-    init_op = tf.initialize_all_variables()
+    init_op = tf.global_variables_initializer()
 
     # network
     conv = tf.nn.conv2d(

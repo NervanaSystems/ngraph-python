@@ -39,7 +39,7 @@ ifndef VIRTUAL_ENV
    $(error You must activate the neon virtual environment before continuing)
 endif
 
-.PHONY: env default install uninstall clean test style lint lint3k check doc
+.PHONY: env default install uninstall clean test style lint lint3k check doc viz_install
 
 default: install
 
@@ -120,3 +120,13 @@ release: check
 	@vi ChangeLog
 	@echo "TODO (manual steps): release on github and update docs with 'make publish_doc'"
 	@echo
+
+UNAME=$(shell uname)
+viz_install:
+ifeq ("$(UNAME)", "Darwin")
+	@brew install graphviz
+else ifeq ("$(UNAME)", "Linux")
+	@apt-get install graphviz
+endif
+
+	@pip install -r viz_requirements.txt

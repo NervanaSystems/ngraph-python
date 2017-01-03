@@ -50,8 +50,8 @@ neon/backends/kernels/dump
 
 # tensorflow
 *.pb
-*.ckpt
-*.ckpt.meta
+*.ckpt*
+*.ckpt.meta*
 checkpoint
 
 # test
