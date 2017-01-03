@@ -180,13 +180,12 @@ class OpsNN(OpsBase):
         input_dict = dict()
         input_dict['X'], input_dict['W'], input_dict['B'] = inputs
 
-        # TODO: currently NHWC only
         order = [val.s for val in c2_op.arg._values if val.name == "order"]
         if 1 != len(order):
             raise ValueError("Multiple order values in convolution")
         order = order[0]
 
-        if order not in ("NHWC", "NCHW")
+        if order not in ("NHWC", "NCHW"):
             raise NotImplementedError("Unsupported order in convolution: {}", order)
 
         # set input axes shape
@@ -202,8 +201,13 @@ class OpsNN(OpsBase):
         ax_kernel_W = ng.make_axis(roles=[ar.Width])
         ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
 
-        ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(input_dict['X'].axes.lengths)
-        ng.make_axes([ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]).set_shape(input_dict['W'].axes.lengths)
+        axes_order = {
+            'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W], 'W': [ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]},
+            'NHWC': {'X': [ax_N, ax_H, ax_W, ax_C], 'W': [ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]},
+        }
+
+        ng.make_axes(axes_order[order]['X']).set_shape(input_dict['X'].axes.lengths)
+        ng.make_axes(axes_order[order]['W']).set_shape(input_dict['W'].axes.lengths)
         ax_D.length = ax_kernel_D.length = 1 #TODO: why assign 1?
 
         # strides params
@@ -234,47 +238,46 @@ class OpsNN(OpsBase):
                       str_d=1, str_h=str_h, str_w=str_w)
 
         # input, weight, output axes
-        ax_dict = {
+        internal_ax_dict = {
             'X': ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N]),
             'W': ng.make_axes([ax_C, ax_kernel_D, ax_kernel_H, ax_kernel_W, ax_kernel_ofm])
         }
 
-        ax_dict['Y'] = ng.make_axes([
+        internal_ax_dict['Y'] = ng.make_axes([
             ng.make_axis(ax_kernel_ofm.length, name='C', roles=[ar.Channel]),
-            spatial_axis(ax_dict['X'], ax_dict['W'], params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(ax_dict['X'], ax_dict['W'], params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(ax_dict['X'], ax_dict['W'], params['pad_w'], params['str_w'], ar.Width),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_d'], params['str_d'], ar.Depth),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_h'], params['str_h'], ar.Height),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_w'], params['str_w'], ar.Width),
             ax_N
         ])
 
         # broadcast input / filter axes
-        if "NHWC" == order:
-            input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
-            input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NHWC -> NDHWC
-            input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=ax_dict['X'])  # NDHWC -> CDHWN
-            input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes([ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]))
-            input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)HWC -> D(ofm)HWC
-            input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=ax_dict['W']) # kernel: D(ofm)HWC -> CDHW(ofm)
-        else:  # "NCHW"
-            input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
-            input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NCHW -> NDCHW
-            input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=ax_dict['X'])  # NDCHW -> CDHWN
-            input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes([ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]))
-            input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)CHW -> D(ofm)CHW
-            input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=ax_dict['W']) # kernel: D(ofm)CHW -> CDHW(ofm)
+        # if "NHWC" == order:
+        input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes(axes_order[order]['X']))
+        input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NHWC -> NDHWC
+        input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=internal_ax_dict['X'])  # NDHWC -> CDHWN
+        input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes(axes_order[order]['W']))
+        input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)HWC -> D(ofm)HWC
+        input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=internal_ax_dict['W']) # kernel: D(ofm)HWC -> CDHW(ofm)
+        # else:  # "NCHW"
+        #     input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
+        #     input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NCHW -> NDCHW
+        #     input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=internal_ax_dict['X'])  # NDCHW -> CDHWN
+        #     input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes([ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]))
+        #     input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)CHW -> D(ofm)CHW
+        #     input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=internal_ax_dict['W']) # kernel: D(ofm)CHW -> CDHW(ofm)
 
         # convolution
-        output_dict = {'Y' : ng.convolution(params, input_dict['X'], input_dict['W'], axes=ax_dict['Y'])}
+        output = ng.convolution(params, input_dict['X'], input_dict['W'], axes=internal_ax_dict['Y'])
 
         # cast back to proper format
-        oC, oD, oH, oW, oN = output_dict['Y'].axes
-        if "NHWC" == order:
-            output_dict['Y'] = ng.broadcast(output_dict['Y'], ng.make_axes([oN, oD, oH, oW, oC]))
-        else:  # "NCHW"
-            output_dict['Y'] = ng.broadcast(output_dict['Y'], ng.make_axes([oN, oD, oC, oH, oW]))
+        oC, oD, oH, oW, oN = output.axes
+
+        output = ng.broadcast(output, ng.make_axes([oN, oD, oH, oW, oC])) if "NHWC" == order \
+            else ng.broadcast(output, ng.make_axes([oN, oD, oC, oH, oW]))  # NCHW
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output_dict['Y'] = ng.tensor_slice(output_dict['Y'], out_slicing)
+        output = ng.tensor_slice(output, out_slicing)
 
-        return output_dict['Y']
+        return output
