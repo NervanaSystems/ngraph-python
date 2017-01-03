@@ -77,6 +77,37 @@ def test_AveragedLoss():
     assert(np.allclose(f_result, workspace.FetchBlob("loss"), equal_nan=False))
 
 
+def test_LabelCrossEntropy():
+    workspace.ResetWorkspace()
+    batch = 8
+    classes = 16
+    y_shape = (batch, classes)
+    t_shape = (batch, )
+    y_values = np.random.uniform(0, 1, y_shape)
+    t_values = np.random.randint(0, classes, t_shape)
+
+    net = core.Net("net")
+    Y = net.GivenTensorFill([], "Y", shape=y_shape, values=y_values)
+    T = net.GivenTensorIntFill([], "T", shape=t_shape, values=t_values)
+    net.LabelCrossEntropy([Y, T], "xent")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=True)
+
+    # Get handle
+    f_ng = importer.get_op_handle("xent")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    assert(np.allclose(f_result, workspace.FetchBlob("xent"), equal_nan=False))
+
+
 def test_maxpool():
     workspace.ResetWorkspace()
 

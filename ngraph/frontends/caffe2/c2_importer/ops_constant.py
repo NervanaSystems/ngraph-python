@@ -194,3 +194,30 @@ class OpsConstant(OpsBase):
         ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
 
         return ng_op
+
+    def GivenTensorIntFill(self, c2_op, inputs):
+        """
+        Creates a constant tensor with int values provided.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            value, shape, name
+        """
+        # parse arguments
+        args = {arg.name: arg for arg in c2_op.arg}
+        # convert to numpy value
+        values = [v for v in args["values"].ints]
+        shape = [s for s in args["shape"].ints]
+        np_init = np.array(values)
+        np_val = np.ndarray(shape)
+        np_val[:] = np_init.reshape(shape)[:]
+
+        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
+
+        return ng_op

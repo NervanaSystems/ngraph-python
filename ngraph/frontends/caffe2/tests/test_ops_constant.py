@@ -189,3 +189,31 @@ def test_giventensorfill():
     # compare Caffe2 and ngraph results
     assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
     assert(np.ma.allclose(f_result, data1, atol=1e-6, rtol=0))
+
+
+def test_giventensorintfill():
+    workspace.ResetWorkspace()
+
+    shape = [10, 10]
+    data1 = np.random.random_integers(-100, 100, shape)
+
+    net = core.Net("net")
+    net.GivenTensorIntFill([], ["Y"], shape=shape, values=data1, name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+    assert(np.ma.allequal(f_result, data1))
