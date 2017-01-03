@@ -169,16 +169,12 @@ class OpsNN(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to tf_node:
-            input, filter
+        Inputs to c2_op:
+            input, wegiths, filter
 
-        TODO: assume default caffe2 layout NHWC, RSCK,
-              need to support NCHW as well
+        Supports caffe2's layout NHWC and NCHW as well.
         """
-        # I will use dictionary because this code must be python 2.x and 3.x compatible.
-        # Python 2.x doesn't support 'nonlocal' statement.
-        input_dict = dict()
-        input_dict['X'], input_dict['W'], input_dict['B'] = inputs
+        X, W, bias = inputs
 
         order = [val.s for val in c2_op.arg._values if val.name == "order"]
         if 1 != len(order):
@@ -206,9 +202,9 @@ class OpsNN(OpsBase):
             'NHWC': {'X': [ax_N, ax_H, ax_W, ax_C], 'W': [ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]},
         }
 
-        ng.make_axes(axes_order[order]['X']).set_shape(input_dict['X'].axes.lengths)
-        ng.make_axes(axes_order[order]['W']).set_shape(input_dict['W'].axes.lengths)
-        ax_D.length = ax_kernel_D.length = 1 #TODO: why assign 1?
+        ng.make_axes(axes_order[order]['X']).set_shape(X.axes.lengths)
+        ng.make_axes(axes_order[order]['W']).set_shape(W.axes.lengths)
+        ax_D.length = ax_kernel_D.length = 1
 
         # strides params
         stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
@@ -252,23 +248,23 @@ class OpsNN(OpsBase):
         ])
 
         # broadcast input / filter axes
-        # if "NHWC" == order:
-        input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes(axes_order[order]['X']))
-        input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NHWC -> NDHWC
-        input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=internal_ax_dict['X'])  # NDHWC -> CDHWN
-        input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes(axes_order[order]['W']))
-        input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)HWC -> D(ofm)HWC
-        input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=internal_ax_dict['W']) # kernel: D(ofm)HWC -> CDHW(ofm)
-        # else:  # "NCHW"
-        #     input_dict['X'] = ng.cast_axes(input_dict['X'], ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
-        #     input_dict['X'] = ng.expand_dims(input_dict['X'], ax_D, 1)  # NCHW -> NDCHW
-        #     input_dict['X'] = ng.axes_with_order(input_dict['X'], axes=internal_ax_dict['X'])  # NDCHW -> CDHWN
-        #     input_dict['W'] = ng.cast_axes(input_dict['W'], ng.make_axes([ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]))
-        #     input_dict['W'] = ng.expand_dims(input_dict['W'], ax_kernel_D, 0) # kernel: (ofm)CHW -> D(ofm)CHW
-        #     input_dict['W'] = ng.axes_with_order(input_dict['W'], axes=internal_ax_dict['W']) # kernel: D(ofm)CHW -> CDHW(ofm)
+        # flow for NHWC order:                   |  flow for NCHW order:
+        # input:                                 |  input:
+        #   expand dims: NHWC -> NDHWC           |    expand dims: NCHW -> NDCHW
+        #   reorder:     NDHWC -> CDHWN          |    reorder:     NDCHW -> CDHWN
+        # weights:                               |  weights:
+        #   expand dims: (ofm)HWC -> D(ofm)HWC   |    expand dims: (ofm)CHWC -> D(ofm)CHW
+        #   reorder:     D(ofm)HWC -> CDHW(ofm)  |    reorder:     D(ofm)CHW -> CDHW(ofm)
+
+        X = ng.cast_axes(X, ng.make_axes(axes_order[order]['X']))
+        X = ng.expand_dims(X, ax_D, 1)
+        X = ng.axes_with_order(X, axes=internal_ax_dict['X'])
+        W = ng.cast_axes(W, ng.make_axes(axes_order[order]['W']))
+        W = ng.expand_dims(W, ax_kernel_D, 0)
+        W = ng.axes_with_order(W, axes=internal_ax_dict['W'])
 
         # convolution
-        output = ng.convolution(params, input_dict['X'], input_dict['W'], axes=internal_ax_dict['Y'])
+        output = ng.convolution(params, X, W, axes=internal_ax_dict['Y'])
 
         # cast back to proper format
         oC, oD, oH, oW, oN = output.axes

@@ -108,7 +108,7 @@ def test_avgpool():
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
-def test_convolution_nhwc_no_pad():
+def test_convolution_nhwc_no_pad_no_bias():
     workspace.ResetWorkspace()
 
     # shape is in NCHW format
@@ -153,14 +153,11 @@ def test_convolution_nhwc_no_pad():
         ex = ExecutorFactory()
         f_result = ex.executor(f_ng)()
 
-        # print("ngraph result: {}:\n{}".format("Y", f_result))
-        # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
-
         # compare Caffe2 and ngraph results
         assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
-def test_convolution_nchw_no_pad():
+def test_convolution_nchw_no_pad_no_bias():
     # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
     param_list = [
         [1, 3, 2, 1, 2, 2],
@@ -200,9 +197,6 @@ def test_convolution_nchw_no_pad():
         # Execute
         ex = ExecutorFactory()
         f_result = ex.executor(f_ng)()
-
-        # print("ngraph result: {}:\n{}".format("Y", f_result))
-        # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
 
         # compare Caffe2 and ngraph results
         assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
