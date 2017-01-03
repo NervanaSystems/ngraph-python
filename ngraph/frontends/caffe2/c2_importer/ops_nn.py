@@ -58,6 +58,22 @@ class OpsNN(OpsBase):
         result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op
 
+    def SquaredL2Distance(self, c2_op, inputs):
+        """
+        Computes squared L2 distance between two inputs.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        x, y = inputs
+
+        y = ng.cast_axes(y, x.axes)
+        return ng.squared_L2(x - y) / 2
+
     def AveragedLoss(self, c2_op, inputs):
         """
         Computes average loss for the batch.
