@@ -23,8 +23,7 @@ def pytest_addoption(parser):
                      help="Enable and *only* enable gpuflex transformer.")
 
 @pytest.fixture(scope="module",
-                params=['numpy', 'gpu'])
-                #params=ngt.transformer_choices())
+                params=ngt.transformer_choices())
 def transformer_factory(request):
     def set_and_get_factory(transformer_name):
         factory = ngt.make_transformer_factory(transformer_name)
