@@ -60,5 +60,5 @@ def test_args_shape_to_axes_wrong_pos():
         assert const == const_val
         expected_shape_to_axes(axes, shape)
         assert name == name_val
-    # with pytest.raises(AssertionError):
-    funct(const_val, shape, name_val)
+    with pytest.raises(ValueError):
+        funct(const_val, shape, name_val)
