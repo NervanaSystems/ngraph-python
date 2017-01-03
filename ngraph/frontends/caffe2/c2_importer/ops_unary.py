@@ -87,6 +87,7 @@ class OpsUnary(OpsBase):
         """
         # get input
         x = inputs[0]
+
         # normalization axes
         norm_axes = x.axes[1]
 
