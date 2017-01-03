@@ -198,8 +198,10 @@ class OpsNN(OpsBase):
         ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
 
         axes_order = {
-            'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W], 'W': [ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]},
-            'NHWC': {'X': [ax_N, ax_H, ax_W, ax_C], 'W': [ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]},
+            'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],
+                     'W': [ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]},
+            'NHWC': {'X': [ax_N, ax_H, ax_W, ax_C],
+                     'W': [ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]},
         }
 
         ng.make_axes(axes_order[order]['X']).set_shape(X.axes.lengths)
@@ -216,7 +218,8 @@ class OpsNN(OpsBase):
         # TODO: how to handle padding in caffe2?
         # padding = c2_op.attr['padding'].s.decode("ascii")
         # padding = (image_size - kernel_size) % stride_size
-        padding = np.mod(np.array([ax_H.length, ax_W.length]) - np.array([ax_kernel_H.length, ax_kernel_W.length]),
+        padding = np.mod(np.array([ax_H.length, ax_W.length])
+                         - np.array([ax_kernel_H.length, ax_kernel_W.length]),
                          np.array([str_h, str_w]))
         if not np.array_equal(padding, [0] * len(padding)):
             raise NotImplementedError("Convolution does not support padding yet")
@@ -241,9 +244,12 @@ class OpsNN(OpsBase):
 
         internal_ax_dict['Y'] = ng.make_axes([
             ng.make_axis(ax_kernel_ofm.length, name='C', roles=[ar.Channel]),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_w'], params['str_w'], ar.Width),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_d'],
+                         params['str_d'], ar.Depth),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_h'],
+                         params['str_h'], ar.Height),
+            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_w'],
+                         params['str_w'], ar.Width),
             ax_N
         ])
 

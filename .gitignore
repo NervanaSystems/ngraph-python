@@ -45,6 +45,9 @@ neon/backends/kernels/dump
 # apple
 *.AppleDouble
 
+# vscode
+.vscode/
+
 # tensorflow
 *.pb
 *.ckpt

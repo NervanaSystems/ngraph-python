@@ -114,12 +114,11 @@ def test_convolution_nhwc_no_pad_no_bias():
     # shape is in NCHW format
     # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
     param_list = [
-                  [1, 3, 2, 1, 2, 2],
-                  [1, 1, 4, 1, 2, 2],
-                  [2, 3, 8, 1, 2, 2],
-                  [8, 2, 5, 4, 3, 1],
-                 ]
-
+        [1, 3, 2, 1, 2, 2],
+        [1, 1, 4, 1, 2, 2],
+        [2, 3, 8, 1, 2, 2],
+        [8, 2, 5, 4, 3, 1],
+    ]
 
     for param_iter in param_list:
         n, ifm, spatial, ofm, kernel, stride = param_iter
@@ -154,7 +153,8 @@ def test_convolution_nhwc_no_pad_no_bias():
         f_result = ex.executor(f_ng)()
 
         # compare Caffe2 and ngraph results
-        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                           equal_nan=False))
 
 
 def test_convolution_nchw_no_pad_no_bias():
@@ -199,4 +199,5 @@ def test_convolution_nchw_no_pad_no_bias():
         f_result = ex.executor(f_ng)()
 
         # compare Caffe2 and ngraph results
-        assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+        assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                            equal_nan=False))
