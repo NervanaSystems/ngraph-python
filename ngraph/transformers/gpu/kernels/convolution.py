@@ -452,9 +452,6 @@ class XpropDirect(KernelGroup):
         self.bsum   = BatchNormSum(self.lib, K, gridMPQNw)
 
     def init_smallN(self, op):
-
-        assert False, "avoiding small N for debug"
-
         (N, C, K, D, H, W, T, R, S, M, P, Q,
         pad_d, pad_h, pad_w, str_d, str_h, str_w) = self.params
 
@@ -1099,27 +1096,15 @@ class UpdateDirect(KernelGroup):
         #     for i,k in enumerate(self.kernel_args): print i, k
 
         import pycuda.driver as drv
-        print "updat execute name", self.kernel_name
-        print "updat execute opts", self.kernel_opts
         kernel = kernel_specs.get_kernel(self.kernel_name, self.kernel_opts)
 
         for r in range(repeat):
             if self.zero:
                 drv.memset_d32_async(*self.zero_args)
-
-            print "\n<<<\nupdat execute with args", self.kernel_args
             drv.Context.synchronize()
-            print "before self.I", self.I.get()[:,0,5,5,63]
-            print "before self.E", self.E.get()[:,0,3,3,63]
-            print "before self.O", self.O.get()[:,0,2,2,7]
-            print ""
 
             kernel.prepared_async_call(*self.kernel_args)
             drv.Context.synchronize()
-            print "after self.I", self.I.get()[:,0,5,5,63]
-            print "after self.E", self.E.get()[:,0,3,3,63]
-            print "after self.O", self.O.get()[:,0,2,2,7]
-            print ""
 
             if self.clss is not 'fconv':
                 self.output_trans.execute()
@@ -1127,11 +1112,6 @@ class UpdateDirect(KernelGroup):
                 print "skipping output transform for flex."
 
             drv.Context.synchronize()
-            print "trans self.I", self.I.get()[:,0,5,5,63]
-            print "trans self.E", self.E.get()[:,0,3,3,63]
-            print "trans self.O", self.O.get()[:,0,2,2,7]
-
-            print "\n>>>\n"
 
         if unbind:
             self.output_trans.unbind()

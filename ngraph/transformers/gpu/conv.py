@@ -124,7 +124,6 @@ class ConvFpropKernel(GPUKernel):
         """
         Call into convolution library to execute kernels
         """
-        print "conv.py Fprop execute"
         self.fprop_kernels.execute(1, unbind=False)
 
 
@@ -232,7 +231,6 @@ class ConvBpropKernel(GPUKernel):
         """
         Call into convolution library to execute kernels
         """
-        print "conv.py Bprop execute"
         self.bprop_kernels.execute(1, unbind=False)
 
 
@@ -342,5 +340,4 @@ class ConvUpdateKernel(GPUKernel):
         """
         Call into convolution library to execute kernels
         """
-        print "conv.py Updat execute"
         self.updat_kernels.execute(1, unbind=False)
