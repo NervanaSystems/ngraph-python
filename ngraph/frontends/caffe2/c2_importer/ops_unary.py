@@ -91,4 +91,4 @@ class OpsUnary(OpsBase):
         # normalization axes
         norm_axes = x.axes[1]
 
-        return ng.softmax(x, norm_axes).named(c2_op.name)
+        return ng.softmax(x, normalization_axes=norm_axes).named(c2_op.name)
