@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import numpy as np
-import pytest
 from builtins import range
 
+import numpy as np
+import pytest
+
+import ngraph as ng
 import ngraph.util.names as names
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
-from ngraph.util.utils import ExecutorFactory
-import ngraph as ng
+from ngraph.testing import ExecutorFactory
 
 # Make some axes
 ax = names.NameScope()

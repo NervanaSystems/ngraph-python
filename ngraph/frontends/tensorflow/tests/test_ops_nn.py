@@ -169,7 +169,7 @@ class Tester(ImporterTester):
         y_ = tf.placeholder(tf.float32, [128, 10])
         cross_entropy = tf.reduce_mean(-tf.reduce_sum(
             y_ * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         batch_xs, batch_ys = mnist.train.next_batch(128)
 
         # test

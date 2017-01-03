@@ -36,7 +36,7 @@ def logistic_regression(args):
     y = tf.nn.sigmoid(tf.matmul(x, w))
     log_likelihoods = tf.log(y) * t + tf.log(1 - y) * (1 - t)
     cost = -tf.reduce_sum(log_likelihoods)
-    init_op = tf.initialize_all_variables()
+    init_op = tf.global_variables_initializer()
 
     # import graph_def
     importer = TFImporter()

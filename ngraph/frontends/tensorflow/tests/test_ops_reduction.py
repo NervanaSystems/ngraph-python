@@ -24,7 +24,7 @@ from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
 
 
 class Tester(ImporterTester):
-    def test_sum_mean(self):
+    def test_sum_prod_mean(self):
         # test cases
         reduction_indices_list = [None, [], [0, ], [0, 1], [1, 2], [0, 1, 2]]
 
@@ -36,18 +36,20 @@ class Tester(ImporterTester):
 
         # test
         for reduction_indices in reduction_indices_list:
-            f = tf.reduce_sum(a, reduction_indices=reduction_indices)
-            self.run(f, tf_feed_dict=feed_dict)
-            g = tf.reduce_mean(a, reduction_indices=reduction_indices)
-            self.run(g, tf_feed_dict=feed_dict)
+            f_sum = tf.reduce_sum(a, reduction_indices=reduction_indices)
+            self.run(f_sum, tf_feed_dict=feed_dict)
+            f_prod = tf.reduce_prod(a, reduction_indices=reduction_indices)
+            self.run(f_prod, tf_feed_dict=feed_dict)
+            f_mean = tf.reduce_mean(a, reduction_indices=reduction_indices)
+            self.run(f_mean, tf_feed_dict=feed_dict)
 
-    def test_sum_and_broadcast(self):
+    def test_sum_prod_broadcast(self):
         # placeholder
         a = tf.placeholder(tf.float32, shape=[3, 4, 5, 6])
         b = tf.placeholder(tf.float32, shape=[3, 4, 5])
         a_sum = tf.reduce_sum(a, reduction_indices=[0, 3])  # shape (4, 5)
-        b_sum = tf.reduce_sum(b, reduction_indices=[0, 1])  # shape (5,)
-        f = a_sum + b_sum + b  # (4, 5) + (5,) + (3, 4, 5) -> (3, 4, 5)
+        b_prod = tf.reduce_prod(b, reduction_indices=[0, 1])  # shape (5,)
+        f = a_sum + b_prod + b  # (4, 5) + (5,) + (3, 4, 5) -> (3, 4, 5)
 
         # value
         feed_dict = dict()
@@ -56,18 +58,3 @@ class Tester(ImporterTester):
 
         # test
         self.run(f, tf_feed_dict=feed_dict)
-
-    def test_prod(self):
-        # TODO: reduce_prod currently not supported in ngraph, constant only
-
-        # test cases
-        reduction_indices_list = [None, [], [0, ], [0, 1], [1, 2], [0, 1, 2]]
-
-        # tf constant
-        a = tf.constant(
-            np.random.randn(3, 4, 5).astype(np.float32), dtype=tf.float32)
-
-        # test
-        for reduction_indices in reduction_indices_list:
-            f = tf.reduce_prod(a, reduction_indices=reduction_indices)
-            self.run(f, tf_feed_dict={})

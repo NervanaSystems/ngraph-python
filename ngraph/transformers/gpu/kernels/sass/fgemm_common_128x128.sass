@@ -1,0 +1,475 @@
+# hgemm_common_128x128
+
+# Copyright 2014 Nervana Systems Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+[-
+
+our $int16;
+
+sub convert_in {
+    return $int16 ? 'I2F.F32.S16' : 'F2F.F32.F16';
+}
+
+
+sub convert_out {
+    return $int16 ? 'F2I.S16.F32': 'F2F.F16.F32';
+}
+
+
+sub scale_int16 {
+    return $int16? q{
+--:-:-:-:1      FMUL c0, c0, param_scale;
+--:-:-:-:1      FMUL c1, c1, param_scale;
+--:-:-:-:1      FMUL c2, c2, param_scale;
+--:-:-:-:0      FMUL c3, c3, param_scale;
+    } : "";
+}
+
+
+sub max_abs1 {
+    return $int16? q{
+--:-:-:-:1 @!P0 MOV cs0, RZ;
+--:-:-:-:1 @!P1 MOV cs1, RZ;
+--:-:-:-:1 @!P2 MOV cs2, RZ;
+--:-:-:-:1 @!P3 MOV cs3, RZ;
+
+--:-:-:-:1  @P0 VABSDIFF.S16.S16.MRG_16L cs0, c0, RZ, RZ;
+--:-:-:-:1  @P1 VABSDIFF.S16.S16.MRG_16L cs1, c1, RZ, RZ;
+--:-:-:-:1  @P2 VABSDIFF.S16.S16.MRG_16L cs2, c2, RZ, RZ;
+--:-:-:-:1  @P3 VABSDIFF.S16.S16.MRG_16L cs3, c3, RZ, RZ;
+    } : "";
+}
+
+
+sub max_abs2 {
+    return $int16? q{
+<SCHEDULE_BLOCK>
+
+// a = abs(a)
+--:-:-:-:1  @P0 VABSDIFF.S16.S16.MRG_16H cs0, c0, RZ, cs0;
+--:-:-:-:1  @P1 VABSDIFF.S16.S16.MRG_16H cs1, c1, RZ, cs1;
+--:-:-:-:1  @P2 VABSDIFF.S16.S16.MRG_16H cs2, c2, RZ, cs2;
+--:-:-:-:1  @P3 VABSDIFF.S16.S16.MRG_16H cs3, c3, RZ, cs3;
+
+// max = max(c,d,max(a,b,max)) ...
+--:-:-:-:1      VMNMX.UD.U16.U16.MX.MAX maxabs, cs0, cs0.H1, maxabs;
+--:-:-:-:1      VMNMX.UD.U16.U16.MX.MAX maxabs, cs1, cs1.H1, maxabs;
+--:-:-:-:1      VMNMX.UD.U16.U16.MX.MAX maxabs, cs2, cs2.H1, maxabs;
+--:-:-:-:1      VMNMX.UD.U16.U16.MX.MAX maxabs, cs3, cs3.H1, maxabs;
+</SCHEDULE_BLOCK>
+
+    } : "";
+}
+
+
+sub butterfly {
+    return $int16 ? q{
+--:-:-:-:0      LOP.AND.Z P0, RZ, tid, 31;
+--:-:1:-:2      SHFL.BFLY PT, warp_max, maxabs, 0x10, 0x1f;
+01:-:-:-:4      IMNMX maxabs, warp_max, maxabs, !PT;
+--:-:1:-:2      SHFL.BFLY PT, warp_max, maxabs, 0x8,  0x1f;
+01:-:-:-:4      IMNMX maxabs, warp_max, maxabs, !PT;
+--:-:1:-:2      SHFL.BFLY PT, warp_max, maxabs, 0x4,  0x1f;
+01:-:-:-:4      IMNMX maxabs, warp_max, maxabs, !PT;
+--:-:-:-:0      MOV Stats0, param_Stats[0];
+--:-:1:-:2      SHFL.BFLY PT, warp_max, maxabs, 0x2,  0x1f;
+01:-:-:-:4      IMNMX maxabs, warp_max, maxabs, !PT;
+--:-:-:-:0      MOV Stats1, param_Stats[1];
+--:-:1:-:2      SHFL.BFLY PT, warp_max, maxabs, 0x1,  0x1f;
+01:-:-:-:2      IMNMX maxabs, warp_max, maxabs, !PT;
+--:-:-:-:1  @P0 RED.E.MAX [Stats], maxabs;
+    } : "";
+}
+
+sub hw_truncate
+{
+    return '' unless $int16;
+
+    my @out1;
+    my @wflag = qw(1 2 3 4 5 - - 6);
+    foreach my $y (0..7)
+    {
+        foreach my $x (0..7)
+        {
+            my $f1 = $x == 7 && $y == 0 ? '01' : '--';
+            my $f2 = $x == 7 ? $wflag[$y] : '-';
+            push @out1, "--:-:-:-:1      FMUL cx${x}y${y}, cx${x}y${y}, sclR;\n";
+            push @out1, "$f1:-:$f2:-:1      F2I.S32.F32.TRUNC cx${x}y${y}, cx${x}y${y};\n";
+        }
+    }
+
+    my @out;
+    my @rflag = qw(01 02 04 08 10 20 -- --);
+    foreach my $y (0..7)
+    {
+        foreach my $x (0..7)
+        {
+            my $flag = $x == 0 ? $rflag[$y] : '--';
+            push @out, "$flag:-:-:-:1      IADD32I cx${x}y${y}, cx${x}y${y}, 0x00000800;\n";
+        }
+        foreach my $x (0..7)
+        {
+            push @out, "--:-:-:-:1      LOP32I.AND cx${x}y${y}, cx${x}y${y}, 0xfffff000;\n";
+        }
+    }
+    my @data;
+    foreach my $y (0..7)
+    {
+        foreach my $x (0..7)
+        {
+            push @{$data[0]}, "--:-:-:-:4      I2F.F32.S32.RZ cx${x}y${y}, cx${x}y${y};\n";
+            push @{$data[1]}, "--:-:-:-:1      FMUL cx${x}y${y}, cx${x}y${y}, sclRr;\n";
+        }
+    }
+    my $i = 0;
+    my @read = qw(01 02 04 08 10 20);
+    my @writ = (1,2,3,4,5,6);
+    while (@{$data[1]})
+    {
+        my $I2F = shift @{$data[0]};
+        if ($I2F)
+        {
+            $out[$#out] =~ s/:1 /:0 / if $out[$#out] =~ /FMUL|LOP/;
+            my $bar = shift @writ;
+            $I2F =~ s/^--:-:-/--:-:$bar/;
+            push @out,  $I2F;
+            push @writ, $bar;
+        }
+        if ($i > 2)
+        {
+            my $FMUL = shift @{$data[1]};
+            my $bar  = shift @read;
+            $FMUL =~ s/^--/$bar/;
+            push @out,  $FMUL;
+            push @read, $bar;
+        }
+        $i++;
+    }
+    return qq{
+<SCHEDULE_BLOCK>\n} . join('', @out1) . qq{
+</SCHEDULE_BLOCK>\n} . join('', @out) . q{
+--:-:-:Y:5  @P0 BRA.U LOOP;
+--:-:-:Y:5  @P1 BRA.U REMAINDER;};
+
+}
+
+-]
+
+--:-:1:-:1      LDS.U.128 j0Ay0, [readAs + 4x<0*128 + 00>];
+--:-:1:-:1      LDS.U.128 j0Bx0, [readBs + 4x<0*128 + 00>];
+--:-:1:-:1      LDS.U.128 j0Ay4, [readAs + 4x<0*128 + 64>];
+--:-:1:-:1      LDS.U.128 j0Bx4, [readBs + 4x<0*128 + 64>];
+
+LOOP:
+
+[+
+
+    our @top;
+    our %insert;
+
+    my @cOrder;
+    my @swirl = ([0,2],[1,2],[1,0],[0,0]);
+    my @y = (0,1,4,5);
+    foreach my $x (0,2,4,6)
+    {
+        foreach my $y (@y)
+        {
+            push @cOrder, [$x + $_->[0], $y + $_->[1]] foreach @swirl;
+        }
+        @y = reverse @y;
+    }
+
+    my $out = join '', @top;
+
+    foreach my $j (0 .. 7)
+    {
+        my $odd      = $j & 1;
+        my $nOdd     = !$odd + 0;
+        my $rsOffset = ($j + 1) % 8;
+        my $rsPred   = $j == 7 ? '@P0' : '   ';
+
+        $insert{"j${j}c0"} = sprintf "--:-:1:-:1  %s LDS.U.128 j%dAy0, [readAs + 4x<%d*128 + 00>];\n", $rsPred, $nOdd, $rsOffset;
+        $insert{"j${j}c2"} = sprintf "--:-:1:-:1  %s LDS.U.128 j%dBx0, [readBs + 4x<%d*128 + 00>];\n", $rsPred, $nOdd, $rsOffset;
+        $insert{"j${j}c4"} = sprintf "--:-:1:-:1  %s LDS.U.128 j%dAy4, [readAs + 4x<%d*128 + 64>];\n", $rsPred, $nOdd, $rsOffset;
+        $insert{"j${j}c6"} = sprintf "--:-:1:-:1  %s LDS.U.128 j%dBx4, [readBs + 4x<%d*128 + 64>];\n", $rsPred, $nOdd, $rsOffset;
+
+        foreach my $c (0 .. 63)
+        {
+            my ($x,$y) = @{$cOrder[$c]};
+
+            my $ins    = $insert{"j${j}c$c"} || '';
+
+            my $yield  = $c == 32 ? 'Y' : '-';
+
+            my $wait   = $c == 0 ? '01' : '--';
+
+            my $stall  = (split "\n", $ins)[0] =~ /LDS|F2F|I2F|I2I|LDG|STS|BAR|BRA/ ? 0 : 1;
+
+            my $ctrl   = "$wait:-:-:$yield:$stall";
+
+            $out .= sprintf "%s      FFMA cx%dy%d, j%dBx%d, j%dAy%d, cx%dy%d;\n%s", $ctrl,  $x,$y,  $odd,$x,  $odd,$y,  $x,$y,  $ins;
+        }
+    }
+    return $out . hw_truncate();
++]
+
+<SCHEDULE_BLOCK>
+
+// writeCs = (readAs / 4) * 128 + readBs;
+--:-:-:-:1      LOP.AND readAs, readAs, 0xfff;
+--:-:-:-:1      LOP.AND readBs, readBs, 0xfff;
+--:-:-:-:1      ISCADD  writeCs, readAs, readBs, 5;
+
+--:-:-:-:1      LOP.AND tid_31,  tid, 31;
+--:-:-:-:1      LOP.AND tid_96,  tid, 96;
+--:-:-:-:1      LOP.AND tid_128, tid, 128;
+
+// cx = tid31 | (tid_128 >> 2);
+--:-:-:-:1      SHR.U32  cx00, tid_128, 2;
+--:-:-:-:1      LOP.OR   cx00, tid_31,  cx00;
+
+// readCs = ((tid_96 << 4) | cx) << 2;
+--:-:-:-:1      SHL      readCs, tid_96,  4;
+--:-:-:-:1      LOP.OR   readCs, readCs, cx00;
+--:-:-:-:1      SHL      readCs, readCs, 2;
+
+// cx += blkB*128;
+--:-:-:-:1      ISCADD  cx00, blkB, cx00, 7;
+--:-:-:-:1      IADD    cx64, cx00, 64;
+
+// cy = blkA*128 + (tid_96 >> 1)
+--:-:-:-:1      SHR.U32 cy00, tid_96, 1;
+--:-:-:-:1      ISCADD  cy00, blkA, cy00, 7;
+
+// C += (cy*ldc + cx) * 2;
+--:-:-:-:1      MOV  ldc,  param_ldc;
+--:-:-:-:1      MOV  ldcz, param_ldcz;
+--:-:-:-:1      XMAD.LO  ci, cy00, ldc, cx00, xmad_c;
+--:-:-:-:1      XMAD.LO2 ci, ldcz, blkZ, ci;
+--:-:-:-:1      LEA      C00y0.CC, ci, param_C[0],     1;
+--:-:-:-:1      LEA.HI.X C00y1,    ci, param_C[1], RZ, 1;
+
+--:-:-:-:1      SHL  ldc1, ldc, 1;
+--:-:-:-:1      SHL  ldc4, ldc, 3;
+--:-:-:-:1      ISCADD ldc60, ldc, -ldc4, 7;
+
+--:-:-:-:1      MOV alpha, param_alpha;
+--:-:-:-:1      MOV beta,  param_beta;
+--:-:-:-:1      MOV flags, param_flags;
+--:-:-:-:1      MOV maxabs, RZ;
+
+--:-:-:-:1      ISETP.NE.AND P6, PT, beta, RZ, PT; // beta != 0
+
+</SCHEDULE_BLOCK>
+
+--:-:-:-:5      IADD   C04y0.CC, C00y0, ldc4;
+--:-:-:-:1      IADD   cy04, cy00,  4;
+--:-:-:-:1      IADD.X C04y1,    C00y1, RZ;
+--:-:-:-:5      IADD   C08y0.CC, C04y0, ldc4;
+--:-:-:-:1      IADD   cy08, cy00,  8;
+--:-:-:-:1      IADD.X C08y1,    C04y1, RZ;
+--:-:-:-:5      IADD   C12y0.CC, C08y0, ldc4;
+--:-:-:-:1      IADD   cy12, cy00,  12;
+--:-:-:-:0      IADD.X C12y1,    C08y1, RZ;
+
+--:-:-:-:5      BAR.SYNC 0;
+
+<CODE>
+
+    my $out;
+    foreach my $y (0..7)
+    {
+        $out .=
+            "--:-:-:-:5      IADD   C00y0.CC, C00y0, ldc60;\n" .
+            "--:-:-:-:1      IADD   cy00,     cy00,  60;\n" .
+            "--:-:-:-:1      IADD.X C00y1,    C00y1, RZ;\n" .
+            "--:-:-:-:5      IADD   C04y0.CC, C04y0, ldc60;\n" .
+            "--:-:-:-:1      IADD   cy04,     cy04,  60;\n" .
+            "--:-:-:-:1      IADD.X C04y1,    C04y1, RZ;\n" .
+            "--:-:-:-:5      IADD   C08y0.CC, C08y0, ldc60;\n" .
+            "--:-:-:-:1      IADD   cy08,     cy08,  60;\n" .
+            "--:-:-:-:1      IADD.X C08y1,    C08y1, RZ;\n" .
+            "--:-:-:-:5      IADD   C12y0.CC, C12y0, ldc60;\n" .
+            "--:-:-:-:1      IADD   cy12,     cy12,  60;\n" .
+            "--:-:-:-:1      IADD.X C12y1,    C12y1, RZ;\n\n"  if $y == 4;
+
+        $out .= sprintf(
+            "--:-:-:-:1      FMUL c0, cx0y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c1, cx1y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c2, cx2y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c3, cx3y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c4, cx4y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c5, cx5y%d, alpha;\n" .
+            "--:-:-:-:1      FMUL c6, cx6y%d, alpha;\n" .
+            "--:-:-:-:0      FMUL c7, cx7y%d, alpha;\n",
+            ($y) x 8);
+
+        $out .= "--:-:-:-:5      CAL STORE_C;\n\n";
+    }
+    return $out;
+
+</CODE>
+
+[+ butterfly() +]
+--:-:-:-:5      EXIT;
+
+STORE_C:
+
+<SCHEDULE_BLOCK>
+--:-:-:-:1      ISETP.LT.AND P4, PT, cx00, param_n, P6;
+--:-:-:-:1      ISETP.LT.AND P5, PT, cx64, param_n, P6;
+
+--:-:-:-:1      ISETP.LT.AND P0, PT, cy00, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P1, PT, cy00, param_m, P5;
+--:-:-:-:1      ISETP.LT.AND P2, PT, cy04, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P3, PT, cy04, param_m, P5;
+
+--:-:1:-:1  @P0 LDG.E.S16 d0, [C00y0 + 2x<00>];
+--:-:2:-:1  @P1 LDG.E.S16 d1, [C00y0 + 2x<64>];
+--:-:3:-:1  @P2 LDG.E.S16 d2, [C04y0 + 2x<00>];
+--:-:4:-:1  @P3 LDG.E.S16 d3, [C04y0 + 2x<64>];
+--:-:-:-:1 @!P0 MOV d0, RZ;
+--:-:-:-:1 @!P1 MOV d1, RZ;
+--:-:-:-:1 @!P2 MOV d2, RZ;
+--:-:-:-:1 @!P3 MOV d3, RZ;
+
+--:-:-:-:1      ISETP.LT.AND P4, PT, cx00, param_n, PT;
+--:-:-:-:1      ISETP.LT.AND P5, PT, cx64, param_n, PT;
+
+--:-:-:-:1      ISETP.LT.AND P0, PT, cy00, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P1, PT, cy00, param_m, P5;
+--:-:-:-:1      ISETP.LT.AND P2, PT, cy04, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P3, PT, cy04, param_m, P5;
+
+// Apply relu
+--:-:-:-:1      LOP.AND.NZ P6, RZ, flags, 2;
+--:-:-:-:1  @P6 FMNMX c0, c0, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c1, c1, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c2, c2, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c3, c3, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c4, c4, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c5, c5, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c6, c6, RZ, !PT;
+--:-:-:-:1  @P6 FMNMX c7, c7, RZ, !PT;
+
+--:-:-:-:5      ISETP.NE.AND P6, PT, beta, RZ, PT; // beta != 0
+</SCHEDULE_BLOCK>
+
+--:-:-:-:3      STS.128 [writeCs+4x<00>], c0;
+--:-:-:-:1      STS.128 [writeCs+4x<64>], c4;
+
+--:-:-:-:0      IADD cy00, cy00, 1;
+
+--:-:-:-:1      LDS c0, [readCs + 4x<0*128 + 00>];
+--:-:5:-:1      LDS c1, [readCs + 4x<0*128 + 64>];
+--:-:-:-:1      LDS c2, [readCs + 4x<1*128 + 00>];
+--:-:6:-:1      LDS c3, [readCs + 4x<1*128 + 64>];
+
+--:-:-:-:0      IADD cy04, cy04, 1;
+
+01:-:1:-:1  @P6 [+ convert_in() +] d0, d0;
+02:-:2:-:1  @P6 [+ convert_in() +] d1, d1;
+04:-:3:-:1  @P6 [+ convert_in() +] d2, d2;
+08:-:4:-:1  @P6 [+ convert_in() +] d3, d3;
+
+11:-:-:-:1  @P6 FFMA c0, d0, beta, c0;
+02:-:-:-:1  @P6 FFMA c1, d1, beta, c1;
+24:-:-:-:1  @P6 FFMA c2, d2, beta, c2;
+08:-:-:-:3  @P6 FFMA c3, d3, beta, c3;
+
+[+ scale_int16() +]
+
+--:-:1:-:1      [+ convert_out() +] c0, c0;
+--:-:2:-:1      [+ convert_out() +] c1, c1;
+--:-:3:-:1      [+ convert_out() +] c2, c2;
+--:-:4:-:1      [+ convert_out() +] c3, c3;
+
+<SCHEDULE_BLOCK>
+--:-:-:-:1      ISETP.LT.AND P4, PT, cx00, param_n, P6;
+--:-:-:-:1      ISETP.LT.AND P5, PT, cx64, param_n, P6;
+
+01:-:-:-:1  @P0 STG.E.S16 [C00y0 + 2x<00>], c0;
+02:5:-:-:1  @P1 STG.E.S16 [C00y0 + 2x<64>], c1;
+04:-:-:-:1  @P2 STG.E.S16 [C04y0 + 2x<00>], c2;
+08:6:-:-:1  @P3 STG.E.S16 [C04y0 + 2x<64>], c3;
+
+[+ max_abs1() +]
+
+--:-:-:-:1      ISETP.LT.AND P0, PT, cy08, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P1, PT, cy08, param_m, P5;
+--:-:-:-:1      ISETP.LT.AND P2, PT, cy12, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P3, PT, cy12, param_m, P5;
+
+--:-:1:-:1  @P0 LDG.E.S16 d0, [C08y0 + 2x<00>];
+--:-:2:-:1  @P1 LDG.E.S16 d1, [C08y0 + 2x<64>];
+--:-:3:-:1  @P2 LDG.E.S16 d2, [C12y0 + 2x<00>];
+--:-:4:-:1  @P3 LDG.E.S16 d3, [C12y0 + 2x<64>];
+--:-:-:-:1 @!P0 MOV d0, RZ;
+--:-:-:-:1 @!P1 MOV d1, RZ;
+--:-:-:-:1 @!P2 MOV d2, RZ;
+--:-:-:-:1 @!P3 MOV d3, RZ;
+
+--:-:-:-:1      ISETP.LT.AND P4, PT, cx00, param_n, PT;
+--:-:-:-:1      ISETP.LT.AND P5, PT, cx64, param_n, PT;
+
+--:-:-:-:2      ISETP.LT.AND P0, PT, cy08, param_m, P4;
+--:-:-:-:2      ISETP.LT.AND P1, PT, cy08, param_m, P5;
+--:-:-:-:1      ISETP.LT.AND P2, PT, cy12, param_m, P4;
+--:-:-:-:1      ISETP.LT.AND P3, PT, cy12, param_m, P5;
+</SCHEDULE_BLOCK>
+
+10:-:-:-:4      IADD   C00y0.CC, C00y0, ldc1;
+--:-:-:-:1      IADD   cy08, cy08, 1;
+--:-:-:-:1      IADD   cy12, cy12, 1;
+--:-:-:-:1      IADD.X C00y1,    C00y1, RZ;
+20:-:-:-:6      IADD   C04y0.CC, C04y0, ldc1;
+--:-:-:-:0      IADD.X C04y1,    C04y1, RZ;
+
+--:-:-:-:1      LDS c0, [readCs + 4x<2*128 + 00>];
+--:-:5:-:1      LDS c1, [readCs + 4x<2*128 + 64>];
+--:-:-:-:1      LDS c2, [readCs + 4x<3*128 + 00>];
+--:-:6:-:1      LDS c3, [readCs + 4x<3*128 + 64>];
+
+01:-:1:-:4  @P6 [+ convert_in() +] d0, d0;
+02:-:2:-:4  @P6 [+ convert_in() +] d1, d1;
+04:-:3:-:4  @P6 [+ convert_in() +] d2, d2;
+08:-:4:-:1  @P6 [+ convert_in() +] d3, d3;
+
+11:-:-:-:1  @P6 FFMA c0, d0, beta, c0;
+02:-:-:-:1  @P6 FFMA c1, d1, beta, c1;
+24:-:-:-:1  @P6 FFMA c2, d2, beta, c2;
+08:-:-:-:3  @P6 FFMA c3, d3, beta, c3;
+
+[+ scale_int16() +]
+
+--:-:1:-:1      [+ convert_out() +] c0, c0;
+--:-:2:-:1      [+ convert_out() +] c1, c1;
+--:-:3:-:1      [+ convert_out() +] c2, c2;
+--:-:4:-:1      [+ convert_out() +] c3, c3;
+
+01:-:-:-:1  @P0 STG.E.S16 [C08y0 + 2x<00>], c0;
+02:5:-:-:1  @P1 STG.E.S16 [C08y0 + 2x<64>], c1;
+04:-:-:-:1  @P2 STG.E.S16 [C12y0 + 2x<00>], c2;
+08:6:-:-:1  @P3 STG.E.S16 [C12y0 + 2x<64>], c3;
+
+[+ max_abs2() +]
+
+10:-:-:-:6      IADD   C08y0.CC, C08y0, ldc1;
+--:-:-:-:1      IADD.X C08y1,    C08y1, RZ;
+20:-:-:-:6      IADD   C12y0.CC, C12y0, ldc1;
+--:-:-:-:0      IADD.X C12y1,    C12y1, RZ;
+
+--:-:-:-:5      RET;

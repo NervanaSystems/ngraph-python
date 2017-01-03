@@ -13,15 +13,14 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+from builtins import range
 
+import numpy as np
 import pytest
 import ngraph as ng
 import ngraph.transformers as ngt
-import numpy as np
-from builtins import range
-from ngraph.util.derivative_check import check_derivative
-from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from ngraph.util.utils import numeric_derivative, executor
+from ngraph.testing import check_derivative, ExecutorFactory, \
+    RandomTensorGenerator, numeric_derivative, executor
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -40,7 +39,7 @@ def test_constant_multiply(transformer_factory):
     c = ng.multiply(a, b)
 
     result = executor(c)()
-    np.testing.assert_allclose(result, [8])
+    ng.testing.assert_allclose(result, [8])
 
 
 def test_constant_tensor_multiply(transformer_factory):
@@ -56,7 +55,7 @@ def test_constant_tensor_multiply(transformer_factory):
     c = ng.multiply(a, b)
 
     result = executor(c)()
-    np.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
+    ng.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
 
 
 def test_tensor_sum_single_reduction_axes(transformer_factory):
@@ -72,7 +71,7 @@ def test_tensor_sum_single_reduction_axes(transformer_factory):
     b = ng.sum(a, reduction_axes=Y)
 
     result = executor(b)()
-    np.testing.assert_allclose(result, [2.0, 2.0])
+    ng.testing.assert_allclose(result, [2.0, 2.0])
 
 
 def test_scalar(transformer_factory):
@@ -83,7 +82,7 @@ def test_scalar(transformer_factory):
 
     cval = executor(x)()
     assert cval.shape == ()
-    np.testing.assert_allclose(cval, val)
+    ng.testing.assert_allclose(cval, val)
 
 
 def test_tensor_constant(transformer_factory):
@@ -100,7 +99,7 @@ def test_tensor_constant(transformer_factory):
 
     x = ng.constant(aval, aaxes)
     cval = executor(x)()
-    np.testing.assert_allclose(cval, aval)
+    ng.testing.assert_allclose(cval, aval)
 
 
 def test_placeholder(transformer_factory):
@@ -117,7 +116,7 @@ def test_placeholder(transformer_factory):
 
     x = ng.placeholder([W, H])
     d = 2 * x
-    d2 = ng.squared_L2(x)
+    d2 = ng.squared_L2(x, out_axes=None)
 
     ex = ExecutorFactory()
     # Return placeholder, param is placeholder
@@ -125,21 +124,21 @@ def test_placeholder(transformer_factory):
     prod_fun = ex.executor([d, d2], x)
 
     cval = placeholder_fun(aval)
-    np.testing.assert_allclose(cval, aval)
+    ng.testing.assert_allclose(cval, aval)
 
     # Pass a different array though
     u = rng.uniform(-1.0, 1.0, aaxes)
     cval = placeholder_fun(u)
-    np.testing.assert_allclose(cval, u)
+    ng.testing.assert_allclose(cval, u)
 
     cval, s = prod_fun(aval)
-    np.testing.assert_allclose(cval, aval * 2)
-    np.testing.assert_allclose(s[()], np.dot(aval.flatten(), aval.flatten()))
+    ng.testing.assert_allclose(cval, aval * 2)
+    ng.testing.assert_allclose(s[()], np.dot(aval.flatten(), aval.flatten()))
 
     cval, s = prod_fun(u)
     u2 = u * 2
-    np.testing.assert_allclose(cval, u2)
-    np.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
+    ng.testing.assert_allclose(cval, u2)
+    ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
 def test_reduction(transformer_factory):
@@ -155,6 +154,7 @@ def test_reduction(transformer_factory):
     u = rng.uniform(-1.0, 1.0, axes)
 
     for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod'),
                               (np.max, ng.max, 'max'),
                               (np.min, ng.min, 'min')]:
         for reduction_axes in [[C],
@@ -167,9 +167,117 @@ def test_reduction(transformer_factory):
             npval = npred(u, dims)
             graph_reduce = bered(p_u, reduction_axes=reduction_axes)
             graph_val = executor(graph_reduce, p_u)(u)
-            np.testing.assert_allclose(
+            ng.testing.assert_allclose(
                 npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
                 red=red, axes=reduction_axes)
+
+
+def test_prod_constant(transformer_factory):
+    """
+    Test reduce product of constants
+    """
+    A0 = ng.make_axis(2, name='C')
+    A1 = ng.make_axis(3, name='W')
+    A2 = ng.make_axis(4, name='H')
+
+    # ngrpah ops
+    const_3d = ng.broadcast(ng.constant(2., axes=[]), axes=[A0, A1, A2])
+    prod_0 = ng.prod(const_3d, reduction_axes=[A0])
+    prod_1 = ng.prod(const_3d, reduction_axes=[A1])
+    prod_2 = ng.prod(const_3d, reduction_axes=[A2])
+    prod_0_1 = ng.prod(const_3d, reduction_axes=[A0, A1])
+    prod_0_2 = ng.prod(const_3d, reduction_axes=[A0, A2])
+    prod_1_2 = ng.prod(const_3d, reduction_axes=[A1, A2])
+    prod_0_1_2 = ng.prod(const_3d, reduction_axes=[A0, A1, A2])
+
+    # numpy results
+    np_const_3d = np.ones((2, 3, 4)) * 2.
+    res_0_np = np.prod(np_const_3d, axis=(0))
+    res_1_np = np.prod(np_const_3d, axis=(1))
+    res_2_np = np.prod(np_const_3d, axis=(2))
+    res_0_1_np = np.prod(np_const_3d, axis=(0, 1))
+    res_0_2_np = np.prod(np_const_3d, axis=(0, 2))
+    res_1_2_np = np.prod(np_const_3d, axis=(1, 2))
+    res_0_1_2_np = np.prod(np_const_3d, axis=(0, 1, 2))
+
+    # define comp
+    ex = ExecutorFactory()
+    comps = ex.executor([prod_0, prod_1, prod_2, prod_0_1, prod_0_2, prod_1_2,
+                         prod_0_1_2])
+
+    res_0_ng, res_1_ng, res_2_ng, res_0_1_ng, res_0_2_ng, res_1_2_ng, res_0_1_2_ng = comps()
+
+    np.testing.assert_allclose(res_0_np, res_0_ng)
+    np.testing.assert_allclose(res_1_np, res_1_ng)
+    np.testing.assert_allclose(res_2_np, res_2_ng)
+    np.testing.assert_allclose(res_0_1_np, res_0_1_ng)
+    np.testing.assert_allclose(res_0_2_np, res_0_2_ng)
+    np.testing.assert_allclose(res_1_2_np, res_1_2_ng)
+    np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
+
+
+def test_prod_deriv(transformer_factory):
+    """
+    Test reduce product's gradient
+    """
+    def power_set(lst):
+        """
+        power_set([0, 1, 2]) is:
+        [[], [0], [1], [0, 1], [2], [0, 2], [1, 2], [0, 1, 2]]
+        """
+        result = [[]]
+        for x in lst:
+            result.extend([subset + [x] for subset in result])
+        return result
+
+    def get_all_reduction_axes(axes):
+        """
+        Get all possible reduction axes
+        """
+        ndim = len(axes.lengths)
+        if ndim == 0:
+            return axes
+        else:
+            results = []
+            all_indices = power_set(range(ndim))
+            for indices in all_indices:
+                if not indices:
+                    results.append(ng.make_axes([]))
+                else:
+                    results.append(ng.make_axes([axes[index] for index in indices]))
+            return results
+
+    def shape_to_axes(shape):
+        """
+        Convert shape to axes
+        """
+        if not shape:
+            return ng.make_axes()
+        axes = ng.make_axes([ng.make_axis(length=s) for s in shape])
+        return axes
+
+    # test cases
+    test_cases = [
+        np.array([[[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]],
+                  [[1., 2., 3.], [4., 5., 6.], [7., 8., 0.]]]),
+        np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]]),
+        np.array([1., 2., 3.]),
+        np.array([0., 2., 3.]),
+        np.array([0., 0., 3.]),
+        np.array([0., 0., 0.]),
+        np.array([0.]),
+        np.array([2.]),
+        np.array(0.),
+        np.array(2.),
+    ]
+
+    for x_val in test_cases:
+        axes = shape_to_axes(x_val.shape)
+        all_reduction_axes = get_all_reduction_axes(axes)
+        for reduction_axes in all_reduction_axes:
+            x = ng.placeholder(axes=axes)
+            x_prod = ng.prod(x, reduction_axes)
+            check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
 
 
 def test_reduction_deriv(transformer_factory):
@@ -187,7 +295,8 @@ def test_reduction_deriv(transformer_factory):
 
     # Need to test max/min differently since if two elements are extremums
     # and we modify one, the derivative will change.
-    for npred, bered, red in [(np.sum, ng.sum, 'sum')]:
+    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
+                              (np.prod, ng.prod, 'prod')]:
         for reduction_axes in [[C],
                                [W],
                                [H],
@@ -215,7 +324,7 @@ def test_reciprocal(transformer_factory):
 
     ex = ExecutorFactory()
     rec_u_graph = ex.executor(rec_u, p_u)(u)
-    np.testing.assert_allclose(rec_u_np, rec_u_graph)
+    ng.testing.assert_allclose(rec_u_np, rec_u_graph)
 
 
 def test_reciprocal_derivative(transformer_factory):
@@ -322,10 +431,10 @@ def test_elementwise_unary_ops_matched_args(transformer_factory):
         dudut_fun = ex.derivative(result_op, p_u)
 
         u_t = fun(u)
-        np.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
+        ng.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
         dudunum = dudunum_fun(u)
         dudut = dudut_fun(u)
-        np.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
+        ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
 def test_elementwise_ops_unmatched_args(transformer_factory):
@@ -374,26 +483,26 @@ def test_elementwise_ops_unmatched_args(transformer_factory):
 
         # u op v
         result_be = uv_fun(u, v)
-        np.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
+        ng.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
         duvdunum = duvdunum_fun(u, v)
         duvdut = duvdut_fun(u, v)
-        np.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
+        ng.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
 
         duvdvnum = duvdvnum_fun(v, u)
         duvdvt = duvdvt_fun(v, u)
-        np.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
+        ng.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
 
         # v op u
 
         result_be = vu_fun(u, v)
-        np.testing.assert_allclose(vu_np, result_be, atol=1e-4, rtol=1e-4)
+        ng.testing.assert_allclose(vu_np, result_be, atol=1e-4, rtol=1e-4)
         dvudunum = dvudunum_fun(u, v)
         dvudut = dvudut_fun(u, v)
-        np.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
+        ng.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
 
         dvudvnum = dvudvnum_fun(v, u)
         dvudvt = dvudvt_fun(v, u)
-        np.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
+        ng.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
 
 
 def np_softmax(x, axis):
@@ -460,10 +569,10 @@ def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
 
     cel = cross_entropy_binary_logistic(u, v)
     cel_shortcut = cross_entropy_binary_logistic_shortcut(u, v)
-    np.testing.assert_allclose(cel, cel_shortcut, rtol=1e-5)
+    ng.testing.assert_allclose(cel, cel_shortcut, rtol=1e-5)
 
     cel_graph = executor(ng.cross_entropy_binary_inner(ng.sigmoid(p_u), p_v), p_u, p_v)(u, v)
-    np.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
+    ng.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
 def test_cross_entropy_binary(transformer_factory):
@@ -490,7 +599,7 @@ def test_cross_entropy_binary(transformer_factory):
 
     dval_u_num = dval_u_num_fun(u, v)
     dval_u_graph = dval_u_graph_fun(u, v)
-    np.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
+    ng.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
 
 def adiff_softmax(x):
@@ -549,7 +658,7 @@ def test_np_softmax(transformer_factory):
                                 ng.make_axes([N])).reshape(1, N.length)
 
     s = np_softmax(x, 0)
-    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+    ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     # Drop batch axis and test the derivative
     x0 = x[:, 0]
@@ -568,7 +677,7 @@ def test_np_softmax(transformer_factory):
 
     a = numeric_derivative(np_softmax_0, x0, .001)
     s = adiff_softmax(x0)
-    np.testing.assert_allclose(s, a, atol=1e-2, rtol=1e-2)
+    ng.testing.assert_allclose(s, a, atol=1e-2, rtol=1e-2)
 
 
 def np_cross_entropy_multi(y, t, axis=None):
@@ -609,16 +718,16 @@ def test_softmax(transformer_factory):
     smax_fun = ex.executor(ng.softmax(p_x), p_x)
 
     s = smax_w_fun(x)
-    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+    ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     x = rng.uniform(-5000, 5000, ng.make_axes([W, N]))
     u = np_softmax(x, 0)
     s = smax_w_fun(x)
-    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+    ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
     # Test with softmax_axis default
     s = smax_fun(x)
-    np.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+    ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
 def test_softmax2(transformer_factory):
@@ -822,7 +931,7 @@ def compare_f_at_x(f_be, x_be, f_np, x, **kwargs):
     val_be = ex.executor(f_be, *x_be)(*x)
 
     # compare numpy and op_graph
-    np.testing.assert_allclose(val_np, val_be, **kwargs)
+    ng.testing.assert_allclose(val_np, val_be, **kwargs)
 
 
 def test_sigmoid_value(transformer_factory):
@@ -852,7 +961,7 @@ def one_hot_comparison(hot_axes, axes, C):
         v[tuple(vindex)] = 1
 
     v_t = executor(ng.one_hot(u_p, axis=C), u_p)(u)
-    np.testing.assert_allclose(v_t, v)
+    ng.testing.assert_allclose(v_t, v)
 
 
 def test_onehot(transformer_factory):
@@ -889,7 +998,7 @@ def test_clip(transformer_factory):
     ex = ExecutorFactory()
     costfunc = ex.executor(clip_func, p_x)
     result = costfunc(x)
-    np.testing.assert_allclose(result, expected_result)
+    ng.testing.assert_allclose(result, expected_result)
 
 
 def test_elementwise_fp16_in(transformer_factory):
@@ -907,7 +1016,7 @@ def test_elementwise_fp16_in(transformer_factory):
     c = ng.multiply(a, b)
 
     result = executor(c)()
-    np.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
+    ng.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
 
 
 def test_elementwise_fp16_out(transformer_factory):
@@ -923,7 +1032,7 @@ def test_elementwise_fp16_out(transformer_factory):
     c = ng.multiply(a, b, dtype=np.dtype(np.float16))
 
     result = executor(c)()
-    np.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
+    ng.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
 
 
 def test_empty_finalize():
@@ -959,7 +1068,7 @@ def test_mean(transformer_factory):
 
     np_f_res = np.sum(np.mean(input_value, axis=1, keepdims=True) - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
+    ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
 def test_variance_wgrad(transformer_factory):
@@ -981,11 +1090,11 @@ def test_variance_wgrad(transformer_factory):
 
     np_f_res = np.sum(np.var(input_value, axis=1, keepdims=True) - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
+    ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
     np_b_res = 2 * (input_value - np.mean(input_value, axis=1, keepdims=True))
 
-    np.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
+    ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
 def test_variance_sqrt_inverse(transformer_factory):
@@ -1020,5 +1129,5 @@ def test_variance_sqrt_inverse(transformer_factory):
 
     np_f_res = np.sum(np_f_res - target_value)
 
-    np.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
-    np.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
+    ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
+    ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)

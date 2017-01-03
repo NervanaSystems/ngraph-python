@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
+import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 import pytest
 
@@ -28,7 +29,7 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         result = tf.add(a, b) * 3
 
         # test
@@ -45,13 +46,13 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         a_update = tf.assign(a, b)
 
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)
 
     @pytest.mark.xfail(strict=True)
     def test_ref_assign_add(self):
@@ -64,10 +65,10 @@ class Tester(ImporterTester):
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))
-        init_op = tf.initialize_all_variables()
+        init_op = tf.global_variables_initializer()
         a_update = tf.assign_add(a, b)
 
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert np.allclose(tf_result, ng_result)
+        assert ng.testing.allclose(tf_result, ng_result)

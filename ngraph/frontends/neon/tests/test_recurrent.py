@@ -29,12 +29,14 @@ The following are made sure to be the same in both recurrent layers
     -   the data shape inside recurrent (neon) is feature, seq_len * batch_size
 """
 import itertools as itt
-import numpy as np
-import ngraph as ng
 
-from ngraph.frontends.neon import Recurrent, BiRNN, GaussianInit, Tanh
-from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
+import numpy as np
 from recurrent_ref import Recurrent as RefRecurrent
+
+import ngraph as ng
+from ngraph.frontends.neon import Recurrent, BiRNN, GaussianInit, Tanh
+from ngraph.testing.execution import ExecutorFactory
+from ngraph.testing.random import RandomTensorGenerator
 
 rng = RandomTensorGenerator()
 
@@ -163,13 +165,13 @@ def check_birnn(seq_len, input_size, hidden_size, batch_size,
         h_ref = h_ref_bwd + h_ref_fwd
         if return_seq is True:
             fprop_neon = fprop_neon[:, :, 0]
-        np.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
+        ng.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
     else:
         if return_seq is True:
             fprop_neon_fwd = fprop_neon_fwd[:, :, 0]
             fprop_neon_bwd = fprop_neon_bwd[:, :, 0]
-        np.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
-        np.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
+        ng.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
+        ng.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
     return
 
 
@@ -230,15 +232,15 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
     # bprop derivs
     dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
     dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
-    np.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
 
     dWb_s = dWb_s_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
     dWb_n = dWb_n_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
-    np.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
 
     dWinput_s = dWinput_s_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
     dWinput_n = dWinput_n_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
-    np.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
+    ng.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
 
     # ========= reference model ==========
     output_shape = (hidden_size, seq_len * batch_size)
@@ -270,7 +272,7 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
     # comparing outputs
     if return_seq is True:
         fprop_neon = fprop_neon[:, :, 0]
-    np.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
+    ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
 
     return
 

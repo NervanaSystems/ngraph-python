@@ -12,6 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.analysis.dataflow import *
-from ngraph.analysis.fusion import *
-from ngraph.analysis.memory import *
+
+# reuse from TF
+from ngraph.frontends.tensorflow.tf_importer.ops_binary import OpsBinary as TFOpsBinary
+
+
+class OpsBinary(TFOpsBinary):
+    """
+    Mix-in class element-wise binary ops.
+    For now, reuse TF
+    """
+    # TBD: weird implementation of Sum of more than two inputs :) Should be modified?
+    def _nested_add(self, op, inputs):
+        if len(inputs) == 2:
+            return self.Add(op, inputs)
+        else:
+            add_input = [inputs[0], self._nested_add(op, inputs[1:])]
+            return self.Add(op, add_input)
+
+    def Sum(self, op, inputs):
+        return self._nested_add(op, inputs)

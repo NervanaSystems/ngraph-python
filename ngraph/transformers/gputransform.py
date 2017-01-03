@@ -27,16 +27,14 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, ReciprocalOneDOp, \
-    RngOp, \
+    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, PowerZeroDim, \
+    ReciprocalOneDOp, RngOp, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    Function, SetItemOp
+    Function, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-# TODO: re-enable fusion
-# from ngraph.analysis.fusion import gpu_fusible
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout
@@ -275,6 +273,14 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Power)
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
+
+    @add_op.on_type(PowerZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("pow", x=x, y=y, out=out)
+
+    @add_op.on_type(Prod)
+    def add_op(self, op, out, x):
+        self._buffer_op("prod", x=x, axis=0, out=out)
 
     @add_op.on_type(ReciprocalOneDOp)
     def add_op(self, op, out, x):
@@ -986,6 +992,8 @@ class GPUTransformer(Transformer):
     __runtime = None
 
     transformer_name = "gpu"
+    default_rtol = 1e-05
+    default_atol = 1e-08
 
     @staticmethod
     def close_gpu():
@@ -994,8 +1002,6 @@ class GPUTransformer(Transformer):
             GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):
-        # TODO: Re-enable fusion
-        # super(GPUTransformer, self).__init__(fusion=gpu_fusible, **kwargs)
         super(GPUTransformer, self).__init__(**kwargs)
 
         self.graph_passes.insert(0, GPUTensorLayout())

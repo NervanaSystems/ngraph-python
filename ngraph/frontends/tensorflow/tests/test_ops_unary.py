@@ -85,3 +85,13 @@ class Tester(ImporterTester):
         # test
         feed_dict = {a: np.random.rand(*tf_to_shape_tuple(a))}
         self.run(neg_a, tf_feed_dict=feed_dict)
+
+    def test_square(self):
+        # tf ops
+        y = tf.placeholder(tf.float32, [8, 5])
+        f = tf.square(y)
+        y_np = np.random.randn(8, 5)
+        feed_dict = {y: y_np}
+
+        # test
+        self.run(f, tf_feed_dict=feed_dict)
