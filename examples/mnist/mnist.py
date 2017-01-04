@@ -49,10 +49,14 @@ class MNIST(object):
         with gzip.open(filepath, 'rb') as f:
             self.train_set, self.valid_set = pickle_load(f)
 
-        self.train_set = {'image': self.train_set[0].reshape(60000, 1, 28, 28),
-                          'label': self.train_set[1]}
-        self.valid_set = {'image': self.valid_set[0].reshape(10000, 1, 28, 28),
-                          'label': self.valid_set[1]}
+        self.train_set = {'image': {'data': self.train_set[0].reshape(60000, 28, 28),
+                                    'axes': ('batch', 'height', 'width')},
+                          'label': {'data': self.train_set[1],
+                                    'axes': ('batch',)}}
+        self.valid_set = {'image': {'data': self.valid_set[0].reshape(10000, 28, 28),
+                                    'axes': ('batch', 'height', 'width')},
+                          'label': {'data': self.valid_set[1],
+                                    'axes': ('batch',)}}
 
         return self.train_set, self.valid_set
 

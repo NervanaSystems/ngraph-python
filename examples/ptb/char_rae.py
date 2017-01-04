@@ -21,8 +21,9 @@ the same sequence in reverse order.
 
 import ngraph as ng
 from ngraph.frontends.neon import Preprocess, Recurrent, Affine, Softmax, Tanh
-from ngraph.frontends.neon import UniformInit, RMSProp, ax, make_bound_computation
-from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import UniformInit, RMSProp
+from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
@@ -51,38 +52,39 @@ train_set = SequentialArrayIterator(ptb_data['train'],
                                     reverse_target=True,
                                     get_prev_target=True)
 
+inputs = train_set.make_placeholders()
+ax.Y.length = len(tree_bank_data.vocab)
+
+
+def expand_onehot(x):
+    # Assign the recurrent role and property to the axis named 'time'
+    x.axes.find_by_short_name('time')[0].add_role(ar.time)
+    x.axes.find_by_short_name('time')[0].is_recurrent = True
+    return ng.one_hot(x, axis=ax.Y)
+
+
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
 # model initialization
-one_hot_enc = Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y))
+one_hot_enc = Preprocess(functor=expand_onehot)
 enc = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True, return_sequence=False)
-one_hot_dec = Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y))
+one_hot_dec = Preprocess(functor=expand_onehot)
 dec = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True, return_sequence=True)
-linear = Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y, ax.REC))
-
-# Bind axes lengths:
-ax.Y.length = len(tree_bank_data.vocab)
-ax.REC.length = time_steps
-ax.N.length = args.batch_size
-
-# placeholders with descriptive names
-inputs = dict(inp_enc=ng.placeholder([ax.REC, ax.N]),
-              inp_dec=ng.placeholder([ax.REC, ax.N]),
-              tgt=ng.placeholder([ax.REC, ax.N]))
+linear = Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
 # build network graph
-one_hot_enc_out = one_hot_enc.train_outputs(inputs['inp_enc'])
-one_hot_dec_out = one_hot_dec.train_outputs(inputs['inp_dec'])
+one_hot_enc_out = one_hot_enc.train_outputs(inputs['inp_txt'])
+one_hot_dec_out = one_hot_dec.train_outputs(inputs['prev_tgt'])
 enc_out = enc.train_outputs(one_hot_enc_out)
 dec_out = dec.train_outputs(one_hot_dec_out, init_state=enc_out)
 output_prob = linear.train_outputs(dec_out)
 
 loss = ng.cross_entropy_multi(output_prob,
-                              ng.one_hot(inputs['tgt'], axis=ax.Y),
+                              ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
                               usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
@@ -90,17 +92,19 @@ updates = optimizer(loss)
 train_outputs = dict(batch_cost=mean_cost, updates=updates)
 loss_outputs = dict(cross_ent_loss=loss)
 
-# Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-
 ######################
 # Train Loop
 
-for mb_idx, data in enumerate(train_set):
-    batch_output = train_computation(dict(inp_enc=data['inp_txt'],
-                                          inp_dec=data['prev_tgt'],
-                                          tgt=data['tgt_txt']))
-    if mb_idx % args.iter_interval == 0:
-        print("Iteration {} complete. Avg losses: {}".format(mb_idx + 1,
-                                                             float(batch_output['batch_cost'])))
+# Now bind the computations we are interested in
+transformer = ngt.make_transformer()
+train_computation = make_bound_computation(transformer, train_outputs, inputs)
+loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+
+cbs = make_default_callbacks(output_file=args.output_file,
+                             frequency=args.iter_interval,
+                             train_computation=train_computation,
+                             total_iterations=args.num_iterations,
+                             loss_computation=loss_computation,
+                             use_progress_bar=args.progress_bar)
+
+loop_train(train_set, train_computation, cbs)
