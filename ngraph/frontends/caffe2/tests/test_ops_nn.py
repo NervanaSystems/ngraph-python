@@ -157,10 +157,12 @@ def test_convolution_nhwc_no_pad_no_bias():
     # shape is in NCHW format
     # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
     param_list = [
+        # [1, 1, 1, 1, 1, 1],
         [1, 3, 2, 1, 2, 2],
         [1, 1, 4, 1, 2, 2],
         [2, 3, 8, 1, 2, 2],
         [8, 2, 5, 4, 3, 1],
+        [1, 2, 5, 2, 3, 1],
     ]
 
     for param_iter in param_list:
@@ -172,7 +174,14 @@ def test_convolution_nhwc_no_pad_no_bias():
 
         data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
         data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
-        data_b = [0. for i in range(np.prod(shape_b))]
+        data_b = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_b))]
+
+        # data_x = [0. for i in range(np.prod(shape_x))]
+        # data_w = [0. for i in range(np.prod(shape_w))]
+        # data_b = [float(i)+1. for i in range(np.prod(shape_b))]
+        # data_x = [1.0]
+        # data_w = [1.0]
+        # data_b = [1.0]
 
         net = core.Net("net")
         X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
@@ -195,6 +204,10 @@ def test_convolution_nhwc_no_pad_no_bias():
         ex = ExecutorFactory()
         f_result = ex.executor(f_ng)()
 
+
+        print(param_iter)
+        print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
+        print("ngraph result: {}:\n{}".format("Y", f_result))
         # compare Caffe2 and ngraph results
         assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
                            equal_nan=False))

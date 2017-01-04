@@ -224,6 +224,11 @@ class OpsNN(OpsBase):
         ng.make_axes(axes_order[order]['W']).set_shape(W.axes.lengths)
         ax_D.length = ax_kernel_D.length = 1
 
+        if 1 != len(bias.axes):
+            raise ValueError("Bias's must be 1D.")
+        if ax_kernel_ofm.length != bias.axes.lengths[0]:
+            raise ValueError("Bias's length must equal to number of output feature maps.")
+
         # strides params
         stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
         if len(stride_size) != 1:
@@ -286,16 +291,41 @@ class OpsNN(OpsBase):
         W = ng.axes_with_order(W, axes=internal_ax_dict['W'])
 
         # convolution
-        output = ng.convolution(params, X, W, axes=internal_ax_dict['Y'])
+        Y = ng.convolution(params, X, W, axes=internal_ax_dict['Y'])
 
         # cast back to proper format
-        oC, oD, oH, oW, oN = output.axes
+        oC, oD, oH, oW, oN = Y.axes
 
-        output = ng.broadcast(output, ng.make_axes([oN, oD, oH, oW, oC])) if "NHWC" == order \
-            else ng.broadcast(output, ng.make_axes([oN, oD, oC, oH, oW]))  # NCHW
+        # bias = ng.cast_axes(bias, ng.make_axes([ax_kernel_ofm]))
+        # bias = ng.broadcast(bias, [oC, oD, oH, oW, oN])
+        # Y = ng.Add(Y, bias)
+
+        Y = ng.broadcast(Y, ng.make_axes([oN, oD, oH, oW, oC])) if "NHWC" == order \
+            else ng.broadcast(Y, ng.make_axes([oN, oD, oC, oH, oW]))  # NCHW
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.tensor_slice(output, out_slicing)
+        Y = ng.tensor_slice(Y, out_slicing)
 
-        return output
+        def _conv_bias_add(c2_op, inputs):
+            Y, bias = inputs
+
+            ax_N = ng.make_axis(batch=True)
+            ax_C = ng.make_axis(roles=[ar.Channel])
+            ax_H = ng.make_axis(roles=[ar.Height])
+            ax_W = ng.make_axis(roles=[ar.Width])
+
+            axes_order = {
+                'NCHW': [ax_N, ax_C, ax_H, ax_W],
+                'NHWC': [ax_N, ax_H, ax_W, ax_C],
+            }
+
+            ng.make_axes(axes_order[order]).set_shape(Y.axes.lengths)
+
+            bias = ng.cast_axes(bias, ng.make_axes([ax_C]))
+            bias = ng.broadcast(bias, axes_order[order])
+            Y = ng.Add(Y, bias)
+            return Y
+
+        return _conv_bias_add(c2_op, [Y, bias])
+
