@@ -18,7 +18,8 @@ from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferSto
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
-from autoflex.gpu import GPUFlexManager, GPUFlex
+#from autoflex.gpu import GPUFlexManager, GPUFlex
+from ngraph.flex import GPUFlexManager, GPUFlex
 
 
 # create and attach bind_flex_scales method to EW kernel
