@@ -75,3 +75,43 @@ def test_tanh():
 
     # compare Caffe2 and ngraph results
     assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))
+
+
+def test_softmax():
+    workspace.ResetWorkspace()
+
+    shape = [2, 7]
+    data = [
+        1., 2., 3., 4., 1., 2., 3.,
+        1., 2., 3., 4., 1., 2., 3.
+    ]
+    expected = [
+        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
+        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
+    ]
+
+    net = core.Net("net")
+    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
+    net.Softmax(["X"], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    c2_y = workspace.FetchBlob("Y")
+
+    # compare Caffe2 and ngraph results
+    assert(np.allclose(f_result, c2_y, atol=1e-4, rtol=0, equal_nan=False))
+
+    # compare expected results and ngraph results
+    assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
