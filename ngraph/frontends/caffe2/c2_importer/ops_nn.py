@@ -72,7 +72,7 @@ class OpsNN(OpsBase):
         x, y = inputs
 
         y = ng.cast_axes(y, x.axes)
-        return ng.squared_L2(x - y) / 2
+        return 0.5 * ng.squared_L2(x - y)
 
     def AveragedLoss(self, c2_op, inputs):
         """
