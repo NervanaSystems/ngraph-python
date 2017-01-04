@@ -20,7 +20,7 @@ import ngraph.transformers as ngt
 from ngraph.op_graph.axes import spatial_axis
 
 from ngraph.frontends.neon import ax, ar
-from ngraph.frontends.neon import NgraphArgparser
+from flexargparser import FlexNgraphArgparser
 
 
 # This is currently unused
@@ -28,7 +28,7 @@ rng = RandomTensorGenerator(0, np.float32)
 
 
 # Select a transformer
-parser = NgraphArgparser(description='simple conv example')
+parser = FlexNgraphArgparser(description='simple conv example')
 args = parser.parse_args()
 transformer_name = args.backend
 

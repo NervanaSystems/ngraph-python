@@ -17,9 +17,11 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.op_graph.axes as ax
-from ngraph.frontends.neon import NgraphArgparser
+#from ngraph.frontends.neon import NgraphArgparser
+from flexargparser import FlexNgraphArgparser
 
-parser = NgraphArgparser(description='x + 1.5, sum, abs')
+#parser = NgraphArgparser(description='x + 1.5, sum, abs')
+parser = FlexNgraphArgparser(description='x + 1.5 example')
 args = parser.parse_args()
 transformer_name = args.backend
 

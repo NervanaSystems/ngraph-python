@@ -17,11 +17,12 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.op_graph.axes as ax
-from ngraph.frontends.neon import NgraphArgparser
+from flexargparser import FlexNgraphArgparser
+
 
 
 # Select a transformer
-parser = NgraphArgparser(description='simple gemm example')
+parser = FlexNgraphArgparser(description='simple gemm example')
 args = parser.parse_args()
 transformer_name = args.backend
 

@@ -17,21 +17,10 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.op_graph.axes as ax
-from ngraph.frontends.neon import NgraphArgparser
-
-parser = NgraphArgparser(description='x + 1.5 example')
-args = parser.parse_args()
-transformer_name = args.backend
-
-# hard code flex transformer
-# transformer_name = 'flexgpu'
-# factory = ngt.make_transformer_factory(transformer_name)
-# ngt.set_transformer_factory(factory)
-
-transformer = ngt.make_transformer()
+from flexargparser import FlexNgraphArgparser
 
 
-def print_fm_stats(transformer):
+def print_fm_stats(transformer, transformer_name):
     if transformer_name == 'flexgpu' and transformer.flex_manager.num_flex_tensors < 20:
         print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
         fm = transformer.flex_manager
@@ -39,14 +28,23 @@ def print_fm_stats(transformer):
         fm.transfer_stats()
         print("flex_manager.host_stats", fm.host_stats)
 
-# Build the graph - scalar addition
+parser = FlexNgraphArgparser(description='x + 1.5 example')
+args = parser.parse_args()
+transformer_name = args.backend
+
+transformer = ngt.make_transformer()
+
+# Build the graph
 x = ng.placeholder(())
-x_plus_one = x + 1.5  # really: x_plus_one = ng.add(x, ng.constant(1))
+x_plus_one = x + 1.5
+
 # Define a computation
-plus_one = transformer.computation(x_plus_one, x)  # computation, parameters
+plus_one = transformer.computation(x_plus_one, x)
 
 # Run the computation
 for i in range(5):
     print(plus_one(i))
+    print()
 
-print_fm_stats(transformer)
+# flex manager stats
+print_fm_stats(transformer, transformer_name)

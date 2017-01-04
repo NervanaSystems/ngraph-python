@@ -297,7 +297,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             after allocation.  This happens once per training session, not once per-minibatch.
     """
     def __init__(self, **kwargs):
-        super(Transformer, self).__init__(**kwargs)
+        super(Transformer, self).__init__()
         self.computations = OrderedSet()
         self.finalized = False
         self.allocated = False
@@ -537,5 +537,5 @@ def allocate_transformer(name, **kargs):
 def make_transformer_factory(name, **kargs):
     def factory():
         return allocate_transformer(name, **kargs)
-    factory.name = name
+    factory.name = name  # added for pytest
     return factory

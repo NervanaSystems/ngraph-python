@@ -73,10 +73,13 @@ class NgraphArgparser(configargparse.ArgumentParser):
 
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args()
-        factory = ngt.make_transformer_factory(args.backend)
-        ngt.set_transformer_factory(factory)
+        self.make_and_set_transformer_factory(args)
 
         # invert no_progress_bar meaning and store in args.progress_bar
         args.progress_bar = not args.no_progress_bar
 
         return args
+
+    def make_and_set_transformer_factory(self, args):
+        factory = ngt.make_transformer_factory(args.backend)
+        ngt.set_transformer_factory(factory)
