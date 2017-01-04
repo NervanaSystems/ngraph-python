@@ -21,7 +21,7 @@ from neon.layers.layer import Pooling
 
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
+from ngraph.testing import RandomTensorGenerator, executor
 from ngraph.frontends.neon import ax, ar
 from ngraph.frontends.neon.layer import output_dim
 
