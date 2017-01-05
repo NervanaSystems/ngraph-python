@@ -15,19 +15,16 @@ class Flex(object):
 
         # numpy dtype interface
         self.itemsize = storage_bits / 8
-
-        # TODO: keep this here? or move to flexgpu?
-        # needed by conv kernels
-        self.type = 'flex' 
+        self.type = 'flex'
         self.str = "<i2"
-        self.name = 'flex'  # TODO, what to set name and type to
+        self.name = 'flex'  # TODO reconsider what name and type are set to?
 
     # TODO: review __eq__
     # - more generally this is about the design of flex dtype
     # - last 2 conditions are neon flexsim holdovers - keep?
     def __eq__(self, other):
-        return ((self.storage_bits == other.storage_bits) and
-                isinstance(self, other.__class__) and
+        return (isinstance(other, self.__class__) and
+                (self.storage_bits == other.storage_bits) and
                 (type(self) is type(other)) and
                 (self.type is other.type))
 
@@ -76,7 +73,8 @@ class FlexManager(object):
             FlexEntry
         """
         flex_id = self._num_flex_tensors
-        self.flex_entries[flex_id] = FlexEntry(flex_id, dtype=dtype)
+        flex_entry = FlexEntry(flex_id, dtype=dtype)
+        self.flex_entries[flex_id] = flex_entry
         self._num_flex_tensors += 1
 
         return flex_entry

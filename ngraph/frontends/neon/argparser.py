@@ -37,6 +37,9 @@ class NgraphArgparser(configargparse.ArgumentParser):
 
         self.setup_default_args()
 
+    def backend_names(self):
+        return ['numpy', 'gpu']
+
     def setup_default_args(self):
         """
         Setup the default arguments used by ngraph
@@ -62,7 +65,9 @@ class NgraphArgparser(configargparse.ArgumentParser):
                                'visualization.')
 
         self.add_argument('-z', '--batch_size', type=int, default=128)
-        self.add_argument('-b', '--backend', choices=['gpu', 'numpy', 'gpuflex'], default='numpy',
+        self.add_argument('-b', '--backend',
+                          choices=self.backend_names(),
+                          default='numpy',
                           help='backend type')
         self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)

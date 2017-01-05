@@ -17,14 +17,11 @@ import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.transformers.gpu.util import _get_sm_count
-#from ngraph.flex import GPUFlex, gpuflex16
 from ngraph.flex.base import Flex
 
 from pycuda.compiler import SourceModule
 
 import numpy as np
-
-flex_verbose = False
 
 
 _op_templates = {
@@ -594,7 +591,7 @@ def _get_register_type(dtype, memory=False):
         # FLEX TODO:
         # need a case to return "flex" string for _conversion_templates
         # or push this case to calling code
-            #return dtype.dtype_name
+            #return dtype.name
     if dtype == np.float32:
         return "float"
     elif dtype == np.float16:
@@ -688,11 +685,10 @@ def _build_register_mapping(stages):
                             buffers[inval] = buffername
 
                         from ngraph.transformers.gputransform import GPURegister
-                        #FIXME FLEX
                         if isinstance(inval, GPURegister) and \
-                            not (op[0] == "argmax" or op[0] == "argmin"):
-                            print "according to Stewart, this should not happen in current graph without fusing"
-                            import ipdb; ipdb.set_trace()
+                           not (op[0] == "argmax" or op[0] == "argmin"):
+                            # FLEX TODO: clean up this message
+                            raise ValueError('flex gpu: should not happen without fusion')
 
                         # flex
                         # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper
@@ -973,6 +969,7 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         params.append(ctx.flex_stats_ptr)
 
     return (args, arg_desc, params)
+
 
 def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     """
@@ -1299,7 +1296,7 @@ def _call_compound_kernel(ops):
 
 
 class CudaSourceFile:
-    def __init__(self, name):
+    def __init__(self, name, is_flex=False):
         self.num_kernels = 0
         self.module = None
         self.functions = dict()
@@ -1311,12 +1308,11 @@ class CudaSourceFile:
         self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
         self.filename = self.f.name
         self.f.write(_includes_template)
+        if is_flex:
+            self.f.write(_flex_includes_template)
         self.f.flush()
 
-        if flex_verbose: print "CudaSourceFile temporary file", self.filename
-        # FLEX TODO this is a hack:
-        # relying on _get_compound_kernel processing of params to know if we have a flex kernel
-        self.flex_includes_written = False
+        # print "CudaSourceFile temporary file", self.filename
 
     def add_kernel(self, ops):
         assert not self.compiled
@@ -1345,11 +1341,6 @@ class CudaSourceFile:
                 griddim[2] = axis[2]
 
         params = [tuple(griddim), tuple(blockdim), None] + params
-
-        # check if flex includes are needed/have been written
-        if _are_flex_params(params) and self.flex_includes_written is not True:
-            self.f.write(_flex_includes_template)
-            self.flex_includes_written = True
 
         # Add kernel code to source file
         self.f.write(code)

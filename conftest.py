@@ -14,13 +14,14 @@
 # ----------------------------------------------------------------------------
 import pytest
 import ngraph.transformers as ngt
+from ngraph.flex.names import flex_gpu_transformer_name
 
 from ngraph.testing.error_check import transformer_name
 
 
 def pytest_addoption(parser):
     parser.addoption("--enable_flex", action="store_true",
-                     help="Enable and *only* enable gpuflex transformer.")
+                     help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
 
 @pytest.fixture(scope="module",
                 params=ngt.transformer_choices())
@@ -33,8 +34,8 @@ def transformer_factory(request):
     transformer_name = request.param
 
     if pytest.config.getoption("--enable_flex"):
-        if transformer_name == 'gpuflex':
-            if 'gpuflex' in ngt.transformer_choices():
+        if transformer_name == flex_gpu_transformer_name:
+            if flex_gpu_transformer_name in ngt.transformer_choices():
                 yield set_and_get_factory(transformer_name)
             else:
                 raise ValueError("GPU not found, should not set --enable_flex"
@@ -42,7 +43,7 @@ def transformer_factory(request):
         else:
             pytest.skip('Skip all other transformers since --enable_flex is set.')
     else:
-        if transformer_name == 'gpuflex':
+        if transformer_name == flex_gpu_transformer_name:
             pytest.skip('Skip flex test since --enable_flex is not set.')
         else:
             yield set_and_get_factory(transformer_name)

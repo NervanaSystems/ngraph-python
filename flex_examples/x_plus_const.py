@@ -17,16 +17,8 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.op_graph.axes as ax
-from flexargparser import FlexNgraphArgparser
+from ngraph.flex.flexargparser import FlexNgraphArgparser
 
-
-def print_fm_stats(transformer, transformer_name):
-    if transformer_name == 'flexgpu' and transformer.flex_manager.num_flex_tensors < 20:
-        print("flex_manager.stat_ids after computations", transformer.flex_manager.stat_ids)
-        fm = transformer.flex_manager
-
-        fm.transfer_stats()
-        print("flex_manager.host_stats", fm.host_stats)
 
 parser = FlexNgraphArgparser(description='x + 1.5 example')
 args = parser.parse_args()
@@ -45,6 +37,3 @@ plus_one = transformer.computation(x_plus_one, x)
 for i in range(5):
     print(plus_one(i))
     print()
-
-# flex manager stats
-print_fm_stats(transformer, transformer_name)

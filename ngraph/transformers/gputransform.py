@@ -420,7 +420,10 @@ class GPUKernelGroup(object):
         self.transformer = transformer
         self.kernels = []
         self.name = name
-        self.sourcefile = CudaSourceFile(name)
+        self.sourcefile = self.make_cuda_source_file()
+
+    def make_cuda_source_file(self):
+        return CudaSourceFile(self.name)
 
     @generic_method(Op)
     def add_kernel(self, op):

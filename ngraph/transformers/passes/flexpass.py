@@ -2,7 +2,6 @@ from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, tdcache
 from ngraph.flex import gpuflex16
-#from autoflex.gpu import gpuflex16
 
 
 class FlexPass(PeepholeGraphPass):
@@ -14,5 +13,6 @@ class FlexPass(PeepholeGraphPass):
 
 # unused after most recent merge from master (12/30)
 class ClearTensorDescriptions(GraphPass):
-    def do_pass(self, ops):
+    def do_pass(self, ops, inits):
         tdcache.tensor_description_cache.clear()
+        return ops, inits

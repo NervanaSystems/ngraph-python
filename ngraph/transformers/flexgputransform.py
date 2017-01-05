@@ -17,9 +17,9 @@ from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
-from ngraph.transformers.gpu.float_ew2 import FlexScaleDescription
-#from autoflex.gpu import GPUFlexManager, GPUFlex
+from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription
 from ngraph.flex import GPUFlexManager, GPUFlex
+from ngraph.flex.names import flex_gpu_transformer_name
 
 
 # create and attach bind_flex_scales method to EW kernel
@@ -40,7 +40,7 @@ class FlexGPUTransformer(GPUTransformer):
      - uses flex subclass GPUKernelGroup
     """
 
-    transformer_name = "gpuflex"
+    transformer_name = flex_gpu_transformer_name
 
     # set global override tolerances for unit tests
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
@@ -49,14 +49,13 @@ class FlexGPUTransformer(GPUTransformer):
     default_rtol = 1e-05
     default_atol = 20 * fixed_point_res
 
-    def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
+    def __init__(self, fixed_point=True, flex_verbose=False, **kwargs):
 
-        super(FlexGPUTransformer, self).__init__(**kwargs)
+        super(FlexGPUTransformer, self).__init__()
         self.fixed_point = fixed_point
 
         # flex passes for setting Op dtypes to flex
-        # TODO: ClearTensorDescription do_pass interface (number of args) issue
-        #self.register_graph_pass(ClearTensorDescriptions())
+        self.register_graph_pass(ClearTensorDescriptions())
         self.register_graph_pass(FlexPass())
 
         # flex manager manages autoflex mechanics
@@ -69,21 +68,15 @@ class FlexGPUTransformer(GPUTransformer):
         return FlexGPUKernelGroup(self, name)
 
     def transform_ordered_ops(self, ordered_ops, name):
-
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
-
-        # TODO: this is a placeholder; notes below may be outdated, talk with graph team
-        # allocate dev and host stat buffers associated with this computation?
-        # tensor descriptions have already been initialized so device tensors have been created
-        # create relation between computation and organization of device_buffers?
-        # self.flex_manager.dev_stats.append(drv.mem_alloc(num_flex_tensors*4))
-
+        # TODO allocate dev and host stat buffers associated with this computation here?
         return ret_val
 
     def storage_dtype(self, dtype):
         if isinstance(dtype, GPUFlex):
             return dtype.storage_dtype
         else:
+            # TODO
             raise NotImplementedError
 
 
@@ -134,6 +127,9 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def __init__(self, transformer, name):
         super(FlexGPUKernelGroup, self).__init__(transformer, name)
+
+    def make_cuda_source_file(self):
+        return CudaSourceFile(self.name, is_flex=True)
 
     def compile_all(self):
         """
