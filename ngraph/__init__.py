@@ -66,6 +66,8 @@ __all__ = [
     'pooling',
     'reciprocal',
     'safelog',
+    'sequential',
+    'sequential_op_factory',
     'sigmoid',
     'sign',
     'sin',

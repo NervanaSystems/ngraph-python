@@ -178,12 +178,13 @@ class Op(NameableValue, DebugInfo):
 
     @staticmethod
     @contextmanager
-    def captured_ops():
+    def captured_ops(ops=None):
         """
         Capture all Ops created within the context. Hides ops created in this
         context from parent contexts.
         """
-        ops = []
+        if ops is None:
+            ops = []
         try:
             Op._get_thread_ops().append(ops)
             yield (ops)
@@ -203,12 +204,13 @@ class Op(NameableValue, DebugInfo):
     # have different semantics that don't work with a shared stack
     @staticmethod
     @contextmanager
-    def all_ops():
+    def all_ops(ops=None, isolate=False):
         """
         Collects all Ops created within the context. Does not hide ops created
-        in this context from parent contexts.
+        in this context from parent contexts unless isolate is True.
         """
-        ops = []
+        if ops is None:
+            ops = []
         try:
             all_ops = Op.get_all_ops()
             all_ops.append(ops)
@@ -216,7 +218,7 @@ class Op(NameableValue, DebugInfo):
         finally:
             all_ops.pop()
             parent = all_ops[-1]
-            if parent is not None:
+            if not isolate and parent is not None:
                 parent.extend(ops)
 
     # The thread's global user_deps map
@@ -457,6 +459,10 @@ class Op(NameableValue, DebugInfo):
 
         """
         return not self.is_constant
+
+    @property
+    def is_tensor_op(self):
+        return False
 
     @property
     def is_scalar(self):
@@ -841,7 +847,7 @@ class ControlBlockOp(Op):
 
 class ParallelOp(ControlBlockOp):
     """
-    Compute every Op in all in any order.
+    Compute every Op in all in any order compatible with existing dependencies.
 
     Arguments:
         all: Ops to be computed.
@@ -915,23 +921,85 @@ def computation(returns, *args):
 
 class SequentialOp(ControlBlockOp):
     """
-    Compute every Op in all in sequential order.
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
 
     Arguments:
-        all: Ops to be computed.
-        **kwargs: Args for related classes.
+        ops: Sequence of ops to compute.
     """
-    def __init__(self, all, **kwargs):
+    def __init__(self, ops, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
-        self.require_user_deps(all)
-        tails = all[1:]
-        tails.append(self)
-        for last_op, op in zip(all, all[1:]):
-            op.add_other_dep(last_op)
+        self.value_op = ops[-1]
+        ops = OrderedSet(ops)
+        for op0, op1 in zip(ops[:-1], ops[1:]):
+            op1.other_deps.add(op0)
+            op1.require_user_deps([op0])
+        self.other_deps.update(ops)
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return self.value_op.is_tensor_op
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    def generate_adjoints(self, adjoints, delta):
+        self.value_op.generate_add_delta(adjoints, delta)
 
 
-def sequential(all):
-    return SequentialOp(all)
+def sequential(ops):
+    """
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
+
+    Arguments:
+        ops: Sequence of ops to compute.
+
+    """
+    return SequentialOp(ops)
+
+
+class SequentialFactory(list):
+    def __call__(self):
+        return sequential(self)
+
+
+@contextmanager
+def sequential_op_factory():
+    """
+    Captures created ops in a list to be used to form sequential ops.
+
+    The captured ops will be executed in the generated order, if not already executed.
+    Use append to manually add an op to the factory.
+    The last op added is the value returned from the sequential.
+
+    Example::
+
+            N = ng.make_axis(1)
+            x = ng.variable([N], initial_value=0)
+            with ng.sequential_op_factory() as pf:
+                x0 = x + x
+                ng.assign(x, 2)
+                x1 = x + x
+                pf.append(x0)
+            p = pf()
+
+
+    Returns: A callable which creates an Op that will evaluate the ops in the order specified,
+    and have value the same as the last op appended.
+
+    """
+    with Op.all_ops(SequentialFactory()) as ops:
+        yield(ops)
 
 
 class Fill(Op):
@@ -982,6 +1050,10 @@ class TensorOp(Op):
         self.__axes = axes
 
         self.scale = scale
+
+    @property
+    def is_tensor_op(self):
+        return True
 
     def generate_add_delta(self, adjoints, delta):
         """
@@ -1741,14 +1813,15 @@ class AssignableTensorOp(TensorOp):
         self.input = input
 
         with Op.saved_user_deps():
-            # Run initializations in a clean context so their SetItems don't modify user_deps
-            # for the main computations.
-            # TODO Maybe we want to use a single context for all of initialization.  We would
-            # need to do the following in a separate method called during transformation.
-            if callable(initial_value):
-                self.add_initializer(assign(self, initial_value()))
-            elif initial_value is not None:
-                self.add_initializer(assign(self, initial_value))
+            with Op.all_ops(isolate=True):
+                # Run initializations in a clean context so their SetItems don't modify user_deps
+                # for the main computations.
+                # TODO Maybe we want to use a single context for all of initialization.  We would
+                # need to do the following in a separate method called during transformation.
+                if callable(initial_value):
+                    self.add_initializer(assign(self, initial_value()))
+                elif initial_value is not None:
+                    self.add_initializer(assign(self, initial_value))
 
     @property
     def defs(self):

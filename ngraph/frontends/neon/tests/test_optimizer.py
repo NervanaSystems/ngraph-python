@@ -92,7 +92,6 @@ def test_gdm(args, transformer_factory):
     # where (x, y) are nparrays that fill the placeholders X and Y
     updates = gdm(cost)
     ngraph_optimize = transformer.computation([W, updates], X, Y)
-    transformer.initialize()
 
     # set up the neon gdm
     neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
@@ -109,6 +108,7 @@ def test_gdm(args, transformer_factory):
     for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
         # obtain ngraph results
         (ng_W, _) = ngraph_optimize(x, y)
+        gdm.update_learning_rate()
         ng_Ws.append(copy.deepcopy(ng_W))
 
         # obtain neon results
