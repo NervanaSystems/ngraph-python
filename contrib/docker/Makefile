@@ -18,6 +18,9 @@ build_doc: build_base
 test: build_test
 	@docker run --rm ${VOLUME} -t ngraph_test make test
 
+test_gpu: build_test
+	@nvidia-docker run --rm ${VOLUME} -t ngraph_test make test
+
 doc: build_doc
 	@docker run --rm ${VOLUME} -t ngraph_doc make doc
 
@@ -25,7 +28,8 @@ style: build_test
 	@docker run --rm ${VOLUME} -t ngraph_test make style
 
 test_shell: build_test
-	@docker run --rm ${VOLUME} -t ngraph_test /bin/bash
+	@docker run --rm ${VOLUME} -it ngraph_test /bin/bash
 
 shell: build_dev
 	@docker run --rm ${VOLUME} -it ngraph_dev /bin/bash
+
