@@ -283,8 +283,8 @@ class RMSProp(LearningRateOptimizer):
                     grad = clip_gradient_value(grad, self.gradient_clip_value)
                     state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
                     ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad))
-                    variable, variable - ((scale_factor * grad * self.lrate)
-                                          / (ng.sqrt(state + epsilon) + epsilon))
+                    ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
+                                                    / (ng.sqrt(state + epsilon) + epsilon)))
                 updates.append(opfac())
 
         return ng.doall(updates)
