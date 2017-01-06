@@ -28,18 +28,29 @@ To add a new op in ngraph, you'll need to :
 
 Example
 -------
-In the following example, we'll walk though the steps for adding the ``ng.prod``
-op.
+In the following example, we'll walk though the steps for adding the ``Prod``
+op. ``Prod`` computes the product of a tensor over given reduction axes. For
+instance ::
+
+   import ngraph as ng
+   axes = ng.make_axes([ng.make_axis(2), ng.make_axis(2)])
+   x = ng.constant([[1., 2.], [3., 4.]], axes=axes)
+   x_prod = ng.prod(x, reduction_axes=x.axes[1])
+   print(ng.transformers.make_transformer().computation(x_prod)())
+   # output:
+   # [  2.  12.]
 
 1. First, we need to register the new op in ``op_graph``. In general, an op is
    a sub-class of ``ngraph.op_graph.op_graph.Op``. To add a new op, we could
    inherit from the class ``Op`` or one of its descendant classes and implement
-   the functionalities correspondingly. During the op registration phase, we
-   set up axes and other necessary attributes / functions for op implementation
-   in transformers. Since ops of different types have distinct functionalities,
-   we could usually find references on ops that have similar behavior or belong
-   to the same category.
+   the functionalities. In most cases, we just need to implement the
+   ``__init__()`` and ``generate_adjoints()`` if we want to define the derivative
+   of the op. For other advanced functionalities, please refer to the the source
+   of ``ngraph.op_graph.op_graph.Op``.
 
+   There are several helper functions (namely ``create_binary_elementwise``,
+   ``create_twod_reduction_op``, ``create_oned_reduction_op`` and
+   ``create_reduction_op``) to accelerate op registration process.
    In this case, since ``Prod`` is a reduction op, we could use the
    ``create_reduction_op`` helper function. So in
    ``ngraph/op_graph/op_graph.py``, we add ::
@@ -49,14 +60,38 @@ op.
         )
 
 2. Next, we could (optionally) add adjoint function for computing gradients of
-   the op in ``Op.generate_adjoints()`` function. There are two scenarios: if
+   the op in ``generate_adjoints()`` function. There are two scenarios: if
    the gradients of the op could be represented by other ops available in
    ngraph, we could use those ops to implement the gradients; if that is not
    possible or if we want to optimize the performance of the gradient
    computation, we could add new ops specifically for computing gradient.
 
-   In this example, we could represent the gradeints of the ``Prod`` by other
-   ngraph ops. In ``ngraph/op_graph/op_graph.py``, we add ::
+   The ``generate_adjoints()`` function takes several arguments:
+
+         - ``adjoints``: A dictionary storing adjoints for the derivative being
+           computed, with dictionary key being the op and value being the
+           derivative of the op. ``adjoints`` needs to be accumulated by the
+           ``generate_add_delta()`` function.
+         - ``delta``: The back-propagated gradient from the downstream of the
+           graph.
+         - ``input_op_0``: The input operand to the op.
+         - ``input_op_1, ...``: Other input operand(s) to the op.
+           ``generate_adjoints()`` takes variable-length inputs.
+
+   Inside ``generate_adjoints()`` for each input op, we accumulated its
+   gradients by calling ``input_op.generate_add_delta(adjoints, gradient_by_current_op)``.
+
+   For more details of how autodiff works in ngraph, please refer to the
+   :ref:`Autodiff` documentation.
+
+   In this example, we could represent the gradients of the ``Prod`` by other
+   ngraph ops, such as ``equal``, ``sum``, ``prod`` and ``broadcast``. Also,
+   since we are using ``create_reduction_op`` helper function, we define a
+   ``prod_adjoints()`` function externally and pass it to the helper function.
+   The helper function would then apply it to the ``generate_adjoints()``
+   in the generated ``Prod`` class.
+
+   In ``ngraph/op_graph/op_graph.py``, we add ::
 
         def prod_adjoints(self, adjoints, delta, x):
             # axes
@@ -89,9 +124,11 @@ op.
             )
 
 3. The next step is to register op in transformer passes. Transformer passes
-   are used to simplify graph, optimize ops for execution and meet device
-   specific constraints. The two default passes we have currently are
-   ``SimplePrune`` and ``RequiredTensorShaping``.
+   are used to simplify graph, to optimize ops for execution and to meet device
+   specific constraints. Some optimization passes are optional, while other
+   passes could be required to ensure correctness.The two default passes we
+   currently have are ``SimplePrune`` and ``RequiredTensorShaping``. Please
+   refer to :ref:`Transformer Passes` doc for more details.
 
    For ``Prod``, one of the optimization we can do is that, if the tensor are
    filled with the identical value, we could replace it by the ``Power`` op.
@@ -102,10 +139,13 @@ op.
 
             @visit.on_type(Prod)
             def visit(self, op):
+                """
+                When Prod op is visited by transformer passes, replace it with
+                other ops depending on the input operand to optimize performance
+                and reduce to 2D to meet gpu device constrains.
+                """
                 x = op.args[0]
                 if x.is_scalar:
-                    # Prod of a scalar is just the scalar raised to the power of the
-                    # axes size rebroadcast
                     val = broadcast(power(cast_axes(x, ()), op.reduction_axes.size), op.axes)
                     self.replace_op(op, val)
                     return
@@ -119,18 +159,15 @@ op.
             @visit.on_type(Prod)
             def visit(self, op):
                 """
-                TODO.
-                Arguments:
-                  op: TODO
-                Returns:
-                  TODO
+                If x is filled with the same value, then replace the prod op
+                with `power`.
                 """
                 x, = op.args
                 if x.is_scalar and x.is_constant:
                     val = power(x.const, op.reduction_axes.size)
                     self.replace_op(op, constant(val))
 
-4. Next, we need to add implementations of the op in transformers. Notes that
+4. Next, we need to add implementations of the op in transformers. Note that
    in the previous steps, we still haven't specified how the op shall be executed
    (forward computation). In current ngraph, the ops are implemented in
    ``NumpyTransformer`` and ``GPUTransformer`` are done by code generation for
@@ -146,7 +183,9 @@ op.
             def generate_op(self, op, out, x):
                 self.append("np.prod({}, axis=0, out={})", x, out)
 
-   In ``ngraph/transformers/gputransform.py``, add ::
+   In ``ngraph/transformers/gputransform.py``, add the following in the
+   ``ElementWiseKernel`` class for element-wise CUDA C kernel. Here, ops are
+   first buffered in a list and then the kernel is compiled at the end. ::
 
         class ElementWiseKernel(GPUKernel):
             ...
@@ -156,7 +195,8 @@ op.
                 self._buffer_op("prod", x=x, axis=0, out=out)
 
    Finally in ``/ngraph/transformers/gpu/float_ew2.py`` add the following for
-   the reduction op generation template ::
+   the reduction op generation template. These are string templates for the
+   generated CUDA C code. ::
 
         _redop_templates = {
             "prod": r"%(out)s = %(out)s * %(x)s;",
