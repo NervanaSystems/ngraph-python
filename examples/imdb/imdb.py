@@ -16,11 +16,12 @@ from ngraph.util.persist import valid_path_append, fetch_file, pickle_load
 import os
 import numpy as np
 
+
 def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
     """
     Preprocess the text by adding start and offset indices given padding, etc.
-    
-    vocab will be a dictionary mapping word to index. When given, 
+
+    vocab will be a dictionary mapping word to index. When given,
     Typically:
         oov = 2
         start = 1
@@ -40,9 +41,10 @@ def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
 
     return X
 
+
 def pad_sentence(sentences, pad_value, pad_to_len=None, pad_from='left'):
     """
-    pad the sentence to the same length. When the length is not given, 
+    pad the sentence to the same length. When the length is not given,
     use the max length from the set.
 
     """
@@ -62,8 +64,8 @@ def pad_sentence(sentences, pad_value, pad_to_len=None, pad_from='left'):
     return X
 
 
-
 class IMDB(object):
+
     """
     IMDB data set from http://www.aclweb.org/anthology/P11-1015..
 
@@ -72,6 +74,7 @@ class IMDB(object):
                        download the data
 
     """
+
     def __init__(self, path='.', vocab_size=20000, sentence_length=128, shuffle=False):
         self.path = path
         self.url = 'https://s3.amazonaws.com/text-datasets'
@@ -92,7 +95,8 @@ class IMDB(object):
             X, y = pickle_load(f)
 
         X = preprocess_text(X, self.vocab_size)
-        X = pad_sentence(X, pad_value=0, pad_to_len=self.sentence_length, pad_from='left')
+        X = pad_sentence(
+            X, pad_value=0, pad_to_len=self.sentence_length, pad_from='left')
 
         if self.shuffle:
             np.random.seed(123)

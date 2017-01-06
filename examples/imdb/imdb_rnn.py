@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, Preprocess, BiRNN, Recurrent, Affine,
+from ngraph.frontends.neon import (Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
