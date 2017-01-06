@@ -1,0 +1,10 @@
+FROM ngraph_base/$NAME_POSTFIX
+
+WORKDIR /root/private-ngraph
+
+RUN apt-get install -y pandoc
+ADD doc_requirements.txt /root/private-ngraph/doc_requirements.txt
+RUN pip install -r doc_requirements.txt
+
+# make ngraph Makefile happy :-(
+ENV VIRTUAL_ENV='making ngraph makefile happy'
