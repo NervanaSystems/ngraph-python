@@ -9,7 +9,7 @@ from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
 from multiprocessing import Process, Queue
 import collections
-import ripdb,os
+
 
 def build_transformer(name):
     """
@@ -31,33 +31,45 @@ def build_transformer(name):
 
     return transformer
 
-        # execute a helper function
-def process_helper(child_transformer_name, in_q, out_q, child_ops, args):
-   
-    #TODO
-    # pass in child_transformer_name, not obj
-    # then create obj in process, since creation has some state 
-    # debugger = ripdb.Rpdb(port=os.getpid()+12345) 
-    # debugger.set_trace()
- 
-    child_transformer_obj = build_transformer(child_transformer_name)
-    computation = child_transformer_obj.computation(child_ops, *args)
-    EXIT_PERIOD_S = 0.5
-    while True:
-        # wait for input and then return output
+
+class AsyncComputation(Process):
+    def __init__(self, transformer_type, child_ops, child_args):
+        super(AsyncComputation, self).__init__()
+        self.transformer_type = transformer_type
+        self.child_ops = child_ops
+        self.child_args = child_args
+
+        self.in_q = Queue()
+        self.out_q = Queue()
+
+        # TODO use a cleaner exit, this kills all children on exit
+        self.daemon = True
+
+    def feed_input(self, placeholder_vals):
+        self.in_q.put(placeholder_vals)
+
+    def get_result(self):
+        return self.out_q.get()
+
+    def run(self):
+        """
+        Create transformer in this context; use it to build computation.
+
+        Pass and recv args and results from computation via queues.
+        """
+        transformer = build_transformer(self.transformer_type)
+        computation = transformer.computation(self.child_ops, *self.child_args)
+
         # TODO clean way to exit (while !should_exit)
-        try: 
-            inputs = in_q.get(timeout=EXIT_PERIOD_S) # This is a blocking call!
+        EXIT_PERIOD_S = 0.5
+        while True:
+            try:
+                inputs = self.in_q.get(timeout=EXIT_PERIOD_S)
+                outputs = computation(*inputs)
+                self.out_q.put(outputs)
 
-            # computation
-            outputs = computation(*inputs)
-
-            out_q.put(outputs)
-        except Exception:
-            pass
-            
-
-    # TODO how do we terminate processes?
+            except Exception:
+                pass
     
 
 class HetrComputation(Computation):
@@ -73,8 +85,6 @@ class HetrComputation(Computation):
         self.send_nodes_list = transformer_obj.send_nodes_list
         self.hetr_passes = transformer_obj.hetr_passes
         self.num_results = 0
-        self.in_dict = dict()
-        self.out_dict = dict()
 
         # Do Hetr passes
         for graph_pass in self.hetr_passes:
@@ -91,7 +101,6 @@ class HetrComputation(Computation):
             tname = s.metadata['device'] + str(s.metadata['device_id'])
             self.transformer_to_node[tname].append(s)
 
-        self.child_results_map = dict()
         if isinstance(results, list):
             self.num_results = len(results)
             for pos, op in enumerate(results):
@@ -107,43 +116,18 @@ class HetrComputation(Computation):
 
         self.placeholders = {t: list() for t in self.transformer_name_list}
         self.placeholders_pos = {t: list() for t in self.transformer_name_list}
-        self.placeholder_inverse = []
         for i, p in enumerate(parameters):
             tname = p.metadata['transformer']
             self.placeholders[tname].append(p)
             self.placeholders_pos[tname].append(i)
-            self.placeholder_inverse.append((tname, len(self.placeholders[tname])))
 
-        # TODO move this loop down to process start. 
-        #      create processes in place of .add_child()
-        #      delete add_child function
-        #      keep list of processes, dict of in_q and out_q by t_name
-        # create child-computations for all unique keys in child_transformers dict
-        #create process for each child computations and maps its inq and outq
+        self.child_computations = dict()
         for tname in self.transformer_name_list:
-            child_ops = self.transformer_to_node[tname]
-            child_placeholders = self.placeholders[tname]
-            self.in_dict[tname] = Queue()
-            self.out_dict[tname] = Queue()
+            p = AsyncComputation(tname, self.transformer_to_node[tname],
+                                 tuple(self.placeholders[tname]))
+            p.start()
+            self.child_computations[tname] = p
 
-            p = Process(target=process_helper, 
-                        args=(tname,
-                              self.in_dict[tname], 
-                              self.out_dict[tname],
-                              child_ops, tuple(child_placeholders)))
-            
-            # TODO use a cleaner exit, this kills all children on exit
-            p.daemon = True
-            
-            p.start() 
-
-
-
-#    def map_child_to_tranformer(self, t, tname, returns, *args, **kwargs):
-#        self.child_computations[tname] = (t, returns, *args, **kwargs)
-        #self.child_computations[tname] = (t.computation(returns, *args, **kwargs)
-
-    
     def __call__(self, *params):
         """
         Executes child computations in parallel.
@@ -152,7 +136,6 @@ class HetrComputation(Computation):
 
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
-
         return_list = [None for i in range(self.num_results)]
         child_result_q = dict()
 
@@ -161,18 +144,12 @@ class HetrComputation(Computation):
         # Collect child results from multiprocess queue mapped by out_dict 
         for tname in self.transformer_name_list:
             targs = [params[i] for i in self.placeholders_pos[tname]]
-            if tname in self.child_results_map.keys():
-                child_result_q[tname] = self.out_dict[tname]
-            # TODO don't start process;
-            #      find in_q and out_q for t_name
-            #      place targs into in_q and get result back from out_q
-            self.in_dict[tname].put(targs)
+            self.child_computations[tname].feed_input(targs)
 
         # Reverse map child results to flattend list of results
         # in order expected by parent caller.
-        for tname, q_obj in child_result_q.iteritems():
-            child_results = q_obj.get()
-            # TODO maybe, child_results_map becomes the out_q map you made in __init__?
+        for tname, result_map in self.child_results_map.iteritems():
+            child_results = self.child_computations[tname].get_result()
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 return_list[parent_idx] = child_results[child_idx]
 
