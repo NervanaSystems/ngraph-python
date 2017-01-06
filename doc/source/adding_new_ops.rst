@@ -59,6 +59,50 @@ instance ::
               'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
         )
 
+   Now let's look at ``DotOp`` for an example where we use subclassing ``Op``
+   instead of using helper functions. In this example, ``DotOp`` inherits
+   ``TensorOp`` which is a descendant of ``Op``. In the ``__init__()`` function,
+   we do input arguments checking and set up the output axes in ``DotOp.axes``.
+   In the ``generate_adjoints`` function, we accumulate the gradients for the
+   LHS operand ``x`` and RHS operand ``y`` respectively. ::
+
+         class DotOp(TensorOp):
+
+             def __init__(self, x, y, **kwargs):
+                 self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
+                 self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
+                 self.x_out_axes = x.axes - self.x_reduction_axes
+                 self.y_out_axes = y.axes - self.y_reduction_axes
+
+                 intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
+                 if len(intersection_axes):
+                     raise ValueError(("Both arguments to a DotOp contained {axes}. "
+                                       "In order to dot two tensors with the same Axis together, one "
+                                       "of the Axes must be a dual. See: "
+                                       "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
+                                       ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+
+                 axes = self.x_out_axes + self.y_out_axes
+
+                 super(DotOp, self).__init__(
+                     args=(x, y), axes=axes, **kwargs
+                 )
+
+             def generate_adjoints(self, adjoints, delta, x, y):
+                 x.generate_add_delta(
+                     adjoints,
+                     axes_with_order(
+                         dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                             dualed_axes(y, self.y_reduction_axes, -1, 0)),
+                         x.axes)
+                 )
+                 y.generate_add_delta(
+                     adjoints,
+                     axes_with_order(
+                         dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
+                         y.axes)
+                 )
+
 2. Next, we could (optionally) add adjoint function for computing gradients of
    the op in ``generate_adjoints()`` function. There are two scenarios: if
    the gradients of the op could be represented by other ops available in
