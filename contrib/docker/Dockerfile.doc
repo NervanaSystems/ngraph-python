@@ -1,4 +1,4 @@
-FROM ngraph_base/$NAME_POSTFIX
+FROM ngraph_base
 
 WORKDIR /root/private-ngraph
 
