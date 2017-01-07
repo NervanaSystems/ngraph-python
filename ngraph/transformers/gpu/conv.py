@@ -54,7 +54,7 @@ class ConvFpropKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = False  # transformer.runtime.enable_winograd
+        enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
@@ -115,9 +115,9 @@ class ConvFpropKernel(GPUKernel):
         """
         # flexes: not available yet?
         # import ipdb; ipdb.set_trace()
-        I_scale = 2**-8
-        F_scale = 2**-8
-        O_scale = 2**8
+        I_scale = self.I.value.flex_entry.scale
+        F_scale = self.F.value.flex_entry.scale
+        O_scale = 1.0 / self.O.value.flex_entry.scale
         self.fprop_kernels.bind_flex_scales(I_scale, F_scale, O_scale)
 
     def execute(self):
@@ -161,7 +161,7 @@ class ConvBpropKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = False  # transformer.runtime.enable_winograd
+        enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
@@ -220,11 +220,9 @@ class ConvBpropKernel(GPUKernel):
         """
         wrapper for kernels in convolution.py
         """
-        # flexes: not available yet?
-        # import ipdb; ipdb.set_trace()
-        E_scale = 2**-8
-        F_scale = 2**-8
-        O_scale = 2**8
+        E_scale = self.E.value.flex_entry.scale
+        F_scale = self.F.value.flex_entry.scale
+        O_scale = 1.0 / self.O.value.flex_entry.scale
         self.bprop_kernels.bind_flex_scales(E_scale, F_scale, O_scale)  # TODO: Passing E for I
 
     def execute(self):
@@ -268,7 +266,7 @@ class ConvUpdateKernel(GPUKernel):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        enable_winograd = False  # transformer.runtime.enable_winograd
+        enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
 
         # ---- Cuda C ----
@@ -330,11 +328,11 @@ class ConvUpdateKernel(GPUKernel):
         """
         wrapper for kernels in convolution.py
         """
-        # flexes: not available yet?
-        E_scale = 2**-8
-        F_scale = 2**-8
-        O_scale = 2**8
-        self.updat_kernels.bind_flex_scales(E_scale, F_scale, O_scale)  # TODO: Definitely passing the wrong inputs now
+        # FLEX TODO: Definitely passing the wrong inputs now
+        E_scale = self.E.value.flex_entry.scale
+        I_scale = self.I.value.flex_entry.scale
+        U_scale = 1.0 / self.U.value.flex_entry.scale
+        self.updat_kernels.bind_flex_scales(E_scale, I_scale, U_scale)  # FLEX TODO: revisit
 
     def execute(self):
         """
