@@ -58,6 +58,52 @@ class OpsNN(OpsBase):
         result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op
 
+    def SquaredL2Distance(self, c2_op, inputs):
+        """
+        Computes squared L2 distance between two inputs.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        x, y = inputs
+
+        y = ng.cast_axes(y, x.axes)
+        return 0.5 * ng.squared_L2(x - y)
+
+    def AveragedLoss(self, c2_op, inputs):
+        """
+        Computes average loss for the batch.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        return ng.mean(inputs[0], reduction_axes=inputs[0].axes.batch_axes())
+
+    def LabelCrossEntropy(self, c2_op, inputs):
+        """
+        Computes the cross entropy between the input and the label set.
+
+        Arguments:
+            c2_op: OperatorDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+       """
+        y, labels = inputs
+
+        labels_one_hot = ng.one_hot(labels, axis=y.axes[1])
+        labels_one_hot = ng.cast_axes(labels_one_hot, [labels_one_hot.axes[0], y.axes[0]])
+        return ng.cross_entropy_multi(y, labels_one_hot, out_axes=y.axes[0])
+
     def MaxPool(self, c2_op, inputs):
         return self.Pool(c2_op, inputs)
 

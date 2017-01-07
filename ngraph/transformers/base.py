@@ -21,7 +21,7 @@ import abc
 from builtins import object
 from future.utils import with_metaclass
 
-from ngraph.op_graph.op_graph import Op, TensorOp, InitTensorOp, tensor_descriptions, \
+from ngraph.op_graph.op_graph import Op, InitTensorOp, tensor_descriptions, \
     doall, computation
 from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune
 from ngraph.util.generics import generic_method
@@ -79,7 +79,7 @@ class Computation(NameableValue):
             :param op:
             :return: Return value for op.
             """
-            if isinstance(op, TensorOp):
+            if op.is_tensor_op:
                 if op.value is None:
                     pass
                 return op.value.get(None)
@@ -335,7 +335,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         self.ops = Op.ordered_ops(all_ops)
         for op in self.ops:
-            if isinstance(op, TensorOp):
+            if op.is_tensor_op:
                 tensor_description = op.tensor_description()
                 if tensor_description.buffer is None:
                     tensor_description.buffer = self.device_buffer_storage(

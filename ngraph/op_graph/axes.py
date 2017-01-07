@@ -40,42 +40,6 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
-def output_dim(X, S, padding, strides, pooling=False):
-        """
-        Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-        Arguments:
-            X (int): input data dimension
-            S (int): filter dimension
-            padding (int): padding on each side
-            strides (int): striding
-            pooling (bool): flag for setting pooling layer size
-        """
-        size = ((X - S + 2 * padding) // strides) + 1
-
-        if pooling and padding >= S:
-            raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-        return size
-
-
-def spatial_axis(input, filter, padding, stride, role):
-    ax_i = input.role_axes(role)
-    assert len(ax_i) != 0, "Unable to find input axis with role {}".format(role.name)
-    hh = ax_i[0].length
-
-    if isinstance(filter, int):
-        rr = filter
-    else:
-        ax_f = filter.role_axes(role)
-        assert len(ax_f) != 0, "Unable to find filter axis with role {}".format(role.name)
-        rr = ax_f[0].length
-    out_axis = make_axis(length=output_dim(hh, rr, padding, stride),
-                         name=ax_i[0].short_name,
-                         roles=[role])
-    return out_axis
-
-
 def make_axis_role(name=None, docstring=None):
     """
     Returns a new AxisRole.
@@ -221,6 +185,10 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
         """
         return self.__is_recurrent
+
+    @is_recurrent.setter
+    def is_recurrent(self, value):
+        self.__is_recurrent = value
 
     @property
     def match_on_length(self):
@@ -846,6 +814,14 @@ class Axes(object):
         return tuple(x.name for x in self)
 
     @property
+    def short_names(self):
+        """
+        Returns:
+            tuple: The names without indices of the outer axes.
+        """
+        return tuple(x.short_name for x in self)
+
+    @property
     def lengths(self):
         """
         Returns:
@@ -897,23 +873,6 @@ class Axes(object):
             return self[0]
         return FlattenedAxis(self)
 
-    def shape_dict(self):
-        """
-        Retuns:
-            dict: A dictionary with names of the axes as keys and
-            lengths as values
-        """
-        names = [axis.name for axis in self._axes]
-        # TODO: get rid of this temporary hack.
-        names = [name.split('_')[0] for name in names]
-        short_names = []
-        for name in names:
-            if name.find('.') != -1:
-                name = name.split('.')[1]
-            short_names.append(name)
-        vals = [axis.length for axis in self._axes]
-        return dict(zip(short_names, vals))
-
     def set_shape(self, shape):
         axes = self._axes
         diff = len(axes) - len(shape)
@@ -933,6 +892,13 @@ class Axes(object):
             return
         raise ValueError('Number of axes %d too low for shape %s' % (
                          len(axes), shape))
+
+    def find_by_short_name(self, short_name):
+        return Axes(axis for axis in self if axis.short_name == short_name)
+
+    def add_role(self, role):
+        for axis in self:
+            axis.add_role(role)
 
     def __iter__(self):
         return self._axes.__iter__()

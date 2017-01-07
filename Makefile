@@ -62,7 +62,7 @@ clean:
 
 test: testflex
 	@echo Running unit tests...
-	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 testflex:
