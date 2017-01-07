@@ -1,10 +1,14 @@
 DIR = $(realpath ../..)
 VOLUME = -v ${DIR}:/root/private-ngraph
 
+# default version is python 2, but can be switched to 3 from command
+# line
+PYTHON_VERSION = 2
+
 .PHONY: build_test test build_base build_dev
 
 build_base:
-	@docker build -f=Dockerfile.base -t=ngraph_base ${DIR}
+	@docker build -f=Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base ${DIR}
 
 build_dev: build_base
 	@docker build -f=Dockerfile.dev -t=ngraph_dev ${DIR}
