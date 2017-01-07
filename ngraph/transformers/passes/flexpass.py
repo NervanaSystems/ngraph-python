@@ -11,7 +11,6 @@ class FlexPass(PeepholeGraphPass):
         op.dtype = gpuflex16
 
 
-# unused after most recent merge from master (12/30)
 class ClearTensorDescriptions(GraphPass):
     def do_pass(self, ops, inits):
         tdcache.tensor_description_cache.clear()
