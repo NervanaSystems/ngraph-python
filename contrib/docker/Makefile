@@ -33,3 +33,4 @@ test_shell: build_test
 shell: build_dev
 	@docker run --rm ${VOLUME} -it ngraph_dev /bin/bash
 
+all: style doc test test_gpu

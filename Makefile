@@ -61,7 +61,7 @@ clean:
 
 test:
 	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph -n auto --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 style:
