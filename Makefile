@@ -70,10 +70,6 @@ testflex:
 	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
 	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
-testflexfail:
-	@echo Running flex unit tests...
-	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_fail.cfg`
-
 style:
 	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
