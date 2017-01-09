@@ -71,7 +71,7 @@ testflex:
 	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
 style:
-	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
+	flake8 --output-file style.txt $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
