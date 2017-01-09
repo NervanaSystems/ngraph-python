@@ -53,9 +53,8 @@ def run_model(request, tmpdir_factory, transformer_factory):
     for i in range(2):
         tmpdir = tmpdir_factory.mktemp(model)
         ofile = tmpdir.join("out{}.hdf5".format(i)).__str__()
-        cmd = '{} {} --out {} --data_dir {}'.format(
-            db[model]['filename'], db[model]['arguments'], ofile, tmpdir
-        )
+        cmd = '{} {} --out {}'.format(
+            db[model]['filename'], db[model]['arguments'], ofile)
         rc = subprocess.check_call(cmd, shell=True)
         ofiles.append(ofile)
         rcs.append(rc)
