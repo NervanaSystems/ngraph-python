@@ -29,7 +29,8 @@ class FlexNgraphArgparser(NgraphArgparser):
         backend_names = super(FlexNgraphArgparser, self).backend_names()
         # only add flex gpu transformer as an option if autoflex installed
         try:
-            from ngraph.flex import GPUFlexManager  # TODO: import FlexGPUTransformer instead
+            # import GPUFlexManager to check if autoflex installed
+            from ngraph.flex import GPUFlexManager  # noqa
             backend_names.append(flex_gpu_transformer_name)
         except ImportError:
             print '{} transformer not available'.format(flex_gpu_transformer_name),
@@ -42,8 +43,8 @@ class FlexNgraphArgparser(NgraphArgparser):
         # default value for all flex args if not given, confusing with store_true in add_argument
         default = False
 
-        if ((args.backend == flex_gpu_transformer_name) and
-             any([hasattr(args, a) for a in flex_args])):
+        if args.backend == flex_gpu_transformer_name and \
+           any([hasattr(args, a) for a in flex_args]):
                 flex_args_dict = dict((a, getattr(args, a, default)) for a in flex_args)
                 factory = ngt.make_transformer_factory(args.backend, **flex_args_dict)
         else:

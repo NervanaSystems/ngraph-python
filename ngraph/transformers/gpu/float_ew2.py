@@ -591,7 +591,7 @@ def _get_register_type(dtype, memory=False):
         # FLEX TODO:
         # need a case to return "flex" string for _conversion_templates
         # or push this case to calling code
-            #return dtype.name
+            # return dtype.name
     if dtype == np.float32:
         return "float"
     elif dtype == np.float16:
@@ -1046,13 +1046,15 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # doesn't support data format
                     reg_name = ctx.register_mapping[inval]
                     if isinstance(inval.dtype, Flex):
-                        type_key = (inval.dtype.dtype_name,  # FLEX TODO: see _conversion_template note
+                        # FLEX TODO: see _conversion_template note
+                        type_key = (inval.dtype.dtype_name,
                                     ctx.register_types[reg_name])
                     else:
                         type_key = (_get_register_type(inval.dtype, True),
                                     ctx.register_types[reg_name])
                     if op[0] == 'argmax' or op[0] == 'argmin':  # FLEX TODO: others?
-                        # there should not be a conversion performed, even though type_key is currently (flex, float)
+                        # there should not be a conversion performed,
+                        # even though type_key is currently (flex, float)
                         # FLEX FIXME: fix this more systematically
                         type_key = (float, float)
                     else:
@@ -1147,8 +1149,9 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     reg_name = ctx.register_mapping[op[3]]
                     if isinstance(op[3].dtype, Flex):
+                        # FLEX TODO: see conversion_template note
                         type_key = (ctx.register_types[reg_name],
-                                    op[3].dtype.dtype_name)  # FLEX TODO: see conversion_template note
+                                    op[3].dtype.dtype_name)
                     else:
                         type_key = (ctx.register_types[reg_name],
                                     _get_register_type(op[3].dtype, True))
