@@ -1,3 +1,4 @@
+from __future__ import print_function
 from ngraph.frontends.neon.argparser import NgraphArgparser
 import ngraph.transformers as ngt
 from ngraph.flex.names import flex_gpu_transformer_name
@@ -33,8 +34,8 @@ class FlexNgraphArgparser(NgraphArgparser):
             from ngraph.flex import GPUFlexManager  # noqa
             backend_names.append(flex_gpu_transformer_name)
         except ImportError:
-            print '{} transformer not available'.format(flex_gpu_transformer_name),
-            print 'please check if autoflex package is installed'
+            print('{} transformer not available'.format(flex_gpu_transformer_name))
+            print('please check if autoflex package is installed')
         return backend_names
 
     def make_and_set_transformer_factory(self, args):

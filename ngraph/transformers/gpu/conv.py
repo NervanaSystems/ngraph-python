@@ -179,9 +179,7 @@ class ConvBpropKernel(GPUKernel):
             # TODO: Remove hardcoded np.dtype(np.int16)
             args = (transformer.runtime, np.dtype(np.int16), N, C, K, D, H, W, T, R, S,
                     M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
-            print "\nconv.py ConvBpropKernel creating kernel for args", args
             self.bprop_kernels = convolution.BpropDirect(*args)
-            print "conv.py ConvBpropKernel done creating", self.bprop_kernels.kernel_name, "\n"
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \

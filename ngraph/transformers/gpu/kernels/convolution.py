@@ -61,13 +61,14 @@ class KernelGroup(object):
             self.clss = "hconv"
         elif dtype.type is np.float32:
             self.clss = "sconv"
-        elif dtype.type is np.int16:  # TODO: Reverted this because later on we compare it with pycuda GPUArrays of type int16
+        elif dtype.type is np.int16:
+            # Urs FLEX TODO: Reverted this because later on
+            # we compare it with pycuda GPUArrays of type int16
             self.clss = "fconv"
         elif dtype.type is np.int8:
             self.clss = "bconv"
         else:
-            print "requested dtype", dtype.type
-            raise TypeError("dtype not supported.")
+            raise TypeError("dtype {} not supported.".format(dtype.type))
 
     def bind_params(self, *args):
         raise TypeError("bind_params not implemented.")
@@ -1029,7 +1030,6 @@ class UpdateDirect(KernelGroup):
                 self.zero_args = ( output_data, 0, O.size, self.lib.stream )
             self.kernel_args[2:6] = (self.lib.stream, output_data, I.gpudata, E.gpudata)
         else:
-            print "flexpoint."
             self.kernel_args[2:7] = (self.lib.stream, 0, O.gpudata, I.gpudata, E.gpudata)
 
         self.I = I  # TODO: Added these for debugging, to be removed again.
@@ -1077,13 +1077,9 @@ class UpdateDirect(KernelGroup):
         # TODO: just recreate the whole args to clean this up?
         self.kernel_args[7] *= scale_ab  # alpha
         self.kernel_args[8] *= scale_c  # beta
-        print "UpdateDirect.bind_flex_scales", len(self.kernel_args),
         if len(self.kernel_args) == 49:  # first updat call. 11 variable + 28 constants + 4 magic = 43
-            print "first updat"
             self.kernel_args.extend((dummy_stat_prt, scale_c))  #dummy pointer
-            print self.kernel_args
         elif len(self.kernel_args) == 51:  # repeated updat calls
-            print "repeated updat"
             self.kernel_args[49:51] = [dummy_stat_prt, scale_c]
         else:
             assert False, "Weird number of kernel args"
@@ -1106,10 +1102,9 @@ class UpdateDirect(KernelGroup):
             kernel.prepared_async_call(*self.kernel_args)
             drv.Context.synchronize()
 
+            # do output transform if not flex
             if self.clss is not 'fconv':
                 self.output_trans.execute()
-            else:
-                print "skipping output transform for flex."
 
             drv.Context.synchronize()
 
