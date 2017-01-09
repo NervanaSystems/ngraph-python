@@ -123,6 +123,49 @@ def test_slice(transformer_factory):
             'axes_lengths': {C: 2, D: 2},
             'expected': [2, 5]
         },
+    ]
+
+    for test in tests:
+        ex = ExecutorFactory()
+        for axis, length in test['axes_lengths'].items():
+            axis.length = length
+        tensor_axes = test['tensor_axes']
+
+        tensor_np = np.array(
+            test['tensor'], dtype='float32'
+        )
+        tensor = ng.placeholder(tensor_axes)
+        expected = np.array(test['expected'], dtype='float32')
+
+        s = test['slice']
+        s_axes = test['sliced_axes']
+
+        sliced = ng.tensor_slice(tensor, s, s_axes)
+        sliced_val_fun = ex.executor(sliced, tensor)
+
+        num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
+        # Test backpropagation
+        sym_deriv_fun = ex.derivative(sliced, tensor)
+
+        sliced_val = sliced_val_fun(tensor_np)
+        assert np.array_equal(sliced_val, expected)
+
+        numeric_deriv = num_deriv_fun(tensor_np)
+        sym_deriv = sym_deriv_fun(tensor_np)
+
+        assert ng.testing.allclose(
+            numeric_deriv, sym_deriv, rtol=rtol, atol=atol
+        )
+
+
+
+def test_slice2(transformer_factory):
+    """TODO."""
+
+    C = ng.make_axis(name='C')
+    D = ng.make_axis(name='D')
+
+    tests = [
         {
             'tensor': [[1, 4, 5], [2, 5, 6]],
             'tensor_axes': (C, D),
