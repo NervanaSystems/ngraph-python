@@ -1,4 +1,4 @@
 pytest
 pytest-cov
 pytest-xdist
-flake8>=3.2.1
+flake8==3.2.1
