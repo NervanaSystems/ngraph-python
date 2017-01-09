@@ -286,7 +286,9 @@ def test_conv_flatten_deriv(transformer_factory):
     """
 
     # set shape
-    N = 8
+    # NOTE: N must be >= 4 for GPU, but for CPU this could be decreased to
+    # speed up the test
+    N = 4
     C, D, H, W = (3, 1, 28, 28)
     T, R, S, K = (1, 5, 5, 8)
 
