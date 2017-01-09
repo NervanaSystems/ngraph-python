@@ -25,7 +25,6 @@ from ngraph.frontends.tensorflow.tests.test_util import TempDir
 from ngraph.frontends.tensorflow.tf_importer.ops_nn import tf_conv2d_pool_padding
 import pytest
 import itertools
-import os
 
 
 def gen_conv_testcase():
@@ -107,6 +106,7 @@ def gen_pool_testcase():
 
 
 class Tester(ImporterTester):
+
     @pytest.mark.parametrize("all_args", gen_conv_testcase())
     def test_conv(self, all_args):
         C, D, H, W, N, T, R, S, K, strides, padding = all_args
