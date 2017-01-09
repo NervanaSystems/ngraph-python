@@ -21,9 +21,11 @@ from builtins import filter
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
+from ngraph.frontends.tensorflow.tests.test_util import TempDir
 from ngraph.frontends.tensorflow.tf_importer.ops_nn import tf_conv2d_pool_padding
 import pytest
 import itertools
+import os
 
 
 def gen_conv_testcase():
@@ -161,18 +163,19 @@ class Tester(ImporterTester):
     def test_mnist_softmax_forward(self):
         # tf placeholder
         from tensorflow.examples.tutorials.mnist import input_data
-        mnist = input_data.read_data_sets('/tmp/data', one_hot=True)
-        x = tf.placeholder(tf.float32, [128, 784])
-        W = tf.Variable(tf.zeros([784, 10]))
-        b = tf.Variable(tf.zeros([10]))
-        y = tf.matmul(x, W) + b
-        y_ = tf.placeholder(tf.float32, [128, 10])
-        cross_entropy = tf.reduce_mean(-tf.reduce_sum(
-            y_ * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
-        init_op = tf.global_variables_initializer()
-        batch_xs, batch_ys = mnist.train.next_batch(128)
+        with TempDir() as tmpdir:
+            mnist = input_data.read_data_sets(tmpdir, one_hot=True)
+            x = tf.placeholder(tf.float32, [128, 784])
+            W = tf.Variable(tf.zeros([784, 10]))
+            b = tf.Variable(tf.zeros([10]))
+            y = tf.matmul(x, W) + b
+            y_ = tf.placeholder(tf.float32, [128, 10])
+            cross_entropy = tf.reduce_mean(-tf.reduce_sum(
+                y_ * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
+            init_op = tf.global_variables_initializer()
+            batch_xs, batch_ys = mnist.train.next_batch(128)
 
-        # test
-        feed_dict = {x: batch_xs, y_: batch_ys}
+            # test
+            feed_dict = {x: batch_xs, y_: batch_ys}
 
-        self.run(cross_entropy, tf_init_op=init_op, tf_feed_dict=feed_dict)
+            self.run(cross_entropy, tf_init_op=init_op, tf_feed_dict=feed_dict)
