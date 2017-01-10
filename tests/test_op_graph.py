@@ -47,6 +47,22 @@ def test_deriv_missing_connection():
         ng.deriv(x + y, z)
 
 
+def test_sequential():
+    N = ng.make_axis(1)
+    x = ng.variable([N], initial_value=0)
+    with ng.sequential_op_factory() as pf:
+        x0 = x + x
+        ng.assign(x, 2)
+        x1 = x + x
+        pf.append(x0)
+    p = pf()
+    ex = ExecutorFactory()
+    x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
+    assert x0_val == 0
+    assert x1_val == 4
+    assert p_val == 0
+
+
 def test_pad_invalid_paddings_length():
     """
     pad should raise an exception if the paddings length is not the same as the

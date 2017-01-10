@@ -61,11 +61,11 @@ clean:
 
 test:
 	@echo Running unit tests...
-	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 style:
-	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
+	flake8 --output-file style.txt $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:

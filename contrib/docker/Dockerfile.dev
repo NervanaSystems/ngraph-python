@@ -1,0 +1,3 @@
+FROM ngraph_base
+
+WORKDIR /root/private-ngraph
