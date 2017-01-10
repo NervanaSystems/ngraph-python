@@ -108,6 +108,7 @@ def test_softmax():
     ex = ExecutorFactory()
     f_result = ex.executor(f_ng)()
 
+    # Get Caffe2 result
     c2_y = workspace.FetchBlob("Y")
 
     # compare Caffe2 and ngraph results
@@ -126,8 +127,8 @@ def test_exp():
         1., 2., 3., 4., 1., 2., 3.
     ]
     expected = [
-        [2.71828183,   7.3890561,  20.08553692,  54.59815003, 2.71828183,   7.3890561,  20.08553692],
-        [2.71828183, 7.3890561,  20.08553692,  54.59815003,   2.71828183, 7.3890561,  20.08553692],
+        [2.71828,   7.3890,  20.08553,  54.59815, 2.71828,   7.3890,  20.08553],
+        [2.71828, 7.3890,  20.08553,  54.59815,   2.71828, 7.3890,  20.08553],
     ]
 
     net = core.Net("net")
@@ -144,10 +145,11 @@ def test_exp():
     # Get handle
     f_ng = importer.get_op_handle("Y")
 
-    # Execute
+    # Execute in ngraph and get the result
     ex = ExecutorFactory()
     f_result = ex.executor(f_ng)()
 
+    # Get Caffe2 result
     c2_y = workspace.FetchBlob("Y")
 
     # compare Caffe2 and ngraph results
