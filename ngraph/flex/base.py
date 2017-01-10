@@ -15,7 +15,8 @@ class Flex(object):
         self.storage_bits = storage_bits
 
         # numpy dtype interface
-        self.itemsize = storage_bits / 8
+        assert np.mod(storage_bits, 8) == 0
+        self.itemsize = int(storage_bits // 8)
         self.type = 'flex'
         self.str = "<i2"
         self.name = 'flex'  # TODO reconsider what name and type are set to?

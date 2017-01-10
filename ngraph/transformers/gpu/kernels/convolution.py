@@ -62,7 +62,7 @@ class KernelGroup(object):
         elif dtype.type is np.float32:
             self.clss = "sconv"
         elif dtype.type is np.int16:
-            # Urs FLEX TODO: Reverted this because later on
+            # Urs TODO: Reverted this because later on
             # we compare it with pycuda GPUArrays of type int16
             self.clss = "fconv"
         elif dtype.type is np.int8:
@@ -708,6 +708,7 @@ class UpdateDirect(KernelGroup):
             N, C, K, D, H, W, T, R, S, M, P, Q ))
 
         # insert Python version in filename to avoid Py2/Py3 incompatibilities in shelve
+        # Urs TODO cleanup comments
         if self.clss is not 'fconv':
             self.autotune_db_file = os.path.join(lib.cache_dir, "autotune%d.db" % sys.version_info[0])
             self.init_sb()
@@ -1032,7 +1033,7 @@ class UpdateDirect(KernelGroup):
         else:
             self.kernel_args[2:7] = (self.lib.stream, 0, O.gpudata, I.gpudata, E.gpudata)
 
-        self.I = I  # TODO: Added these for debugging, to be removed again.
+        self.I = I  # TODO: Added these for debugging, to be removed again. Urs TODO
         self.E = E
         self.O = O  # filter
         O.fill(0)  # init with zeros because un-initialized mem often retains previous results

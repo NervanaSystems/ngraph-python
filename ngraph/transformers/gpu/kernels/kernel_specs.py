@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __future__ import print_function
+from __future__ import division
 from builtins import str
 import re
 import os.path
@@ -1031,7 +1032,7 @@ def get_kernel(base_name, options=None):
     return func
 
 
-# added for old flex kenrnels
+# added for old flex kernels
 from math import ceil
 def update_grid(kernel_name, base_blocks, P, Q, SM_count):
 
@@ -1039,14 +1040,14 @@ def update_grid(kernel_name, base_blocks, P, Q, SM_count):
     occupancy = kernels[kernel_name]["occupancy"]
 
     # warps per scheduler for one block
-    occ_per_block = threads / (32.0 * 4.0 * SM_count)
+    occ_per_block = threads // (32.0 * 4.0 * SM_count)
 
     grid = []
     for p in range(1, P+1):
         for q in range(1, Q+1):
 
             occup  = p*q*base_blocks * occ_per_block
-            groups = occup / occupancy
+            groups = occup // occupancy
             slots  = ceil(groups)
 
             # This is a heuristic that keeps the balance of work accross the SMs
