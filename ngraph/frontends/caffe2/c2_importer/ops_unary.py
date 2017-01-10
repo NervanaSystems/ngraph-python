@@ -53,7 +53,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to tf_node:
+        Inputs to c2_op:
             x, name
         """
         return self._element_wise_unary(ng.tanh, c2_op, inputs).named(c2_op.name)
@@ -69,7 +69,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to tf_node:
+        Inputs to c2_op:
             features, name
         """
         return ng.maximum(inputs[0], 0.).named(c2_op.name)
@@ -92,3 +92,36 @@ class OpsUnary(OpsBase):
         norm_axes = x.axes[1]
 
         return ng.softmax(x, normalization_axes=norm_axes).named(c2_op.name)
+
+    def Sigmoid(self, c2_op, inputs):
+        """
+        Computes `y = 1 / (1 + exp(-x))` element-wise.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            x, name
+        """
+        return self._element_wise_unary(ng.sigmoid, c2_op, inputs)
+
+    def Negative(self, c2_op, inputs):
+        """
+        Numerical negative value element-wise.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            x, name
+        """
+        return ng.negative(inputs[0]).named(c2_op.name)
+
