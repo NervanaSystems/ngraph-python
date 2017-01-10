@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
-    negative, cast_axes, power
+    negative, cast_axes, power, DerivOp
 
 from ngraph.util.generics import generic_method
 from ngraph.util.ordered import OrderedSet
@@ -235,6 +235,31 @@ class RequiredTensorShaping(PeepholeGraphPass):
         x = op.args[0]
         if op.axes == x.axes:
             self.replace_op(op, x)
+
+
+class DerivPass(PeepholeGraphPass):
+    """
+    The pass that computes derivatives, i.e. expanding DerivOp to actual
+    derivatives.
+    """
+
+    @generic_method()
+    def visit(self, op):
+        pass
+
+    @visit.on_type(DerivOp)
+    def visit(self, op):
+        dependent = op.args[0]
+        independent = op.args[1]
+        error = op.args[2]
+
+        adjoints = dependent.forwarded.adjoints(error)
+        if independent not in adjoints:
+            self.replace_op(op, constant(0, independent.axes))
+        else:
+            adjoint = adjoints[independent.forwarded]
+            self.replace_op(op,
+                            broadcast(adjoint.forwarded, axes=independent.axes))
 
 
 class SimplePrune(PeepholeGraphPass):

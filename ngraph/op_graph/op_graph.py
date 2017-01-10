@@ -3606,6 +3606,17 @@ def mean(x, reduction_axes=None, out_axes=None):
         tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
+class DerivOp(TensorOp):
+
+    def __init__(self, dependent, independent, error):
+        super(DerivOp, self).__init__()
+
+        if not error.axes.has_same_axes(dependent.axes):
+            raise ValueError("Dependent and error must have the same set of axes")
+        self.args = (dependent, independent, error)
+        self.axes = make_axes(independent.axes)
+
+
 def deriv(dependent, independent, error=None):
     """
     Computes the operation for [dDependent/dIndependent](error=1).
@@ -3623,18 +3634,8 @@ def deriv(dependent, independent, error=None):
 
     """
     if error is None:
-        error = constant(1)
-
-    if not error.axes.has_same_axes(dependent.axes):
-        raise ValueError("Dependent and error must have the same set of axes")
-
-    adjoints = dependent.forwarded.adjoints(error)
-
-    if independent not in adjoints:
-        return constant(0, independent.axes)
-
-    adjoint = adjoints[independent.forwarded]
-    return broadcast(adjoint.forwarded, axes=independent.axes)
+        error = constant(1.)
+    return DerivOp(dependent, independent, error)
 
 
 class CrossEntropyMultiInner(object):

@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.op_graph.op_graph import Op, InitTensorOp, tensor_descriptions, \
     doall, computation
-from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune
+from ngraph.transformers.passes.passes import RequiredTensorShaping, SimplePrune, DerivPass
 from ngraph.util.generics import generic_method
 from ngraph.util.names import NameableValue
 from ngraph.util.ordered import OrderedSet
@@ -304,7 +304,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.device_buffers = OrderedSet()
         self.cpu_initializations = []
         self.init_computation = None
-        self.graph_passes = [SimplePrune(), RequiredTensorShaping()]
+        self.graph_passes = [DerivPass(), SimplePrune(), RequiredTensorShaping()]
 
     def register_graph_pass(self, graph_pass):
         self.graph_passes.append(graph_pass)
