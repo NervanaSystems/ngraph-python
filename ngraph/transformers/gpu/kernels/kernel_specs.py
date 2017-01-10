@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
 from builtins import str
 import re
 import os.path
@@ -945,7 +946,7 @@ def get_kernel(base_name, options=None):
     kernel_spec = kernels[base_name]
     kernel_name = base_name
 
-    if flex_verbose: print "kernel_name", kernel_name
+    if flex_verbose: print("kernel_name {}".format(kernel_name))
 
     if "args" in kernel_spec:
         for pair in kernel_spec["args"].items():
@@ -1021,7 +1022,7 @@ def get_kernel(base_name, options=None):
     if kernel_name[0] == "f":
         sig += "Qf"  # stats pointer and scale float.
 
-    if flex_verbose: print "\nkernel_specs: get_kernel:", kernel_name, "with sig", sig
+    if flex_verbose: print("\nkernel_specs: get_kernel: {} with sig {}".format(kernel_name, sig))
 
     module = drv.module_from_file(os.path.join(cubin_dir, kernel_name + ".cubin"))
     func   = module.get_function(kernel_name)
@@ -1030,7 +1031,7 @@ def get_kernel(base_name, options=None):
     return func
 
 
-# added for old flex kenrnels
+# added for old flex kernels
 from math import ceil
 def update_grid(kernel_name, base_blocks, P, Q, SM_count):
 
