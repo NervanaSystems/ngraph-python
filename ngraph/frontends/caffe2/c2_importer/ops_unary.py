@@ -124,4 +124,3 @@ class OpsUnary(OpsBase):
             x, name
         """
         return ng.negative(inputs[0]).named(c2_op.name)
-
