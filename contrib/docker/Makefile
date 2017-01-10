@@ -26,6 +26,8 @@ build_doc: build_base
 	@docker build -f=Dockerfile.doc -t=ngraph_doc ${DIR}
 
 test: build_test
+	@echo docker run --rm ${VOLUME} -t ngraph_test make test
+	@echo ${NGRAPH_DATA_DIR}
 	@docker run --rm ${VOLUME} -t ngraph_test make test
 
 test_gpu: build_test
