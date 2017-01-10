@@ -111,12 +111,17 @@ class IMDB(object):
         X_test = X[int(len(X) * (1 - test_split)):]
         y_test = y[int(len(X) * (1 - test_split)):]
 
-        y_train = np.array(y_train).reshape((len(y_train), 1))
-        y_test = np.array(y_test).reshape((len(y_test), 1))
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
 
         self.nclass = 1 + max(np.max(y_train), np.max(y_test))
 
-        self.data_dict['train'] = {'inp_txt': X_train, 'tgt_txt': y_train}
-        self.data_dict['valid'] = {'inp_txt': X_test, 'tgt_txt': y_test}
-
+        self.data_dict['train'] = {'review': {'data': X_train,
+                                              'axes': ('batch', 'time')},
+                                   'label': {'data': y_train,
+                                             'axes': ('batch',)}}
+        self.data_dict['valid'] = {'review': {'data': X_test,
+                                              'axes': ('batch', 'time')},
+                                   'label': {'data': y_test,
+                                             'axes': ('batch',)}}
         return self.data_dict

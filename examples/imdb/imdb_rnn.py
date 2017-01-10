@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
+from __future__ import print_function
 import ngraph as ng
 from ngraph.frontends.neon import (Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
@@ -48,6 +50,9 @@ train_set = ArrayIterator(imdb_data['train'], batch_size=args.batch_size,
                           total_iterations=args.num_iterations)
 valid_set = ArrayIterator(imdb_data['valid'], batch_size=args.batch_size)
 
+inputs = train_set.make_placeholders()
+ax.Y.length = imdb_dataset.nclass
+
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
@@ -63,20 +68,11 @@ seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True),
                    rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=ax.Y)])
 
-# Bind axes lengths:
-ax.Y.length = imdb_dataset.nclass
-ax.REC.length = time_steps
-ax.N.length = args.batch_size
-
-# placeholders with descriptive names
-inputs = dict(inp_txt=ng.placeholder([ax.REC, ax.N]),
-              tgt_txt=ng.placeholder([ax.N]))
-
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
-output_prob = seq1.train_outputs(inputs['inp_txt'])
 
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
+output_prob = seq1.train_outputs(inputs['review'])
+loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
 
