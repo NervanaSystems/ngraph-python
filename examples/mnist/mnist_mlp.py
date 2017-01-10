@@ -47,21 +47,14 @@ train_data, valid_data = MNIST(args.data_dir).load_data()
 train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 valid_set = ArrayIterator(valid_data, args.batch_size)
 
+inputs = train_set.make_placeholders()
+ax.Y.length = 10
+
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
                    Affine(nout=100, weight_init=GaussianInit(), activation=Rectlin()),
                    Affine(axes=ax.Y, weight_init=GaussianInit(), activation=Logistic())])
-
-######################
-# Input specification
-ax.C.length, ax.H.length, ax.W.length = train_set.shapes['image']
-ax.N.length = args.batch_size
-ax.Y.length = 10
-
-# placeholders with descriptive names
-inputs = dict(image=ng.placeholder([ax.C, ax.H, ax.W, ax.N]),
-              label=ng.placeholder([ax.N]))
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 
