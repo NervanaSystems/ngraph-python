@@ -16,6 +16,7 @@ import numpy as np
 
 import ngraph as ng
 import ngraph.transformers as ngt
+from ngraph.util.ordered import OrderedSet
 from ngraph.transformers.hetrtransform import HetrComputation
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass, ChildTransformerPass
@@ -56,7 +57,7 @@ def check_result_values(input_vector, result_expected, placeholder, op_list=[], 
 
 
 def check_device_assign_pass(default_device, default_device_id,
-                             graph_op_metadata, graph_op=[], *args):
+                             graph_op_metadata, graph_ops=[], *args):
     """
     The Device assign pass should inject the metadata{device_id, device} as specified by the user for each op, 
     if not specified then the default {device_id:0, device:numpy} should be inserted for each op.
@@ -69,7 +70,8 @@ def check_device_assign_pass(default_device, default_device_id,
     """
 
     obj = DeviceAssignPass(default_device, default_device_id)
-    obj.do_pass(graph_op)
+    inits = OrderedSet()
+    graph_ops, inits = obj.do_pass(graph_ops, inits)
 
     for op in graph_op_metadata.keys():
         assert op.metadata['device'] == graph_op_metadata[op][0]
@@ -89,7 +91,8 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
     """
     send_nodes = list()
     obj = CommunicationPass(send_nodes)
-    obj.do_pass(ops_to_transform)
+    inits = OrderedSet()
+    ops_to_transform, inits = obj.do_pass(ops_to_transform, inits)
 
     op_list_instance_type = list()
     num_expected_sendnodes = len(expected_recv_nodes)
@@ -132,7 +135,8 @@ def test_hetr_graph_passes():
     
     # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
     obj = ChildTransformerPass([])
-    obj.do_pass(graph_op_list)
+    inits = OrderedSet()
+    graph_op_list, inits = obj.do_pass(graph_op_list, inits)
     assert set(transformer_list) == set(obj.transformer_list)
 
 

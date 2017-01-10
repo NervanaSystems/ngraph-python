@@ -45,6 +45,10 @@ class CommunicationPass(PeepholeGraphPass):
         else:
             op.args(args)  # setter is called args
 
+    def do_pass(self, ops, inits):
+        ops, inits = super(CommunicationPass, self).do_pass(ops, inits)
+        ops.update(self.send_nodes)
+        return ops, inits
 
 class ChildTransformerPass(PeepholeGraphPass):
 

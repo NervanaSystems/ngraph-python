@@ -1,5 +1,9 @@
 from neon import NervanaObject  # noqa
 
+from multiprocessing import Process, Queue
+import collections
+from ngraph.util.ordered import OrderedSet
+from ngraph.op_graph.op_graph import computation
 from ngraph.transformers.base import Transformer, Computation
 from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.base import set_transformer_factory
@@ -7,8 +11,6 @@ from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.transformers.nptransform import NumPyTransformer
-from multiprocessing import Process, Queue
-import collections
 
 
 def build_transformer(name):
@@ -33,11 +35,11 @@ def build_transformer(name):
 
 
 class AsyncComputation(Process):
-    def __init__(self, transformer_type, child_ops, child_args):
+    def __init__(self, transformer_type, results, params):
         super(AsyncComputation, self).__init__()
         self.transformer_type = transformer_type
-        self.child_ops = child_ops
-        self.child_args = child_args
+        self.results = results
+        self.params = params
 
         self.in_q = Queue()
         self.out_q = Queue()
@@ -58,7 +60,7 @@ class AsyncComputation(Process):
         Pass and recv args and results from computation via queues.
         """
         transformer = build_transformer(self.transformer_type)
-        computation = transformer.computation(self.child_ops, *self.child_args)
+        computation = transformer.computation(self.results, *self.params)
 
         # TODO clean way to exit (while !should_exit)
         EXIT_PERIOD_S = 0.5
@@ -72,13 +74,16 @@ class AsyncComputation(Process):
                 pass
     
 
-class HetrComputation(Computation):
+# TODO
+# revisit making HetrComputation a Computation;
+# update it to not take results, *parameters, but instead a computation_op
+class HetrComputation(object):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
 
     def __init__(self, transformer_obj, results, *parameters, **kwargs):
-        super(HetrComputation, self).__init__(transformer_obj, results, *parameters, **kwargs)
+        #super(HetrComputation, self).__init__(transformer_obj, results, *parameters, **kwargs)
         self.child_computations = dict()
         self.child_results_map = dict()
         self.transformer_name_list = transformer_obj.transformer_list
@@ -86,33 +91,35 @@ class HetrComputation(Computation):
         self.hetr_passes = transformer_obj.hetr_passes
         self.num_results = 0
 
+        if not isinstance(results, list):
+            results = [results] 
+        all_results = OrderedSet(results)
+        # all res empty; transformer_obj as no computations. where do these get assigned?
+        # previously, we used t.all_results, which went away.  when was that created?
+        #   - computation object used to update all_results of transformer
+        #   - transformer transform_ops used to use all_results but not update it, and return a new copy
+
         # Do Hetr passes
+        inits = OrderedSet()
         for graph_pass in self.hetr_passes:
-            graph_pass.do_pass(transformer_obj.all_results)
+            all_results, inits = graph_pass.do_pass(all_results, inits)
 
         if transformer_obj.vizpass:
-            vis_results = transformer_obj.all_results + transformer_obj.send_nodes_list
-            transformer_obj.vizpass.do_pass(vis_results)
+            vis_results = all_results + transformer_obj.send_nodes_list
+            transformer_obj.vizpass.do_pass(vis_results, inits)
 
         self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
         # update the transformer to send node mappings
         for s in self.send_nodes_list:
-            tname = s.metadata['device'] + str(s.metadata['device_id'])
+            tname = s.metadata['transformer']
             self.transformer_to_node[tname].append(s)
 
-        if isinstance(results, list):
-            self.num_results = len(results)
-            for pos, op in enumerate(results):
-                tname = op.metadata['transformer']
-                self.transformer_to_node[tname].append(op)
-                self.child_results_map.setdefault(tname, []).append(pos)
-        else:
-            # if results is not a list, then its default pos = 0
-            tname = results.metadata['transformer']
-            self.transformer_to_node[tname].append(results)
-            self.child_results_map.setdefault(tname, []).append(0)
-            self.num_results = 1
+        self.num_results = len(results)
+        for pos, op in enumerate(results):
+            tname = op.metadata['transformer']
+            self.transformer_to_node[tname].append(op)
+            self.child_results_map.setdefault(tname, []).append(pos)
 
         self.placeholders = {t: list() for t in self.transformer_name_list}
         self.placeholders_pos = {t: list() for t in self.transformer_name_list}
@@ -124,7 +131,7 @@ class HetrComputation(Computation):
         self.child_computations = dict()
         for tname in self.transformer_name_list:
             p = AsyncComputation(tname, self.transformer_to_node[tname],
-                                 tuple(self.placeholders[tname]))
+                                         tuple(self.placeholders[tname]))
             p.start()
             self.child_computations[tname] = p
 
