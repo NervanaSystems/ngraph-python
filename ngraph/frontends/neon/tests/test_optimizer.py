@@ -35,7 +35,8 @@ def pytest_generate_tests(metafunc):
         lr = np.random.random(2)
         momentum = np.random.random(4)
         wdecay = [0.0005, 0.000, 0.001, 0.1]
-        fargs = itt.product(lr, momentum, wdecay)
+        nesterov = [False, True]
+        fargs = itt.product(lr, momentum, wdecay, nesterov)
         metafunc.parametrize('args', fargs)
 
 
@@ -84,8 +85,9 @@ def test_gdm(args, transformer_factory):
     ex = ExecutorFactory()
     transformer = ex.transformer
 
-    lrate, mom, wdecay = args
-    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
+    lrate, mom, wdecay, nesterov = args
+    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
+                                  wdecay=wdecay, nesterov=nesterov)
     cost = ng.sum(Y - ng.dot(W, X), out_axis=())
 
     # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
@@ -94,7 +96,8 @@ def test_gdm(args, transformer_factory):
     ngraph_optimize = transformer.computation([W, updates], X, Y)
 
     # set up the neon gdm
-    neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
+    neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
+                                           wdecay=wdecay, nesterov=nesterov)
     # dev_v0 = be.zeros((C.length, 1))  # velocities are zero at the beginning
     dev_dw = be.zeros((C.length, 1))  # we fill the gradient info in the below
     dev_w_init = be.array(w_init)  # copy w_init to device
@@ -104,8 +107,10 @@ def test_gdm(args, transformer_factory):
     ng_Ws = []
     be_Ws = []
 
+    import ipdb
     # run for 20 minibatches
     for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
+        # ipdb.set_trace()
         # obtain ngraph results
         (ng_W, _) = ngraph_optimize(x, y)
         gdm.update_learning_rate()

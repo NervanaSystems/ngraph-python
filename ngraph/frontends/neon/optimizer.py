@@ -173,7 +173,44 @@ class LearningRateOptimizer(Optimizer):
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
-    """TODO."""
+    """
+    Stochastic gradient descent with momentum.
+
+    Given the parameters :math:`\\theta`, the learning rate :math:`\\alpha`,
+    and the gradients :math:`\\nabla J(\\theta; x)`
+    computed on the minibatch data :math:`x`, SGD updates the parameters via
+
+    .. math::
+        \\theta' = \\theta - \\alpha\\nabla J(\\theta; x)
+
+    Here we implement SGD with momentum. Momentum tracks the history of
+    gradient updates to help the system move faster through saddle points.
+    Given the additional parameters: momentum :math:`\gamma`, weight decay :math:`\lambda`,
+    and current velocity :math:`v`, we use the following update equations
+
+    .. math::
+        v' = \\gamma v - \\alpha(\\nabla J(\\theta; x) + \\lambda\\theta)
+        theta' = \\theta + v'
+
+    The optional `nesterov` parameter implements Nesterov Accelerated Gradient.
+    If this is set, we use the following update equations instead
+    .. math::
+        v' = \\gamma^2 v + \\alpha (\\gamma + 1) (\\nabla J(\\theta; x) + \\lambda\\theta)
+        theta' = \\theta + v'
+
+    Example usage:
+
+    .. code-block:: python
+
+        import ngraph as ng
+        from ngraph.frontends.neon.optimizers import GradientDescentMomentum
+
+        # use SGD with learning rate 0.01 and momentum 0.9, while
+        # clipping the gradient magnitude to between -5 and 5.
+        loss = ng.squared_l2(actual - estimate)
+        opt = GradientDescentMomentum(0.01, 0.9, gradient_clip_value=5)
+        updates = opt(loss)
+    """
     metadata = {'layer_type': 'gradient_descent_optimizer'}
 
     def __init__(
@@ -186,6 +223,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
             gradient_clip_value=None,
             name=None,
             schedule=Schedule(),
+            nesterov=False,
             **kwargs):
         super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
         self.momentum_coef = momentum_coef
@@ -193,6 +231,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
         self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
         self.schedule = schedule
+        self.nesterov = nesterov
         self.stochastic_round = stochastic_round
 
     @ng.with_op_metadata
@@ -211,10 +250,15 @@ class GradientDescentMomentum(LearningRateOptimizer):
                     clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
                     ng.assign(velocity, velocity * self.momentum_coef - self.lrate * (
                         scale_factor * clip_grad + self.wdecay * variable))
-                    ng.assign(variable, variable + velocity)
+                    if self.nesterov:
+                        delta = self.momentum_coef * velocity - \
+                                self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
+                    else:
+                        delta = velocity
+                    ng.assign(variable, variable + delta)
                 updates.append(opfac())
 
-            return ng.doall(updates)
+        return ng.doall(updates)
 
 
 class RMSProp(LearningRateOptimizer):
