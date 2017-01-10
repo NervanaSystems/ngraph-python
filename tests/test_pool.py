@@ -15,16 +15,15 @@
 
 import numpy as np
 import pytest
-
-import ngraph as ng
-import ngraph.transformers as ngt
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator
-from ngraph.op_graph.axes import spatial_axis
-from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Pooling
+
+import ngraph as ng
+import ngraph.transformers as ngt
+from ngraph.testing import RandomTensorGenerator, executor
+from ngraph.frontends.neon import ax, ar
+from ngraph.frontends.neon.layer import output_dim
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -121,13 +120,19 @@ def test_pooling():
     inputs = ng.placeholder(axes=ax_i)
 
     ax_o = ng.make_axes([
-        spatial_axis(ax_i, J, padding['pad_c'], strides['str_c'], role=ar.Channel),
-        spatial_axis(ax_i, T, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, R, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, S, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
 
+    ax_o[:-1].set_shape((
+        output_dim(C, J, padding['pad_c'], strides['str_c']),
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
     # randomly initialize
     input_value = rng.uniform(-1, 1, ax_i)
 
@@ -163,7 +168,7 @@ def test_pooling():
     gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
 
     # Compare fprop
-    np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
     # Compare bprop
-    np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)

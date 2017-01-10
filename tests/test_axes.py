@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import numpy as np
-import pytest
 from builtins import range
 
+import numpy as np
+import pytest
+
+import ngraph as ng
 import ngraph.util.names as names
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
-from ngraph.util.utils import ExecutorFactory
-import ngraph as ng
+from ngraph.testing import ExecutorFactory
 
 # Make some axes
 ax = names.NameScope()
@@ -49,7 +50,7 @@ def to_nested_tuple(axes):
         FlattenedAxis are replaced with tuple
     """
     return tuple(
-        to_nested_tuple(axis.axes) if isinstance(axis, FlattenedAxis) else axis
+        to_nested_tuple(axis.axes) if axis.is_flattened else axis
         for axis in axes
     )
 
@@ -250,6 +251,22 @@ def test_sliced_batch_axis():
     a = ng.make_axis(10, batch=True)
     s = SlicedAxis(a, slice(0, 5))
     assert s.is_batch is True
+
+
+def test_sliced_recurrent_axis():
+    """ slicing a recurrent axis should result in a recurrent axis """
+    a = ng.make_axis(10, recurrent=True)
+    s = SlicedAxis(a, slice(0, 5))
+    assert s.is_recurrent is True
+
+
+def test_sliced_axis_roles():
+    """ slicing an axis should result in the same roles as the parent axis """
+    role1 = ng.make_axis_role()
+    role2 = ng.make_axis_role()
+    a = ng.make_axis(10, roles=[role1, role2])
+    s = SlicedAxis(a, slice(0, 5))
+    assert all(r in s.roles for r in a.roles)
 
 
 def test_idempotent_axes_a():

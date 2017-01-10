@@ -15,15 +15,14 @@
 
 import numpy as np
 import pytest
-
-import ngraph as ng
-from ngraph.util.utils import executor
-from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
-from ngraph.op_graph.axes import spatial_axis
-from ngraph.frontends.neon import ax, ar
 from neon import NervanaObject
 from neon.backends import gen_backend
 from neon.layers.layer import Convolution
+
+import ngraph as ng
+from ngraph.frontends.neon import ax, ar
+from ngraph.frontends.neon.layer import output_dim
+from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -35,6 +34,7 @@ class DummyDeltaBuffers(object):
     """
     Dummy class for delta buffers needed by neon
     """
+
     def __init__(self):
         self.buffers = [None]
 
@@ -155,17 +155,22 @@ def test_convolution_backprop(transformer_factory):
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
     ax_o = ng.make_axes([
-        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
-        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
 
+    ax_o[:-1].set_shape((
+        K,
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
+
     inputs = ng.placeholder(axes=ax_i)
-    inputs.input = True
     filters = ng.placeholder(axes=ax_f)
-    filters.input = True
 
     # randomly initialize
     input_value = rng.uniform(-1, 1, ax_i)
@@ -182,7 +187,7 @@ def test_convolution_backprop(transformer_factory):
     dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
     dcdf_num_val = dcdf_num_fun(filter_value, input_value)
 
-    np.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+    ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
 def test_convolution(transformer_factory):
@@ -204,13 +209,21 @@ def test_convolution(transformer_factory):
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
+
     ax_o = ng.make_axes([
-        ng.make_axis(ax_f.role_axes(ar.Channelout)[0].length, name='C', roles=[ar.Channel]),
-        spatial_axis(ax_i, ax_f, padding['pad_d'], strides['str_d'], role=ar.Depth),
-        spatial_axis(ax_i, ax_f, padding['pad_h'], strides['str_h'], role=ar.Height),
-        spatial_axis(ax_i, ax_f, padding['pad_w'], strides['str_w'], role=ar.Width),
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
         ax.N
     ])
+
+    ax_o[:-1].set_shape((
+        K,
+        output_dim(D, T, padding['pad_d'], strides['str_d']),
+        output_dim(H, R, padding['pad_h'], strides['str_h']),
+        output_dim(W, S, padding['pad_w'], strides['str_w']))
+    )
 
     inputs = ng.placeholder(axes=ax_i)
     filters = ng.placeholder(axes=ax_f)
@@ -258,13 +271,13 @@ def test_convolution(transformer_factory):
     gradF_ne = neon_layer.dW.get().reshape(ax_f.lengths)
 
     # Compare fprop
-    np.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
 
     # Compare bprop
-    np.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
 
     # Compare update
-    np.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
+    ng.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
 
 
 def test_conv_flatten_deriv(transformer_factory):
@@ -273,7 +286,9 @@ def test_conv_flatten_deriv(transformer_factory):
     """
 
     # set shape
-    N = 8
+    # NOTE: N must be >= 4 for GPU, but for CPU this could be decreased to
+    # speed up the test
+    N = 4
     C, D, H, W = (3, 1, 28, 28)
     T, R, S, K = (1, 5, 5, 8)
 
@@ -282,7 +297,13 @@ def test_conv_flatten_deriv(transformer_factory):
     # i, f, o axes
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_o = ng.make_axes([ax.K, ax.M, ax.P, ax.Q, ax.N])
+    ax_o = ng.make_axes([
+        ng.make_axis(name='C', roles=[ar.features_input]),
+        ng.make_axis(name='D', roles=[ar.features_0]),
+        ng.make_axis(name='H', roles=[ar.features_1]),
+        ng.make_axis(name='W', roles=[ar.features_2]),
+        ax.N
+    ])
 
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
@@ -290,6 +311,7 @@ def test_conv_flatten_deriv(transformer_factory):
     axes_rsck = ng.make_axes([ax.R, ax.S, ax.C, ax.K])
     axes_rsck_prime = ng.make_axes([ng.make_axis(axis.length).named(axis.name + 'p')
                                     for axis in axes_rsck])
+    axes_nmpqk = ng.make_axes([ax_o[-1], ax_o[1], ax_o[2], ax_o[3], ax_o[0]])
 
     # broadcast input / filter axes
     input_var = ng.variable(ax_i).named('input')
@@ -304,8 +326,7 @@ def test_conv_flatten_deriv(transformer_factory):
 
     # convolution
     output_kmpqn = ng.convolution(params, input_var, filter_ctrsk, axes=ax_o)
-    output_nmpqk = ng.axes_with_order(output_kmpqn,
-                                      axes=ng.make_axes([ax.N, ax.M, ax.P, ax.Q, ax.K]))
+    output_nmpqk = ng.axes_with_order(output_kmpqn, axes=axes_nmpqk)
 
     # slice away the oD
     out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
@@ -332,12 +353,12 @@ def test_conv_flatten_deriv(transformer_factory):
     conv_val = conv_comp(filter_val, input_val)
     conv_val_num = np.empty_like(conv_val)
     conv_val_num.fill(C * T * R * S)
-    assert np.allclose(conv_val, conv_val_num)
+    assert ng.testing.allclose(conv_val, conv_val_num)
 
     grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
     grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
-    assert np.allclose(grad_filter_num_val, grad_filter_sym_val)
+    assert ng.testing.allclose(grad_filter_num_val, grad_filter_sym_val)
 
     grad_input_num_val = grad_input_num_comp(input_val, filter_val)
     grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
-    assert np.allclose(grad_input_num_val, grad_input_sym_val)
+    assert ng.testing.allclose(grad_input_num_val, grad_input_sym_val)

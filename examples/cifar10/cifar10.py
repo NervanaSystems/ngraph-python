@@ -27,6 +27,7 @@ class CIFAR10(object):
     Arguments:
         path (str): Local path to copy data files.
     """
+
     def __init__(self, path='.'):
         self.path = path
         self.url = 'http://www.cs.toronto.edu/~kriz'
@@ -72,10 +73,14 @@ class CIFAR10(object):
             X_test, y_test = d['data'], d['labels']
             X_test = X_test.reshape(-1, 3, 32, 32)
 
-        self.train_set = {'image': X_train,
-                          'label': y_train}
-        self.valid_set = {'image': X_test,
-                          'label': np.array(y_test)}
+        self.train_set = {'image': {'data': X_train,
+                                    'axes': ('batch', 'channel', 'height', 'width')},
+                          'label': {'data': y_train,
+                                    'axes': ('batch',)}}
+        self.valid_set = {'image': {'data': X_test,
+                                    'axes': ('batch', 'channel', 'height', 'width')},
+                          'label': {'data': np.array(y_test),
+                                    'axes': ('batch',)}}
 
         return self.train_set, self.valid_set
 

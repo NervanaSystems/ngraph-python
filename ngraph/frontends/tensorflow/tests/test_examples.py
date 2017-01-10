@@ -17,8 +17,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import glob
 import os
 import numpy as np
+import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 import argparse
 
@@ -43,7 +45,7 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = logistic_regression(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
@@ -61,7 +63,7 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = mnist_mlp(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
@@ -82,12 +84,12 @@ class TestExamples(ImporterTester):
         tf_cost_vals = tf_retrain_mnist(args)
 
         # check
-        assert np.allclose(
+        assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
         # cleanups
-        # e.g. dir/checkpoint
+        # dir/checkpoint
         try:
             dir_name = os.path.dirname(
                 os.path.abspath(args.checkpoint_path))
@@ -95,13 +97,10 @@ class TestExamples(ImporterTester):
             os.remove(checkpoint_file_path)
         except:
             print("[clean up] checkpoint does not exist")
-        # e.g. dir/model.ckpt
-        try:
-            os.remove(args.checkpoint_path)
-        except:
-            print("[clean up] checkpoint (weights) does not exist")
-        # e.g. dir/model.ckpt.meta
-        try:
-            os.remove(args.checkpoint_path + '.meta')
-        except:
-            print("[clean up] metagraph dump does not exist")
+
+        # dir/model.ckpt, model.ckpt.index, model.ckpt.meta, model.ckpt.data*
+        for file in glob.glob(args.checkpoint_path + "*"):
+            try:
+                os.remove(file)
+            except:
+                print("[clean up] removal of %s not successful" % file)

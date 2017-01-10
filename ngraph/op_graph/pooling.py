@@ -78,18 +78,48 @@ class PoolingOp(op_graph.TensorOp):
         inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, self))
 
 
-class BpropPoolOp(op_graph.TensorOp):
+class PoolDerivOp(op_graph.TensorOp):
+    """
+    Maintains index and pool_params through forwarding of the original PoolingOp.
+
+    Arguments:
+        fprop: The original PoolingOp.
+    """
+    def __init__(self, fprop, **kwargs):
+        super(PoolDerivOp, self).__init__(**kwargs)
+        self.fprop = fprop
+
+    @property
+    def index(self):
+        """
+
+        Returns:
+            The argmax tensor index of the pooling op.
+        """
+        return self.fprop.forwarded.index
+
+    @property
+    def pool_params(self):
+        """
+
+        Returns:
+            The pooling parameters of the pooling op.
+
+        """
+        return self.fprop.forwarded.pool_params
+
+
+class BpropPoolOp(PoolDerivOp):
     def __init__(self, delta, inputs, fprop, *args, **kwargs):
         """
         Arguments:
             inputs  : input tensor.
         """
-        self.inputs = inputs
-        self.fprop = fprop
-
-        self.pool_params = fprop.pool_params
-        self.index = fprop.index
-
         super(BpropPoolOp, self).__init__(
-            args=(delta,), *args, axes=inputs.axes, **kwargs
+            args=(delta,),
+            fprop=fprop,
+            axes=inputs.axes,
+            *args, **kwargs
         )
+
+        self.inputs = inputs

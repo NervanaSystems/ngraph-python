@@ -14,6 +14,7 @@
 from __future__ import division
 
 from contextlib import contextmanager
+import collections
 
 import inspect
 import cachetools
@@ -24,7 +25,7 @@ from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, casting_axis
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -163,57 +164,72 @@ class Op(NameableValue, DebugInfo):
     """
 
     # Default is to not collect Ops as they are created
-    get_thread_state().ops = [None]
-
     @staticmethod
     def _get_thread_ops():
         """
         :return: The stack of Ops being collected.
         """
-        return get_thread_state().ops
+        try:
+            ops = get_thread_state().ops
+        except AttributeError:
+            ops = [None]
+            get_thread_state().ops = ops
+        return ops
 
     @staticmethod
     @contextmanager
-    def captured_ops():
+    def captured_ops(ops=None):
         """
         Capture all Ops created within the context. Hides ops created in this
         context from parent contexts.
         """
-        ops = []
+        if ops is None:
+            ops = []
         try:
             Op._get_thread_ops().append(ops)
             yield (ops)
         finally:
             Op._get_thread_ops().pop()
 
-    # We need to create another stack here because all_ops and captured_ops
-    # have different semantics that don't work with a shared stack
-    get_thread_state().all_ops = [None]
-
     @staticmethod
-    @contextmanager
-    def all_ops():
-        """
-        Collects all Ops created within the context. Does not hide ops created
-        in this context from parent contexts.
-        """
-        ops = []
+    def get_all_ops():
         try:
             all_ops = get_thread_state().all_ops
+        except AttributeError:
+            all_ops = [None]
+            get_thread_state().all_ops = all_ops
+        return all_ops
+
+    # We need to create another stack here because all_ops and captured_ops
+    # have different semantics that don't work with a shared stack
+    @staticmethod
+    @contextmanager
+    def all_ops(ops=None, isolate=False):
+        """
+        Collects all Ops created within the context. Does not hide ops created
+        in this context from parent contexts unless isolate is True.
+        """
+        if ops is None:
+            ops = []
+        try:
+            all_ops = Op.get_all_ops()
             all_ops.append(ops)
             yield (ops)
         finally:
             all_ops.pop()
             parent = all_ops[-1]
-            if parent is not None:
+            if not isolate and parent is not None:
                 parent.extend(ops)
 
     # The thread's global user_deps map
-    get_thread_state().user_deps = [dict()]
-
     @staticmethod
     def _get_thread_user_deps():
-        return get_thread_state().user_deps
+        try:
+            user_deps = get_thread_state().user_deps
+        except AttributeError:
+            user_deps = [dict()]
+            get_thread_state().user_deps = user_deps
+        return user_deps
 
     @staticmethod
     @contextmanager
@@ -277,9 +293,7 @@ class Op(NameableValue, DebugInfo):
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
-        for arg in self.args:
-            for dep in arg.user_deps:
-                self.add_other_dep(dep)
+        self.require_user_deps(self.args)
         self.schemas = []
         self.const = const
         self.is_constant = constant
@@ -295,13 +309,18 @@ class Op(NameableValue, DebugInfo):
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
-        all_ops = get_thread_state().all_ops[-1]
+        all_ops = Op.get_all_ops()[-1]
         if all_ops is not None:
             all_ops.append(self)
 
         self.style = {}
         self.ops = []
         self.__forward = None
+
+    def require_user_deps(self, args):
+        for arg in args:
+            for dep in arg.user_deps:
+                self.add_other_dep(dep)
 
     @property
     def args(self):
@@ -440,6 +459,10 @@ class Op(NameableValue, DebugInfo):
 
         """
         return not self.is_constant
+
+    @property
+    def is_tensor_op(self):
+        return False
 
     @property
     def is_scalar(self):
@@ -696,6 +719,7 @@ class InitTensorOp(Op):
         valfun: A CPU function that produces the initial value for the tensor.
 
     """
+
     def __init__(self, tensor, valfun, **kwargs):
         super(InitTensorOp, self).__init__(args=(tensor,), **kwargs)
         self.valfun = valfun
@@ -754,6 +778,7 @@ class AssignOneDOp(Op):
         tensor (AssignableTensorOp): The value to assign to.
         value (TensorOp): The value.
     """
+
     def __init__(self, tensor, val, force=False, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
@@ -796,24 +821,19 @@ class SetItemOp(Op):
         val (TensorOp): A value to assign.
 
     """
+
     def __init__(self, tensor, item, val, **kwargs):
         super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
         self.item = tuple(item)
         tensor.user_deps = OrderedSet([self])
 
 
-class doall(Op):
+class ControlBlockOp(Op):
     """
-    Compute every Op in all.
-
-    Arguments:
-        all: Ops to be computed.
-        **kwargs: Args for related classes.
+    An Op that affects execution sequencing.
     """
-
-    def __init__(self, all, **kwargs):
-        super(doall, self).__init__(args=(), **kwargs)
-        self.other_deps = OrderedSet(all)
+    def __init__(self, **kwargs):
+        super(ControlBlockOp, self).__init__(**kwargs)
 
     @property
     def is_device_op(self):
@@ -823,6 +843,163 @@ class doall(Op):
             False, because this is handled by the transformer.
         """
         return False
+
+
+class ParallelOp(ControlBlockOp):
+    """
+    Compute every Op in all in any order compatible with existing dependencies.
+
+    Arguments:
+        all: Ops to be computed.
+        **kwargs: Args for related classes.
+    """
+    def __init__(self, all, **kwargs):
+        super(ParallelOp, self).__init__(**kwargs)
+        self.other_deps.update(all)
+        self.require_user_deps(all)
+
+
+def doall(all):
+    return ParallelOp(all)
+
+
+class ComputationOp(ParallelOp):
+    """
+    Represents a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Parameters:
+        returns: Ops returned.
+        parameters: Parameter ops.
+    """
+    def __init__(self, returns, *args, **kwargs):
+        for arg in args:
+            if not isinstance(arg, Op) or not arg.input:
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
+        if isinstance(returns, collections.Container):
+            all = returns
+        elif isinstance(returns, Op):
+            all = [returns]
+        elif returns is not None:
+            raise ValueError()
+        else:
+            all = []
+
+        super(ComputationOp, self).__init__(all=all, **kwargs)
+        self.returns = returns
+        self.parameters = args
+        for arg in args:
+            self.add_other_dep(arg)
+
+
+def computation(returns, *args):
+    """
+    Defines a host-callable graph computation.
+
+    Arguments:
+        returns: Values returned by the computation. A list, set, or op.
+        *args: Inputs to the computation.
+
+    Returns:
+        A computation op.
+    """
+
+    return ComputationOp(returns, *args)
+
+
+class SequentialOp(ControlBlockOp):
+    """
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
+
+    Arguments:
+        ops: Sequence of ops to compute.
+    """
+    def __init__(self, ops, **kwargs):
+        super(SequentialOp, self).__init__(**kwargs)
+        self.value_op = ops[-1]
+        ops = OrderedSet(ops)
+        for op0, op1 in zip(ops[:-1], ops[1:]):
+            op1.other_deps.add(op0)
+            op1.require_user_deps([op0])
+        self.other_deps.update(ops)
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return self.value_op.is_tensor_op
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    def generate_adjoints(self, adjoints, delta):
+        self.value_op.generate_add_delta(adjoints, delta)
+
+
+def sequential(ops):
+    """
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
+
+    Arguments:
+        ops: Sequence of ops to compute.
+
+    """
+    return SequentialOp(ops)
+
+
+class SequentialFactory(list):
+    def __call__(self):
+        return sequential(self)
+
+
+@contextmanager
+def sequential_op_factory():
+    """
+    Captures created ops in a list to be used to form sequential ops.
+
+    The captured ops will be executed in the generated order, if not already executed.
+    Use append to manually add an op to the factory.
+    The last op added is the value returned from the sequential.
+
+    Example::
+
+            N = ng.make_axis(1)
+            x = ng.variable([N], initial_value=0)
+            with ng.sequential_op_factory() as pf:
+                x0 = x + x
+                ng.assign(x, 2)
+                x1 = x + x
+                pf.append(x0)
+            p = pf()
+
+
+    Returns: A callable which creates an Op that will evaluate the ops in the order specified,
+    and have value the same as the last op appended.
+
+    """
+    with Op.all_ops(SequentialFactory()) as ops:
+        yield(ops)
 
 
 class Fill(Op):
@@ -873,6 +1050,10 @@ class TensorOp(Op):
         self.__axes = axes
 
         self.scale = scale
+
+    @property
+    def is_tensor_op(self):
+        return True
 
     def generate_add_delta(self, adjoints, delta):
         """
@@ -985,6 +1166,9 @@ class TensorOp(Op):
         return assign(self, self / val)
 
     def __getitem__(self, item):
+        if isinstance(item, slice) and len(self.axes) > 1:
+            item = (item,)
+        item += tuple(slice(None) for _ in range(len(self.axes) - len(item)))
         return tensor_slice(self, item)
 
     def __axes__(self):
@@ -1094,6 +1278,7 @@ class TensorOp(Op):
 
 
 class ReshapeOp(TensorOp):
+
     def __init__(self, x, **kwargs):
         super(ReshapeOp, self).__init__(
             args=(x,),
@@ -1152,6 +1337,7 @@ class Transpose(ReshapeOp):
     Arguments:
         x: A tensor.
     """
+
     def __init__(self, x, **kwargs):
         super(Transpose, self).__init__(
             x,
@@ -1176,11 +1362,18 @@ class AxesCastOp(ReshapeOp):
         axes: The new axes.
 
     """
+
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
         if not x.is_scalar and x.axes.lengths != axes.lengths:
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
+        if len(x.axes) > 0:
+            aliasing_axes = []
+            for new_axis, old_axis in zip(axes, x.axes):
+                aliasing_axes.append(casting_axis(new_axis, old_axis))
+            axes = make_axes(aliasing_axes)
+
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1262,25 +1455,6 @@ def expand_dims(x, axis, dim):
     return ExpandDims(x, axis, dim)
 
 
-class ResultHandle(ReshapeOp):
-    def __init__(self, x, **kwargs):
-        super(ResultHandle, self).__init__(
-            x, **kwargs
-        )
-
-    @property
-    def device_op(self):
-        return self
-
-    @tdcache()
-    def tensor_description(self):
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(td.axes, self.name)
-
-    def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(delta)
-
-
 class BroadcastOp(ReshapeOp):
     """
     Used to add additional axes for a returned derivative.
@@ -1334,6 +1508,44 @@ def broadcast(x, axes):
     return BroadcastOp(x, axes)
 
 
+def axes_with_role_order(x, roles):
+    """
+    Return a tensor with a different axes order according to
+    specified roles.  Will expand dims as necessary with inferred
+    axes for missing roles
+
+    Args:
+        x (TensorOp): The tensor.
+        roles (sequence, AxisRoles): A permutation of the roles
+                                     of axes of the tensor.
+
+    Returns:
+        TensorOp: The new tensor.
+
+    """
+    reordered_axes = make_axes()
+    y = x
+    for r in roles:
+        ax_i = y.axes.role_axes(r)
+        if len(ax_i) == 0:
+            ax_i = make_axis(length=1, roles=[r])
+        elif len(ax_i) == 1:
+            ax_i = ax_i[0]
+        else:
+            raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
+        reordered_axes += ax_i
+        # This will only add the missing axes to the front
+        y = expand_dims(y, ax_i, 0)
+
+    # Ensure that axes of x are a subset of y
+    if not x.axes.intersect(y.axes).has_same_axes(x.axes):
+        raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
+            x.axes - x.axes.intersect(y.axes)
+        ))
+
+    return axes_with_order(y, reordered_axes)
+
+
 def axes_with_order(x, axes):
     """
     Return a tensor with a different axes order.
@@ -1360,6 +1572,7 @@ class ReorderAxes(ReshapeOp):
         x: The tensor whose axes to reorder.
         axes: The new axes.
     """
+
     def __init__(self, x, axes, **kwargs):
         if not x.axes.has_same_axes(axes):
             raise ValueError(
@@ -1498,9 +1711,9 @@ def slice_along_axis(x, axis, idx):
 
 
 class Flatten(ReshapeOp):
+
     def __init__(self, x, axes, **kwargs):
-        if not isinstance(x, AssignableTensorOp):
-            x = ContiguousOp(axes_with_order(x, x.axes))
+        x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1541,6 +1754,7 @@ def flatten_at(x, idx):
 
 
 class Unflatten(ReshapeOp):
+
     def __init__(self, x, axes=None, **kwargs):
         if axes is None:
             axes = []
@@ -1599,14 +1813,15 @@ class AssignableTensorOp(TensorOp):
         self.input = input
 
         with Op.saved_user_deps():
-            # Run initializations in a clean context so their SetItems don't modify user_deps
-            # for the main computations.
-            # TODO Maybe we want to use a single context for all of initialization.  We would
-            # need to do the following in a separate method called during transformation.
-            if callable(initial_value):
-                self.add_initializer(assign(self, initial_value()))
-            elif initial_value is not None:
-                self.add_initializer(assign(self, initial_value))
+            with Op.all_ops(isolate=True):
+                # Run initializations in a clean context so their SetItems don't modify user_deps
+                # for the main computations.
+                # TODO Maybe we want to use a single context for all of initialization.  We would
+                # need to do the following in a separate method called during transformation.
+                if callable(initial_value):
+                    self.add_initializer(assign(self, initial_value()))
+                elif initial_value is not None:
+                    self.add_initializer(assign(self, initial_value))
 
     @property
     def defs(self):
@@ -1659,10 +1874,14 @@ def constant(const, axes=None, dtype=None):
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
                              graph_label_type=graph_label_type, dtype=dtype)
+
     nptensor = np.asarray(const, dtype=val.dtype)
 
     if not val.has_axes:
         val.axes = make_axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
+
+    if np.isscalar(const):
+        nptensor = np.zeros(val.axes.lengths, dtype=val.dtype) + const
 
     if nptensor.shape != val.axes.lengths:
         raise ValueError((
@@ -1855,6 +2074,7 @@ class StackOp(AssignableTensorOp):
     Parameters:
         pos: The position of the join axis.
     """
+
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
         x_axes = x_list[0].axes
@@ -1926,6 +2146,7 @@ def stack(x_list, axis, pos=0):
 
 
 class UnsliceSchema(object):
+
     def __init__(self, x, slices):
         self.x = x
         self.slices = slices
@@ -2104,6 +2325,7 @@ class UnaryElementwiseOneDOp(ElementWise):
     """
     Handles initialization for unary operations.
     """
+
     def __init__(self, x):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
 
@@ -2458,6 +2680,7 @@ def sqrt(x):
 
 
 class BinaryElementWiseAxesOp(ElementWise):
+
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
@@ -2483,6 +2706,7 @@ class BinaryElementWiseAxesOp(ElementWise):
 
 
 class BinaryElementWiseLowDOp(ElementWise):
+
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
 
@@ -2675,6 +2899,7 @@ class ContiguousOp(TensorOp):
     Parameters:
         x (TensorOp): A possibly non-contiguous tensor.
     """
+
     def __init__(self, x, **kwargs):
         super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
 
@@ -2687,14 +2912,21 @@ class ContiguousOp(TensorOp):
 
 
 class DotOp(TensorOp):
+
     def __init__(self, x, y, **kwargs):
         self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
         self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
-        if len(self.x_out_axes.intersect(self.y_out_axes)):
-            raise ValueError("Intersection in out axes for dot.")
+        intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
+        if len(intersection_axes):
+            raise ValueError(("Both arguments to a DotOp contained {axes}. "
+                              "In order to dot two tensors with the same Axis together, one "
+                              "of the Axes must be a dual. See: "
+                              "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
+                              ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+
         axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
@@ -2785,7 +3017,7 @@ def dot(x, y, name=None):
     return DotOp(x, y, name=name)
 
 
-def squared_L2(x):
+def squared_L2(x, out_axes=None, reduction_axes=None):
     """
     Returns the dot of x and y, with the axes of x set to their dual offset.
 
@@ -2797,15 +3029,22 @@ def squared_L2(x):
         TensorOp: The result.
 
     """
-    return dot(dualed_axes(x, x.axes, -1, 0), x)
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
 class LowDimensionalDot(TensorOp):
+
     def __init__(self, x, y, axes, **kwargs):
         super(LowDimensionalDot, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
 class DotOneDimensional(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 1 and len(y.axes) == 1
         super(DotOneDimensional, self).__init__(
@@ -2814,6 +3053,7 @@ class DotOneDimensional(LowDimensionalDot):
 
 
 class DotTwoDimensional(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 2
         super(DotTwoDimensional, self).__init__(
@@ -2822,6 +3062,7 @@ class DotTwoDimensional(LowDimensionalDot):
 
 
 class DotTwoByOne(LowDimensionalDot):
+
     def __init__(self, x, y, axes, **kwargs):
         assert len(x.axes) == 2 and len(y.axes) == 1
         super(DotTwoByOne, self).__init__(
@@ -3042,6 +3283,42 @@ Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
 )
 
 
+def prod_adjoints(self, adjoints, delta, x):
+    # axes
+    axes = x.axes
+    reduction_axes = self.reduction_axes
+
+    # x_equal_zero
+    x_equal_zero = equal(x, 0)
+
+    # count 0's occurrence by reduction axes
+    x_zero_count = sum(x_equal_zero, reduction_axes=reduction_axes)
+
+    # create mask for zero count 0 and 1
+    mask_zero = broadcast(equal(x_zero_count, 0), axes=axes)
+    mask_one = broadcast(equal(x_zero_count, 1), axes=axes)
+
+    # replace all 0 to 1
+    x_replaced = equal(x, 0.) * 1. + (1. - equal(x, 0.)) * x
+
+    # do product of x_replace and gradient
+    x_replaced_prod = prod(x_replaced, reduction_axes=reduction_axes)
+    x_replaced_grad = x_replaced_prod / x_replaced
+
+    # multiply mask with mask for the two cases
+    x_grad = mask_zero * x_replaced_grad + mask_one * x_equal_zero * x_replaced_grad
+
+    x.generate_add_delta(
+        adjoints,
+        broadcast(delta, x.axes) * x_grad
+    )
+
+
+Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
+    'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
+)
+
+
 Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
     'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
 )
@@ -3074,6 +3351,7 @@ class TensorSizeOp(TensorOp):
             of these axes instead.
         kwargs: options, including name
     """
+
     def __init__(self, x, reduction_axes=None, out_axes=None, **kwargs):
         if reduction_axes is None and out_axes is None:
             reduction_axes = x.axes.sample_axes()
@@ -3177,6 +3455,7 @@ class OneHotOp(TensorOp):
         axis: The axis along which to construct the onehot form. It should not be
         in x and should have length equal to the number of classes.
     """
+
     def __init__(self, x, axis, **kwargs):
         self.axis = axis
         super(OneHotOp, self).__init__(
@@ -3230,6 +3509,7 @@ class OneHotTwoDimOp(OneHotOp):
         axis: The axis along which to construct the onehot form. It should not be
         in x and should have length equal to the number of classes.
     """
+
     def __init__(self, x, axis, **kwargs):
         assert len(x.axes) == 1
         super(OneHotTwoDimOp, self).__init__(x, axis, **kwargs)
@@ -3262,13 +3542,15 @@ def sigmoid(x):
     """
     sigmoid(x)
 
-        :math:`\frac{1}{1+exp(-x)}`
+    .. math::
+        \\frac{1}{1+e^{-x}}
 
     Arguments:
         x: A tensor
 
     Returns:
         TensorOp: sigmoid(x).
+
     """
     result = reciprocal(exp(-x) + 1)
     result.add_schema(Sigmoid(x=x))
@@ -3280,9 +3562,8 @@ class Function(Op):
 
     def __init__(self, ops):
         super(Function, self).__init__()
-        from ngraph.analysis import Digraph
-        self.ops = Digraph(ops)
-        self.instructions = self.ops.topsort()
+        self.ops = ops
+        self.instructions = Op.ordered_ops(self.ops)
         args, defs = set(), set()
         for op in self.instructions:
             # Kernel defines the def of each operation
@@ -3309,16 +3590,6 @@ class Function(Op):
     def inputs(self):
         """TODO."""
         return self.use
-
-
-class Buffer(object):
-    """TODO."""
-
-    def __init__(self, color, size):
-        self.color = color
-        self.size = size
-        self.data = None
-        self.views = OrderedSet()
 
 
 def mean(x, reduction_axes=None, out_axes=None):

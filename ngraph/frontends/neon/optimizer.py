@@ -116,7 +116,7 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
     else:
         s = None
         for param in grad_list:
-            term = ng.squared_L2(param)
+            term = ng.squared_L2(param, out_axes=None)
             if s is None:
                 s = term
             else:
@@ -154,8 +154,25 @@ class Optimizer(object):
         self.name = name
         self.iteration_index = 0
 
+    def update_learning_rate(self):
+        pass
 
-class GradientDescentMomentum(Optimizer):
+
+class LearningRateOptimizer(Optimizer):
+    def __init__(self, learning_rate, **kwargs):
+        super(LearningRateOptimizer, self).__init__(**kwargs)
+        self.learning_rate = learning_rate
+        self.lrate = ng.persistent_tensor(axes=(),
+                                          initial_value=learning_rate).named('lrate')
+
+    def update_learning_rate(self):
+        self.iteration_index += 1
+        self.learning_rate = self.schedule.get_learning_rate(self.learning_rate,
+                                                             self.iteration_index)
+        self.lrate.value[()] = self.learning_rate
+
+
+class GradientDescentMomentum(LearningRateOptimizer):
     """TODO."""
     metadata = {'layer_type': 'gradient_descent_optimizer'}
 
@@ -170,49 +187,37 @@ class GradientDescentMomentum(Optimizer):
             name=None,
             schedule=Schedule(),
             **kwargs):
-        super(GradientDescentMomentum, self).__init__(**kwargs)
+        super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
         self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
         self.schedule = schedule
         self.stochastic_round = stochastic_round
-        self.learning_rate = ng.persistent_tensor(axes=(),
-                                                  initial_value=learning_rate).named('lrate')
 
     @ng.with_op_metadata
     def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
-            velocity_updates, param_updates = [], []
+            updates = []
             batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
-
             grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
             scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
 
             for variable, grad in zip(batch_cost.variables(), grads):
-                grad = clip_gradient_value(grad, self.gradient_clip_value)
+                with ng.sequential_op_factory() as opfac:
+                    velocity = ng.persistent_tensor(axes=variable.axes,
+                                                    initial_value=0.).named(variable.name + '_vel')
+                    clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
+                    ng.assign(velocity, velocity * self.momentum_coef - self.lrate * (
+                        scale_factor * clip_grad + self.wdecay * variable))
+                    ng.assign(variable, variable + velocity)
+                updates.append(opfac())
 
-                velocity = ng.persistent_tensor(axes=variable.axes,
-                                                initial_value=0.).named(variable.name + '_vel')
-                velocity_updates.append(
-                    ng.assign(velocity,
-                              velocity * self.momentum_coef - self.learning_rate * (
-                                  scale_factor * grad + self.wdecay * variable)))
-
-                param_updates.append(ng.assign(variable, variable + velocity))
-
-            lr_update = [ng.assign(self.learning_rate,
-                                   self.schedule.get_learning_rate(self.learning_rate,
-                                                                   self.iteration_index))]
-
-            updates = ng.doall(velocity_updates + param_updates + lr_update)
-            self.iteration_index += 1
-
-        return updates
+            return ng.doall(updates)
 
 
-class RMSProp(Optimizer):
+class RMSProp(LearningRateOptimizer):
     """
     Root Mean Square propagation.
     Root Mean Square (RMS) propagation protects against vanishing and
@@ -254,20 +259,18 @@ class RMSProp(Optimizer):
         Notes:
             Only constant learning rate is supported currently.
         """
-        super(RMSProp, self).__init__(name=name)
+        super(RMSProp, self).__init__(learning_rate=learning_rate, name=name)
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
         self.schedule = schedule
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.learning_rate = ng.persistent_tensor(axes=(),
-                                                  initial_value=learning_rate).named('lrate')
 
     @ng.with_op_metadata
     def __call__(self, cost_func):
         with ng.Op.saved_user_deps():
-            state_updates, param_updates = [], []
+            updates = []
             batch_cost = ng.sum(cost_func, out_axes=())
             batch_size = cost_func.axes.batch_axes()[0].length
 
@@ -276,29 +279,12 @@ class RMSProp(Optimizer):
 
             epsilon, decay = (self.epsilon, self.decay_rate)
             for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
-                grad = clip_gradient_value(grad, self.gradient_clip_value)
+                with ng.sequential_op_factory() as opfac:
+                    grad = clip_gradient_value(grad, self.gradient_clip_value)
+                    state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+                    ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad))
+                    ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
+                                                    / (ng.sqrt(state + epsilon) + epsilon)))
+                updates.append(opfac())
 
-                state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
-                state_updates.append(
-                    ng.assign(
-                        lvalue=state,
-                        rvalue=decay * state + (1.0 - decay) * ng.square(grad)
-                    ).named('state_u_%s' % i)
-                )
-
-                param_updates.append(
-                    ng.assign(
-                        lvalue=variable,
-                        rvalue=variable - ((scale_factor * grad * self.learning_rate)
-                                           / (ng.sqrt(state + epsilon) + epsilon)),
-                    ).named('var_u_%s' % i)
-                )
-
-            lr_update = [ng.assign(self.learning_rate,
-                                   self.schedule.get_learning_rate(self.learning_rate,
-                                                                   self.iteration_index))]
-
-            updates = ng.doall(state_updates + param_updates + lr_update)
-            self.iteration_index += 1
-
-        return updates
+        return ng.doall(updates)

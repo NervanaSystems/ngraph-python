@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import ngraph as ng
 import numpy as np
 import pytest
+
+import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -86,7 +87,7 @@ def test_expand_dims(transformer_factory):
                 # Test backpropagation
                 numeric_deriv = num_deriv_fun(tensor_np)
                 sym_deriv = sym_deriv_fun(tensor_np)
-                assert np.allclose(
+                assert ng.testing.allclose(
                     numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                 )
 
@@ -176,7 +177,7 @@ def test_slice(transformer_factory):
         numeric_deriv = num_deriv_fun(tensor_np)
         sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert np.allclose(
+        assert ng.testing.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
 
@@ -243,7 +244,7 @@ def test_padding(transformer_factory):
         numeric_deriv = numeric_deriv_fun(tensor_np)
         sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert np.allclose(
+        assert ng.testing.allclose(
             numeric_deriv, sym_deriv, rtol=rtol, atol=atol
         )
 
@@ -273,12 +274,12 @@ def test_cast_axes(transformer_factory):
     sym_deriv_fun = ex.derivative(y, x)
 
     x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
-    assert np.allclose(
+    assert ng.testing.allclose(
         y_fun(x_np),
         np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
     )
 
-    assert np.allclose(
+    assert ng.testing.allclose(
         num_deriv_fun(x_np),
         sym_deriv_fun(x_np),
         rtol=rtol,

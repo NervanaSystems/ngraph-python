@@ -17,6 +17,7 @@ from __future__ import print_function
 # basics
 import mimetypes
 import sys
+import os
 
 # tensorflow
 import tensorflow as tf
@@ -137,7 +138,9 @@ class TFImporter:
         graph = tf.Graph()
         with graph.as_default():
             # restore from meta
-            self.saver = tf.train.import_meta_graph(mata_graph_path)
+            meta_graph_path = os.path.join(os.getcwd(), mata_graph_path)
+            self.saver = tf.train.import_meta_graph(meta_graph_path)
+
             # parse graph
             self.import_graph(graph)
 
@@ -223,11 +226,12 @@ class TFImporter:
             raise ValueError("self._checkpoint_path is None, please specify"
                              "checkpoint_path while importing meta_graph.")
         with self._graph.as_default():
-            tf_variables = tf.all_variables()
+            tf_variables = tf.global_variables()
             ng_variables = self.get_op_handle(tf_variables)
             ng_restore_ops = []
             with tf.Session() as sess:
-                self.saver.restore(sess, self._checkpoint_path)
+                checkpoint_path = os.path.join(os.getcwd(), self._checkpoint_path)
+                self.saver.restore(sess, checkpoint_path)
                 for tf_variable, ng_variable in zip(tf_variables, ng_variables):
                     val = sess.run(tf_variable)
                     with ng.Op.saved_user_deps():

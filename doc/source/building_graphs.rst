@@ -165,9 +165,10 @@ Op Hierarchy
 
 Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind graph construction functions.
 
-All Nervana Graph nodes are instances of subclasses of the class ``Op`` which is captured in the full class hierarchy in the following figure.
+.. All Nervana Graph nodes are instances of subclasses of the class ``Op`` which is captured in the full class hierarchy in the following figure.
 
-.. image:: assets/op_hierarchy.svg
+
+.. .. image:: assets/op_hierarchy.*
 
 Ops influencing evaluation
 ==========================

@@ -16,8 +16,8 @@ from __future__ import division
 import ngraph as ng
 import math
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
-from ngraph.op_graph.axes import spatial_axis
 from ngraph.frontends.neon import ar
+from ngraph.frontends.neon.layer import output_dim
 
 
 def tf_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding):
@@ -130,20 +130,23 @@ class OpsNN(OpsBase):
 
         # set axes shape
         ax_N = ng.make_axis(batch=True)
-        ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth])
-        ax_H = ng.make_axis(roles=[ar.Height])
-        ax_W = ng.make_axis(roles=[ar.Width])
+        ax_C = ng.make_axis(roles=[ar.features_input])
+        ax_D = ng.make_axis(roles=[ar.features_0], length=1)
+        ax_H = ng.make_axis(roles=[ar.features_1])
+        ax_W = ng.make_axis(roles=[ar.features_2])
 
-        ax_T = ng.make_axis(roles=[ar.Depth])
-        ax_R = ng.make_axis(roles=[ar.Height])
-        ax_S = ng.make_axis(roles=[ar.Width])
-        ax_K = ng.make_axis(roles=[ar.Channelout])
+        ax_T = ng.make_axis(roles=[ar.features_0], length=1)
+        ax_R = ng.make_axis(roles=[ar.features_1])
+        ax_S = ng.make_axis(roles=[ar.features_2])
+        ax_K = ng.make_axis(roles=[ar.features_output])
+
+        oC = ng.make_axis(name='C', roles=[ar.features_input])
+        oD = ng.make_axis(name='D', roles=[ar.features_0], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.features_1])
+        oW = ng.make_axis(name='W', roles=[ar.features_2])
 
         ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
         ng.make_axes([ax_R, ax_S, ax_C, ax_K]).set_shape(weight.axes.lengths)
-        ax_D.length = 1
-        ax_T.length = 1
 
         # strides params
         tf_strides = [int(s) for s in list(tf_node.attr['strides'].list.i)]
@@ -172,13 +175,11 @@ class OpsNN(OpsBase):
         # i, f, o axes
         ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
         ax_f = ng.make_axes([ax_C, ax_T, ax_R, ax_S, ax_K])
-        ax_o = ng.make_axes([
-            ng.make_axis(ax_K.length, name='C', roles=[ar.Channel]),
-            spatial_axis(ax_i, ax_f, params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(ax_i, ax_f, params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(ax_i, ax_f, params['pad_w'], params['str_w'], ar.Width),
-            ax_N
-        ])
+        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
+
+        oC.length = ax_K.length
+        oH.length = output_dim(ax_H.length, ax_R.length, pad_t, str_h)
+        oW.length = output_dim(ax_W.length, ax_S.length, pad_l, str_w)
 
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
@@ -206,7 +207,7 @@ class OpsNN(OpsBase):
         Performs the max pooling on the input.
 
         Arguments:
-            tf_node: NodeDef object, the tensorflow node tso convert.
+            tf_node: NodeDef object, the tensorflow node to convert.
             inputs: List of ngraph Ops as inputs to this node.
 
         Returns:
@@ -229,12 +230,17 @@ class OpsNN(OpsBase):
 
         # set axes shape
         ax_N = ng.make_axis(batch=True)
-        ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth])
-        ax_H = ng.make_axis(roles=[ar.Height])
-        ax_W = ng.make_axis(roles=[ar.Width])
+        ax_C = ng.make_axis(roles=[ar.features_input])
+        ax_D = ng.make_axis(roles=[ar.features_0], length=1)
+        ax_H = ng.make_axis(roles=[ar.features_1])
+        ax_W = ng.make_axis(roles=[ar.features_2])
+
+        oC = ng.make_axis(name='C', roles=[ar.features_input])
+        oD = ng.make_axis(name='D', roles=[ar.features_0], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.features_1])
+        oW = ng.make_axis(name='W', roles=[ar.features_2])
+
         ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
-        ax_D.length = 1
 
         # ksize params
         tf_ksize = [int(s) for s in list(tf_node.attr['ksize'].list.i)]
@@ -268,22 +274,19 @@ class OpsNN(OpsBase):
                                       "pad_t(%s) == pad_b(%s) and"
                                       "pad_l(%s) == pad_r(%s)" %
                                       (pad_t, pad_b, pad_l, pad_r))
-
         # pooling params
         params = dict(op='max',
                       pad_d=0, pad_h=pad_t, pad_w=pad_l, pad_c=0,
                       str_d=1, str_h=str_h, str_w=str_w, str_c=1,
                       J=J, T=T, R=R, S=S)
 
-        # i, f, o axes
+        oC.length = output_dim(ax_C.length, J, 0, 1)
+        oH.length = output_dim(ax_H.length, R, pad_t, str_h)
+        oW.length = output_dim(ax_W.length, S, pad_l, str_w)
+
+        # i, o axes
         ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
-        ax_o = ng.make_axes([
-            spatial_axis(ax_i, J, params['pad_c'], params['str_c'], ar.Channel),
-            spatial_axis(ax_i, T, params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(ax_i, R, params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(ax_i, S, params['pad_w'], params['str_w'], ar.Width),
-            ax_N
-        ])
+        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
 
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
@@ -294,8 +297,7 @@ class OpsNN(OpsBase):
         output = ng.pooling(params, image, axes=ax_o)
 
         # cast back to NHWC
-        oC, oD, oH, oW, oN = output.axes
-        output = ng.broadcast(output, ng.make_axes([oN, oD, oH, oW, oC]))
+        output = ng.broadcast(output, ng.make_axes([ax_N, oD, oH, oW, oC]))
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]

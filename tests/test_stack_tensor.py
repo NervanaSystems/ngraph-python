@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import ngraph as ng
 import numpy as np
-from ngraph.util.utils import ExecutorFactory, RandomTensorGenerator
+
+import ngraph as ng
+from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 
 delta = 1e-3
 rtol = atol = 1e-2
@@ -47,4 +48,4 @@ def test_stack(transformer_factory):
         for n_fun, s_fun, a_i in zip(num_funs, sym_funs, a_v):
             d_n = n_fun(a_i)
             d_s = s_fun(a_i)
-            np.allclose(d_n, d_s, rtol=rtol, atol=atol)
+            ng.testing.allclose(d_n, d_s, rtol=rtol, atol=atol)

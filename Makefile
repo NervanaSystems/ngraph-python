@@ -39,7 +39,7 @@ ifndef VIRTUAL_ENV
    $(error You must activate the neon virtual environment before continuing)
 endif
 
-.PHONY: env default install uninstall clean test style lint lint3k check doc
+.PHONY: env default install uninstall clean test style lint lint3k check doc viz_install
 
 default: install
 
@@ -61,11 +61,11 @@ clean:
 
 test:
 	@echo Running unit tests...
-	@py.test --cov=ngraph $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
 
 style:
-	flake8 $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
+	flake8 --output-file style.txt $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
@@ -120,3 +120,13 @@ release: check
 	@vi ChangeLog
 	@echo "TODO (manual steps): release on github and update docs with 'make publish_doc'"
 	@echo
+
+UNAME=$(shell uname)
+viz_install:
+ifeq ("$(UNAME)", "Darwin")
+	@brew install graphviz
+else ifeq ("$(UNAME)", "Linux")
+	@apt-get install graphviz
+endif
+
+	@pip install -r viz_requirements.txt

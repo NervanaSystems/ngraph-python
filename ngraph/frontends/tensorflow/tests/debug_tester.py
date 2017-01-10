@@ -20,6 +20,7 @@ import re
 import time
 import atexit
 import numpy as np
+import ngraph as ng
 
 cmd_kill = 'pid=`lsof -t -i:6006`; if [ $pid ] ; then kill -9 $pid; fi'
 cmd_browser = 'open http://0.0.0.0:6006/#graphs'
@@ -130,7 +131,7 @@ def def_target_feed_dict():
     fc2_weights = tf.Variable(
         0.1 * np.random.randn(512, num_labels).astype(np.float32))
     fc2_biases = tf.Variable(np.zeros((num_labels)).astype(np.float32))
-    init_op = tf.initialize_all_variables()
+    init_op = tf.global_variables_initializer()
 
     # network
     conv = tf.nn.conv2d(
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     ng_results = tester.ng_run(
         target, tf_feed_dict=feed_dict, print_ng_result=False, verbose=False)
     print(tf_results, ng_results)
-    assert np.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
+    assert ng.testing.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
     tester.teardown(delete_dump=False)
 
     # start tensorboard (optional)

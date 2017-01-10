@@ -28,7 +28,7 @@ class JSONPass(GraphPass):
     def __init__(self):
         super(JSONPass, self).__init__()
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, init):
         nodes = dict()
         edges = []
 
@@ -113,7 +113,7 @@ class VizPass(GraphPass):
         if op.forwarded and op.forwarded is not op:
             graph.edge(op.name, op.forwarded.name, color='red')
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, inits):
         try:
             import graphviz
         except ImportError:
@@ -135,20 +135,20 @@ class VizPass(GraphPass):
                 if arg not in visited:
                     frontier.add(arg)
 
-        ops = list(visited)
+        visited_ops = list(visited)
         vg = graphviz.Digraph(node_attr={'shape': 'box'},
                               graph_attr={'nodesep': '.5',
                                           'ranksep': '.5'})
         if self.subgraph_attr is not None:
             subgraphs = {}
-            for subgraph_name in self.get_subgraphs(ops):
+            for subgraph_name in self.get_subgraphs(visited_ops):
                 if subgraph_name not in subgraphs and subgraph_name is not None:
                     sg = graphviz.Digraph(name='cluster_{}'.format(subgraph_name))
                     sg.body.append('color="{}"'.format(self.random_color()))
                     sg.body.append('style=filled')
                     sg.body.append('label="{}"'.format(subgraph_name))
                     subgraphs[subgraph_name] = sg
-            for op in ops:
+            for op in visited_ops:
                 subgraph_name = op.metadata.get(self.subgraph_attr, '')
                 if subgraph_name in subgraphs:
                     graph = subgraphs[subgraph_name]
@@ -160,8 +160,10 @@ class VizPass(GraphPass):
                 vg.subgraph(sg)
 
         else:
-            for op in ops:
+            for op in visited_ops:
                 self.add_op_to_graph(op, vg)
 
         tmp_dir = tempfile.mkdtemp()
         vg.render(directory=tmp_dir, view=True, cleanup=True)
+
+        return ops, inits

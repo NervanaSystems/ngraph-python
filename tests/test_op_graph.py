@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import numpy as np
 import pytest
 
-import numpy as np
 import ngraph as ng
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 
 def test_variable_init(transformer_factory):
@@ -28,7 +28,7 @@ def test_variable_init(transformer_factory):
 
     ex = ExecutorFactory()
     result = ex.executor(W)()
-    np.testing.assert_allclose(result, w_init)
+    ng.testing.assert_allclose(result, w_init)
 
 
 def test_deriv_missing_connection():
@@ -45,6 +45,22 @@ def test_deriv_missing_connection():
 
     with pytest.raises(ValueError):
         ng.deriv(x + y, z)
+
+
+def test_sequential():
+    N = ng.make_axis(1)
+    x = ng.variable([N], initial_value=0)
+    with ng.sequential_op_factory() as pf:
+        x0 = x + x
+        ng.assign(x, 2)
+        x1 = x + x
+        pf.append(x0)
+    p = pf()
+    ex = ExecutorFactory()
+    x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
+    assert x0_val == 0
+    assert x1_val == 4
+    assert p_val == 0
 
 
 def test_pad_invalid_paddings_length():
@@ -106,6 +122,22 @@ def test_slice_nop():
     assert s.axes[1] != x.axes[1]
 
 
+def test_tensor_slice():
+    """
+    slicing a tensor should work like numpy
+    """
+
+    M = ng.make_axis(10)
+    N = ng.make_axis(20)
+    O = ng.make_axis(5)
+
+    x = ng.placeholder(axes=[M, N, O])
+
+    assert x[:5].axes.full_lengths == (5, 20, 5)
+    assert x[:, 2:7].axes.full_lengths == (10, 5, 5)
+    assert x[:5, :, :-1].axes.full_lengths == (5, 20, 4)
+
+
 def test_setting():
     ex = ExecutorFactory()
     X = ng.make_axis(name='X', length=3)
@@ -128,8 +160,8 @@ def test_setting():
     f_v2 = ex.executor(v)
 
     e_v = f_v().copy()
-    assert np.allclose(e_v, np_x)
+    assert ng.testing.allclose(e_v, np_x)
     e_v1 = f_v1().copy()
-    assert np.allclose(e_v1, np_x + np_y)
+    assert ng.testing.allclose(e_v1, np_x + np_y)
     e_v2 = f_v2().copy()
-    assert np.allclose(e_v2, np_x + np_y)
+    assert ng.testing.allclose(e_v2, np_x + np_y)

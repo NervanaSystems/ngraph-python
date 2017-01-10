@@ -16,15 +16,17 @@
 '''
 Test of the optimizers
 '''
+import copy
+import itertools as itt
+
+import numpy as np
+from neon.backends import gen_backend
+from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
+
 import ngraph as ng
 import ngraph.transformers as ngt
-import itertools as itt
-import numpy as np
-import copy
-from ngraph.util.utils import ExecutorFactory
 from ngraph.frontends.neon import GradientDescentMomentum
-from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
-from neon.backends import gen_backend
+from ngraph.testing.execution import ExecutorFactory
 
 
 def pytest_generate_tests(metafunc):
@@ -90,7 +92,6 @@ def test_gdm(args, transformer_factory):
     # where (x, y) are nparrays that fill the placeholders X and Y
     updates = gdm(cost)
     ngraph_optimize = transformer.computation([W, updates], X, Y)
-    transformer.initialize()
 
     # set up the neon gdm
     neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
@@ -107,6 +108,7 @@ def test_gdm(args, transformer_factory):
     for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
         # obtain ngraph results
         (ng_W, _) = ngraph_optimize(x, y)
+        gdm.update_learning_rate()
         ng_Ws.append(copy.deepcopy(ng_W))
 
         # obtain neon results
@@ -118,4 +120,4 @@ def test_gdm(args, transformer_factory):
         be_W = param.get()[:, 0]
         be_Ws.append(be_W)
 
-        np.testing.assert_allclose(be_W, ng_W, rtol=1e-3)
+        ng.testing.assert_allclose(be_W, ng_W, rtol=1e-3)

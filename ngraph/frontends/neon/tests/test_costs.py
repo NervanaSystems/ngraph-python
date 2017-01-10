@@ -13,8 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
+
 import ngraph as ng
-from ngraph.util.utils import ExecutorFactory
+from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
@@ -25,7 +26,7 @@ def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     t = ng.placeholder([N])
 
     costfunc = ex.executor(func.__call__(y, t), y, t)
-    np.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
+    ng.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
 
 
 """
@@ -105,7 +106,7 @@ def test_sum_squared(transformer_factory):
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
 
     def cost(y, t):
-        return ng.squared_L2(y - t) / 2
+        return ng.squared_L2(y - t, out_axes=None) / 2
 
     compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
 
@@ -116,7 +117,7 @@ def test_sum_squared_limits(transformer_factory):
     expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
 
     def cost(y, t):
-        return ng.squared_L2(y - t) / 2
+        return ng.squared_L2(y - t, out_axes=None) / 2
 
     compare_tensors(cost, outputs, targets, expected_result, tol=1e-7)
 

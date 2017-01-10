@@ -16,6 +16,7 @@ import ngraph as ng
 from ngraph.op_graph.op_graph import AssignableTensorOp, Op
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass, SimplePrune
 from ngraph.util.generics import generic_method
+from ngraph.util.ordered import OrderedSet
 
 
 def get_simple_graph():
@@ -26,8 +27,8 @@ def get_simple_graph():
 
 def test_simpleprune_graph_pass():
     base_op, simple_graph = get_simple_graph()
-    output_graph = SimplePrune().do_pass([simple_graph])
-    assert output_graph.pop() is base_op
+    output_graph, inits = SimplePrune().do_pass([simple_graph], OrderedSet())
+    assert output_graph[0] is base_op
 
 
 class MySimplePeepholeGraphPass(PeepholeGraphPass):
@@ -45,19 +46,19 @@ class MySimplePeepholeGraphPass(PeepholeGraphPass):
 
 
 class MySimpleGraphPass(GraphPass):
-    def do_pass(self, ops):
-        return len(Op.ordered_ops(ops))
+    def do_pass(self, ops, inits):
+        return len(Op.ordered_ops(ops)), inits
 
 
 def test_simple_peephole():
     base_op, simple_graph = get_simple_graph()
     pass_inst = MySimplePeepholeGraphPass()
-    output_graph = pass_inst.do_pass([simple_graph]).pop()
-    assert output_graph.args[0].args[0].const == 10.0
+    output_graph, inits = pass_inst.do_pass([simple_graph], OrderedSet())
+    assert output_graph[0].const == 10.0
 
 
 def test_simple_pass():
     base_op, simple_graph = get_simple_graph()
     pass_inst = MySimpleGraphPass()
-    output_val = pass_inst.do_pass([simple_graph])
+    output_val, inits = pass_inst.do_pass([simple_graph], OrderedSet())
     assert output_val == 3

@@ -16,6 +16,7 @@ import os
 import subprocess
 import h5py
 import numpy as np
+import ngraph as ng
 import pytest
 
 base_dir = os.path.dirname(__file__)
@@ -66,7 +67,7 @@ def test_model_traincost(run_model, transformer_factory):
     model_name, (out_path, _) = run_model
     cost = get_last_interval_cost(out_path, 10)
     print(cost)
-    np.testing.assert_allclose(cost, db[model_name]['cost'], rtol=0.15)
+    ng.testing.assert_allclose(cost, db[model_name]['cost'], rtol=0.15)
 
 
 def test_model_positivecost(run_model, transformer_factory):
@@ -90,4 +91,4 @@ def test_model_determinism(run_model, transformer_factory):
     model_name, (out_path1, out_path2) = run_model
     cost1 = get_last_interval_cost(out_path1, 10)
     cost2 = get_last_interval_cost(out_path2, 10)
-    np.testing.assert_allclose(cost1, cost2, rtol=1e-5)
+    ng.testing.assert_allclose(cost1, cost2, rtol=1e-5)
