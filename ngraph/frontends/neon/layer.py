@@ -350,7 +350,8 @@ class BatchNorm(Layer):
     metadata = {'layer_type': 'batch_norm'}
 
     def __init__(self, rho=0.9, eps=1e-3, **kwargs):
-        self.rho = rho
+        # rho needs to be allocated storage because it will be changed dynamically during tuning
+        self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
         self.gamma = None
         self.beta = None
@@ -369,14 +370,19 @@ class BatchNorm(Layer):
         self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
         self.beta = self.beta or ng.variable(axes=out_axes, initial_value=0.0).named('beta')
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-        self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+        self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
-        xmean = ng.mean(in_obj, reduction_axes=red_axes)
-        xvar = ng.variance(in_obj, reduction_axes=red_axes)
-        ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho))
-        ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho))
+        with ng.sequential_op_factory() as pf:
+            xmean = ng.mean(in_obj, reduction_axes=red_axes)
+            xvar = ng.variance(in_obj, reduction_axes=red_axes)
+            ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho))
+            ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho))
+            self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+        return pf()
 
-        return self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+    def set_tuning_iteration(self, batch_index):
+        # Following tuning, one must divide self.gvar by rho in order to debias
+        self.rho.value[()] = float(batch_index) / (batch_index + 1.0)
 
     def inference_outputs(self, in_obj):
         return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
@@ -384,7 +390,7 @@ class BatchNorm(Layer):
 
 class Dropout(Layer):
     """
-    Layer for stochastically droping activations to prevent overfitting
+    Layer for stochastically dropping activations to prevent overfitting
     Args:
         keep (float):  Number between 0 and 1 that indicates probability of any particular
                        activation being dropped.  Default 0.5.
