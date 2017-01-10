@@ -1,11 +1,5 @@
 DIR = $(realpath ../..)
-VOLUME = -v ${DIR}:/root/private-ngraph
-
-ifdef NGRAPH_DATA_DIR
-VOLUME += -v ${NGRAPH_DATA_DIR}:/root/nervana/data
-else
-VOLUME += -v $$HOME/nervana/data:/root/nervana/data
-endif
+VOLUME = -v ${DIR}:/root/private-ngraph -v $$HOME/nervana/data:/root/nervana/data
 
 # default version is python 2, but can be switched to 3 from command
 # line
