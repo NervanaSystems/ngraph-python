@@ -1102,10 +1102,9 @@ class UpdateDirect(KernelGroup):
             kernel.prepared_async_call(*self.kernel_args)
             drv.Context.synchronize()
 
+            # do output transform if not flex
             if self.clss is not 'fconv':
                 self.output_trans.execute()
-            else:
-                print "skipping output transform for flex."
 
             drv.Context.synchronize()
 
