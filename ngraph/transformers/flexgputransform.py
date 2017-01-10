@@ -13,6 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import print_function
+from __future__ import division
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
@@ -220,6 +222,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         if flex_manager.fixed_point is False:
 
             if flex_manager.verbose:
-                print "managing flex_ids:", self.output_flex_ids
+                print("managing flex_ids: {}".format(self.output_flex_ids))
 
             flex_manager.manage_after_computation(self.output_flex_ids)
