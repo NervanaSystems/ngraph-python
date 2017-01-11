@@ -94,6 +94,14 @@ class ElementWiseKernel(GPUKernel):
         self.kernel = None
         self.shared_size = 0
 
+    def add_reduction_op(self, string, op, out, x):
+        if len(op.reduction_axes) == 0:
+            #import pdb; pdb.set_trace()
+            self._buffer_op("assign", x=x, out=out)
+        else:
+            axis = op.args[0].axes.index(op.reduction_axes[0])
+            self._buffer_op(string, x=x, axis=axis, out=out)
+
     @generic_method(Op)
     def add_op(self, op, *args):
         if op.is_device_op:
@@ -246,8 +254,7 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Max)
     def add_op(self, op, out, x):
-        axis = op.args[0].axes.index(op.reduction_axes[0])
-        self._buffer_op("max", x=x, axis=axis, out=out)
+        self.add_reduction_op("max", op, out, x)
 
     @add_op.on_type(MaximumOneDim)
     def add_op(self, op, out, x, y):
@@ -263,8 +270,7 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Min)
     def add_op(self, op, out, x):
-        axis = op.args[0].axes.index(op.reduction_axes[0])
-        self._buffer_op("min", x=x, axis=axis, out=out)
+        self.add_reduction_op("min", op, out, x)
 
     @add_op.on_type(MinimumOneDim)
     def add_op(self, op, out, x, y):
@@ -324,7 +330,7 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Prod)
     def add_op(self, op, out, x):
-        self._buffer_op("prod", x=x, axis=0, out=out)
+        self.add_reduction_op("prod", op, out, x)
 
     @add_op.on_type(ReciprocalOneDOp)
     def add_op(self, op, out, x):
@@ -388,8 +394,7 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Sum)
     def add_op(self, op, out, x):
-        axis = op.args[0].axes.index(op.reduction_axes[0])
-        self._buffer_op("sum", x=x, axis=axis, out=out)
+        self.add_reduction_op("sum", op, out, x)
 
     @add_op.on_type(TanhOneDOp)
     def add_op(self, op, out, x):
@@ -600,7 +605,6 @@ class GPUKernelGroup():
                 k.bind_buffers()
 
             k.execute()
-            self.transformer.runtime.ctx.synchronize()
 
 
 class GPUBufferAllocator():
