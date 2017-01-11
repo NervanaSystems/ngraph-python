@@ -18,20 +18,14 @@ Test of the optimizers
 '''
 import copy
 import itertools as itt
-
 import numpy as np
-from neon.backends import gen_backend
-from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon import GradientDescentMomentum
-from ngraph.testing.execution import ExecutorFactory
 
 
 def pytest_generate_tests(metafunc):
     if 'args' in metafunc.fixturenames:
-        fargs = []
         lr = np.random.random(2)
         momentum = np.random.random(4)
         wdecay = [0.0005, 0.000, 0.001, 0.1]
@@ -51,11 +45,11 @@ def compare_optimizers(ng_opt, np_opt, nfeatures=20, batch_size=32, niters=20, r
     ng_Ws = list()
     np_Ws = list()
     for x, y in (generate_data(nfeatures, batch_size) for _ in range(niters)):
-        # NOTE: Does not update learning rate according to schedule. Keep in mind for schedule tests
+        # NOTE: Does not update learning rate according to schedule.
+        # NOTE: Keep in mind for schedule tests
         # Compute ngraph values
         ng_W, _ = ng_opt(x, y)
         ng_Ws.append(copy.deepcopy(ng_W))
-
 
         # Compute numpy values
         np_W = np_opt(x, y)

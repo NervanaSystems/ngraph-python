@@ -251,8 +251,8 @@ class GradientDescentMomentum(LearningRateOptimizer):
                     ng.assign(velocity, velocity * self.momentum_coef - self.lrate * (
                         scale_factor * clip_grad + self.wdecay * variable))
                     if self.nesterov:
-                        delta = self.momentum_coef * velocity - \
-                                self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
+                        delta = (self.momentum_coef * velocity -
+                                 self.lrate * (scale_factor * clip_grad + self.wdecay * variable))
                     else:
                         delta = velocity
                     ng.assign(variable, variable + delta)
