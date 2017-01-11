@@ -94,6 +94,7 @@ class HetrComputation(object):
         if not isinstance(results, list):
             results = [results] 
         all_results = OrderedSet(results)
+        all_results.update(parameters)
         # all res empty; transformer_obj as no computations. where do these get assigned?
         # previously, we used t.all_results, which went away.  when was that created?
         #   - computation object used to update all_results of transformer
@@ -225,13 +226,13 @@ class HetrTransformer(Transformer):
 
     def transform_ordered_ops(self, ordered_ops, name):
         print(name, ordered_ops)
-        return name + 1
+        return name + str(1)
 
     def finish_transform(self):
         assert False, "Should not be used, TODO cleanup"
 
     def allocate_storage(self):
         assert False, "Should not be used, TODO cleanup"
-
+        
 set_transformer_factory(
     make_transformer_factory(HetrTransformer.transformer_name))

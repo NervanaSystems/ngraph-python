@@ -69,9 +69,9 @@ def check_device_assign_pass(default_device, default_device_id,
 
     """
 
-    obj = DeviceAssignPass(default_device, default_device_id)
+    device_assign_pass = DeviceAssignPass(default_device, default_device_id)
     inits = OrderedSet()
-    graph_ops, inits = obj.do_pass(graph_ops, inits)
+    graph_ops, inits = device_assign_pass.do_pass(graph_ops, inits)
 
     for op in graph_op_metadata.keys():
         assert op.metadata['device'] == graph_op_metadata[op][0]

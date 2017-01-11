@@ -43,8 +43,6 @@ def test_stack(transformer_factory):
         num_funs = [ex.numeric_derivative(s, _, delta) for _ in a]
         sym_funs = [ex.derivative(s, _) for _ in a]
 
-        ex.transformer.initialize()
-
         for n_fun, s_fun, a_i in zip(num_funs, sym_funs, a_v):
             d_n = n_fun(a_i)
             d_s = s_fun(a_i)
