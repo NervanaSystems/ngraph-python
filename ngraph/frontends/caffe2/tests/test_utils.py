@@ -23,8 +23,10 @@ def expected_shape_to_axes(axes, expected):
     assert isinstance(axes, list)
     assert len(axes) == len(expected)
     ax1, ax2 = axes[0], axes[1]
-    assert isinstance(ax1, Axis)
-    assert isinstance(ax2, Axis)
+    if not isinstance(ax1, Axis):
+        raise ValueError
+    if not isinstance(ax2, Axis):
+        raise ValueError
     assert ax1.length == expected[0]
     assert ax2.length == expected[1]
 
@@ -48,7 +50,6 @@ def test_args_shape_to_axes():
     funct(const_val, shape, name_val)
 
 
-@pytest.mark.xfail(strict=True)
 def test_args_shape_to_axes_wrong_pos():
     const_val = 5.
     shape = [2, 3]
@@ -59,4 +60,5 @@ def test_args_shape_to_axes_wrong_pos():
         assert const == const_val
         expected_shape_to_axes(axes, shape)
         assert name == name_val
-    funct(const_val, shape, name_val)
+    with pytest.raises(ValueError):
+        funct(const_val, shape, name_val)
