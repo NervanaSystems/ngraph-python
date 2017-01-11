@@ -682,7 +682,7 @@ class NumPyTransformer(Transformer):
         self.use_pinned_mem = False
         self.rng_seed = None
 
-        self.graph_passes.insert(0, CPUTensorLayout())
+        self.graph_passes.insert(1, CPUTensorLayout())
 
     def device_buffer_storage(self, bytes, dtype, name):
         """

@@ -1099,9 +1099,8 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-
-        self.graph_passes = [SimplePrune(), GPUTensorShaping(), GPUTensorLayout(),
-                             GPUContiguousPrune()]
+        self.graph_passes = [SimplePrune(), GPUTensorShaping(),
+                             GPUTensorLayout(), GPUContiguousPrune()]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
