@@ -1779,6 +1779,31 @@ class TensorDescription(NameableValue):
         return tuple(cstrides) == self.strides
 
     @property
+    def broadcast_contiguous(self):
+        """
+
+        Returns:
+            True if tensor's strides are contiguous or broadcasted
+        """
+        if self.shape == ():
+            return True
+
+        broadcast_axes = np.where(np.equal(self.strides, 0))[0]
+        aug_shape = list(self.shape)
+        for bcast_axis in broadcast_axes:
+            aug_shape[bcast_axis] = 1
+
+        s = self.dtype.itemsize
+        cstrides = []
+        for _ in reversed(aug_shape):
+            cstrides.insert(0, s)
+            s = s * _
+
+        for bcast_axis in broadcast_axes:
+            cstrides[bcast_axis] = 0
+        return tuple(cstrides) == self.strides
+
+    @property
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self

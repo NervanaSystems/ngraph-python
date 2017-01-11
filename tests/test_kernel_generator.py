@@ -13,10 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+import numpy as np
 
 import ngraph as ng
 import ngraph.transformers as ngt
-import numpy as np
+
+from ngraph.util.utils import executor
 
 
 def test_exit_condition(transformer_factory):
@@ -34,4 +36,70 @@ def test_exit_condition(transformer_factory):
 
     val1 = comp()
     val2 = comp()
-    ng.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+    np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
+
+
+def test_4d_elementwise(transformer_factory):
+    for c_len, h_len, w_len, n_len in [(16, 10, 28, 32),
+                                       (3, 16, 16, 4),
+                                       (7, 15, 19, 5)]:
+        C = ng.make_axis(c_len)
+        H = ng.make_axis(h_len)
+        W = ng.make_axis(w_len)
+        N = ng.make_axis(n_len)
+
+        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
+        y_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
+        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
+        y = ng.constant(y_val, ng.make_axes([C, H, W, N]))
+
+        out = ng.add(x, y)
+
+        graph_val = executor(out)()
+        np_val = np.add(x_val, y_val)
+        np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+
+
+def test_4d_reduction(transformer_factory):
+    for c_len, h_len, w_len, n_len in [(16, 10, 28, 32),
+                                       (3, 16, 16, 4),
+                                       (7, 15, 19, 5)]:
+        C = ng.make_axis(c_len)
+        H = ng.make_axis(h_len)
+        W = ng.make_axis(w_len)
+        N = ng.make_axis(n_len)
+
+        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
+        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
+
+        out1 = ng.sum(x, reduction_axes=[H])
+        out2 = ng.sum(x, reduction_axes=[N])
+
+        graph_val1, graph_val2 = executor([out1, out2])()
+        np_val1 = np.sum(x_val, 1)
+        np_val2 = np.sum(x_val, 3)
+        np.testing.assert_allclose(graph_val1, np_val1, rtol=1e-4)
+        np.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
+
+
+def test_4d_chained(transformer_factory):
+    for c_len, h_len, w_len, n_len in [(64, 10, 28, 32),
+                                       (3, 16, 16, 4),
+                                       (7, 15, 19, 5),
+                                       (3, 5, 7, 2)]:
+        C = ng.make_axis(c_len)
+        H = ng.make_axis(h_len)
+        W = ng.make_axis(w_len)
+        N = ng.make_axis(n_len)
+
+        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
+        y_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
+        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
+        y = ng.constant(y_val, ng.make_axes([C, H, W, N]))
+
+        im = ng.reciprocal(x)
+        out = ng.sum(ng.add(im, y), reduction_axes=[C])
+
+        graph_val = executor(out)()
+        np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
+        np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
