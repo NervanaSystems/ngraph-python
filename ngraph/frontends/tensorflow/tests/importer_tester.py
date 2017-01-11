@@ -23,6 +23,7 @@ import os
 import ngraph.transformers as ngt
 import pytest
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
+import tempfile
 
 
 @pytest.mark.usefixtures("transformer_factory")
@@ -37,7 +38,8 @@ class ImporterTester(object):
 
     @classmethod
     def setup_class(self):
-        self.pb_txt_path = "temp_graph.txt"
+        self.tmp_file = tempfile.NamedTemporaryFile(suffix='.txt')
+        self.pb_txt_path = self.tmp_file.name
 
     def setup_method(self, method):
         self.sess = tf.Session()
