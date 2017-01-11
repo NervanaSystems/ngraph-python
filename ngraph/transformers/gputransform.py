@@ -602,7 +602,7 @@ class GPUKernelGroup(object):
 
     @add_kernel.on_type(Recv)
     def add_kernel(self, op):
-        assert False, "TODO implement me"
+        self.kernels.append(RecvKernel(self.transformer, op))
 
     def compile_all(self):
         """

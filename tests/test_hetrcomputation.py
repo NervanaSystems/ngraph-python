@@ -174,3 +174,30 @@ def test_simple_graph():
                                          (31, 32, 90)],
                         placeholder=x,
                         op_list=[x_plus_one, x_plus_two, x_mul_three])
+
+
+def test_gpu_send_and_recv():
+
+    # put x+1 on cpu numpy
+    with ng.metadata(device='numpy'):
+        x = ng.placeholder(())
+        x_plus_one = x + 1
+    # put x+2 on gpu numpy
+    with ng.metadata(device='gpu'):
+        x_plus_two = x_plus_one + 1
+
+    check_result_values(input_vector=[10, 20, 30],
+                        result_expected=[(12), (22), (32)],
+                        placeholder=x, op_list=[x_plus_two])
+
+    # put x+1 on gpu numpy
+    with ng.metadata(device='gpu'):
+        x = ng.placeholder(())
+        x_plus_one = x + 1
+    # put x+2 on cpu numpy
+    with ng.metadata(device='numpy'):
+        x_plus_two = x_plus_one + 1
+
+    check_result_values(input_vector=[10, 20, 30],
+                        result_expected=[(12), (22), (32)],
+                        placeholder=x, op_list=[x_plus_two])

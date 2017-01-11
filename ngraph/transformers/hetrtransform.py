@@ -21,7 +21,6 @@ def build_transformer(name):
     :param results: the graph nodes that we care about, for the computation
     :return: the dictionary of transformers, with names matching the graph node hints
     """
-    print("build_transformer", name)
     if 'numpy' in name:
         transformer = make_transformer_factory('numpy')()
     elif 'gpu' in name:
@@ -198,7 +197,6 @@ class HetrComputation(object):
             self.placeholders[tname].append(p)
             self.placeholders_pos[tname].append(i)
 
-        print self.send_nodes_list
         self.child_computations = dict()
         for tname in self.transformer_name_list:
             # request asynctransformer from HT

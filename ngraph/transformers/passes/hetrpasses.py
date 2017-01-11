@@ -20,6 +20,7 @@ class DeviceAssignPass(PeepholeGraphPass):
         op.metadata['transformer'] = transformer
         self.transformers.add(transformer)
 
+
 class CommunicationPass(PeepholeGraphPass):
 
     def __init__(self, sendnodes):
@@ -29,7 +30,8 @@ class CommunicationPass(PeepholeGraphPass):
     def visit(self, op):
         args = list()
         for arg in op.args:
-            if op.metadata['device_id'] != arg.metadata['device_id'] or op.metadata['device'] != arg.metadata['device']:
+            if op.metadata['device_id'] != arg.metadata['device_id'] or \
+               op.metadata['device'] != arg.metadata['device']:
                 shared_q = multiprocessing.Queue()
                 self.send_nodes.append(Send(from_node=arg, q=shared_q,
                                             device=arg.metadata['device'],
@@ -37,7 +39,7 @@ class CommunicationPass(PeepholeGraphPass):
 
                 args.append(Recv(axes=arg.axes, dtype=arg.dtype, q=shared_q,
                                  device=op.metadata['device'],
-                                 device_id=arg.metadata['device_id']))
+                                 device_id=op.metadata['device_id']))
             else:
                 args.append(arg)
 
@@ -61,12 +63,11 @@ class ChildTransformerPass(PeepholeGraphPass):
 
     def visit(self, op):
         if 'parallel' in op.metadata:
-            print "axis:", op.metadata['parallel'].name, \
-                  "==> length:", op.metadata['parallel'].length
+            # print "axis:", op.metadata['parallel'].name, \
+            #      "==> length:", op.metadata['parallel'].length
             assert(isinstance(op.metadata['device_id'], (list, tuple)))
             # TODO: implement scatter/gather
 
-        print op.metadata
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = list()
             for device_id in op.metadata['device_id']:
