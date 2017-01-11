@@ -90,3 +90,21 @@ def test_sigmoid():
 
 def test_tanh():
     run_all_close_compare_initiated_with_random_gauss('Tanh')
+
+
+def test_exp():
+    workspace.ResetWorkspace()
+
+    shape = [2, 7]
+    data = [
+        1., 2., 3., 4., 1., 2., 3.,
+        1., 2., 3., 4., 1., 2., 3.
+    ]
+    expected = [
+        [2.71828, 7.3890, 20.08553, 54.59815, 2.71828, 7.3890, 20.08553],
+        [2.71828, 7.3890, 20.08553, 54.59815, 2.71828, 7.3890, 20.08553],
+    ]
+    run_all_close_compare_initiated_with_random_gauss('Exp',
+                                                      shape=shape,
+                                                      data=data,
+                                                      expected=expected)
