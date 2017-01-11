@@ -166,6 +166,52 @@ def to_set(axis):
     else:
         return set([axis])
 
+def flatten(l):
+    out = []
+    for item in l:
+        if type(item) == list:
+            out = out + item
+        elif type(item) == FlattenedAxis:
+            for axis in item.axes:
+                out.append(axis)
+        else:
+            out.append(item)
+    return out
+
+def flatten_op(op, axes, axes_list, reduction_axes=None):
+    new_order = flatten(axes_list)
+    if new_order != range(len(new_order)):
+        reordered_axes = make_axes(tuple(flatten(axes)))
+        out_args = []
+        for arg in op.args:
+            out_args.append(Flatten(ReorderAxes(arg, axes=reordered_axes), axes=axes))
+
+        op_type = type(op)
+        if reduction_axes is None:
+            new_op = op_type(*out_args)
+        else:
+            new_op = op_type(*out_args, reduction_axes=reduction_axes)
+
+        if type(op) == AssignOp:
+            return new_op
+        else:
+            return ReorderAxes(unflatten(new_op), axes=op.axes)
+    else:
+        out_args = []
+        for arg in op.args:
+            out_args.append(Flatten(arg, axes=axes))
+
+        op_type = type(op)
+        if reduction_axes is None:
+            new_op = op_type(*out_args)
+        else:
+            new_op = op_type(*out_args, reduction_axes=reduction_axes)
+        
+        if type(op) == AssignOp:
+            return new_op
+        else:
+            return unflatten(new_op)
+
 class GPUTensorShaping(PeepholeGraphPass):
     def get_new_axes(self, shape, strides, preserve_axes=None):
         dims = len(shape)
@@ -385,10 +431,9 @@ class GPUTensorShaping(PeepholeGraphPass):
                 else:
                     axes.append(arg0_td.axes[axis])
 
-            op_type = type(op)
             axes = make_axes(tuple(axes))
-            new_op = op_type(Flatten(arg0, axes=axes))
-            self.replace_op(op, unflatten(new_op))
+            new_op = flatten_op(op, axes, axes_list)
+            self.replace_op(op, new_op)
 
     @visit.on_type(BinaryElementWiseAxesOp)
     def visit(self, op):
@@ -407,10 +452,9 @@ class GPUTensorShaping(PeepholeGraphPass):
                 else:
                     axes.append(arg0_td.axes[axis])
 
-            op_type = type(op)
             axes = make_axes(tuple(axes))
-            new_op = op_type(Flatten(arg0, axes=axes), Flatten(arg1, axes=axes))
-            self.replace_op(op, unflatten(new_op))
+            new_op = flatten_op(op, axes, axes_list)
+            self.replace_op(op, new_op)
 
     @visit.on_type(AssignOp)
     def visit(self, op):
@@ -427,9 +471,8 @@ class GPUTensorShaping(PeepholeGraphPass):
                 else:
                     axes.append(val_td.axes[axis])
 
-            op_type = type(op)
             axes = make_axes(tuple(axes))
-            new_op = op_type(Flatten(tensor, axes=axes), Flatten(val, axes=axes))
+            new_op = flatten_op(op, axes, axes_list)
             self.replace_op(op, new_op)
 
     @visit.on_type(ReductionOp)
@@ -451,10 +494,9 @@ class GPUTensorShaping(PeepholeGraphPass):
                 if axis == red_axis:
                     reduction_axes = new_axis
 
-            op_type = type(op)
             axes = make_axes(tuple(axes))
-            new_op = op_type(Flatten(arg0, axes=axes), reduction_axes=reduction_axes)
-            self.replace_op(op, unflatten(new_op))
+            new_op = flatten_op(op, axes, axes_list, reduction_axes=reduction_axes)
+            self.replace_op(op, new_op)
 
     @visit.on_type(OneHotOp)
     def visit(self, op):
