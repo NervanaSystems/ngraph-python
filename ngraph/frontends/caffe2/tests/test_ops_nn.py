@@ -142,7 +142,8 @@ def test_maxpool():
     param_list = [[[1, 3, 10, 10], 2, 2],
                   [[2, 3, 5, 5], 1, 1],
                   [[2, 2, 7, 7], 3, 2],
-                  [[8, 5, 8, 8], 4, 4]]
+                  [[8, 5, 8, 8], 4, 4]
+                  ]
 
     for param_iter in param_list:
         shape, kernel, stride = param_iter
@@ -169,138 +170,220 @@ def test_maxpool():
         # compare Caffe2 and ngraph results
         assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
 
-#
-# def test_avgpool():
-#     workspace.ResetWorkspace()
-#
-#     # shape is in NCHW format
-#     # [[shape], kernel, stride] #TODO: add padding
-#     param_list = [[[1, 3, 10, 10], 2, 2],
-#                   [[2, 3, 5, 5], 1, 1],
-#                   [[2, 2, 7, 7], 3, 2],
-#                   [[8, 5, 8, 8], 4, 4]]
-#
-#     for param_iter in param_list:
-#         shape, kernel, stride = param_iter
-#         data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
-#
-#         net = core.Net("net")
-#         X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
-#         net.AveragePool(X, 'Y', kernel=kernel, stride=stride)
-#
-#         # Execute via Caffe2
-#         workspace.RunNetOnce(net)
-#
-#         # Import caffe2 network into ngraph
-#         importer = C2Importer()
-#         importer.parse_net_def(net.Proto(), verbose=False)
-#
-#         # Get handle
-#         f_ng = importer.get_op_handle("Y")
-#
-#         # Execute
-#         ex = ExecutorFactory()
-#         f_result = ex.executor(f_ng)()
-#
-#         # compare Caffe2 and ngraph results
-#         assert(np.allclose(f_result, workspace.FetchBlob("Y"),
-#                            atol=1e-4, rtol=1e-3, equal_nan=False))
 
-#
-# def test_convolution_nhwc_no_pad_no_bias():
-#     workspace.ResetWorkspace()
-#
-#     # shape is in NCHW format
-#     # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
-#     param_list = [
-#         [1, 3, 2, 1, 2, 2],
-#         [1, 1, 4, 1, 2, 2],
-#         [2, 3, 8, 1, 2, 2],
-#         [8, 2, 5, 4, 3, 1],
-#         [1, 2, 5, 2, 3, 1],
-#     ]
-#
-#     for param_iter in param_list:
-#         n, ifm, spatial, ofm, kernel, stride = param_iter
-#
-#         shape_x = (n, spatial, spatial, ifm)
-#         shape_w = (ofm, kernel, kernel, ifm)
-#         shape_b = (ofm, )
-#
-#         data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
-#         data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
-#         data_b = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_b))]
-#
-#         net = core.Net("net")
-#         X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
-#         W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
-#         B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
-#
-#         net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NHWC')
-#
-#         # Execute via Caffe2
-#         workspace.RunNetOnce(net)
-#
-#         # Import caffe2 network into ngraph
-#         importer = C2Importer()
-#         importer.parse_net_def(net.Proto(), verbose=False)
-#
-#         # Get handle
-#         f_ng = importer.get_op_handle("Y")
-#
-#         # Execute
-#         ex = ExecutorFactory()
-#         f_result = ex.executor(f_ng)()
-#
-#         # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
-#         # print("ngraph result: {}:\n{}".format("Y", f_result))
-#         # compare Caffe2 and ngraph results
-#         assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-#                            equal_nan=False))
-#
-#
-# def test_convolution_nchw_no_pad_no_bias():
-#     # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
-#     param_list = [
-#         [1, 3, 2, 1, 2, 2],
-#         [1, 1, 4, 1, 2, 2],
-#         [2, 3, 8, 1, 2, 2],
-#         [8, 2, 5, 4, 3, 1],
-#         [1, 2, 5, 2, 3, 1],
-#     ]
-#
-#     for param_iter in param_list:
-#         n, ifm, spatial, ofm, kernel, stride = param_iter
-#
-#         shape_x = (n, ifm, spatial, spatial)
-#         shape_w = (ofm, ifm, kernel, kernel)
-#         shape_b = (ofm,)
-#
-#         data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
-#         data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
-#         data_b = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_b))]
-#
-#         net = core.Net("net")
-#         X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
-#         W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
-#         B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
-#
-#         net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NCHW')
-#
-#         # Execute via Caffe2
-#         workspace.RunNetOnce(net)
-#
-#         # Import caffe2 network into ngraph
-#         importer = C2Importer()
-#         importer.parse_net_def(net.Proto(), verbose=False)
-#
-#         # Get handle
-#         f_ng = importer.get_op_handle("Y")
-#
-#         # Execute
-#         ex = ExecutorFactory()
-#         f_result = ex.executor(f_ng)()
-#
-#         # compare Caffe2 and ngraph results
-#         assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-#                             equal_nan=False))
+def test_avgpool():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [[shape], kernel, stride] #TODO: add padding
+    param_list = [[[1, 3, 10, 10], 2, 2],
+                  [[2, 3, 5, 5], 1, 1],
+                  [[2, 2, 7, 7], 3, 2],
+                  [[8, 5, 8, 8], 4, 4]]
+
+    for param_iter in param_list:
+        shape, kernel, stride = param_iter
+        data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+
+        net = core.Net("net")
+        X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+        net.AveragePool(X, 'Y', kernel=kernel, stride=stride)
+
+        # Execute via Caffe2
+        workspace.RunNetOnce(net)
+
+        # Import caffe2 network into ngraph
+        importer = C2Importer()
+        importer.parse_net_def(net.Proto(), verbose=False)
+
+        # Get handle
+        f_ng = importer.get_op_handle("Y")
+
+        # Execute
+        ex = ExecutorFactory()
+        f_result = ex.executor(f_ng)()
+
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"),
+                           atol=1e-4, rtol=1e-3, equal_nan=False))
+
+
+def test_convolution_nhwc_no_pad():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+    param_list = [
+        [1, 3, 2, 1, 2, 2],
+        [1, 1, 4, 1, 2, 2],
+        [2, 3, 8, 1, 2, 2],
+        [8, 2, 5, 4, 3, 1],
+        [1, 2, 5, 2, 3, 1],
+    ]
+
+    for param_iter in param_list:
+        n, ifm, spatial, ofm, kernel, stride = param_iter
+
+        shape_x = (n, spatial, spatial, ifm)
+        shape_w = (ofm, kernel, kernel, ifm)
+        shape_b = (ofm, )
+
+        data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
+        data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
+        data_b = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_b))]
+
+        net = core.Net("net")
+        X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
+        W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
+        B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
+
+        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NHWC')
+
+        # Execute via Caffe2
+        workspace.RunNetOnce(net)
+
+        # Import caffe2 network into ngraph
+        importer = C2Importer()
+        importer.parse_net_def(net.Proto(), verbose=False)
+
+        # Get handle
+        f_ng = importer.get_op_handle("Y")
+
+        # Execute
+        ex = ExecutorFactory()
+        f_result = ex.executor(f_ng)()
+
+        # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
+        # print("ngraph result: {}:\n{}".format("Y", f_result))
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                           equal_nan=False))
+
+
+def test_convolution_nchw_no_pad():
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+    param_list = [
+        [1, 3, 2, 1, 2, 2],
+        [1, 1, 4, 1, 2, 2],
+        [2, 3, 8, 1, 2, 2],
+        [8, 2, 5, 4, 3, 1],
+        [1, 2, 5, 2, 3, 1],
+    ]
+
+    for param_iter in param_list:
+        n, ifm, spatial, ofm, kernel, stride = param_iter
+
+        shape_x = (n, ifm, spatial, spatial)
+        shape_w = (ofm, ifm, kernel, kernel)
+        shape_b = (ofm,)
+
+        data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
+        data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
+        data_b = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_b))]
+
+        net = core.Net("net")
+        X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
+        W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
+        B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
+
+        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NCHW')
+
+        # Execute via Caffe2
+        workspace.RunNetOnce(net)
+
+        # Import caffe2 network into ngraph
+        importer = C2Importer()
+        importer.parse_net_def(net.Proto(), verbose=False)
+
+        # Get handle
+        f_ng = importer.get_op_handle("Y")
+
+        # Execute
+        ex = ExecutorFactory()
+        f_result = ex.executor(f_ng)()
+
+        # compare Caffe2 and ngraph results
+        assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                            equal_nan=False))
+
+
+def test_convolution_nhwc_no_pad_no_bias():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+    n, ifm, spatial, ofm, kernel, stride = [2, 3, 8, 1, 2, 2]
+
+    shape_x = (n, spatial, spatial, ifm)
+    shape_w = (ofm, kernel, kernel, ifm)
+    shape_b = (ofm, )
+
+    data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
+    data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
+    data_b = [0. for i in range(np.prod(shape_b))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
+    W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
+    B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
+
+    net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NHWC')
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                       equal_nan=False))
+
+
+def test_convolution_nchw_no_pad_no_bias():
+    workspace.ResetWorkspace()
+
+    # shape is in NCHW format
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+    n, ifm, spatial, ofm, kernel, stride = [2, 3, 8, 1, 2, 2]
+
+    shape_x = (n, ifm, spatial, spatial)
+    shape_w = (ofm, ifm, kernel, kernel)
+    shape_b = (ofm,)
+
+    data_x = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_x))]
+    data_w = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape_w))]
+    data_b = [0. for i in range(np.prod(shape_b))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape_x, values=data_x, name="X")
+    W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
+    B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
+
+    net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NCHW')
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                        equal_nan=False))

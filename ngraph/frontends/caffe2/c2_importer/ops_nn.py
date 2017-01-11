@@ -15,7 +15,7 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 from ngraph.frontends.neon import ar
-# from ngraph.op_graph.axes import spatial_axis
+from ngraph.frontends.neon.layer import output_dim
 import ngraph as ng
 import numpy as np
 
@@ -130,14 +130,19 @@ class OpsNN(OpsBase):
 
         # TODO: we assume NCHW, make some assert here?
 
-        # set axes shape
+        # set input axes shape
         ax_N = ng.make_axis(batch=True)
         ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth])
+        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
         ax_W = ng.make_axis(roles=[ar.Width])
         ng.make_axes([ax_N, ax_C, ax_H, ax_W]).set_shape(image.axes.lengths)
-        ax_D.length = 1
+
+        # create placeholders for output axes
+        oC = ng.make_axis(name='C', roles=[ar.Channel])
+        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.Height])
+        oW = ng.make_axis(name='W', roles=[ar.Width])
 
         # spatial kernel size
         kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
@@ -176,15 +181,13 @@ class OpsNN(OpsBase):
                       str_d=1, str_h=stride_h, str_w=stride_w, str_c=1,
                       J=kernel_c, T=kernel_d, R=kernel_h, S=kernel_w)
 
-        # i, f, o axes
+        # i, o axes
+        oC.length = output_dim(ax_C.length, kernel_c, params['pad_c'], params['str_c'])
+        oD.length = output_dim(ax_D.length, kernel_d, params['pad_d'], params['str_d'])
+        oH.length = output_dim(ax_H.length, kernel_h, params['pad_h'], params['str_h'])
+        oW.length = output_dim(ax_W.length, kernel_w, params['pad_w'], params['str_w'])
         ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
-        ax_o = ng.make_axes([
-            spatial_axis(ax_i, kernel_c, params['pad_c'], params['str_c'], ar.Channel),
-            spatial_axis(ax_i, kernel_d, params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(ax_i, kernel_h, params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(ax_i, kernel_w, params['pad_w'], params['str_w'], ar.Width),
-            ax_N
-        ])
+        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
 
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
@@ -195,8 +198,7 @@ class OpsNN(OpsBase):
         output = ng.pooling(params, image, axes=ax_o)
 
         # cast back to NDCHW
-        oC, oD, oH, oW, oN = output.axes
-        output = ng.broadcast(output, ng.make_axes([oN, oD, oC, oH, oW]))
+        output = ng.broadcast(output, ng.make_axes([ax_N, oD, oC, oH, oW]))
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
@@ -233,15 +235,21 @@ class OpsNN(OpsBase):
         # set input axes shape
         ax_N = ng.make_axis(batch=True)
         ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth])
+        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
         ax_W = ng.make_axis(roles=[ar.Width])
 
         # set kernel axes shape
-        ax_kernel_D = ng.make_axis(roles=[ar.Depth])
+        ax_kernel_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_kernel_H = ng.make_axis(roles=[ar.Height])
         ax_kernel_W = ng.make_axis(roles=[ar.Width])
         ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
+
+        # create placeholders for output axes
+        oC = ng.make_axis(name='C', roles=[ar.Channel])
+        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.Height])
+        oW = ng.make_axis(name='W', roles=[ar.Width])
 
         axes_order = {
             'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],
@@ -252,7 +260,6 @@ class OpsNN(OpsBase):
 
         ng.make_axes(axes_order[order]['X']).set_shape(X.axes.lengths)
         ng.make_axes(axes_order[order]['W']).set_shape(W.axes.lengths)
-        ax_D.length = ax_kernel_D.length = 1
 
         if 1 != len(bias.axes):
             raise ValueError("Bias's must be 1D.")
@@ -293,16 +300,10 @@ class OpsNN(OpsBase):
             'W': ng.make_axes([ax_C, ax_kernel_D, ax_kernel_H, ax_kernel_W, ax_kernel_ofm])
         }
 
-        internal_ax_dict['Y'] = ng.make_axes([
-            ng.make_axis(ax_kernel_ofm.length, name='C', roles=[ar.Channel]),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_d'],
-                         params['str_d'], ar.Depth),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_h'],
-                         params['str_h'], ar.Height),
-            spatial_axis(internal_ax_dict['X'], internal_ax_dict['W'], params['pad_w'],
-                         params['str_w'], ar.Width),
-            ax_N
-        ])
+        oC.length = ax_kernel_ofm.length
+        oH.length = output_dim(ax_H.length, ax_kernel_H.length, params['pad_h'], params['str_h'])
+        oW.length = output_dim(ax_W.length, ax_kernel_W.length, params['pad_w'], params['str_w'])
+        internal_ax_dict['Y'] = ng.make_axes([oC, oD, oH, oW, ax_N])
 
         # broadcast input / filter axes
         # flow for NHWC order:                   |  flow for NCHW order:
@@ -324,10 +325,8 @@ class OpsNN(OpsBase):
         Y = ng.convolution(params, X, W, axes=internal_ax_dict['Y'])
 
         # cast back to proper format
-        oC, oD, oH, oW, oN = Y.axes
-
-        Y = ng.broadcast(Y, ng.make_axes([oN, oD, oH, oW, oC])) if "NHWC" == order \
-            else ng.broadcast(Y, ng.make_axes([oN, oD, oC, oH, oW]))  # NCHW
+        Y = ng.broadcast(Y, ng.make_axes([ax_N, oD, oH, oW, oC])) if "NHWC" == order \
+            else ng.broadcast(Y, ng.make_axes([ax_N, oD, oC, oH, oW]))  # NCHW
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
