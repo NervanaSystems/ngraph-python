@@ -44,7 +44,7 @@ def get_last_interval_cost(filename, interval_size):
     return cost[-interval_size:].mean()
 
 
-@pytest.fixture(scope='module', params=db.keys())
+@pytest.fixture(scope='module', params=('mnist', 'cifar10'))
 def run_model(request, tmpdir_factory, transformer_factory):
     model = request.param
 
@@ -53,8 +53,7 @@ def run_model(request, tmpdir_factory, transformer_factory):
     for i in range(2):
         tmpdir = tmpdir_factory.mktemp(model)
         ofile = tmpdir.join("out{}.hdf5".format(i)).__str__()
-        cmd = '{} {}  --out {}'.format(
-            db[model]['filename'], db[model]['arguments'], ofile)
+        cmd = '{} {} --out {}'.format(db[model]['filename'], db[model]['arguments'], ofile)
         rc = subprocess.check_call(cmd, shell=True)
         ofiles.append(ofile)
         rcs.append(rc)
