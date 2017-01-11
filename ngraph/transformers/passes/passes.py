@@ -243,6 +243,31 @@ class DerivPass(PeepholeGraphPass):
     derivatives.
     """
 
+    @staticmethod
+    def _deriv(dependent, independent, error=constant(1)):
+        """
+        Computes the operation for [dDependent/dIndependent](error=1).
+        The derivative is a multi-linear function.
+        Args:
+            dependent (TensorOp): Dependent op.
+            independent(TensorOp): Independent op.
+            error (TensorOp, optional): The tensor holding the error where the
+                derivative will be computed at. Must have the same axes as dependent.
+        Returns:
+            TensorOp: Derivative applied to error. Has axes of independent.
+        """
+        if not error.axes.has_same_axes(dependent.axes):
+            raise ValueError(
+                "Dependent and error must have the same set of axes")
+
+        adjoints = dependent.forwarded.adjoints(error)
+
+        if independent not in adjoints:
+            return constant(0, independent.axes)
+
+        adjoint = adjoints[independent.forwarded]
+        return broadcast(adjoint.forwarded, axes=independent.axes)
+
     @generic_method()
     def visit(self, op):
         pass
@@ -250,15 +275,8 @@ class DerivPass(PeepholeGraphPass):
     @visit.on_type(DerivOp)
     def visit(self, op):
         # redundant names to keep consistent for now
-        dependent, independent, error = op.dependent, op.independent, op.error
-
-        adjoints = dependent.forwarded.adjoints(error)
-        if independent not in adjoints:
-            self.replace_op(op, constant(0, independent.axes))
-        else:
-            adjoint = adjoints[independent.forwarded]
-            self.replace_op(op,
-                            broadcast(adjoint.forwarded, axes=independent.axes))
+        deriv = DerivPass._deriv(op.dependent, op.independent, op.error)
+        self.replace_op(op, deriv)
 
 
 class SimplePrune(PeepholeGraphPass):
