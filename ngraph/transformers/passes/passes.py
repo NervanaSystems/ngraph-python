@@ -262,7 +262,7 @@ class DerivPass(PeepholeGraphPass):
 
         adjoints = dependent.forwarded.adjoints(error)
 
-        if independent not in adjoints:
+        if independent.forwarded not in adjoints:
             return constant(0, independent.axes)
 
         adjoint = adjoints[independent.forwarded]
