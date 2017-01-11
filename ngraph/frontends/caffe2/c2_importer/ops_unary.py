@@ -92,3 +92,16 @@ class OpsUnary(OpsBase):
         norm_axes = x.axes[1]
 
         return ng.softmax(x, normalization_axes=norm_axes).named(c2_op.name)
+
+    def Exp(self, c2_op, inputs):
+        """
+        Computes element-wise exp: `exp(x)`
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+        """
+        return ng.exp(inputs[0]).named(c2_op.name)
