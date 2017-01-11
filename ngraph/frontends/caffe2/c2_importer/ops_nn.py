@@ -15,7 +15,7 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 from ngraph.frontends.neon import ar
-from ngraph.op_graph.axes import spatial_axis
+# from ngraph.op_graph.axes import spatial_axis
 import ngraph as ng
 import numpy as np
 
