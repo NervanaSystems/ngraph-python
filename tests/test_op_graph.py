@@ -63,6 +63,25 @@ def test_sequential():
     assert p_val == 0
 
 
+def test_sequential_reduce():
+    N = ng.make_axis(3)
+    x = ng.variable([N], initial_value=1)
+    with ng.sequential_op_factory() as pf:
+        x0 = x + x
+        x1 = ng.sum(x0, out_axes=())
+        x2 = ng.sum(x0, out_axes=()) + x0
+    p = pf()
+    ex = ExecutorFactory()
+    x0_val, x1_val, x2_val, p_val = ex.executor([x0, x1, x2, p])()
+    x0_np = x.value[...] + x.value[...]
+    x1_np = np.sum(x0_np)
+    x2_np = x1_np + x0_np
+    assert np.allclose(x0_val, x0_np)
+    assert np.allclose(x1_val, x1_np)
+    assert np.allclose(x2_val, x2_np)
+    assert np.allclose(p_val, x2_np)
+
+
 def test_pad_invalid_paddings_length():
     """
     pad should raise an exception if the paddings length is not the same as the
