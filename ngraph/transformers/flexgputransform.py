@@ -93,7 +93,7 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
                                                   **kwargs)
 
         # create flex entry
-        self.flex_entry = self.transformer.flex_manager.new_flex()
+        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
 
     @property
     def scale(self):
