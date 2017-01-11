@@ -62,7 +62,7 @@ clean:
 
 test: testflex
 	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 testflex:
@@ -71,7 +71,7 @@ testflex:
 	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
 style:
-	flake8 --output-file style.txt $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
+	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 lint:
