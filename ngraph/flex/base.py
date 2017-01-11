@@ -6,8 +6,17 @@ import numpy as np
 
 class Flex(object):
     """
-    flex dtype
-    Subclassed for different device transformers
+    Flex dtype (supports parts of the numpy dtype interface).
+    Subclassed for different device transformers.
+
+    Arguments:
+        storage_bits (int): number of bits to store numbers of this type
+
+    Attributes:
+        itemsize: numpy interface
+        type: numpy interface
+        str: numpy interface
+        name: numpy interface
     """
 
     def __init__(self, storage_bits):
@@ -15,13 +24,13 @@ class Flex(object):
         self.storage_bits = storage_bits
 
         # numpy dtype interface
-        assert np.mod(storage_bits, 8) == 0
+        assert np.mod(storage_bits, 8) == 0  # FLEX PR1 TODO: move this to autoflex repo
         self.itemsize = int(storage_bits // 8)
         self.type = 'flex'
         self.str = "<i2"
-        self.name = 'flex'  # TODO reconsider what name and type are set to?
+        self.name = 'flex'  # FLEX PR1 take out comment: reconsider what name and type are set to?
 
-    # TODO: review __eq__
+    # FLEX PR1 TODO: review __eq__ 
     # - more generally this is about the design of flex dtype
     # - last 2 conditions are neon flexsim holdovers - keep?
     def __eq__(self, other):
@@ -36,7 +45,18 @@ flex16 = Flex(storage_bits=16)
 
 class FlexEntry(object):
     """
-    Associated with every flex tensor
+    Associated with every flex tensor.
+
+    Arguments:
+        _id: tensor id
+        dtype: tensor dtype
+        init_dec: initial tensor DEC
+
+    Attributes:
+        flex_id: tensor id
+        dtype: tensor dtype
+        scale (float): scale of tensor
+        dec (int): dec of tensor
     """
 
     def __init__(self, _id, dtype, init_dec):
@@ -55,6 +75,15 @@ class FlexEntry(object):
 
 
 class FlexManager(object):
+    """
+    Manages flex tensors. Abstract base class.
+
+    Arguments:
+        None
+
+    Attributes:
+        flex_entries (dict): mapping from tensor IDs to FlexEntry
+    """
 
     default_dec = 8  # determines fixed point resolution and default initial dec
 
@@ -69,7 +98,7 @@ class FlexManager(object):
 
     def make_flex_entry(self, dtype):
         """
-        Create flex entry for new flex tensor
+        Create flex entry for new flex tensor.
 
         Returns:
             FlexEntry
