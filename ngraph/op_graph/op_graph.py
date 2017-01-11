@@ -3613,7 +3613,9 @@ class DerivOp(TensorOp):
 
         if not error.axes.has_same_axes(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
-        self.args = (dependent, independent, error)
+        self.dependent = dependent
+        self.independent = independent
+        self.error = error
         self.axes = make_axes(independent.axes)
 
 

@@ -249,9 +249,8 @@ class DerivPass(PeepholeGraphPass):
 
     @visit.on_type(DerivOp)
     def visit(self, op):
-        dependent = op.args[0]
-        independent = op.args[1]
-        error = op.args[2]
+        # redundant names to keep consistent for now
+        dependent, independent, error = op.dependent, op.independent, op.error
 
         adjoints = dependent.forwarded.adjoints(error)
         if independent not in adjoints:
