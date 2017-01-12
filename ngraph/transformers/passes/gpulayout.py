@@ -193,7 +193,7 @@ def flatten(l):
     return out
 
 
-def flatten_op(op, axes, axes_list, reduction_axes=None):
+def flatten_op(op, axes, axes_list, reduction_axes=None, axis=None):
     new_order = flatten(axes_list)
     if new_order != range(len(new_order)):
         reordered_axes = make_axes(tuple(flatten(axes)))
@@ -203,7 +203,10 @@ def flatten_op(op, axes, axes_list, reduction_axes=None):
 
         op_type = type(op)
         if reduction_axes is None:
-            new_op = op_type(*out_args)
+            if axis is None:
+                new_op = op_type(*out_args)
+            else:
+                new_op = op_type(*out_args, axis=axis)
         else:
             new_op = op_type(*out_args, reduction_axes=reduction_axes)
 
@@ -218,7 +221,10 @@ def flatten_op(op, axes, axes_list, reduction_axes=None):
 
         op_type = type(op)
         if reduction_axes is None:
-            new_op = op_type(*out_args)
+            if axis is None:
+                new_op = op_type(*out_args)
+            else:
+                new_op = op_type(*out_args, axis=axis)
         else:
             new_op = op_type(*out_args, reduction_axes=reduction_axes)
 
@@ -313,6 +319,7 @@ class GPUTensorShaping(PeepholeGraphPass):
                 stride_index += 1
 
         # Check if preserved axes have been merged into a single axis
+        out_preserve = None
         if preserve_axes is not None:
             preserve_satisfied = False
             for axis in axes:
@@ -345,14 +352,26 @@ class GPUTensorShaping(PeepholeGraphPass):
 
         # Forced dimshuffle cases
         if len(axes) > 3:
-            assert False
+            num_to_merge = len(axes) - 2
+            to_merge = []
+            for axis in axes:
+                if axis != out_preserve:
+                    to_merge.append(axis)
+                    if len(to_merge) == num_to_merge:
+                        break
+
+            merged_axis = []
+            for axis in to_merge:
+                merged_axis = merge_axes(merged_axis, axis)
+                axes.remove(axis)
+
+            axes.insert(0, merged_axis)
 
         if preserve_axes is not None:
             return (axes, out_preserve)
         else:
             return axes
 
-    """TODO."""
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         """
@@ -515,8 +534,28 @@ class GPUTensorShaping(PeepholeGraphPass):
 
     @visit.on_type(OneHotOp)
     def visit(self, op):
-        # TODO: REMOVE!!!!
-        self.replace_op(op, op.as_two_dim())
+        op_td = op.tensor_description()
+
+        preserve_axes = [op.axes.index_unique(op.axis)]
+        if len(op_td.shape) > 3:
+            axes_list, red_axis = self.get_new_axes(list(op_td.shape), list(op_td.strides),
+                                                    preserve_axes)
+            axes = []
+            for axis in axes_list:
+                if type(axis) == list:
+                    to_compound = [op_td.axes[a] for a in axis]
+                    new_axis = FlattenedAxis((tuple(to_compound)))
+                else:
+                    new_axis = op_td.axes[axis]
+                axes.append(new_axis)
+                if axis == red_axis:
+                    reduction_axes = new_axis
+
+            axes_list.pop(axes.index(reduction_axes))
+            axes.remove(reduction_axes)
+            axes = make_axes(tuple(axes))
+            new_op = flatten_op(op, axes, axes_list, axis=reduction_axes)
+            self.replace_op(op, new_op)
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):
