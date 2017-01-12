@@ -18,7 +18,7 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 
-from ngraph.util.utils import executor
+from ngraph.testing import executor
 
 
 def test_exit_condition(transformer_factory):
