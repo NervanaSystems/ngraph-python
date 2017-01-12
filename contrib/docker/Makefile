@@ -7,17 +7,27 @@ PYTHON_VERSION = 2
 
 .PHONY: build_test test build_base build_dev
 
+DOCKER_BUILD=docker build
+
+ifdef http_proxy
+DOCKER_BUILD+=--build-arg http_proxy=$(http_proxy)
+endif
+
+ifdef http_proxy
+DOCKER_BUILD+=--build-arg https_proxy=$(https_proxy)
+endif
+
 build_base:
-	@docker build -f=Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base ${DIR}
+	@$(DOCKER_BUILD) -f=Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base ${DIR}
 
 build_dev: build_base
-	@docker build -f=Dockerfile.dev -t=ngraph_dev ${DIR}
+	@$(DOCKER_BUILD) -f=Dockerfile.dev -t=ngraph_dev ${DIR}
 
 build_test: build_base
-	@docker build -f=Dockerfile.test -t=ngraph_test ${DIR}
+	@$(DOCKER_BUILD) -f=Dockerfile.test -t=ngraph_test ${DIR}
 
 build_doc: build_base
-	@docker build -f=Dockerfile.doc -t=ngraph_doc ${DIR}
+	@$(DOCKER_BUILD) -f=Dockerfile.doc -t=ngraph_doc ${DIR}
 
 test: build_test
 	@echo docker run --rm ${VOLUME} -t ngraph_test make test
