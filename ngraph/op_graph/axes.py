@@ -1029,6 +1029,21 @@ class Axes(object):
         """
         return self._axes.index(axis)
 
+    def index_unique(self, axis):
+        """
+        Returns the index of an axis and ignores match_on_length behavior
+
+        Arguments:
+            axis: The axis to search for.
+
+        Returns:
+            The index.
+        """
+        for i in range(len(self._axes)):
+            if self._axes[i].annotated_axis is axis.annotated_axis:
+                return i
+        raise ValueError("Axis not in axes")
+
     def has_same_axes(self, axes):
         """
         Checks whether axes have the same set of axes as self.
@@ -1776,31 +1791,6 @@ class TensorDescription(NameableValue):
         for _ in reversed(self.shape):
             cstrides.insert(0, s)
             s = s * _
-        return tuple(cstrides) == self.strides
-
-    @property
-    def broadcast_contiguous(self):
-        """
-
-        Returns:
-            True if tensor's strides are contiguous or broadcasted
-        """
-        if self.shape == ():
-            return True
-
-        broadcast_axes = np.where(np.equal(self.strides, 0))[0]
-        aug_shape = list(self.shape)
-        for bcast_axis in broadcast_axes:
-            aug_shape[bcast_axis] = 1
-
-        s = self.dtype.itemsize
-        cstrides = []
-        for _ in reversed(aug_shape):
-            cstrides.insert(0, s)
-            s = s * _
-
-        for bcast_axis in broadcast_axes:
-            cstrides[bcast_axis] = 0
         return tuple(cstrides) == self.strides
 
     @property

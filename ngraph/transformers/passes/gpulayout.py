@@ -26,11 +26,14 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
 from ngraph.op_graph.axes import make_axes, make_axis, FlattenedAxis
 
 
-def _is_strides_contiguous(td):
-    contiguous_strides = [td.dtype.itemsize]
-    for dim in reversed(td.shape[1:]):
+def _is_strides_contiguous(shape, strides):
+    if all(v == 0 for v in strides) or all(v == strides[0] for v in strides):
+        return True
+
+    contiguous_strides = [strides[-1]]
+    for dim in reversed(shape[1:]):
         contiguous_strides.insert(0, contiguous_strides[0] * dim)
-    return (tuple(contiguous_strides) == td.strides)
+    return (tuple(contiguous_strides) == strides)
 
 
 class GPUTensorLayout(PeepholeGraphPass):
@@ -127,8 +130,18 @@ class GPUContiguousPrune(PeepholeGraphPass):
         match = self.match_pattern(op, (ContiguousOp, Flatten))
         if match is not None:
             td = match[0].args[0].tensor_description()
-            if td.broadcast_contiguous and not td.c_contiguous:
-                self.replace_op(match[0], match[0].args[0])
+            if not td.c_contiguous:
+                # We can still remove the contig op as long as flattened axes are contig
+                can_remove = True
+                for axis in match[1].axes:
+                    if type(axis) == FlattenedAxis:
+                        strides = [td.strides[td.axes.index_unique(a)] for a in axis.axes]
+                        shape = [td.strides[td.axes.index_unique(a)] for a in axis.axes]
+                        if not _is_strides_contiguous(shape, strides):
+                            can_remove = False
+
+                if can_remove:
+                    self.replace_op(match[0], match[0].args[0])
 
     """TODO."""
     @generic_method(dispatch_base_type=Op)
@@ -250,8 +263,9 @@ class GPUTensorShaping(PeepholeGraphPass):
 
             to_merge = []
             for index in range(len(strides)):
-                if axes[index] not in preserve_set:
-                    to_merge.append(axes[index])
+                if strides[index] == stride:
+                    if type(axes[index]) != int or axes[index] not in preserve_set:
+                        to_merge.append(axes[index])
 
             while len(to_merge) > 1:
                 index = axes.index(to_merge.pop(1))
@@ -279,14 +293,14 @@ class GPUTensorShaping(PeepholeGraphPass):
                 if index1 < index2:
                     shape[index1] = shape[index1] * shape[index2]
                     axes[index1] = merge_axes(axes[index1], axes[index2])
+                    strides[index1] = strides.pop(index2)
                     shape.pop(index2)
-                    strides.pop(index2)
                     axes.pop(index2)
                 else:
                     shape[index2] = shape[index1] * shape[index2]
                     axes[index2] = merge_axes(axes[index2], axes[index1])
+                    strides[index2] = strides.pop(index1)
                     shape.pop(index1)
-                    strides.pop(index1)
                     axes.pop(index1)
                 
                 sorted_strides = list(strides)
@@ -351,7 +365,6 @@ class GPUTensorShaping(PeepholeGraphPass):
 
     @visit.on_type(DotOp)
     def visit(self, op):
-        #DUPLICATED
         x, y = op.args
         x_reduction_axes = op.x_reduction_axes
         y_reduction_axes = op.y_reduction_axes
@@ -480,7 +493,7 @@ class GPUTensorShaping(PeepholeGraphPass):
         arg0 = op.args[0]
         arg0_td = arg0.tensor_description()
 
-        preserve_axes = [arg0_td.axes.index(axis) for axis in op.reduction_axes]
+        preserve_axes = [arg0_td.axes.index_unique(axis) for axis in op.reduction_axes]
         if len(arg0_td.shape) > 3 or len(preserve_axes) > 1:
             axes_list, red_axis = self.get_new_axes(list(arg0_td.shape), list(arg0_td.strides), preserve_axes)
             axes = []
@@ -505,14 +518,12 @@ class GPUTensorShaping(PeepholeGraphPass):
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):
-        # DUPLICATED
         x = op.args[0]
         if op.axes == x.axes:
             self.replace_op(op, x)
 
     @visit.on_type(BroadcastOp)
     def visit(self, op):
-        # DUPLICATED
         x = op.args[0]
         if op.axes == x.axes:
             self.replace_op(op, x)

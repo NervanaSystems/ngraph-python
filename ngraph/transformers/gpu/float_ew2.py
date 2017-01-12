@@ -267,14 +267,14 @@ class TensorDescriptionWrapper:
 
             self.strides = [s // self.dtype.itemsize for s in self.strides]
             self.strides = tuple(self.strides)
-        else:
+        elif len(self.strides) != len(kernel_axes):
             num_kernel_axes = len(kernel_axes)
             bcast_shape = [1] * num_kernel_axes
             bcast_strides = [0] * num_kernel_axes
 
             for axis in range(num_kernel_axes):
                 if kernel_axes[axis] in self.td.axes:
-                    td_axis_index = self.td.axes.index(kernel_axes[axis])
+                    td_axis_index = self.td.axes.index_unique(kernel_axes[axis])
                     bcast_shape[axis] = self.shape[td_axis_index]
                     bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
                 else:
@@ -284,6 +284,9 @@ class TensorDescriptionWrapper:
 
             self.shape = tuple(bcast_shape)
             self.strides = tuple(bcast_strides)
+        else:
+            self.strides = [s // self.dtype.itemsize for s in self.strides]
+            self.strides = tuple(self.strides)
 
     @property
     def is_trans(self):
