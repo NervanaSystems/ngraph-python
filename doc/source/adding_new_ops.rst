@@ -43,10 +43,10 @@ instance ::
 1. First, we need to register the new op in ``op_graph``. In general, an op is
    a sub-class of ``ngraph.op_graph.op_graph.Op``. To add a new op, we could
    inherit from the class ``Op`` or one of its descendant classes and implement
-   the functionalities. In most cases, we just need to implement the
-   ``__init__()`` and ``generate_adjoints()`` if we want to define the derivative
-   of the op. For other advanced functionalities, please refer to the the source
-   of ``ngraph.op_graph.op_graph.Op``.
+   the functionalities. We need to implement the ``__init__()``, and if we want
+   to define the derivative of the op, we need to implement the
+   ``generate_adjoints()``. For other advanced functionalities, please refer to
+   the the source of ``ngraph.op_graph.op_graph.Op``.
 
    There are several helper functions (namely ``create_binary_elementwise``,
    ``create_twod_reduction_op``, ``create_oned_reduction_op`` and
@@ -62,46 +62,31 @@ instance ::
    Now let's look at ``DotOp`` for an example where we use subclassing ``Op``
    instead of using helper functions. In this example, ``DotOp`` inherits
    ``TensorOp`` which is a descendant of ``Op``. In the ``__init__()`` function,
-   we do input arguments checking and set up the output axes in ``DotOp.axes``.
-   In the ``generate_adjoints`` function, we accumulate the gradients for the
-   LHS operand ``x`` and RHS operand ``y`` respectively. ::
+   we do input arguments checking and set up the output axes in ``DotOp.axes``.::
 
-         class DotOp(TensorOp):
+        class DotOp(TensorOp):
 
-             def __init__(self, x, y, **kwargs):
-                 self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
-                 self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
-                 self.x_out_axes = x.axes - self.x_reduction_axes
-                 self.y_out_axes = y.axes - self.y_reduction_axes
+            def __init__(self, x, y, **kwargs):
+                self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
+                self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
+                self.x_out_axes = x.axes - self.x_reduction_axes
+                self.y_out_axes = y.axes - self.y_reduction_axes
 
-                 intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
-                 if len(intersection_axes):
-                     raise ValueError(("Both arguments to a DotOp contained {axes}. "
-                                       "In order to dot two tensors with the same Axis together, one "
-                                       "of the Axes must be a dual. See: "
-                                       "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
-                                       ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+                intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
+                if len(intersection_axes):
+                    raise ValueError(("Both arguments to a DotOp contained {axes}. "
+                                      "In order to dot two tensors with the same Axis together, one "
+                                      "of the Axes must be a dual. See: "
+                                      "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
+                                      ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
 
-                 axes = self.x_out_axes + self.y_out_axes
+                axes = self.x_out_axes + self.y_out_axes
 
-                 super(DotOp, self).__init__(
-                     args=(x, y), axes=axes, **kwargs
-                 )
+                super(DotOp, self).__init__(
+                    args=(x, y), axes=axes, **kwargs
+                )
 
-             def generate_adjoints(self, adjoints, delta, x, y):
-                 x.generate_add_delta(
-                     adjoints,
-                     axes_with_order(
-                         dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                             dualed_axes(y, self.y_reduction_axes, -1, 0)),
-                         x.axes)
-                 )
-                 y.generate_add_delta(
-                     adjoints,
-                     axes_with_order(
-                         dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
-                         y.axes)
-                 )
+            ...
 
 2. Next, we could (optionally) add adjoint function for computing gradients of
    the op in ``generate_adjoints()`` function. There are two scenarios: if
@@ -167,10 +152,31 @@ instance ::
                 broadcast(delta, x.axes) * x_grad
             )
 
+   Back to the ``DotOp``. In its ``generate_adjoints`` function, we accumulate
+   the gradients for the LHS operand ``x`` and RHS operand ``y`` respectively. ::
+
+         class DotOp(TensorOp):
+             ...
+
+             def generate_adjoints(self, adjoints, delta, x, y):
+                 x.generate_add_delta(
+                     adjoints,
+                     axes_with_order(
+                         dot(dualed_axes(delta, self.y_out_axes, -1, 0),
+                             dualed_axes(y, self.y_reduction_axes, -1, 0)),
+                         x.axes)
+                 )
+                 y.generate_add_delta(
+                     adjoints,
+                     axes_with_order(
+                         dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
+                         y.axes)
+                 )
+
 3. The next step is to register op in transformer passes. Transformer passes
    are used to simplify graph, to optimize ops for execution and to meet device
    specific constraints. Some optimization passes are optional, while other
-   passes could be required to ensure correctness.The two default passes we
+   passes could be required to ensure correctness. The two default passes we
    currently have are ``SimplePrune`` and ``RequiredTensorShaping``. Please
    refer to :ref:`Transformer Passes` doc for more details.
 
@@ -257,7 +263,7 @@ instance ::
             ...
         }
 
-5. The last step is to add the corresponding tests to test the correctness
-   of the forward and backward computation. For ``ng.prod``, please refer to
+5. The last step is to add the corresponding tests to verify the forward and
+   backward computation. For ``ng.prod``, please refer to
    ``test_prod_constant()`` and ``test_prod_deriv`` test function under
    ``tests/test_execution.py``.
