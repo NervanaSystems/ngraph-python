@@ -61,6 +61,7 @@ clean:
 
 test:
 	@echo Running unit tests...
+	@find . -type f -name \*.pyc -exec rm {} \;
 	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
