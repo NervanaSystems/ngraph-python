@@ -96,7 +96,6 @@ class ElementWiseKernel(GPUKernel):
 
     def add_reduction_op(self, string, op, out, x):
         if len(op.reduction_axes) == 0:
-            #import pdb; pdb.set_trace()
             self._buffer_op("assign", x=x, out=out)
         else:
             axis = op.args[0].axes.index(op.reduction_axes[0])
@@ -105,7 +104,6 @@ class ElementWiseKernel(GPUKernel):
     @generic_method(Op)
     def add_op(self, op, *args):
         if op.is_device_op:
-            import pdb; pdb.set_trace()
             raise ValueError("Unhandled op: {}".format(op))
 
     @add_op.on_type(AbsoluteOneDOp)
@@ -1086,7 +1084,8 @@ class GPUTransformer(Transformer):
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
 
-        self.graph_passes = [SimplePrune(), GPUTensorShaping(), GPUTensorLayout(), GPUContiguousPrune()]
+        self.graph_passes = [SimplePrune(), GPUTensorShaping(), GPUTensorLayout(),
+                             GPUContiguousPrune()]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()

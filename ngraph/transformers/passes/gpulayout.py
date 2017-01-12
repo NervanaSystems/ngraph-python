@@ -13,17 +13,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.passes.passes import PeepholeGraphPass, RequiredTensorShaping
+from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, Flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, UnaryElementwiseAxesOp, \
-    negative, cast_axes, SetItemOp, tensor_slice
-from ngraph.op_graph.axes import make_axes, make_axis, FlattenedAxis
+    DotTwoByOne, OneHotOp, Flatten, \
+    Op, Sum, UnaryElementwiseAxesOp, \
+    SetItemOp, tensor_slice
+from ngraph.op_graph.axes import make_axis, FlattenedAxis
 
 
 def _is_strides_contiguous(shape, strides):
@@ -179,6 +179,7 @@ def to_set(axis):
     else:
         return set([axis])
 
+
 def flatten(l):
     out = []
     for item in l:
@@ -190,6 +191,7 @@ def flatten(l):
         else:
             out.append(item)
     return out
+
 
 def flatten_op(op, axes, axes_list, reduction_axes=None):
     new_order = flatten(axes_list)
@@ -219,11 +221,12 @@ def flatten_op(op, axes, axes_list, reduction_axes=None):
             new_op = op_type(*out_args)
         else:
             new_op = op_type(*out_args, reduction_axes=reduction_axes)
-        
+
         if type(op) == AssignOp:
             return new_op
         else:
             return unflatten(new_op)
+
 
 class GPUTensorShaping(PeepholeGraphPass):
     def get_new_axes(self, shape, strides, preserve_axes=None):
@@ -251,9 +254,10 @@ class GPUTensorShaping(PeepholeGraphPass):
             preserve1 = len(preserve_set & to_set(axes[index1])) > 0
             preserve2 = len(preserve_set & to_set(axes[index2])) > 0
 
-            if (stride1 * shape1) == stride2 and ((preserve1 and preserve2) or ((not preserve1) and (not preserve2))):
+            if (stride1 * shape1) == stride2 and ((preserve1 and preserve2) or
+                                                  ((not preserve1) and (not preserve2))):
                 return True
-            
+
             return False
 
         # Merge any axes with same strides
@@ -288,7 +292,7 @@ class GPUTensorShaping(PeepholeGraphPass):
         while len(axes) > 3 and stride_index != (len(axes) - 1):
             index1 = strides.index(sorted_strides[stride_index])
             index2 = strides.index(sorted_strides[stride_index + 1])
-            
+
             if can_merge(index1, index2):
                 if index1 < index2:
                     shape[index1] = shape[index1] * shape[index2]
@@ -302,7 +306,7 @@ class GPUTensorShaping(PeepholeGraphPass):
                     strides[index2] = strides.pop(index1)
                     shape.pop(index1)
                     axes.pop(index1)
-                
+
                 sorted_strides = list(strides)
                 sorted_strides.sort()
             else:
@@ -336,7 +340,7 @@ class GPUTensorShaping(PeepholeGraphPass):
                 axes.append(merged_axis)
             else:
                 axes.insert(0, merged_axis)
-            
+
             out_preserve = merged_axis
 
         # Forced dimshuffle cases
@@ -431,7 +435,6 @@ class GPUTensorShaping(PeepholeGraphPass):
     @visit.on_type(UnaryElementwiseAxesOp)
     def visit(self, op):
         arg0 = op.args[0]
-        
         arg0_td = arg0.tensor_description()
 
         if len(arg0_td.shape) > 3:
@@ -451,8 +454,6 @@ class GPUTensorShaping(PeepholeGraphPass):
     @visit.on_type(BinaryElementWiseAxesOp)
     def visit(self, op):
         arg0 = op.args[0]
-        arg1 = op.args[1]
-        
         arg0_td = arg0.tensor_description()
 
         if len(arg0_td.shape) > 3:
@@ -495,7 +496,8 @@ class GPUTensorShaping(PeepholeGraphPass):
 
         preserve_axes = [arg0_td.axes.index_unique(axis) for axis in op.reduction_axes]
         if len(arg0_td.shape) > 3 or len(preserve_axes) > 1:
-            axes_list, red_axis = self.get_new_axes(list(arg0_td.shape), list(arg0_td.strides), preserve_axes)
+            axes_list, red_axis = self.get_new_axes(list(arg0_td.shape), list(arg0_td.strides),
+                                                    preserve_axes)
             axes = []
             for axis in axes_list:
                 if type(axis) == list:
