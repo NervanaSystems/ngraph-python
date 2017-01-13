@@ -157,3 +157,61 @@ def test_exp():
 
     # compare expected results and ngraph results
     assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
+
+
+def test_NCHW2NHWC():
+    workspace.ResetWorkspace()
+
+    # NCHW
+    shape = [2, 3, 4, 5]
+    data1 = [float(i) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    X.NCHW2NHWC([], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+
+
+def test_NHWC2NCHW():
+    workspace.ResetWorkspace()
+
+    # NHWC
+    shape = [2, 3, 4, 5]
+    data1 = [float(i) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    X.NCHW2NHWC([], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))

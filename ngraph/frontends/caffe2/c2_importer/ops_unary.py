@@ -15,6 +15,7 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
+from ngraph.frontends.neon import ar
 
 
 class OpsUnary(OpsBase):
@@ -33,6 +34,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
         """
+        assert 1 == len(inputs)
         # get inputs
         left = inputs[0]
 
@@ -56,6 +58,7 @@ class OpsUnary(OpsBase):
         Inputs to tf_node:
             x, name
         """
+        assert 1 == len(inputs)
         return self._element_wise_unary(ng.tanh, c2_op, inputs).named(c2_op.name)
 
     def Relu(self, c2_op, inputs):
@@ -72,6 +75,7 @@ class OpsUnary(OpsBase):
         Inputs to tf_node:
             features, name
         """
+        assert 1 == len(inputs)
         return ng.maximum(inputs[0], 0.).named(c2_op.name)
 
     def Softmax(self, c2_op, inputs):
@@ -85,6 +89,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
         """
+        assert 1 == len(inputs)
         # get input
         x = inputs[0]
 
@@ -104,4 +109,31 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
         """
+        assert 1 == len(inputs)
         return ng.exp(inputs[0]).named(c2_op.name)
+
+    def NCHW2NHWC(self, c2_op, inputs):
+        """ Returns data in NHWC format. """
+        assert 1 == len(inputs)
+        X = inputs[0]
+
+        order = X.order if hasattr(X, 'order') else 'NCHW'
+        if 'NCHW' != order:
+            raise ValueError("NCHW2NHWC accepts only NCHW input format.")
+
+        Y = ng.axes_with_order(X, axes=ng.make_axes([X.axes[0], X.axes[2], X.axes[3], X.axes[1]]))
+        Y.order = 'NHWC'
+        return Y
+
+    def NHWC2NCHW(self, c2_op, inputs):
+        """ Returns data in NHWC format. """
+        assert 1 == len(inputs)
+        X = inputs[0]
+
+        order = X.order if hasattr(X, 'order') else 'NHWC'
+        if 'NHWC' != order:
+            raise ValueError("NHWC2NCHW accepts only NHWC input format.")
+
+        Y = ng.axes_with_order(X, axes=ng.make_axes([X.axes[0], X.axes[3], X.axes[1], X.axes[2]]))
+        Y.order = 'NCHW'
+        return Y
