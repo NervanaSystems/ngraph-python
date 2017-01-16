@@ -1,3 +1,10 @@
+## Installing docker
+
+on ubuntu 14.04:
+- run ./install_latest_docker_ubuntu_1404
+
+## Usage
+
 From this directory you can:
 
 ### make test

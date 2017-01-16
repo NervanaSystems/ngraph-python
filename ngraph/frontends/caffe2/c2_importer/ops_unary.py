@@ -15,7 +15,6 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
-from ngraph.frontends.neon import ar
 
 
 class OpsUnary(OpsBase):
@@ -55,7 +54,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to tf_node:
+        Inputs to c2_op:
             x, name
         """
         assert 1 == len(inputs)
@@ -72,7 +71,7 @@ class OpsUnary(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
 
-        Inputs to tf_node:
+        Inputs to c2_op:
             features, name
         """
         assert 1 == len(inputs)
@@ -137,3 +136,35 @@ class OpsUnary(OpsBase):
         Y = ng.axes_with_order(X, axes=ng.make_axes([X.axes[0], X.axes[3], X.axes[1], X.axes[2]]))
         Y.order = 'NCHW'
         return Y
+
+    def Sigmoid(self, c2_op, inputs):
+        """
+        Computes `y = 1 / (1 + exp(-x))` element-wise.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            x, name
+        """
+        return self._element_wise_unary(ng.sigmoid, c2_op, inputs)
+
+    def Negative(self, c2_op, inputs):
+        """
+        Numerical negative value element-wise.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            x, name
+        """
+        return ng.negative(inputs[0]).named(c2_op.name)

@@ -21,16 +21,14 @@ import pytest
 
 base_dir = os.path.dirname(__file__)
 example_dir = os.path.join(base_dir, '../../../../examples/')
-work_dir = os.getenv('NGRAPH_WORK_DIR', os.path.join(os.path.expanduser('~'), 'nervana'))
-work_dir = os.path.realpath(work_dir)
 
 db = {'mnist': {'filename': os.path.join(example_dir, 'mnist', 'mnist_mlp.py'),
-                'arguments': '--data_dir {} --num_iterations {} --iter_interval {} -r 0'.format(
-                    work_dir, 950, 475),
+                'arguments': '--num_iterations {} --iter_interval {} -r 0'.format(
+                    950, 475),
                 'cost': 0.28437907},
       'cifar10': {'filename': os.path.join(example_dir, 'cifar10', 'cifar10_mlp.py'),
-                  'arguments': '--data_dir {} --num_iterations {} --iter_interval {} -r 0'.format(
-                  work_dir, 950, 475),
+                  'arguments': '--num_iterations {} --iter_interval {} -r 0'.format(
+                  950, 475),
                   'cost': 1.6199253}
       }
 
@@ -46,14 +44,15 @@ def get_last_interval_cost(filename, interval_size):
     return cost[-interval_size:].mean()
 
 
-@pytest.fixture(scope='module', params=db.keys())
+@pytest.fixture(scope='module', params=('mnist', 'cifar10'))
 def run_model(request, tmpdir_factory, transformer_factory):
     model = request.param
 
     ofiles, rcs = [], []
 
     for i in range(2):
-        ofile = tmpdir_factory.mktemp(model).join("out{}.hdf5".format(i)).__str__()
+        tmpdir = tmpdir_factory.mktemp(model)
+        ofile = tmpdir.join("out{}.hdf5".format(i)).__str__()
         cmd = '{} {} --out {}'.format(db[model]['filename'], db[model]['arguments'], ofile)
         rc = subprocess.check_call(cmd, shell=True)
         ofiles.append(ofile)
