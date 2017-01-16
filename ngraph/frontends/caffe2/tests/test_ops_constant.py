@@ -77,11 +77,8 @@ def test_gaussianfill():
     # Elementwise difference of the two random matrixes
     difference_res = caffe_res - f_result
 
-   #standard deviation of Difference Matrix
+    #standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
-
-    # print("\n\ngaussianfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("gaussianfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 3 * difference_res.std() / N))
 
     # testing can only be approximate (so in rare cases may fail!!)
     # if fails once try to re-run a couple of times to make sure there is a problem)
@@ -121,9 +118,6 @@ def test_uniformfill():
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    # print("\n uniformfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("uniformfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 5 * difference_res.std() / N))
-
     # testing can only be approximated, so sometimes can fail!!
     # approach mimicking gaussian test, and this time the multiplier is set to 5 to account for distorsion from gaussian
     # if fails once try to re-run a couple of times to make sure there is a problem)
@@ -161,9 +155,6 @@ def test_uniformintfill():
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    # print("\n uniformintfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("uniformintill difference : mean and tolerance: {} {}".format(difference_res.mean(), 8 * difference_res.std() / N))
-
     # testing can only be approximated, so sometimes can fail!!
     # approach mimicking gaussian test, and this time the multiplier is set to 8 to account for distorsion from gaussian
     # if fails once try to re-run a couple of times to make sure there is a problem)
@@ -200,9 +191,6 @@ def test_xavierfill():
 
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
-
-    # print("\n xavierfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("xavierfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 3 * difference_res.std() / N))
 
     # testing can only be approximated, so sometimes can fail!!
     # approach mimicking gaussian test
