@@ -80,18 +80,13 @@ def test_gaussianfill():
    #standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    print("\n\ngaussianfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("gaussianfill variances and tolerance: {} {} {}".format(f_result.var(), caffe_res.var(), 3 * diffe_res_std / N))
+    # print("\n\ngaussianfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
+    # print("gaussianfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 3 * difference_res.std() / N))
 
     # testing can only be approximate (so in rare cases may fail!!)
     # if fails once try to re-run a couple of times to make sure there is a problem)
     # the difference must be still gaussian and P(|m'-m|)<3*std = 99.73%, and std(m) = std/N, having N*N elements
     assert(np.isclose(difference_res.mean(), 0, atol= 3 * diffe_res_std / N, rtol = 0))
-
-    # tests on difference in means and variances are estimated and *attempt* to rule out cases in
-    # which some pairs of distribution with some simmetrical relation can satisfy the first test.
-    # assert(np.isclose(f_result.mean(), caffe_res.mean(), atol= 3 * (f_result.std() + caffe_res.std()) / N, rtol = 0))
-    # assert(np.isclose(f_result.var(), caffe_res.var(), atol=3 * diffe_res_std / N, rtol=0))
 
 
 def test_uniformfill():
@@ -126,15 +121,13 @@ def test_uniformfill():
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    print("\n uniformfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("uniformfill variances and tolerance: {} {} {}".format(f_result.var(), caffe_res.var(), 3 * diffe_res_std / N))
+    # print("\n uniformfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
+    # print("uniformfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 5 * difference_res.std() / N))
 
     # testing can only be approximated, so sometimes can fail!!
-    # approach mimicking gaussian test
-    assert(np.isclose(difference_res.mean(), 0, atol= 3 * diffe_res_std / N, rtol = 0))
-
-    #assert(np.isclose(f_result.mean(), caffe_res.mean(), atol= 3 * (f_result.std() + caffe_res.std()) / N, rtol = 0))
-    #assert(np.isclose(f_result.var(), caffe_res.var(), atol=3 * diffe_res_std / N, rtol=0))
+    # approach mimicking gaussian test, and this time the multiplier is set to 5 to account for distorsion from gaussian
+    # if fails once try to re-run a couple of times to make sure there is a problem)
+    assert(np.isclose(difference_res.mean(), 0, atol= 5 * diffe_res_std / N, rtol = 0))
 
 
 def test_uniformintfill():
@@ -168,12 +161,13 @@ def test_uniformintfill():
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    print("\n uniformintfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    #print("uniformintfill variances and tolerance: {} {} {}".format(f_result.var(), caffe_res.var(), 3 * diffe_res_std / N))
+    # print("\n uniformintfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
+    # print("uniformintill difference : mean and tolerance: {} {}".format(difference_res.mean(), 8 * difference_res.std() / N))
 
     # testing can only be approximated, so sometimes can fail!!
-    # approach mimicking gaussian test
-    assert(np.isclose(difference_res.mean(), 0, atol= 3 * diffe_res_std / N, rtol = 0))
+    # approach mimicking gaussian test, and this time the multiplier is set to 8 to account for distorsion from gaussian
+    # if fails once try to re-run a couple of times to make sure there is a problem)
+    assert(np.isclose(difference_res.mean(), 0, atol= 8 * diffe_res_std / N, rtol = 0))
 
 
 def test_xavierfill():
@@ -207,15 +201,13 @@ def test_xavierfill():
     # standard deviation of Difference Matrix
     diffe_res_std = difference_res.std()
 
-    print("\n xavierfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
-    # print("xavierfill variances and tolerance: {} {} {}".format(f_result.var(), caffe_res.var(), 3 * diffe_res_std / N))
+    # print("\n xavierfill means and tolerance: {} {} {}".format(f_result.mean(), caffe_res.mean(), 3 * (f_result.std() + caffe_res.std()) / N))
+    # print("xavierfill difference : mean and tolerance: {} {}".format(difference_res.mean(), 3 * difference_res.std() / N))
 
     # testing can only be approximated, so sometimes can fail!!
     # approach mimicking gaussian test
+    # if fails once try to re-run a couple of times to make sure there is a problem)
     assert(np.isclose(difference_res.mean(), 0, atol= 3 * diffe_res_std / N, rtol = 0))
-
-    #assert(np.isclose(f_result.mean(), caffe_res.mean(), atol= 3 * (f_result.std() + caffe_res.std()) / N, rtol = 0))
-    #assert(np.isclose(f_result.var(), caffe_res.var(), atol=3 * diffe_res_std / N, rtol=0))
 
 
 def test_giventensorfill():
