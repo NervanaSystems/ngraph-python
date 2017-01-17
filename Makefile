@@ -60,15 +60,20 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-test: testflex
-	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
-
 testflex:
 	@echo Running flex unit tests...
 	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
 	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
+
+test_parallel: testflex
+	@echo Running unit tests...
+	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+test: testflex
+	@echo Running unit tests...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
 
 style:
 	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
