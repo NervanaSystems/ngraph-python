@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 from builtins import range, zip
 import os
 import tempfile
@@ -168,19 +169,25 @@ _smem_decl_template = r"""
 _smem_init_template = r"""
         %(sbuf)s[threadIdx.x] = 0.0f;"""
 
-_thread_index_template1 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
+_thread_index_template1 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
-_thread_index_template2 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+_thread_index_template2 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
     unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
-_thread_index_template3 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+_thread_index_template3 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
     unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
     unsigned int idx2 = threadIdx.%(dim2)s + blockIdx.%(dim2)s * ITEMS_PER_BLOCK2_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
 _exit_condition_template = r"(idx%(axis)s >= shape%(axis_letter)s)"
@@ -484,8 +491,8 @@ def _get_axes_mapping(ops):
 
         (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[loop_axis])
         blocksize = blockdim
-        axes_mapping[loop_axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[loop_axis],
-                              False)
+        axes_mapping[loop_axis] = (dims.pop(0), blockdim, griddim, items_per_thread,
+                                   max_shape[loop_axis], False)
 
     for axis in axes:
         if axes_mapping[axis][0] is not None:
@@ -810,17 +817,17 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     debug = True
     if debug:
         debug_info = _debug_info_template % {
-            "shape0" : axes_mapping[0][4],
-            "shape1" : axes_mapping[1][4],
-            "shape2" : axes_mapping[2][4]
+            "shape0": axes_mapping[0][4],
+            "shape1": axes_mapping[1][4],
+            "shape2": axes_mapping[2][4]
         }
 
         for buf in ctx.buffers.keys():
             stride_info = _debug_stride_template % {
-                "name" : ctx.buffers[buf],
-                "stride0" : buf.strides[0],
-                "stride1" : 0 if len(buf.strides) < 2 else buf.strides[1],
-                "stride2" : 0 if len(buf.strides) < 3 else buf.strides[2]
+                "name": ctx.buffers[buf],
+                "stride0": buf.strides[0],
+                "stride1": 0 if len(buf.strides) < 2 else buf.strides[1],
+                "stride2": 0 if len(buf.strides) < 3 else buf.strides[2]
             }
             debug_info = debug_info + stride_info
         header = debug_info + header
@@ -1035,7 +1042,8 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     # TODO: repeat broadcast loads for reductions to ensure reduction is actually
                     # run. Probably a better way to do this
-                    if (inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1) and op[0] in _op_templates:
+                    if (inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1) and \
+                            op[0] in _op_templates:
                         index_code = _index_template % {
                             "index": "index",
                             "stridea": "stridea_" + ctx.buffers[inval],

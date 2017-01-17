@@ -195,7 +195,7 @@ def flatten(l):
 
 def flatten_op(op, axes, axes_list, reduction_axes=None, axis=None):
     new_order = flatten(axes_list)
-    if new_order != range(len(new_order)):
+    if new_order != list(range(len(new_order))):
         reordered_axes = make_axes(tuple(flatten(axes)))
         out_args = []
         for arg in op.args:
