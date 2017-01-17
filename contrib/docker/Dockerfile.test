@@ -12,6 +12,11 @@ RUN make sysinstall
 WORKDIR /root/private-ngraph
 ADD test_requirements.txt /root/private-ngraph/test_requirements.txt
 RUN pip install -r test_requirements.txt
+# it seems that sometimes neon fails to install this dependency.
+# Sticking it here for now to get jenkins up and running.  Ideally we
+# won't depend on neon for install and will have something like
+# gpu_requirements.txt in ngraph
+RUN pip install pycuda
 
 # necessary for tests/test_walkthrough.py which requires that ngraph is
 # importable from an entrypoint not local to ngraph.
