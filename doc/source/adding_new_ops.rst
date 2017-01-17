@@ -111,7 +111,7 @@ instance ::
    gradients by calling ``input_op.generate_add_delta(adjoints, gradient_by_current_op)``.
 
    For more details of how autodiff works in ngraph, please refer to the
-   :ref:`Autodiff` documentation.
+   :ref:`autodiff <autodiff>` documentation.
 
    In this example, we could represent the gradients of the ``Prod`` by other
    ngraph ops, such as ``equal``, ``sum``, ``prod`` and ``broadcast``. Also,
@@ -178,7 +178,7 @@ instance ::
    specific constraints. Some optimization passes are optional, while other
    passes could be required to ensure correctness. The two default passes we
    currently have are ``SimplePrune`` and ``RequiredTensorShaping``. Please
-   refer to :ref:`Transformer Passes` doc for more details.
+   refer to :ref:`transformer passes <transformer_passes>` doc for more details.
 
    For ``Prod``, one of the optimization we can do is that, if the tensor are
    filled with the identical value, we could replace it by the ``Power`` op.
