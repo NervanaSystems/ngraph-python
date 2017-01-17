@@ -24,19 +24,17 @@ class Flex(object):
         self.storage_bits = storage_bits
 
         # numpy dtype interface
-        assert np.mod(storage_bits, 8) == 0  # FLEX PR1 TODO: move this to autoflex repo
         self.itemsize = int(storage_bits // 8)
         self.type = 'flex'
         self.str = "<i2"
-        self.name = 'flex'  # FLEX PR1 take out comment: reconsider what name and type are set to?
+        self.name = 'flex'
 
-    # FLEX PR1 TODO: review __eq__ 
-    # - more generally this is about the design of flex dtype
-    # - last 2 conditions are neon flexsim holdovers - keep?
     def __eq__(self, other):
+        """
+        Whether two instances of flex dtype are considered equivalent
+        """
         return (isinstance(other, self.__class__) and
                 (self.storage_bits == other.storage_bits) and
-                (type(self) is type(other)) and
                 (self.type is other.type))
 
 
