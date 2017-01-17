@@ -30,6 +30,7 @@ STYLE_CHECK_DIRS := ngraph tests examples
 # pytest options
 TEST_OPTS :=
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
+TEST_DIRS_FLEX := flex_tests/
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -39,7 +40,7 @@ ifndef VIRTUAL_ENV
    $(error You must activate the neon virtual environment before continuing)
 endif
 
-.PHONY: env default install uninstall clean test style lint lint3k check doc viz_install
+.PHONY: env default install uninstall clean test testflex style lint lint3k check doc viz_install
 
 default: install
 
@@ -59,12 +60,17 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-test_parallel:
+testflex:
+	@echo Running flex unit tests...
+	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
+	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
+
+test_parallel: testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test:
+test: testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i

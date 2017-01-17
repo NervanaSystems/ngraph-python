@@ -17,10 +17,12 @@ import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.transformers.gpu.util import _get_sm_count
+from ngraph.flex.base import Flex
 
 from pycuda.compiler import SourceModule
 
 import numpy as np
+
 
 _op_templates = {
     "assign": r"%(out)s = %(x)s;",
@@ -84,6 +86,8 @@ _redop32_templates = {
 _conversion_templates = {
     ("half", "float"): r"%(out)s = __half2float(%(in)s);",
     ("float", "half"): r"%(out)s = __float2half(%(in)s);",
+    ("flex", "float"): r"%(out)s = %(scale)s * %(in)s;",
+    ("float", "flex"): r"%(out)s = fp32_to_int16(%(scale)s * %(in)s);",
 }
 _default_conversion = r"%(out)s = %(in)s;"
 
@@ -225,6 +229,28 @@ __global__ void %(kernel_name)s(%(args)s)
 _includes_template = r"""#include <float.h>
 #include <cuda_fp16.h>
 """
+# flex functions taken from neon flexsim neon/backends/cuda_templates.py
+_flex_includes_template = r"""
+__device__ __forceinline__ short fp32_to_int16(float val)
+{
+    short ret;
+    asm("cvt.rni.s16.f32 %0, %1;" : "=h"(ret) : "f"(val));
+    return ret;
+}
+
+__device__ __forceinline__ float max_abs(int max_abs, int val)
+{
+    asm("{\n\t"
+        ".reg .s32 abs_val;\n\t"
+        "abs.s32 abs_val, %1;\n\t"
+        "max.s32 %0, %0, abs_val;\n\t"
+        "}" : "+r"(max_abs) : "r"(val));
+    return max_abs;
+}
+"""
+
+# flex templates
+_flex_maxabs_atomicmax = "atomicMax(flex_stats, flex_max);"
 
 indent_str = "    "
 
@@ -264,6 +290,12 @@ class TensorDescriptionWrapper:
     def is_trans(self):
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
+    def is_flex(self):
+        return hasattr(self.td.buffer.device_tensor(self.td), 'flex_entry')
+
+    def flex_entry(self):
+        return self.td.buffer.device_tensor(self.td).flex_entry
+
 
 class GenerationContext:
     def __init__(self):
@@ -275,6 +307,16 @@ class GenerationContext:
         self.last_write = None
         self.has_argmaxmin = None
         self.shared_buffers = None
+
+
+class FlexScaleDescription:
+    def __init__(self, flex_entry, is_output):
+        self.flex_entry = flex_entry
+        self.is_output = is_output
+
+
+def _are_flex_params(params):
+    return any([isinstance(p, FlexScaleDescription) for p in params])
 
 
 def _is_buffer(value):
@@ -537,6 +579,19 @@ def _preprocess_ops(ops, loop_axis_len):
 
 
 def _get_register_type(dtype, memory=False):
+    if isinstance(dtype, Flex):
+        # short buffers will be converted to float registers by flex scale
+        if memory:
+            if dtype.storage_bits == 16:
+                return "short"
+            else:
+                raise NotImplementedError
+        else:
+            return "float"
+        # FLEX TODO:
+        # need a case to return "flex" string for _conversion_templates
+        # or push this case to calling code
+            # return dtype.name
     if dtype == np.float32:
         return "float"
     elif dtype == np.float16:
@@ -595,6 +650,9 @@ def _build_register_mapping(stages):
     last_write = {}
     constants = {}
     has_argmaxmin = False
+    # flex_scale: register name --> (kernel arg name, flex entry, whether is output)
+    flex_scale = {}
+    flex_stats_ptr = None
 
     for stage, stage_index in zip(stages, range(len(stages))):
         for op, op_index in zip(stage, range(len(stage))):
@@ -610,9 +668,12 @@ def _build_register_mapping(stages):
                         register_types[regname] = _get_register_type(type(inval), False)
                     else:
                         regname = "reg" + str(reg_count)
+                        sclname = "scale" + str(reg_count)
                         reg_count = reg_count + 1
                         register_mapping[inval] = regname
                         register_types[regname] = _get_register_type(inval.dtype, False)
+
+                        # FLEX TODO: other ops without scale?
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
                                 "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
@@ -623,12 +684,25 @@ def _build_register_mapping(stages):
                             buffername = "buf" + str(len(buffers))
                             buffers[inval] = buffername
 
+                        from ngraph.transformers.gputransform import GPURegister
+                        if isinstance(inval, GPURegister) and \
+                           not (op[0] == "argmax" or op[0] == "argmin"):
+                            # FLEX TODO: clean up this message
+                            raise ValueError('flex gpu: should not happen without fusion')
+
+                        # flex
+                        # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper
+                        if not (op[0] == "argmax" or op[0] == "argmin") and inval.is_flex():
+                            flex_entry = inval.flex_entry()
+                            flex_scale[regname] = (sclname, flex_entry, False)
+
             if op[3] not in register_mapping:
                 regname = "reg" + str(reg_count)
+                sclname = "scale" + str(reg_count)
                 reg_count = reg_count + 1
                 register_mapping[op[3]] = regname
-
                 register_types[regname] = _get_register_type(op[3].dtype, False)
+
                 if op[0] in _redop_templates:
                     register_inits[regname] = _redop_inits[op[0]]
                 else:
@@ -637,6 +711,12 @@ def _build_register_mapping(stages):
                 if _is_buffer(op[3]):
                     buffername = "buf" + str(len(buffers))
                     buffers[op[3]] = buffername
+
+                # flex
+                if op[3].is_flex():
+                    flex_entry = op[3].flex_entry()
+                    flex_scale[regname] = (sclname, flex_entry, True)
+                    flex_stats_ptr = flex_entry.ptr
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)
@@ -649,6 +729,8 @@ def _build_register_mapping(stages):
     ctx.constants = constants
     ctx.last_write = last_write
     ctx.has_argmaxmin = has_argmaxmin
+    ctx.flex_scale = flex_scale
+    ctx.flex_stats_ptr = flex_stats_ptr
     return ctx
 
 
@@ -767,6 +849,10 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         reg_decls = reg_decls + "\n    float temp_val = 0.0f;"
         reg_decls = reg_decls + "\n    unsigned int temp_idx = 0;"
 
+    if ctx.flex_stats_ptr is not None:
+        reg_decls = reg_decls + "\n    int flex_max = 0;"
+        reg_decls = reg_decls + "\n    short reg_out = 0;"
+
     smem_decls = ""
     smem_inits = ""
     for sbuf in ctx.shared_buffers:
@@ -870,6 +956,18 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
             params.append(buf.strides[1])
             params.append(buf.strides[2])
 
+    # flex scale arguments
+    for argname, flex_entry, is_output in ctx.flex_scale.values():
+        args.append("float " + argname)
+        arg_desc = arg_desc + "f"
+        # create description of flex scale parameters that will be bound later
+        params.append(FlexScaleDescription(flex_entry, is_output))
+
+    if ctx.flex_stats_ptr is not None:
+        args.append("int * flex_stats")
+        arg_desc = arg_desc + "P"
+        params.append(ctx.flex_stats_ptr)
+
     return (args, arg_desc, params)
 
 
@@ -947,12 +1045,25 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # Check if explicit type conversion is needed for load because ALU
                     # doesn't support data format
                     reg_name = ctx.register_mapping[inval]
-                    type_key = (_get_register_type(inval.dtype, True),
-                                ctx.register_types[reg_name])
+                    if isinstance(inval.dtype, Flex):
+                        # FLEX TODO: see _conversion_template note
+                        type_key = (inval.dtype.dtype_name,
+                                    ctx.register_types[reg_name])
+                    else:
+                        type_key = (_get_register_type(inval.dtype, True),
+                                    ctx.register_types[reg_name])
+                    if op[0] == 'argmax' or op[0] == 'argmin':  # FLEX TODO: others?
+                        # there should not be a conversion performed,
+                        # even though type_key is currently (flex, float)
+                        # FLEX FIXME: fix this more systematically
+                        type_key = (float, float)
+                    else:
+                        scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
                     if type_key in _conversion_templates:
                         load_code = _conversion_templates[type_key] % {
                             "out": reg_name,
-                            "in": load_code
+                            "in": load_code,
+                            "scale": scale
                         }
                     else:
                         load_code = _default_conversion % {
@@ -1006,6 +1117,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     "y": ctx.register_mapping[op[2]],
                     "indent": (2 * indent_str)
                 }
+
                 if axes_mapping[loop_axis][1] <= 32:
                     warp_red_code = _red32_template % {
                         "statement": redop_code
@@ -1035,12 +1147,33 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                         "buffer": ctx.buffers[op[3]]
                     }
 
+                    reg_name = ctx.register_mapping[op[3]]
+                    if isinstance(op[3].dtype, Flex):
+                        # FLEX TODO: see conversion_template note
+                        type_key = (ctx.register_types[reg_name],
+                                    op[3].dtype.dtype_name)
+                    else:
+                        type_key = (ctx.register_types[reg_name],
+                                    _get_register_type(op[3].dtype, True))
+
                     # Check if explicit type conversion is needed for store because ALU
                     # doesn't support data format
-                    reg_name = ctx.register_mapping[op[3]]
-                    type_key = (ctx.register_types[reg_name],
-                                _get_register_type(op[3].dtype, True))
-                    if type_key in _conversion_templates:
+                    if op[3].is_flex():
+                        # for flex, store conversion in reg_out, which is reused for
+                        # max_abs besides loop or reduction store
+                        flex_stores = []  # flex statements for both loop and reduction stores
+                        flex_conversion = _conversion_templates[type_key] % {
+                            "out": "reg_out",
+                            "in": reg_name,
+                            "scale": ctx.flex_scale[reg_name][0]
+                        }
+                        flex_stores.append(flex_conversion)
+                        flex_stores.append("flex_max = max_abs(flex_max, reg_out);")
+                        store_code = _default_conversion % {
+                            "out": store_code,
+                            "in": "reg_out"
+                        }
+                    elif type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
                             "in": reg_name
@@ -1051,6 +1184,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "in": reg_name
                         }
 
+                    # reduction or loop store
                     if (op[0] in _redop_templates or op[3].strides[loop_axis] == 0
                             or op[3].shape[loop_axis] == 1):
                         store_code = _redstore_template % {
@@ -1064,6 +1198,8 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "stridec": "stridec_" + ctx.buffers[op[3]],
                             "item": "idx" + str(loop_axis)
                         }
+                        if op[3].is_flex():
+                            reduction_stores.extend(flex_stores)
                         reduction_stores.append(index_code)
                         reduction_stores.append(store_code)
                     else:
@@ -1074,8 +1210,13 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "stridec": "stridec_" + ctx.buffers[op[3]],
                             "item": "item"
                         }
+                        if op[3].is_flex():
+                            loop_stores.extend(flex_stores)
                         loop_stores.append(index_code)
                         loop_stores.append(store_code)
+                    # flex collect max_abs across threads
+                    if op[3].is_flex():
+                        reduction_stores.append(_flex_maxabs_atomicmax)
 
         # Build stage code from collected statements
         code = code + _generate_stage_code(broadcast_loads, loop_loads, loop_stores,
@@ -1119,7 +1260,10 @@ def _prepare_compound_kernel(ops):
     code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims)
 
     # Compile kernel
-    code = _includes_template + code
+    if _are_flex_params(params):
+        code = _includes_template + _flex_includes_template + code
+    else:
+        code = _includes_template + code
     module = SourceModule(code, options=[])
     kernel = module.get_function(kernel_name)
     kernel.name = kernel_name
@@ -1155,7 +1299,7 @@ def _call_compound_kernel(ops):
 
 
 class CudaSourceFile:
-    def __init__(self, name):
+    def __init__(self, name, is_flex=False):
         self.num_kernels = 0
         self.module = None
         self.functions = dict()
@@ -1167,7 +1311,11 @@ class CudaSourceFile:
         self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
         self.filename = self.f.name
         self.f.write(_includes_template)
+        if is_flex:
+            self.f.write(_flex_includes_template)
         self.f.flush()
+
+        # print "CudaSourceFile temporary file", self.filename
 
     def add_kernel(self, ops):
         assert not self.compiled

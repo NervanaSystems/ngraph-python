@@ -42,7 +42,8 @@ class ConvFpropKernel(GPUKernel):
         self.O = op.tensor_description()
         self.I, self.F = (_ for _ in op.call_info())
         conv_dims = op.conv_params
-        self.dtype = self.O.dtype
+        self.dtype = self.O.dtype  # TODO: This will be flex, should be np.int16?
+        self.output_flex_ids = []  # TODO: populate
 
         C, D, H, W, N = self.I.axes.lengths
         C, T, R, S, K = self.F.axes.lengths
@@ -64,6 +65,13 @@ class ConvFpropKernel(GPUKernel):
                                  "pre-Maxwell GPUs")
 
             self.fprop_kernels = convolution.FpropCuda(*args)
+
+        # ---- Flex ----
+        elif self.dtype.type == "flex":
+            # TODO: Remove hardcoded np.dtype(np.int16)
+            args = (transformer.runtime, np.dtype(np.int16), N, C, K, D, H, W, T, R, S,
+                    M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+            self.fprop_kernels = convolution.FpropDirect(*args)
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
@@ -98,7 +106,19 @@ class ConvFpropKernel(GPUKernel):
         self.fprop_kernels.bind_params(I_data, F_data, O_data, X=None,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
+
         super(ConvFpropKernel, self).bind_buffers()
+
+    def bind_flex_scales(self):
+        """
+        wrapper for kernels in convolution.py
+        """
+        # flexes: not available yet?
+        # import ipdb; ipdb.set_trace()
+        I_scale = self.I.value.flex_entry.scale
+        F_scale = self.F.value.flex_entry.scale
+        O_scale = 1.0 / self.O.value.flex_entry.scale
+        self.fprop_kernels.bind_flex_scales(I_scale, F_scale, O_scale)
 
     def execute(self):
         """
@@ -130,6 +150,7 @@ class ConvBpropKernel(GPUKernel):
         self.E, self.F = (_ for _ in op.call_info())
         conv_dims = op.conv_params
         self.dtype = self.O.dtype
+        self.output_flex_ids = []  # TODO: populate
 
         C, D, H, W, N = self.O.axes.lengths
         C, T, R, S, K = self.F.axes.lengths
@@ -152,6 +173,13 @@ class ConvBpropKernel(GPUKernel):
 
             # TODO small C bprop?
             self.bprop_kernels = convolution.BpropCuda(*args)
+
+        # ---- Flex ----
+        elif self.dtype.type == "flex":
+            # TODO: Remove hardcoded np.dtype(np.int16)
+            args = (transformer.runtime, np.dtype(np.int16), N, C, K, D, H, W, T, R, S,
+                    M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+            self.bprop_kernels = convolution.BpropDirect(*args)
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
@@ -186,6 +214,15 @@ class ConvBpropKernel(GPUKernel):
                                        relu=False, brelu=False, slope=0.0)
         super(ConvBpropKernel, self).bind_buffers()
 
+    def bind_flex_scales(self):
+        """
+        wrapper for kernels in convolution.py
+        """
+        E_scale = self.E.value.flex_entry.scale
+        F_scale = self.F.value.flex_entry.scale
+        O_scale = 1.0 / self.O.value.flex_entry.scale
+        self.bprop_kernels.bind_flex_scales(E_scale, F_scale, O_scale)  # TODO: Passing E for I
+
     def execute(self):
         """
         Call into convolution library to execute kernels
@@ -216,6 +253,7 @@ class ConvUpdateKernel(GPUKernel):
         self.E, self.I = (_ for _ in op.call_info())
         conv_dims = op.conv_params
         self.dtype = self.U.dtype
+        self.output_flex_ids = []  # TODO: populate
 
         C, D, H, W, N = self.I.axes.lengths
         C, T, R, S, K = self.U.axes.lengths
@@ -237,6 +275,16 @@ class ConvUpdateKernel(GPUKernel):
                                  "and pre-Maxwell GPUs")
 
             self.updat_kernels = convolution.UpdateCuda(*args)
+
+        # ---- Flex ----
+        elif self.dtype.type == "flex":
+            # TODO: This is not very nice
+            args = (transformer.runtime, np.dtype(np.int16), N, C, K, D, H, W, T, R, S,
+                    M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+            if N >= 4:
+                self.updat_kernels = convolution.UpdateDirect(*args)
+            else:
+                raise NotImplementedError("This is not supported")
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
@@ -273,6 +321,16 @@ class ConvUpdateKernel(GPUKernel):
         U_data = self.U.value.tensor
         self.updat_kernels.bind_params(I_data, E_data, U_data, alpha=1.0, beta=0.0)
         super(ConvUpdateKernel, self).bind_buffers()
+
+    def bind_flex_scales(self):
+        """
+        wrapper for kernels in convolution.py
+        """
+        # FLEX TODO: Definitely passing the wrong inputs now
+        E_scale = self.E.value.flex_entry.scale
+        I_scale = self.I.value.flex_entry.scale
+        U_scale = 1.0 / self.U.value.flex_entry.scale
+        self.updat_kernels.bind_flex_scales(E_scale, I_scale, U_scale)  # FLEX TODO: revisit
 
     def execute(self):
         """
