@@ -14,6 +14,18 @@ build_dev: build_base
 	@docker build -f=Dockerfile.dev -t=ngraph_dev ${DIR}
 
 build_test: build_base
+	# hack to clone autoflex here in this working directory so it can be
+	# ADDed to the docker container.  We will most likely want a more
+	# organized way to set this up, but here it is for now.  We must be
+	# careful to avoid publishing this docker container since it
+	# contains private code in it.
+	@cd ${DIR}/contrib/docker
+	@git clone git@github.com:NervanaSystems/autoflex.git || mkdir autoflex || cd autoflex && git pull
+	@cd ${DIR}/contrib/docker/autoflex
+	@git checkout d0b92e67 || true
+	@cd ${DIR}/contrib/docker
+
+	# now build the docker container
 	@docker build -f=Dockerfile.test -t=ngraph_test ${DIR}
 
 build_doc: build_base
