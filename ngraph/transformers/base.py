@@ -80,9 +80,8 @@ class Computation(NameableValue):
             :return: Return value for op.
             """
             if op.is_tensor_op:
-                if op.value is None:
-                    pass
-                return op.value.get(None)
+                if op.value is not None:
+                    return op.value.get(None)
             else:
                 return None
 
