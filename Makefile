@@ -59,9 +59,14 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-test:
+test_parallel:
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+test:
+	@echo Running unit tests...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 style:
