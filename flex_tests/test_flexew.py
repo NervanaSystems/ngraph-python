@@ -53,7 +53,7 @@ def test_sum(transformer_factory):
 
     sum_executor = executor(y, x)
 
-    xval = np.array(list(range(1,10) + [-1]))
+    xval = np.array(list(range(1,10)) + [-1])
     xval[2] += + 1 + 10
 
     assert(sum_executor(xval) == sum(xval))
