@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 from builtins import range, zip
+import os
 import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
@@ -167,19 +169,25 @@ _smem_decl_template = r"""
 _smem_init_template = r"""
         %(sbuf)s[threadIdx.x] = 0.0f;"""
 
-_thread_index_template1 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
+_thread_index_template1 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
-_thread_index_template2 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+_thread_index_template2 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
     unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
-_thread_index_template3 = r"""unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
+_thread_index_template3 = r"""
+    unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
     unsigned int idx1 = threadIdx.%(dim1)s + blockIdx.%(dim1)s * ITEMS_PER_BLOCK1_%(id)s;
     unsigned int idx2 = threadIdx.%(dim2)s + blockIdx.%(dim2)s * ITEMS_PER_BLOCK2_%(id)s;
-    unsigned int loopmax = min(shape%(loop_axis)s, (blockIdx.x + 1) * ITEMS_PER_BLOCK0_%(id)s);
+    unsigned int loopmax = min(shape%(loop_axis)s,
+                               (blockIdx.x + 1) * ITEMS_PER_BLOCK%(loop_axis_id)s_%(id)s);
 """
 
 _exit_condition_template = r"(idx%(axis)s >= shape%(axis_letter)s)"
@@ -216,6 +224,12 @@ _defines_template3 = r"""#define ITEMS_PER_BLOCK0_%(id)s %(blksize0)s
 #define ITEMS_PER_BLOCK2_%(id)s %(blksize2)s
 """
 
+_debug_info_template = r"""
+// Shape (%(shape0)s, %(shape1)s, %(shape2)s)"""
+
+_debug_stride_template = r"""
+//%(name)s.strides (%(stride0)s, %(stride1)s, %(stride2)s)"""
+
 _header_template = r"""
 
 %(defines)s
@@ -237,28 +251,49 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, max_dims=1, gemm=False):
+    def __init__(self, tensor_description, kernel_axes, gemm=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
         self.td = tensor_description
 
-        if len(self.strides) == 0:
-            self.strides = (0, )
+        if type(kernel_axes) == int:
+            if len(self.strides) == 0:
+                self.strides = (0, )
 
-        if len(self.shape) == 0:
-            self.shape = (1, )
+            if len(self.shape) == 0:
+                self.shape = (1, )
 
-        if len(self.shape) < max_dims:
-            if gemm:
-                self.shape = tuple(list(self.shape) + [1])
-                self.strides = tuple(list(self.strides) + [1])
-            else:
-                self.shape = tuple([1] + list(self.shape))
-                self.strides = tuple([0] + list(self.strides))
+            if len(self.shape) < kernel_axes:
+                if gemm:
+                    self.shape = tuple(list(self.shape) + [1])
+                    self.strides = tuple(list(self.strides) + [1])
+                else:
+                    self.shape = tuple([1] + list(self.shape))
+                    self.strides = tuple([0] + list(self.strides))
 
-        self.strides = [s // self.dtype.itemsize for s in self.strides]
-        self.strides = tuple(self.strides)
+            self.strides = [s // self.dtype.itemsize for s in self.strides]
+            self.strides = tuple(self.strides)
+        elif len(self.strides) != len(kernel_axes):
+            num_kernel_axes = len(kernel_axes)
+            bcast_shape = [1] * num_kernel_axes
+            bcast_strides = [0] * num_kernel_axes
+
+            for axis in range(num_kernel_axes):
+                if kernel_axes[axis] in self.td.axes:
+                    td_axis_index = self.td.axes.index_unique(kernel_axes[axis])
+                    bcast_shape[axis] = self.shape[td_axis_index]
+                    bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
+                else:
+                    # Broadcast
+                    bcast_shape[axis] = 1
+                    bcast_strides[axis] = 0
+
+            self.shape = tuple(bcast_shape)
+            self.strides = tuple(bcast_strides)
+        else:
+            self.strides = [s // self.dtype.itemsize for s in self.strides]
+            self.strides = tuple(self.strides)
 
     @property
     def is_trans(self):
@@ -397,12 +432,14 @@ def _get_axes_mapping(ops):
         mapping along with number of dimensions used by the kernel.
     """
     max_shape = [1] * MAX_AXES
+    avg_stride = [0] * MAX_AXES
+    avg_denom = 0.0
     axes = range(MAX_AXES)
     reduction_axis = None
 
     # Find maximum shape and check for reductions
     for op in ops:
-        if op[0] in _redop_templates or op[0]:
+        if op[0] in _redop_templates or op[4]:
             assert reduction_axis is None or reduction_axis == op[4]
             reduction_axis = op[4]
 
@@ -414,6 +451,12 @@ def _get_axes_mapping(ops):
                 for axis in axes:
                     if axis < len(shape) and shape[axis] > max_shape[axis]:
                         max_shape[axis] = shape[axis]
+
+                    if axis < len(shape) and shape[axis] > 1:
+                        avg_stride[axis] += t.strides[axis]
+                    else:
+                        avg_stride[axis] += 1
+                avg_denom += 1.0
 
     # Determine which axis/axes map to block
     axes_mapping = [(None, None, None, None, None, False)] * MAX_AXES
@@ -428,18 +471,29 @@ def _get_axes_mapping(ops):
 
         blocksize = blockdim
         dims.remove('x')
-    elif max_shape[0] == 1 and np.prod(max_shape) != 1:
-        if max_shape[1] == 1:
-            axis = 2
+    else:
+        # Try to find contiguous loop axis
+        if max_shape[0] == 1 and np.prod(max_shape) != 1:
+            if max_shape[1] == 1:
+                loop_axis = 2
+            else:
+                loop_axis = 1
         else:
-            axis = 1
+            loop_axis = 0
+        min_stride = 10000.0
+        for axis in axes:
+            if max_shape[axis] < 32:
+                continue
+            stride = avg_stride[axis] / avg_denom
+            if stride < min_stride:
+                loop_axis = axis
+                min_stride = stride
 
-        (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[axis])
+        (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[loop_axis])
         blocksize = blockdim
-        axes_mapping[axis] = (dims.pop(0), blockdim, griddim, items_per_thread, max_shape[axis],
-                              False)
+        axes_mapping[loop_axis] = (dims.pop(0), blockdim, griddim, items_per_thread,
+                                   max_shape[loop_axis], False)
 
-    # TODO: consider contiguity in axis mapping
     for axis in axes:
         if axes_mapping[axis][0] is not None:
             continue
@@ -555,19 +609,26 @@ def _get_register_type(dtype, memory=False):
 
 
 def _wrap_tensor_descriptions(ops):
-    max_dims = 1
+    max_dims = 0
+    kernel_axes = None
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                max_dims = max(max_dims, len(new_op[index].shape))
+                if len(new_op[index].shape) > max_dims:
+                    max_dims = len(new_op[index].shape)
+                    kernel_axes = new_op[index].axes
+
+    if kernel_axes is None:
+        # Make dummy axis for scalar kernels
+        kernel_axes = (1, )
 
     new_ops = []
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                new_op[index] = TensorDescriptionWrapper(new_op[index], max_dims)
+                new_op[index] = TensorDescriptionWrapper(new_op[index], kernel_axes)
 
         new_ops.append(tuple(new_op))
 
@@ -753,6 +814,24 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         "args": argstring
     }
 
+    debug = True
+    if debug:
+        debug_info = _debug_info_template % {
+            "shape0": axes_mapping[0][4],
+            "shape1": axes_mapping[1][4],
+            "shape2": axes_mapping[2][4]
+        }
+
+        for buf in ctx.buffers.keys():
+            stride_info = _debug_stride_template % {
+                "name": ctx.buffers[buf],
+                "stride0": buf.strides[0],
+                "stride1": 0 if len(buf.strides) < 2 else buf.strides[1],
+                "stride2": 0 if len(buf.strides) < 3 else buf.strides[2]
+            }
+            debug_info = debug_info + stride_info
+        header = debug_info + header
+
     # Initialization code
     reg_decls = ""
     for reg in ctx.register_mapping.values():
@@ -783,6 +862,7 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
         "dim1": axes_mapping[1][0],
         "dim2": axes_mapping[2][0],
         "loop_axis": loop_axis_letters[loop_axis],
+        "loop_axis_id": loop_axis,
         "id": kernel_identifier
     }
 
@@ -797,7 +877,7 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
             exit_conditions.append(condition)
 
     if len(exit_conditions) != 0:
-        total_condition = " && ".join(exit_conditions)
+        total_condition = " || ".join(exit_conditions)
         code = _early_exit_template % {
             "condition": total_condition
         } + code
@@ -960,7 +1040,10 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "in": load_code
                         }
 
-                    if inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1:
+                    # TODO: repeat broadcast loads for reductions to ensure reduction is actually
+                    # run. Probably a better way to do this
+                    if (inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1) and \
+                            op[0] in _op_templates:
                         index_code = _index_template % {
                             "index": "index",
                             "stridea": "stridea_" + ctx.buffers[inval],
@@ -985,7 +1068,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
             if op[0] in _op_templates:
                 if op[0] == "onehot" and op[4] != loop_axis:
-                    index = "idx" + str(loop_axis)
+                    index = "idx" + str(op[4])
                 else:
                     index = "item"
                 op_code = _op_templates[op[0]] % {
@@ -1155,13 +1238,14 @@ def _call_compound_kernel(ops):
 
 
 class CudaSourceFile:
-    def __init__(self, name):
+    def __init__(self, name, retain_file=False):
         self.num_kernels = 0
         self.module = None
         self.functions = dict()
         self.arg_descs = dict()
 
         self.compiled = False
+        self.retain_file = retain_file
 
         # Open file and add header
         self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
@@ -1218,6 +1302,9 @@ class CudaSourceFile:
         code = sourcefile.read()
         self.module = SourceModule(code, options=[])
         sourcefile.close()
+
+        if not self.retain_file:
+            os.remove(self.filename)
 
         self.compiled = True
 

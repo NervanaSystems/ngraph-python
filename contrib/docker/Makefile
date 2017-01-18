@@ -1,5 +1,5 @@
 DIR = $(realpath ../..)
-VOLUME = -v ${DIR}:/root/private-ngraph
+VOLUME = -v ${DIR}:/root/private-ngraph -v $$HOME/nervana/data:/root/nervana/data
 
 # default version is python 2, but can be switched to 3 from command
 # line
@@ -33,6 +33,9 @@ style: build_test
 
 test_shell: build_test
 	@docker run --rm ${VOLUME} -it ngraph_test /bin/bash
+
+test_gpu_shell: build_test
+	@nvidia-docker run --rm ${VOLUME} -it ngraph_test /bin/bash
 
 shell: build_dev
 	@docker run --rm ${VOLUME} -it ngraph_dev /bin/bash
