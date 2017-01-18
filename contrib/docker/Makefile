@@ -20,11 +20,16 @@ build_test: build_base
 	# careful to avoid publishing this docker container since it
 	# contains private code in it.
 	@rm -rf ${DIR}/contrib/docker/autoflex
+	@echo 'removed autoflex folder'
 	@cd ${DIR}/contrib/docker
 	@git clone git@github.com:NervanaSystems/autoflex.git
-	@cd ${DIR}/contrib/docker/autoflex
+	@echo 'cloned autoflex repo'
+#@cd ${DIR}/contrib/docker/autoflex
+	@cd autoflex
 	@git checkout cf8db2f80
-	@cd ${DIR}/contrib/docker
+	@echo 'checked out autoflex repo version'
+#@cd ${DIR}/contrib/docker
+	@cd ..
 
 	# now build the docker container
 	@docker build -f=Dockerfile.test -t=ngraph_test ${DIR}
