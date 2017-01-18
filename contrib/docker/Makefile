@@ -26,7 +26,7 @@ build_test: build_base
 	@echo 'cloned autoflex repo'
 #@cd ${DIR}/contrib/docker/autoflex
 	@cd autoflex
-	@git checkout cf8db2f80
+#@git checkout cf8db2f80
 	@echo 'checked out autoflex repo version'
 #@cd ${DIR}/contrib/docker
 	@cd ..
