@@ -3617,7 +3617,7 @@ def mean(x, reduction_axes=None, out_axes=None):
         tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
-def deriv(dependent, independent, error=constant(1)):
+def deriv(dependent, independent, error=None):
     """
     Computes the operation for [dDependent/dIndependent](error=1).
 
@@ -3633,6 +3633,9 @@ def deriv(dependent, independent, error=constant(1)):
         TensorOp: Derivative applied to error. Has axes of independent.
 
     """
+    if error is None:
+        error = constant(1)
+
     if not error.axes.has_same_axes(dependent.axes):
         raise ValueError("Dependent and error must have the same set of axes")
 
