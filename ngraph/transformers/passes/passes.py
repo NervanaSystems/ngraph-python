@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
-    negative, cast_axes, power, DerivOp
+    negative, cast_axes, power, DerivOp, ComputationOp
 
 from ngraph.util.generics import generic_method
 from ngraph.util.ordered import OrderedSet
@@ -277,6 +277,22 @@ class DerivPass(PeepholeGraphPass):
         # redundant names to keep consistent for now
         deriv = DerivPass._deriv(op.dependent, op.independent, op.error)
         self.replace_op(op, deriv)
+
+
+class CompUserDepsPass(PeepholeGraphPass):
+    """
+    Pass that converts ComputationOp's user deps. Currently CompUserDepsPass
+    is required since passes are not able to add ops that require user deps,
+    which may need to be refactored.
+    """
+
+    @generic_method()
+    def visit(self, op):
+        pass
+
+    @visit.on_type(ComputationOp)
+    def visit(self, op):
+        op.require_user_deps(list(op.other_deps))
 
 
 class SimplePrune(PeepholeGraphPass):

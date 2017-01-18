@@ -3640,6 +3640,7 @@ def deriv(dependent, independent, error=None):
     return DerivOp(dependent, independent, error)
 
 
+
 class CrossEntropyMultiInner(object):
     """TODO."""
 
