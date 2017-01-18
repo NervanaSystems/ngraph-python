@@ -136,7 +136,7 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         super(FlexGPUKernelGroup, self).__init__(transformer, name)
 
     def make_cuda_source_file(self):
-        return CudaSourceFile(self.name, is_flex=True)
+        return CudaSourceFile(self.name, gen_flex=True, retain_file=False)
 
     @generic_method(Op)
     def add_kernel(self, op):
