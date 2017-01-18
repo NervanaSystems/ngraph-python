@@ -19,10 +19,11 @@ build_test: build_base
 	# organized way to set this up, but here it is for now.  We must be
 	# careful to avoid publishing this docker container since it
 	# contains private code in it.
+	@rm -rf ${DIR}/contrib/docker/autoflex
 	@cd ${DIR}/contrib/docker
-	@git clone git@github.com:NervanaSystems/autoflex.git || mkdir autoflex || cd autoflex && git pull
+	@git clone git@github.com:NervanaSystems/autoflex.git
 	@cd ${DIR}/contrib/docker/autoflex
-	@git checkout d0b92e67 || true
+	@git checkout cf8db2f80
 	@cd ${DIR}/contrib/docker
 
 	# now build the docker container
