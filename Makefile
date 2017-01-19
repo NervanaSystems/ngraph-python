@@ -28,7 +28,7 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
-TEST_OPTS :=
+TEST_OPTS := --timeout=300
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
 TEST_DIRS_FLEX := flex_tests/
 
