@@ -3,7 +3,7 @@ VOLUME = -v ${DIR}:/root/private-ngraph -v $$HOME/nervana/data:/root/nervana/dat
 
 # default version is python 2, but can be switched to 3 from command
 # line
-PYTHON_VERSION = 3
+PYTHON_VERSION = 2
 
 .PHONY: build_test test build_base build_dev
 

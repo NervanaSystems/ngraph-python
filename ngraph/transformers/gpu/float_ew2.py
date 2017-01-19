@@ -742,7 +742,7 @@ def _build_register_mapping(stages):
                         from ngraph.transformers.gputransform import GPURegister
                         if isinstance(inval, GPURegister) and \
                            not (op[0] == "argmax" or op[0] == "argmin"):
-                            raise ValueError('flex gpu: should not happen without fusion')
+                            raise ValueError('should not happen without fusion')
 
                         # flex
                         # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper

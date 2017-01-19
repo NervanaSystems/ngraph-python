@@ -818,9 +818,6 @@ class GPUDeviceTensor(DeviceTensor):
 
         return tensor
 
-    def set_dtype(self, dtype):
-        self.tensor_description.dtype = dtype
-
     def __getitem__(self, index):
         if index is None or index == _none_slice or index == ():
             return self.tensor
