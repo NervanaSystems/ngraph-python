@@ -23,5 +23,11 @@ RUN pip install pycuda
 ADD . /root/private-ngraph
 RUN pip install -e .
 
+# add in autoflex.  This should will only be added if the user building
+# this dockerfile has permission to access the autoflex repo.  This is a
+# temporary solution to get things working quickly.
+ADD contrib/docker/autoflex /root/autoflex
+RUN pip install -e /root/autoflex
+
 # make ngraph Makefile happy :-(
 ENV VIRTUAL_ENV='making ngraph makefile happy'

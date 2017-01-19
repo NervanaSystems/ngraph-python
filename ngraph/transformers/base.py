@@ -529,12 +529,12 @@ def allocate_transformer(name, **kargs):
     try:
         return Transformer.transformers[name](**kargs)
     except KeyError:
-        names = ', '.join(["'%s'" % (_,) for _ in Transformer.transformer_choices()])
+        names = ', '.join(["'%s'" % (_,) for _ in transformer_choices()])
         raise ValueError("transformer must be one of (%s)" % (names,))
 
 
 def make_transformer_factory(name, **kargs):
     def factory():
         return allocate_transformer(name, **kargs)
-    factory.name = name
+    factory.name = name  # added for pytest
     return factory

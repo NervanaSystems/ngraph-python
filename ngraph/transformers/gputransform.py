@@ -473,7 +473,7 @@ class ElementWiseKernel(GPUKernel):
                                         shared_size=self.shared_size)
 
 
-class GPUKernelGroup():
+class GPUKernelGroup(object):
     """
     A group of GPU kernels which corresponds to a Computation object. Since we
     can't always compound all ops from a Computation into a single GPU kernel,
@@ -500,7 +500,10 @@ class GPUKernelGroup():
         self.transformer = transformer
         self.kernels = []
         self.name = name
-        self.sourcefile = CudaSourceFile(name, retain_file=True)
+        self.sourcefile = self.make_cuda_source_file()
+
+    def make_cuda_source_file(self):
+        return CudaSourceFile(self.name)
 
     @generic_method(Op)
     def add_kernel(self, op):
@@ -591,6 +594,9 @@ class GPUKernelGroup():
         for kernel in self.kernels:
             kernel.compile(self.sourcefile)
 
+    def setup_kernel_execute(self, kernel):
+        pass
+
     def __call__(self):
         """
         Loops over all kernels contained in this group and executes them. Since buffers
@@ -602,6 +608,7 @@ class GPUKernelGroup():
             if not k.buffers_bound:
                 k.bind_buffers()
 
+            self.setup_kernel_execute(k)
             k.execute()
 
 
@@ -685,7 +692,7 @@ class GPUTensorAllocator():
 
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUArray(tensor_description.shape,
-                              tensor_description.dtype,
+                              self.transformer.storage_dtype(tensor_description.dtype),
                               gpudata=gpudata,
                               strides=tensor_description.strides)
 
@@ -708,10 +715,19 @@ class GPURegister():
         self.name = name
 
 
+class GPUDeviceBufferReference(DeviceBufferReference):
+    """
+    Analogous to NumPyDeviceBufferReference.
+    """
+    def __init__(self, transformer, **kwargs):
+        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
+
+
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
     Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
     """
+
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(GPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -736,14 +752,6 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.current_buffer = buffer_alloc
         self.transform_allocate_views()
         self.transformer.current_buffer = None
-
-
-class GPUDeviceBufferReference(DeviceBufferReference):
-    """
-    Analogous to NumPyDeviceBufferReference.
-    """
-    def __init__(self, transformer, **kwargs):
-        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class GPUDeviceTensor(DeviceTensor):
@@ -786,6 +794,7 @@ class GPUDeviceTensor(DeviceTensor):
         Returns:
             Numpy array containing tensor data
         """
+
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
@@ -874,17 +883,24 @@ class GPUDeviceTensor(DeviceTensor):
         sliced = self.__getitem__(key)
 
         # Use fill for scalar values
+        # convert value to numpy
+        if type(value) == float:
+            value = np.float64(value)
+        elif type(value) == int:
+            value = np.int64(value)
+        # flex: added astype to deal with GPUArray dtype int16
+        # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif type(value) == np.int32 or type(value) == np.int64 or \
                 type(value) == int:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif np.sum(self.tensor.strides) == 0:
             view = GPUArray((1, ), dtype=self.tensor.dtype)
-            view.fill(value)
+            view.fill(value.astype(sliced.dtype))
         else:
             # Convert to correct dtype if necessary
             if value.dtype != self.tensor.dtype:
@@ -1132,9 +1148,12 @@ class GPUTransformer(Transformer):
     def finish_transform_allocate(self):
         pass
 
+    def gpu_kernel_group(self, name):
+        return GPUKernelGroup(self, name)
+
     def transform_ordered_ops(self, ordered_ops, name):
         # Create kernel group
-        kernel_group = GPUKernelGroup(self, name)
+        kernel_group = self.gpu_kernel_group(name)
         for fun in ordered_ops:
             kernel_group.add_kernel(fun)
 
@@ -1156,3 +1175,6 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
+
+    def storage_dtype(self, dtype):
+        return dtype  # overridden by flex gpu transformer

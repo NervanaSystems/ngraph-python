@@ -37,6 +37,9 @@ class NgraphArgparser(configargparse.ArgumentParser):
 
         self.setup_default_args()
 
+    def backend_names(self):
+        return ['numpy', 'gpu']
+
     def setup_default_args(self):
         """
         Setup the default arguments used by ngraph
@@ -62,7 +65,9 @@ class NgraphArgparser(configargparse.ArgumentParser):
                                'visualization.')
 
         self.add_argument('-z', '--batch_size', type=int, default=128)
-        self.add_argument('-b', '--backend', choices=['gpu', 'numpy'], default='numpy',
+        self.add_argument('-b', '--backend',
+                          choices=self.backend_names(),
+                          default='numpy',
                           help='backend type')
         self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)
@@ -73,10 +78,13 @@ class NgraphArgparser(configargparse.ArgumentParser):
 
     def parse_args(self, gen_be=True):
         args = super(NgraphArgparser, self).parse_args()
-        factory = ngt.make_transformer_factory(args.backend)
-        ngt.set_transformer_factory(factory)
+        self.make_and_set_transformer_factory(args)
 
         # invert no_progress_bar meaning and store in args.progress_bar
         args.progress_bar = not args.no_progress_bar
 
         return args
+
+    def make_and_set_transformer_factory(self, args):
+        factory = ngt.make_transformer_factory(args.backend)
+        ngt.set_transformer_factory(factory)
