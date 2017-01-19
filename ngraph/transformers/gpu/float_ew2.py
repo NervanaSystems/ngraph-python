@@ -25,7 +25,6 @@ from pycuda.compiler import SourceModule
 
 import numpy as np
 
-
 _op_templates = {
     "assign": r"%(out)s = %(x)s;",
     "finite": None,
@@ -642,10 +641,6 @@ def _get_register_type(dtype, memory=False):
                 raise NotImplementedError
         else:
             return "float"
-        # FLEX TODO:
-        # need a case to return "flex" string for _conversion_templates
-        # or push this case to calling code
-            # return dtype.name
     if dtype == np.float32:
         return "float"
     elif dtype == np.float16:
@@ -734,7 +729,6 @@ def _build_register_mapping(stages):
                         register_mapping[inval] = regname
                         register_types[regname] = _get_register_type(inval.dtype, False)
 
-                        # FLEX TODO: other ops without scale?
                         if (op[0] == "argmax" or op[0] == "argmin") and inval is op[2]:
                             register_inits[regname] = \
                                 "FLT_MAX" if op[0] == "argmin" else "-FLT_MAX"
@@ -748,7 +742,6 @@ def _build_register_mapping(stages):
                         from ngraph.transformers.gputransform import GPURegister
                         if isinstance(inval, GPURegister) and \
                            not (op[0] == "argmax" or op[0] == "argmin"):
-                            # FLEX TODO: clean up this message
                             raise ValueError('flex gpu: should not happen without fusion')
 
                         # flex
@@ -1126,16 +1119,15 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                     # doesn't support data format
                     reg_name = ctx.register_mapping[inval]
                     if isinstance(inval.dtype, Flex):
-                        # FLEX TODO: see _conversion_template note
                         type_key = (inval.dtype.dtype_name,
                                     ctx.register_types[reg_name])
                     else:
                         type_key = (_get_register_type(inval.dtype, True),
                                     ctx.register_types[reg_name])
-                    if op[0] == 'argmax' or op[0] == 'argmin':  # FLEX TODO: others?
+                    if op[0] == 'argmax' or op[0] == 'argmin':
                         # there should not be a conversion performed,
-                        # even though type_key is currently (flex, float)
-                        # FLEX FIXME: fix this more systematically
+                        # so override current type_key (flex, float)
+                        # TODO: fix this more systematically
                         type_key = (float, float)
                     else:
                         scale = ctx.flex_scale[reg_name][0] if inval.is_flex() else None
@@ -1232,7 +1224,6 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     reg_name = ctx.register_mapping[op[3]]
                     if isinstance(op[3].dtype, Flex):
-                        # FLEX TODO: see conversion_template note
                         type_key = (ctx.register_types[reg_name],
                                     op[3].dtype.dtype_name)
                     else:
@@ -1398,8 +1389,6 @@ class CudaSourceFile:
         if gen_flex:
             self.f.write(_flex_includes_template)
         self.f.flush()
-
-        # print "CudaSourceFile temporary file", self.filename
 
     def add_kernel(self, ops):
         assert not self.compiled
