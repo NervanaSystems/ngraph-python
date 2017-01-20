@@ -281,9 +281,11 @@ class DerivPass(PeepholeGraphPass):
 
 class CompUserDepsPass(PeepholeGraphPass):
     """
-    Pass that converts ComputationOp's user deps. Currently CompUserDepsPass
-    is required since passes are not able to add ops that require user deps,
+    Pass that converts ComputationOp's user_deps. Currently CompUserDepsPass
+    is required since passes are not able to add ops that require user_deps,
     which may need to be refactored.
+
+    TODO: This is a temporary fix until user_deps gets cleaned up.
     """
 
     @generic_method()
