@@ -139,6 +139,8 @@ class VizPass(GraphPass):
             for arg in op.user_deps:
                 if arg not in visited:
                     frontier.add(arg)
+            if op.forwarded is not op:
+                frontier.add(op.forwarded)
 
         visited_ops = list(visited)
         vg = graphviz.Digraph(node_attr={'shape': 'box'},
