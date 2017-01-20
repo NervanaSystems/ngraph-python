@@ -53,3 +53,18 @@ def test_uniform_range_posneg(transformer_factory):
     assert np.all(result < 0.5)
     assert np.all(result >= -0.5)
     assert not np.all(result >= 0.0)
+
+
+def test_rng_repetition(transformer_factory):
+    """
+    Tests rng ops, to make sure they run every execution and not just initialization
+    """
+    axes = ng.make_axes([ng.make_axis(2), ng.make_axis(2)])
+    x = ng.variable(initial_value=np.array([[1, 2], [3, 4]]), axes=axes)
+    y = ng.uniform(x)
+    mysum = ng.sum(y)
+    trans = ng.transformers.make_transformer()
+    rand_comp = trans.computation(mysum)
+    val1 = rand_comp().copy()
+    val2 = rand_comp().copy()
+    assert val1 != val2
