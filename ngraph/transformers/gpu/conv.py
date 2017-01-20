@@ -279,3 +279,30 @@ class ConvUpdateKernel(GPUKernel):
         Call into convolution library to execute kernels
         """
         self.updat_kernels.execute(1, unbind=False)
+
+
+class FlexConvFpropKernel(ConvFpropKernel):
+    """
+    Inherits all parent class ConvFpropKernel behavior except
+    selects flex convolution kernel and sets up flex parameters
+    """
+    def __init__(self, transformer, op):
+        raise NotImplementedError
+
+
+class FlexConvBpropKernel(ConvBpropKernel):
+    """
+    Inherits all parent class ConvBpropKernel behavior except
+    selects flex convolution kernel and sets up flex parameters
+    """
+    def __init__(self, transformer, op):
+        raise NotImplementedError
+
+
+class FlexConvUpdateKernel(ConvUpdateKernel):
+    """
+    Inherits all parent class ConvUpdateKernel behavior except
+    selects flex convolution kernel and sets up flex parameters
+    """
+    def __init__(self, transformer, op):
+        raise NotImplementedError

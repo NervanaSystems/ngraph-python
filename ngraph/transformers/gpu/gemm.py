@@ -116,6 +116,10 @@ class GEMMKernel(GPUKernel):
         assert n == C.shape[1]
         assert k == B.shape[0]
 
+        # Flex only has the 128x128 tile size
+        if C.is_flex():
+            size = "128x128"
+
         # Some basic tile size selection.
         # Your best bet is to benchmark your code with all 3 sizes
         # and manually fine tune the selection for each layer.
@@ -190,19 +194,49 @@ class GEMMKernel(GPUKernel):
                 vec_opt = ("vec",)
 
         # nt and nn are more efficient with k%16==0
-        if C.dtype.type is np.float16:
+        if C.is_flex():
+            clss = "fgemm"
+        elif C.dtype.type is np.float16:
             clss = "hgemm"
         elif C.dtype.type is np.float32:
             clss = "sgemm"
         else:
             raise TypeError("Only floating point dot currently supported.")
 
+        # TODO: Flex may not have all "size" options (Urs)
         self.kernel = kernel_specs.get_kernel("_".join((clss, op, size)), vec_opt)
+        # alpha, beta
+        self.alpha = 1.0
+        self.beta = 0.0
+        # create params
+        # if params list changes, indices in bind_flex_scales may need updating
         self.params = [
             (1, int(gridA), int(gridB)), (self.kernel.threads, 1, 1), None,
-            C.td, A.td, B.td, 1.0, 0.0, 0, int(lda), int(ldb), int(ldc),
+            C.td, A.td, B.td, self.alpha, self.beta, 0, int(lda), int(ldb), int(ldc),
             int(m), int(n), int(k),
             0, 0, 0, 0]
+        if clss == "fgemm":
+            # save flex entries for bind_flex_scales
+            self.flex_entry_A = A.flex_entry()
+            self.flex_entry_B = B.flex_entry()
+            self.flex_entry_C = C.flex_entry()
+
+            # flex params
+            self.params += [self.flex_entry_C.ptr, 1.0]  # maxabs ptr, output scale
+            # record output flex id for autoflex
+            self.output_flex_ids = [self.flex_entry_C.flex_id]
+            # bind param values that depend on flex scales
+            self.bind_flex_scales()
+
+    def bind_flex_scales(self):
+        scaleAB = self.flex_entry_A.scale * self.flex_entry_B.scale
+        scaleC = self.flex_entry_C.scale
+        alpha = self.alpha * scaleAB
+        beta = self.beta * scaleC
+        # TODO: hardcoding these sucks
+        self.params[6] = alpha
+        self.params[7] = beta
+        self.params[20] = 1. / scaleC
 
     def bind_buffers(self):
         """

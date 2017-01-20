@@ -1,0 +1,14 @@
+#!/bin/bash
+
+sudo apt-get update
+sudo apt-get install apt-transport-https ca-certificates
+echo "deb https://apt.dockerproject.org/repo ubuntu-trusty main" | sudo tee /etc/apt/sources.list.d/docker.list
+
+sudo apt-get update
+sudo apt-get install docker-engine
+
+sudo gpasswd -a ${USER} docker
+sudo service docker restart
+
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+echo "please logout and log back in before trying to use docker"

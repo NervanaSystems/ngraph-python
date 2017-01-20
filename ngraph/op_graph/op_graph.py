@@ -354,7 +354,7 @@ class Op(NameableValue, DebugInfo):
         """
         available = OrderedSet()
         counts = dict()
-        parents = defaultdict(list)
+        parents = defaultdict(OrderedSet)
         ready = OrderedSet()
 
         available.update(root.forwarded for root in roots)
@@ -365,11 +365,11 @@ class Op(NameableValue, DebugInfo):
             if node in counts:
                 continue
 
-            children = [child.forwarded for child in node.all_deps]
+            children = OrderedSet((child.forwarded for child in node.all_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
-                    parents[child].append(node)
+                    parents[child].add(node)
                 available.update(children)
             else:
                 ready.add(node)
@@ -384,6 +384,8 @@ class Op(NameableValue, DebugInfo):
                     del counts[p]
                 else:
                     counts[p] = count
+        if len(counts) > 0:
+            raise ValueError("Graph not a DAG")
 
     @property
     def forward(self):
@@ -421,8 +423,12 @@ class Op(NameableValue, DebugInfo):
             result = result.__forward
 
     def add_other_dep(self, dep):
-        # Add the dep to the op that actually does the work.
-        self.device_op.other_deps.add(dep.forwarded)
+        device_op = self.device_op
+        if device_op is self:
+            self.other_deps.add(dep)
+        else:
+            # Add the dep to the op that actually does the work.
+            device_op.add_other_dep(dep.forwarded)
 
     @property
     def all_deps(self):
@@ -855,7 +861,8 @@ class ParallelOp(ControlBlockOp):
     """
     def __init__(self, all, **kwargs):
         super(ParallelOp, self).__init__(**kwargs)
-        self.other_deps.update(all)
+        for op in all:
+            self.add_other_dep(op)
         self.require_user_deps(all)
 
 
@@ -932,11 +939,12 @@ class SequentialOp(ControlBlockOp):
     def __init__(self, ops, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
         self.value_op = ops[-1]
-        ops = OrderedSet(ops)
+        ops = OrderedSet((op.device_op for op in ops))
         for op0, op1 in zip(ops[:-1], ops[1:]):
-            op1.other_deps.add(op0)
+            op1.add_other_dep(op0)
             op1.require_user_deps([op0])
-        self.other_deps.update(ops)
+        for op in ops:
+            self.add_other_dep(op)
 
     @tdcache()
     def tensor_description(self):
@@ -3609,7 +3617,7 @@ def mean(x, reduction_axes=None, out_axes=None):
         tensor_size(x, reduction_axes=reduction_axes, out_axes=out_axes)
 
 
-def deriv(dependent, independent, error=constant(1)):
+def deriv(dependent, independent, error=None):
     """
     Computes the operation for [dDependent/dIndependent](error=1).
 
@@ -3625,6 +3633,9 @@ def deriv(dependent, independent, error=constant(1)):
         TensorOp: Derivative applied to error. Has axes of independent.
 
     """
+    if error is None:
+        error = constant(1)
+
     if not error.axes.has_same_axes(dependent.axes):
         raise ValueError("Dependent and error must have the same set of axes")
 

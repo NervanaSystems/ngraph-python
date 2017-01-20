@@ -32,12 +32,17 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
     SubtractOneDim, SubtractZeroDim, \
     Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    Function, SetItemOp, Prod
+    Function, AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+    ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
+    Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
+    Subtract, TanhOp, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.gpulayout import GPUTensorLayout
+from ngraph.transformers.passes.passes import SimplePrune
+from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
+    GPUContiguousPrune
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
@@ -89,6 +94,13 @@ class ElementWiseKernel(GPUKernel):
         self.kernel = None
         self.shared_size = 0
 
+    def add_reduction_op(self, string, op, out, x):
+        if len(op.reduction_axes) == 0:
+            self._buffer_op("assign", x=x, out=out)
+        else:
+            axis = op.args[0].axes.index(op.reduction_axes[0])
+            self._buffer_op(string, x=x, axis=axis, out=out)
+
     @generic_method(Op)
     def add_op(self, op, *args):
         if op.is_device_op:
@@ -98,7 +110,15 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("abs", x=x, out=out)
 
+    @add_op.on_type(AbsoluteOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("abs", x=x, out=out)
+
     @add_op.on_type(AddOneDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("add", x=x, y=y, out=out)
+
+    @add_op.on_type(Add)
     def add_op(self, op, out, x, y):
         self._buffer_op("add", x=x, y=y, out=out)
 
@@ -122,27 +142,11 @@ class ElementWiseKernel(GPUKernel):
                         axis=0,
                         out=out)
 
-    @add_op.on_type(ConvolutionOp)
-    def add_op(self, op, outputs, inputs, filters):
-        self._buffer_op("fprop_conv", op.dims, inputs, filters, outputs)
-
-    @add_op.on_type(bprop_conv)
-    def add_op(self, op, outputs, delta, filters):
-        self._buffer_op("bprop_conv", op.dims, filters, delta, outputs)
-
-    @add_op.on_type(update_conv)
-    def add_op(self, op, outputs, delta, inputs):
-        self._buffer_op("update_conv", op.dims, inputs, delta, outputs)
-
-    @add_op.on_type(PoolingOp)
-    def add_op(self, op, outputs, inputs, argmax):
-        self._buffer_op("fprop_pool", op.dims, inputs, outputs, argmax)
-
-    @add_op.on_type(BpropPoolOp)
-    def add_op(self, op, outputs, delta, argmax):
-        self._buffer_op("bprop_pool", op.dims, delta, outputs, argmax)
-
     @add_op.on_type(CosOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("cos", x=x, out=out)
+
+    @add_op.on_type(CosOp)
     def add_op(self, op, out, x):
         self._buffer_op("cos", x=x, out=out)
 
@@ -154,6 +158,10 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
 
+    @add_op.on_type(Divide)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("div", x=x, y=y, out=out)
+
     @add_op.on_type(ModOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("mod", x=x, y=y, out=out)
@@ -162,17 +170,9 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("mod", x=x, y=y, out=out)
 
-    @add_op.on_type(DotOneDimensional)
+    @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
-        self._buffer_op("dot", x=x, y=y, out=out)
-
-    @add_op.on_type(DotTwoDimensional)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("dot", x=x, y=y, out=out)
-
-    @add_op.on_type(DotTwoByOne)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("dot", x=x, y=y, out=out)
+        self._buffer_op("mod", x=x, y=y, out=out)
 
     @add_op.on_type(EqualOneDim)
     def add_op(self, op, out, x, y):
@@ -182,7 +182,15 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("eq", x=x, y=y, out=out)
 
+    @add_op.on_type(Equal)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("eq", x=x, y=y, out=out)
+
     @add_op.on_type(ExpOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("exp", x=x, out=out)
+
+    @add_op.on_type(ExpOp)
     def add_op(self, op, out, x):
         self._buffer_op("exp", x=x, out=out)
 
@@ -194,11 +202,19 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("gt", x=x, y=y, out=out)
 
+    @add_op.on_type(Greater)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("gt", x=x, y=y, out=out)
+
     @add_op.on_type(GreaterEqualOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("ge", x=x, y=y, out=out)
 
     @add_op.on_type(GreaterEqualZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("ge", x=x, y=y, out=out)
+
+    @add_op.on_type(GreaterEqual)
     def add_op(self, op, out, x, y):
         self._buffer_op("ge", x=x, y=y, out=out)
 
@@ -210,6 +226,10 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("lt", x=x, y=y, out=out)
 
+    @add_op.on_type(Less)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("lt", x=x, y=y, out=out)
+
     @add_op.on_type(LessEqualOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
@@ -218,13 +238,21 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
 
+    @add_op.on_type(LessEqual)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("le", x=x, y=y, out=out)
+
     @add_op.on_type(LogOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("log", x=x, out=out)
+
+    @add_op.on_type(LogOp)
     def add_op(self, op, out, x):
         self._buffer_op("log", x=x, out=out)
 
     @add_op.on_type(Max)
     def add_op(self, op, out, x):
-        self._buffer_op("max", x=x, axis=0, out=out)
+        self.add_reduction_op("max", op, out, x)
 
     @add_op.on_type(MaximumOneDim)
     def add_op(self, op, out, x, y):
@@ -234,15 +262,23 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("maximum", x=x, y=y, out=out)
 
+    @add_op.on_type(Maximum)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("maximum", x=x, y=y, out=out)
+
     @add_op.on_type(Min)
     def add_op(self, op, out, x):
-        self._buffer_op("min", x=x, axis=0, out=out)
+        self.add_reduction_op("min", op, out, x)
 
     @add_op.on_type(MinimumOneDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("minimum", x=x, y=y, out=out)
 
     @add_op.on_type(MinimumZeroDim)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("minimum", x=x, y=y, out=out)
+
+    @add_op.on_type(Minimum)
     def add_op(self, op, out, x, y):
         self._buffer_op("minimum", x=x, y=y, out=out)
 
@@ -254,7 +290,15 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("mul", x=x, y=y, out=out)
 
+    @add_op.on_type(Multiply)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("mul", x=x, y=y, out=out)
+
     @add_op.on_type(NegativeOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("neg", x=x, out=out)
+
+    @add_op.on_type(NegativeOp)
     def add_op(self, op, out, x):
         self._buffer_op("neg", x=x, out=out)
 
@@ -266,9 +310,13 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("ne", x=x, y=y, out=out)
 
+    @add_op.on_type(NotEqual)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("ne", x=x, y=y, out=out)
+
     @add_op.on_type(OneHotOp)
     def add_op(self, op, out, x):
-        self._buffer_op("onehot", x=x, out=out)
+        self._buffer_op("onehot", x=x, axis=0, out=out)
 
     @add_op.on_type(Power)
     def add_op(self, op, out, x, y):
@@ -280,9 +328,13 @@ class ElementWiseKernel(GPUKernel):
 
     @add_op.on_type(Prod)
     def add_op(self, op, out, x):
-        self._buffer_op("prod", x=x, axis=0, out=out)
+        self.add_reduction_op("prod", op, out, x)
 
     @add_op.on_type(ReciprocalOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("rcp", x=x, out=out)
+
+    @add_op.on_type(ReciprocalOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
@@ -290,7 +342,15 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, tensor, value):
         self._buffer_op("assign", x=value, out=tensor)
 
+    @add_op.on_type(AssignOp)
+    def add_op(self, op, out, tensor, value):
+        self._buffer_op("assign", x=value, out=tensor)
+
     @add_op.on_type(SignOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sgn", x=x, out=out)
+
+    @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
 
@@ -298,11 +358,23 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("sin", x=x, out=out)
 
+    @add_op.on_type(SinOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sin", x=x, out=out)
+
     @add_op.on_type(SqrtOneDOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqrt", x=x, out=out)
 
+    @add_op.on_type(SqrtOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sqrt", x=x, out=out)
+
     @add_op.on_type(SquareOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sqr", x=x, out=out)
+
+    @add_op.on_type(SquareOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqr", x=x, out=out)
 
@@ -314,11 +386,19 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("sub", x=x, y=y, out=out)
 
+    @add_op.on_type(Subtract)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("sub", x=x, y=y, out=out)
+
     @add_op.on_type(Sum)
     def add_op(self, op, out, x):
-        self._buffer_op("sum", x=x, axis=0, out=out)
+        self.add_reduction_op("sum", op, out, x)
 
     @add_op.on_type(TanhOneDOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("tanh", x=x, out=out)
+
+    @add_op.on_type(TanhOp)
     def add_op(self, op, out, x):
         self._buffer_op("tanh", x=x, out=out)
 
@@ -393,7 +473,7 @@ class ElementWiseKernel(GPUKernel):
                                         shared_size=self.shared_size)
 
 
-class GPUKernelGroup():
+class GPUKernelGroup(object):
     """
     A group of GPU kernels which corresponds to a Computation object. Since we
     can't always compound all ops from a Computation into a single GPU kernel,
@@ -420,7 +500,10 @@ class GPUKernelGroup():
         self.transformer = transformer
         self.kernels = []
         self.name = name
-        self.sourcefile = CudaSourceFile(name)
+        self.sourcefile = self.make_cuda_source_file()
+
+    def make_cuda_source_file(self):
+        return CudaSourceFile(self.name)
 
     @generic_method(Op)
     def add_kernel(self, op):
@@ -511,6 +594,9 @@ class GPUKernelGroup():
         for kernel in self.kernels:
             kernel.compile(self.sourcefile)
 
+    def setup_kernel_execute(self, kernel):
+        pass
+
     def __call__(self):
         """
         Loops over all kernels contained in this group and executes them. Since buffers
@@ -522,6 +608,7 @@ class GPUKernelGroup():
             if not k.buffers_bound:
                 k.bind_buffers()
 
+            self.setup_kernel_execute(k)
             k.execute()
 
 
@@ -605,7 +692,7 @@ class GPUTensorAllocator():
 
         gpudata = int(buffer_alloc) + tensor_description.offset
         new_tensor = GPUArray(tensor_description.shape,
-                              tensor_description.dtype,
+                              self.transformer.storage_dtype(tensor_description.dtype),
                               gpudata=gpudata,
                               strides=tensor_description.strides)
 
@@ -628,10 +715,19 @@ class GPURegister():
         self.name = name
 
 
+class GPUDeviceBufferReference(DeviceBufferReference):
+    """
+    Analogous to NumPyDeviceBufferReference.
+    """
+    def __init__(self, transformer, **kwargs):
+        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
+
+
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
     Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
     """
+
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(GPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -656,14 +752,6 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.current_buffer = buffer_alloc
         self.transform_allocate_views()
         self.transformer.current_buffer = None
-
-
-class GPUDeviceBufferReference(DeviceBufferReference):
-    """
-    Analogous to NumPyDeviceBufferReference.
-    """
-    def __init__(self, transformer, **kwargs):
-        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class GPUDeviceTensor(DeviceTensor):
@@ -706,6 +794,7 @@ class GPUDeviceTensor(DeviceTensor):
         Returns:
             Numpy array containing tensor data
         """
+
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
@@ -794,17 +883,24 @@ class GPUDeviceTensor(DeviceTensor):
         sliced = self.__getitem__(key)
 
         # Use fill for scalar values
+        # convert value to numpy
+        if type(value) == float:
+            value = np.float64(value)
+        elif type(value) == int:
+            value = np.int64(value)
+        # flex: added astype to deal with GPUArray dtype int16
+        # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif type(value) == np.int32 or type(value) == np.int64 or \
                 type(value) == int:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
-            sliced.fill(value)
+            sliced.fill(value.astype(sliced.dtype))
         elif np.sum(self.tensor.strides) == 0:
             view = GPUArray((1, ), dtype=self.tensor.dtype)
-            view.fill(value)
+            view.fill(value.astype(sliced.dtype))
         else:
             # Convert to correct dtype if necessary
             if value.dtype != self.tensor.dtype:
@@ -1004,7 +1100,8 @@ class GPUTransformer(Transformer):
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
 
-        self.graph_passes.insert(0, GPUTensorLayout())
+        self.graph_passes = [SimplePrune(), GPUTensorShaping(), GPUTensorLayout(),
+                             GPUContiguousPrune()]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
@@ -1051,9 +1148,12 @@ class GPUTransformer(Transformer):
     def finish_transform_allocate(self):
         pass
 
+    def gpu_kernel_group(self, name):
+        return GPUKernelGroup(self, name)
+
     def transform_ordered_ops(self, ordered_ops, name):
         # Create kernel group
-        kernel_group = GPUKernelGroup(self, name)
+        kernel_group = self.gpu_kernel_group(name)
         for fun in ordered_ops:
             kernel_group.add_kernel(fun)
 
@@ -1075,3 +1175,6 @@ class GPUTransformer(Transformer):
     def allocate_storage(self):
         for alloc in self.buffer_allocators:
             alloc()
+
+    def storage_dtype(self, dtype):
+        return dtype  # overridden by flex gpu transformer

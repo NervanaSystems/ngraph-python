@@ -63,6 +63,64 @@ def test_sequential():
     assert p_val == 0
 
 
+def test_sequential_reduce():
+    N = ng.make_axis(3)
+    x = ng.variable([N], initial_value=1)
+    with ng.sequential_op_factory() as pf:
+        x0 = x + x
+        x1 = ng.sum(x0, out_axes=())
+        x2 = ng.sum(x0, out_axes=()) + x0
+    p = pf()
+    ex = ExecutorFactory()
+    x0_val, x1_val, x2_val, p_val = ex.executor([x0, x1, x2, p])()
+    x0_np = x.value[...] + x.value[...]
+    x1_np = np.sum(x0_np)
+    x2_np = x1_np + x0_np
+    assert np.allclose(x0_val, x0_np)
+    assert np.allclose(x1_val, x1_np)
+    assert np.allclose(x2_val, x2_np)
+    assert np.allclose(p_val, x2_np)
+
+
+def test_sequential_side():
+    N = ng.make_axis(3)
+    x = ng.variable([N], initial_value=[1, 2, 3])
+    x1 = ng.persistent_tensor(axes=(), initial_value=2)
+    x2 = ng.persistent_tensor(axes=(), initial_value=3)
+    b = ng.persistent_tensor(axes=(), initial_value=1)
+
+    with ng.sequential_op_factory() as pf:
+        ng.assign(x1, ng.sum(x, out_axes=()) + x1 * b + (1 - b))
+        ng.assign(x2, ng.mean(x, out_axes=()) + x2 * b + (1 - b))
+        y = x * 2
+        pf.append(y)
+    p = pf()
+
+    ex = ExecutorFactory()
+    main_effect = ex.executor(p)
+
+    # Run main path #1
+    y_val = main_effect()
+    x_np = np.array([1, 2, 3], dtype=np.float32)
+    y_np = x_np * 2
+
+    assert np.allclose(y_val, y_np)
+
+    # Run main path #2 (Should be the same as before)
+    y_val = main_effect()
+
+    assert np.allclose(y_val, y_np)
+
+    # Now check side effects
+    x1_val, x2_val = x1.value.tensor, x2.value.tensor
+
+    x1_np = x_np.sum() + (x_np.sum() + 2)
+    x2_np = x_np.mean() + (x_np.mean() + 3)
+
+    assert np.allclose(x2_val, x2_np)
+    assert np.allclose(x1_val, x1_np)
+
+
 def test_pad_invalid_paddings_length():
     """
     pad should raise an exception if the paddings length is not the same as the

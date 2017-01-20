@@ -21,78 +21,19 @@ import numpy as np
 import random as random
 
 
-def test_relu():
+def run_all_close_compare_initiated_with_random_gauss(c2_op_name,
+                                                      shape=None,
+                                                      data=None,
+                                                      expected=None):
     workspace.ResetWorkspace()
-
-    shape = [10, 10]
-    data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
+    if not shape:
+        shape = [2, 7]
+    if not data:
+        data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
 
     net = core.Net("net")
     net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
-    net.Relu(["X"], ["Y"], name="Y")
-
-    # Execute via Caffe2
-    workspace.RunNetOnce(net)
-
-    # Import caffe2 network into ngraph
-    importer = C2Importer()
-    importer.parse_net_def(net.Proto(), verbose=False)
-
-    # Get handle
-    f_ng = importer.get_op_handle("Y")
-
-    # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
-
-    # compare Caffe2 and ngraph results
-    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
-
-
-def test_tanh():
-    workspace.ResetWorkspace()
-
-    shape = [1, 10]
-    data = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
-
-    net = core.Net("net")
-    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
-    net.Tanh(["X"], ["Y"], name="Y")
-
-    # Execute via Caffe2
-    workspace.RunNetOnce(net)
-
-    # Import caffe2 network into ngraph
-    importer = C2Importer()
-    importer.parse_net_def(net.Proto(), verbose=False)
-
-    # Get handle
-    f_ng = importer.get_op_handle("Y")
-
-    # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
-
-    # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=0, equal_nan=False))
-
-
-def test_softmax():
-    workspace.ResetWorkspace()
-
-    shape = [2, 7]
-    data = [
-        1., 2., 3., 4., 1., 2., 3.,
-        1., 2., 3., 4., 1., 2., 3.
-    ]
-    expected = [
-        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
-        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
-    ]
-
-    net = core.Net("net")
-    net.GivenTensorFill([], "X", shape=shape, values=data, name="X")
-    net.Softmax(["X"], ["Y"], name="Y")
+    getattr(net, c2_op_name)(["X"], ["Y"], name="Y")
 
     # Execute via Caffe2
     workspace.RunNetOnce(net)
@@ -114,4 +55,114 @@ def test_softmax():
     assert(np.allclose(f_result, c2_y, atol=1e-4, rtol=0, equal_nan=False))
 
     # compare expected results and ngraph results
-    assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
+    if expected:
+        assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
+
+
+def test_relu():
+    run_all_close_compare_initiated_with_random_gauss('Relu',
+                                                      shape=[10, 10])
+
+
+def test_softmax():
+    shape = [2, 7]
+    data = [
+        1., 2., 3., 4., 1., 2., 3.,
+        1., 2., 3., 4., 1., 2., 3.
+    ]
+    expected = [
+        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
+        [0.024, 0.064, 0.175, 0.475, 0.024, 0.064, 0.175],
+    ]
+    run_all_close_compare_initiated_with_random_gauss('Softmax',
+                                                      shape=shape,
+                                                      data=data,
+                                                      expected=expected)
+
+
+def test_negative():
+    run_all_close_compare_initiated_with_random_gauss('Negative')
+
+
+def test_sigmoid():
+    run_all_close_compare_initiated_with_random_gauss('Sigmoid')
+
+
+def test_tanh():
+    run_all_close_compare_initiated_with_random_gauss('Tanh')
+
+
+def test_exp():
+    workspace.ResetWorkspace()
+
+    shape = [2, 7]
+    data = [
+        1., 2., 3., 4., 1., 2., 3.,
+        1., 2., 3., 4., 1., 2., 3.
+    ]
+    expected = [
+        [2.71828, 7.3890, 20.08553, 54.59815, 2.71828, 7.3890, 20.08553],
+        [2.71828, 7.3890, 20.08553, 54.59815, 2.71828, 7.3890, 20.08553],
+    ]
+    run_all_close_compare_initiated_with_random_gauss('Exp',
+                                                      shape=shape,
+                                                      data=data,
+                                                      expected=expected)
+
+
+def test_NCHW2NHWC():
+    workspace.ResetWorkspace()
+
+    # NCHW
+    shape = [2, 3, 4, 5]
+    data1 = [float(i) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    X.NCHW2NHWC([], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+
+
+def test_NHWC2NCHW():
+    workspace.ResetWorkspace()
+
+    # NHWC
+    shape = [2, 3, 4, 5]
+    data1 = [float(i) for i in range(np.prod(shape))]
+
+    net = core.Net("net")
+    X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+    X.NCHW2NHWC([], ["Y"], name="Y")
+
+    # Execute via Caffe2
+    workspace.RunNetOnce(net)
+
+    # Import caffe2 network into ngraph
+    importer = C2Importer()
+    importer.parse_net_def(net.Proto(), verbose=False)
+
+    # Get handle
+    f_ng = importer.get_op_handle("Y")
+
+    # Execute
+    ex = ExecutorFactory()
+    f_result = ex.executor(f_ng)()
+
+    # compare Caffe2 and ngraph results
+    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
