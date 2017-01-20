@@ -38,6 +38,7 @@ The ``Transformer.initialize`` method of the transformer is responsible for runn
 Passes and op transformation are called from ``Transformer._transform_computations``. Device buffer and tensor allocation is called from ``Transformer.allocate_storage`` which must be implemented by each transformer. Constant tensor initialization is called from ``Transformer.allocate`` and other initialization is performed in a special computation called by ``Transformer.initialize``.
 
 .. _transformer_passes:
+
 Transformer Passes
 ------------------
 
