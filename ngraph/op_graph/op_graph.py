@@ -144,7 +144,6 @@ class Op(NameableValue, DebugInfo):
         initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
-        reference (bool): The storage is accessed via a reference.  Default False.
         metadata: String key value dictionary for frontend metadata.
         trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
@@ -156,7 +155,6 @@ class Op(NameableValue, DebugInfo):
         other_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
-        reference (bool): The storage is accessed via a reference.  Implies persistent.
         schemas: Information about how the Op was generated.
         metadata: Dictionary with of string keys and values used for attaching
             arbitrary metadata to nodes.
@@ -254,88 +252,22 @@ class Op(NameableValue, DebugInfo):
         finally:
             Op._get_thread_user_deps().pop()
 
-    @property
-    def user_deps(self):
+    @staticmethod
+    def ordered_ops(results):
         """
+        depth-first, post-order "Bottom Up" traversal of Ops in results.
 
-        :return:
-            Set of Ops the must come before this Op is used.  See SetItem.
-        """
-        return Op._get_thread_user_deps()[-1].get(self, OrderedSet())
-
-    @user_deps.setter
-    def user_deps(self, value):
-        Op._get_thread_user_deps()[-1][self] = value
-
-    def __init__(self,
-                 args=(),
-                 metadata=None,
-                 const=None,
-                 constant=False,
-                 initializers=None,
-                 persistent=True,
-                 reference=False,
-                 trainable=False,
-                 **kwargs):
-        super(Op, self).__init__(**kwargs)
-        self.__args = ()
-        self.metadata = dict()
-        self.args = args
-        # TODO: is this ok?  __repr__ wants a .name
-        if self.name is None:
-            self.name = 'empty_name'
-
-        if metadata is not None:
-            if not isinstance(metadata, dict):
-                raise ValueError("Metadata must be of type dict,"
-                                 "not {} of {}".format(type(metadata), metadata))
-            self.metadata.update(metadata)
-
-        # List to keep generation deterministic
-        self.other_deps = OrderedSet()
-        self.require_user_deps(self.args)
-        self.schemas = []
-        self.const = const
-        self.is_constant = constant
-        self.initializers = OrderedSet()
-        if initializers is not None:
-            for initializer in initializers:
-                self.add_initializer(initializer)
-        self.__persistent = persistent
-        self.reference = reference
-        self.trainable = trainable
-
-        # Add this op to both the captured op and all op accounting lists
-        ops = Op._get_thread_ops()[-1]
-        if ops is not None:
-            ops.append(self)
-        all_ops = Op.get_all_ops()[-1]
-        if all_ops is not None:
-            all_ops.append(self)
-
-        self.style = {}
-        self.ops = []
-        self.__forward = None
-
-    def require_user_deps(self, args):
-        for arg in args:
-            for dep in arg.user_deps:
-                self.add_other_dep(dep)
-
-    @property
-    def args(self):
-        """All the inputs to this node."""
-        return self.__args
-
-    @args.setter
-    def args(self, args):
-        """
-        Replace old inputs with new inputs.
+        Ops will only appear once in result.
 
         Arguments:
-            args: New arguments
+          results: a list of ops which are the roots of the graph traversal
+
+        Returns:
+          list of Ops in depth-first, post-order
         """
-        self.__args = tuple(args)
+        ordered_ops = []
+        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
+        return ordered_ops
 
     @staticmethod
     def visit_input_closure(roots, fun):
@@ -387,6 +319,123 @@ class Op(NameableValue, DebugInfo):
         if len(counts) > 0:
             raise ValueError("Graph not a DAG")
 
+    def __init__(self,
+                 args=(),
+                 metadata=None,
+                 const=None,
+                 constant=False,
+                 persistent=True,
+                 trainable=False,
+                 initializers=None,
+                 **kwargs):
+        super(Op, self).__init__(**kwargs)
+        self.__args = ()
+        self.metadata = dict()
+        self.args = args
+        # TODO: is this ok?  __repr__ wants a .name
+        if self.name is None:
+            self.name = 'empty_name'
+
+        if metadata is not None:
+            if not isinstance(metadata, dict):
+                raise ValueError("Metadata must be of type dict,"
+                                 "not {} of {}".format(type(metadata), metadata))
+            self.metadata.update(metadata)
+
+        # List to keep generation deterministic
+        self.other_deps = OrderedSet()
+        self.require_user_deps(self.args)
+        self.schemas = []
+        self.const = const
+        self.__is_constant = constant
+        self.__is_persistent = persistent
+        self.__is_trainable = trainable
+        self.initializers = OrderedSet()
+        if initializers is not None:
+            for initializer in initializers:
+                self.add_initializer(initializer)
+
+        # Add this op to both the captured op and all op accounting lists
+        ops = Op._get_thread_ops()[-1]
+        if ops is not None:
+            ops.append(self)
+        all_ops = Op.get_all_ops()[-1]
+        if all_ops is not None:
+            all_ops.append(self)
+
+        self.style = {}
+        self.ops = []
+        self.__forward = None
+
+    def __str__(self):
+        return self.graph_label
+
+    def __repr__(self):
+        return '<{cl}({gl}):{id}>'.format(
+            cl=self.__class__.__name__,
+            gl=self.graph_label_type,
+            id=id(self)
+        )
+
+    @property
+    def is_constant(self):
+        return self.__is_constant
+
+    @property
+    def is_persistent(self):
+        return self.__is_persistent
+
+    @property
+    def is_trainable(self):
+        return self.__is_trainable
+
+    @property
+    def is_tensor_op(self):
+        return False
+
+    @property
+    def is_scalar(self):
+        return 0 == len(self.axes)
+
+    @property
+    def is_device_op(self):
+        """
+
+        Returns:
+            True if the Op executes on the device.
+        """
+        return True
+
+    @property
+    def scalar_op(self):
+        if not self.is_scalar:
+            raise ValueError()
+        return self
+
+    @property
+    def device_op(self):
+        """
+        Returns the op that performs the operations on the device.
+
+        Returns: self
+        """
+        return self
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self.__args
+
+    @args.setter
+    def args(self, args):
+        """
+        Replace old inputs with new inputs.
+
+        Arguments:
+            args: New arguments
+        """
+        self.__args = tuple(args)
+
     @property
     def forward(self):
         """
@@ -422,14 +471,6 @@ class Op(NameableValue, DebugInfo):
                 return result
             result = result.__forward
 
-    def add_other_dep(self, dep):
-        device_op = self.device_op
-        if device_op is self:
-            self.other_deps.add(dep)
-        else:
-            # Add the dep to the op that actually does the work.
-            device_op.add_other_dep(dep.forwarded)
-
     @property
     def all_deps(self):
         """
@@ -438,6 +479,32 @@ class Op(NameableValue, DebugInfo):
             Ops that must execute before this one can.
         """
         return self.device_op.other_deps + self.args
+
+    @property
+    def user_deps(self):
+        """
+
+        :return:
+            Set of Ops the must come before this Op is used.  See SetItem.
+        """
+        return Op._get_thread_user_deps()[-1].get(self, OrderedSet())
+
+    @user_deps.setter
+    def user_deps(self, value):
+        Op._get_thread_user_deps()[-1][self] = value
+
+    def require_user_deps(self, args):
+        for arg in args:
+            for dep in arg.user_deps:
+                self.add_other_dep(dep)
+
+    def add_other_dep(self, dep):
+        device_op = self.device_op
+        if device_op is self:
+            self.other_deps.add(dep)
+        else:
+            # Add the dep to the op that actually does the work.
+            device_op.add_other_dep(dep.forwarded)
 
     def add_initializer(self, init):
         self.initializers.add(init)
@@ -456,61 +523,6 @@ class Op(NameableValue, DebugInfo):
 
     def replace_self(self, rep):
         self.forward = rep
-
-    @property
-    def assignable(self):
-        """
-
-        Returns: True if the tensor can be assigned to.
-
-        """
-        return not self.is_constant
-
-    @property
-    def is_tensor_op(self):
-        return False
-
-    @property
-    def is_scalar(self):
-        return 0 == len(self.axes)
-
-    @property
-    def scalar_op(self):
-        if not self.is_scalar:
-            raise ValueError()
-        return self
-
-    @property
-    def persistent(self):
-        """
-
-        Returns: True if value is not shared and is retained through computation.  Always true
-        for a reference.
-
-        """
-        return self.__persistent or self.reference
-
-    @property
-    def is_device_op(self):
-        """
-
-        Returns:
-            True if the Op executes on the device.
-        """
-        return True
-
-    @property
-    def device_op(self):
-        """
-        Returns the op that performs the operations on the device.
-
-        Returns: self
-        """
-        return self
-
-    @persistent.setter
-    def persistent(self, value):
-        self.__persistent = value
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -545,16 +557,6 @@ class Op(NameableValue, DebugInfo):
             # Replace generate_adjoints for self
             self.generate_adjoints = generate_adjoints
 
-    @property
-    def defs(self):
-        """
-        Returns:
-            For liveness analysis.  The storage associated with everything
-            in the returned list is modified when the Op is executed.
-
-        """
-        return [self]
-
     def find_schema(self, t):
         """
         Find a schema of particular type.
@@ -572,6 +574,16 @@ class Op(NameableValue, DebugInfo):
                 return schema
         return None
 
+    @property
+    def defs(self):
+        """
+        Returns:
+            For liveness analysis.  The storage associated with everything
+            in the returned list is modified when the Op is executed.
+
+        """
+        return [self]
+
     def variables(self, filter=None):
         """
         Return all trainable Ops used in computing this node.
@@ -585,7 +597,7 @@ class Op(NameableValue, DebugInfo):
         params = OrderedSet()
 
         if filter is None:
-            filter = lambda op: op.trainable
+            filter = lambda op: op.is_trainable
 
         def visitor(node):
             """
@@ -635,23 +647,6 @@ class Op(NameableValue, DebugInfo):
 
         return adjoints
 
-    @staticmethod
-    def ordered_ops(results):
-        """
-        depth-first, post-order "Bottom Up" traversal of Ops in results.
-
-        Ops will only appear once in result.
-
-        Arguments:
-          results: a list of ops which are the roots of the graph traversal
-
-        Returns:
-          list of Ops in depth-first, post-order
-        """
-        ordered_ops = []
-        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
-        return ordered_ops
-
     def tensor_description(self):
         return None
 
@@ -669,16 +664,6 @@ class Op(NameableValue, DebugInfo):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
-
-    def __str__(self):
-        return self.graph_label
-
-    def __repr__(self):
-        return '<{cl}({gl}):{id}>'.format(
-            cl=self.__class__.__name__,
-            gl=self.graph_label_type,
-            id=id(self)
-        )
 
 
 def as_op(x):
@@ -768,7 +753,7 @@ class AssignOp(Op):
 
     def __init__(self, tensor, val, force=False, **kwargs):
         tensor, val = as_ops((tensor, val))
-        if not force and not tensor.assignable:
+        if not force and tensor.is_constant:
             raise ValueError("{} is not assignable.".format(tensor))
         val = broadcast(val, tensor.axes)
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
@@ -1022,7 +1007,7 @@ class Fill(Op):
 
     def __init__(self, tensor, scalar, force=False, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
-        if not force and not tensor.assignable:
+        if not force and tensor.is_constant:
             raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
             if scalar.is_constant:
@@ -1880,8 +1865,9 @@ def constant(const, axes=None, dtype=None):
         An AssignableTensorOp for the constant.
     """
     graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=axes, constant=True, persistent=True, trainable=False,
-                             graph_label_type=graph_label_type, dtype=dtype)
+    val = AssignableTensorOp(axes=axes, constant=True, persistent=True,
+                             trainable=False, graph_label_type=graph_label_type,
+                             dtype=dtype)
 
     nptensor = np.asarray(const, dtype=val.dtype)
 
@@ -1972,8 +1958,7 @@ def constant_storage(axes, dtype=None, initial_value=None):
     """
 
     return AssignableTensorOp(graph_label_type="constant",
-                              constant=True, persistent=True,
-                              trainable=False,
+                              constant=True, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2016,8 +2001,7 @@ def temporary(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=False, persistent=True,
-                              trainable=False,
+                              constant=False, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2039,8 +2023,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Persistent",
-                              constant=False, persistent=True,
-                              trainable=False,
+                              constant=False, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2060,9 +2043,8 @@ def variable(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Variable",
-                              constant=False, persistent=True,
-                              trainable=True, axes=axes,
-                              dtype=dtype,
+                              constant=False, persistent=True, trainable=True,
+                              axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
