@@ -294,7 +294,7 @@ class CompUserDepsPass(PeepholeGraphPass):
 
     @visit.on_type(ComputationOp)
     def visit(self, op):
-        op.require_user_deps(list(op.other_deps))
+        op.require_user_deps(list(map(lambda x: x.forwarded, op.other_deps)))
 
 
 class SimplePrune(PeepholeGraphPass):
