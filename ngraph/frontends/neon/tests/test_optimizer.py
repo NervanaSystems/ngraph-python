@@ -20,11 +20,8 @@ import copy
 import itertools as itt
 
 import numpy as np
-from neon.backends import gen_backend
-from neon.optimizers import GradientDescentMomentum as NeonGradientDescentMomentum
 
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.testing.execution import ExecutorFactory
 
@@ -66,13 +63,6 @@ def test_gdm(args, transformer_factory):
     C = ng.make_axis(20, name="C")
     N = ng.make_axis(32, name="N", batch=True)
 
-    be = gen_backend(backend='cpu', batch_size=N.length)
-
-    # restrict to numpy transformer for now
-    factory = ngt.make_transformer_factory('numpy')
-    ngt.set_transformer_factory(factory)
-    ngt.make_transformer()
-
     # generate dummy data (to initialize values)
     w_init = np.random.rand(C.length).astype('float32')
 
@@ -93,16 +83,12 @@ def test_gdm(args, transformer_factory):
     updates = gdm(cost)
     ngraph_optimize = transformer.computation([W, updates], X, Y)
 
-    # set up the neon gdm
-    neon_gdm = NeonGradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    # dev_v0 = be.zeros((C.length, 1))  # velocities are zero at the beginning
-    dev_dw = be.zeros((C.length, 1))  # we fill the gradient info in the below
-    dev_w_init = be.array(w_init)  # copy w_init to device
-    param_list = [((dev_w_init, dev_dw), [])]
+    # set up the reference values for gradient descent
+    w_ref = w_init.copy()
+    vel_ref = np.zeros_like(w_ref)
 
     # store the weights with each minibatch for debugging
     ng_Ws = []
-    be_Ws = []
 
     # run for 20 minibatches
     for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
@@ -111,13 +97,14 @@ def test_gdm(args, transformer_factory):
         gdm.update_learning_rate()
         ng_Ws.append(copy.deepcopy(ng_W))
 
-        # obtain neon results
-        dw = -1 * x.sum(axis=1)   # the gradients we compute analytically
-        param_list[0][0][1].set(dw)  # fill the gradient
+        # obtain reference results
+        dw = -1 * x.sum(axis=1) / N.length   # the gradients we compute analytically
 
-        neon_gdm.optimize([DummyLayer(param_list)], epoch=0)
-        (param, grad), states = param_list[0]
-        be_W = param.get()[:, 0]
-        be_Ws.append(be_W)
+        dw = dw + wdecay * w_ref
+        if mom == 0:
+            w_ref[:] = w_ref - lrate * dw
+        else:
+            vel_ref[:] = mom * vel_ref - lrate * dw
+            w_ref[:] = w_ref + vel_ref
 
-        ng.testing.assert_allclose(be_W, ng_W, rtol=1e-3)
+        ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
