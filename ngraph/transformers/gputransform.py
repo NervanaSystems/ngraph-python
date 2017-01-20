@@ -40,7 +40,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune
+from ngraph.transformers.passes.passes import SimplePrune, DerivPass, CompUserDepsPass
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -1099,7 +1099,8 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [SimplePrune(), GPUTensorShaping(),
+        self.graph_passes = [DerivPass(), CompUserDepsPass(),
+                             SimplePrune(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 
         self.buffer_allocators = []
