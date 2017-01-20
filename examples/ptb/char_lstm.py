@@ -69,12 +69,14 @@ if args.layer_type == "lstm":
 # model initialization
 seq1 = Sequential([Preprocess(functor=expand_onehot),
                    rlayer1,
-                   rlayer2,
+                   # rlayer2,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))])
 
 optimizer = RMSProp(gradient_clip_value=gradient_clip_value)
 
 output_prob = seq1.train_outputs(inputs['inp_txt'])
+import ipdb; ipdb.set_trace()
+
 loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
