@@ -194,7 +194,7 @@ class NameableValue(object):
 
     @property
     def short_name(self):
-        sn = self.__name.split('_')[0]
+        sn = self.name.split('_')[0]
         if sn.find('.') != -1:
             sn = sn.split('.')[1]
         return sn

@@ -943,7 +943,14 @@ class SequentialOp(ControlBlockOp):
     def value(self):
         return self.value_op.value
 
+    @property
+    def axes(self):
+        return self.value_op.axes
+
     def generate_adjoints(self, adjoints, delta):
+        self.value_op.generate_add_delta(adjoints, delta)
+
+    def generate_add_delta(self, adjoints, delta):
         self.value_op.generate_add_delta(adjoints, delta)
 
 
