@@ -47,30 +47,16 @@ class LookupTableOp(TensorOp):
         Return:
         """
 
-        # check shapes of lut and idx
+        # check shape of lut and index
         if len(lut.shape) != 2:
             raise ValueError((
                 'lookup table shape must be length 2, found {}'
             ).format(len(lut.shape)))
 
-        if len(idx.shape) != 2:
+        if len(idx.shape) != 1:
             raise ValueError((
-                'indices shape must be length 2, found {}'
-            ).format(len(idx.shape)))
-
-        # check batch axes
-        batch_axes = idx.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Indices must have one batch axis.  "
-                "Found {n_batch_axes} batch axes: {batch_axes} "
-                "Found {n_sample_axes} sample axes: {sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(idx.axes.sample_axes()),
-                sample_axes=idx.axes.sample_axes(),
-            ))
+                'index shape must be length 1, found {}'
+            ).format(len(lut.shape)))
 
         # axes are the output axes, and it will indicate which axis to do the lookup
         # so one of the lut axis has to be in axes
@@ -85,12 +71,27 @@ class LookupTableOp(TensorOp):
                 out_axes=axes,
             ))
 
+        if not idx.axes[0] in axes:
+            raise ValueError((
+                "Output axes must index axes.  "
+                "Found index axes: {idx_axes} "
+                "Found output axes: {out_axes}."
+            ).format(
+                idx_axes=idx.axes,
+                out_axes=axes,
+            ))
+
         # decide the lookup axis based on the output axes and lut axes
         # if lut shape is (V, F), and output axes has F, the lut_axis is 0
+        # lut_axis is the axis being indexed by idx
         self.lut_axis = 0 if lut.axes[1] in axes else 1
-        self.bprop_sum_axis = idx.axes.index(batch_axes[0])
         self.pad_idx = pad_idx
         self.update = update
+
+        if axes[self.lut_axis] != idx.axes[0]:
+            import pdb; pdb.set_trace()
+            raise ValueError("Cannot transpose lut axes implicitly")
+
         super(LookupTableOp, self).__init__(args=(lut, idx),
                                             axes=axes,
                                             **kwargs)
@@ -112,7 +113,7 @@ class LutDerivOp(TensorOp):
     def __init__(self, fprop, **kwargs):
         super(LutDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
-        self.bprop_sum_axis = self.fprop.forwarded.bprop_sum_axis
+        self.lut_axis = self.fprop.forwarded.lut_axis
         self.pad_idx = self.fprop.forwarded.pad_idx
         self.update = self.fprop.forwarded.update
 

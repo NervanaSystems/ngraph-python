@@ -242,23 +242,19 @@ class NumPyCodeEngine(object):
     def all_code():
         pycode = """
         def fprop_lut(self, lut, idx, axis, output):
-            V, F = lut.shape
-            T, N = idx.shape
-            idx = idx.reshape(T*N, -1).squeeze().astype(int)
-            output[:] = lut.take(idx, axis).T.reshape(output.shape)
+            output[:] = lut.take(idx.astype(int), axis)
 
         def update_lut(self, error, idx, pad_idx, axis, dW):
             dW[:] = 0
-            T, N = idx.shape
-            F, Te, Ne = error.shape
-            error = error.reshape(F, -1)
-            assert (Te == T and Ne == N), "lookup indices shape and error shape are not compatible"
-            idx = idx.reshape(T*N, -1).squeeze().astype(int)
+            idx = idx.astype(int)
             unqidx, inv = np.unique(idx, return_inverse=True)
             groups = [np.where(inv == i) for i in range(len(unqidx))]
             for (wrd_id, group) in zip(unqidx, groups):
                 if wrd_id != pad_idx:
-                    dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
+                    if axis == 0:
+                        dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
+                    else:
+                        dW[:, wrd_id] = np.sum(error.take(group[0], axis=axis), axis=axis)
 
         """
         return pycode
@@ -475,7 +471,7 @@ class NumPyCodeGenerator(PyGen):
     def generatea_op(self, op, outputs, delta, idx):
         if op.update:
             self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
-                        delta, idx, op.pad_idx, op.bprop_sum_axis, outputs)
+                        delta, idx, op.pad_idx, op.lut_axis, outputs)
 
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):

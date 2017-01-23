@@ -51,12 +51,13 @@ def test_lut(lut_args):
 
     ax_idx = ng.make_axes([ax.REC, ax.N])
     ax_lut = ng.make_axes([V, F])
-    ax_out = ng.make_axes([F, ax.REC, ax.N])
 
     lut = ng.placeholder(ax_lut)
     idx = ng.placeholder(ax_idx)
+    idx_flat = ng.flatten(idx)
+    ax_out = idx_flat.axes + ng.make_axes([F])
 
-    lut_out_ng = ng.lookuptable(lut, idx, ax_out, pad_idx=0)
+    lut_out_ng = ng.lookuptable(lut, idx_flat, ax_out, pad_idx=0)
 
     ex = ExecutorFactory()
 

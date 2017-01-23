@@ -117,13 +117,15 @@ class LookupTable(Layer):
         in_obj.axes.find_by_short_name('time')[0].add_role(ar.time)
         in_obj.axes.find_by_short_name('time')[0].is_recurrent = True
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
 
         self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
-        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes
+        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
 
         # missing the part to set 0 for pad_idx lookup
         self.W = ng.variable(axes=self.w_axes,
@@ -131,9 +133,9 @@ class LookupTable(Layer):
                              ).named('W')
         if self.pad_idx is not None:
             ng.Fill(ng.slice_along_axis(self.W, self.lut_v_axis, self.pad_idx), 0)
-
-        return ng.lookuptable(self.W, in_obj, self.o_axes, update=self.update,
-                              pad_idx=self.pad_idx)
+        lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
+                                    pad_idx=self.pad_idx)
+        return ng.axes_with_order(ng.unflatten(lut_result), self.o_axes)
 
 
 class ConvBase(Layer):
