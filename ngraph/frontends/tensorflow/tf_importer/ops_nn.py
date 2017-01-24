@@ -170,7 +170,8 @@ class OpsNN(OpsBase):
 
         # conv params
         params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
-                      str_d=1, str_h=str_h, str_w=str_w)
+                      str_d=1, str_h=str_h, str_w=str_w,
+                      fil_d=1, dil_h=1, dil_w=1)
 
         # i, f, o axes
         ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
