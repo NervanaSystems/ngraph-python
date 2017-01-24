@@ -60,17 +60,14 @@ def expand_onehot(x):
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "rnn":
-    rlayer = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True)
-    rlayer_1 = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True)
+    rlayer = Recurrent(hidden_size, init, activation=Tanh())
 elif args.layer_type == "birnn":
-    rlayer = BiRNN(hidden_size, init, activation=Tanh(), reset_cells=False,
-                   return_sequence=True, sum_out=True)
+    rlayer = BiRNN(hidden_size, init, activation=Tanh(), return_sequence=True, sum_out=True)
 
 # model initialization
 seq1 = Sequential([Preprocess(functor=expand_onehot),
                    rlayer,
-                   rlayer_1,
-                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))])
+                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
 optimizer = RMSProp()
 output_prob = seq1.train_outputs(inputs['inp_txt'])

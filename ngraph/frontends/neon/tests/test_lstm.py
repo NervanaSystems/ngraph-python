@@ -35,6 +35,7 @@ import numpy as np
 from lstm_ref import LSTM as RefLSTM
 
 import ngraph as ng
+
 from ngraph.frontends.neon import LSTM, GaussianInit, Tanh, Logistic
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
@@ -43,6 +44,7 @@ rng = RandomTensorGenerator()
 
 delta = 1e-3
 rtol = atol = 1e-3
+
 
 def pytest_generate_tests(metafunc):
 
@@ -56,7 +58,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('reflstmargs', fargs)
 
 
-def test_ref_compare_rand(reflstmargs):
+def test_ref_compare_rand(transformer_factory, reflstmargs):
         # run comparison with reference code
         # for Gaussian random init
         seq_len, input_size, hidden_size, batch_size = reflstmargs
@@ -64,7 +66,7 @@ def test_ref_compare_rand(reflstmargs):
                    GaussianInit(0.0, 0.1))
 
 
-def test_ref_stacked(reflstmargs):
+def test_ref_stacked(transformer_factory, reflstmargs):
         seq_len, input_size, hidden_size, batch_size = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
                            GaussianInit(0.0, 0.1))
@@ -120,8 +122,6 @@ def check_lstm(seq_len, input_size, hidden_size,
 
     # the output needs transpose as well
     Hout_ref = Hout_ref.reshape(seq_len * batch_size, hidden_size).T
-    IFOGf_ref = batch_cache['IFOGf'].reshape(seq_len * batch_size, hidden_size * 4).T
-    Ct_ref = batch_cache['Ct'].reshape(seq_len * batch_size, hidden_size).T
 
     # comparing outputs
     if return_seq is True:
@@ -145,11 +145,11 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
     inp_ng = ng.placeholder([Cin, REC, N])
 
     lstm_ng_1 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                   reset_cells=reset_cells, return_sequence=return_seq,
-                   backward=backward)
+                     reset_cells=reset_cells, return_sequence=return_seq,
+                     backward=backward)
     lstm_ng_2 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                   reset_cells=reset_cells, return_sequence=return_seq,
-                   backward=backward)
+                     reset_cells=reset_cells, return_sequence=return_seq,
+                     backward=backward)
 
     out_ng_1 = lstm_ng_1.train_outputs(inp_ng)
     out_ng_2 = lstm_ng_2.train_outputs(out_ng_1)
@@ -210,10 +210,11 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
     for i in range(num_iter):
         input_value = input_value_list[i]
         inp_ref = input_value.copy().transpose([1, 2, 0])
-        (Hout_ref_1, cprev_1, hprev_1, batch_cache) = lstm_ref_1.forward(inp_ref, WLSTM_1, c0_1, h0_1)
-        (Hout_ref_2, cprev_2, hprev_2, batch_cache) = lstm_ref_2.forward(Hout_ref_1, WLSTM_2, 
+        (Hout_ref_1, cprev_1, hprev_1, batch_cache) = lstm_ref_1.forward(inp_ref, WLSTM_1,
+                                                                         c0_1, h0_1)
+        (Hout_ref_2, cprev_2, hprev_2, batch_cache) = lstm_ref_2.forward(Hout_ref_1, WLSTM_2,
                                                                          c0_2, h0_2)
-        
+
         if reset_cells is False:
             c0_1 = cprev_1
             h0_1 = hprev_1
@@ -223,8 +224,6 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
         # the output needs transpose as well
         Hout_ref_1 = Hout_ref_1.reshape(seq_len * batch_size, hidden_size).T
         Hout_ref_2 = Hout_ref_2.reshape(seq_len * batch_size, hidden_size).T
-        IFOGf_ref = batch_cache['IFOGf'].reshape(seq_len * batch_size, hidden_size * 4).T
-        Ct_ref = batch_cache['Ct'].reshape(seq_len * batch_size, hidden_size).T
 
         fprop_ref_1_list.append(Hout_ref_1)
         fprop_ref_2_list.append(Hout_ref_2)
@@ -235,6 +234,6 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
 
 if __name__ == '__main__':
-    seq_len, input_size, hidden_size, batch_size = (8, 5, 16, 1) #(10, 3, 6, 1)
-    init = GaussianInit(0.0, 0.1) #ConstantInit(1.0)
-    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, return_seq=True)
+    seq_len, input_size, hidden_size, batch_size = (8, 5, 16, 1)
+    init = GaussianInit(0.0, 0.1)
+    check_lstm(seq_len, input_size, hidden_size, batch_size, init, return_seq=True)
