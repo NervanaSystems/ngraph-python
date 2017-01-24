@@ -104,7 +104,9 @@ class GPUTensorLayout(PeepholeGraphPass):
             else:
                 new_slices.append(s)
         if flip:
-            self.replace_op(op, SetItemOp(tensor, new_slices, tensor_slice(value, copy_slices)))
+            with Op.saved_user_deps():
+                self.replace_op(op, SetItemOp(tensor, new_slices,
+                                              tensor_slice(value, copy_slices)))
 
 
 class GPUContiguousPrune(PeepholeGraphPass):
