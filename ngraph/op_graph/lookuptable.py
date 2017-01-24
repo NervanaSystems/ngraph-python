@@ -89,7 +89,6 @@ class LookupTableOp(TensorOp):
         self.update = update
 
         if axes[self.lut_axis] != idx.axes[0]:
-            import pdb; pdb.set_trace()
             raise ValueError("Cannot transpose lut axes implicitly")
 
         super(LookupTableOp, self).__init__(args=(lut, idx),

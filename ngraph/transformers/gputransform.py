@@ -38,6 +38,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     Subtract, TanhOp, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.passes import SimplePrune, DerivPass, CompUserDepsPass
@@ -249,6 +250,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(LogOp)
     def add_op(self, op, out, x):
         self._buffer_op("log", x=x, out=out)
+
+    @add_op.on_type(LookupTableOp)
+    def add_op(self, op, outputs, lut, idx):
+        self._buffer_op("take", x=idx, y=lut, out=outputs, axis=op.lut_axis)
 
     @add_op.on_type(Max)
     def add_op(self, op, out, x):
@@ -584,6 +589,10 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
                                        op.reduction_axes.size))
+
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        pass
 
     def compile_all(self):
         """
