@@ -50,6 +50,7 @@ from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
+from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -592,7 +593,7 @@ class GPUKernelGroup(object):
 
     @add_kernel.on_type(update_lut)
     def add_kernel(self, op):
-        pass
+        self.kernels.append(LUTBpropKernel(self.transformer, op))
 
     def compile_all(self):
         """
