@@ -105,6 +105,7 @@ class LUTBpropKernel(GPUKernel):
         """
         Executes the pooling kernel.
         """
+        self.O.value.tensor.fill(0)
         self.word_counts.fill(0)
         for k in self.kernels:
             kernel, params = k

@@ -16,6 +16,7 @@ import itertools as itt
 import numpy as np
 
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
 from ngraph.frontends.neon import ax
 
@@ -38,7 +39,8 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('lut_args', fargs)
 
 
-def test_lut(lut_args):
+
+def test_lut(transformer_factory, lut_args):
     """
     test lut fprop and bprop
     """
@@ -79,5 +81,8 @@ def test_lut(lut_args):
 
 if __name__ == '__main__':
     # lut_args = (10, 3, 4, 10)
-    lut_args = (3, 3, 1, 1)
-    test_lut(lut_args)
+    factory = ngt.make_transformer_factory('gpu')
+    ngt.set_transformer_factory(factory)
+    (V, F, N, T) = (3, 3, 1, 1)
+    lut_args = (V, F, N, T)
+    test_lut(factory, lut_args)
