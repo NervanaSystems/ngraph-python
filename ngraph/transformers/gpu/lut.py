@@ -20,6 +20,7 @@ from ngraph.transformers.gpu.kernels.cuda import lookuptable
 from pycuda.gpuarray import empty
 import numpy as np
 
+
 class LUTBpropKernel(GPUKernel):
     """
     Kernel object to execute lookup table backward propagation. Selects from Nervana's
@@ -43,7 +44,7 @@ class LUTBpropKernel(GPUKernel):
         lut_axis = op.lut_axis
         # Only supported when reads are contiguous
         assert (lut_axis == 0)
-        
+
         embedding_dim = self.O.shape[1]
         vocab_size = self.O.shape[0]
         nin = self.E.shape[0]

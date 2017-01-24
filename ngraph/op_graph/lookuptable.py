@@ -36,6 +36,23 @@ def lookuptable(lut, idx, axes, update=True, pad_idx=None, docstring=None):
     return LookupTableOp(lut, idx, axes=axes, update=True, pad_idx=pad_idx, docstring=docstring)
 
 
+def lookuptable_update(delta, lut, idx, fprop_op):
+    """
+    An operation to update the lookup embedding - lut using the idx.
+
+    Args:
+        delta (TensorOp): The delta
+        lut (TensorOp): The lookup table.
+        idx (TensorOp): The indices to do the lookup.
+        fprop_op (TensorOp): the reference of the lookuptableOp
+
+    Returns:
+        TensorOp: The result of the lookup update.
+
+    """
+    return update_lut(delta, lut, idx, fprop_op)
+
+
 class LookupTableOp(TensorOp):
 
     def __init__(self, lut, idx, axes, update=True, pad_idx=None, **kwargs):

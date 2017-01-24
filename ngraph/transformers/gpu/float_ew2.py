@@ -116,7 +116,8 @@ _index_template32 = \
 
 _take_index_template1 = r"%(index)s = %(idxa)s * %(stridea)s;"
 _take_index_template2 = r"%(index)s = %(idxa)s * %(stridea)s + %(idxb)s * %(strideb)s;"
-_take_index_template3 = r"%(index)s = %(idxa)s * %(stridea)s + %(idxb)s * %(strideb)s + %(idxc)s * %(stridec)s;"
+_take_index_template3 = \
+    r"%(index)s = %(idxa)s * %(stridea)s + %(idxb)s * %(strideb)s +%(idxc)s * %(stridec)s;"
 
 _load_template = r"%(buffer)s[%(index)s]"
 

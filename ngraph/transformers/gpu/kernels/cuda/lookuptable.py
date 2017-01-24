@@ -143,8 +143,8 @@ def _get_sorting_kernel(kernel_id, block_size, in_dtype):
 #define THREADS %(threads)s
 #define STORE_BLOCKSUM %(store_blocksum)s
 __global__ void sort_inputs0(
-        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts, const int vocab_size,
-        const int input_length)
+        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts,
+        const int vocab_size, const int input_length)
 {
     const int tid = threadIdx.x + (blockDim.x * blockIdx.x);
     int word_id;
@@ -207,22 +207,22 @@ __device__ void scan(int* buffer, int* blocksum, int global_length)
 }
 
 __global__ void sort_inputs1(
-        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts, const int vocab_size,
-        const int input_length)
+        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts,
+        const int vocab_size, const int input_length)
 {
     scan(word_counts, word_counts + vocab_size, vocab_size);
 }
 
 __global__ void sort_inputs2(
-        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts, const int vocab_size,
-        const int input_length)
+        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts,
+        const int vocab_size, const int input_length)
 {
     scan(word_counts + vocab_size, 0, blockDim.x);
 }
 
 __global__ void sort_inputs3(
-        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts, const int vocab_size,
-        const int input_length)
+        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts,
+        const int vocab_size, const int input_length)
 {
     const int gid = (threadIdx.x + (blockIdx.x * blockDim.x)) << 1;
 
@@ -234,8 +234,8 @@ __global__ void sort_inputs3(
 }
 
 __global__ void sort_inputs4(
-        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts, const int vocab_size,
-        const int input_length)
+        %(in_dtype)s* inputs, int* index_buffer, int* offset_buffer, int* word_counts,
+        const int vocab_size, const int input_length)
 {
     const int tid = threadIdx.x + (blockDim.x * blockIdx.x);
     int word_id;
