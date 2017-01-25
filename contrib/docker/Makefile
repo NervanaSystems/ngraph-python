@@ -11,6 +11,16 @@ PYTHON_VERSION = 2
 
 .PHONY: build_test test build_base build_dev
 
+DOCKER_BUILD=docker build
+
+ifdef http_proxy
+DOCKER_BUILD+=--build-arg http_proxy=$(http_proxy)
+endif
+
+ifdef http_proxy
+DOCKER_BUILD+=--build-arg https_proxy=$(https_proxy)
+endif
+
 expand_dockerfile_templates:
 	cd ${DIR}/contrib/docker
 	mkdir ${BUILD_DIR} || true
@@ -31,10 +41,10 @@ clean:
 	rmdir ${DIR}/contrib/docker/.build-*
 
 build_base: expand_dockerfile_templates fallback_cuda_version
-	docker build -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_${BUILD_VERSION} ${DIR}
 
 build_dev: build_base
-	docker build -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev_${BUILD_VERSION} ${DIR}
 
 build_test: build_base
 	# hack to clone autoflex here in this working directory so it can be
@@ -47,10 +57,10 @@ build_test: build_base
 	git clone git@github.com:NervanaSystems/autoflex.git
 
 	# now build the docker container
-	docker build -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test_${BUILD_VERSION} ${DIR}
 
 build_doc: build_base
-	docker build -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc_${BUILD_VERSION} ${DIR}
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
