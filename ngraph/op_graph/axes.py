@@ -1066,7 +1066,7 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def assert_broadcast_valid(axes, new_axes):
+    def assert_valid_broadcast(axes, new_axes):
         """
         Checks whether axes can be broadcasted to new_axes. We require
         that the components of axes be laid out in the same order in new_axes.
@@ -1101,7 +1101,7 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def check_flatten(axes, new_axes):
+    def assert_valid_flatten(axes, new_axes):
         """
         Checks whther axes can safely be flattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1115,11 +1115,11 @@ class Axes(object):
         Returns:
             True if axes can be safely flattened to new_axes, False otherwise.
         """
-        return Axes.check_unflatten(new_axes, axes)
+        Axes.assert_valid_unflatten(new_axes, axes)
 
     @staticmethod
     @with_args_as_axes
-    def check_unflatten(axes, new_axes):
+    def assert_valid_unflatten(axes, new_axes):
         """
         Checks whether axes can safely be unflattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1438,7 +1438,7 @@ class TensorDescription(NameableValue):
     def flatten(self, new_axes, name=None):
         """
         Flattens a tensor description to give it the Axes in new_axes.
-        See Axes.check_flatten for a description of permitted values of new_axes.
+        See Axes.assert_valid_flatten for a description of permitted values of new_axes.
 
         Arguments:
             new_axes: The Axes of the flattened tensor description.
@@ -1447,7 +1447,7 @@ class TensorDescription(NameableValue):
             The reshaped tensor description.
         """
         new_axes = Axes(new_axes)
-        assert Axes.check_flatten(self.axes, new_axes)
+        Axes.assert_valid_flatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -1480,7 +1480,7 @@ class TensorDescription(NameableValue):
     def unflatten(self, new_axes, name=None):
         """
         Unflattens a tensor description to give it the Axes in new_axes.
-        See Axes.check_unflatten for a description of the permitted values of
+        See Axes.assert_valid_unflatten for a description of the permitted values of
         new_axes
 
         Arguments:
@@ -1547,7 +1547,7 @@ class TensorDescription(NameableValue):
             raise ValueError()
 
         new_axes = Axes(new_axes)
-        assert Axes.check_unflatten(self.axes, new_axes)
+        Axes.assert_valid_unflatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -1589,7 +1589,7 @@ class TensorDescription(NameableValue):
     def broadcast(self, new_axes, name=None):
         """
         Adds axes to a tensor description to give it a new shape.
-        See Axes.assert_broadcast_valid for a description of the permitted
+        See Axes.assert_valid_broadcast for a description of the permitted
         transformations.
 
         Arguments:
@@ -1598,7 +1598,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The broadcasted tensor description.
         """
-        Axes.assert_broadcast_valid(self.axes, new_axes)
+        Axes.assert_valid_broadcast(self.axes, new_axes)
         return self.reorder_and_broadcast(new_axes, name)
 
     def reorder(self, new_axes, name=None):

@@ -1465,7 +1465,7 @@ class BroadcastOp(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        Axes.assert_broadcast_valid(x.axes, axes)
+        Axes.assert_valid_broadcast(x.axes, axes)
         super(BroadcastOp, self).__init__(
             x, axes=axes, **kwargs
         )
@@ -1761,7 +1761,7 @@ class Unflatten(ReshapeOp):
             for axis in x.axes:
                 axes.extend(axis.axes)
         axes = make_axes(axes)
-        assert Axes.check_unflatten(x.axes, axes)
+        assert Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
