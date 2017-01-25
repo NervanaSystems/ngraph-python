@@ -60,18 +60,17 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-testflex:
+testflex: clean
 	@echo Running flex unit tests...
 	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
 	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
-test_parallel: testflex
+test_parallel: clean testflex
 	@echo Running unit tests...
-	@find . -type f -name \*.pyc -exec rm {} \;
 	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test: testflex
+test: clean testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
