@@ -1078,7 +1078,15 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        removed_axes = set(axes) - set(new_axes)
+        def base_annotated_axis(axis):
+            if axis != axis.annotated_axis:
+                return base_annotated_axis(axis.annotated_axis)
+            else:
+                return axis
+
+        removed_axes = (set(map(base_annotated_axis, axes)) -
+                        set(map(base_annotated_axis, axes)))
+
         if removed_axes:
             raise ValueError(("The new_axes of a broadcast operation must "
                               "include all of the axes from the origional set "
