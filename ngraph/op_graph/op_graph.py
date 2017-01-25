@@ -1465,7 +1465,7 @@ class BroadcastOp(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        assert Axes.check_broadcast(x.axes, axes)
+        Axes.assert_broadcast_valid(x.axes, axes)
         super(BroadcastOp, self).__init__(
             x, axes=axes, **kwargs
         )

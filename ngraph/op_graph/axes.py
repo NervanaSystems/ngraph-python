@@ -1066,7 +1066,7 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def check_broadcast(axes, new_axes):
+    def assert_broadcast_valid(axes, new_axes):
         """
         Checks whether axes can be broadcasted to new_axes. We require
         that the components of axes be laid out in the same order in new_axes.
@@ -1078,20 +1078,18 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        def check(condition):
-            if not condition:
-                return False
-
-        axes_s = set(axes)
-        idx = 0
-        for new_axis in new_axes:
-            if idx < len(axes) and new_axis == axes[idx]:
-                idx += 1
-            else:
-                check(new_axis not in axes_s)
-
-        check(idx == len(axes))
-        return True
+        removed_axes = set(axes) - set(new_axes)
+        if removed_axes:
+            raise ValueError(("The new_axes of a broadcast operation must "
+                              "include all of the axes from the origional set "
+                              "of axes. \n"
+                              "  original axes: {axes}\n"
+                              "  new axes: {new_axes}\n"
+                              "  missing axes: {removed_axes}").format(
+                axes=axes,
+                new_axes=new_axes,
+                removed_axes=removed_axes,
+            ))
 
     @staticmethod
     @with_args_as_axes
@@ -1583,7 +1581,7 @@ class TensorDescription(NameableValue):
     def broadcast(self, new_axes, name=None):
         """
         Adds axes to a tensor description to give it a new shape.
-        See Axes.check_broadcast for a description of the permitted
+        See Axes.assert_broadcast_valid for a description of the permitted
         transformations.
 
         Arguments:
@@ -1592,7 +1590,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The broadcasted tensor description.
         """
-        Axes.check_broadcast(self.axes, new_axes)
+        Axes.assert_broadcast_valid(self.axes, new_axes)
         return self.reorder_and_broadcast(new_axes, name)
 
     def reorder(self, new_axes, name=None):
