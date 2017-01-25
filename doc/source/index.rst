@@ -32,6 +32,7 @@
    building_graphs.rst
    axes.rst
    autodiff.rst
+   adding_new_ops.rst
 
 .. toctree::
    :hidden:

@@ -46,7 +46,7 @@ class OpsBinary(OpsBase):
         value's last dim.
 
         Arguments:
-            tf_node: NodeDef object, the tensorflow node tso convert.
+            tf_node: NodeDef object, the tensorflow node to convert.
             inputs: List of ngraph Ops as inputs to this node.
 
         Returns:

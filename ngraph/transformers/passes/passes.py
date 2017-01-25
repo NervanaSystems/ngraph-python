@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
-    negative, cast_axes, power
+    negative, cast_axes, power, DerivOp, ComputationOp
 
 from ngraph.util.generics import generic_method
 from ngraph.util.ordered import OrderedSet
@@ -235,6 +235,66 @@ class RequiredTensorShaping(PeepholeGraphPass):
         x = op.args[0]
         if op.axes == x.axes:
             self.replace_op(op, x)
+
+
+class DerivPass(PeepholeGraphPass):
+    """
+    The pass that computes derivatives, i.e. expanding DerivOp to actual
+    derivatives.
+    """
+
+    @staticmethod
+    def _deriv(dependent, independent, error=constant(1)):
+        """
+        Computes the operation for [dDependent/dIndependent](error=1).
+        The derivative is a multi-linear function.
+        Args:
+            dependent (TensorOp): Dependent op.
+            independent(TensorOp): Independent op.
+            error (TensorOp, optional): The tensor holding the error where the
+                derivative will be computed at. Must have the same axes as dependent.
+        Returns:
+            TensorOp: Derivative applied to error. Has axes of independent.
+        """
+        if not error.axes.has_same_axes(dependent.axes):
+            raise ValueError(
+                "Dependent and error must have the same set of axes")
+
+        adjoints = dependent.forwarded.adjoints(error)
+
+        if independent.forwarded not in adjoints:
+            return constant(0, independent.axes)
+
+        adjoint = adjoints[independent.forwarded]
+        return broadcast(adjoint.forwarded, axes=independent.axes)
+
+    @generic_method()
+    def visit(self, op):
+        pass
+
+    @visit.on_type(DerivOp)
+    def visit(self, op):
+        # redundant names to keep consistent for now
+        deriv = DerivPass._deriv(op.dependent, op.independent, op.error)
+        self.replace_op(op, deriv)
+
+
+class CompUserDepsPass(PeepholeGraphPass):
+    """
+    Pass that converts ComputationOp's user_deps. Currently CompUserDepsPass
+    is required since passes are not able to add ops that require user_deps,
+    which may need to be refactored.
+
+    TODO: This is a temporary fix until user_deps gets cleaned up.
+    """
+
+    @generic_method()
+    def visit(self, op):
+        pass
+
+    @visit.on_type(ComputationOp)
+    def visit(self, op):
+        op.require_user_deps(list(map(lambda x: x.forwarded, op.other_deps)))
 
 
 class SimplePrune(PeepholeGraphPass):

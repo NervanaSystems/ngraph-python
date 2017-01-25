@@ -452,7 +452,7 @@ class CastingAxis(Axis):
             the dual space of level n.
 
         """
-        return self.annotated_axis.dual_level()
+        return self.annotated_axis.dual_level
 
     def __add__(self, offset):
         return CastingAxis(self.annotated_axis.get_dual(offset),
