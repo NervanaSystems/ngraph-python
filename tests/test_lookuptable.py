@@ -18,7 +18,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.op_graph.lookuptable import lookuptable_update
 import ngraph.transformers as ngt
-from ngraph.util.utils import RandomTensorGenerator, ExecutorFactory
+from ngraph.testing import RandomTensorGenerator, ExecutorFactory
 from ngraph.frontends.neon import ax
 
 rng = RandomTensorGenerator(0, np.float32)
