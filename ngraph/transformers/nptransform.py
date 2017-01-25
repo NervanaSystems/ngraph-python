@@ -36,6 +36,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
     MinimumOneDim, MinimumZeroDim, \
     MultiplyOneDim, MultiplyZeroDim, \
+    StopGradientOneDOp, \
     NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
     Power, PowerZeroDim, \
     AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
@@ -565,6 +566,10 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(MultiplyZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(StopGradientOneDOp)
+    def generate_op(self, op, out, x):
+        self.append("np.copyto(src={}, dst={}, casting='no')", x, out)
 
     @generate_op.on_type(NegativeOneDOp)
     def generate_op(self, op, out, x):
