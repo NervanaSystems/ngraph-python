@@ -56,6 +56,8 @@ checkpoint
 
 # test
 coverage.xml
+.coverage*
+testout.xml
 
 # doc
 doc/source/Graph_Introduction.rst
