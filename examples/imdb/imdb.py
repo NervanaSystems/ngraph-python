@@ -42,7 +42,7 @@ def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
     return X
 
 
-def pad_sentence(sentences, pad_value, pad_to_len=None, pad_from='left'):
+def pad_sentence(sentences, pad_idx, pad_to_len=None, pad_from='left'):
     """
     pad the sentence to the same length. When the length is not given,
     use the max length from the set.
@@ -54,7 +54,7 @@ def pad_sentence(sentences, pad_value, pad_to_len=None, pad_from='left'):
         lengths = [len(sent) for sent in sentences]
         pad_to_len = np.max(lengths)
 
-    X = (np.ones((nsamples, pad_to_len)) * pad_value).astype(dtype=np.int32)
+    X = (np.ones((nsamples, pad_to_len)) * pad_idx).astype(dtype=np.int32)
     for i, sent in enumerate(sentences):
         trunc = sent[-pad_to_len:]
         if pad_from is 'left':
@@ -75,7 +75,8 @@ class IMDB(object):
 
     """
 
-    def __init__(self, path='.', vocab_size=20000, sentence_length=128, shuffle=False):
+    def __init__(self, path='.', vocab_size=20000, sentence_length=128,
+                 pad_idx=0, shuffle=False):
         self.path = path
         self.url = 'https://s3.amazonaws.com/text-datasets'
         self.filename = 'imdb.pkl'
@@ -83,6 +84,7 @@ class IMDB(object):
         self.vocab_size = vocab_size
         self.sentence_length = sentence_length
         self.shuffle = shuffle
+        self.pad_idx = pad_idx
 
     def load_data(self, test_split=0.2):
         self.data_dict = {}
@@ -96,7 +98,7 @@ class IMDB(object):
 
         X = preprocess_text(X, self.vocab_size)
         X = pad_sentence(
-            X, pad_value=0, pad_to_len=self.sentence_length, pad_from='left')
+            X, pad_idx=self.pad_idx, pad_to_len=self.sentence_length, pad_from='left')
 
         if self.shuffle:
             np.random.seed(123)

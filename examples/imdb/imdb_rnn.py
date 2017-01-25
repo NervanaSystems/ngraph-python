@@ -41,9 +41,10 @@ hidden_size = 10
 gradient_clip_value = 15
 embed_size = 128
 vocab_size = 20000
+pad_idx = 0
 
 # download IMDB
-imdb_dataset = IMDB(path=args.data_dir, sentence_length=time_steps)
+imdb_dataset = IMDB(path=args.data_dir, sentence_length=time_steps, pad_idx=pad_idx)
 imdb_data = imdb_dataset.load_data()
 
 train_set = ArrayIterator(imdb_data['train'], batch_size=args.batch_size,
@@ -64,7 +65,7 @@ else:
                    reset_cells=True, return_sequence=False, sum_out=True)
 
 # model initialization
-seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True),
+seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_idx=pad_idx),
                    rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=ax.Y)])
 
