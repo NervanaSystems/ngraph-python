@@ -452,7 +452,7 @@ class CastingAxis(Axis):
             the dual space of level n.
 
         """
-        return self.annotated_axis.dual_level()
+        return self.annotated_axis.dual_level
 
     def __add__(self, offset):
         return CastingAxis(self.annotated_axis.get_dual(offset),
@@ -1028,6 +1028,21 @@ class Axes(object):
             The index.
         """
         return self._axes.index(axis)
+
+    def index_unique(self, axis):
+        """
+        Returns the index of an axis and ignores match_on_length behavior
+
+        Arguments:
+            axis: The axis to search for.
+
+        Returns:
+            The index.
+        """
+        for i in range(len(self._axes)):
+            if self._axes[i].annotated_axis is axis.annotated_axis:
+                return i
+        raise ValueError("Axis not in axes")
 
     def has_same_axes(self, axes):
         """

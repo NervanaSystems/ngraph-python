@@ -15,7 +15,7 @@
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 from ngraph.frontends.neon import ar
-from ngraph.op_graph.axes import spatial_axis
+from ngraph.frontends.neon.layer import output_dim
 import ngraph as ng
 import numpy as np
 
@@ -130,14 +130,19 @@ class OpsNN(OpsBase):
 
         # TODO: we assume NCHW, make some assert here?
 
-        # set axes shape
+        # set input axes shape
         ax_N = ng.make_axis(batch=True)
         ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth])
+        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
         ax_W = ng.make_axis(roles=[ar.Width])
         ng.make_axes([ax_N, ax_C, ax_H, ax_W]).set_shape(image.axes.lengths)
-        ax_D.length = 1
+
+        # create placeholders for output axes
+        oC = ng.make_axis(name='C', roles=[ar.Channel])
+        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.Height])
+        oW = ng.make_axis(name='W', roles=[ar.Width])
 
         # spatial kernel size
         kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
@@ -149,12 +154,11 @@ class OpsNN(OpsBase):
 
         # strides params
         stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
-        if len(kernel_size) != 1:
+        if len(stride_size) != 1:
             raise ValueError("Stride size must be scalar value")
         stride_h = stride_w = stride_size[0]
 
         # padding params
-
         # TODO: how to handle padding in caffe2?
         # padding = c2_op.attr['padding'].s.decode("ascii")
         # padding = (image_size - kernel_size) % stride_size
@@ -177,15 +181,13 @@ class OpsNN(OpsBase):
                       str_d=1, str_h=stride_h, str_w=stride_w, str_c=1,
                       J=kernel_c, T=kernel_d, R=kernel_h, S=kernel_w)
 
-        # i, f, o axes
+        # i, o axes
+        oC.length = output_dim(ax_C.length, kernel_c, params['pad_c'], params['str_c'])
+        oD.length = output_dim(ax_D.length, kernel_d, params['pad_d'], params['str_d'])
+        oH.length = output_dim(ax_H.length, kernel_h, params['pad_h'], params['str_h'])
+        oW.length = output_dim(ax_W.length, kernel_w, params['pad_w'], params['str_w'])
         ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
-        ax_o = ng.make_axes([
-            spatial_axis(ax_i, kernel_c, params['pad_c'], params['str_c'], ar.Channel),
-            spatial_axis(ax_i, kernel_d, params['pad_d'], params['str_d'], ar.Depth),
-            spatial_axis(ax_i, kernel_h, params['pad_h'], params['str_h'], ar.Height),
-            spatial_axis(ax_i, kernel_w, params['pad_w'], params['str_w'], ar.Width),
-            ax_N
-        ])
+        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
 
         # broadcast input / filter axes
         image = ng.cast_axes(image, ng.make_axes([ax_N, ax_C, ax_H, ax_W]))
@@ -196,11 +198,144 @@ class OpsNN(OpsBase):
         output = ng.pooling(params, image, axes=ax_o)
 
         # cast back to NDCHW
-        oC, oD, oH, oW, oN = output.axes
-        output = ng.broadcast(output, ng.make_axes([oN, oD, oC, oH, oW]))
+        output = ng.broadcast(output, ng.make_axes([ax_N, oD, oC, oH, oW]))
 
         # slice away the oD
         out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
         output = ng.tensor_slice(output, out_slicing)
 
         return output
+
+    def Conv(self, c2_op, inputs):
+        """
+        Computes a 2-D convolution given 4D input and filter tensors.
+
+        Arguments:
+            c2_op: NodeDef object, the caffe2 node to convert.
+            inputs: List of ngraph Ops as inputs to this node.
+
+        Returns:
+            A ngraph Op corresponding to the caffe2 node.
+
+        Inputs to c2_op:
+            input, wegiths, filter
+
+        Supports caffe2's layout NHWC and NCHW as well.
+        """
+        X, W, bias = inputs
+
+        order = [val.s for val in c2_op.arg._values if val.name == "order"]
+        if 1 != len(order):
+            raise ValueError("Multiple order values in convolution")
+        order = order[0]
+
+        if order not in ("NHWC", "NCHW"):
+            raise NotImplementedError("Unsupported order in convolution: {}", order)
+
+        # set input axes shape
+        ax_N = ng.make_axis(batch=True)
+        ax_C = ng.make_axis(roles=[ar.Channel])
+        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
+        ax_H = ng.make_axis(roles=[ar.Height])
+        ax_W = ng.make_axis(roles=[ar.Width])
+
+        # set kernel axes shape
+        ax_kernel_D = ng.make_axis(roles=[ar.Depth], length=1)
+        ax_kernel_H = ng.make_axis(roles=[ar.Height])
+        ax_kernel_W = ng.make_axis(roles=[ar.Width])
+        ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
+
+        # create placeholders for output axes
+        oC = ng.make_axis(name='C', roles=[ar.Channel])
+        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
+        oH = ng.make_axis(name='H', roles=[ar.Height])
+        oW = ng.make_axis(name='W', roles=[ar.Width])
+
+        axes_order = {
+            'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],
+                     'W': [ax_kernel_ofm, ax_C, ax_kernel_H, ax_kernel_W]},
+            'NHWC': {'X': [ax_N, ax_H, ax_W, ax_C],
+                     'W': [ax_kernel_ofm, ax_kernel_H, ax_kernel_W, ax_C]},
+        }
+
+        ng.make_axes(axes_order[order]['X']).set_shape(X.axes.lengths)
+        ng.make_axes(axes_order[order]['W']).set_shape(W.axes.lengths)
+
+        if 1 != len(bias.axes):
+            raise ValueError("Bias's must be 1D.")
+        if ax_kernel_ofm.length != bias.axes.lengths[0]:
+            raise ValueError("Bias's length must equal to number of output feature maps.")
+
+        # strides params
+        stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
+        if len(stride_size) != 1:
+            raise ValueError("Stride size must be scalar value")
+        str_h = str_w = stride_size[0]
+
+        # padding params
+        # TODO: how to handle padding in caffe2?
+        # padding = c2_op.attr['padding'].s.decode("ascii")
+        # padding = (image_size - kernel_size) % stride_size
+        padding = np.mod(np.array([ax_H.length, ax_W.length])
+                         - np.array([ax_kernel_H.length, ax_kernel_W.length]),
+                         np.array([str_h, str_w]))
+        if not np.array_equal(padding, [0] * len(padding)):
+            raise NotImplementedError("Convolution does not support padding yet")
+
+        pad_t = pad_b = pad_l = pad_r = 0
+
+        if pad_t != pad_b or pad_l != pad_r:
+            raise NotImplementedError("Requires symmetric padding in ngraph:"
+                                      "pad_t(%s) == pad_b(%s) and"
+                                      "pad_l(%s) == pad_r(%s)" %
+                                      (pad_t, pad_b, pad_l, pad_r))
+
+        # conv params
+        params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
+                      str_d=1, str_h=str_h, str_w=str_w)
+
+        # input, weight, output axes
+        internal_ax_dict = {
+            'X': ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N]),
+            'W': ng.make_axes([ax_C, ax_kernel_D, ax_kernel_H, ax_kernel_W, ax_kernel_ofm])
+        }
+
+        oC.length = ax_kernel_ofm.length
+        oH.length = output_dim(ax_H.length, ax_kernel_H.length, params['pad_h'], params['str_h'])
+        oW.length = output_dim(ax_W.length, ax_kernel_W.length, params['pad_w'], params['str_w'])
+        internal_ax_dict['Y'] = ng.make_axes([oC, oD, oH, oW, ax_N])
+
+        # broadcast input / filter axes
+        # flow for NHWC order:                   |  flow for NCHW order:
+        # input:                                 |  input:
+        #   expand dims: NHWC -> NDHWC           |    expand dims: NCHW -> NDCHW
+        #   reorder:     NDHWC -> CDHWN          |    reorder:     NDCHW -> CDHWN
+        # weights:                               |  weights:
+        #   expand dims: (ofm)HWC -> D(ofm)HWC   |    expand dims: (ofm)CHWC -> D(ofm)CHW
+        #   reorder:     D(ofm)HWC -> CDHW(ofm)  |    reorder:     D(ofm)CHW -> CDHW(ofm)
+
+        X = ng.cast_axes(X, ng.make_axes(axes_order[order]['X']))
+        X = ng.expand_dims(X, ax_D, 1)
+        X = ng.axes_with_order(X, axes=internal_ax_dict['X'])
+        W = ng.cast_axes(W, ng.make_axes(axes_order[order]['W']))
+        W = ng.expand_dims(W, ax_kernel_D, 0)
+        W = ng.axes_with_order(W, axes=internal_ax_dict['W'])
+
+        # convolution
+        Y = ng.convolution(params, X, W, axes=internal_ax_dict['Y'])
+
+        # cast back to proper format
+        Y = ng.broadcast(Y, ng.make_axes([ax_N, oD, oH, oW, oC])) if "NHWC" == order \
+            else ng.broadcast(Y, ng.make_axes([ax_N, oD, oC, oH, oW]))  # NCHW
+
+        # slice away the oD
+        out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
+        Y = ng.tensor_slice(Y, out_slicing)
+
+        def _conv_bias_add(c2_op, inputs):
+            X, bias = inputs
+            bias = ng.cast_axes(bias, axes=ng.make_axes([X.axes[1 if 'NCHW' == order else 3]]))
+            Y = ng.Add(X, bias)
+            return Y
+
+        return _conv_bias_add(c2_op, [Y, bias])

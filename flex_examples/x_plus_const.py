@@ -12,16 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
+from __future__ import print_function
+import numpy as np
+import ngraph as ng
 import ngraph.transformers as ngt
+import ngraph.op_graph.axes as ax
+from ngraph.flex.flexargparser import FlexNgraphArgparser
 
 
-@pytest.fixture(scope="class", params=ngt.transformer_choices())
-def transformer_factory(request):
-    factory = ngt.make_transformer_factory(request.param)
-    ngt.set_transformer_factory(factory)
-    yield factory
+parser = FlexNgraphArgparser(description='x + 1.5 example')
+args = parser.parse_args()
+transformer_name = args.backend
 
-    # Reset transformer factory to default
-    ngt.set_transformer_factory(
-        ngt.make_transformer_factory("numpy"))
+transformer = ngt.make_transformer()
+
+# Build the graph
+x = ng.placeholder(())
+x_plus_one = x + 1.5
+
+# Define a computation
+plus_one = transformer.computation(x_plus_one, x)
+
+# Run the computation
+for i in range(5):
+    print(plus_one(i))
+    print()
