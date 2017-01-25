@@ -18,6 +18,7 @@ expand_dockerfile_templates:
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
+	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.caffe2 > ${BUILD_DIR}/Dockerfile.caffe2
 
 fallback_cuda_version: expand_dockerfile_templates
 # if has cuda && v8.0 cuda toolkit -> use nvidia 7.5 base image
@@ -54,6 +55,12 @@ build_doc: build_base
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
+
+build_caffe2: build_test
+	docker build -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2_${BUILD_VERSION} ${DIR}
+
+test_caffe2: build_caffe2
+	docker run --rm ${VOLUME} -t ngraph_caffe2_${BUILD_VERSION} py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed ngraph/frontends/caffe2/tests/
 
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test

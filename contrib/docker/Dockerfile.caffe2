@@ -1,0 +1,34 @@
+FROM ngraph_test
+
+# Caffe2 dependencies
+RUN apt-get update && apt-get install -q -y \
+    git \
+    cmake \
+    g++ \
+    libeigen3-dev \
+    libgoogle-glog-dev \
+    libleveldb-dev \
+    liblmdb-dev \
+    libopencv-dev \
+    libprotobuf-dev \
+    libsnappy-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    protobuf-compiler \
+    python-dev \
+    python-pip
+
+# Required Python packages
+RUN pip install --upgrade pip && pip install \
+    numpy \
+    protobuf
+
+# Clone and build Caffe2
+RUN git clone --recursive https://github.com/caffe2/caffe2.git /opt/caffe2 
+
+WORKDIR /opt/caffe2/
+RUN mkdir build && cd build && cmake .. -DUSE_CUDA=OFF -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
+    make -j && make install
+
+ENV PYTHONPATH=/opt/caffe2/build/
+WORKDIR /root/private-ngraph
