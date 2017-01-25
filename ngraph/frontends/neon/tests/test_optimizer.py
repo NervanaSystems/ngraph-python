@@ -68,8 +68,16 @@ def test_gdm(args, transformer_factory):
     C = ng.make_axis(20, name="C")
     N = ng.make_axis(32, name="N", batch=True)
 
-    # generate dummy data (to initialize values)
-    w_init = np.random.rand(C.length).astype('float32')
+    lrate, mom, wdecay = args
+    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
+                                  wdecay=wdecay)
+
+    # params to be updated using GDM
+    np_W = np.random.rand(C.length)
+    W = ng.variable([C - 1], initial_value=np_W)
+
+    # Set up initial velocity
+    velocity = np.zeros(C.length)
 
     # Set up data placeholders
     X = ng.placeholder([C, N]).named("X")
@@ -105,27 +113,30 @@ def test_gdm_nesterov(args, transformer_factory):
     gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
                                   wdecay=wdecay, nesterov=True)
 
-    # set up the reference values for gradient descent
-    w_ref = w_init.copy()
-    vel_ref = np.zeros_like(w_ref)
+    C = ng.make_axis(20, name="C")
+    N = ng.make_axis(32, name="N", batch=True)
 
-    # store the weights with each minibatch for debugging
-    ng_Ws = []
+    # params to be updated using GDM
+    np_W = np.random.rand(C.length)
+    W = ng.variable([C - 1], initial_value=np_W)
 
     # Set up initial velocity
     velocity = np.zeros(C.length)
 
-        # obtain reference results
-        dw = -1 * x.sum(axis=1) / N.length   # the gradients we compute analytically
+    # Set up data placeholders
+    data = ng.placeholder([C, N]).named("data")
+    target = ng.placeholder([N]).named("target")
 
-        dw = dw + wdecay * w_ref
-        if mom == 0:
-            w_ref[:] = w_ref - lrate * dw
-        else:
-            vel_ref[:] = mom * vel_ref - lrate * dw
-            w_ref[:] = w_ref + vel_ref
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W, data), out_axis=())
+    updates = gdm(cost)
+    optimize = transformer.computation([W, updates], data, target)
 
-        ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
+    # Set up numpy version
+    def numpy_nesterov(x, y):
+        grad = -1 * x.mean(axis=1)
+        velocity[:] = mom * velocity - lrate * (grad + wdecay * np_W)
+        np_W[:] = np_W + mom * velocity - lrate * (grad + wdecay * np_W)
 
         return np_W
 
