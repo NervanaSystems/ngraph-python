@@ -135,6 +135,7 @@ class HetrComputation(object):
     """
 
     def __init__(self, hetr, results, *parameters, **kwargs):
+        # Exit immediately with empty computation
         #super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
         self.child_computations = dict()
         self.child_results_map = dict()
@@ -143,6 +144,7 @@ class HetrComputation(object):
         self.hetr_passes = hetr.hetr_passes
         self.num_results = 0
 
+        orig_results = results
         if not isinstance(results, list):
             results = [results] 
         all_results = OrderedSet(results)
@@ -152,14 +154,15 @@ class HetrComputation(object):
         #   - computation object used to update all_results of transformer
         #   - transformer transform_ops used to use all_results but not update it, and return a new copy
 
-        # Do Hetr passes
-        inits = OrderedSet()
-        for graph_pass in self.hetr_passes:
-            all_results, inits = graph_pass.do_pass(all_results, inits)
+        if orig_results is not None:
+            # Do Hetr passes
+            inits = OrderedSet()
+            for graph_pass in self.hetr_passes:
+                all_results, inits = graph_pass.do_pass(all_results, inits)
 
-        if hetr.vizpass:
-            vis_results = all_results + hetr.send_nodes_list
-            hetr.vizpass.do_pass(vis_results, inits)
+            if hetr.vizpass:
+                vis_results = all_results + hetr.send_nodes_list
+                hetr.vizpass.do_pass(vis_results, inits)
 
         self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
@@ -169,10 +172,12 @@ class HetrComputation(object):
             self.transformer_to_node[tname].append(s)
 
         self.num_results = len(results)
-        for pos, op in enumerate(results):
-            tname = op.metadata['transformer']
-            self.transformer_to_node[tname].append(op)
-            self.child_results_map.setdefault(tname, []).append(pos)
+
+        if orig_results is not None:
+            for pos, op in enumerate(results):
+                tname = op.metadata['transformer']
+                self.transformer_to_node[tname].append(op)
+                self.child_results_map.setdefault(tname, []).append(pos)
 
         ###
         # TODO WIP was trying to make the loops below more concise

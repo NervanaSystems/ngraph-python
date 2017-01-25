@@ -48,7 +48,7 @@ def test_batchnorm_fprop(basic_bnargs, transformer_factory):
     fprop = layer.train_outputs(inp)
 
     ex = ExecutorFactory()
-    fprop_function = ex.executor(fprop, inp)
+    fprop_function = ex.executor([fprop, layer.gmean, layer.gvar], inp)
     np.random.seed(0)
 
     # initial conditions for tracked variables
@@ -58,7 +58,7 @@ def test_batchnorm_fprop(basic_bnargs, transformer_factory):
     for i in range(2):
         x = np.random.random((nin, batch_size)).astype(np.float32)
 
-        out = fprop_function(x)
+        out, gm, gv = fprop_function(x)
 
         xmean = x.mean(axis=1, keepdims=True)
         xvar = x.var(axis=1, keepdims=True)
@@ -66,8 +66,6 @@ def test_batchnorm_fprop(basic_bnargs, transformer_factory):
         gmean_ref = xmean.ravel() * (1.0 - rho) + gmean_ref * rho
         gvar_ref = xvar.ravel() * (1.0 - rho) + gvar_ref * rho
 
-        gm = layer.gmean.value.get(None)
-        gv = layer.gvar.value.get(None)
         assert ng.testing.allclose(out, out_ref, atol=1e-6), '%e' % np.max(np.abs(out - out_ref))
         assert ng.testing.allclose(gm, gmean_ref, atol=1e-6), '%e' % np.max(np.abs(gm - gmean_ref))
         assert ng.testing.allclose(gv, gvar_ref, atol=1e-6), '%e' % np.max(np.abs(gv - gvar_ref))
