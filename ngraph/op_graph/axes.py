@@ -16,6 +16,7 @@ from __future__ import division
 
 import collections
 import operator
+import itertools
 from functools import reduce, wraps
 
 import numpy as np
@@ -1079,6 +1080,12 @@ class Axes(object):
             True if axes can be broadcasted to new_axes, False otherwise.
         """
         def base_annotated_axis(axis):
+            """
+            Find the base annotated axis.
+
+            If ax_a gets casted to ax_b and then casted to ax_c,
+            base_annotated_axis(ax_c) == ax_a.
+            """
             if axis != axis.annotated_axis:
                 return base_annotated_axis(axis.annotated_axis)
             else:
@@ -1101,7 +1108,44 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def assert_valid_flatten(axes, new_axes):
+    def is_valid_flatten_or_unflatten(src_axes, dst_axes):
+        """
+        Checks whether we can flatten OR unflatten from src_axes to dst_axes.
+
+        The requirements are that the components of axes should all be
+        present in new_axes and that they should be laid out in the same
+        order. This check is symmetric.
+        """
+
+        def inflate(axes):
+            """
+            Inflate Axes potentially containing FlattendAxis to a list of regular
+            Axis recursively.
+            """
+            axes_list = [list(axis.axes) if axis.is_flattened else [axis]
+                         for axis in axes]
+            axes = list(itertools.chain.from_iterable(axes_list))
+
+            # inflate recursively
+            if any([axis.is_flattened for axis in axes]):
+                return inflate(axes)
+            else:
+                return axes
+
+        # inflate
+        src_axes, dst_axes = inflate(src_axes), inflate(dst_axes)
+
+        # check equal number of Axis
+        if len(src_axes) != len(dst_axes):
+            return False
+
+        # check all Axis are equal
+        equal = [src == dst for src, dst in zip(src_axes, dst_axes)]
+        return all(equal)
+
+    @staticmethod
+    @with_args_as_axes
+    def assert_valid_flatten(unflattend_axes, flattened_axes):
         """
         Checks whther axes can safely be flattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1109,17 +1153,21 @@ class Axes(object):
         order.
 
         Arguments:
-            axes: The original axes.
-            new_axes: The flattened axes.
+            unflattend_axes: The original axes.
+            flattened_axes: The flattened axes.
 
         Returns:
             True if axes can be safely flattened to new_axes, False otherwise.
         """
-        Axes.assert_valid_unflatten(new_axes, axes)
+        if not Axes.is_valid_flatten_or_unflatten(unflattend_axes, flattened_axes):
+            raise ValueError("Trying to flatten:\n%s\nto:\n%s.\n"
+                             "But they are of different lengths, or the axes"
+                             "layouts are different"
+                             % (unflattend_axes, flattened_axes))
 
     @staticmethod
     @with_args_as_axes
-    def assert_valid_unflatten(axes, new_axes):
+    def assert_valid_unflatten(flattened_axes, unflattend_axes):
         """
         Checks whether axes can safely be unflattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1127,30 +1175,17 @@ class Axes(object):
         order.
 
         Arguments:
-            axes: The original axes.
-            new_axes: The unflattened axes.
+            flattened_axes: The original axes.
+            unflattend_axes: The unflattened axes.
 
         Returns:
             True if axes can be safely unflattened to new_axes, False otherwise.
         """
-        if len(axes) == 0:
-            return True
-
-        def check(condition):
-            if not condition:
-                return False
-
-        idx = 0
-        for axis in axes:
-            if axis == new_axes[idx]:
-                idx += 1
-            else:
-                check(axis.is_flattened)
-                new_idx = idx + len(axis.axes)
-                check(axis.axes == new_axes[idx:new_idx])
-                idx = new_idx
-        check(idx == len(new_axes))
-        return True
+        if not Axes.is_valid_flatten_or_unflatten(flattened_axes, unflattend_axes):
+            raise ValueError("Trying to unflatten:\n%s\nto:\n%s.\n"
+                             "But they are of different lengths, or the axes"
+                             "layouts are different"
+                             % (unflattend_axes, flattened_axes))
 
     # TODO: delete this method, the size should come from the tensor
     @property

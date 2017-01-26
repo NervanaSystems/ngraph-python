@@ -1761,7 +1761,7 @@ class Unflatten(ReshapeOp):
             for axis in x.axes:
                 axes.extend(axis.axes)
         axes = make_axes(axes)
-        assert Axes.assert_valid_unflatten(x.axes, axes)
+        Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
