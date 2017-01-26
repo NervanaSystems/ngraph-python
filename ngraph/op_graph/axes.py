@@ -16,6 +16,7 @@ from __future__ import division
 
 import collections
 import operator
+import itertools
 from functools import reduce, wraps
 
 import numpy as np
@@ -1068,7 +1069,7 @@ class Axes(object):
 
     @staticmethod
     @with_args_as_axes
-    def check_broadcast(axes, new_axes):
+    def assert_valid_broadcast(axes, new_axes):
         """
         Checks whether axes can be broadcasted to new_axes. We require
         that the components of axes be laid out in the same order in new_axes.
@@ -1080,24 +1081,73 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        def check(condition):
-            if not condition:
-                return False
+        def base_annotated_axis(axis):
+            """
+            Find the base annotated axis.
 
-        axes_s = set(axes)
-        idx = 0
-        for new_axis in new_axes:
-            if idx < len(axes) and new_axis == axes[idx]:
-                idx += 1
+            If ax_a gets casted to ax_b and then casted to ax_c,
+            base_annotated_axis(ax_c) == ax_a.
+            """
+            if axis != axis.annotated_axis:
+                return base_annotated_axis(axis.annotated_axis)
             else:
-                check(new_axis not in axes_s)
+                return axis
 
-        check(idx == len(axes))
-        return True
+        removed_axes = (set(map(base_annotated_axis, axes)) -
+                        set(map(base_annotated_axis, axes)))
+
+        if removed_axes:
+            raise ValueError(("The new_axes of a broadcast operation must "
+                              "include all of the axes from the origional set "
+                              "of axes. \n"
+                              "  original axes: {axes}\n"
+                              "  new axes: {new_axes}\n"
+                              "  missing axes: {removed_axes}").format(
+                axes=axes,
+                new_axes=new_axes,
+                removed_axes=removed_axes,
+            ))
 
     @staticmethod
     @with_args_as_axes
-    def check_flatten(axes, new_axes):
+    def is_valid_flatten_or_unflatten(src_axes, dst_axes):
+        """
+        Checks whether we can flatten OR unflatten from src_axes to dst_axes.
+
+        The requirements are that the components of axes should all be
+        present in new_axes and that they should be laid out in the same
+        order. This check is symmetric.
+        """
+
+        def inflate(axes):
+            """
+            Inflate Axes potentially containing FlattendAxis to a list of regular
+            Axis recursively.
+            """
+            axes_list = [list(axis.axes) if axis.is_flattened else [axis]
+                         for axis in axes]
+            axes = list(itertools.chain.from_iterable(axes_list))
+
+            # inflate recursively
+            if any([axis.is_flattened for axis in axes]):
+                return inflate(axes)
+            else:
+                return axes
+
+        # inflate
+        src_axes, dst_axes = inflate(src_axes), inflate(dst_axes)
+
+        # check equal number of Axis
+        if len(src_axes) != len(dst_axes):
+            return False
+
+        # check all Axis are equal
+        equal = [src == dst for src, dst in zip(src_axes, dst_axes)]
+        return all(equal)
+
+    @staticmethod
+    @with_args_as_axes
+    def assert_valid_flatten(unflattend_axes, flattened_axes):
         """
         Checks whther axes can safely be flattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1105,17 +1155,21 @@ class Axes(object):
         order.
 
         Arguments:
-            axes: The original axes.
-            new_axes: The flattened axes.
+            unflattend_axes: The original axes.
+            flattened_axes: The flattened axes.
 
         Returns:
             True if axes can be safely flattened to new_axes, False otherwise.
         """
-        return Axes.check_unflatten(new_axes, axes)
+        if not Axes.is_valid_flatten_or_unflatten(unflattend_axes, flattened_axes):
+            raise ValueError("Trying to flatten:\n%s\nto:\n%s.\n"
+                             "But they are of different lengths, or the axes"
+                             "layouts are different"
+                             % (unflattend_axes, flattened_axes))
 
     @staticmethod
     @with_args_as_axes
-    def check_unflatten(axes, new_axes):
+    def assert_valid_unflatten(flattened_axes, unflattend_axes):
         """
         Checks whether axes can safely be unflattened to produce new_axes.
         The requirements are that the components of axes should all be
@@ -1123,30 +1177,17 @@ class Axes(object):
         order.
 
         Arguments:
-            axes: The original axes.
-            new_axes: The unflattened axes.
+            flattened_axes: The original axes.
+            unflattend_axes: The unflattened axes.
 
         Returns:
             True if axes can be safely unflattened to new_axes, False otherwise.
         """
-        if len(axes) == 0:
-            return True
-
-        def check(condition):
-            if not condition:
-                return False
-
-        idx = 0
-        for axis in axes:
-            if axis == new_axes[idx]:
-                idx += 1
-            else:
-                check(axis.is_flattened)
-                new_idx = idx + len(axis.axes)
-                check(axis.axes == new_axes[idx:new_idx])
-                idx = new_idx
-        check(idx == len(new_axes))
-        return True
+        if not Axes.is_valid_flatten_or_unflatten(flattened_axes, unflattend_axes):
+            raise ValueError("Trying to unflatten:\n%s\nto:\n%s.\n"
+                             "But they are of different lengths, or the axes"
+                             "layouts are different"
+                             % (unflattend_axes, flattened_axes))
 
     # TODO: delete this method, the size should come from the tensor
     @property
@@ -1434,7 +1475,7 @@ class TensorDescription(NameableValue):
     def flatten(self, new_axes, name=None):
         """
         Flattens a tensor description to give it the Axes in new_axes.
-        See Axes.check_flatten for a description of permitted values of new_axes.
+        See Axes.assert_valid_flatten for a description of permitted values of new_axes.
 
         Arguments:
             new_axes: The Axes of the flattened tensor description.
@@ -1443,7 +1484,7 @@ class TensorDescription(NameableValue):
             The reshaped tensor description.
         """
         new_axes = Axes(new_axes)
-        assert Axes.check_flatten(self.axes, new_axes)
+        Axes.assert_valid_flatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -1476,7 +1517,7 @@ class TensorDescription(NameableValue):
     def unflatten(self, new_axes, name=None):
         """
         Unflattens a tensor description to give it the Axes in new_axes.
-        See Axes.check_unflatten for a description of the permitted values of
+        See Axes.assert_valid_unflatten for a description of the permitted values of
         new_axes
 
         Arguments:
@@ -1543,7 +1584,7 @@ class TensorDescription(NameableValue):
             raise ValueError()
 
         new_axes = Axes(new_axes)
-        assert Axes.check_unflatten(self.axes, new_axes)
+        Axes.assert_valid_unflatten(self.axes, new_axes)
 
         new_strides = []
         new_sizes = []
@@ -1585,7 +1626,7 @@ class TensorDescription(NameableValue):
     def broadcast(self, new_axes, name=None):
         """
         Adds axes to a tensor description to give it a new shape.
-        See Axes.check_broadcast for a description of the permitted
+        See Axes.assert_valid_broadcast for a description of the permitted
         transformations.
 
         Arguments:
@@ -1594,7 +1635,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The broadcasted tensor description.
         """
-        Axes.check_broadcast(self.axes, new_axes)
+        Axes.assert_valid_broadcast(self.axes, new_axes)
         return self.reorder_and_broadcast(new_axes, name)
 
     def reorder(self, new_axes, name=None):
