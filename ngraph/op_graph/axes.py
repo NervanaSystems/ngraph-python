@@ -537,6 +537,11 @@ class DualAxis(Axis):
         super(DualAxis, self).__init__()
         self.__primary_axis = primary_axis
         self.__dual_level = dual_level
+        if dual_level > 0:
+            dual_level_str = '+' + str(dual_level)
+        else:
+            dual_level_str = str(dual_level)
+        self.name = primary_axis.name + dual_level_str
 
     @property
     def length(self):
@@ -1301,12 +1306,7 @@ class FlattenedAxis(Axis):
         return hash(self.axes)
 
     def __repr__(self):
-        s = 'FlattenedAxis('
-        for i, x in enumerate(self.axes):
-            s += repr(x)
-            s += ', '
-        s += ')'
-        return s
+        return 'FlattenedAxis(%s)' % ', '.join(repr(axis) for axis in self.axes)
 
 
 def reduce_strides(strides):
