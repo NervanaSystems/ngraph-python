@@ -2119,11 +2119,13 @@ class StackOp(AssignableTensorOp):
 
     def generate_adjoints(self, adjoints, delta, *x_list):
         s = [slice(None)] * len(self.axes)
+        arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
         for i, x in enumerate(x_list):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
-                tensor_slice(delta, tuple(s), axes=x.axes)
+                axes_with_order(tensor_slice(delta, tuple(s), axes=arg_axes),
+                                x.axes)
             )
 
 
