@@ -55,6 +55,7 @@ def check_result_values(input_vector, result_expected, placeholder, op_list=[], 
     
     print "Result Pass: Hetrcomputation return values matches the expected result values"
 
+    transformer.cleanup()
 
 def check_device_assign_pass(default_device, default_device_id,
                              graph_op_metadata, graph_ops=[], *args):

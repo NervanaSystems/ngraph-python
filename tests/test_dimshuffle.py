@@ -39,7 +39,8 @@ def test_dimshuffle_fprop(transformer_factory):
     # randomly initialize
     x_value = rng.uniform(-1, 1, x.axes)
 
-    result = executor(output, x)(x_value)
+    with executor(output, x) as ex:
+        result = ex(x_value)
 
     ng.testing.assert_allclose(result, x_value.T)
 

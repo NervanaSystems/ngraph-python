@@ -493,6 +493,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.init_computation()
 
 
+    def cleanup(self):
+        pass
+
 __transformer_factory = None
 
 

@@ -1,7 +1,8 @@
 from neon import NervanaObject  # noqa
 
+import atexit
 import time
-from multiprocessing import Process, Queue, Manager
+from multiprocessing import Process, Queue, Manager, Event
 import collections
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.op_graph import computation
@@ -49,6 +50,7 @@ class AsyncTransformer(Process):
         self.comp_id_ctr = 0
 
         self.started = False
+        self.exit = Event()
         self.daemon = True
 
     def new_comp_id(self):
@@ -86,6 +88,9 @@ class AsyncTransformer(Process):
         self.computation_q.put(c.comp_id)
         return c
 
+    def cleanup(self):
+        self.exit.set()
+
     def run(self):
 
         # build the transformer first to catch any errors
@@ -93,14 +98,16 @@ class AsyncTransformer(Process):
 
         # collect requests to make computations, but do them all at once
         SLEEP_S = 0.2
-        print "Wait for call"
         while self.work_q.empty():
+            if self.exit.is_set():
+                return
             time.sleep(SLEEP_S)
         
 
-        print "build computations"
         # build all the computations
         while not self.computation_q.empty():
+            if self.exit.is_set():
+                return
             # comp_wrapper objects useful for caller, but only map into 
             # real computation objects stored here:
             comp_id = self.computation_q.get()
@@ -108,10 +115,8 @@ class AsyncTransformer(Process):
             computation = transformer.computation(returns, *placeholders)
             self.computations[comp_id] = computation
 
-        print("begin working")
         # begin doing work; trigger transformer init on first call
-        # TODO clean way to exit (while !should_exit)
-        while True:
+        while not self.exit.is_set():
             try:
                 # shared work q serializes work requests
                 comp_id, inputs = self.work_q.get(timeout=SLEEP_S)
@@ -254,10 +259,17 @@ class HetrTransformer(Transformer):
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None
 
+
+    def cleanup(self):
+        for t in self.child_transformers.itervalues():
+            t.cleanup()
+
     def transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
-            self.child_transformers[tname] = AsyncTransformer(tname)
+            at = AsyncTransformer(tname)
+            self.child_transformers[tname] = at
+            atexit.register(at.cleanup)
 
         return self.child_transformers[tname]
 
@@ -285,6 +297,15 @@ class HetrTransformer(Transformer):
     def initialize(self):
         print("Dummy Initialize, skipping")
         pass
+
+    def register_graph_pass(self, graph_pass):
+        from ngraph.transformers.passes.nviz import VizPass
+        if isinstance(graph_pass, VizPass):
+            print("Ignoring vizpass")
+            #self.vizpass = graph_pass
+        else:
+            print("Ignoring unsupported graph pass in hetr", graph_pass)
+            pass
 
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"

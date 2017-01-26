@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object
+from contextlib import contextmanager
 
 import numpy as np
 import ngraph as ng
@@ -24,7 +25,14 @@ class ExecutorFactory(object):
     """TODO."""
 
     def __init__(self):
+        pass
+
+    def __enter__(self):
         self.transformer = ngt.make_transformer()
+        return self
+
+    def __exit__(self, *args):
+        self.transformer.cleanup()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
@@ -94,7 +102,7 @@ class ExecutorFactory(object):
 
             return helper
 
-
+@contextmanager
 def executor(results, *parameters):
     """
     Generate a single-entry transformer that computes results from parameters
@@ -106,7 +114,10 @@ def executor(results, *parameters):
     Returns:
       Function of placeholders in parameters
     """
-    return ExecutorFactory().executor(results, *parameters)
+    ex = ExecutorFactory()
+    ex.__enter__()
+    yield ex.executor(results, *parameters)
+    ex.__exit__()
 
 
 def numeric_derivative(f, x, dx):
@@ -174,13 +185,13 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
         kwargs: passed to assert_allclose.  Useful for atol/rtol.
     """
 
-    ex = ExecutorFactory()
+    with ExecutorFactory() as ex:
 
-    dfdx_numeric = ex.numeric_derivative(f, x, delta, *parameters)
-    dfdx_symbolic = ex.derivative(f, x, *parameters)
+        dfdx_numeric = ex.numeric_derivative(f, x, delta, *parameters)
+        dfdx_symbolic = ex.derivative(f, x, *parameters)
 
-    ng.testing.assert_allclose(
-        dfdx_numeric(x_value, *parameter_values),
-        dfdx_symbolic(x_value, *parameter_values),
-        **kwargs
-    )
+        ng.testing.assert_allclose(
+            dfdx_numeric(x_value, *parameter_values),
+            dfdx_symbolic(x_value, *parameter_values),
+            **kwargs
+        )

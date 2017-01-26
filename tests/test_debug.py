@@ -53,7 +53,8 @@ def test_print_op_fprop(capfd):
     x_value = np.array([1])
 
     output = ng.PrintOp(x, 'prefix')
-    result = executor(output, x)(x_value)
+    with executor(output, x) as ex:
+        result = ex(x_value)
 
     ng.testing.assert_allclose(result, x_value)
 
