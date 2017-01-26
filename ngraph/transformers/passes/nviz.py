@@ -110,6 +110,8 @@ class VizPass(GraphPass):
             graph.edge(op.name, arg.name, color='green')
         for arg in op.other_deps:
             graph.edge(op.name, arg.name, color='blue')
+        for arg in op.user_deps:
+            graph.edge(op.name, arg.name, color='gold')
         if op.forwarded and op.forwarded is not op:
             graph.edge(op.name, op.forwarded.name, color='red')
 
@@ -134,6 +136,11 @@ class VizPass(GraphPass):
             for arg in op.other_deps:
                 if arg not in visited:
                     frontier.add(arg)
+            for arg in op.user_deps:
+                if arg not in visited:
+                    frontier.add(arg)
+            if op.forwarded is not op:
+                frontier.add(op.forwarded)
 
         visited_ops = list(visited)
         vg = graphviz.Digraph(node_attr={'shape': 'box'},
