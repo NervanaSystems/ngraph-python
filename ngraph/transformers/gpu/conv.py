@@ -49,12 +49,17 @@ class ConvFpropKernel(GPUKernel):
         K, M, P, Q, _ = self.O.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
+        dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
+
+        dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
+        if dilated_conv:
+            assert (dil_w > 0 and dil_h > 0 and dil_w > 0)
 
         # ---- Cuda C ----
         if use_cudac_kernels:
@@ -67,7 +72,7 @@ class ConvFpropKernel(GPUKernel):
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
-                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)) and not dilated_conv:
             from .kernels.winograd_conv import (FpropWinograd_2x2_3x3, FpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -136,12 +141,17 @@ class ConvBpropKernel(GPUKernel):
         K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
+        dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
+
+        dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
+        if dilated_conv:
+            assert (dil_w > 0 and dil_h > 0 and dil_w > 0)
 
         # ---- Cuda C ----
         if use_cudac_kernels:
@@ -155,7 +165,7 @@ class ConvBpropKernel(GPUKernel):
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
-                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)) and not dilated_conv:
             from .kernels.winograd_conv import (BpropWinograd_2x2_3x3, BpropWinograd_4x4_3x3)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
@@ -222,12 +232,17 @@ class ConvUpdateKernel(GPUKernel):
         K, M, P, Q, _ = self.E.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
+        dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = transformer.runtime.enable_winograd
         use_cudac_kernels = transformer.runtime.use_cudac_kernels
+
+        dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
+        if dilated_conv:
+            assert (dil_w > 0 and dil_h > 0 and dil_w > 0)
 
         # ---- Cuda C ----
         if use_cudac_kernels:
@@ -240,7 +255,7 @@ class ConvUpdateKernel(GPUKernel):
 
         # ---- Winograd ----
         elif enable_winograd and R == 3 and S == 3 and \
-                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)):
+                all(x == 1 for x in (D, M, T, str_w, str_h, str_d)) and not dilated_conv:
             from .kernels.winograd_conv import (UpdateWinograd_3x3_2x2, UpdateWinograd_3x3_4x4)
             # Temp for now till we can autotune
             # 2 is safer for fp16 without batchnorm
