@@ -333,11 +333,27 @@ class FlexConvBpropKernel(ConvBpropKernel):
         self.trunc_rows = 5
         flags = self.trunc_rows << 8
 
+        # Must dim shuffle filter data for bprop kernel
         F_data = runtime.scratch_buffer(B.size)
         if self.bprop_zero:
             Out = runtime.scratch_buffer(O_size, offset=F_size)
+            shuffle_kernel = _get_transpose_kernel(self.F.dtype.str[1:])
         else:
             Out = self.O
+            # can point to transpose or dimshuffle kernel
+            shuffle_kernel = _get_shuffle_kernel(self.F.dtype.str[1:])
+        shuffle_args = [layer.shuffle_grid, self.shuffle_block, None,
+                        F_data, self.F] + self.shuffle_args
+        shuffle_kernel = [shuffle_kernel] + shuffle_args
+
+        # Have to zero output buffer and use type conversion for kernel using atomics
+        if self.bprop_zero:
+            shape = [np.prod(self.O.shape[:-1]), self.O.shape[-1]]
+            convert_kernel = _prepare_convert_kernel(Out, "f2", self.O, shape,
+                                                     self.flex_entry_O.ptr)
+            self.convert_out = True
+        else:
+            self.convert_out = False
 
         self.kernels = []
         for kernel in self.bprop_kernels:
@@ -351,20 +367,14 @@ class FlexConvBpropKernel(ConvBpropKernel):
             kernel.extend((self.flex_entry_O.ptr, 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
+        self.kernels = [shuffle_kernel] + self.kernels
+        if self.convert_out:
+            self.kernels.append(convert_kernel)
+
         # record output flex id for autoflex
         self.output_flex_ids = [self.flex_entry_O.flex_id]
         # bind param values that depend on flex scales
         self.bind_flex_scales()
-        
-        if self.bprop_zero:
-            shuffle_kernel = _get_transpose_kernel(self.F.dtype.str[1:])
-            self.convert_type = "f2"  # source type
-        else:
-            shuffle_kernel = _get_shuffle_kernel(self.F.dtype.str[1:])  # can point to transpose or dimshuffle kernel
-        shuffle_args = [layer.shuffle_grid, self.shuffle_block, None,
-                        F_data, self.F] + self.shuffle_args
-        shuffle_kernel = [shuffle_kernel] + shuffle_args
-        self.kernels.append(shuffle_kernel)
 
     def bind_buffers(self):
         for kernel in self.kernels:
@@ -380,12 +390,19 @@ class FlexConvBpropKernel(ConvBpropKernel):
         alpha = self.alpha * scaleAB
         beta = self.beta * scaleC
 
-        for kernel in self.kernels:
+        for kernel in self.kernels[1:1+len(self.bprop_kernels)]:
             kernel[8] = alpha
             kernel[9] = beta
             kernel[-1] = 1. / scaleC
 
+        if self.convert_out:
+            self.kernels[-1][-2] = 1. / scaleC
+
     def execute(self):
+        if self.bprop_zero:
+            import pdb; pdb.set_trace()
+            self.O.value.fill(0)
+
         for kernel in self.kernels:
             kernel[0].prepared_async_call(*kernel[1:], shared_size=self.bprop_lut_size)
 
@@ -495,4 +512,57 @@ def _get_shuffle_kernel(dtype):
     module = SourceModule(code)
     kernel = module.get_function("dimShuffle")
     kernel.prepare("PPIIIIIIIIIIIIII")
+    return kernel
+
+
+def _prepare_convert_kernel(src_data, src_type, dst_data, shape, flex_data):
+    # quick wrapper to convert raw float scratch data to a destination tensor
+    shape, strides = _get_fast_ew_dims(dest_tensor.size)
+    kernel_args = [dst_data, src_data, shape[1], 1.0, flex_data]
+
+    kernel = _get_convert_kernel(src_type)
+    return [kernel, (shape[0], 1, 1), (32, 1, 1), None, *kernel_args]
+
+
+# fast axis=0 reduction kernel used for deterministic update
+@context_dependent_memoize
+def _get_convert_kernel(dtype):
+
+    _convert_kernel = r"""
+#include <cuda_fp16.h>
+
+__global__ void convert(short* out, const %(type)s* in, int dim,
+                        float scale, int* flex_data)
+{
+    int offset = blockIdx.x * dim;
+    int max_val = 0;
+
+    for(int item = threadIdx.x; item < dim; item += 32)
+    {
+        %(type)s value = in[offset + item];
+        short result = (short)(%(cvt)s(value) * scale);
+        max_val = max((int)abs(result), max_val);
+        out[offset] = result;
+    }
+
+    atomicMax(flex_data, max_val);
+}
+"""
+    if dtype == "f4":
+        template_vals = {
+            "type"   : "float",
+            "cvt"    : "",
+        }
+    elif dtype == "f2":
+        template_vals = {
+            "type"   : "half",
+            "cvt"    : "__half2float"
+        }
+    else:
+        raise ValueError("Invalid conversion type")
+
+    code = _reduce_kernel % template_vals
+    module = SourceModule(code)
+    kernel = module.get_function("convert")
+    kernel.prepare("PPII")
     return kernel
