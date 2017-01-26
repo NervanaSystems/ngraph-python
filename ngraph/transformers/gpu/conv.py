@@ -142,6 +142,11 @@ class ConvBpropKernel(GPUKernel):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_dims)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
+        self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w)
+
+    def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
         args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
