@@ -26,8 +26,10 @@ RUN pip install --upgrade pip && pip install \
 # Clone and build Caffe2
 RUN git clone --recursive https://github.com/caffe2/caffe2.git /opt/caffe2 
 
+
 WORKDIR /opt/caffe2/
-RUN mkdir build && cd build && cmake .. -DUSE_CUDA=OFF -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
+RUN mkdir build && cd build && \
+    cmake .. -DUSE_CUDA=OFF -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
     make -j && make install
 
 ENV PYTHONPATH=/opt/caffe2/build/
