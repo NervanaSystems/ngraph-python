@@ -640,7 +640,7 @@ class Op(NameableValue, DebugInfo):
         for o in reversed(Op.ordered_ops([self])):
             if o in adjoints:
                 adjoint = adjoints[o]
-                if o.scale is not None:
+                if getattr(o, "scale", None) is not None:
                     adjoint = adjoint * o.scale
 
                 o.generate_adjoints(adjoints, adjoint, *o.args)
@@ -930,6 +930,10 @@ class SequentialOp(ControlBlockOp):
             op1.require_user_deps([op0])
         for op in ops:
             self.add_other_dep(op)
+
+    def __getattr__(self, attr):
+
+        return getattr(self.value_op, attr)
 
     @tdcache()
     def tensor_description(self):
@@ -2140,6 +2144,159 @@ def stack(x_list, axis, pos=0):
 
     """
     return StackOp(x_list, axis, pos)
+
+
+class ConcatOp(AssignableTensorOp):
+    """
+    Concatenates a list of tensors along specific axis. The axis can be different among each
+    tensor, but must have a common role. All other axes should be identical.
+
+    Args:
+        x_list (list of TensorOps): A list of nearly identically-axed tensors to concatenate.
+                                    They can have at most one axis that is different, and it must
+                                    have a common role.
+        axis_list (list of Axis): A list of Axis objects that will be concatenated along, one for
+                                  each tensor in x_list.
+    """
+
+    def __init__(self, x_list, axis_list):
+
+        # Get common axes from first tensor in list
+        x_axes = x_list[0].axes
+        ax = axis_list[0]
+        common_axes = x_axes - ax
+
+        # Create long axis for concatenated tens1or
+        concat_axis = make_axis(batch=ax.is_batch,
+                                recurrent=ax.is_recurrent,
+                                roles=ax.roles).named("Concat")
+
+        # Store the axes order equivalent to the first tensor
+        ind = x_axes.index(ax)
+        axes_0 = x_axes[:ind]
+        axes_1 = x_axes[ind + 1:]
+        self._axes_order = axes_0 + concat_axis + axes_1
+
+        # To do the assignments we must first make sure that every slice of the larger tensor is
+        # contiguous in memory. This is most easily achieved by flattening, with concat_axis as
+        # either the first or last axis.
+        axes = make_axes((concat_axis,) + tuple(common_axes))
+        super(ConcatOp, self).__init__(args=tuple(x_list), axes=axes)
+        self._axis_list = axis_list
+
+        # Since the concatenation axis is first, we'll flatten the rest.
+        flat = flatten_at(self, 1)
+        slices = [slice(None)] * len(flat.axes)
+        assign_op = AssignTwoDOp if len(flat.axes) == 2 else AssignOneDOp
+
+        start = 0
+        deps = OrderedSet()
+        for ii, (x, ax) in enumerate(zip(self.args, axis_list)):
+            if len(x.axes - common_axes) > 1:
+                raise RuntimeError("Tensor {} has more than 1 axis not in common with"
+                                   " other tensors".format(ii))
+            if ax.length is None:
+                raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
+
+            slices[0] = slice(start, start + ax.length)
+            slice_op = tensor_slice(flat, slices)
+
+            # Make sure the args are in the same order as our axes
+            ordered_axes = make_axes((ax,) + tuple(common_axes))
+            ordered_arg = axes_with_order(x, ordered_axes)
+
+            # Flatten the arg so that it is the same shape as the slice
+            flat_arg = flatten_at(ordered_arg, 1)
+
+            # Assign into the slice
+            deps.add(assign_op(slice_op, flat_arg))
+            start += ax.length
+
+        concat_axis.length = start
+        self.user_deps = deps
+
+    def generate_adjoints(self, adjoints, delta, *x_list):
+
+        s = [slice(None)] * len(self.axes)
+        start = 0
+        for i, (x, ax) in enumerate(zip(x_list, self._axis_list)):
+            arg_axes = make_axes((ax,) + tuple(self.axes[1:]))
+            s[0] = slice(start, start + ax.length)
+            x.generate_add_delta(adjoints,
+                                 axes_with_order(tensor_slice(delta,
+                                                              tuple(s),
+                                                              axes=arg_axes),
+                                                 x.axes))
+            start += ax.length
+
+
+def concat_along_axis(x_list, axis):
+    """
+    Concatenates a list of tensors along specific axis. The axis must appear in every tensor in the
+    list.
+
+    Args:
+        x_list (list of TensorOps): A list of identically-axed tensors to concatenate
+        axis (Axis): Axis to concatenate along
+
+    Returns:
+        The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
+
+    Examples:
+        ax = ng.make_name_scope("ax")
+        ax.H = ng.make_axis(length=5)
+        ax.W = ng.make_axis(length=4)
+        axes = ng.make_axes([ax.H, ax.W])
+        x = ng.constant(np.ones(axes.full_lengths), axes=axes)
+        y = ng.constant(np.ones(axes.full_lengths), axes=axes)
+        c = ng.concat_along_axis([x, y], ax.H)
+    """
+
+    if len(x_list) < 1:
+        return x_list
+
+    concat_op = ConcatOp(x_list, [axis for _ in range(len(x_list))])
+
+    return axes_with_order(concat_op, concat_op._axes_order)
+
+
+def concat_role_axis(x_list, role):
+    """
+    Concatenates a list of tensors along an axis with the specified role. All other axes in each
+    tensor should be identical.
+
+    Args:
+        x_list (list of TensorOps): A list of identically-axed tensors to concatenate
+        role (AxisRole): Axis role common to every tensor in x_list
+
+    Returns:
+        The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
+
+    Examples:
+        role = ng.make_axis_role("Concat")
+        ax = ng.make_name_scope("ax")
+        ax.H1 = ng.make_axis(length=5, roles=[role])
+        ax.H2 = ng.make_axis(length=8, roles=[role])
+        ax.W = ng.make_axis(length=4)
+        x = ng.constant(np.ones((ax.H1.length, ax.W.length)), axes=[ax.H1, ax.W])
+        y = ng.constant(np.ones((ax.H2.length, ax.W.length)), axes=[ax.H2, ax.W])
+        c = ng.concat_role_axis([x, y], role)
+    """
+    if len(x_list) < 1:
+        return x_list
+
+    def get_role_axis(axes, role):
+        ax = axes.role_axes(role)
+        if len(ax) > 1:
+            raise RuntimeError("Multiple axes have role {}".format(role.name))
+        elif len(ax) == 0:
+            raise RuntimeError("No axis with role {}".format(role.name))
+        else:
+            return ax[0]
+
+    concat_op = ConcatOp(x_list, [get_role_axis(x.axes, role) for x in x_list])
+
+    return axes_with_order(concat_op, concat_op._axes_order)
 
 
 class UnsliceSchema(object):

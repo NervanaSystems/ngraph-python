@@ -299,6 +299,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
         """
         self.roles.add(axis_role)
+        return self
 
     @property
     def annotated_axis(self):
@@ -899,6 +900,7 @@ class Axes(object):
     def add_role(self, role):
         for axis in self:
             axis.add_role(role)
+        return self
 
     def __iter__(self):
         return self._axes.__iter__()
