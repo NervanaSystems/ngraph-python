@@ -18,31 +18,6 @@ import numpy as np
 import tensorflow as tf
 
 
-class SGDOptimizer(object):
-    def __init__(self, lrate=0.1):
-        self.lrate = lrate
-
-    def minimize(self, cost):
-        """
-        Minimize cost by returning update Ops.
-
-        Arguments:
-            cost: The cost Op to be minimized
-
-        Returns:
-            A doall op containing setitems to variable ops.
-        """
-        variables = list(cost.variables())
-        grads = [ng.deriv(cost, variable) for variable in variables]
-        with ng.Op.saved_user_deps():
-            param_updates = [
-                ng.assign(variable, variable - self.lrate * grad)
-                for variable, grad in zip(variables, grads)
-            ]
-            updates = ng.doall(param_updates)
-        return updates
-
-
 def np_layout_shuffle(in_tensor, in_axes, out_axes):
     """
     Perform numpy array dim-shuffle and expand / shrink dims.
