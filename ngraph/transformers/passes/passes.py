@@ -66,7 +66,7 @@ class PeepholeGraphPass(GraphPass):
         has_work = True
         while has_work or self.find_initializers(ops):
             self.replacement_list = []
-            ops = OrderedSet(op.forwarded for op in self.inits + ops)
+            ops = OrderedSet(op.forwarded for op in self.inits + list(ops))
             for op in Op.ordered_ops(ops):
                 op.update_forwards()
                 self.visit(op)
@@ -120,9 +120,9 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = broadcast(y, y_reduction_axes + y.axes)
 
         if x.is_scalar:
-            temp = x
-            x = y
-            y = temp
+            x, y = y, x
+            x_reduction_axes, y_reduction_axes = y_reduction_axes, x_reduction_axes
+
         if y.is_scalar:
             if x.is_scalar:
                 out = x.scalar_op * y.scalar_op

@@ -20,7 +20,9 @@ import pytest
 import ngraph as ng
 import ngraph.util.names as names
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
-from ngraph.testing import ExecutorFactory
+from ngraph.testing import ExecutorFactory, check_derivative, RandomTensorGenerator
+
+rng = RandomTensorGenerator(0, np.float32)
 
 # Make some axes
 ax = names.NameScope()
@@ -369,3 +371,20 @@ def test_scalar_broadcast():
     z = ng.broadcast(x, axes=broadcast_axes)
     z_comp = ex.executor(z)
     assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
+
+
+def test_flatten_dot_deriv_simplified(transformer_factory):
+    """
+    Test derivative with dot and flatten
+    """
+    ax_N = ng.make_axis(3)
+    ax_Y = ng.make_axis(2)
+
+    x = ng.placeholder(ng.make_axes([ax_N]))
+    w = ng.constant([5, 2], axes=ng.make_axes([ax_Y]))
+    logits = ng.dot(x, w)
+    cost = ng.sum(logits, reduction_axes=logits.axes)
+
+    delta = 0.001
+    u = rng.uniform(.1, 5.0, x.axes)
+    check_derivative(cost, x, delta, u, atol=1e-2, rtol=1e-2)
