@@ -2337,6 +2337,23 @@ class StopGradientOneDOp(UnaryElementwiseOneDOp):
 class StopGradient(UnaryElementwiseAxesOp):
     """ TODO """
     one_d_class = StopGradientOneDOp
+    is_tensor_op = False
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return self.value_op.is_tensor_op
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    @property
+    def axes(self):
+        return self.value_op.axes
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 0.)
