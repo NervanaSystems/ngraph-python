@@ -238,8 +238,9 @@ class NumPyPoolEngine(object):
 
 
 class NumPyCodeEngine(object):
+
     @staticmethod
-    def all_code():
+    def lut_code():
         pycode = """
         def fprop_lut(self, lut, idx, axis, output):
             output[:] = lut.take(idx.astype(int), axis)
@@ -785,7 +786,7 @@ class NumPyTransformer(Transformer):
             self.code.endl()
 
             self.code.append(NumPyConvEngine.all_conv_code())
-            self.code.append(NumPyCodeEngine.all_code())
+            self.code.append(NumPyCodeEngine.lut_code())
             self.code.endl()
 
             self.code.append(self.allocate_storage_code.code)

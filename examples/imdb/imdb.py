@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -19,13 +19,17 @@ import numpy as np
 
 def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
     """
-    Preprocess the text by adding start and offset indices given padding, etc.
+    Preprocess the text by adding start and offset indices given padding. Also
+    limit the max index using
 
-    vocab will be a dictionary mapping word to index. When given,
-    Typically:
-        oov = 2
-        start = 1
-        index_from = 3, given: 0 (padding), 1 (start), 2 (OOV)
+    Arguments:
+        X (List): dataset
+        vocab_size (int): a given vocab_size limit. From a dataset. Words less frequent can
+                    get capped when they are beyond the vocab size.
+        oov (int): the index used for oov word, typically 2
+        start (int): the index used as the start of a sentence, typically 1
+        index_from (int): the index offset, typically 3, given having 0 (padding),
+                          1 (start), 2 (OOV).
     """
 
     if start is not None:
@@ -33,7 +37,7 @@ def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
     else:
         X = [[w + index_from for w in x] for x in X]
 
-    if not vocab_size:
+    if vocab_size is None:
         vocab_size = max([max(x) for x in X])
 
     if oov is not None:
@@ -42,11 +46,16 @@ def preprocess_text(X, vocab_size, oov=2, start=1, index_from=3):
     return X
 
 
-def pad_sentence(sentences, pad_idx, pad_to_len=None, pad_from='left'):
+def pad_sentences(sentences, pad_idx, pad_to_len=None, pad_from='left'):
     """
-    pad the sentence to the same length. When the length is not given,
+    pad sentences to the same length. When the length is not given,
     use the max length from the set.
 
+    Arguments:
+        sentences (List): list of sentences
+        pad_idx (int): the index value used for padding
+        pad_to_len (int): the maximum length to pad to
+        pad_from (string): either "left" or "right"
     """
     nsamples = len(sentences)
 
@@ -72,6 +81,10 @@ class IMDB(object):
     Arguments:
         path (string): Data directory to find the data, if not existing, will
                        download the data
+        vocab_size (int): vocabulary size limite
+        sentence_length (int): the max sentence length to pad the data to
+        pad_idx (int): the index value used for padding
+        shuffle (bool): whether to shuffle the data
 
     """
 
@@ -97,13 +110,11 @@ class IMDB(object):
             X, y = pickle_load(f)
 
         X = preprocess_text(X, self.vocab_size)
-        X = pad_sentence(
+        X = pad_sentences(
             X, pad_idx=self.pad_idx, pad_to_len=self.sentence_length, pad_from='left')
 
         if self.shuffle:
-            np.random.seed(123)
             np.random.shuffle(X)
-            np.random.seed(123)
             np.random.shuffle(y)
 
         # split the data

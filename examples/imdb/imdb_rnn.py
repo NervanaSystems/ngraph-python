@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -67,7 +67,7 @@ else:
 # model initialization
 seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_idx=pad_idx),
                    rlayer,
-                   Affine(init, activation=Softmax(), bias_init=init, axes=ax.Y)])
+                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
@@ -76,6 +76,7 @@ output_prob = seq1.train_outputs(inputs['review'])
 loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
+
 
 train_outputs = dict(batch_cost=mean_cost, updates=updates)
 loss_outputs = dict(cross_ent_loss=loss)

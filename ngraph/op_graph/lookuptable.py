@@ -129,9 +129,31 @@ class LutDerivOp(TensorOp):
     def __init__(self, fprop, **kwargs):
         super(LutDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
-        self.lut_axis = self.fprop.forwarded.lut_axis
-        self.pad_idx = self.fprop.forwarded.pad_idx
-        self.update = self.fprop.forwarded.update
+
+    @property
+    def lut_axis(self):
+        """
+        Returns:
+            The lookup axis
+        """
+        return self.fprop.forwarded.lut_axis
+
+    @property
+    def pad_idx(self):
+        """
+        Returns:
+            the index used for padding
+
+        """
+        return self.fprop.forwarded.pad_idx
+
+    @property
+    def update(self):
+        """
+        Returns:
+            the boolean to indicate if the LUT can be udpated
+        """
+        return self.fprop.forwarded.update
 
 
 class update_lut(LutDerivOp):

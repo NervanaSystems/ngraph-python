@@ -81,7 +81,7 @@ else:
 # model initialization
 seq1 = Sequential([layer_0,
                    rlayer,
-                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y))])
+                   Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
