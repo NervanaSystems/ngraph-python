@@ -17,11 +17,14 @@ from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
-from ngraph.transformers.gpu.convolution import _magic32, _magic64, _get_sm_count
+from ngraph.transformers.gpu.kernels.convolution import _magic32, _magic64, _get_sm_count
+
 from pycuda.compiler import SourceModule
+from pycuda.tools import context_dependent_memoize
 
 from operator import itemgetter
 import numpy as np
+import sys
 
 if sys.version_info >= (3, 0):
     from functools import reduce
@@ -150,7 +153,7 @@ class FlexConvFpropKernel(ConvFpropKernel):
                 0, self.O, self.I, self.F, 1.0, 0.0, flags,
                 kernel[3]] + kernel[4])
 
-        for kernel in self.kernels
+        for kernel in self.kernels:
             kernel.extend((self.flex_entry_O.ptr, 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
@@ -364,7 +367,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
                 kernel_specs.get_kernel(kernel[0]), kernel[1], kernel[2], None,
                 0, Out, self.E, F_data, 1.0, 0.0, flags, kernel[3]] + kernel[4])
 
-        for kernel in self.kernels
+        for kernel in self.kernels:
             kernel.extend((self.flex_entry_O.ptr, 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
@@ -572,7 +575,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                 0, U_data, self.I, self.E, 1.0, 0.0, flags,
                 kernel[3]] + kernel[4])
 
-        for kernel in self.kernels
+        for kernel in self.kernels:
             kernel.extend((self.flex_entry_O.ptr, 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
@@ -721,7 +724,7 @@ def _prepare_convert_kernel(src_data, src_type, dst_data, shape, flex_data):
     kernel_args = [dst_data, src_data, shape[1], 1.0, flex_data]
 
     kernel = _get_convert_kernel(src_type)
-    return [kernel, (shape[0], 1, 1), (32, 1, 1), None, *kernel_args]
+    return [kernel, (shape[0], 1, 1), (32, 1, 1), None,] + kernel_args
 
 
 # fast axis=0 reduction kernel used for deterministic update
