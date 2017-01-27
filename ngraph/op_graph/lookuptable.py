@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
+from ngraph.op_graph.op_graph import TensorOp
 
 
 def lookuptable(lut, idx, axes, update=True, pad_idx=None, docstring=None):
@@ -164,7 +164,7 @@ class update_lut(LutDerivOp):
             idx  : indices for lookup
         """
         super(update_lut, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(idx)),
+            args=(delta, idx),
             fprop=fprop,
             axes=lut.axes, **kwargs
         )
@@ -178,7 +178,7 @@ class bprop_lut(LutDerivOp):
             idx  : indices for lookup
         """
         super(bprop_lut, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(lut)),
+            args=(delta, lut),
             fprop=fprop,
             axes=idx.axes, **kwargs
         )

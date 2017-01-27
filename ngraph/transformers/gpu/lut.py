@@ -35,7 +35,9 @@ class LUTBpropKernel(GPUKernel):
         super(LUTBpropKernel, self).__init__(transformer)
         self.op = op
 
-        # Hard coding for now, non-deterministic is faster but difficult to debug
+        # Hard coding for now, non-deterministic is faster but difficult to reproduce
+        # or debug. Deterministic kernels are fast enough and LUT layer tends to be
+        # a small percentage of execution time.
         self.deterministic = True
 
         (self.E, self.I) = (_ for _ in op.call_info())

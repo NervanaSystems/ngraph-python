@@ -111,7 +111,6 @@ def test_lut(transformer_factory, lut_args):
 
 
 if __name__ == '__main__':
-    # lut_args = (10, 3, 4, 10)
     factory = ngt.make_transformer_factory('numpy')
     ngt.set_transformer_factory(factory)
     (V, F, N, T) = (3, 6, 4, 5)
