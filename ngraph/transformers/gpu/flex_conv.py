@@ -16,18 +16,32 @@
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.kernels import kernel_specs
-from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, _get_register_type
 from ngraph.transformers.gpu.kernels.convolution import _magic32, _magic64, _get_sm_count
 
 from pycuda.compiler import SourceModule
 from pycuda.tools import context_dependent_memoize
 
-from operator import itemgetter
+from operator import itemgetter, mul
 import numpy as np
 import sys
 
 if sys.version_info >= (3, 0):
     from functools import reduce
+
+
+class ScratchBufferWrapper(object):
+    def __init__(self, size, offset, runtime):
+        self.size = size
+        self.offset = offset
+        self.runtime = runtime
+
+        runtime.scratch_buffer_reset()
+        runtime.set_scratch_size(size + offset)
+
+    def get_ptr(self):
+        self.runtime.scratch_buffer_init()
+        return self.runtime.scratch_buffer(self.size + self.offset) + self.offset
 
 
 class FlexConvFpropKernel(ConvFpropKernel):
@@ -55,7 +69,7 @@ class FlexConvFpropKernel(ConvFpropKernel):
         assert N % 32 == 0, "N dim must be multiple of 32"
         assert K % vec_size == 0, "K dim must be multiple of %d" % vec_size
 
-        if self.dtype.type is np.int16:
+        if self.dtype.type == "flex":
             clss = "fconv"
         else:
             raise TypeError("Type not supported.")
@@ -71,8 +85,6 @@ class FlexConvFpropKernel(ConvFpropKernel):
         self.MPQ = (M, P, Q)
         self.padding = (pad_d, pad_h, pad_w)
         self.strides = (str_d, str_h, str_w)
-        self.relu = relu
-        self.bsum = bsum
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
@@ -168,6 +180,9 @@ class FlexConvFpropKernel(ConvFpropKernel):
                 if type(kernel[index]) == TensorDescription:
                     kernel[index] = kernel[index].value.tensor.gpudata
 
+                if type(kernel[index]) == ScratchBufferWrapper:
+                    kernel[index] = kernel[index].get_ptr()
+
         super(FlexConvFpropKernel, self).bind_buffers()
 
     def bind_flex_scales(self):
@@ -206,15 +221,15 @@ class FlexConvBpropKernel(ConvBpropKernel):
         self.flex_entry_F = self.F.flex_entry()
         self.flex_entry_O = self.O.flex_entry()
 
-        F_size = np.prod(self.F.shape) * self.F.dtype.itemsize
-        O_size = np.prod(self.O.shape) * self.O.dtype.itemsize
+        F_size = np.prod(self.F.shape) * 2
+        O_size = np.prod(self.O.shape) * 2
 
         vec_size = 4 if self.dtype.itemsize == 4 else 8
 
         assert N % 32 == 0, "N dim must be multiple of 32"
         assert K % vec_size == 0, "K dim must be multiple of %d" % vec_size
 
-        if self.dtype.type is np.int16:
+        if self.dtype.type == "flex":
             clss = "fconv"
         else:
             raise TypeError("Type not supported.")
@@ -230,8 +245,6 @@ class FlexConvBpropKernel(ConvBpropKernel):
         self.MPQ = (M, P, Q)
         self.padding = (pad_d, pad_h, pad_w)
         self.strides = (str_d, str_h, str_w)
-        self.relu = relu
-        self.bsum = bsum
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
@@ -338,15 +351,15 @@ class FlexConvBpropKernel(ConvBpropKernel):
         flags = self.trunc_rows << 8
 
         # Must dim shuffle filter data for bprop kernel
-        F_data = runtime.scratch_buffer(F_size)
+        F_data = ScratchBufferWrapper(F_size, 0, runtime)
         if self.bprop_zero:
-            Out = runtime.scratch_buffer(O_size, offset=F_size)
-            shuffle_kernel = _get_transpose_kernel(self.F.dtype.str[1:])
+            Out = ScratchBufferWrapper(O_size, F_size, runtime)
+            shuffle_kernel = _get_transpose_kernel(self.F.dtype)
         else:
             Out = self.O
             # can point to transpose or dimshuffle kernel
-            shuffle_kernel = _get_shuffle_kernel(self.F.dtype.str[1:])
-        shuffle_args = [layer.shuffle_grid, self.shuffle_block, None,
+            shuffle_kernel = _get_shuffle_kernel(self.F.dtype)
+        shuffle_args = [self.shuffle_grid, self.shuffle_block, None,
                         F_data, self.F] + self.shuffle_args
         shuffle_kernel = [shuffle_kernel] + shuffle_args
 
@@ -385,6 +398,9 @@ class FlexConvBpropKernel(ConvBpropKernel):
             for index in range(len(kernel)):
                 if type(kernel[index]) == TensorDescription:
                     kernel[index] = kernel[index].value.tensor.gpudata
+
+                if type(kernel[index]) == ScratchBufferWrapper:
+                    kernel[index] = kernel[index].get_ptr()
 
         super(FlexConvBpropKernel, self).bind_buffers()
 
@@ -431,14 +447,14 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_U = self.U.flex_entry()
 
-        U_size = np.prod(self.U.shape) * self.U.dtype.itemsize
+        U_size = np.prod(self.U.shape) * 2
 
         vec_size = 4 if self.dtype.itemsize == 4 else 8
 
         assert N % 32 == 0, "N dim must be multiple of 32"
         assert K % vec_size == 0, "K dim must be multiple of %d" % vec_size
 
-        if self.dtype.type is np.int16:
+        if self.dtype.type == "flex":
             clss = "fconv"
         else:
             raise TypeError("Type not supported.")
@@ -454,8 +470,6 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.MPQ = (M, P, Q)
         self.padding = (pad_d, pad_h, pad_w)
         self.strides = (str_d, str_h, str_w)
-        self.relu = relu
-        self.bsum = bsum
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
@@ -561,7 +575,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         flags = self.trunc_rows << 8
 
         # Have to convert output from float to flex
-        U_data = runtime.scratch_buffer(U_size)
+        U_data = ScratchBufferWrapper(U_size, 0, runtime)
         shape = [np.prod(self.U.shape[:-1]), self.U.shape[-1]]
         convert_kernel = _prepare_convert_kernel(U_data, "f4", self.U, shape,
                                                  self.flex_entry_U.ptr)
@@ -592,6 +606,9 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                 if type(kernel[index]) == TensorDescription:
                     kernel[index] = kernel[index].value.tensor.gpudata
 
+                if type(kernel[index]) == ScratchBufferWrapper:
+                    kernel[index] = kernel[index].get_ptr()
+
         super(FlexConvUpdateKernel, self).bind_buffers()
 
     def bind_flex_scales(self):
@@ -617,6 +634,14 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
 
 def _grid_dim(tile_size, dim_size):
     return dim_size // tile_size + (dim_size % tile_size != 0)
+
+
+def _flatten(lst):
+    """
+    flatten a nested list of lists or values
+    """
+    return sum(([x] if not isinstance(x, (list, tuple))
+                else _flatten(x) for x in lst), [])
 
 
 _transpose_kernel = r"""
@@ -655,7 +680,9 @@ __global__ void transpose(%(type)s* out, const %(type)s* in, int rows, int cols)
 @context_dependent_memoize
 def _get_transpose_kernel(dtype):
 
-    code = _transpose_kernel % _ew_types[dtype]
+    code = _transpose_kernel % {
+        "type": _get_register_type(dtype)
+    }
     module = SourceModule(code)
     kernel = module.get_function("transpose")
     kernel.prepare("PPII")
@@ -711,7 +738,9 @@ __global__ void dimShuffle(
 @context_dependent_memoize
 def _get_shuffle_kernel(dtype):
 
-    code = _shuffle_kernel % _ew_types[dtype]
+    code = _shuffle_kernel % {
+        "type": _get_register_type(dtype)
+    }
     module = SourceModule(code)
     kernel = module.get_function("dimShuffle")
     kernel.prepare("PPIIIIIIIIIIIIII")
@@ -720,7 +749,6 @@ def _get_shuffle_kernel(dtype):
 
 def _prepare_convert_kernel(src_data, src_type, dst_data, shape, flex_data):
     # quick wrapper to convert raw float scratch data to a destination tensor
-    shape, strides = _get_fast_ew_dims(dest_tensor.size)
     kernel_args = [dst_data, src_data, shape[1], 1.0, flex_data]
 
     kernel = _get_convert_kernel(src_type)
@@ -734,6 +762,11 @@ def _get_convert_kernel(dtype):
     _convert_kernel = r"""
 #include <cuda_fp16.h>
 
+__device__ short iabs(short a)
+{
+    return (a < 0) ? (-a) : a;
+}
+
 __global__ void convert(short* out, const %(type)s* in, int dim,
                         float scale, int* flex_data)
 {
@@ -744,7 +777,7 @@ __global__ void convert(short* out, const %(type)s* in, int dim,
     {
         %(type)s value = in[offset + item];
         short result = (short)(%(cvt)s(value) * scale);
-        max_val = max((int)abs(result), max_val);
+        max_val = max((int)iabs(result), max_val);
         out[offset] = result;
     }
 
@@ -758,13 +791,13 @@ __global__ void convert(short* out, const %(type)s* in, int dim,
         }
     elif dtype == "f2":
         template_vals = {
-            "type"   : "half",
+            "type"   : "unsigned short",
             "cvt"    : "__half2float"
         }
     else:
         raise ValueError("Invalid conversion type")
 
-    code = _reduce_kernel % template_vals
+    code = _convert_kernel % template_vals
     module = SourceModule(code)
     kernel = module.get_function("convert")
     kernel.prepare("PPII")
