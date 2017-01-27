@@ -122,6 +122,7 @@ kernels = {
     "persistent_rnn_bprop":          {"threads": 256, "sass": "persistent_rnn_bprop",      "params": "rnn_bprop",      "share": "(64*48) + 4"},
 
     # Flex conv
+    "fconv_bprop_C1_N64":   {"threads":  32, "sass": "hconv_bprop_C1_N64",      "params": "bprop_flex",  "share": " 32*8*2 +  64*8*2",     "args": {"int16": 1}},
     "fconv_bprop_C128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
     "fconv_bprop_C128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
     "fconv_bprop_C32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop_flex",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},

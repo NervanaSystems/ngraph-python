@@ -581,7 +581,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                                                  self.flex_entry_U.ptr)
 
         self.kernels = []
-        for kernel in self.fprop_kernels:
+        for kernel in self.updat_kernels:
             # TODO: Populate alpha and beta parameters (in a separate loop!).
             # alpha (used to be params[6]) will be multiplied with
             self.kernels.append([
@@ -590,13 +590,13 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                 kernel[3]] + kernel[4])
 
         for kernel in self.kernels:
-            kernel.extend((self.flex_entry_O.ptr, 1.0))
+            kernel.extend((self.flex_entry_U.ptr, 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
         self.kernels.append(convert_kernel)
 
         # record output flex id for autoflex
-        self.output_flex_ids = [self.flex_entry_O.flex_id]
+        self.output_flex_ids = [self.flex_entry_U.flex_id]
         # bind param values that depend on flex scales
         self.bind_flex_scales()
 
