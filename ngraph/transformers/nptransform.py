@@ -163,47 +163,54 @@ class NumPyConvEngine(object):
         K, M, P, Q, _ = O.tensor_description.axes.lengths
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_params)
-        mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d) for m in range(M)]
-        pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h) for p in range(P)]
-        qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w) for q in range(Q)]
-        dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d) for d in range(D)]
-        hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h) for h in range(H)]
-        wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w) for w in range(W)]
+        dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_params)
+        mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d, dil_d) for m in range(M)]
+        pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h, dil_h) for p in range(P)]
+        qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w, dil_w) for q in range(Q)]
+        dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d, dil_d) for d in range(D)]
+        hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h, dil_h) for h in range(H)]
+        wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w, dil_w) for w in range(W)]
 
         return (mSlice, pSlice, qSlice, dSlice, hSlice, wSlice)
 
     @staticmethod
-    def fprop_slice(q, S, X, padding, strides):
-        firstF = 0
-        lastF = S - 1
-        qs = q * strides - padding
-        x2 = qs + lastF
-        if qs < 0:
-            firstF = -qs
-            qs = 0
-        if x2 >= X:
-            dif = x2 - X + 1
-            lastF -= dif
-            x2 -= dif
-        return (slice(firstF, lastF + 1), slice(qs, x2 + 1), lastF - firstF + 1)
+    def fprop_slice(q, S, X, padding, stride, dilation):
+        f1 = None
+        qs = q * stride - padding
+        for s in range(S):
+            x = qs + s * dilation
+            if f1 is None and x >= 0 and x < X:
+                x1 = x
+                f1 = s
+            if x < X:
+                x2 = x
+                f2 = s
+        if f1 is None:
+            return (slice(0, 0, 1), slice(0, 0, 1), 0)
+        return (slice(f1, f2 + 1), slice(x1, x2 + 1, dilation), f2 - f1 + 1)
 
     @staticmethod
-    def bprop_slice(x, S, Q, padding, strides):
-        qs = x - (S - padding - 1)
-        firstF = None
-        for s in range(S):  # TODO remove loop logic here.
-            q = qs + s
-            if q % strides == 0:
-                q //= strides
+    def bprop_slice(x, S, Q, padding, stride, dilation):
+        qs = x - (dilation * (S - 1) - padding)
+        f1 = None
+        for s in range(S):
+            q = qs + s * dilation
+            if q % stride == 0:
+                q //= stride
                 if q >= 0 and q < Q:
-                    if firstF is None:
-                        firstF = s
-                        firstE = q
-                    lastF = s
-                    lastE = q
-        if firstF is None:
+                    if f1 is None:
+                        f1 = s
+                        x1 = q
+                    f2 = s
+                    x2 = q
+        if f1 is None:
             return (slice(0, 0, 1), slice(0, 0, 1), 0)
-        return (slice(firstF, lastF + 1, strides), slice(firstE, lastE + 1, 1), 0)
+
+        f_step = 1
+        while ((f_step * dilation) % stride) != 0:
+            f_step += 1
+        x_step = (f_step * dilation) // stride
+        return (slice(f1, f2 + 1, f_step), slice(x1, x2 + 1, x_step), 0)
 
 
 class NumPyPoolEngine(object):

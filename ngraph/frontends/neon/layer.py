@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.frontends.neon.axis import ar
 
 
-def output_dim(X, S, padding, strides, pooling=False):
+def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     """
     Compute along 1 dimension, with these sizes, what will be the output dimension.
 
@@ -28,7 +28,10 @@ def output_dim(X, S, padding, strides, pooling=False):
         padding (int): padding on each side
         strides (int): striding
         pooling (bool): flag for setting pooling layer size
+        dilation (int): dilation of filter
     """
+
+    S = dilation * (S - 1) + 1
     size = ((X - S + 2 * padding) // strides) + 1
 
     if pooling and padding >= S:
@@ -171,7 +174,8 @@ class ConvBase(Layer):
         super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
-                               str_h=None, str_w=None, str_d=None)
+                               str_h=None, str_w=None, str_d=None,
+                               dil_h=None, dil_w=None, dil_d=None)
 
         for d in [fshape, strides, padding]:
             self.convparams.update(d)
@@ -208,9 +212,12 @@ class ConvBase(Layer):
             # set lengths
             out_shape = [
                 self.f_axes[-1].length,
-                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d']),
-                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h']),
-                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'])
+                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                           cpm['dil_d']),
+                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                           cpm['dil_h']),
+                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                           cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
             self.o_axes += in_axes.batch_axes()
@@ -220,7 +227,7 @@ class ConvBase(Layer):
 
 class Conv2D(ConvBase):
 
-    def __init__(self, fshape, init, strides, padding, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
                 fshape = (1, fshape[0], fshape[0], fshape[1])
@@ -231,8 +238,10 @@ class Conv2D(ConvBase):
             strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+        if isinstance(dilation, int):
+            dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
 
 
 class Activation(Layer):
@@ -380,9 +389,9 @@ class Affine(Layer):
 
 class Convolution(Layer):
 
-    def __init__(self, fshape, filter_init, strides=1, padding=0, bias_init=None, activation=None,
-                 batch_norm=False, **kwargs):
-        self.conv = Conv2D(fshape, filter_init, strides, padding, **kwargs)
+    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+                 activation=None, batch_norm=False, **kwargs):
+        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init)
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)

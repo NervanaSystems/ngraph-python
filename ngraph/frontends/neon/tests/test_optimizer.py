@@ -18,7 +18,6 @@ Test of the optimizers
 '''
 import copy
 import itertools as itt
-
 import numpy as np
 
 import ngraph as ng
@@ -28,7 +27,6 @@ from ngraph.testing.execution import ExecutorFactory
 
 def pytest_generate_tests(metafunc):
     if 'args' in metafunc.fixturenames:
-        fargs = []
         lr = np.random.random(2)
         momentum = np.random.random(4)
         wdecay = [0.0005, 0.000, 0.001, 0.1]
@@ -36,20 +34,29 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('args', fargs)
 
 
-class DummyLayer(object):
-
-    def __init__(self, p):
-        self.p = p[0]
-
-    def get_params(self):
-        return self.p
-
-
 def generate_data(C, N):
     x = np.random.rand(C, N).astype('float32')
     y = np.random.rand(N).astype('float32')
 
     return x, y
+
+
+def compare_optimizers(ng_opt, np_opt, nfeatures=20, batch_size=32, niters=20, rtol=1e-6):
+
+    ng_Ws = list()
+    np_Ws = list()
+    for x, y in (generate_data(nfeatures, batch_size) for _ in range(niters)):
+        # NOTE: Does not update learning rate according to schedule.
+        # NOTE: Keep in mind for schedule tests
+        # Compute ngraph values
+        ng_W, _ = ng_opt(x, y)
+        ng_Ws.append(copy.deepcopy(ng_W))
+
+        # Compute numpy values
+        np_W = np_opt(x, y)
+        np_Ws.append(copy.deepcopy(np_W))
+
+        ng.testing.assert_allclose(np_W, ng_W, rtol=rtol)
 
 
 # xfail due to initial_value=nparray not working
@@ -108,3 +115,48 @@ def test_gdm(args, transformer_factory):
             w_ref[:] = w_ref + vel_ref
 
         ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
+
+
+def test_gdm_nesterov(args, transformer_factory):
+    """
+    Test ngraph gradient descent with nesterov momentum against a simple numpy implementation
+    Args:
+        args (tuple): learning rate, momentum, weight decay
+        transformer_factory: unused
+    """
+
+    lrate, mom, wdecay = args
+    ex = ExecutorFactory()
+    transformer = ex.transformer
+
+    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
+                                  wdecay=wdecay, nesterov=True)
+
+    C = ng.make_axis(20, name="C")
+    N = ng.make_axis(32, name="N", batch=True)
+
+    # params to be updated using GDM
+    np_W = np.random.rand(C.length)
+    W = ng.variable([C - 1], initial_value=np_W)
+
+    # Set up initial velocity
+    velocity = np.zeros(C.length)
+
+    # Set up data placeholders
+    data = ng.placeholder([C, N]).named("data")
+    target = ng.placeholder([N]).named("target")
+
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W, data), out_axis=())
+    updates = gdm(cost)
+    optimize = transformer.computation([W, updates], data, target)
+
+    # Set up numpy version
+    def numpy_nesterov(x, y):
+        grad = -1 * x.mean(axis=1)
+        velocity[:] = mom * velocity - lrate * (grad + wdecay * np_W)
+        np_W[:] = np_W + mom * velocity - lrate * (grad + wdecay * np_W)
+
+        return np_W
+
+    compare_optimizers(optimize, numpy_nesterov, nfeatures=C.length, batch_size=N.length)
