@@ -33,6 +33,7 @@ TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tes
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
+TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
@@ -118,6 +119,11 @@ test_mxnet: test_prepare clean
 	 --junit-xml=testout_test_mxnet_$(PY).xml \
 	 $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i coverage_test_mxnet_$(PY).xml
+
+test_cntk: test_prepare clean
+	@echo Running unit tests for cntk frontend...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
+	@coverage xml -i
 
 test_integration: test_prepare clean
 	@echo Running integration tests...
