@@ -31,7 +31,8 @@ def test_uniform_range_pos(transformer_factory):
     ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
     ng_a = ng.uniform(ng_a, low=0.0, high=0.5)
 
-    result = executor(ng_a)()
+    with executor(ng_a) as ex:
+        result = ex()
     print(result)
 
     assert np.all(result < 0.5)
@@ -47,7 +48,8 @@ def test_uniform_range_posneg(transformer_factory):
     ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
     ng_a = ng.uniform(ng_a, low=-0.5, high=0.5)
 
-    result = executor(ng_a)()
+    with executor(ng_a) as ex:
+        result = ex()
     print(result)
 
     assert np.all(result < 0.5)

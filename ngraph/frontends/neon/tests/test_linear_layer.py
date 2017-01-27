@@ -53,7 +53,8 @@ def test_linear_zeros(basic_linargs, transformer_factory):
 
     # evaluate
     ngt.make_transformer()
-    out = executor(fprop, inp)(x)
+    with executor(fprop, inp) as ex:
+        out = ex(x)
 
     assert np.min(out) == 0.0 and np.max(out) == 0.0
 
@@ -80,7 +81,8 @@ def test_linear_ones(basic_linargs, transformer_factory):
 
     # evaluate
     ngt.make_transformer()
-    out, w = executor([fprop, layer.W], inp)(x)
+    with executor([fprop, layer.W], inp) as ex:
+        out, w = ex(x)
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
 
     assert ng.testing.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))

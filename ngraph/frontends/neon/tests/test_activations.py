@@ -27,26 +27,26 @@ from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
-    ex = ExecutorFactory()
-    C = ng.make_axis('C')
-    N = ng.make_axis('N', batch=True)
-    C.length, N.length = inputs.shape
-    x = ng.placeholder([C, N])
+    with ExecutorFactory() as ex:
+        C = ng.make_axis('C')
+        N = ng.make_axis('N', batch=True)
+        C.length, N.length = inputs.shape
+        x = ng.placeholder([C, N])
 
-    if deriv is False:
-        costfunc = ex.executor(func.__call__(x), x)
-        result = costfunc(inputs)
-    else:
-        costfunc = ex.derivative(func.__call__(x), x)
+        if deriv is False:
+            costfunc = ex.executor(func.__call__(x), x)
+            result = costfunc(inputs)
+        else:
+            costfunc = ex.derivative(func.__call__(x), x)
 
-        result = costfunc(inputs)
+            result = costfunc(inputs)
 
-        # hack to get derivatives
-        result = result.ravel()
-        result = result[0:result.size:(C.length * N.length + 1)]
-        result = result.reshape(inputs.shape)
+            # hack to get derivatives
+            result = result.ravel()
+            result = result[0:result.size:(C.length * N.length + 1)]
+            result = result.reshape(inputs.shape)
 
-    ng.testing.assert_allclose(result, expected_result, rtol=tol)
+        ng.testing.assert_allclose(result, expected_result, rtol=tol)
 
 
 """Identity

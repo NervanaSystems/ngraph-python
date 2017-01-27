@@ -117,7 +117,6 @@ class ImporterTester(object):
         importer = TFImporter()
         importer.import_protobuf(self.pb_txt_path, verbose=verbose)
         transformer = ngt.make_transformer()
-        #transformer = ngt.make_transformer_factory('hetr')()
 
         # set target node
         ng_target_node = importer.get_op_handle_by_name(
@@ -158,6 +157,7 @@ class ImporterTester(object):
         if print_ng_result:
             print(ng_result)
 
+        transformer.cleanup()
         return ng_result
 
     def tf_run(self,

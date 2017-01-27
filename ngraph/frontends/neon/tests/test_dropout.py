@@ -39,8 +39,8 @@ def test_dropout_train(transformer_factory):
 
     # evaluate
     ngt.make_transformer()
-    comp = executor([fprop, layer.mask], inp)
-    out, mask = comp(x)
+    with executor([fprop, layer.mask], inp) as comp:
+        out, mask = comp(x)
     numpy_out = x * mask[:, None]
     np.testing.assert_allclose(out, numpy_out)
 
@@ -66,8 +66,8 @@ def test_dropout_inference(transformer_factory):
 
     # evaluate
     ngt.make_transformer()
-    comp = executor(fprop, inp)
-    out = comp(x)
+    with executor(fprop, inp) as comp:
+        out = comp(x)
     numpy_out = x * 0.5
     np.testing.assert_allclose(out, numpy_out)
     out1 = out.copy()
@@ -98,3 +98,4 @@ def test_dropout_bprop_single_comp(transformer_factory):
     fout, bout, mask = comp(x, 2)
     # Calculate derivative by hand and compare
     np.testing.assert_allclose(bout, (x * mask[:, None]).sum())
+    trans.cleanup()

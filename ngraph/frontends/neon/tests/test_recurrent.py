@@ -100,97 +100,97 @@ def check_birnn(seq_len, input_size, hidden_size, batch_size,
     H = ng.make_axis(hidden_size)
     ax_s = ng.make_axes([H, N])
 
-    ex = ExecutorFactory()
-    np.random.seed(0)
+    with ExecutorFactory() as ex:
+        np.random.seed(0)
 
-    birnn_ng = BiRNN(hidden_size, init_func, activation=Tanh(),
-                     reset_cells=True, return_sequence=return_seq, sum_out=sum_out)
+        birnn_ng = BiRNN(hidden_size, init_func, activation=Tanh(),
+                         reset_cells=True, return_sequence=return_seq, sum_out=sum_out)
 
-    inp_ng = ng.placeholder([Cin, REC, N])
-    init_state_ng = ng.placeholder(ax_s)
+        inp_ng = ng.placeholder([Cin, REC, N])
+        init_state_ng = ng.placeholder(ax_s)
 
-    # fprop graph
-    out_ng = birnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
-    # out_ng.input = True
+        # fprop graph
+        out_ng = birnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
+        # out_ng.input = True
 
-    rnn_W_input = birnn_ng.fwd_rnn.W_input
-    rnn_W_input.input = True
-    rnn_W_recur = birnn_ng.fwd_rnn.W_recur
-    rnn_W_recur.input = True
-    rnn_b = birnn_ng.fwd_rnn.b
-    rnn_b.input = True
+        rnn_W_input = birnn_ng.fwd_rnn.W_input
+        rnn_W_input.input = True
+        rnn_W_recur = birnn_ng.fwd_rnn.W_recur
+        rnn_W_recur.input = True
+        rnn_b = birnn_ng.fwd_rnn.b
+        rnn_b.input = True
 
-    # fprop on random inputs
-    input_value = rng.uniform(-1, 1, inp_ng.axes)
-    init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
+        # fprop on random inputs
+        input_value = rng.uniform(-1, 1, inp_ng.axes)
+        init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
 
-    if sum_out is True:
-        fprop_neon_fun = ex.executor([out_ng,
-                                  birnn_ng.fwd_rnn.W_input,
-                                  birnn_ng.fwd_rnn.W_recur,
-                                  birnn_ng.fwd_rnn.b,
-                                  birnn_ng.bwd_rnn.W_input,
-                                  birnn_ng.bwd_rnn.W_recur,
-                                  birnn_ng.bwd_rnn.b],
-                                  inp_ng, init_state_ng)
-        fprop_neon, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-            fprop_neon_fun(input_value, init_state_value)
-        fprop_neon = fprop_neon.copy()
-    else:
-        fprop_neon_fun = ex.executor(out_ng+
-                                  [birnn_ng.fwd_rnn.W_input,
-                                  birnn_ng.fwd_rnn.W_recur,
-                                  birnn_ng.fwd_rnn.b,
-                                  birnn_ng.bwd_rnn.W_input,
-                                  birnn_ng.bwd_rnn.W_recur,
-                                  birnn_ng.bwd_rnn.b],
-                                  inp_ng, init_state_ng)
-        fprop_neon, fprop_neon_1, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-            fprop_neon_fun(input_value, init_state_value)
-        
-        fprop_neon_fwd = fprop_neon.copy()
-        fprop_neon_bwd = fprop_neon_1.copy()
+        if sum_out is True:
+            fprop_neon_fun = ex.executor([out_ng,
+                                      birnn_ng.fwd_rnn.W_input,
+                                      birnn_ng.fwd_rnn.W_recur,
+                                      birnn_ng.fwd_rnn.b,
+                                      birnn_ng.bwd_rnn.W_input,
+                                      birnn_ng.bwd_rnn.W_recur,
+                                      birnn_ng.bwd_rnn.b],
+                                      inp_ng, init_state_ng)
+            fprop_neon, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
+                fprop_neon_fun(input_value, init_state_value)
+            fprop_neon = fprop_neon.copy()
+        else:
+            fprop_neon_fun = ex.executor(out_ng+
+                                      [birnn_ng.fwd_rnn.W_input,
+                                      birnn_ng.fwd_rnn.W_recur,
+                                      birnn_ng.fwd_rnn.b,
+                                      birnn_ng.bwd_rnn.W_input,
+                                      birnn_ng.bwd_rnn.W_recur,
+                                      birnn_ng.bwd_rnn.b],
+                                      inp_ng, init_state_ng)
+            fprop_neon, fprop_neon_1, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
+                fprop_neon_fun(input_value, init_state_value)
+            
+            fprop_neon_fwd = fprop_neon.copy()
+            fprop_neon_bwd = fprop_neon_1.copy()
 
-    # ========= reference model ==========
-    output_shape = (hidden_size, seq_len * batch_size)
+        # ========= reference model ==========
+        output_shape = (hidden_size, seq_len * batch_size)
 
-    # generate random deltas tensor
-    deltas = np.random.randn(*output_shape)
+        # generate random deltas tensor
+        deltas = np.random.randn(*output_shape)
 
-    # the reference code expects these shapes:
-    # input_shape: (seq_len, input_size, batch_size)
-    # output_shape: (seq_len, hidden_size, batch_size)
-    deltas_ref = deltas.copy().T.reshape(
-        seq_len, batch_size, hidden_size).swapaxes(1, 2)
+        # the reference code expects these shapes:
+        # input_shape: (seq_len, input_size, batch_size)
+        # output_shape: (seq_len, hidden_size, batch_size)
+        deltas_ref = deltas.copy().T.reshape(
+            seq_len, batch_size, hidden_size).swapaxes(1, 2)
 
-    inp_ref = input_value.transpose([1, 0, 2])
+        inp_ref = input_value.transpose([1, 0, 2])
 
-    # reference numpy RNN
-    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
-    rnn_ref.Wxh[:] = fwd_input.copy()
-    rnn_ref.Whh[:] = fwd_recur.copy()
-    rnn_ref.bh[:] = fwd_b.copy().reshape(rnn_ref.bh.shape)
-    (dWxh_ref, dWhh_ref, db_ref, h_ref_fwd,
-        dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
-                                                  init_states=init_state_value)
+        # reference numpy RNN
+        rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
+        rnn_ref.Wxh[:] = fwd_input.copy()
+        rnn_ref.Whh[:] = fwd_recur.copy()
+        rnn_ref.bh[:] = fwd_b.copy().reshape(rnn_ref.bh.shape)
+        (dWxh_ref, dWhh_ref, db_ref, h_ref_fwd,
+            dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
+                                                      init_states=init_state_value)
 
-    rnn_ref.Wxh[:] = bwd_input.copy()
-    rnn_ref.Whh[:] = bwd_recur.copy()
-    rnn_ref.bh[:] = bwd_b.copy().reshape(rnn_ref.bh.shape)
-    h_ref_bwd = rnn_ref.fprop_backwards(inp_ref, init_state_value)
+        rnn_ref.Wxh[:] = bwd_input.copy()
+        rnn_ref.Whh[:] = bwd_recur.copy()
+        rnn_ref.bh[:] = bwd_b.copy().reshape(rnn_ref.bh.shape)
+        h_ref_bwd = rnn_ref.fprop_backwards(inp_ref, init_state_value)
 
-    if sum_out is True:
-        h_ref = h_ref_bwd + h_ref_fwd
-        if return_seq is True:
-            fprop_neon = fprop_neon[:, :, 0]
-        ng.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
-    else:
-        if return_seq is True:
-            fprop_neon_fwd = fprop_neon_fwd[:, :, 0]
-            fprop_neon_bwd = fprop_neon_bwd[:, :, 0]
-        ng.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
-        ng.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
-    return
+        if sum_out is True:
+            h_ref = h_ref_bwd + h_ref_fwd
+            if return_seq is True:
+                fprop_neon = fprop_neon[:, :, 0]
+            ng.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
+        else:
+            if return_seq is True:
+                fprop_neon_fwd = fprop_neon_fwd[:, :, 0]
+                fprop_neon_bwd = fprop_neon_bwd[:, :, 0]
+            ng.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
+            ng.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
+        return
 
 
 # compare neon RNN to reference RNN implementation
@@ -206,94 +206,94 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
     H = ng.make_axis(hidden_size)
     ax_s = ng.make_axes([H, N])
 
-    ex = ExecutorFactory()
-    np.random.seed(0)
+    with ExecutorFactory() as ex:
+        np.random.seed(0)
 
-    rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
-                       reset_cells=True, return_sequence=return_seq,
-                       backward=backward)
+        rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
+                           reset_cells=True, return_sequence=return_seq,
+                           backward=backward)
 
-    inp_ng = ng.placeholder([Cin, REC, N])
-    init_state_ng = ng.placeholder(ax_s)
+        inp_ng = ng.placeholder([Cin, REC, N])
+        init_state_ng = ng.placeholder(ax_s)
 
-    # fprop graph
-    out_ng = rnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
-    out_ng.input = True
+        # fprop graph
+        out_ng = rnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
+        out_ng.input = True
 
-    rnn_W_input = rnn_ng.W_input
-    rnn_W_input.input = True
-    rnn_W_recur = rnn_ng.W_recur
-    rnn_W_recur.input = True
-    rnn_b = rnn_ng.b
-    rnn_b.input = True
+        rnn_W_input = rnn_ng.W_input
+        rnn_W_input.input = True
+        rnn_W_recur = rnn_ng.W_recur
+        rnn_W_recur.input = True
+        rnn_b = rnn_ng.b
+        rnn_b.input = True
 
-    fprop_neon_fun = ex.executor([out_ng, rnn_ng.W_input, rnn_ng.W_recur, rnn_ng.b], inp_ng, init_state_ng)
+        fprop_neon_fun = ex.executor([out_ng, rnn_ng.W_input, rnn_ng.W_recur, rnn_ng.b], inp_ng, init_state_ng)
 
-    dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
-    dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
-    dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
-    dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
-    dWb_s_fun = ex.derivative(out_ng, rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
-    dWb_n_fun = ex.numeric_derivative(out_ng, rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
+        dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
+        dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
+        dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
+        dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
+        dWb_s_fun = ex.derivative(out_ng, rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
+        dWb_n_fun = ex.numeric_derivative(out_ng, rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
 
-    # fprop on random inputs
-    input_value = rng.uniform(-1, 1, inp_ng.axes)
-    init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
-    fprop_neon, Wxh_neon, Whh_neon, bh_neon  = fprop_neon_fun(input_value, init_state_value)
-    fprop_neon = fprop_neon.copy()
+        # fprop on random inputs
+        input_value = rng.uniform(-1, 1, inp_ng.axes)
+        init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
+        fprop_neon, Wxh_neon, Whh_neon, bh_neon  = fprop_neon_fun(input_value, init_state_value)
+        fprop_neon = fprop_neon.copy()
 
-    # after the rnn graph has been executed, can get the W values. Get copies so
-    # shared values don't confuse derivatives
-    #Wxh_neon = rnn_ng.W_input.value.get(None).copy()
-    #Whh_neon = rnn_ng.W_recur.value.get(None).copy()
-    #bh_neon = rnn_ng.b.value.get(None).copy()
+        # after the rnn graph has been executed, can get the W values. Get copies so
+        # shared values don't confuse derivatives
+        #Wxh_neon = rnn_ng.W_input.value.get(None).copy()
+        #Whh_neon = rnn_ng.W_recur.value.get(None).copy()
+        #bh_neon = rnn_ng.b.value.get(None).copy()
 
-    # bprop derivs
-    dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
-    dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
-    ng.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
+        # bprop derivs
+        dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
+        dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
+        ng.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
 
-    dWb_s = dWb_s_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
-    dWb_n = dWb_n_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
-    ng.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
+        dWb_s = dWb_s_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
+        dWb_n = dWb_n_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
+        ng.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
 
-    dWinput_s = dWinput_s_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
-    dWinput_n = dWinput_n_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
-    ng.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
+        dWinput_s = dWinput_s_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
+        dWinput_n = dWinput_n_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
+        ng.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
 
-    # ========= reference model ==========
-    output_shape = (hidden_size, seq_len * batch_size)
+        # ========= reference model ==========
+        output_shape = (hidden_size, seq_len * batch_size)
 
-    # generate random deltas tensor
-    deltas = np.random.randn(*output_shape)
+        # generate random deltas tensor
+        deltas = np.random.randn(*output_shape)
 
-    # the reference code expects these shapes:
-    # input_shape: (seq_len, input_size, batch_size)
-    # output_shape: (seq_len, hidden_size, batch_size)
-    deltas_ref = deltas.copy().T.reshape(
-        seq_len, batch_size, hidden_size).swapaxes(1, 2)
+        # the reference code expects these shapes:
+        # input_shape: (seq_len, input_size, batch_size)
+        # output_shape: (seq_len, hidden_size, batch_size)
+        deltas_ref = deltas.copy().T.reshape(
+            seq_len, batch_size, hidden_size).swapaxes(1, 2)
 
-    inp_ref = input_value.transpose([1, 0, 2])
+        inp_ref = input_value.transpose([1, 0, 2])
 
-    # reference numpy RNN
-    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
-    rnn_ref.Wxh[:] = Wxh_neon
-    rnn_ref.Whh[:] = Whh_neon
-    rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
+        # reference numpy RNN
+        rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
+        rnn_ref.Wxh[:] = Wxh_neon
+        rnn_ref.Whh[:] = Whh_neon
+        rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
 
-    if backward:
-        h_ref_list = rnn_ref.fprop_backwards(inp_ref, init_state_value)
-    else:
-        (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-            dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
-                                                      init_states=init_state_value)
+        if backward:
+            h_ref_list = rnn_ref.fprop_backwards(inp_ref, init_state_value)
+        else:
+            (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
+                dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
+                                                          init_states=init_state_value)
 
-    # comparing outputs
-    if return_seq is True:
-        fprop_neon = fprop_neon[:, :, 0]
-    ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
+        # comparing outputs
+        if return_seq is True:
+            fprop_neon = fprop_neon[:, :, 0]
+        ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
 
-    return
+        return
 
 
 if __name__ == '__main__':

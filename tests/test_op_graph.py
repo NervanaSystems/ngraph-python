@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing import ExecutorFactory
+from ngraph.testing import ExecutorFactory, executor
 
 
 def test_variable_init(transformer_factory):
@@ -26,8 +26,8 @@ def test_variable_init(transformer_factory):
     w_init = np.random.rand(C.length)
     W = ng.variable(ng.make_axes([C]), initial_value=w_init)
 
-    ex = ExecutorFactory()
-    result = ex.executor(W)()
+    with ExecutorFactory() as ex:
+        result = ex.executor(W)()
     ng.testing.assert_allclose(result, w_init)
 
 
@@ -56,8 +56,8 @@ def test_sequential():
         x1 = x + x
         pf.append(x0)
     p = pf()
-    ex = ExecutorFactory()
-    x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
+    with ExecutorFactory() as ex:
+        x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
     assert x0_val == 0
     assert x1_val == 4
     assert p_val == 0
@@ -71,8 +71,8 @@ def test_sequential_reduce():
         x1 = ng.sum(x0, out_axes=())
         x2 = ng.sum(x0, out_axes=()) + x0
     p = pf()
-    ex = ExecutorFactory()
-    x0_val, x1_val, x2_val, p_val = ex.executor([x0, x1, x2, p])()
+    with ExecutorFactory() as ex:
+        x0_val, x1_val, x2_val, p_val = ex.executor([x0, x1, x2, p])()
     x0_np = x.value[...] + x.value[...]
     x1_np = np.sum(x0_np)
     x2_np = x1_np + x0_np
@@ -96,8 +96,8 @@ def test_sequential_side():
         pf.append(y)
     p = pf()
 
-    ex = ExecutorFactory()
-    main_effect = ex.executor(p)
+    with ExecutorFactory() as ex:
+        main_effect = ex.executor(p)
 
     # Run main path #1
     y_val = main_effect()
@@ -197,7 +197,6 @@ def test_tensor_slice():
 
 
 def test_setting():
-    ex = ExecutorFactory()
     X = ng.make_axis(name='X', length=3)
     axes = ng.make_axes([X])
 
@@ -209,13 +208,14 @@ def test_setting():
 
     v = ng.variable(axes, initial_value=x)
 
-    f_v = ex.executor(v)
+    with ExecutorFactory() as ex:
+        f_v = ex.executor(v)
 
-    with ng.Op.saved_user_deps():
-        ng.assign(v, v + y)
-        f_v1 = ex.executor(v)
+        with ng.Op.saved_user_deps():
+            ng.assign(v, v + y)
+            f_v1 = ex.executor(v)
 
-    f_v2 = ex.executor(v)
+        f_v2 = ex.executor(v)
 
     e_v = f_v().copy()
     assert ng.testing.allclose(e_v, np_x)
