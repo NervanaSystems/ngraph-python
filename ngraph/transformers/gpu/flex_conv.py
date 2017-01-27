@@ -17,6 +17,7 @@ from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.convolution import _magic32, _magic64, _get_sm_count
 from pycuda.compiler import SourceModule
 
 from operator import itemgetter
@@ -32,9 +33,9 @@ class FlexConvFpropKernel(ConvFpropKernel):
     selects flex convolution kernel and sets up flex parameters
     """
     def __init__(self, transformer, op):
-        super(FlexConvFpropKernel, self).__init__(transformer, op)
         self.alpha = 1.0
         self.beta = 0.0
+        super(FlexConvFpropKernel, self).__init__(transformer, op)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w):
@@ -188,17 +189,17 @@ class FlexConvBpropKernel(ConvBpropKernel):
     selects flex convolution kernel and sets up flex parameters
     """
     def __init__(self, transformer, op):
-        super(FlexConvBpropKernel, self).__init__(transformer, op)
         self.alpha = 1.0
         self.beta = 0.0
+        super(FlexConvBpropKernel, self).__init__(transformer, op)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w):
-        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
+        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
         self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
         self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
 
-        self.flex_entry_I = self.I.flex_entry()
+        self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_F = self.F.flex_entry()
         self.flex_entry_O = self.O.flex_entry()
 
@@ -334,7 +335,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
         flags = self.trunc_rows << 8
 
         # Must dim shuffle filter data for bprop kernel
-        F_data = runtime.scratch_buffer(B.size)
+        F_data = runtime.scratch_buffer(F_size)
         if self.bprop_zero:
             Out = runtime.scratch_buffer(O_size, offset=F_size)
             shuffle_kernel = _get_transpose_kernel(self.F.dtype.str[1:])
@@ -361,7 +362,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
             # alpha (used to be params[6]) will be multiplied with
             self.kernels.append([
                 kernel_specs.get_kernel(kernel[0]), kernel[1], kernel[2], None,
-                0, Out, self.I, F_data, 1.0, 0.0, flags, kernel[3]] + kernel[4])
+                0, Out, self.E, F_data, 1.0, 0.0, flags, kernel[3]] + kernel[4])
 
         for kernel in self.kernels
             kernel.extend((self.flex_entry_O.ptr, 1.0))
@@ -385,7 +386,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
         super(FlexConvBpropKernel, self).bind_buffers()
 
     def bind_flex_scales(self):
-        scaleAB = self.flex_entry_I.scale * self.flex_entry_F.scale
+        scaleAB = self.flex_entry_E.scale * self.flex_entry_F.scale
         scaleC = self.flex_entry_O.scale
         alpha = self.alpha * scaleAB
         beta = self.beta * scaleC
@@ -413,7 +414,206 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
     selects flex convolution kernel and sets up flex parameters
     """
     def __init__(self, transformer, op):
-        raise NotImplementedError
+        self.alpha = 1.0
+        self.beta = 0.0
+        super(FlexConvUpdateKernel, self).__init__(transformer, op)
+
+    def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
+        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
+        self.U = TensorDescriptionWrapper(self.U, len(self.U.shape))
+
+        self.flex_entry_I = self.I.flex_entry()
+        self.flex_entry_E = self.E.flex_entry()
+        self.flex_entry_U = self.U.flex_entry()
+
+        U_size = np.prod(self.U.shape) * self.U.dtype.itemsize
+
+        vec_size = 4 if self.dtype.itemsize == 4 else 8
+
+        assert N % 32 == 0, "N dim must be multiple of 32"
+        assert K % vec_size == 0, "K dim must be multiple of %d" % vec_size
+
+        if self.dtype.type is np.int16:
+            clss = "fconv"
+        else:
+            raise TypeError("Type not supported.")
+
+        self.C = C
+        self.K = K
+        self.M = M
+        self.P = P
+        self.Q = Q
+        self.NCK = (N, C, K)
+        self.TRS = (T, R, S)
+        self.DHW = (D, H, W)
+        self.MPQ = (M, P, Q)
+        self.padding = (pad_d, pad_h, pad_w)
+        self.strides = (str_d, str_h, str_w)
+        self.relu = relu
+        self.bsum = bsum
+
+        self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+
+        self.dimI   = (C, D, H, W, N)
+        self.dimF   = (C, T, R, S, K)
+        self.dimFb  = (K, T, R, S, C)
+        self.dimO   = (K, M, P, Q, N)
+        self.dimI2  = (C*D*H*W, N)
+        self.dimF2  = (C*T*R*S, K)
+        self.dimF2t = (K, C*T*R*S)
+        self.dimO2  = (K*M*P*Q, N)
+        self.dimS   = (K, 1)
+        self.sizeI  = reduce(mul, self.dimI, 1)
+        self.sizeF  = reduce(mul, self.dimF, 1)
+        self.sizeO  = reduce(mul, self.dimO, 1)
+        self.nOut   = reduce(mul, self.MPQ, 1) * K
+
+        # precompute some multiplications for fast constant memory access
+        HW    = H*W
+        DHW   = D*HW
+        WN    = W*N
+        HWN   = H*WN
+        DHWN  = D*HWN
+        RS    = R*S
+        RST   = T*RS
+        CRST  = C*RST
+        CRSTK = K*CRST
+        KRST  = K*RST
+        PQ    = P*Q
+        PQM   = M*PQ
+        QN    = Q*N
+        PQN   = P*QN
+        MPQN  = M*PQN
+
+        if CRST > 2**16:
+            assert CRST  < 2**16, "Integer division is faster with 16bit numerators"
+
+        # precompute the magic numbers and shift amounts for integer division
+        magic_HW    = _magic64(HW)
+        magic_W     = _magic64(W)
+        magic_PQ    = _magic64(PQ)
+        magic_Q     = _magic64(Q)
+        magic_RST   = _magic32(CRST, RST)
+        magic_RS    = _magic32(RST+32, RS)
+        magic_S     = _magic32(RS+32, S)
+        magic_str_w = _magic32(W + S, str_w)
+        magic_str_h = _magic32(H + R, str_h)
+        magic_str_d = _magic32(D + T, str_d)
+
+        # flop count for benchmarking
+        self.flops = PQM * K * N * CRST * 2.0
+
+        tile_N   = 128 if N > 64 else 64
+        grid_N   = _grid_dim(tile_N, N)
+        tiles_CK = (128, 64, 32) if tile_N == 128 else (128, 64)
+
+        ####### UPDATE ###########
+
+        grid_C   = _grid_dim(128, CRST)
+        sm_count = _get_sm_count()
+
+        # in float32 for big feature_map layers the smaller tile is actually faster
+        # so restrict tile selection to just that.
+        if self.dtype.type is np.float32 and PQ > 56*56:
+            K_tiles = (64,)
+        else:
+            K_tiles = (128, 64)
+
+        determ = ""
+        self.determ = 0
+
+        self.updat_kernels = []
+        for tile_K, grid_K, offset_K in kernel_specs.K_partitions(K, K_tiles):
+
+            kernel_name = "%s_updat%s_C128_K%d" % (clss, determ, tile_K)
+            base_blocks = M*grid_C*grid_K
+
+            grid_P, grid_Q, threads = kernel_specs.update_grid(kernel_name, base_blocks, P, Q, sm_count)
+            # print grid_P, grid_Q
+
+            grid_PQ   = grid_P * grid_Q
+            magic_PQu = _magic64(grid_PQ)
+            magic_Qu  = _magic64(grid_Q)
+
+            block = (threads, 1, 1)
+            if RST > 1:
+                grid = (M*grid_PQ, grid_C, grid_K)
+            else:
+                grid = (grid_C, grid_K, M*grid_PQ)
+
+            self.determ *= M*grid_PQ
+            self.determ_shape = (M*grid_PQ, CRSTK)
+
+            self.updat_kernels.append([kernel_name, grid, block, offset_K, _flatten([
+                N, K, D, H, W, WN, HWN, DHWN,
+                C, CRST, RST, magic_RST, RS, magic_RS, S, magic_S,
+                pad_d, pad_h, pad_w, str_d, str_h, str_w,
+                P, Q, PQ, QN, PQN, MPQN, magic_Qu, magic_PQu,
+                grid_P, grid_Q, grid_PQ])])
+
+        # Set to 5 for the current T1000 HW config
+        self.trunc_rows = 5
+        flags = self.trunc_rows << 8
+
+        # Have to convert output from float to flex
+        U_data = runtime.scratch_buffer(U_size)
+        shape = [np.prod(self.U.shape[:-1]), self.U.shape[-1]]
+        convert_kernel = _prepare_convert_kernel(U_data, "f4", self.U, shape,
+                                                 self.flex_entry_U.ptr)
+
+        self.kernels = []
+        for kernel in self.fprop_kernels:
+            # TODO: Populate alpha and beta parameters (in a separate loop!).
+            # alpha (used to be params[6]) will be multiplied with
+            self.kernels.append([
+                kernel_specs.get_kernel(kernel[0]), kernel[1], kernel[2], None,
+                0, U_data, self.I, self.E, 1.0, 0.0, flags,
+                kernel[3]] + kernel[4])
+
+        for kernel in self.kernels
+            kernel.extend((self.flex_entry_O.ptr, 1.0))
+            kernel[10] &= 0xfffffffe  # Enable output flag
+
+        self.kernels.append(convert_kernel)
+
+        # record output flex id for autoflex
+        self.output_flex_ids = [self.flex_entry_O.flex_id]
+        # bind param values that depend on flex scales
+        self.bind_flex_scales()
+
+    def bind_buffers(self):
+        for kernel in self.kernels:
+            for index in range(len(kernel)):
+                if type(kernel[index]) == TensorDescription:
+                    kernel[index] = kernel[index].value.tensor.gpudata
+
+        super(FlexConvUpdateKernel, self).bind_buffers()
+
+    def bind_flex_scales(self):
+        scaleAB = self.flex_entry_I.scale * self.flex_entry_E.scale
+        scaleC = self.flex_entry_U.scale
+        alpha = self.alpha * scaleAB
+        beta = self.beta * scaleC
+
+        for kernel in self.kernels[:-1]:
+            kernel[8] = alpha
+            kernel[9] = beta
+            kernel[-1] = 1. / scaleC
+
+        self.kernels[-1][-2] = 1. / scaleC
+
+    def execute(self):
+        import pdb; pdb.set_trace()
+        self.U.value.fill(0)
+
+        for kernel in self.kernels:
+            kernel[0].prepared_async_call(*kernel[1:])
+
+
+def _grid_dim(tile_size, dim_size):
+    return dim_size // tile_size + (dim_size % tile_size != 0)
 
 
 _transpose_kernel = r"""
