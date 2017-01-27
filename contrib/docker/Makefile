@@ -67,10 +67,10 @@ test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
 
 build_caffe2: build_test
-	docker build -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2_${BUILD_VERSION} ${DIR}
 
 test_caffe2: build_caffe2
-	docker run --rm ${VOLUME} -t ngraph_caffe2_${BUILD_VERSION} py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed ngraph/frontends/caffe2/tests/
+	docker run --rm ${VOLUME} -t ngraph_caffe2_${BUILD_VERSION} py.test --cov=ngraph --junit-xml=testout_caffe2.xml -n auto --boxed ngraph/frontends/caffe2/tests/
 
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test

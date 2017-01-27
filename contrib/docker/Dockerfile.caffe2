@@ -1,7 +1,7 @@
 FROM ngraph_test
 
 # Caffe2 dependencies
-RUN apt-get update && apt-get install -q -y \
+RUN apt-get update && apt-get install -y \
     git \
     cmake \
     g++ \
@@ -24,12 +24,20 @@ RUN pip install --upgrade pip && pip install \
     protobuf
 
 # Clone and build Caffe2
-RUN git clone --recursive https://github.com/caffe2/caffe2.git /opt/caffe2 
-
+RUN git clone https://github.com/caffe2/caffe2.git /opt/caffe2
 
 WORKDIR /opt/caffe2/
+
+# Clone only required submodules
+RUN git submodule init && \
+    git submodule update third_party/benchmark/  && \
+    git submodule update third_party/googletest && \
+    git submodule update third_party/pybind11 && \
+    git submodule update third_party/eigen
+
 RUN mkdir build && cd build && \
-    cmake .. -DUSE_CUDA=OFF -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
+    cmake .. -DUSE_ROCKSDB=OFF -DUSE_MPI=OFF -DUSE_OPENMP=OFF -DUSE_CUDA=OFF \
+             -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
     make -j && make install
 
 ENV PYTHONPATH=/opt/caffe2/build/
