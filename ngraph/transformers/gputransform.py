@@ -100,7 +100,7 @@ class ElementWiseKernel(GPUKernel):
         if len(op.reduction_axes) == 0:
             self._buffer_op("assign", x=x, out=out)
         else:
-            axis = op.args[0].axes.index(op.reduction_axes[0])
+            axis = op.args[0].axes.index_unique(op.reduction_axes[0])
             self._buffer_op(string, x=x, axis=axis, out=out)
 
     @generic_method(Op)

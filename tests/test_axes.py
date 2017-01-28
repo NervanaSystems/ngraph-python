@@ -20,9 +20,7 @@ import pytest
 import ngraph as ng
 import ngraph.util.names as names
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
-from ngraph.testing import ExecutorFactory, check_derivative, RandomTensorGenerator
-
-rng = RandomTensorGenerator(0, np.float32)
+from ngraph.testing import ExecutorFactory
 
 # Make some axes
 ax = names.NameScope()
@@ -371,60 +369,3 @@ def test_scalar_broadcast():
     z = ng.broadcast(x, axes=broadcast_axes)
     z_comp = ex.executor(z)
     assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
-
-
-def test_flatten_deriv_simplified(transformer_factory):
-    """
-    Test derivative with dot and flatten
-    """
-    ax_N = ng.make_axis(3)
-    ax_Y = ng.make_axis(2)
-
-    x = ng.placeholder(ng.make_axes([ax_N]))
-    w = ng.constant([5, 2], axes=ng.make_axes([ax_Y]))
-    logits = ng.dot(x, w)
-    cost = ng.sum(logits, reduction_axes=logits.axes)
-
-    delta = 0.001
-    u = rng.uniform(.1, 5.0, x.axes)
-    check_derivative(cost, x, delta, u, atol=1e-2, rtol=1e-2)
-
-
-@pytest.mark.xfail(strict=True)
-def test_flatten_deriv(transformer_factory):
-    from ngraph.frontends.neon import ax
-    np.random.seed(0)
-
-    # set shape
-    C, D, H, W, N = (3, 1, 28, 28, 8)  # image
-    Y = 10
-
-    ax.C.length = C
-    ax.D.length = D
-    ax.H.length = H
-    ax.W.length = W
-    ax.N.length = N
-    ax.Y.length = Y
-
-    # conv output
-    conv = ng.placeholder(ng.make_axes([ax.N, ax.H, ax.W, ax.C]))
-
-    # flatten
-    flatten = ng.flatten_at(conv, idx=1)
-    num_flatten = flatten.axes.lengths[1]
-    flatten = ng.cast_axes(flatten,
-                           ng.make_axes([ax.N, ng.make_axis(num_flatten)]))
-
-    # fc
-    fc_weights_axes = ng.make_axes([ng.make_axis(num_flatten), ax.Y])
-    fc_weights = ng.constant(np.random.randn(num_flatten, Y),
-                             axes=fc_weights_axes)
-    flatten_casted = ng.cast_axes(flatten,
-                                  ng.make_axes([flatten.axes[0],
-                                                fc_weights_axes[0] - 1]))
-    logits = ng.dot(flatten_casted, fc_weights)
-    cost = ng.sum(logits, reduction_axes=logits.axes)
-
-    delta = 0.001
-    u = rng.uniform(.1, 5.0, conv.axes)
-    check_derivative(cost, conv, delta, u, atol=1e-2, rtol=1e-2)

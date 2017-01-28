@@ -1046,7 +1046,7 @@ class Axes(object):
             The index.
         """
         for i in range(len(self._axes)):
-            if self._axes[i].annotated_axis is axis.annotated_axis:
+            if self._axes[i].annotated_axis.primary_axis is axis.annotated_axis.primary_axis:
                 return i
         raise ValueError("Axis not in axes")
 
