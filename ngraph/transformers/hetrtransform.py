@@ -329,5 +329,5 @@ class HetrTransformer(Transformer):
     def allocate_storage(self):
         assert False, "Should not be used, TODO cleanup"
         
-set_transformer_factory(
-    make_transformer_factory(HetrTransformer.transformer_name))
+#set_transformer_factory(
+#    make_transformer_factory(HetrTransformer.transformer_name))
