@@ -21,6 +21,7 @@ from ngraph.transformers.gpu.kernels.convolution import _magic32, _magic64, _get
 
 from pycuda.compiler import SourceModule
 from pycuda.tools import context_dependent_memoize
+import pycuda.driver as drv
 
 from operator import itemgetter, mul
 import numpy as np
@@ -153,7 +154,7 @@ class FlexConvFpropKernel(ConvFpropKernel):
         self.fprop_lut_size = RST * 4 * 2
 
         # Set to 5 for the current T1000 HW config
-        self.trunc_rows = 5
+        self.trunc_rows = 32
         flags = self.trunc_rows << 8
 
         self.kernels = []
@@ -175,15 +176,15 @@ class FlexConvFpropKernel(ConvFpropKernel):
         self.bind_flex_scales()
 
     def bind_buffers(self):
-        for kernel in self.kernels:
-            for index in range(len(kernel)):
-                if type(kernel[index]) == TensorDescription:
-                    kernel[index] = kernel[index].value.tensor.gpudata
+        for k_id in range(len(self.kernels)):
+            for index in range(len(self.kernels[k_id])):
+                if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
 
-                if type(kernel[index]) == ScratchBufferWrapper:
-                    kernel[index] = kernel[index].get_ptr()
+                if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()
 
-        super(FlexConvFpropKernel, self).bind_buffers()
+        self.buffers_bound = True
 
     def bind_flex_scales(self):
         scaleAB = self.flex_entry_I.scale * self.flex_entry_F.scale
@@ -347,18 +348,18 @@ class FlexConvBpropKernel(ConvBpropKernel):
             self.bprop_lut_size = RST * 4 * 2
 
         # Set to 5 for the current T1000 HW config
-        self.trunc_rows = 5
+        self.trunc_rows = 32
         flags = self.trunc_rows << 8
 
         # Must dim shuffle filter data for bprop kernel
         F_data = ScratchBufferWrapper(F_size, 0, runtime)
         if self.bprop_zero:
             Out = ScratchBufferWrapper(O_size, F_size, runtime)
-            shuffle_kernel = _get_transpose_kernel(self.F.dtype)
+            shuffle_kernel = _get_transpose_kernel(self.dtype)
         else:
             Out = self.O
             # can point to transpose or dimshuffle kernel
-            shuffle_kernel = _get_shuffle_kernel(self.F.dtype)
+            shuffle_kernel = _get_shuffle_kernel(self.dtype)
         shuffle_args = [self.shuffle_grid, self.shuffle_block, None,
                         F_data, self.F] + self.shuffle_args
         shuffle_kernel = [shuffle_kernel] + shuffle_args
@@ -394,15 +395,15 @@ class FlexConvBpropKernel(ConvBpropKernel):
         self.bind_flex_scales()
 
     def bind_buffers(self):
-        for kernel in self.kernels:
-            for index in range(len(kernel)):
-                if type(kernel[index]) == TensorDescription:
-                    kernel[index] = kernel[index].value.tensor.gpudata
+        for k_id in range(len(self.kernels)):
+            for index in range(len(self.kernels[k_id])):
+                if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
 
-                if type(kernel[index]) == ScratchBufferWrapper:
-                    kernel[index] = kernel[index].get_ptr()
+                if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()
 
-        super(FlexConvBpropKernel, self).bind_buffers()
+        self.buffers_bound = True
 
     def bind_flex_scales(self):
         scaleAB = self.flex_entry_E.scale * self.flex_entry_F.scale
@@ -421,7 +422,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
     def execute(self):
         if self.bprop_zero:
             import pdb; pdb.set_trace()
-            self.O.value.fill(0)
+            self.O.td.value[:] = 0
 
         for kernel in self.kernels:
             kernel[0].prepared_async_call(*kernel[1:], shared_size=self.bprop_lut_size)
@@ -447,7 +448,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_U = self.U.flex_entry()
 
-        U_size = np.prod(self.U.shape) * 2
+        U_size = np.prod(self.U.shape) * 4
 
         vec_size = 4 if self.dtype.itemsize == 4 else 8
 
@@ -571,7 +572,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                 grid_P, grid_Q, grid_PQ])])
 
         # Set to 5 for the current T1000 HW config
-        self.trunc_rows = 5
+        self.trunc_rows = 32
         flags = self.trunc_rows << 8
 
         # Have to convert output from float to flex
@@ -601,15 +602,15 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.bind_flex_scales()
 
     def bind_buffers(self):
-        for kernel in self.kernels:
-            for index in range(len(kernel)):
-                if type(kernel[index]) == TensorDescription:
-                    kernel[index] = kernel[index].value.tensor.gpudata
+        for k_id in range(len(self.kernels)):
+            for index in range(len(self.kernels[k_id])):
+                if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
 
-                if type(kernel[index]) == ScratchBufferWrapper:
-                    kernel[index] = kernel[index].get_ptr()
+                if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
+                    self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()
 
-        super(FlexConvUpdateKernel, self).bind_buffers()
+        self.buffers_bound = True
 
     def bind_flex_scales(self):
         scaleAB = self.flex_entry_I.scale * self.flex_entry_E.scale
@@ -625,8 +626,9 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.kernels[-1][-2] = 1. / scaleC
 
     def execute(self):
-        import pdb; pdb.set_trace()
-        self.U.value.fill(0)
+        # This zeros out the scratch buffer which is accumulated into using atomics
+        # for update output kernels
+        drv.memset_d32(self.kernels[0][5], 0, np.prod(self.U.shape))
 
         for kernel in self.kernels:
             kernel[0].prepared_async_call(*kernel[1:])
@@ -681,7 +683,7 @@ __global__ void transpose(%(type)s* out, const %(type)s* in, int rows, int cols)
 def _get_transpose_kernel(dtype):
 
     code = _transpose_kernel % {
-        "type": _get_register_type(dtype)
+        "type": _get_register_type(dtype, memory=True)
     }
     module = SourceModule(code)
     kernel = module.get_function("transpose")
@@ -737,9 +739,8 @@ __global__ void dimShuffle(
 
 @context_dependent_memoize
 def _get_shuffle_kernel(dtype):
-
     code = _shuffle_kernel % {
-        "type": _get_register_type(dtype)
+        "type": _get_register_type(dtype, memory=True)
     }
     module = SourceModule(code)
     kernel = module.get_function("dimShuffle")
@@ -778,7 +779,7 @@ __global__ void convert(short* out, const %(type)s* in, int dim,
         %(type)s value = in[offset + item];
         short result = (short)(%(cvt)s(value) * scale);
         max_val = max((int)iabs(result), max_val);
-        out[offset] = result;
+        out[offset + item] = result;
     }
 
     atomicMax(flex_data, max_val);
@@ -800,5 +801,5 @@ __global__ void convert(short* out, const %(type)s* in, int dim,
     code = _convert_kernel % template_vals
     module = SourceModule(code)
     kernel = module.get_function("convert")
-    kernel.prepare("PPII")
+    kernel.prepare("PPIfP")
     return kernel
