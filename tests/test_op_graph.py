@@ -55,12 +55,12 @@ def test_sequential():
         ng.assign(x, 2)
         x1 = x + x
         pf.append(x0)
-    p = pf()
-    with ExecutorFactory() as ex:
-        x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
-    assert x0_val == 0
-    assert x1_val == 4
-    assert p_val == 0
+        p = pf()
+        with ExecutorFactory() as ex:
+            x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
+            assert x0_val == 0
+            assert x1_val == 4
+            assert p_val == 0
 
 
 def test_sequential_reduce():
@@ -70,16 +70,16 @@ def test_sequential_reduce():
         x0 = x + x
         x1 = ng.sum(x0, out_axes=())
         x2 = ng.sum(x0, out_axes=()) + x0
-    p = pf()
-    with ExecutorFactory() as ex:
-        x0_val, x1_val, x2_val, p_val = ex.executor([x0, x1, x2, p])()
-    x0_np = x.value[...] + x.value[...]
-    x1_np = np.sum(x0_np)
-    x2_np = x1_np + x0_np
-    assert np.allclose(x0_val, x0_np)
-    assert np.allclose(x1_val, x1_np)
-    assert np.allclose(x2_val, x2_np)
-    assert np.allclose(p_val, x2_np)
+        p = pf()
+        with ExecutorFactory() as ex:
+            x0_val, x1_val, x2_val, p_val = ex.executor([x0,x1,x2,p])()
+            x0_np = x.value[...] + x.value[...]
+        x1_np = np.sum(x0_np)
+        x2_np = x1_np + x0_np
+        assert np.allclose(x0_val, x0_np)
+        assert np.allclose(x1_val, x1_np)
+        assert np.allclose(x2_val, x2_np)
+        assert np.allclose(p_val, x2_np)
 
 
 def test_sequential_side():
@@ -94,31 +94,31 @@ def test_sequential_side():
         ng.assign(x2, ng.mean(x, out_axes=()) + x2 * b + (1 - b))
         y = x * 2
         pf.append(y)
-    p = pf()
+        p = pf()
 
-    with ExecutorFactory() as ex:
-        main_effect = ex.executor(p)
+        with ExecutorFactory() as ex:
+            main_effect = ex.executor(p)
 
-    # Run main path #1
-    y_val = main_effect()
-    x_np = np.array([1, 2, 3], dtype=np.float32)
-    y_np = x_np * 2
+            # Run main path #1
+            y_val = main_effect()
+            x_np = np.array([1, 2, 3], dtype=np.float32)
+            y_np = x_np * 2
 
-    assert np.allclose(y_val, y_np)
+            assert np.allclose(y_val, y_np)
 
-    # Run main path #2 (Should be the same as before)
-    y_val = main_effect()
+            # Run main path #2 (Should be the same as before)
+            y_val = main_effect()
 
-    assert np.allclose(y_val, y_np)
+            assert np.allclose(y_val, y_np)
 
-    # Now check side effects
-    x1_val, x2_val = x1.value.tensor, x2.value.tensor
+            # Now check side effects
+            x1_val, x2_val = x1.value.tensor, x2.value.tensor
 
-    x1_np = x_np.sum() + (x_np.sum() + 2)
-    x2_np = x_np.mean() + (x_np.mean() + 3)
+            x1_np = x_np.sum() + (x_np.sum() + 2)
+            x2_np = x_np.mean() + (x_np.mean() + 3)
 
-    assert np.allclose(x2_val, x2_np)
-    assert np.allclose(x1_val, x1_np)
+            assert np.allclose(x2_val, x2_np)
+            assert np.allclose(x1_val, x1_np)
 
 
 def test_pad_invalid_paddings_length():
