@@ -144,6 +144,7 @@ class HetrComputation(object):
         #super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
         self.child_computations = dict()
         self.child_results_map = dict()
+        self.transformer = hetr
         self.transformer_name_list = hetr.transformer_list
         self.send_nodes_list = hetr.send_nodes_list
         self.hetr_passes = hetr.hetr_passes
@@ -247,6 +248,8 @@ class HetrTransformer(Transformer):
 
     transformer_name = "hetr"
 
+    hetr_counter = 0
+
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
@@ -259,8 +262,12 @@ class HetrTransformer(Transformer):
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None
 
+        HetrTransformer.hetr_counter += 1
+        assert HetrTransformer.hetr_counter <= 1
+        assert HetrTransformer.hetr_counter >= 0
 
     def cleanup(self):
+        HetrTransformer.hetr_counter -= 1
         for t in self.child_transformers.itervalues():
             t.cleanup()
 
