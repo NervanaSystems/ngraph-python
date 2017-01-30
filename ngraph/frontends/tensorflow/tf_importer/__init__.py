@@ -12,24 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
-import ngraph as ng
-import ngraph.transformers as ngt
-import ngraph.transformers.passes.nviz
-
-# Build the graph
-with ng.metadata(device='numpy'):
-    x = ng.placeholder(())
-x_plus_one = x + 1
-
-# Select a transformer
-transformer = ngt.make_transformer_factory('hetr')()
-
-transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
-
-# Define a computation
-plus_one = transformer.computation(x_plus_one, x)
-
-# Run the computation
-for i in range(5):
-    print(plus_one(i))
