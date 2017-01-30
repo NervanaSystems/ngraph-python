@@ -408,6 +408,9 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def scalar_op(self):
+        """
+        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        """
         if not self.is_scalar:
             raise ValueError()
         return self
@@ -1465,7 +1468,7 @@ class BroadcastOp(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        assert Axes.check_broadcast(x.axes, axes)
+        Axes.assert_valid_broadcast(x.axes, axes)
         super(BroadcastOp, self).__init__(
             x, axes=axes, **kwargs
         )
@@ -1761,7 +1764,7 @@ class Unflatten(ReshapeOp):
             for axis in x.axes:
                 axes.extend(axis.axes)
         axes = make_axes(axes)
-        assert Axes.check_unflatten(x.axes, axes)
+        Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -2119,11 +2122,13 @@ class StackOp(AssignableTensorOp):
 
     def generate_adjoints(self, adjoints, delta, *x_list):
         s = [slice(None)] * len(self.axes)
+        arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
         for i, x in enumerate(x_list):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
-                tensor_slice(delta, tuple(s), axes=x.axes)
+                axes_with_order(tensor_slice(delta, tuple(s), axes=arg_axes),
+                                x.axes)
             )
 
 
