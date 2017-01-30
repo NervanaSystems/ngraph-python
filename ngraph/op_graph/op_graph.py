@@ -2337,7 +2337,6 @@ class StopGradientOneDOp(UnaryElementwiseOneDOp):
 class StopGradient(UnaryElementwiseAxesOp):
     """ TODO """
     one_d_class = StopGradientOneDOp
-    is_tensor_op = False
 
     @tdcache()
     def tensor_description(self):
@@ -2345,7 +2344,7 @@ class StopGradient(UnaryElementwiseAxesOp):
 
     @property
     def is_tensor_op(self):
-        return self.value_op.is_tensor_op
+        return False
 
     @property
     def value(self):

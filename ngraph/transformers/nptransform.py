@@ -567,10 +567,6 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(StopGradientOneDOp)
-    def generate_op(self, op, out, x):
-        self.append("np.copyto(src={}, dst={}, casting='no')", x, out)
-
     @generate_op.on_type(NegativeOneDOp)
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
