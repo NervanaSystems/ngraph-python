@@ -61,8 +61,12 @@ class OpsBridge(OpsConstant, OpsBinary, OpsPlaceholder, OpsUnary, OpsMatmul,
         """
         op_name = tf_node.op
 
-        try:
-            return getattr(self, op_name)(tf_node, input_ops)
-        except:
+        # if op not handled, gets -1
+        ng_op = getattr(self, op_name, None)
+
+        if ng_op:
+            return ng_op(tf_node, input_ops)
+        else:
+            # ignored op set to None
             print(tf_node.name, "ignored.")
             return None

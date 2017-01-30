@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.frontends.neon.axis import ar
 
 
-def output_dim(X, S, padding, strides, pooling=False):
+def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     """
     Compute along 1 dimension, with these sizes, what will be the output dimension.
 
@@ -28,7 +28,10 @@ def output_dim(X, S, padding, strides, pooling=False):
         padding (int): padding on each side
         strides (int): striding
         pooling (bool): flag for setting pooling layer size
+        dilation (int): dilation of filter
     """
+
+    S = dilation * (S - 1) + 1
     size = ((X - S + 2 * padding) // strides) + 1
 
     if pooling and padding >= S:
@@ -87,6 +90,73 @@ class Linear(Layer):
         return ng.dot(self.W, in_obj)
 
 
+class LookupTable(Layer):
+    """
+    Lookup table layer that often is used as word embedding layer
+
+    Args:
+        vocab_size (int): the vocabulary size
+        embed_dim (int): the size of embedding vector
+        init (Initializor): initialization function
+        update (bool): if the word vectors get updated through training
+        pad_idx (int): by knowing the pad value, the update will make sure always
+                       have the vector representing pad value to be 0s.
+
+    """
+    metadata = {'layer_type': 'lookuptable'}
+
+    def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None, **kwargs):
+        super(LookupTable, self).__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.init = init
+        self.update = update
+        self.pad_idx = pad_idx
+        self.role_order = (ar.time, ar.batch)
+
+    def lut_init(self, axes, pad_word_axis, pad_idx):
+        """
+        Initialization function for the lut.
+        After using the initialization to fill the whole array, set the part that represents
+        padding to be 0.
+        """
+        init_w = self.init(axes)
+        if pad_word_axis is 0:
+            init_w[pad_idx] = 0
+        else:
+            init_w[:, pad_idx] = 0
+        return init_w
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        """
+        Arguments:
+            in_obj (Tensor): object that provides the lookup indices
+        """
+        in_obj.axes.find_by_short_name('time')[0].add_role(ar.time)
+        in_obj.axes.find_by_short_name('time')[0].is_recurrent = True
+        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = ng.flatten(in_obj)
+        in_axes = in_obj.axes
+
+        self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
+        self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
+
+        self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
+        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
+
+        self.W = ng.variable(axes=self.w_axes,
+                             initial_value=self.lut_init(
+                                 self.w_axes, self.lut_v_axis, self.pad_idx)
+                             ).named('W')
+
+        lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
+                                    pad_idx=self.pad_idx)
+        return ng.axes_with_order(ng.unflatten(lut_result), self.o_axes)
+
+
 class ConvBase(Layer):
     """
     Convolutional layer that requires explicit binding of all spatial roles
@@ -104,7 +174,8 @@ class ConvBase(Layer):
         super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
-                               str_h=None, str_w=None, str_d=None)
+                               str_h=None, str_w=None, str_d=None,
+                               dil_h=None, dil_w=None, dil_d=None)
 
         for d in [fshape, strides, padding]:
             self.convparams.update(d)
@@ -141,9 +212,12 @@ class ConvBase(Layer):
             # set lengths
             out_shape = [
                 self.f_axes[-1].length,
-                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d']),
-                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h']),
-                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'])
+                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                           cpm['dil_d']),
+                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                           cpm['dil_h']),
+                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                           cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
             self.o_axes += in_axes.batch_axes()
@@ -153,7 +227,7 @@ class ConvBase(Layer):
 
 class Conv2D(ConvBase):
 
-    def __init__(self, fshape, init, strides, padding, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
                 fshape = (1, fshape[0], fshape[0], fshape[1])
@@ -164,8 +238,10 @@ class Conv2D(ConvBase):
             strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
         if isinstance(padding, int):
             padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+        if isinstance(dilation, int):
+            dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
 
 
 class Activation(Layer):
@@ -313,9 +389,9 @@ class Affine(Layer):
 
 class Convolution(Layer):
 
-    def __init__(self, fshape, filter_init, strides=1, padding=0, bias_init=None, activation=None,
-                 batch_norm=False, **kwargs):
-        self.conv = Conv2D(fshape, filter_init, strides, padding, **kwargs)
+    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+                 activation=None, batch_norm=False, **kwargs):
+        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init)
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)

@@ -43,8 +43,11 @@ class OpsConstant(OpsBase):
         """
         # convert to numpy value
         np_val = tensor_util.MakeNdarray(tf_node.attr['value'].tensor)
-        ng_op = ng.constant(np_val,
-                            shape_to_axes(np_val.shape)).named(tf_node.name)
+        if np_val.dtype == np.dtype('O'):
+            ng_op = None
+        else:
+            ng_op = ng.constant(np_val,
+                                shape_to_axes(np_val.shape)).named(tf_node.name)
         return ng_op
 
     def Fill(self, tf_node, inputs):

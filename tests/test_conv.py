@@ -45,8 +45,10 @@ def test_wrong_filters_shape_length():
     """
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S])
@@ -66,8 +68,10 @@ def test_wrong_input_shape_length():
     """
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
@@ -87,8 +91,10 @@ def test_first_axes_not_same():
     """
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.D, ax.C, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
@@ -110,8 +116,10 @@ def test_wrong_number_of_batch_axes_at_input():
     """
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     C = 3
     D = 1
@@ -147,8 +155,10 @@ def test_convolution_backprop(transformer_factory):
 
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
@@ -202,8 +212,10 @@ def test_convolution(transformer_factory):
 
     padding = dict(pad_d=0, pad_h=0, pad_w=0)
     strides = dict(str_d=1, str_h=1, str_w=1)
+    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
@@ -292,7 +304,7 @@ def test_conv_flatten_deriv(transformer_factory):
     C, D, H, W = (3, 1, 28, 28)
     T, R, S, K = (1, 5, 5, 8)
 
-    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1)
+    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1, dil_d=1, dil_h=1, dil_w=1)
 
     # i, f, o axes
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
