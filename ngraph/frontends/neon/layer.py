@@ -14,6 +14,9 @@
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function
 from builtins import object
+
+import collections
+
 import ngraph as ng
 from ngraph.frontends.neon.axis import ar
 
@@ -609,7 +612,7 @@ class BiRNN(Layer):
             rnn_out (Tensor): output
 
         """
-        if isinstance(in_obj, (list, tuple)) and len(in_obj) == 2:
+        if isinstance(in_obj, collections.Sequence) and len(in_obj) == 2:
             # make sure these 2 streams of inputs share axes
             assert in_obj[0].axes == in_obj[1].axes
             fwd_in = in_obj[0]
@@ -620,7 +623,7 @@ class BiRNN(Layer):
             bwd_in = in_obj
             in_axes = in_obj.axes
 
-        if isinstance(init_state, (list, tuple)) and len(init_state) == 2:
+        if isinstance(init_state, collections.Sequence) and len(init_state) == 2:
             assert init_state[0].axes == init_state[1].axes
             fwd_init = init_state[0]
             bwd_init = init_state[1]
@@ -668,8 +671,12 @@ class LSTM(Recurrent):
         W_recur (Tensor): weights for recurrent connections
             (output_size, output_size)
         b (Tensor): Biases on output units (output_size, 1)
+
+    Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
+
     """
-    metadata = {'layer_type': 'LSTM'}
+    metadata = {'layer_type': 'LSTM',
+                'gates': ['i', 'f', 'o', 'g']}
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
                  reset_cells=True, return_sequence=True, backward=False, **kwargs):
@@ -677,18 +684,16 @@ class LSTM(Recurrent):
                                    return_sequence, backward, **kwargs)
 
         self.gate_activation = gate_activation
-        # i - input gate, f - forget gate, o - output gate, g - input modulation
-        self.gates = ['i', 'f', 'o', 'g']
 
     def _step(self, inp, states):
         h_state = states[0]
         c_state = states[1]
 
         ifog = {k: ng.dot(self.W_input[k], inp) + ng.dot(self.W_recur[k], h_state)
-                + self.b[k] for k in self.gates}
+                + self.b[k] for k in self.metadata['gates']}
 
         ifog_act = {k: self.activation(ifog[k]) if k is 'g'
-                    else self.gate_activation(ifog[k]) for k in self.gates}
+                    else self.gate_activation(ifog[k]) for k in self.metadata['gates']}
 
         c = ifog_act['f'] * c_state + ifog_act['i'] * ifog_act['g']
         # c_prev is the state before applying activation
@@ -735,12 +740,17 @@ class LSTM(Recurrent):
         # params are dictionary for i, f, o, g
         self.W_input = {k: ng.variable(axes=self.w_in_axes,
                                        initial_value=self.init(self.w_in_axes)
-                                       ).named("W_in_{}".format(k)) for k in self.gates}
+                                       ).
+                        named("W_in_{}".format(k)) for k in self.metadata['gates']}
+
         self.W_recur = {k: ng.variable(axes=self.w_re_axes,
                                        initial_value=self.init_inner(self.w_re_axes)
-                                       ).named("W_re_{}".format(k)) for k in self.gates}
-        self.b = {k: ng.variable(axes=self.hidden_axes, initial_value=0).named("bias_{}".format(k))
-                  for k in self.gates}
+                                       ).
+                        named("W_re_{}".format(k)) for k in self.metadata['gates']}
+
+        self.b = {k: ng.variable(axes=self.hidden_axes,
+                                 initial_value=0).
+                  named("bias_{}".format(k)) for k in self.metadata['gates']}
 
         h = self.h_init
         c = self.c_init
