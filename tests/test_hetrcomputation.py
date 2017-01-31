@@ -21,7 +21,6 @@ from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
 
 
 def check_result_values(input_vector, result_expected, placeholder, op_list=[], *args):
-
     """
     This function checks the result values return by the hetr computation object
     against the expected result values
@@ -106,7 +105,9 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
 
     """
     send_nodes = list()
-    obj = CommunicationPass(send_nodes)
+    scatter_shared_queues = list()
+    gather_shared_queues = list()
+    obj = CommunicationPass(send_nodes, scatter_shared_queues, gather_shared_queues)
     obj.do_pass(ops_to_transform, [])
 
     op_list_instance_type = list()
@@ -120,7 +121,10 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
         for each_arg in op.args:
             op_list_instance_type.append(type(each_arg))
 
-        assert ng.op_graph.communication.Recv in op_list_instance_type
+        if (ng.op_graph.communication.Recv in op_list_instance_type or
+            ng.op_graph.communication.Gather_Recv in op_list_instance_type or
+                ng.op_graph.communication.Scatter_Recv in op_list_instance_type) is False:
+            assert False
         del op_list_instance_type[:]
 
 
@@ -151,6 +155,48 @@ def test_hetr_graph_passes():
     # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
     obj = ChildTransformerPass([])
     obj.do_pass(graph_op_list, [])
+    assert set(transformer_list) == set(obj.transformer_list)
+
+
+def test_distributed_graph():
+
+    # Build the graph
+    H = ng.make_axis(length=4, name='height')
+    W = ng.make_axis(length=6, name='width')
+
+    x = ng.placeholder(axes=[H, W])
+    y = ng.placeholder(())
+    z = ng.placeholder(())
+    with ng.metadata(device_id=('1', '2'), parallel=W):
+        x_plus_y = x + y
+
+    x_plus_y_plus_z = x_plus_y + z
+
+    # Build the graph metadata
+    graph_op_list = [x_plus_y_plus_z, x_plus_y, x, y, z]
+
+    graph_op_metadata = {op: list() for op in graph_op_list}
+    graph_op_metadata[x] = ["numpy", '0']
+    graph_op_metadata[y] = ["numpy", '0']
+    graph_op_metadata[z] = ["numpy", '0']
+    graph_op_metadata[x_plus_y] = ["numpy", ('1', '2')]
+    graph_op_metadata[x_plus_y_plus_z] = ["numpy", '0']
+
+    transformer_list = ["numpy2", "numpy1", "numpy0"]
+
+    # Run the hetr passes one by one, and verify they did the expected things to the graph
+    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_op_list)
+    check_communication_pass(
+        ops_to_transform=graph_op_list,
+        expected_recv_nodes=[
+            x_plus_y,
+            x_plus_y,
+            x_plus_y_plus_z])
+    
+    # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
+    obj = ChildTransformerPass([])
+    obj.do_pass(graph_op_list, [])
+
     assert set(transformer_list) == set(obj.transformer_list)
 
 

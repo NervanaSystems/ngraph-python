@@ -53,10 +53,12 @@ from ngraph.transformers.passes.passes import RequiredTensorShaping, \
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, make_transformer_factory, set_transformer_factory
 
-from ngraph.op_graph.communication import Send, Recv
+from ngraph.op_graph.communication import Send, Recv, Gather_Send, Gather_Recv, Scatter_Send, \
+    Scatter_Recv
 
 
 class NumPyConvEngine(object):
+
     @staticmethod
     def all_conv_code():
         pycode = """
@@ -216,6 +218,7 @@ class NumPyConvEngine(object):
 
 
 class NumPyPoolEngine(object):
+
     @staticmethod
     def get_slices(I, O, pool_params):
         C, D, H, W, _ = I.tensor_description.axes.lengths
@@ -271,6 +274,7 @@ class NumPyCodeEngine(object):
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
+
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -326,11 +330,13 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
 
 
 class NumPyDeviceBufferReference(DeviceBufferReference):
+
     def __init__(self, transformer, **kwargs):
         super(NumPyDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class NumPyDeviceTensor(DeviceTensor):
+
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                                 **kwargs)
@@ -396,6 +402,7 @@ def get_tensors(f):
 
 
 class NumPyCodeGenerator(PyGen):
+
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
         self.conv_params = dict()
@@ -404,6 +411,10 @@ class NumPyCodeGenerator(PyGen):
         self.pool_slices = dict()
         self.send_nodes = dict()
         self.recv_nodes = dict()
+        self.scatter_send_nodes = dict()
+        self.scatter_recv_nodes = dict()
+        self.gather_send_nodes = dict()
+        self.gather_recv_nodes = dict()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -717,6 +728,30 @@ class NumPyCodeGenerator(PyGen):
         self.recv_nodes[recv_id] = op
         self.append("{} = self.recv_from_send({})", out, recv_id)
 
+    @generate_op.on_type(Gather_Send)
+    def generate_op(self, op, out, *args):
+        gather_send_id = len(self.gather_send_nodes)
+        self.gather_send_nodes[gather_send_id] = op
+        self.append("self.gather_send({})", gather_send_id)
+
+    @generate_op.on_type(Gather_Recv)
+    def generate_op(self, op, out, *args):
+        gather_recv_id = len(self.gather_recv_nodes)
+        self.gather_recv_nodes[gather_recv_id] = op
+        self.append("{}[:] = self.gather_recv_from_gather_send({})", out, gather_recv_id)
+
+    @generate_op.on_type(Scatter_Send)
+    def generate_op(self, op, out, *args):
+        scatter_send_id = len(self.scatter_send_nodes)
+        self.scatter_send_nodes[scatter_send_id] = op
+        self.append("self.scatter_send({})", scatter_send_id)
+
+    @generate_op.on_type(Scatter_Recv)
+    def generate_op(self, op, out, *args):
+        scatter_recv_id = len(self.scatter_recv_nodes)
+        self.scatter_recv_nodes[scatter_recv_id] = op
+        self.append("{}[:] = self.scatter_recv_from_scatter_send({})", out, scatter_recv_id)
+
 
 class NumPyTransformer(Transformer):
     """
@@ -795,6 +830,7 @@ class NumPyTransformer(Transformer):
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
         self.compute_code.endl()
+        self.name = name
         return name
 
     def finish_transform(self):
@@ -820,7 +856,8 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-            # print(self.code.code)
+            with open("code_{}.py".format(self.name), "w") as f:
+                f.write(self.code.code)
             # print(self.code.filename)
 
         r = self.code.compile("op", globals())
@@ -843,13 +880,63 @@ class NumPyTransformer(Transformer):
             x = q.get()
             return x
 
+        def gather_send(self, gather_send_id):
+            gather_send_op = self.gather_send_nodes[gather_send_id]
+            q = gather_send_op.shared_queue
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = gather_send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            q.put(x_nparr)
+
+        def gather_recv(self, gather_recv_id):
+            gather_recv_op = self.gather_recv_nodes[gather_recv_id]
+            x_devicetensor = gather_recv_op.value
+            x_nparr = x_devicetensor.get(None)
+            for i in range(len(gather_recv_op.from_id)):
+                q = gather_recv_op.shared_queue_list[i]
+                x = q.get()
+                x_nparr[gather_recv_op.slices[i]] = x
+            return x_nparr
+
+        def scatter_send(self, scatter_send_id):
+            scatter_send_op = self.scatter_send_nodes[scatter_send_id]
+
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = scatter_send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            for i in range(len(scatter_send_op.to_id)):
+                q = scatter_send_op.shared_queue_list[i]
+                q.put(x_nparr[scatter_send_op.slices[i]])
+
+        def scatter_recv(self, scatter_recv_id):
+            scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
+            q = scatter_recv_op.shared_queue
+            x = q.get()
+            return x
+
         self.model.recv_from_send = recv
         self.model.send = send
+
+        self.model.gather_recv_from_gather_send = gather_recv
+        self.model.gather_send = gather_send
+
+        self.model.scatter_recv_from_scatter_send = scatter_recv
+        self.model.scatter_send = scatter_send
 
         self.model = self.model()
 
         self.model.send_nodes = self.compute_code.send_nodes
         self.model.recv_nodes = self.compute_code.recv_nodes
+
+        self.model.gather_send_nodes = self.compute_code.gather_send_nodes
+        self.model.gather_recv_nodes = self.compute_code.gather_recv_nodes
+
+        self.model.scatter_send_nodes = self.compute_code.scatter_send_nodes
+        self.model.scatter_recv_nodes = self.compute_code.scatter_recv_nodes
 
         self.model.conv_params = self.compute_code.conv_params
         self.model.pool_params = self.compute_code.pool_params
