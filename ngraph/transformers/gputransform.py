@@ -605,6 +605,17 @@ class GPUKernelGroup(object):
             kernel.compile(self.sourcefile)
 
     def setup_kernel_execute(self, kernel):
+        """
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
+        """
+        pass
+
+    def after_kernel_execute(self, kernel):  # TODO: what to name this
+        """
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
+        """
         pass
 
     def __call__(self):
@@ -620,6 +631,7 @@ class GPUKernelGroup(object):
 
             self.setup_kernel_execute(k)
             k.execute()
+            self.after_kernel_execute(k)
 
 
 class GPUBufferAllocator():
