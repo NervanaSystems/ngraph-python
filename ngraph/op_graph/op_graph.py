@@ -408,6 +408,9 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def scalar_op(self):
+        """
+        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        """
         if not self.is_scalar:
             raise ValueError()
         return self
