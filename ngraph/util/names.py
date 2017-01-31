@@ -270,21 +270,18 @@ class NameScope(Parented):
         self._set_value_name("." + name, value)
 
 
-def make_name_scope(name):
+def make_name_scope():
     """
     Creates a NameScope.
 
     When NameableValue objects are assigned to attributes of a NameScope, the name of the object
     is set to the attribute.
 
-    Args:
-        name: The name of this NameScope.
-
     Returns:
         Namescope: A NameScope.
 
     """
-    return NameScope(name=name)
+    return NameScope()
 
 
 class NameScopeList(Parented, list):
@@ -306,7 +303,7 @@ class NameScopeListExtender(object):
     def __next__(self):
         name_scope_list = self.name_scope_list
         name = '[{len}]'.format(len=len(name_scope_list))
-        val = NameScope(parent=name_scope_list, name=name)
+        val = NameScope(name=name, parent=name_scope_list)
         name_scope_list._set_value_name(name, val)
         name_scope_list.append(val)
         return val

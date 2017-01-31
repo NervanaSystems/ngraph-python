@@ -74,7 +74,7 @@ class ArrayIterator(object):
             p_axes = ng.make_axes([ax.N])
             for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
                 name = axnm[i] if axnm else None
-                p_axes += ng.make_axis(name=name, length=sz)
+                p_axes += ng.make_axis(length=sz).named(name)
             placeholders[k] = ng.placeholder(p_axes)
         return placeholders
 
@@ -153,7 +153,7 @@ class SequentialArrayIterator(object):
 
     def make_placeholders(self):
         ax.N.length = self.batch_size
-        time_axis = ng.make_axis(length=self.time_steps, name='time')
+        time_axis = ng.make_axis(length=self.time_steps).named('time')
         p_axes = ng.make_axes([ax.N, time_axis])
         return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
 

@@ -140,10 +140,10 @@ class OpsNN(OpsBase):
         ax_S = ng.make_axis(roles=[ar.features_2])
         ax_K = ng.make_axis(roles=[ar.features_output])
 
-        oC = ng.make_axis(name='C', roles=[ar.features_input])
-        oD = ng.make_axis(name='D', roles=[ar.features_0], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.features_1])
-        oW = ng.make_axis(name='W', roles=[ar.features_2])
+        oC = ng.make_axis(roles=[ar.features_input]).named('C')
+        oD = ng.make_axis(roles=[ar.features_0], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.features_1]).named('H')
+        oW = ng.make_axis(roles=[ar.features_2]).named('W')
 
         ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
         ng.make_axes([ax_R, ax_S, ax_C, ax_K]).set_shape(weight.axes.lengths)
@@ -236,10 +236,10 @@ class OpsNN(OpsBase):
         ax_H = ng.make_axis(roles=[ar.features_1])
         ax_W = ng.make_axis(roles=[ar.features_2])
 
-        oC = ng.make_axis(name='C', roles=[ar.features_input])
-        oD = ng.make_axis(name='D', roles=[ar.features_0], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.features_1])
-        oW = ng.make_axis(name='W', roles=[ar.features_2])
+        oC = ng.make_axis(roles=[ar.features_input]).named('C')
+        oD = ng.make_axis(roles=[ar.features_0], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.features_1]).named('H')
+        oW = ng.make_axis(roles=[ar.features_2]).named('W')
 
         ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
 

@@ -39,8 +39,8 @@ def test_batchnorm_fprop(basic_bnargs, transformer_factory):
     nin, batch_size = basic_bnargs
 
     # set inputs
-    N = ng.make_axis(batch_size, name="N", batch=True)
-    F = ng.make_axis(nin, name="F")
+    N = ng.make_axis(batch_size, batch=True).named('N')
+    F = ng.make_axis(nin).named('F')
 
     rho, eps = 0.2, 0.1
     inp = ng.placeholder([F, N])

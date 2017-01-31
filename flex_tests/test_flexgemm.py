@@ -27,7 +27,7 @@ def test_gemm(transformer_factory):
     """
     n, c = 32, 32
 
-    ax = ng.make_name_scope("ax")
+    ax = ng.make_name_scope().named('ax')
     ax.N = ng.make_axis(length=n, batch=True)
     ax.C = ng.make_axis(length=c)
 

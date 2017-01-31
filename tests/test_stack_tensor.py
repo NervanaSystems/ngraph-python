@@ -22,7 +22,7 @@ rtol = atol = 1e-2
 
 
 def test_stack(transformer_factory):
-    ax = ng.make_name_scope(name="ax")
+    ax = ng.make_name_scope().named('ax')
     ax.W = ng.make_axis(length=4)
     ax.H = ng.make_axis(length=5)
     ax.I = ng.make_axis(length=3)

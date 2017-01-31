@@ -21,9 +21,9 @@ from ngraph.testing import executor
 
 def test_evalutaion_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
-    C = ng.make_axis(name='C')
-    W = ng.make_axis(name='W')
-    D = ng.make_axis(name='D')
+    C = ng.make_axis().named('C')
+    W = ng.make_axis().named('W')
+    D = ng.make_axis().named('D')
 
     C.length = 2
     D.length = 2

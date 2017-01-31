@@ -85,7 +85,7 @@ def ngraph_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (ng.make_axis(name='axis%s' % i, length=l),)
+        axes += (ng.make_axis(length=l).named('axis%s' % i),)
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)
@@ -98,8 +98,8 @@ def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
-    C = ng.make_axis(name='C', length=2)
-    N = ng.make_axis(name='N', length=3, batch=True)
+    C = ng.make_axis(length=2).named('C')
+    N = ng.make_axis(length=3, batch=True).named('N')
 
     x_axes = ng.make_axes((C - 1, N))
     y_axes = ng.make_axes((C,))
@@ -161,10 +161,10 @@ def test_dot_sum_backprop(transformer_factory):
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    H = ng.make_axis(name='H')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    H = ng.make_axis().named('H')
+    N = ng.make_axis().named('N')
 
     tests = [
         {
@@ -261,7 +261,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     Returns:
 
     """
-    ax = ng.make_name_scope('ax')
+    ax = ng.make_name_scope().named('ax')
     ax.H = ng.make_axis(2)
     ax.W = ng.make_axis(7)
     ax.C = ng.make_axis(3)
@@ -285,7 +285,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
 
 
 def test_squared_L2(transformer_factory):
-    ax = ng.make_name_scope('ax')
+    ax = ng.make_name_scope().named('ax')
     ax.H = ng.make_axis(2)
     ax.W = ng.make_axis(3)
     ax.N = ng.make_axis(5, batch=True)
