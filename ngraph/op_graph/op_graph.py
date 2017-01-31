@@ -2332,6 +2332,42 @@ class UnaryElementwiseOneDOp(ElementWise):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
 
 
+class StopGradientOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d stop gradient.
+    """
+    pass
+
+
+class StopGradient(UnaryElementwiseAxesOp):
+    """ TODO """
+    one_d_class = StopGradientOneDOp
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return False
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    @property
+    def axes(self):
+        return self.value_op.axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, 0.)
+
+
+def stop_gradient(x):
+    """ TODO """
+    return StopGradient(x)
+
+
 class NegativeOneDOp(UnaryElementwiseOneDOp):
     """
     1d negative.
