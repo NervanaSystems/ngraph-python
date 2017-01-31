@@ -31,5 +31,7 @@ importer.import_graph_def(tf.get_default_graph().as_graph_def())
 f_ng = importer.get_op_handle(f)
 
 # execute
-f_result = ngt.make_transformer().computation(f_ng)()
+transformer = ngt.make_transformer()
+f_result = transformer.computation(f_ng)()
+transformer.cleanup()
 print(f_result)

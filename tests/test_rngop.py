@@ -70,3 +70,4 @@ def test_rng_repetition(transformer_factory):
     val1 = rand_comp().copy()
     val2 = rand_comp().copy()
     assert val1 != val2
+    trans.cleanup()

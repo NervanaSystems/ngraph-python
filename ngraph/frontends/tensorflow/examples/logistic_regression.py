@@ -60,6 +60,8 @@ def logistic_regression(args):
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
+    transformer.cleanup()
+
     # tensorflow for comparison
     with tf.Session() as sess:
         train_step = tf.train.GradientDescentOptimizer(args.lrate).minimize(cost)

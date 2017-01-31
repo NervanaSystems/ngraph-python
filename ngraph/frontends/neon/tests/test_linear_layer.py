@@ -52,7 +52,6 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     x = np.random.random((nin, batch_size))
 
     # evaluate
-    ngt.make_transformer()
     with executor(fprop, inp) as ex:
         out = ex(x)
 
@@ -80,7 +79,6 @@ def test_linear_ones(basic_linargs, transformer_factory):
     x = np.ones((nin, batch_size))
 
     # evaluate
-    ngt.make_transformer()
     with executor([fprop, layer.W], inp) as ex:
         out, w = ex(x)
     sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
