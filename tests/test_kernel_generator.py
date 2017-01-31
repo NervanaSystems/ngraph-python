@@ -38,6 +38,8 @@ def test_exit_condition(transformer_factory):
     val2 = comp()
     np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
+    transformer.cleanup()
+
 
 def test_4d_elementwise(transformer_factory):
     for c_len, h_len, w_len, n_len in [(16, 10, 28, 32),
@@ -55,7 +57,8 @@ def test_4d_elementwise(transformer_factory):
 
         out = ng.add(x, y)
 
-        graph_val = executor(out)()
+        with executor(out) as ex:
+            graph_val = ex()
         np_val = np.add(x_val, y_val)
         np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
@@ -75,7 +78,8 @@ def test_4d_reduction(transformer_factory):
         out1 = ng.sum(x, reduction_axes=[H])
         out2 = ng.sum(x, reduction_axes=[N])
 
-        graph_val1, graph_val2 = executor([out1, out2])()
+    with executor([out1, out2]) as ex:
+        graph_val1, graph_val2 = ex()
         np_val1 = np.sum(x_val, 1)
         np_val2 = np.sum(x_val, 3)
         np.testing.assert_allclose(graph_val1, np_val1, rtol=1e-4)
@@ -100,6 +104,7 @@ def test_4d_chained(transformer_factory):
         im = ng.reciprocal(x)
         out = ng.sum(ng.add(im, y), reduction_axes=[C])
 
-        graph_val = executor(out)()
+        with executor(out) as ex:
+            graph_val = ex()
         np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
         np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)

@@ -273,21 +273,21 @@ def test_idempotent_axes_a():
     """
     Test test axes transformations with autodiff, case a, reference test
     """
-    ex = ExecutorFactory()
-    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+    with ExecutorFactory() as ex:
+        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
 
-    w = ng.variable(axes, initial_value=np.ones((3, 1)))
-    result = w + w
+        w = ng.variable(axes, initial_value=np.ones((3, 1)))
+        result = w + w
 
-    result = ng.cast_axes(result, axes)
-    cost = ng.sum(result, reduction_axes=axes)
-    grad = ng.deriv(cost, w)
+        result = ng.cast_axes(result, axes)
+        cost = ng.sum(result, reduction_axes=axes)
+        grad = ng.deriv(cost, w)
 
-    grad_comp = ex.executor(grad)
-    cost_comp = ex.executor(cost)
+        grad_comp = ex.executor(grad)
+        cost_comp = ex.executor(cost)
 
-    assert cost_comp() == 6.0
-    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+        assert cost_comp() == 6.0
+        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
 def test_idempotent_axes_b():
@@ -295,23 +295,23 @@ def test_idempotent_axes_b():
     Test test axes transformations with autodiff, case b, with broadcast applied
     to the same tensor
     """
-    ex = ExecutorFactory()
-    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+    with ExecutorFactory() as ex:
+        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
 
-    w = ng.variable(axes, initial_value=np.ones((3, 1)))
-    l = ng.broadcast(w, axes)
-    r = ng.broadcast(w, axes)
-    result = ng.add(l, r)
+        w = ng.variable(axes, initial_value=np.ones((3, 1)))
+        l = ng.broadcast(w, axes)
+        r = ng.broadcast(w, axes)
+        result = ng.add(l, r)
 
-    result = ng.cast_axes(result, axes)
-    cost = ng.sum(result, reduction_axes=axes)
-    grad = ng.deriv(cost, w)
+        result = ng.cast_axes(result, axes)
+        cost = ng.sum(result, reduction_axes=axes)
+        grad = ng.deriv(cost, w)
 
-    grad_comp = ex.executor(grad)
-    cost_comp = ex.executor(cost)
+        grad_comp = ex.executor(grad)
+        cost_comp = ex.executor(cost)
 
-    assert cost_comp() == 6.0
-    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+        assert cost_comp() == 6.0
+        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
 def test_idempotent_axes_c():
@@ -319,53 +319,53 @@ def test_idempotent_axes_c():
     Test test axes transformations with autodiff, case c, with broadcast,
     slice, cast and dim-shuffle
     """
-    ex = ExecutorFactory()
-    axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
-    result_axes = [ng.make_axis(length=axis.length) for axis in axes]
+    with ExecutorFactory() as ex:
+        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+        result_axes = [ng.make_axis(length=axis.length) for axis in axes]
 
-    # variable
-    w = ng.variable(axes, initial_value=np.ones((3, 1)))
-    l = w
-    r = w
+        # variable
+        w = ng.variable(axes, initial_value=np.ones((3, 1)))
+        l = w
+        r = w
 
-    # broadcast l / r, introducing dummy length 1 axes
-    l = ng.broadcast(l, axes)
-    r = ng.broadcast(r, axes)
+        # broadcast l / r, introducing dummy length 1 axes
+        l = ng.broadcast(l, axes)
+        r = ng.broadcast(r, axes)
 
-    # slice
-    axes_slice = [slice(None, None, None), slice(None, None, None)]
-    l_sliced = ng.tensor_slice(l, axes_slice)
-    r_sliced = ng.tensor_slice(r, axes_slice)
+        # slice
+        axes_slice = [slice(None, None, None), slice(None, None, None)]
+        l_sliced = ng.tensor_slice(l, axes_slice)
+        r_sliced = ng.tensor_slice(r, axes_slice)
 
-    # cast r
-    r_sliced_casted = ng.cast_axes(r_sliced, axes)
+        # cast r
+        r_sliced_casted = ng.cast_axes(r_sliced, axes)
 
-    # perform add
-    result = ng.add(l_sliced, r_sliced_casted)
+        # perform add
+        result = ng.add(l_sliced, r_sliced_casted)
 
-    # cast / dimshuffle
-    result = ng.cast_axes(result, result_axes)
-    result = ng.axes_with_order(result, result_axes)
+        # cast / dimshuffle
+        result = ng.cast_axes(result, result_axes)
+        result = ng.axes_with_order(result, result_axes)
 
-    # cost and grad
-    cost = ng.sum(result, reduction_axes=result.axes)
-    grad = ng.deriv(cost, w)
+        # cost and grad
+        cost = ng.sum(result, reduction_axes=result.axes)
+        grad = ng.deriv(cost, w)
 
-    grad_comp = ex.executor(grad)
-    cost_comp = ex.executor(cost)
+        grad_comp = ex.executor(grad)
+        cost_comp = ex.executor(cost)
 
-    assert cost_comp() == 6.0
-    assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+        assert cost_comp() == 6.0
+        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
 def test_scalar_broadcast():
     """
     Test broadcasting a scalar into a tensor
     """
-    ex = ExecutorFactory()
-    x_axes = ng.make_axes()
-    broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
-    x = ng.constant(1., axes=x_axes)
-    z = ng.broadcast(x, axes=broadcast_axes)
-    z_comp = ex.executor(z)
-    assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
+    with ExecutorFactory() as ex:
+        x_axes = ng.make_axes()
+        broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
+        x = ng.constant(1., axes=x_axes)
+        z = ng.broadcast(x, axes=broadcast_axes)
+        z_comp = ex.executor(z)
+        assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))

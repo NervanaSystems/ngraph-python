@@ -148,8 +148,8 @@ def test_pooling():
 
     targets_value = rng.uniform(.1, 0.9, output.axes)
 
-    conv_executor = executor([output, error, d_inputs], inputs, targets)
-    result_ng, err_ng, gradI_ng = conv_executor(input_value, targets_value)
+    with executor([output, error, d_inputs], inputs, targets) as conv_executor:
+        result_ng, err_ng, gradI_ng = conv_executor(input_value, targets_value)
 
     # Now compute reference values via NEON
     NervanaObject.be.bsz = N
