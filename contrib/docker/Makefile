@@ -39,12 +39,12 @@ endif
 expand_dockerfile_templates:
 	cd ${DIR}/contrib/docker
 	mkdir ${BUILD_DIR} || true
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.base > ${BUILD_DIR}/Dockerfile.base
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.test_cpu > ${BUILD_DIR}/Dockerfile.test_cpu
-	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.base > ${BUILD_DIR}/Dockerfile.base
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test_cpu > ${BUILD_DIR}/Dockerfile.test_cpu
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
 
 fallback_cuda_version: expand_dockerfile_templates
 # if has cuda && v8.0 cuda toolkit -> use nvidia 7.5 base image
@@ -58,13 +58,13 @@ clean:
 	rmdir ${DIR}/contrib/docker/.build-* || echo "keep going if directory is not present"
 	rm -f ${DIR}/*.xml
 	rm -f ${DIR}/*.dat
-	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make clean
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make clean
 
 build_base: expand_dockerfile_templates fallback_cuda_version
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
 
 build_dev: build_base
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
 
 build_test: build_base
 	# hack to clone autoflex here in this working directory so it can be
@@ -77,7 +77,7 @@ build_test: build_base
 	git clone git@github.com:NervanaSystems/autoflex.git
 
 	# now build the docker container
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
 
 build_test_cpu: build_base
 	# hack to clone autoflex here in this working directory so it can be
@@ -90,44 +90,44 @@ build_test_cpu: build_base
 	git clone git@github.com:NervanaSystems/autoflex.git
 
 	# now build the docker container
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
 
 build_mkldnn_test: build_test_cpu
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
 
 build_doc: build_base
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc_${BUILD_VERSION} ${DIR}
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc;${BUILD_VERSION} ${DIR}
 
 test: build_test
-	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
 test_mkldnn: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
 
 test_gpu: build_test
-	nvidia-docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
+	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
 doc: build_doc
-	docker run --rm ${VOLUME} -t ngraph_doc_${BUILD_VERSION} make doc
+	docker run --rm ${VOLUME} -t ngraph_doc:${BUILD_VERSION} make doc
 
 style: build_test
-	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make style
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make style
 
 test_shell: build_test
-	docker run --rm ${VOLUME} -it ngraph_test_${BUILD_VERSION} /bin/bash
+	docker run --rm ${VOLUME} -it ngraph_test:${BUILD_VERSION} /bin/bash
 
 test_mkldnn_shell: build_mkldnn_test
-	docker run --rm ${VOLUME} -it ngraph_mkldnn_test_${BUILD_VERSION} /bin/bash
+	docker run --rm ${VOLUME} -it ngraph_mkldnn_test:${BUILD_VERSION} /bin/bash
 
 test_gpu_shell: build_test
-	nvidia-docker run --rm ${VOLUME} -it ngraph_test_${BUILD_VERSION} /bin/bash
+	nvidia-docker run --rm ${VOLUME} -it ngraph_test:${BUILD_VERSION} /bin/bash
 
 shell: build_dev
-	docker run --rm ${VOLUME} -it ngraph_dev_${BUILD_VERSION} /bin/bash
+	docker run --rm ${VOLUME} -it ngraph_dev:${BUILD_VERSION} /bin/bash
 
 combined_coverage:
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${COV_COMBINED_CMD}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
 all: build_base test_mkldnn
