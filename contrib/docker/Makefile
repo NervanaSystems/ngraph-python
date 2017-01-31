@@ -5,11 +5,26 @@ BUILD_VERSION = ${GIT_COMMIT}_${PYTHON_VERSION}
 BUILD_DIR = ${DIR}/contrib/docker/.build-${BUILD_VERSION}
 NVCC_VER_OUT := $(shell nvcc --version | grep release)
 
+TEST_OPTS := --timeout=300
+UNIT_TEST_DIRS := tests/
+TF_TEST_DIRS := ngraph/frontends/tensorflow/tests/
+NEON_TEST_DIRS := ngraph/frontends/neon/tests
+TEST_DIRS_FLEX := flex_tests/
+
 # default version is python 2, but can be switched to 3 from command
 # line
 PYTHON_VERSION = 2
 
-.PHONY: build_test test build_base build_dev
+MKLDNN_ROOT=/usr/local
+MY_PYTHONPATH=./:/root/private-ngraph/
+
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/testout.xml /root/private-ngraph/testout_unit_test_${PYTHON_VERSION}.xml; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_unit_test_${PYTHON_VERSION}.dat"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/testout.xml /root/private-ngraph/testout_neon_test_${PYTHON_VERSION}.xml; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_neon_test_${PYTHON_VERSION}.dat"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/testout.xml /root/private-ngraph/testout_tf_test_${PYTHON_VERSION}.xml; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_tf_test_${PYTHON_VERSION}.dat"
+
+COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/private-ngraph;rm -f testout.xml;coverage combine;coverage xml -i;coverage report"
+
+.PHONY: build_test test build_base build_dev build_mkldnn_test
 
 DOCKER_BUILD=docker build
 
@@ -28,6 +43,8 @@ expand_dockerfile_templates:
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
 	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
+	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.test_cpu > ${BUILD_DIR}/Dockerfile.test_cpu
+	sed -e 's/\(FROM ngraph.*\)/\1_${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
 
 fallback_cuda_version: expand_dockerfile_templates
 # if has cuda && v8.0 cuda toolkit -> use nvidia 7.5 base image
@@ -37,8 +54,11 @@ endif
 
 clean:
 	rm -rf ${DIR}/contrib/docker/autoflex
-	rm ${DIR}/contrib/docker/.build-*/Dockerfile.*
-	rmdir ${DIR}/contrib/docker/.build-*
+	rm -f ${DIR}/contrib/docker/.build-*/Dockerfile.* || echo "keep going if files are not present"
+	rmdir ${DIR}/contrib/docker/.build-* || echo "keep going if directory is not present"
+	rm -f ${DIR}/*.xml
+	rm -f ${DIR}/*.dat
+	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make clean
 
 build_base: expand_dockerfile_templates fallback_cuda_version
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_${BUILD_VERSION} ${DIR}
@@ -59,11 +79,32 @@ build_test: build_base
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test_${BUILD_VERSION} ${DIR}
 
+build_test_cpu: build_base
+	# hack to clone autoflex here in this working directory so it can be
+	# ADDed to the docker container.  We will most likely want a more
+	# organized way to set this up, but here it is for now.  We must be
+	# careful to avoid publishing this docker container since it
+	# contains private code in it.
+	rm -rf ${DIR}/contrib/docker/autoflex
+	cd ${DIR}/contrib/docker
+	git clone git@github.com:NervanaSystems/autoflex.git
+
+	# now build the docker container
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu_${BUILD_VERSION} ${DIR}
+
+build_mkldnn_test: build_test_cpu
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test_${BUILD_VERSION} ${DIR}
+
 build_doc: build_base
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc_${BUILD_VERSION} ${DIR}
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
+
+test_mkldnn: build_mkldnn_test
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
 
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test_${BUILD_VERSION} make test
@@ -77,10 +118,16 @@ style: build_test
 test_shell: build_test
 	docker run --rm ${VOLUME} -it ngraph_test_${BUILD_VERSION} /bin/bash
 
+test_mkldnn_shell: build_mkldnn_test
+	docker run --rm ${VOLUME} -it ngraph_mkldnn_test_${BUILD_VERSION} /bin/bash
+
 test_gpu_shell: build_test
 	nvidia-docker run --rm ${VOLUME} -it ngraph_test_${BUILD_VERSION} /bin/bash
 
 shell: build_dev
 	docker run --rm ${VOLUME} -it ngraph_dev_${BUILD_VERSION} /bin/bash
 
-all: style doc test test_gpu
+combined_coverage:
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test_${BUILD_VERSION} ${COV_COMBINED_CMD}
+
+all: build_base test_mkldnn

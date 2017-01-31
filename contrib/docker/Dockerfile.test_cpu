@@ -1,0 +1,22 @@
+FROM ngraph_base
+
+# install neon
+WORKDIR /root
+RUN apt-get install -y python-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
+RUN git clone https://github.com/NervanaSystems/neon.git
+WORKDIR neon
+RUN make sysinstall
+
+WORKDIR /root/private-ngraph
+ADD test_requirements.txt /root/private-ngraph/test_requirements.txt
+RUN pip install -r test_requirements.txt
+
+# necessary for tests/test_walkthrough.py which requires that ngraph is
+# importable from an entrypoint not local to ngraph.
+ADD . /root/private-ngraph
+RUN pip install -e .
+
+# make ngraph Makefile happy :-(
+ENV VIRTUAL_ENV='making ngraph makefile happy'

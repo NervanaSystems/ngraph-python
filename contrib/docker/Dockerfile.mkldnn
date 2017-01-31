@@ -1,0 +1,31 @@
+FROM ngraph_test_cpu
+
+WORKDIR /root/private-ngraph
+ADD test_requirements.txt /root/private-ngraph/test_requirements.txt
+RUN pip install -r test_requirements.txt
+
+# install mkl-dnn
+WORKDIR /root
+RUN apt-get install -y cmake
+RUN apt-get install -y doxygen
+RUN apt-get install -y wget
+RUN which wget
+RUN git clone https://github.com/01org/mkl-dnn.git
+WORKDIR mkl-dnn
+RUN cd scripts && ./prepare_mkl.sh && cd ..
+RUN mkdir -p build && cd build && cmake .. && make
+WORKDIR build
+RUN make install
+
+# set environment to build mkldnn_engine.so and run with mkldnn_engine
+# setup with `pip install -e .`
+ENV MKLDNN_ROOT=/usr/local
+WORKDIR /root/private-ngraph
+ADD . /root/private-ngraph
+RUN pip install -e .
+RUN ls -l *.so
+RUN ldd mkldnn_engine.so
+
+# make ngraph Makefile happy :-(
+ENV VIRTUAL_ENV='making ngraph makefile happy'
+ENV PYTHONPATH=./:/root/neon/:/root/private-ngraph/
