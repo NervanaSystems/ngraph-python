@@ -606,13 +606,15 @@ class GPUKernelGroup(object):
 
     def setup_kernel_execute(self, kernel):
         """
-        Used by subclass transformers
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
         """
         pass
 
     def after_kernel_execute(self, kernel):  # TODO: what to name this
         """
-        Used by subclass transformers
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
         """
         pass
 
