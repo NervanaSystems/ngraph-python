@@ -29,11 +29,12 @@ def test_abs(transformer_factory):
     Zin = ng.placeholder((N, M))
     Zout = abs(Zin)
 
-    abs_executor = executor(Zout, Zin)
+    with executor(Zout, Zin) as ex:
+        abs_executor = ex
 
-    Xval = np.array([5, 1, 0, -2, 3, 4]).reshape(n, m).astype(np.float32)
-    Xval[0,1] = -Xval[0,1]
-    assert np.allclose(abs_executor(Xval), abs(Xval))
+        Xval = np.array([5, 1, 0, -2, 3, 4]).reshape(n, m).astype(np.float32)
+        Xval[0,1] = -Xval[0,1]
+        assert np.allclose(abs_executor(Xval), abs(Xval))
 
 
 def test_sum(transformer_factory):
@@ -46,12 +47,13 @@ def test_sum(transformer_factory):
     x = ng.placeholder(H)
     y = ng.sum(x)
 
-    sum_executor = executor(y, x)
+    with executor(y,x) as ex:
+        sum_executor = ex
 
-    xval = np.array(list(range(1,10)) + [-1])
-    xval[2] += + 1 + 10
+        xval = np.array(list(range(1,10)) + [-1])
+        xval[2] += + 1 + 10
 
-    assert(sum_executor(xval) == sum(xval))
+        assert(sum_executor(xval) == sum(xval))
 
 
 def test_plusconst(transformer_factory):
@@ -61,7 +63,8 @@ def test_plusconst(transformer_factory):
     x = ng.placeholder(())
     x_plus_const = x + 1.5
 
-    plusconst_executor = executor(x_plus_const, x)
+    with executor(x_plus_const, x) as ex:
+        plusconst_executor = ex
 
-    for i in range(5):
-        assert plusconst_executor(i) == i + 1.5
+        for i in range(5):
+            assert plusconst_executor(i) == i + 1.5
