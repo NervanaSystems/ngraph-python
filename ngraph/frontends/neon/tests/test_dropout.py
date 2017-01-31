@@ -38,16 +38,15 @@ def test_dropout_train(transformer_factory):
     x = np.random.uniform(size=(nin, batch_size))
 
     # evaluate
-    ngt.make_transformer()
     with executor([fprop, layer.mask], inp) as comp:
         out, mask = comp(x)
-    numpy_out = x * mask[:, None]
-    np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
+        numpy_out = x * mask[:, None]
+        np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
 
-    out1, mask1 = out.copy(), mask.copy()
-    out2, mask2 = comp(x)
-    assert (out1 != out2).any()
-    assert (mask1 != mask2).any()
+        out1, mask1 = out.copy(), mask.copy()
+        out2, mask2 = comp(x)
+        assert (out1 != out2).any()
+        assert (mask1 != mask2).any()
 
 
 def test_dropout_inference(transformer_factory):
@@ -65,14 +64,13 @@ def test_dropout_inference(transformer_factory):
     x = np.random.uniform(size=(nin, batch_size))
 
     # evaluate
-    ngt.make_transformer()
     with executor(fprop, inp) as comp:
         out = comp(x)
-    numpy_out = x * 0.5
-    np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
-    out1 = out.copy()
-    out2 = comp(x)
-    np.testing.assert_allclose(out1, out2, rtol=1e-6)
+        numpy_out = x * 0.5
+        np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
+        out1 = out.copy()
+        out2 = comp(x)
+        np.testing.assert_allclose(out1, out2, rtol=1e-6)
 
 
 def test_dropout_bprop_single_comp(transformer_factory):
