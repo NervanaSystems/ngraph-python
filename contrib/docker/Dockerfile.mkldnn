@@ -23,8 +23,8 @@ ENV MKLDNN_ROOT=/usr/local
 WORKDIR /root/private-ngraph
 ADD . /root/private-ngraph
 RUN pip install -e .
-RUN ls -l *.so
-RUN ldd mkldnn_engine.so
+RUN ls -l *.so || echo keep going if no library is present
+RUN ldd mkldnn_engine.so || echo keep going if no library is present
 
 # make ngraph Makefile happy :-(
 ENV VIRTUAL_ENV='making ngraph makefile happy'
