@@ -90,6 +90,7 @@ class AsyncTransformer(Process):
 
     def cleanup(self):
         self.exit.set()
+        self.join()
 
     def run(self):
 
