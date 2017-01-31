@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
+import ngraph as ng
 import caffe2.python.core as c2core
 import numpy as np
 from utils import make_const_op
@@ -48,9 +49,9 @@ class OpsConstant(OpsBase):
         # convert to numpy value
         np_val = np.full(tuple(args["shape"].ints), value)
 
-        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
-
-        return ng_op
+        ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
+        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        return ng_placeholder
 
     def GaussianFill(self, c2_op, inputs):
         """
@@ -76,8 +77,9 @@ class OpsConstant(OpsBase):
         np_val = np.random.normal(mean, std,
                                   tuple(args["shape"].ints))
 
-        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
-        return ng_op
+        ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
+        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        return ng_placeholder
 
     def UniformFill(self, c2_op, inputs):
         """
@@ -101,9 +103,9 @@ class OpsConstant(OpsBase):
         np_val = np.random.uniform(args["min"].f, args["max"].f,
                                    tuple(args["shape"].ints))
 
-        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
-
-        return ng_op
+        ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
+        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        return ng_placeholder
 
     def UniformIntFill(self, c2_op, inputs):
         """
@@ -191,9 +193,9 @@ class OpsConstant(OpsBase):
         np_val = np.ndarray(shape)
         np_val[:] = np_init.reshape(shape)[:]
 
-        ng_op = make_const_op(np_val, np_val.shape, c2_op.name)
-
-        return ng_op
+        ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
+        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        return ng_placeholder
 
     def GivenTensorIntFill(self, c2_op, inputs):
         """
