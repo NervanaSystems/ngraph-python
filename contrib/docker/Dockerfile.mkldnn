@@ -23,8 +23,11 @@ ENV MKLDNN_ROOT=/usr/local
 WORKDIR /root/private-ngraph
 ADD . /root/private-ngraph
 RUN pip install -e .
+# verify the mkldnn_engine.so is built correctly and save it to a
+# temporary location for in the docker container
+# skip these and keep going if the library is not built in setup.py
 RUN ls -l *.so || echo keep going if no library is present
 RUN ldd mkldnn_engine.so || echo keep going if no library is present
-RUN cp mkldnn_engine.so /usr/local/lib 
+RUN cp mkldnn_engine.so /usr/local/lib || keep going if no library is present
 
 ENV PYTHONPATH=.:/root/private-ngraph/$PYTHONPATH
