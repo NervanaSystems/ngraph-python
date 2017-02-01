@@ -138,22 +138,16 @@ class ImporterTester(object):
             ng_placeholder_vals = [val for (_, val) in tf_feed_dict.items()]
 
             # evaluate ngraph result
-            ng_result_comp = transformer.computation([ng_target_node],
+            ng_result_comp = transformer.computation(ng_target_node,
                                                      *ng_placeholder_nodes)
             if ng_init_op:
                 ng_init_comp()
-#            ng_result = ng_result_comp(*ng_placeholder_vals)[0]
             ng_result = ng_result_comp(*ng_placeholder_vals)
-            if isinstance(ng_result, tuple):
-                ng_result = ng_result[0]
         else:
-            ng_result_comp = transformer.computation([ng_target_node])
+            ng_result_comp = transformer.computation(ng_target_node)
             if ng_init_op:
                 ng_init_comp()
-#            ng_result = ng_result_comp()[0]
             ng_result = ng_result_comp()
-            if isinstance(ng_result, tuple):
-                ng_result = ng_result[0]
         if print_ng_result:
             print(ng_result)
 

@@ -124,30 +124,27 @@ def check_birnn(seq_len, input_size, hidden_size, batch_size,
         input_value = rng.uniform(-1, 1, inp_ng.axes)
         init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
 
-        if sum_out is True:
-            fprop_neon_fun = ex.executor([out_ng,
-                                          birnn_ng.fwd_rnn.W_input,
-                                          birnn_ng.fwd_rnn.W_recur,
-                                          birnn_ng.fwd_rnn.b,
-                                          birnn_ng.bwd_rnn.W_input,
-                                          birnn_ng.bwd_rnn.W_recur,
-                                          birnn_ng.bwd_rnn.b],
-                                         inp_ng, init_state_ng)
-            fprop_neon, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-                fprop_neon_fun(input_value, init_state_value)
+        return_list = [birnn_ng.fwd_rnn.W_input,
+                       birnn_ng.fwd_rnn.W_recur,
+                       birnn_ng.fwd_rnn.b,
+                       birnn_ng.bwd_rnn.W_input,
+                       birnn_ng.bwd_rnn.W_recur,
+                       birnn_ng.bwd_rnn.b]
+
+        if sum_out:
+            return_list.append(out_ng)
+        else:
+            return_list.extend(out_ng)
+
+        fprop_neon_fun = ex.executor(return_list, inp_ng, init_state_ng)
+        all_outputs = fprop_neon_fun(input_value, init_state_value)
+        fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = all_outputs[:6]
+
+        if sum_out:
+            fprop_neon = all_outputs[-1]
             fprop_neon = fprop_neon.copy()
         else:
-            fprop_neon_fun = ex.executor(out_ng +
-                                         [birnn_ng.fwd_rnn.W_input,
-                                          birnn_ng.fwd_rnn.W_recur,
-                                          birnn_ng.fwd_rnn.b,
-                                          birnn_ng.bwd_rnn.W_input,
-                                          birnn_ng.bwd_rnn.W_recur,
-                                          birnn_ng.bwd_rnn.b],
-                                         inp_ng, init_state_ng)
-            fprop_neon, fprop_neon_1, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-                fprop_neon_fun(input_value, init_state_value)
-
+            fprop_neon, fprop_neon_1 = all_outputs[-2:]
             fprop_neon_fwd = fprop_neon.copy()
             fprop_neon_bwd = fprop_neon_1.copy()
 
