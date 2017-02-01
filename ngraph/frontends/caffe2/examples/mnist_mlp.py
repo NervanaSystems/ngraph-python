@@ -54,10 +54,9 @@ def mnist_mlp(args):
     # main_net.FC(['activ2', 'fc_w3', 'fc_b1'], 'FC3', dim_in=fc_size[2], dim_out=fc_size[3])
     # main_net.Softmax('FC3', 'softmax')
 
-    main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
-    main_net.Softmax('FC1', 'softmax')
-    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss')
-
+    ffc = main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
+    sm = main_net.Softmax('FC1', 'softmax')
+    cr = main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss')
 
     # Ngraph part
     # import graph_def
@@ -70,8 +69,8 @@ def mnist_mlp(args):
     # fc_w1_ng, fc_w2_ng, fc_w3_ng, fc_b1_ng, fc_b2_ng, fc_b3_ng, softmax_ng, loss_ng = \
     #     importer.get_op_handle(['fc_w1', 'fc_w2', 'fc_w3', 'fc_b1', 'fc_b2', 'fc_b3', 'softmax', 'loss'])
 
-    fc_w1_ng, fc_b1_ng, softmax_ng, loss_ng = \
-        importer.get_op_handle(['fc_w1', 'fc_b1', 'softmax', 'loss'])
+    x_train_ng, y_train_ng, fc_w1_ng, fc_b1_ng, softmax_ng, loss_ng = \
+        importer.get_op_handle(['train_x', 'train_y', 'fc_w1', 'fc_b1', 'softmax', 'loss'])
 
 
     # setting learning rate for ngraph, that matches the one that it will be used for caffe2 below
@@ -80,15 +79,23 @@ def mnist_mlp(args):
     # transformer and computations
 
     parallel_update = util.CommonSGDOptimizer(args.lrate).minimize(loss_ng, [fc_w1_ng, fc_b1_ng])
-    # parallel_update = util.CommonSGDOptimizer(lrate).minimize(loss_ng, [w_ng, b_ng])
     transformer = ngt.make_transformer()
     # update_fun = transformer.computation(
     #     [loss_ng, w_ng, b_ng, parallel_update], alpha, x_ng, y_gt_ng)
 
     update_fun = transformer.computation(
-        [loss_ng, fc_w1_ng, fc_b1_ng, parallel_update], alpha, train_x, train_y)
+        [loss_ng, fc_w1_ng, fc_b1_ng, parallel_update], alpha, x_train_ng, y_train_ng)
 
     # train
+    true_iter = [0]
+    # ngraph actual computation
+    for i in range(args.max_iter // args.batch):
+        # for xs, ys in zip(xs_np, ys_np + noise):
+        train_x, train_y = mnist.train.next_batch(args.batch)
+        # TODO batch N, add some inner loop?
+        loss_val, w_val, b_val, _ = update_fun(args.lrate, train_x, train_y)
+        print("N it: %s W: %s, B: %s loss %s " % (i, w_val, b_val, loss_val))
+        true_iter[0] += 1
     pass
 
 
