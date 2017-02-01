@@ -1,7 +1,7 @@
 FROM ngraph_test_cpu
 
-WORKDIR /root/private-ngraph
-ADD test_requirements.txt /root/private-ngraph/test_requirements.txt
+WORKDIR /root/ngraph-test
+ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
 RUN pip install -r test_requirements.txt
 
 # install mkl-dnn
@@ -20,8 +20,8 @@ RUN make install
 # set environment to build mkldnn_engine.so and run with mkldnn_engine
 # setup with `pip install -e .`
 ENV MKLDNN_ROOT=/usr/local
-WORKDIR /root/private-ngraph
-ADD . /root/private-ngraph
+WORKDIR /root/ngraph-test
+ADD . /root/ngraph-test
 RUN pip install -e .
 # verify the mkldnn_engine.so is built correctly and save it to a
 # temporary location for in the docker container
@@ -30,4 +30,4 @@ RUN ls -l *.so || echo keep going if no library is present
 RUN ldd mkldnn_engine.so || echo keep going if no library is present
 RUN cp mkldnn_engine.so /usr/local/lib || keep going if no library is present
 
-ENV PYTHONPATH=.:/root/private-ngraph/$PYTHONPATH
+ENV PYTHONPATH=.:/root/ngraph-test/$PYTHONPATH

@@ -1,5 +1,5 @@
 DIR = $(realpath ../..)
-VOLUME = -v ${DIR}:/root/private-ngraph -v $$HOME/nervana/data:/root/nervana/data
+VOLUME = -v ${DIR}:/root/ngraph-test -v $$HOME/nervana/data:/root/nervana/data
 GIT_COMMIT = $(shell git rev-parse HEAD)
 BUILD_VERSION = ${GIT_COMMIT}_${PYTHON_VERSION}
 BUILD_DIR = ${DIR}/contrib/docker/.build-${BUILD_VERSION}
@@ -16,15 +16,15 @@ TEST_DIRS_FLEX := flex_tests/
 PYTHON_VERSION = 2
 
 MKLDNN_ROOT=/usr/local
-MY_PYTHONPATH=./:/root/neon:/root/private-ngraph/
+MY_PYTHONPATH=./:/root/ngraph-test/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_tf_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/ngraph-test;echo ldd mkldnn_engine.so;ldd /root/ngraph-test/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/ngraph-test;echo ldd mkldnn_engine.so;ldd /root/ngraph-test/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;cp /usr/local/lib/mkldnn_engine.so /root/ngraph-test;echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
 
-COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/private-ngraph;coverage combine;coverage xml -i;coverage report"
+COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;coverage combine;coverage xml -i;coverage report"
 
-.PHONY: build_test test build_base build_dev build_mkldnn_test
+.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test shell test_shell test_mkldnn_shell
 
 DOCKER_BUILD=docker build
 
@@ -130,4 +130,4 @@ shell: build_dev
 combined_coverage:
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
-all: doc style test test_gpu test_mkldnn test_mkldnn_gpu
+all: doc style test test_gpu test_mkldnn
