@@ -14,14 +14,9 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import pytest
-from neon import NervanaObject
-from neon.backends import gen_backend
 
 import ngraph as ng
 from ngraph.testing import executor
-
-
-NervanaObject.be = gen_backend()
 
 
 def test_abs(transformer_factory):
