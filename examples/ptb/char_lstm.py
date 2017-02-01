@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,8 +14,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, Preprocess, BiRNN, Recurrent, Affine,
-                                   Softmax, Tanh, LookupTable)
+from ngraph.frontends.neon import (Sequential, Preprocess, LSTM,
+                                   Affine, Softmax, Tanh, Logistic)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, ar, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
@@ -24,20 +24,18 @@ import ngraph.transformers as ngt
 
 from ptb import PTB
 
-
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
-                    help='type of recurrent layer to use (rnn or birnn)')
-parser.add_argument('--use_lut', action='store_true',
-                    help='choose to use lut as first layer')
+parser.add_argument('--layer_type', default='lstm', choices=['lstm'],
+                    help='type of recurrent layer to use (lstm)')
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 50
-time_steps = 150
-hidden_size = 500
+args.batch_size = 64
+time_steps = 50
+hidden_size = 128
+gradient_clip_value = 5
 
 # download penn treebank
 tree_bank_data = PTB(path=args.data_dir)
@@ -61,28 +59,19 @@ def expand_onehot(x):
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=True, pad_idx=0)
-else:
-    layer_0 = Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y))
-
-if args.layer_type == "rnn":
-    rlayer = Recurrent(hidden_size, init, activation=Tanh())
-elif args.layer_type == "birnn":
-    rlayer = BiRNN(hidden_size, init, activation=Tanh(), return_sequence=True, sum_out=True)
-
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=False)
-else:
-    layer_0 = Preprocess(functor=expand_onehot)
+if args.layer_type == "lstm":
+    rlayer = LSTM(hidden_size, init, activation=Tanh(),
+                  gate_activation=Logistic(), return_sequence=True)
 
 # model initialization
-seq1 = Sequential([layer_0,
+seq1 = Sequential([Preprocess(functor=expand_onehot),
                    rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
-optimizer = RMSProp()
+optimizer = RMSProp(gradient_clip_value=gradient_clip_value)
+
 output_prob = seq1.train_outputs(inputs['inp_txt'])
+
 loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)

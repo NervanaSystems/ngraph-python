@@ -220,6 +220,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def setup_kernel_execute(self, kernel):
         """
+        Flex management before kernel call
+
         Before a kernel call, flex tensor scales are adjusted
         and new values are bound to kernel params
         """
@@ -230,19 +232,9 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         # bind flex scale kernel parameters
         kernel.bind_flex_scales()
 
-    def __call__(self):
+    def after_kernel_execute(self, kernel):
         """
-        Calls autoflex on touched tensors after GPUKernelGroup call.
+        Flex management after kernel call
         """
-
-        super(FlexGPUKernelGroup, self).__call__()
-
         # flex management
-        # set up everything needed before next use of modified flex tensors
-        flex_manager = self.transformer.flex_manager
-        if flex_manager.fixed_point is False:
-
-            if flex_manager.verbose:
-                print("managing flex_ids: {}".format(self.output_flex_ids))
-
-            flex_manager.manage_after_computation(self.output_flex_ids)
+        self.transformer.flex_manager.manage_after_computation(kernel)

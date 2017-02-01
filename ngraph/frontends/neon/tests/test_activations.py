@@ -253,9 +253,10 @@ def test_tanh_derivative(transformer_factory):
 
 
 def test_logistic(transformer_factory):
-    inputs = np.array([0, 1, -2]).reshape((3, 1))
-    outputs = 1.0 / (1.0 + np.exp(-inputs)).reshape((3, 1))
-    compare_tensors(Logistic(), inputs, outputs, tol=1e-7)
+    # inputs = np.array([0, 1, -2]).reshape((3, 1))
+    inputs = np.random.random((50, 50))
+    outputs = 1.0 / (1.0 + np.exp(-inputs)).reshape((50, 50))
+    compare_tensors(Logistic(), inputs, outputs, tol=1e-10)
 
 
 def test_logistic_derivative(transformer_factory):
