@@ -58,6 +58,7 @@ _op_templates = {
     "minimum": r"%(out)s = fminf(%(x)s, %(y)s);",
     "maximum": r"%(out)s = fmaxf(%(x)s, %(y)s);",
     "onehot": r"%(out)s = (%(index)s == %(x)s);",
+    "take": r"%(out)s = %(y)s;",
     "dot": None
 }
 
@@ -112,6 +113,11 @@ _index_template31 = \
     r"%(index)s = idx0 * %(stridea)s + %(item)s * %(strideb)s + idx2 * %(stridec)s;"
 _index_template32 = \
     r"%(index)s = idx0 * %(stridea)s + idx1 * %(strideb)s + %(item)s * %(stridec)s;"
+
+_take_index_template1 = r"%(index)s = %(idxa)s * %(stridea)s;"
+_take_index_template2 = r"%(index)s = %(idxa)s * %(stridea)s + %(idxb)s * %(strideb)s;"
+_take_index_template3 = \
+    r"%(index)s = %(idxa)s * %(stridea)s + %(idxb)s * %(strideb)s +%(idxc)s * %(stridec)s;"
 
 _load_template = r"%(buffer)s[%(index)s]"
 
@@ -276,7 +282,7 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes, gemm=False):
+    def __init__(self, tensor_description, kernel_axes, gemm=False, take_axis=False):
         self.dtype = tensor_description.dtype
         self.strides = tensor_description.strides
         self.shape = tensor_description.shape
@@ -303,16 +309,25 @@ class TensorDescriptionWrapper:
             num_kernel_axes = len(kernel_axes)
             bcast_shape = [1] * num_kernel_axes
             bcast_strides = [0] * num_kernel_axes
+            converted = []
 
             for axis in range(num_kernel_axes):
                 if kernel_axes[axis] in self.td.axes:
                     td_axis_index = self.td.axes.index_unique(kernel_axes[axis])
                     bcast_shape[axis] = self.shape[td_axis_index]
                     bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
+                    converted.append(kernel_axes[axis])
                 else:
                     # Broadcast
                     bcast_shape[axis] = 1
                     bcast_strides[axis] = 0
+
+            # Take axis condition where one will not match
+            if take_axis:
+                kernel_index = kernel_axes.index_unique(kernel_axes - converted)
+                td_index = self.td.axes.index_unique(self.td.axes - converted)
+                bcast_shape[kernel_index] = self.shape[td_index]
+                bcast_strides[kernel_index] = self.strides[td_index] // self.dtype.itemsize
 
             self.shape = tuple(bcast_shape)
             self.strides = tuple(bcast_strides)
@@ -477,14 +492,20 @@ def _get_axes_mapping(ops):
     avg_denom = 0.0
     axes = range(MAX_AXES)
     reduction_axis = None
+    take_axes = []
 
     # Find maximum shape and check for reductions
     for op in ops:
-        if op[0] in _redop_templates or op[4]:
+        if op[0] == "take":
+            assert reduction_axis != op[4]
+            take_axes.append(op[4])
+        elif op[0] in _redop_templates or op[4]:
             assert reduction_axis is None or reduction_axis == op[4]
             reduction_axis = op[4]
 
         for t in op[1:4]:
+            if op[0] == "take" and (t is op[2]):
+                continue
             if _is_buffer(t):
                 shape = t.shape
                 assert len(shape) <= MAX_AXES
@@ -529,6 +550,12 @@ def _get_axes_mapping(ops):
             if stride < min_stride:
                 loop_axis = axis
                 min_stride = stride
+
+        if loop_axis in take_axes:
+            for axis in axes:
+                if axis not in take_axes:
+                    loop_axis = axis
+                    break
 
         (griddim, blockdim, items_per_thread) = _optimize_loop_axis(max_shape[loop_axis])
         blocksize = blockdim
@@ -664,6 +691,8 @@ def _wrap_tensor_descriptions(ops):
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
+            if op[0] == "take" and (index == 2):
+                continue
             if isinstance(new_op[index], TensorDescription):
                 if len(new_op[index].shape) > max_dims:
                     max_dims = len(new_op[index].shape)
@@ -678,7 +707,12 @@ def _wrap_tensor_descriptions(ops):
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                new_op[index] = TensorDescriptionWrapper(new_op[index], kernel_axes)
+                if op[0] == "take" and (index == 2):
+                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                                                             kernel_axes,
+                                                             take_axis=True)
+                else:
+                    new_op[index] = TensorDescriptionWrapper(new_op[index], kernel_axes)
 
         new_ops.append(tuple(new_op))
 
@@ -703,6 +737,7 @@ def _build_register_mapping(stages):
     register_inits = {}
     register_types = {}
     buffers = {}
+    take_loads = []
     last_write = {}
     constants = {}
     has_argmaxmin = False
@@ -750,6 +785,9 @@ def _build_register_mapping(stages):
                             flex_entry = inval.flex_entry()
                             flex_scale[regname] = (sclname, flex_entry, False)
 
+            if op[0] == "take":
+                take_loads.append(op[2])
+
             if op[3] not in register_mapping:
                 regname = "reg" + str(reg_count)
                 sclname = "scale" + str(reg_count)
@@ -780,6 +818,7 @@ def _build_register_mapping(stages):
     ctx.register_inits = register_inits
     ctx.register_types = register_types
     ctx.buffers = buffers
+    ctx.take_loads = take_loads
     ctx.constants = constants
     ctx.last_write = last_write
     ctx.has_argmaxmin = has_argmaxmin
@@ -1069,6 +1108,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         _defines_template = _defines_template1
         _index_template = _index_template1
         _thread_index_template = _thread_index_template1
+        _take_index_template = _take_index_template1
     elif dims == 2:
         _defines_template = _defines_template2
         if loop_axis == 0:
@@ -1076,6 +1116,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         else:
             _index_template = _index_template21
         _thread_index_template = _thread_index_template2
+        _take_index_template = _take_index_template2
     elif dims == 3:
         _defines_template = _defines_template3
         if loop_axis == 0:
@@ -1085,6 +1126,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         else:
             _index_template = _index_template32
         _thread_index_template = _thread_index_template3
+        _take_index_template = _take_index_template3
     else:
         assert False
 
@@ -1145,7 +1187,24 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
 
                     # TODO: repeat broadcast loads for reductions to ensure reduction is actually
                     # run. Probably a better way to do this
-                    if (inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1) and \
+                    if op[0] == "take" and inval in ctx.take_loads:
+                        indices = ["idx0", "idx1", "idx2"]
+                        assert op[4] != loop_axis
+                        indices[loop_axis] = "item"
+                        indices[op[4]] = ctx.register_mapping[op[1]]
+
+                        take_code = _take_index_template % {
+                            "index": "index",
+                            "stridea": "stridea_" + ctx.buffers[inval],
+                            "strideb": "strideb_" + ctx.buffers[inval],
+                            "stridec": "stridec_" + ctx.buffers[inval],
+                            "idxa": indices[0],
+                            "idxb": indices[1],
+                            "idxc": indices[2]
+                        }
+                        op_statements.append(take_code)
+                        op_statements.append(load_code)
+                    elif (inval.strides[loop_axis] == 0 or inval.shape[loop_axis] == 1) and \
                             op[0] in _op_templates:
                         index_code = _index_template % {
                             "index": "index",

@@ -282,4 +282,4 @@ if __name__ == '__main__':
     init = GaussianInit(0.0, 0.1)
     # check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
     check_birnn(seq_len, input_size, hidden_size, batch_size,
-                init, return_seq=True, sum_out=True)
+                init, return_seq=False, sum_out=False)

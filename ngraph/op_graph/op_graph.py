@@ -408,6 +408,9 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def scalar_op(self):
+        """
+        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        """
         if not self.is_scalar:
             raise ValueError()
         return self
@@ -2327,6 +2330,42 @@ class UnaryElementwiseOneDOp(ElementWise):
 
     def __init__(self, x):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
+
+
+class StopGradientOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d stop gradient.
+    """
+    pass
+
+
+class StopGradient(UnaryElementwiseAxesOp):
+    """ TODO """
+    one_d_class = StopGradientOneDOp
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return False
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    @property
+    def axes(self):
+        return self.value_op.axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, 0.)
+
+
+def stop_gradient(x):
+    """ TODO """
+    return StopGradient(x)
 
 
 class NegativeOneDOp(UnaryElementwiseOneDOp):
