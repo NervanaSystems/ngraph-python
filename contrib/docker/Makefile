@@ -18,9 +18,9 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/neon:/root/private-ngraph/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;echo MKLDNN_ROOT=${MKLDNN_ROOT};echo PYTHONPATH=${MY_PYTHONPATH};echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_tf_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_unit_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd mkldnn_engine.so;ldd /root/private-ngraph/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_neon_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;cp /usr/local/lib/mkldnn_engine.so /root/private-ngraph;echo ldd_mkldnn_engine.so;ldd mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/private-ngraph/.coverage /root/private-ngraph/.coverage_tf_test_${PYTHON_VERSION}"
 
 COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/private-ngraph;coverage combine;coverage xml -i;coverage report"
 
@@ -130,4 +130,4 @@ shell: build_dev
 combined_coverage:
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
-all: build_base test_mkldnn
+all: doc style test test_gpu test_mkldnn test_mkldnn_gpu

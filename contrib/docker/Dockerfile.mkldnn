@@ -25,7 +25,6 @@ ADD . /root/private-ngraph
 RUN pip install -e .
 RUN ls -l *.so || echo keep going if no library is present
 RUN ldd mkldnn_engine.so || echo keep going if no library is present
+RUN cp mkldnn_engine.so /usr/local/lib 
 
-# make ngraph Makefile happy :-(
-ENV VIRTUAL_ENV='making ngraph makefile happy'
-ENV PYTHONPATH=./:/root/neon/:/root/private-ngraph/
+ENV PYTHONPATH=.:/root/private-ngraph/$PYTHONPATH
