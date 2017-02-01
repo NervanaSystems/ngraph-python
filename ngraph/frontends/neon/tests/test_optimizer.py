@@ -67,8 +67,8 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ng.make_axis(20, name="C")
-    N = ng.make_axis(32, name="N", batch=True)
+    C = ng.make_axis(20).named('C')
+    N = ng.make_axis(32, batch=True).named('N')
 
     # generate dummy data (to initialize values)
     w_init = np.random.rand(C.length).astype('float32')
@@ -78,43 +78,43 @@ def test_gdm(args, transformer_factory):
     Y = ng.placeholder([N]).named('Y')
     W = ng.variable([C - 1], initial_value=w_init).named('W')
 
-    ex = ExecutorFactory()
-    transformer = ex.transformer
+    with ExecutorFactory() as ex:
+        transformer = ex.transformer
 
-    lrate, mom, wdecay = args
-    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
-    cost = ng.sum(Y - ng.dot(W, X), out_axis=())
+        lrate, mom, wdecay = args
+        gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom, wdecay=wdecay)
+        cost = ng.sum(Y - ng.dot(W, X), out_axis=())
 
-    # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
-    # where (x, y) are nparrays that fill the placeholders X and Y
-    updates = gdm(cost)
-    ngraph_optimize = transformer.computation([W, updates], X, Y)
+        # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
+        # where (x, y) are nparrays that fill the placeholders X and Y
+        updates = gdm(cost)
+        ngraph_optimize = transformer.computation([W, updates], X, Y)
 
-    # set up the reference values for gradient descent
-    w_ref = w_init.copy()
-    vel_ref = np.zeros_like(w_ref)
+        # set up the reference values for gradient descent
+        w_ref = w_init.copy()
+        vel_ref = np.zeros_like(w_ref)
 
-    # store the weights with each minibatch for debugging
-    ng_Ws = []
+        # store the weights with each minibatch for debugging
+        ng_Ws = []
 
-    # run for 20 minibatches
-    for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
-        # obtain ngraph results
-        (ng_W, _) = ngraph_optimize(x, y)
-        gdm.update_learning_rate()
-        ng_Ws.append(copy.deepcopy(ng_W))
+        # run for 20 minibatches
+        for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
+            # obtain ngraph results
+            (ng_W, _) = ngraph_optimize(x, y)
+        #    gdm.update_learning_rate()
+            ng_Ws.append(copy.deepcopy(ng_W))
 
-        # obtain reference results
-        dw = -1 * x.sum(axis=1) / N.length   # the gradients we compute analytically
+            # obtain reference results
+            dw = -1 * x.sum(axis=1) / N.length   # the gradients we compute analytically
 
-        dw = dw + wdecay * w_ref
-        if mom == 0:
-            w_ref[:] = w_ref - lrate * dw
-        else:
-            vel_ref[:] = mom * vel_ref - lrate * dw
-            w_ref[:] = w_ref + vel_ref
+            dw = dw + wdecay * w_ref
+            if mom == 0:
+                w_ref[:] = w_ref - lrate * dw
+            else:
+                vel_ref[:] = mom * vel_ref - lrate * dw
+                w_ref[:] = w_ref + vel_ref
 
-        ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
+            ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
 
 
 def test_gdm_nesterov(args, transformer_factory):
@@ -126,37 +126,37 @@ def test_gdm_nesterov(args, transformer_factory):
     """
 
     lrate, mom, wdecay = args
-    ex = ExecutorFactory()
-    transformer = ex.transformer
+    with ExecutorFactory() as ex:
+        transformer = ex.transformer
 
-    gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
-                                  wdecay=wdecay, nesterov=True)
+        gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
+                                      wdecay=wdecay, nesterov=True)
 
-    C = ng.make_axis(20, name="C")
-    N = ng.make_axis(32, name="N", batch=True)
+        C = ng.make_axis(20).named('C')
+        N = ng.make_axis(32, batch=True).named('N')
 
-    # params to be updated using GDM
-    np_W = np.random.rand(C.length)
-    W = ng.variable([C - 1], initial_value=np_W)
+        # params to be updated using GDM
+        np_W = np.random.rand(C.length)
+        W = ng.variable([C - 1], initial_value=np_W)
 
-    # Set up initial velocity
-    velocity = np.zeros(C.length)
+        # Set up initial velocity
+        velocity = np.zeros(C.length)
 
-    # Set up data placeholders
-    data = ng.placeholder([C, N]).named("data")
-    target = ng.placeholder([N]).named("target")
+        # Set up data placeholders
+        data = ng.placeholder([C, N]).named("data")
+        target = ng.placeholder([N]).named("target")
 
-    # Set up op graph
-    cost = ng.sum(target - ng.dot(W, data), out_axis=())
-    updates = gdm(cost)
-    optimize = transformer.computation([W, updates], data, target)
+        # Set up op graph
+        cost = ng.sum(target - ng.dot(W, data), out_axis=())
+        updates = gdm(cost)
+        optimize = transformer.computation([W, updates], data, target)
 
-    # Set up numpy version
-    def numpy_nesterov(x, y):
-        grad = -1 * x.mean(axis=1)
-        velocity[:] = mom * velocity - lrate * (grad + wdecay * np_W)
-        np_W[:] = np_W + mom * velocity - lrate * (grad + wdecay * np_W)
+        # Set up numpy version
+        def numpy_nesterov(x, y):
+            grad = -1 * x.mean(axis=1)
+            velocity[:] = mom * velocity - lrate * (grad + wdecay * np_W)
+            np_W[:] = np_W + mom * velocity - lrate * (grad + wdecay * np_W)
 
-        return np_W
+            return np_W
 
-    compare_optimizers(optimize, numpy_nesterov, nfeatures=C.length, batch_size=N.length)
+        compare_optimizers(optimize, numpy_nesterov, nfeatures=C.length, batch_size=N.length)

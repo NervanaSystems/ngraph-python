@@ -25,13 +25,14 @@ from ngraph.testing import executor
 
 def test_uniform_range_pos(transformer_factory):
     """TODO."""
-    M = ng.make_axis(5, name='M')
-    N = ng.make_axis(8, name='N')
+    M = ng.make_axis(5).named('M')
+    N = ng.make_axis(8).named('N')
 
     ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
     ng_a = ng.uniform(ng_a, low=0.0, high=0.5)
 
-    result = executor(ng_a)()
+    with executor(ng_a) as ex:
+        result = ex()
     print(result)
 
     assert np.all(result < 0.5)
@@ -41,13 +42,14 @@ def test_uniform_range_pos(transformer_factory):
 
 def test_uniform_range_posneg(transformer_factory):
     """TODO."""
-    M = ng.make_axis(5, name='M')
-    N = ng.make_axis(8, name='N')
+    M = ng.make_axis(5).named('M')
+    N = ng.make_axis(8).named('N')
 
     ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
     ng_a = ng.uniform(ng_a, low=-0.5, high=0.5)
 
-    result = executor(ng_a)()
+    with executor(ng_a) as ex:
+        result = ex()
     print(result)
 
     assert np.all(result < 0.5)
@@ -68,3 +70,4 @@ def test_rng_repetition(transformer_factory):
     val1 = rand_comp().copy()
     val2 = rand_comp().copy()
     assert val1 != val2
+    trans.cleanup()

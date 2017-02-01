@@ -123,8 +123,8 @@ def test_wrong_number_of_batch_axes_at_input():
 
     C = 3
     D = 1
-    ax_C = ng.make_axis(length=C, name='C', batch=True)
-    ax_D = ng.make_axis(length=D, name='D', batch=True)
+    ax_C = ng.make_axis(length=C, batch=True).named('C')
+    ax_D = ng.make_axis(length=D, batch=True).named('D')
 
     ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax_C, ax.T, ax.R, ax.S, ax.K])
@@ -165,10 +165,10 @@ def test_convolution_backprop(transformer_factory):
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 
@@ -191,13 +191,13 @@ def test_convolution_backprop(transformer_factory):
 
     output = ng.sum(ng.convolution(conv_params, inputs, filters, ax_o), out_axes=())
 
-    factory = ExecutorFactory()
-    dcdf_sym_fun = factory.derivative(output, filters, inputs)
-    dcdf_num_fun = factory.numeric_derivative(output, filters, .01, inputs)
-    dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
-    dcdf_num_val = dcdf_num_fun(filter_value, input_value)
+    with ExecutorFactory() as factory:
+        dcdf_sym_fun = factory.derivative(output, filters, inputs)
+        dcdf_num_fun = factory.numeric_derivative(output, filters, .01, inputs)
+        dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
+        dcdf_num_val = dcdf_num_fun(filter_value, input_value)
 
-    ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+        ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
 def test_convolution(transformer_factory):
@@ -223,10 +223,10 @@ def test_convolution(transformer_factory):
     ax_f.set_shape((C, T, R, S, K))
 
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 
@@ -260,8 +260,9 @@ def test_convolution(transformer_factory):
 
     targets_value = rng.uniform(.1, 0.9, output.axes)
 
-    conv_executor = executor([output, error, d_inputs, d_filters], inputs, filters, targets)
-    result_ng, err_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, targets_value)
+    with executor([output, error, d_inputs, d_filters], inputs, filters, targets) as conv_executor:
+        result_ng, err_ng, gradI_ng, gradF_ng = \
+            conv_executor(input_value, filter_value, targets_value)
 
     # Now compute reference values via NEON
     NervanaObject.be.bsz = N
@@ -310,10 +311,10 @@ def test_conv_flatten_deriv(transformer_factory):
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 
@@ -353,24 +354,24 @@ def test_conv_flatten_deriv(transformer_factory):
     filter_var.named('filter')
     filter_val = np.ones(filter_var.axes.lengths)
 
-    factory = ExecutorFactory()
+    with ExecutorFactory() as factory:
 
-    conv_comp = factory.executor(output, filter_var, input_var)
-    grad_filter_num_comp = factory.numeric_derivative(cost, filter_var, 1.0, input_var)
-    grad_filter_sym_comp = factory.derivative(cost, filter_var, input_var)
+        conv_comp = factory.executor(output, filter_var, input_var)
+        grad_filter_num_comp = factory.numeric_derivative(cost, filter_var, 1.0, input_var)
+        grad_filter_sym_comp = factory.derivative(cost, filter_var, input_var)
 
-    grad_input_num_comp = factory.numeric_derivative(cost, input_var, 1.0, filter_var)
-    grad_input_sym_comp = factory.derivative(cost, input_var, filter_var)
+        grad_input_num_comp = factory.numeric_derivative(cost, input_var, 1.0, filter_var)
+        grad_input_sym_comp = factory.derivative(cost, input_var, filter_var)
 
-    conv_val = conv_comp(filter_val, input_val)
-    conv_val_num = np.empty_like(conv_val)
-    conv_val_num.fill(C * T * R * S)
-    assert ng.testing.allclose(conv_val, conv_val_num)
+        conv_val = conv_comp(filter_val, input_val)
+        conv_val_num = np.empty_like(conv_val)
+        conv_val_num.fill(C * T * R * S)
+        assert ng.testing.allclose(conv_val, conv_val_num)
 
-    grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
-    grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
-    assert ng.testing.allclose(grad_filter_num_val, grad_filter_sym_val)
+        grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
+        grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
+        assert ng.testing.allclose(grad_filter_num_val, grad_filter_sym_val)
 
-    grad_input_num_val = grad_input_num_comp(input_val, filter_val)
-    grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
-    assert ng.testing.allclose(grad_input_num_val, grad_input_sym_val)
+        grad_input_num_val = grad_input_num_comp(input_val, filter_val)
+        grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
+        assert ng.testing.allclose(grad_input_num_val, grad_input_sym_val)

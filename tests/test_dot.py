@@ -85,11 +85,12 @@ def ngraph_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (ng.make_axis(name='axis%s' % i, length=l),)
+        axes += (ng.make_axis(length=l).named('axis%s' % i),)
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)
-    return executor(ng.sqrt(ng.squared_L2(var)))()
+    with executor(ng.sqrt(ng.squared_L2(var))) as ex:
+        return ex()
 
 
 @raise_all_numpy_errors
@@ -97,8 +98,8 @@ def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
 
-    C = ng.make_axis(name='C', length=2)
-    N = ng.make_axis(name='N', length=3, batch=True)
+    C = ng.make_axis(length=2).named('C')
+    N = ng.make_axis(length=3, batch=True).named('N')
 
     x_axes = ng.make_axes((C - 1, N))
     y_axes = ng.make_axes((C,))
@@ -113,57 +114,57 @@ def test_dot_sum_backprop(transformer_factory):
     d = ng.dot(x, y)
     s = ng.sum(d, out_axes=())
 
-    ex = ExecutorFactory()
-    s_fun = ex.executor(s, x, y)
-    d_fun = ex.executor(d, x, y)
+    with ExecutorFactory() as ex:
+        s_fun = ex.executor(s, x, y)
+        d_fun = ex.executor(d, x, y)
 
-    dd_dx_fun_num = ex.numeric_derivative(d, x, delta, y)
-    dd_dx_fun_sym = ex.derivative(d, x, y)
+        dd_dx_fun_num = ex.numeric_derivative(d, x, delta, y)
+        dd_dx_fun_sym = ex.derivative(d, x, y)
 
-    dd_dy_fun_num = ex.numeric_derivative(d, y, delta, x)
-    dd_dy_fun_sym = ex.derivative(d, y, x)
+        dd_dy_fun_num = ex.numeric_derivative(d, y, delta, x)
+        dd_dy_fun_sym = ex.derivative(d, y, x)
 
-    ds_dx_fun_num = ex.numeric_derivative(s, x, delta, y)
-    ds_dx_fun_sym = ex.derivative(s, x, y)
+        ds_dx_fun_num = ex.numeric_derivative(s, x, delta, y)
+        ds_dx_fun_sym = ex.derivative(s, x, y)
 
-    ds_dy_fun_num = ex.numeric_derivative(s, y, delta, x)
-    ds_dy_fun_sym = ex.derivative(s, y, x)
+        ds_dy_fun_num = ex.numeric_derivative(s, y, delta, x)
+        ds_dy_fun_sym = ex.derivative(s, y, x)
 
-    # assert outputs are equal
-    d_np = x_np.T.dot(y_np)
-    d_val = d_fun(x_np, y_np)
-    ng.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
+        # assert outputs are equal
+        d_np = x_np.T.dot(y_np)
+        d_val = d_fun(x_np, y_np)
+        ng.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
 
-    dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
-    dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
-    ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
+        dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
+        dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
+        ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
 
-    dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
-    dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
-    ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
+        dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
+        dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
+        ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
 
-    s_np = np.sum(d_np)
-    s_val = s_fun(x_np, y_np)
-    ng.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
+        s_np = np.sum(d_np)
+        s_val = s_fun(x_np, y_np)
+        ng.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
 
-    # assert derivative wrt to both tensors is the same when computed
-    # symbolically by ngraph and numerically
-    ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
-    ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
-    ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
+        # assert derivative wrt to both tensors is the same when computed
+        # symbolically by ngraph and numerically
+        ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
+        ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
+        ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
 
-    ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
-    ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
-    ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
+        ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+        ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
+        ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    H = ng.make_axis(name='H')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    H = ng.make_axis().named('H')
+    N = ng.make_axis().named('N')
 
     tests = [
         {
@@ -225,29 +226,29 @@ def test_tensor_dot_tensor(transformer_factory):
         # compute outputs
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
-        ex = ExecutorFactory()
-        dot = ng.dot(tensor1, tensor2)
-        evaluated_fun = ex.executor(dot, tensor1, tensor2)
+        with ExecutorFactory() as ex:
+            dot = ng.dot(tensor1, tensor2)
+            evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
-        deriv1_fun_num = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
-        deriv1_fun_sym = ex.derivative(dot, tensor1, tensor2)
+            deriv1_fun_num = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
+            deriv1_fun_sym = ex.derivative(dot, tensor1, tensor2)
 
-        deriv2_fun_num = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
-        deriv2_fun_sym = ex.derivative(dot, tensor2, tensor1)
+            deriv2_fun_num = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
+            deriv2_fun_sym = ex.derivative(dot, tensor2, tensor1)
 
-        # assert outputs are equal
-        evaluated = evaluated_fun(value1, value2)
-        np.testing.assert_equal(evaluated, expected_output)
+            # assert outputs are equal
+            evaluated = evaluated_fun(value1, value2)
+            np.testing.assert_equal(evaluated, expected_output)
 
-        # assert derivative wrt to both tensors is the same when computed
-        # symbolically by ngraph and numerically
-        deriv1_val_num = deriv1_fun_num(value1, value2)
-        deriv1_val_sym = deriv1_fun_sym(value1, value2)
-        ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
+            # assert derivative wrt to both tensors is the same when computed
+            # symbolically by ngraph and numerically
+            deriv1_val_num = deriv1_fun_num(value1, value2)
+            deriv1_val_sym = deriv1_fun_sym(value1, value2)
+            ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
 
-        deriv2_val_num = deriv2_fun_num(value2, value1)
-        deriv2_val_sym = deriv2_fun_sym(value2, value1)
-        ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
+            deriv2_val_num = deriv2_fun_num(value2, value1)
+            deriv2_val_sym = deriv2_fun_sym(value2, value1)
+            ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
 
 
 def test_flat_tensor_dot_tensor(transformer_factory):
@@ -260,7 +261,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     Returns:
 
     """
-    ax = ng.make_name_scope('ax')
+    ax = ng.make_name_scope().named('ax')
     ax.H = ng.make_axis(2)
     ax.W = ng.make_axis(7)
     ax.C = ng.make_axis(3)
@@ -275,16 +276,16 @@ def test_flat_tensor_dot_tensor(transformer_factory):
 
     result = ng.dot(b, flat_a)
 
-    factory = ExecutorFactory()
-    result_fun = factory.executor(result)
-    result_val = result_fun()
+    with ExecutorFactory() as factory:
+        result_fun = factory.executor(result)
+        result_val = result_fun()
 
     result_correct = np.ones_like(result_val) * ax.C.length
     ng.testing.assert_allclose(result_val, result_correct)
 
 
 def test_squared_L2(transformer_factory):
-    ax = ng.make_name_scope('ax')
+    ax = ng.make_name_scope().named('ax')
     ax.H = ng.make_axis(2)
     ax.W = ng.make_axis(3)
     ax.N = ng.make_axis(5, batch=True)
@@ -292,16 +293,16 @@ def test_squared_L2(transformer_factory):
     axes = ng.make_axes([ax.H, ax.W, ax.N])
     a = ng.constant(np.ones(axes.lengths), axes=axes)
 
-    factory = ExecutorFactory()
-    l2_samples_fun = factory.executor(ng.squared_L2(a))
-    l2_samples_val = np.ones([ax.N.length]) * ax.H.length * ax.W.length
-    l2_all_fun = factory.executor(ng.squared_L2(a, out_axes=[]))
-    l2_all_val = np.ones([]) * ax.W.length * ax.H.length * ax.N.length
-    l2_W_fun = factory.executor(ng.squared_L2(a, reduction_axes=[ax.H, ax.N]))
-    l2_W_val = np.ones([ax.W.length]) * ax.H.length * ax.N.length
-    l2_samples_result = l2_samples_fun()
-    l2_all_result = l2_all_fun()
-    l2_W_result = l2_W_fun()
-    ng.testing.assert_allclose(l2_samples_val, l2_samples_result)
-    ng.testing.assert_allclose(l2_all_val, l2_all_result)
-    ng.testing.assert_allclose(l2_W_val, l2_W_result)
+    with ExecutorFactory() as factory:
+        l2_samples_fun = factory.executor(ng.squared_L2(a))
+        l2_samples_val = np.ones([ax.N.length]) * ax.H.length * ax.W.length
+        l2_all_fun = factory.executor(ng.squared_L2(a, out_axes=[]))
+        l2_all_val = np.ones([]) * ax.W.length * ax.H.length * ax.N.length
+        l2_W_fun = factory.executor(ng.squared_L2(a, reduction_axes=[ax.H, ax.N]))
+        l2_W_val = np.ones([ax.W.length]) * ax.H.length * ax.N.length
+        l2_samples_result = l2_samples_fun()
+        l2_all_result = l2_all_fun()
+        l2_W_result = l2_W_fun()
+        ng.testing.assert_allclose(l2_samples_val, l2_samples_result)
+        ng.testing.assert_allclose(l2_all_val, l2_all_result)
+        ng.testing.assert_allclose(l2_W_val, l2_W_result)
