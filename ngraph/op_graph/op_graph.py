@@ -219,39 +219,6 @@ class Op(NameableValue, DebugInfo):
             if not isolate and parent is not None:
                 parent.extend(ops)
 
-    # The thread's global user_deps map
-    @staticmethod
-    def _get_thread_user_deps():
-        try:
-            user_deps = get_thread_state().user_deps
-        except AttributeError:
-            user_deps = [dict()]
-            get_thread_state().user_deps = user_deps
-        return user_deps
-
-    @staticmethod
-    @contextmanager
-    def saved_user_deps(user_deps_map=None):
-        """
-        Switches the user_deps map within a context.
-
-        The user_deps of an Op are Ops that must run before the Op is used. When Ops are
-        generated outside of the normal stream, such as initializions that run once before any
-        computation, they must be isolated from the normal tracking of variable pre-dependencies.
-
-        Arguments:
-            user_deps_map:  The new user deps map to use. If not provided, one is created
-            and returned.
-
-        """
-        if user_deps_map is None:
-            user_deps_map = dict()
-        try:
-            Op._get_thread_user_deps().append(user_deps_map)
-            yield (user_deps_map)
-        finally:
-            Op._get_thread_user_deps().pop()
-
     @staticmethod
     def ordered_ops(results):
         """
@@ -341,7 +308,6 @@ class Op(NameableValue, DebugInfo):
 
         # List to keep generation deterministic
         self.other_deps = OrderedSet()
-        self.require_user_deps(self.args)
         self.schemas = []
         self.const = const
         self.__is_constant = constant
@@ -479,24 +445,6 @@ class Op(NameableValue, DebugInfo):
             Ops that must execute before this one can.
         """
         return self.device_op.other_deps + self.args
-
-    @property
-    def user_deps(self):
-        """
-
-        :return:
-            Set of Ops the must come before this Op is used.  See SetItem.
-        """
-        return Op._get_thread_user_deps()[-1].get(self, OrderedSet())
-
-    @user_deps.setter
-    def user_deps(self, value):
-        Op._get_thread_user_deps()[-1][self] = value
-
-    def require_user_deps(self, args):
-        for arg in args:
-            for dep in arg.user_deps:
-                self.add_other_dep(dep)
 
     def add_other_dep(self, dep):
         device_op = self.device_op
@@ -757,7 +705,6 @@ class AssignOp(Op):
             raise ValueError("{} is not assignable.".format(tensor))
         val = broadcast(val, tensor.axes)
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
-        tensor.user_deps = OrderedSet([self])
         self.force = force
 
 
@@ -816,7 +763,6 @@ class SetItemOp(Op):
     def __init__(self, tensor, item, val, **kwargs):
         super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
         self.item = tuple(item)
-        tensor.user_deps = OrderedSet([self])
 
 
 class ControlBlockOp(Op):
@@ -848,7 +794,6 @@ class ParallelOp(ControlBlockOp):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
             self.add_other_dep(op)
-        self.require_user_deps(all)
 
 
 def doall(all):
@@ -911,97 +856,6 @@ def computation(returns, *args):
     return ComputationOp(returns, *args)
 
 
-class SequentialOp(ControlBlockOp):
-    """
-    Compute every op in order, compatible with existing dependencies, returning last value.
-
-    Ops will only be executed once, so to return the value of an earlier op, just add it again at
-    the end of the list.
-
-    Arguments:
-        ops: Sequence of ops to compute.
-    """
-    def __init__(self, ops, **kwargs):
-        super(SequentialOp, self).__init__(**kwargs)
-        self.value_op = ops[-1]
-        ops = OrderedSet((op.device_op for op in ops))
-        for op0, op1 in zip(ops[:-1], ops[1:]):
-            op1.add_other_dep(op0)
-            op1.require_user_deps([op0])
-        for op in ops:
-            self.add_other_dep(op)
-
-    @tdcache()
-    def tensor_description(self):
-        return self.value_op.tensor_description()
-
-    @property
-    def is_tensor_op(self):
-        return self.value_op.is_tensor_op
-
-    @property
-    def value(self):
-        return self.value_op.value
-
-    @property
-    def axes(self):
-        return self.value_op.axes
-
-    def generate_adjoints(self, adjoints, delta):
-        self.value_op.generate_add_delta(adjoints, delta)
-
-    def generate_add_delta(self, adjoints, delta):
-        self.value_op.generate_add_delta(adjoints, delta)
-
-
-def sequential(ops):
-    """
-    Compute every op in order, compatible with existing dependencies, returning last value.
-
-    Ops will only be executed once, so to return the value of an earlier op, just add it again at
-    the end of the list.
-
-    Arguments:
-        ops: Sequence of ops to compute.
-
-    """
-    return SequentialOp(ops)
-
-
-class SequentialFactory(list):
-    def __call__(self):
-        return sequential(self)
-
-
-@contextmanager
-def sequential_op_factory():
-    """
-    Captures created ops in a list to be used to form sequential ops.
-
-    The captured ops will be executed in the generated order, if not already executed.
-    Use append to manually add an op to the factory.
-    The last op added is the value returned from the sequential.
-
-    Example::
-
-            N = ng.make_axis(1)
-            x = ng.variable([N], initial_value=0)
-            with ng.sequential_op_factory() as pf:
-                x0 = x + x
-                ng.assign(x, 2)
-                x1 = x + x
-                pf.append(x0)
-            p = pf()
-
-
-    Returns: A callable which creates an Op that will evaluate the ops in the order specified,
-    and have value the same as the last op appended.
-
-    """
-    with Op.all_ops(SequentialFactory()) as ops:
-        yield(ops)
-
-
 class Fill(Op):
     """
     Fill a tensor with a scalar value.
@@ -1028,7 +882,6 @@ class Fill(Op):
             scalar = npscalar[()]
 
         self.scalar = scalar
-        tensor.user_deps = OrderedSet([self])
 
 
 class TensorOp(Op):
@@ -1277,6 +1130,96 @@ class TensorOp(Op):
         return self.forwarded.tensor_description().value
 
 
+class SequentialOp(TensorOp, ControlBlockOp):
+    """
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
+
+    Arguments:
+        ops: Sequence of ops to compute.
+    """
+    def __init__(self, ops, **kwargs):
+        super(SequentialOp, self).__init__(**kwargs)
+        self.value_op = ops[-1]
+        ops = OrderedSet((op.device_op for op in ops))
+        for op0, op1 in zip(ops[:-1], ops[1:]):
+            op1.add_other_dep(op0)
+        for op in ops:
+            self.add_other_dep(op)
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return self.value_op.is_tensor_op
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    @property
+    def axes(self):
+        return self.value_op.axes
+
+    def generate_adjoints(self, adjoints, delta):
+        self.value_op.generate_add_delta(adjoints, delta)
+
+    def generate_add_delta(self, adjoints, delta):
+        self.value_op.generate_add_delta(adjoints, delta)
+
+
+def sequential(ops):
+    """
+    Compute every op in order, compatible with existing dependencies, returning last value.
+
+    Ops will only be executed once, so to return the value of an earlier op, just add it again at
+    the end of the list.
+
+    Arguments:
+        ops: Sequence of ops to compute.
+
+    """
+    return SequentialOp(ops)
+
+
+class SequentialFactory(list):
+    def __call__(self):
+        return sequential(self)
+
+
+@contextmanager
+def sequential_op_factory():
+    """
+    Captures created ops in a list to be used to form sequential ops.
+
+    The captured ops will be executed in the generated order, if not already executed.
+    Use append to manually add an op to the factory.
+    The last op added is the value returned from the sequential.
+
+    Example::
+
+            N = ng.make_axis(1)
+            x = ng.variable([N], initial_value=0)
+            with ng.sequential_op_factory() as pf:
+                x0 = x + x
+                ng.assign(x, 2)
+                x1 = x + x
+                pf.append(x0)
+            p = pf()
+
+
+    Returns: A callable which creates an Op that will evaluate the ops in the order specified,
+    and have value the same as the last op appended.
+
+    """
+    with Op.all_ops(SequentialFactory()) as ops:
+        yield(ops)
+
+
 class ReshapeOp(TensorOp):
 
     def __init__(self, x, **kwargs):
@@ -1318,16 +1261,6 @@ class ReshapeOp(TensorOp):
 
         """
         return self.args[0].device_op
-
-    @property
-    def user_deps(self):
-        # A reshape of storage is shares the side-effects of the storage
-        return self.args[0].user_deps
-
-    @user_deps.setter
-    def user_deps(self, deps):
-        # A reshape of storage is shares the side-effects of the storage
-        self.args[0].user_deps = deps
 
 
 class Transpose(ReshapeOp):
@@ -1812,16 +1745,10 @@ class AssignableTensorOp(TensorOp):
         super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
-        with Op.saved_user_deps():
-            with Op.all_ops(isolate=True):
-                # Run initializations in a clean context so their SetItems don't modify user_deps
-                # for the main computations.
-                # TODO Maybe we want to use a single context for all of initialization.  We would
-                # need to do the following in a separate method called during transformation.
-                if callable(initial_value):
-                    self.add_initializer(assign(self, initial_value()))
-                elif initial_value is not None:
-                    self.add_initializer(assign(self, initial_value))
+        if callable(initial_value):
+            self.add_initializer(assign(self, initial_value()))
+        elif initial_value is not None:
+            self.add_initializer(assign(self, initial_value))
 
     @property
     def defs(self):
@@ -2115,8 +2042,6 @@ class StackOp(AssignableTensorOp):
             # All users of this need to do the assigns
             deps.add(assign_op(slice_op, flattened_arg))
 
-        self.user_deps = deps
-
     def generate_adjoints(self, adjoints, delta, *x_list):
         s = [slice(None)] * len(self.axes)
         arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
@@ -2169,10 +2094,13 @@ def _unslice(x, slices, axes):
         slices: The slices.
         input_axes: The axes of the input x.
     """
-    op = temporary(axes=axes, dtype=x.dtype).named('unslice')
+    temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
+    op = sequential([
+        Fill(temp, 0),
+        SetItemOp(temp, slices, x),
+        temp
+    ])
     op.add_schema(UnsliceSchema(x, slices))
-    Fill(op, 0)
-    SetItemOp(op, slices, x)
     return op
 
 

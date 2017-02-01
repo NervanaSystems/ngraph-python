@@ -36,10 +36,8 @@ class CommonSGDOptimizer(object):
         assert variables is not None
 
         grads = [ng.deriv(cost, variable) for variable in variables]
-        with ng.Op.saved_user_deps():
-            param_updates = [
-                ng.assign(variable, variable - self.lrate * grad)
-                for variable, grad in zip(variables, grads)
-            ]
-            updates = ng.doall(param_updates)
-        return updates
+        param_updates = [
+            ng.assign(variable, variable - self.lrate * grad)
+            for variable, grad in zip(variables, grads)
+        ]
+        return ng.doall(param_updates)

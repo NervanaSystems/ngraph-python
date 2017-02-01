@@ -279,24 +279,6 @@ class DerivPass(PeepholeGraphPass):
         self.replace_op(op, deriv)
 
 
-class CompUserDepsPass(PeepholeGraphPass):
-    """
-    Pass that converts ComputationOp's user_deps. Currently CompUserDepsPass
-    is required since passes are not able to add ops that require user_deps,
-    which may need to be refactored.
-
-    TODO: This is a temporary fix until user_deps gets cleaned up.
-    """
-
-    @generic_method()
-    def visit(self, op):
-        pass
-
-    @visit.on_type(ComputationOp)
-    def visit(self, op):
-        op.require_user_deps(list(map(lambda x: x.forwarded, op.other_deps)))
-
-
 class SimplePrune(PeepholeGraphPass):
     """TODO."""
     @generic_method()

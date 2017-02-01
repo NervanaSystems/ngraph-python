@@ -213,9 +213,11 @@ def test_setting():
 
         f_v = ex.executor(v)
 
-        with ng.Op.saved_user_deps():
-            ng.assign(v, v + y)
-            f_v1 = ex.executor(v)
+        vset = ng.sequential([
+            ng.assign(v, v + y),
+            v
+        ])
+        f_v1 = ex.executor(vset)
 
         f_v2 = ex.executor(v)
 

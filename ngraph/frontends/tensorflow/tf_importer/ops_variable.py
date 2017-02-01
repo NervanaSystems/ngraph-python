@@ -68,8 +68,7 @@ class OpsVariable(OpsBase):
         assert ref.axes.lengths == value.axes.lengths, "shape not the same"
         value = ng.cast_axes(value, ref.axes)
 
-        with ng.Op.saved_user_deps():
-            return ng.assign(ref, value)
+        return ng.assign(ref, value)
 
     def AssignAdd(self, tf_node, inputs):
         """
@@ -90,8 +89,7 @@ class OpsVariable(OpsBase):
         assert ref.axes.lengths == value.axes.lengths, "shape not the same"
         value = ng.cast_axes(value, ref.axes)
 
-        with ng.Op.saved_user_deps():
-            return ng.assign(ref, value)
+        return ng.assign(ref, value)
 
     def NoOp(self, tf_node, inputs):
         """
