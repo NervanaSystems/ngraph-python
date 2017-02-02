@@ -672,35 +672,6 @@ class SlicedAxis(FunctionAxis):
         )
 
 
-class PaddedAxis(FunctionAxis):
-    """
-    An axis created by padding a parent axis.
-
-    Arguments:
-        parent: The axis being padded.
-        pad: A two-element array of pre and post padding.
-    """
-    def __init__(self, parent, pad, **kwargs):
-        self.pad = pad
-
-        def padded_length():
-            return parent.length + pad[0] + pad[1]
-
-        super(PaddedAxis, self).__init__(
-            parent=parent, length_fun=padded_length, **kwargs
-        )
-
-    def __repr__(self):
-        return (
-            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
-        ).format(
-            name=self.name,
-            length=self.length,
-            parent=self.parent,
-            pad=self.pad,
-        )
-
-
 def no_duplicates(arr):
     """
     Returns whether there are duplicates in a list. The elements in the array
