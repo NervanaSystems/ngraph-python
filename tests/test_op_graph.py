@@ -50,12 +50,14 @@ def test_deriv_missing_connection():
 def test_sequential():
     N = ng.make_axis(1)
     x = ng.variable([N], initial_value=0)
-    with ng.sequential_op_factory() as pf:
-        x0 = x + x
-        ng.assign(x, 2)
-        x1 = x + x
-        pf.append(x0)
-    p = pf()
+    x0 = x + x
+    x1 = x + x
+    p = ng.sequential([
+        x0,
+        ng.assign(x, 2),
+        x1,
+        x0
+    ])
     with ExecutorFactory() as ex:
         x0_val, x1_val, p_val = ex.executor([x0, x1, p])()
     assert x0_val == 0
@@ -66,11 +68,15 @@ def test_sequential():
 def test_sequential_reduce():
     N = ng.make_axis(3)
     x = ng.variable([N], initial_value=1)
-    with ng.sequential_op_factory() as pf:
-        x0 = x + x
-        x1 = ng.sum(x0, out_axes=())
-        x2 = ng.sum(x0, out_axes=()) + x0
-    p = pf()
+    x0 = x + x
+    x1 = ng.sum(x0, out_axes=())
+    x2 = ng.sum(x0, out_axes=()) + x0
+    p = ng.sequential([
+        x0,
+        x1,
+        x2
+    ])
+
     with ExecutorFactory() as ex:
         x0_val, x1_val, x2_val, p_val, x_val = ex.executor([x0, x1, x2, p, x])()
         x0_np = x_val + x_val
@@ -90,15 +96,14 @@ def test_sequential_side():
     x2 = ng.persistent_tensor(axes=(), initial_value=3)
     b = ng.persistent_tensor(axes=(), initial_value=1)
 
-    with ng.sequential_op_factory() as pf:
-        ng.assign(x1, ng.sum(x, out_axes=()) + x1 * b + (1 - b))
-        ng.assign(x2, ng.mean(x, out_axes=()) + x2 * b + (1 - b))
-        y = x * 2
-        pf.append(y)
-    p = pf()
+    y = ng.sequential([
+        ng.assign(x1, ng.sum(x, out_axes=()) + x1 * b + (1 - b)),
+        ng.assign(x2, ng.mean(x, out_axes=()) + x2 * b + (1 - b)),
+        x * 2
+    ])
 
     with ExecutorFactory() as ex:
-        main_effect = ex.executor(p)
+        main_effect = ex.executor(y)
 
     # Run main path #1
     y_val = main_effect()

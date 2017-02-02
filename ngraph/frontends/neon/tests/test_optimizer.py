@@ -116,8 +116,6 @@ def test_gdm(args, transformer_factory):
 
             ng.testing.assert_allclose(w_ref, ng_W, rtol=1e-3)
 
-test_gdm((1.0, 2.0, .0005), None)
-
 
 def test_gdm_nesterov(args, transformer_factory):
     """

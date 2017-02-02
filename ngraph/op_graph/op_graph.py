@@ -447,12 +447,14 @@ class Op(NameableValue, DebugInfo):
         return self.device_op.other_deps + self.args
 
     def add_other_dep(self, dep):
+        dep = dep.forwarded
         device_op = self.device_op
         if device_op is self:
-            self.other_deps.add(dep)
+            if dep is not self and dep not in self.all_deps:
+                self.other_deps.add(dep)
         else:
             # Add the dep to the op that actually does the work.
-            device_op.add_other_dep(dep.forwarded)
+            device_op.add_other_dep(dep)
 
     def add_initializer(self, init):
         self.initializers.add(init)
@@ -467,10 +469,12 @@ class Op(NameableValue, DebugInfo):
         self.other_deps = OrderedSet()
         for op in other_deps:
             self.add_other_dep(op)
-        self.initializers = [op.forwarded for op in self.initializers]
+        self.initializers = OrderedSet(op.forwarded for op in self.initializers)
 
     def replace_self(self, rep):
         self.forward = rep
+        for dep in self.other_deps:
+            rep.add_other_dep(dep)
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -895,14 +899,14 @@ class TensorOp(Op):
         **kwargs: Arguments for related classes.
     """
 
-    def __init__(self, dtype=None, axes=None, scale=None, **kwargs):
+    def __init__(self, dtype=None, axes=None, scale=None, is_value_op=None, **kwargs):
         super(TensorOp, self).__init__(**kwargs)
-        self.dtype = default_dtype(dtype)
-        if axes is not None:
-            axes = make_axes(axes)
-        self.__axes = axes
-
-        self.scale = scale
+        if not is_value_op:
+            self.dtype = default_dtype(dtype)
+            if axes is not None:
+                axes = make_axes(axes)
+            self.__axes = axes
+            self.scale = scale
 
     @property
     def is_tensor_op(self):
@@ -1140,16 +1144,36 @@ class SequentialOp(TensorOp, ControlBlockOp):
     Arguments:
         ops: Sequence of ops to compute.
     """
-    def __init__(self, ops, **kwargs):
-        super(SequentialOp, self).__init__(**kwargs)
-        self.value_op = ops[-1]
-        ops = OrderedSet((op.device_op for op in ops))
-        for op0, op1 in zip(ops[:-1], ops[1:]):
-            op1.add_other_dep(op0)
-        for op in ops:
-            self.add_other_dep(op)
+    def __init__(self, ops=None, defer=False, dtype=None, **kwargs):
+        super(SequentialOp, self).__init__(args=(), is_value_op=True, **kwargs)
+        if ops is None:
+            ops = []
+        self.ops = ops
+        self.value_op = None
 
-    @tdcache()
+        if not defer:
+            self.finish()
+
+    def finish(self):
+        self.ops = tuple(as_op(_) for _ in self.ops)
+        last_executed_op = None
+        done_ops = set()
+        for op_top in self.ops:
+            self.value_op = op_top
+            ordered_ops = Op.ordered_ops([op_top])
+            last_executed_top_op = last_executed_op
+            for op in ordered_ops:
+                dev_op = op.device_op
+                if isinstance(dev_op, AssignableTensorOp):
+                    continue
+                if dev_op not in done_ops:
+                    if last_executed_op is not None:
+                        dev_op.add_other_dep(last_executed_op)
+                    last_executed_top_op = dev_op
+                    self.add_other_dep(dev_op)
+                    done_ops.add(dev_op)
+            last_executed_op = last_executed_top_op
+
     def tensor_description(self):
         return self.value_op.tensor_description()
 
@@ -1164,6 +1188,14 @@ class SequentialOp(TensorOp, ControlBlockOp):
     @property
     def axes(self):
         return self.value_op.axes
+
+    @property
+    def dtype(self):
+        return self.value_op.dtype
+
+    @property
+    def scale(self):
+        return self.value_op.scale
 
     def generate_adjoints(self, adjoints, delta):
         self.value_op.generate_add_delta(adjoints, delta)
@@ -1184,11 +1216,6 @@ def sequential(ops):
 
     """
     return SequentialOp(ops)
-
-
-class SequentialFactory(list):
-    def __call__(self):
-        return sequential(self)
 
 
 @contextmanager
@@ -1216,8 +1243,9 @@ def sequential_op_factory():
     and have value the same as the last op appended.
 
     """
-    with Op.all_ops(SequentialFactory()) as ops:
-        yield(ops)
+    with Op.all_ops(SequentialOp(defer=True)) as op:
+        yield (op)
+        op.finish()
 
 
 class ReshapeOp(TensorOp):
@@ -1982,7 +2010,7 @@ def variable(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-class StackOp(AssignableTensorOp):
+class StackSchema(object):
     """
     Joins a list of identically-axed tensors along a new axis.
 
@@ -2001,13 +2029,14 @@ class StackOp(AssignableTensorOp):
 
     def __init__(self, x_list, axis, pos=0, **kwargs):
         self.pos = pos
-        x_axes = x_list[0].axes
+        self.args = tuple(as_op(_) for _ in x_list)
+        x_axes = self.args[0].axes
         axes_0 = x_axes[:pos]
         axes_1 = x_axes[pos:]
         arg_axes = axes_0 + axes_1
 
         axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
-        super(StackOp, self).__init__(args=tuple(x_list), axes=axes)
+        self.temp = temporary(axes=axes)
 
         # In order to avoid setting copies of our storage, we need a flattened
         # version of our storage so we can treat the slices as 2d tensors without
@@ -2023,14 +2052,14 @@ class StackOp(AssignableTensorOp):
         if len(axes_1) > 0:
             flat_axes.append(FlattenedAxis(axes_1))
             flat_slices.append(slice(None))
-        flat_self = flatten(self, flat_axes)
+        flat_self = flatten(self.temp, flat_axes)
 
         if len(axes_0) == 0 or len(axes_1) == 0:
             assign_op = AssignOneDOp
         else:
             assign_op = AssignTwoDOp
 
-        deps = OrderedSet()
+        deps = []
         for i, arg in enumerate(self.args):
             slices = list(flat_slices)
             slices[flat_pos] = i
@@ -2040,12 +2069,14 @@ class StackOp(AssignableTensorOp):
             # Arg is now 1d or 2d, depending on pos
             flattened_arg = flatten_at(ordered_arg, pos)
             # All users of this need to do the assigns
-            deps.add(assign_op(slice_op, flattened_arg))
+            deps.append(assign_op(slice_op, flattened_arg))
+        self.op = sequential([doall(deps), self.temp])
+        self.op.add_schema(self)
 
-    def generate_adjoints(self, adjoints, delta, *x_list):
-        s = [slice(None)] * len(self.axes)
+    def generate_adjoints(self, adjoints, delta, op):
+        s = [slice(None)] * len(self.temp.axes)
         arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
-        for i, x in enumerate(x_list):
+        for i, x in enumerate(self.args):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
@@ -2066,7 +2097,7 @@ def stack(x_list, axis, pos=0):
         TensorOp: The joined tensors.
 
     """
-    return StackOp(x_list, axis, pos)
+    return StackSchema(x_list, axis, pos).op
 
 
 class UnsliceSchema(object):

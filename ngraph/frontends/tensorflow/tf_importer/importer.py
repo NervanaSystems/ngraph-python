@@ -234,8 +234,7 @@ class TFImporter:
                 self.saver.restore(sess, checkpoint_path)
                 for tf_variable, ng_variable in zip(tf_variables, ng_variables):
                     val = sess.run(tf_variable)
-                    restore_op = ng.assign(ng_variable, val)
-                    ng_restore_ops.append(restore_op)
+                    ng_restore_ops.append(ng.assign(ng_variable, val))
             return ng.doall(ng_restore_ops)
 
     def _post_process_op(self, op):

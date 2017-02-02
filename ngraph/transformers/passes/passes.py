@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
-    negative, cast_axes, power, DerivOp, ComputationOp
+    negative, cast_axes, power, DerivOp
 
 from ngraph.util.generics import generic_method
 from ngraph.util.ordered import OrderedSet
