@@ -120,6 +120,8 @@ def ng_retrain_mnist(args):
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
+    transformer.cleanup()
+
     return ng_cost_vals
 
 
