@@ -61,7 +61,7 @@ class AsyncTransformer(Process):
     def computation(self, returns, placeholders):
         #
         # don't actually create a computation, that has to be done inside process
-        # 
+        #
         # instead, return a lightweight computation wrapper that can be used later.
         class AsyncComputation(object):
             def __init__(self, async_transformer):
@@ -103,13 +103,12 @@ class AsyncTransformer(Process):
             if self.exit.is_set():
                 return
             time.sleep(SLEEP_S)
-        
 
         # build all the computations
         while not self.computation_q.empty():
             if self.exit.is_set():
                 return
-            # comp_wrapper objects useful for caller, but only map into 
+            # comp_wrapper objects useful for caller, but only map into
             # real computation objects stored here:
             comp_id = self.computation_q.get()
             returns, placeholders = self.computation_builds[comp_id]
@@ -121,17 +120,18 @@ class AsyncTransformer(Process):
             try:
                 # shared work q serializes work requests
                 comp_id, inputs = self.work_q.get(timeout=SLEEP_S)
-               
+
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
-                
+
                 # individual results q makes it easy for caller to find results
                 self.results_qs[comp_id].put(outputs)
 
             except Exception:
                 pass
- 
+
+
 # TODO
 # revisit making HetrComputation a Computation;
 # update it to not take results, *parameters, but instead a computation_op
@@ -141,8 +141,7 @@ class HetrComputation(object):
     """
 
     def __init__(self, hetr, results, *parameters, **kwargs):
-        # Exit immediately with empty computation
-        #super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
+        # super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
         self.child_computations = dict()
         self.child_results_map = dict()
         self.transformer = hetr
@@ -153,13 +152,14 @@ class HetrComputation(object):
 
         orig_results = results
         if not isinstance(results, list):
-            results = [results] 
+            results = [results]
         all_results = OrderedSet(results)
         all_results.update(parameters)
         # all res empty; hetr as no computations. where do these get assigned?
         # previously, we used t.all_results, which went away.  when was that created?
         #   - computation object used to update all_results of transformer
-        #   - transformer transform_ops used to use all_results but not update it, and return a new copy
+        #   - transformer transform_ops used to use all_results but not update it,
+        #     and return a new copy
 
         if orig_results is not None:
             # Do Hetr passes
@@ -188,7 +188,7 @@ class HetrComputation(object):
 
         ###
         # TODO WIP was trying to make the loops below more concise
-        #[(i, p) for (i, p) in enumerate(parameters) if p.metadata['transformer'] == tname]
+        # [(i, p) for (i, p) in enumerate(parameters) if p.metadata['transformer'] == tname]
         ###
         self.placeholders = {t: list() for t in self.transformer_name_list}
         self.placeholders_pos = {t: list() for t in self.transformer_name_list}
@@ -205,7 +205,7 @@ class HetrComputation(object):
             async_comp = async_trans.computation(self.transformer_to_node[tname],
                                                  tuple(self.placeholders[tname]))
             self.child_computations[tname] = async_comp
-            
+
     def __call__(self, *params):
         """
         Executes child computations in parallel.
@@ -215,11 +215,10 @@ class HetrComputation(object):
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
         return_list = [None for i in range(self.num_results)]
-        child_result_q = dict()
 
         # Map params to each child transformer
         # Run each child in a separate process in process_helper
-        # Collect child results from multiprocess queue mapped by out_dict 
+        # Collect child results from multiprocess queue mapped by out_dict
         for tname in self.transformer_name_list:
             targs = [params[i] for i in self.placeholders_pos[tname]]
             self.child_computations[tname].feed_input(targs)
@@ -301,7 +300,6 @@ class HetrTransformer(Transformer):
 
         return hc
 
-
     def initialize(self):
         print("Dummy Initialize, skipping")
         pass
@@ -310,7 +308,7 @@ class HetrTransformer(Transformer):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
             print("Ignoring vizpass")
-            #self.vizpass = graph_pass
+            # self.vizpass = graph_pass
         else:
             print("Ignoring unsupported graph pass in hetr", graph_pass)
             pass
@@ -336,6 +334,6 @@ class HetrTransformer(Transformer):
 
     def allocate_storage(self):
         assert False, "Should not be used, TODO cleanup"
-        
-#set_transformer_factory(
+
+# set_transformer_factory(
 #    make_transformer_factory(HetrTransformer.transformer_name))

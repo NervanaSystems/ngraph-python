@@ -50,6 +50,7 @@ class CommunicationPass(PeepholeGraphPass):
         ops.update(self.send_nodes)
         return ops, inits
 
+
 class ChildTransformerPass(PeepholeGraphPass):
 
     def __init__(self, transformer_list):

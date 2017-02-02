@@ -800,6 +800,7 @@ class NumPyTransformer(Transformer):
     def finish_transform(self):
         if self.model is not None:
             return
+
         self.code.append(" class Model(object):")
         with indenting(self.code):
             if len(self.device_buffers) == 0:
@@ -823,7 +824,6 @@ class NumPyTransformer(Transformer):
             # print(self.code.filename)
 
         r = self.code.compile("op", globals())
-
         self.model = r['Model']
 
         def send(self, send_id):

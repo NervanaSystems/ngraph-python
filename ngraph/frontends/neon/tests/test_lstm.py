@@ -33,6 +33,7 @@ The following are made sure to be the same in both LSTMs
 import itertools as itt
 import numpy as np
 from lstm_ref import LSTM as RefLSTM
+import pytest
 
 import ngraph as ng
 
@@ -58,6 +59,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('reflstmargs', fargs)
 
 
+@pytest.mark.skip(reason="Need value_op to correctly check side-effects")
 def test_ref_compare_rand(transformer_factory, reflstmargs):
         # run comparison with reference code
         # for Gaussian random init
@@ -66,6 +68,7 @@ def test_ref_compare_rand(transformer_factory, reflstmargs):
                    GaussianInit(0.0, 0.1))
 
 
+@pytest.mark.skip(reason="Need value_op to correctly check side-effects")
 def test_ref_stacked(transformer_factory, reflstmargs):
         seq_len, input_size, hidden_size, batch_size = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
