@@ -26,7 +26,7 @@ COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;
 
 .PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test shell test_shell test_mkldnn_shell
 
-DOCKER_BUILD=docker build
+DOCKER_BUILD=docker build --rm=true
 
 ifdef http_proxy
 DOCKER_BUILD+=--build-arg http_proxy=$(http_proxy)
@@ -43,6 +43,7 @@ expand_dockerfile_templates:
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.base_cpu > ${BUILD_DIR}/Dockerfile.base_cpu
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test_cpu > ${BUILD_DIR}/Dockerfile.test_cpu
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
 
@@ -62,9 +63,15 @@ clean:
 
 build_base: expand_dockerfile_templates fallback_cuda_version
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_base:${BUILD_VERSION}` ngraph_base:latest
+
+build_base_cpu: expand_dockerfile_templates
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base_cpu --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_cpu:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_base_cpu:${BUILD_VERSION}` ngraph_base_cpu:latest
 
 build_dev: build_base
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
 
 build_test: build_base
 	# hack to clone autoflex here in this working directory so it can be
@@ -78,8 +85,9 @@ build_test: build_base
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
 
-build_test_cpu: build_base
+build_test_cpu: build_base_cpu
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -91,12 +99,17 @@ build_test_cpu: build_base
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_test_cpu:${BUILD_VERSION}` ngraph_test_cpu:latest
 
 build_mkldnn_test: build_test_cpu
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
 
 build_doc: build_base
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
+
+build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test

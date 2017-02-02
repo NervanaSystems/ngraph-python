@@ -30,4 +30,4 @@ RUN ls -l *.so || echo keep going if no library is present
 RUN ldd mkldnn_engine.so || echo keep going if no library is present
 RUN cp mkldnn_engine.so /usr/local/lib || keep going if no library is present
 
-ENV PYTHONPATH=.:/root/ngraph-test/$PYTHONPATH
+ENV PYTHONPATH=.:/root/ngraph-test/:$PYTHONPATH
