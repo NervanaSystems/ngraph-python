@@ -23,10 +23,17 @@ RUN pip install --upgrade pip && pip install \
     numpy \
     protobuf
 
-# Clone and build Caffe2
-RUN git clone https://github.com/caffe2/caffe2.git /opt/caffe2
+# Supported revision of Caffe2
+ENV CAFFE2_CLONE_TAG=master
+ENV CAFFE2_REV=51eab3c6554fe99648fa46f43ed854223714472a
+
+# Clone Caffe2
+RUN git clone -b ${CAFFE2_CLONE_TAG} https://github.com/caffe2/caffe2.git /opt/caffe2
 
 WORKDIR /opt/caffe2/
+
+# Checkout supported revision
+RUN git reset --hard ${CAFFE2_REV}
 
 # Clone only required submodules
 RUN git submodule init && \
@@ -35,10 +42,12 @@ RUN git submodule init && \
     git submodule update third_party/pybind11 && \
     git submodule update third_party/eigen
 
+# Build Caffe2
 RUN mkdir build && cd build && \
     cmake .. -DUSE_ROCKSDB=OFF -DUSE_MPI=OFF -DUSE_OPENMP=OFF -DUSE_CUDA=OFF \
              -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
     make -j && make install
 
-ENV PYTHONPATH=/opt/caffe2/build/
+# Set path to the Python modules required by Caffe2 Frontend
+ENV PYTHONPATH=/opt/caffe2/build/:$PYTHONPATH
 WORKDIR /root/private-ngraph
