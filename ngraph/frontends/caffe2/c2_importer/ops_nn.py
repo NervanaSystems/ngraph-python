@@ -292,7 +292,8 @@ class OpsNN(OpsBase):
 
         # conv params
         params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
-                      str_d=1, str_h=str_h, str_w=str_w)
+                      str_d=1, str_h=str_h, str_w=str_w,
+                      dil_d=1, dil_h=1, dil_w=1)
 
         # input, weight, output axes
         internal_ax_dict = {

@@ -60,6 +60,7 @@ class ConvolutionOp(TensorOp):
 
         expected_keys = ['pad_h', 'pad_w', 'pad_d', 'str_h', 'str_w',
                          'str_d', 'dil_h', 'dil_w', 'dil_d']
+        # TODO: meybe we should assume no padding and no dilitation when these parameters are not given
         for k in expected_keys:
             if k not in conv_params:
                 raise ValueError((
