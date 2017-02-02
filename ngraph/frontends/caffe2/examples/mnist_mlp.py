@@ -54,9 +54,9 @@ def mnist_mlp(args):
     # main_net.FC(['activ2', 'fc_w3', 'fc_b1'], 'FC3', dim_in=fc_size[2], dim_out=fc_size[3])
     # main_net.Softmax('FC3', 'softmax')
 
-    ffc = main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
-    sm = main_net.Softmax('FC1', 'softmax')
-    cr = main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss')
+    main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
+    main_net.Softmax('FC1', 'softmax')
+    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss')
 
     # Ngraph part
     # import graph_def
@@ -94,7 +94,8 @@ def mnist_mlp(args):
         train_x, train_y = mnist.train.next_batch(args.batch)
         # TODO batch N, add some inner loop?
         loss_val, w_val, b_val, _ = update_fun(args.lrate, train_x, train_y)
-        print("N it: %s W: %s, B: %s loss %s " % (i, w_val, b_val, loss_val))
+        # print("N it: %s W: %s, B: %s loss %s " % (i, w_val, b_val, loss_val))
+        if true_iter[0] % 1000 == 0: print("iter %s, loss %s " % (true_iter[0], loss_val))
         true_iter[0] += 1
     pass
 
@@ -102,7 +103,7 @@ def mnist_mlp(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--data_dir', default='/tmp/data')
-    parser.add_argument('-i', '--max_iter', type=int, default=10)
+    parser.add_argument('-i', '--max_iter', type=int, default=50000)
     parser.add_argument('-l', '--lrate', type=float, default=0.1,
                         help="Learning rate")
     parser.add_argument('-b', '--batch', type=int, default=1)  # TODO

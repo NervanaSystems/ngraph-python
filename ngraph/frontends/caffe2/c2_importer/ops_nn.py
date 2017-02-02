@@ -46,11 +46,11 @@ class OpsNN(OpsBase):
         # cast axis
         left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
         # add op
-        add_op = ng.dot(left_casted, right)
+        dot_op = ng.dot(left_casted, right)
         # cast bias axis
-        bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
+        bias_casted = ng.cast_axes(bias, [dot_op.axes[-1]])
         # result op
-        result_op = ng.add(add_op, bias_casted, name=c2_op.name)
+        result_op = ng.add(dot_op, bias_casted, name=c2_op.name)
         return result_op
 
     def SquaredL2Distance(self, c2_op, inputs):

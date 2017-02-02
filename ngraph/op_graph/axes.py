@@ -1062,6 +1062,17 @@ class Axes(object):
             False otherwise.
         """
         axes = make_axes(axes)
+        if not axes and not self:
+            return True
+
+        if self:
+            if not axes and self.lengths.count(1) == len(self.lengths):
+                return True
+
+        if axes:
+            if not self and axes.lengths.count(1) == len(axes):
+                return True
+
         for x in self:
             if x not in axes:
                 return False

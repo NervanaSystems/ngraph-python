@@ -1066,7 +1066,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes == delta.axes:
+        if not self.axes.has_same_axes(delta.axes):
             raise ValueError(
                 'delta axes {} do not match adjoint axes {}'
                 .format(delta.axes, self.axes)
