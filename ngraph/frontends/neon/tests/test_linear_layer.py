@@ -20,7 +20,6 @@ import itertools as itt
 import numpy as np
 
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon import Linear, UniformInit
 from ngraph.testing.execution import executor
 
@@ -41,8 +40,8 @@ def test_linear_zeros(basic_linargs, transformer_factory):
     nin, nout, batch_size = basic_linargs
 
     # set inputs
-    N = ng.make_axis(batch_size, name="N", batch=True)
-    F = ng.make_axis(nin, name="F")
+    N = ng.make_axis(batch_size, batch=True).named('N')
+    F = ng.make_axis(nin).named('F')
 
     inp = ng.placeholder([F, N])
     layer = Linear(nout=nout, init=UniformInit(0.0, 0.0))
@@ -68,8 +67,8 @@ def test_linear_ones(basic_linargs, transformer_factory):
     nin, nout, batch_size = basic_linargs
 
     # set inputs
-    N = ng.make_axis(batch_size, name="N", batch=True)
-    F = ng.make_axis(nin, name="F")
+    N = ng.make_axis(batch_size, batch=True).named('N')
+    F = ng.make_axis(nin).named('F')
 
     inp = ng.placeholder([F, N])
     layer = Linear(nout=nout, init=UniformInit(1.0, 1.0))

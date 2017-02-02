@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,79 +13,70 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
+from __future__ import print_function
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, Preprocess, BiRNN, Recurrent, Affine,
+from ngraph.frontends.neon import (Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, ar, loop_train
-from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import SequentialArrayIterator
+from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
+from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import ArrayIterator
 import ngraph.transformers as ngt
 
-from ptb import PTB
+from imdb import IMDB
 
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
-parser.add_argument('--use_lut', action='store_true',
-                    help='choose to use lut as first layer')
 parser.set_defaults(gen_be=False)
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 50
-time_steps = 150
-hidden_size = 500
+args.batch_size = 128
+time_steps = 128
+hidden_size = 10
+gradient_clip_value = 15
+embed_size = 128
+vocab_size = 20000
+pad_idx = 0
 
-# download penn treebank
-tree_bank_data = PTB(path=args.data_dir)
-ptb_data = tree_bank_data.load_data()
-train_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_size,
-                                    time_steps=time_steps, total_iterations=args.num_iterations)
+# download IMDB
+imdb_dataset = IMDB(path=args.data_dir, sentence_length=time_steps, pad_idx=pad_idx)
+imdb_data = imdb_dataset.load_data()
 
-valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_size,
-                                    time_steps=time_steps)
+train_set = ArrayIterator(imdb_data['train'], batch_size=args.batch_size,
+                          total_iterations=args.num_iterations)
+valid_set = ArrayIterator(imdb_data['valid'], batch_size=args.batch_size)
 
 inputs = train_set.make_placeholders()
-ax.Y.length = len(tree_bank_data.vocab)
-
-
-def expand_onehot(x):
-    # Assign roles
-    x.axes.find_by_short_name('time')[0].add_role(ar.time)
-    x.axes.find_by_short_name('time')[0].is_recurrent = True
-    return ng.one_hot(x, axis=ax.Y)
+ax.Y.length = imdb_dataset.nclass
 
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=True, pad_idx=0)
-else:
-    layer_0 = Preprocess(functor=lambda x: ng.one_hot(x, axis=ax.Y))
-
 if args.layer_type == "rnn":
-    rlayer = Recurrent(hidden_size, init, activation=Tanh())
-elif args.layer_type == "birnn":
-    rlayer = BiRNN(hidden_size, init, activation=Tanh(), return_sequence=True, sum_out=True)
-
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=False)
+    rlayer = Recurrent(hidden_size, init, activation=Tanh(),
+                       reset_cells=True, return_sequence=False)
 else:
-    layer_0 = Preprocess(functor=expand_onehot)
+    rlayer = BiRNN(hidden_size, init, activation=Tanh(),
+                   reset_cells=True, return_sequence=False, sum_out=True)
 
 # model initialization
-seq1 = Sequential([layer_0,
+seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_idx=pad_idx),
                    rlayer,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
-optimizer = RMSProp()
-output_prob = seq1.train_outputs(inputs['inp_txt'])
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
+optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
+                    gradient_clip_value=gradient_clip_value)
+
+output_prob = seq1.train_outputs(inputs['review'])
+loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y), usebits=True)
 mean_cost = ng.mean(loss, out_axes=[])
 updates = optimizer(loss)
+
 
 train_outputs = dict(batch_cost=mean_cost, updates=updates)
 loss_outputs = dict(cross_ent_loss=loss)

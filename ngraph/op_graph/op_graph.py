@@ -332,9 +332,6 @@ class Op(NameableValue, DebugInfo):
         self.__args = ()
         self.metadata = dict()
         self.args = args
-        # TODO: is this ok?  __repr__ wants a .name
-        if self.name is None:
-            self.name = 'empty_name'
 
         if metadata is not None:
             if not isinstance(metadata, dict):
@@ -408,6 +405,9 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def scalar_op(self):
+        """
+        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        """
         if not self.is_scalar:
             raise ValueError()
         return self
@@ -1182,7 +1182,7 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype, name=self.name)
+        return TensorDescription(self.axes, dtype=self.dtype).named(self.name)
 
     @property
     def axes(self):
@@ -1347,7 +1347,7 @@ class Transpose(ReshapeOp):
 
     @tdcache()
     def tensor_description(self):
-        return self.args[0].tensor_description().transpose(self.name)
+        return self.args[0].tensor_description().transpose().named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Transpose(delta))
@@ -1378,7 +1378,7 @@ class AxesCastOp(ReshapeOp):
 
     @tdcache()
     def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes, self.name)
+        return self.args[0].tensor_description().cast(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
@@ -1481,7 +1481,7 @@ class BroadcastOp(ReshapeOp):
           TODO
         """
         td, = tensor_descriptions(self.args)
-        return td.broadcast(self.axes, self.name)
+        return td.broadcast(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sum(
@@ -1593,7 +1593,7 @@ class ReorderAxes(ReshapeOp):
           TODO
         """
         td, = tensor_descriptions(self.args)
-        return td.reorder(self.axes, self.name)
+        return td.reorder(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, axes_with_order(
@@ -1672,7 +1672,7 @@ class TensorSliceOp(ReshapeOp):
           TODO
         """
         x, = tensor_descriptions(self.args)
-        return x.slice(self.slices, self.axes, self.name)
+        return x.slice(self.slices, self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1719,7 +1719,7 @@ class Flatten(ReshapeOp):
     @tdcache()
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.flatten(self.axes, name=self.name)
+        return x.flatten(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, unflatten(
@@ -1767,7 +1767,7 @@ class Unflatten(ReshapeOp):
     @tdcache()
     def tensor_description(self):
         x, = tensor_descriptions(self.args)
-        return x.unflatten(self.axes, self.name)
+        return x.unflatten(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, flatten(
@@ -2176,59 +2176,6 @@ def _unslice(x, slices, axes):
     return op
 
 
-class RNG(object):
-    """TODO."""
-
-    def __init__(self, seed=None):
-        self.seed = seed
-        self.rng = np.random.RandomState(seed=seed)
-
-    def uniform(self, low=0.0, high=1.0, size=None):
-        """
-        TODO.
-
-        Arguments:
-          low: TODO
-          high: TODO
-          size: TODO
-          **kwargs: TODO
-
-        Returns:
-          TODO
-        """
-
-        def value_fun(tensor_description):
-            return self.rng.uniform(low, high, tensor_description.sizes).astype(
-                tensor_description.dtype)
-
-        val = constant_storage(axes=size)
-        val.add_initializer(init_tensor(val, value_fun))
-        return val
-
-    def normal(self, loc, scale, size):
-        """
-        TODO.
-
-        Arguments:
-          loc: TODO
-          scale: TODO
-          size: TODO
-          **kwargs: TODO
-
-        Returns:
-          TODO
-        """
-
-        def value_fun(tensor_description):
-            return self.rng.normal(
-                loc, scale, tensor_description.sizes).astype(
-                tensor_description.dtype)
-
-        val = constant_storage(axes=size)
-        val.add_initializer(init_tensor(val, value_fun))
-        return val
-
-
 class RngOp(TensorOp):
 
     def __init__(self, distribution, params, x, *args, **kwargs):
@@ -2327,6 +2274,42 @@ class UnaryElementwiseOneDOp(ElementWise):
 
     def __init__(self, x):
         super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
+
+
+class StopGradientOneDOp(UnaryElementwiseOneDOp):
+    """
+    1d stop gradient.
+    """
+    pass
+
+
+class StopGradient(UnaryElementwiseAxesOp):
+    """ TODO """
+    one_d_class = StopGradientOneDOp
+
+    @tdcache()
+    def tensor_description(self):
+        return self.value_op.tensor_description()
+
+    @property
+    def is_tensor_op(self):
+        return False
+
+    @property
+    def value(self):
+        return self.value_op.value
+
+    @property
+    def axes(self):
+        return self.value_op.axes
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, 0.)
+
+
+def stop_gradient(x):
+    """ TODO """
+    return StopGradient(x)
 
 
 class NegativeOneDOp(UnaryElementwiseOneDOp):
@@ -2780,7 +2763,7 @@ Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
 )
 
 
-def add(x, y, name=None):
+def add(x, y):
     """
     Returns a TensorOp for the sum of x and y.
 
@@ -2998,7 +2981,7 @@ def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
     return cast_axes(x, (dualed(axis) for axis in x.axes))
 
 
-def dot(x, y, name=None):
+def dot(x, y):
     """
     The dot product of x and y.
 
@@ -3013,7 +2996,7 @@ def dot(x, y, name=None):
         TensorOp: The dot product.
 
     """
-    return DotOp(x, y, name=name)
+    return DotOp(x, y)
 
 
 def squared_L2(x, out_axes=None, reduction_axes=None):

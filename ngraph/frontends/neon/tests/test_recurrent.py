@@ -124,30 +124,27 @@ def check_birnn(seq_len, input_size, hidden_size, batch_size,
         input_value = rng.uniform(-1, 1, inp_ng.axes)
         init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
 
-        if sum_out is True:
-            fprop_neon_fun = ex.executor([out_ng,
-                                      birnn_ng.fwd_rnn.W_input,
-                                      birnn_ng.fwd_rnn.W_recur,
-                                      birnn_ng.fwd_rnn.b,
-                                      birnn_ng.bwd_rnn.W_input,
-                                      birnn_ng.bwd_rnn.W_recur,
-                                      birnn_ng.bwd_rnn.b],
-                                      inp_ng, init_state_ng)
-            fprop_neon, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-                fprop_neon_fun(input_value, init_state_value)
+        return_list = [birnn_ng.fwd_rnn.W_input,
+                       birnn_ng.fwd_rnn.W_recur,
+                       birnn_ng.fwd_rnn.b,
+                       birnn_ng.bwd_rnn.W_input,
+                       birnn_ng.bwd_rnn.W_recur,
+                       birnn_ng.bwd_rnn.b]
+
+        if sum_out:
+            return_list.append(out_ng)
+        else:
+            return_list.extend(out_ng)
+
+        fprop_neon_fun = ex.executor(return_list, inp_ng, init_state_ng)
+        all_outputs = fprop_neon_fun(input_value, init_state_value)
+        fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = all_outputs[:6]
+
+        if sum_out:
+            fprop_neon = all_outputs[-1]
             fprop_neon = fprop_neon.copy()
         else:
-            fprop_neon_fun = ex.executor(out_ng+
-                                      [birnn_ng.fwd_rnn.W_input,
-                                      birnn_ng.fwd_rnn.W_recur,
-                                      birnn_ng.fwd_rnn.b,
-                                      birnn_ng.bwd_rnn.W_input,
-                                      birnn_ng.bwd_rnn.W_recur,
-                                      birnn_ng.bwd_rnn.b],
-                                      inp_ng, init_state_ng)
-            fprop_neon, fprop_neon_1, fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = \
-                fprop_neon_fun(input_value, init_state_value)
-            
+            fprop_neon, fprop_neon_1 = all_outputs[-2:]
             fprop_neon_fwd = fprop_neon.copy()
             fprop_neon_bwd = fprop_neon_1.copy()
 
@@ -227,27 +224,31 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
         rnn_b = rnn_ng.b
         rnn_b.input = True
 
-        fprop_neon_fun = ex.executor([out_ng, rnn_ng.W_input, rnn_ng.W_recur, rnn_ng.b], inp_ng, init_state_ng)
+        fprop_neon_fun = ex.executor([out_ng,
+                                      rnn_ng.W_input, rnn_ng.W_recur, rnn_ng.b],
+                                     inp_ng, init_state_ng)
 
-        dWrecur_s_fun = ex.derivative(out_ng, rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
-        dWrecur_n_fun = ex.numeric_derivative(out_ng, rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
-        dWinput_s_fun = ex.derivative(out_ng, rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
-        dWinput_n_fun = ex.numeric_derivative(out_ng, rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
-        dWb_s_fun = ex.derivative(out_ng, rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
-        dWb_n_fun = ex.numeric_derivative(out_ng, rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
+        dWrecur_s_fun = ex.derivative(out_ng,
+                                      rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
+        dWrecur_n_fun = ex.numeric_derivative(out_ng,
+                                              rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
+        dWinput_s_fun = ex.derivative(out_ng,
+                                      rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
+        dWinput_n_fun = ex.numeric_derivative(out_ng,
+                                              rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
+        dWb_s_fun = ex.derivative(out_ng,
+                                  rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
+        dWb_n_fun = ex.numeric_derivative(out_ng,
+                                          rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
 
         # fprop on random inputs
         input_value = rng.uniform(-1, 1, inp_ng.axes)
         init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
-        fprop_neon, Wxh_neon, Whh_neon, bh_neon  = fprop_neon_fun(input_value, init_state_value)
+        fprop_neon, Wxh_neon, Whh_neon, bh_neon = fprop_neon_fun(input_value, init_state_value)
         fprop_neon = fprop_neon.copy()
 
         # after the rnn graph has been executed, can get the W values. Get copies so
         # shared values don't confuse derivatives
-        #Wxh_neon = rnn_ng.W_input.value.get(None).copy()
-        #Whh_neon = rnn_ng.W_recur.value.get(None).copy()
-        #bh_neon = rnn_ng.b.value.get(None).copy()
-
         # bprop derivs
         dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
         dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)

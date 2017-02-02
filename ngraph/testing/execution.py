@@ -102,6 +102,7 @@ class ExecutorFactory(object):
 
             return helper
 
+
 @contextmanager
 def executor(results, *parameters):
     """

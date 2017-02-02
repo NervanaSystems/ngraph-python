@@ -24,7 +24,7 @@ def test_print_op_bprop():
     Ensure bprop of PrintOp is correct (passes through exactly the delta)
     """
 
-    A = ng.make_axis(10, name='A')
+    A = ng.make_axis(10).named('A')
 
     x = ng.placeholder(ng.make_axes([A]))
 
@@ -44,7 +44,7 @@ def test_print_op_fprop(capfd):
     stdout.
     """
 
-    A = ng.make_axis(1, name='A')
+    A = ng.make_axis(1).named('A')
 
     x = ng.placeholder(ng.make_axes([A]))
 

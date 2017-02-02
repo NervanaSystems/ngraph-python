@@ -20,7 +20,7 @@ from ngraph.testing import ExecutorFactory
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
     with ExecutorFactory() as ex:
-        N = ng.make_axis("N")
+        N = ng.make_axis().named('N')
         N.length = outputs.shape[0]
         y = ng.placeholder([N])
         t = ng.placeholder([N])

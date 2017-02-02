@@ -25,9 +25,9 @@ rtol = atol = 1e-2
 
 def test_expand_dims(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    N = ng.make_axis().named('N')
 
     max_new_axis_length = 4
 
@@ -94,8 +94,8 @@ def test_expand_dims(transformer_factory):
 def test_slice(transformer_factory):
     """TODO."""
 
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
 
     tests = [
         {
@@ -149,21 +149,21 @@ def test_slice(transformer_factory):
     ]
 
     for test in tests:
-        for axis, length in test['axes_lengths'].items():
-            axis.length = length
-        tensor_axes = test['tensor_axes']
-
-        tensor_np = np.array(
-            test['tensor'], dtype='float32'
-        )
-        tensor = ng.placeholder(tensor_axes)
-        expected = np.array(test['expected'], dtype='float32')
-
-        s = test['slice']
-        s_axes = test['sliced_axes']
-
-        sliced = ng.tensor_slice(tensor, s, s_axes)
         with ExecutorFactory() as ex:
+            for axis, length in test['axes_lengths'].items():
+                axis.length = length
+            tensor_axes = test['tensor_axes']
+
+            tensor_np = np.array(
+                test['tensor'], dtype='float32'
+            )
+            tensor = ng.placeholder(tensor_axes)
+            expected = np.array(test['expected'], dtype='float32')
+
+            s = test['slice']
+            s_axes = test['sliced_axes']
+
+            sliced = ng.tensor_slice(tensor, s, s_axes)
             sliced_val_fun = ex.executor(sliced, tensor)
 
             num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
@@ -183,10 +183,10 @@ def test_slice(transformer_factory):
 
 def test_padding(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    M = ng.make_axis(name='M')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    M = ng.make_axis().named('M')
+    N = ng.make_axis().named('N')
 
     tests = [
         {
@@ -206,17 +206,17 @@ def test_padding(transformer_factory):
     ]
 
     for test in tests:
-        for axis, length in test['axes_lengths'].items():
-            axis.length = length
-        tensor_axes = test['tensor_axes']
-        tensor_np = np.array(
-            test['tensor'], dtype='float32'
-        )
-        tensor = ng.placeholder(tensor_axes)
-        padding = test['padding']
-        padded_axes = test['padded_axes']
-        padded = ng.pad(tensor, padding, padded_axes)
         with ExecutorFactory() as ex:
+            for axis, length in test['axes_lengths'].items():
+                axis.length = length
+            tensor_axes = test['tensor_axes']
+            tensor_np = np.array(
+                test['tensor'], dtype='float32'
+            )
+            tensor = ng.placeholder(tensor_axes)
+            padding = test['padding']
+            padded_axes = test['padded_axes']
+            padded = ng.pad(tensor, padding, padded_axes)
             computed_val_fun = ex.executor(padded, tensor)
 
             # Test backpropagation
@@ -249,9 +249,8 @@ def test_padding(transformer_factory):
 
 
 def test_cast_axes(transformer_factory):
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
 
     C.length = 2
     D.length = 3
@@ -289,7 +288,7 @@ def test_cast_axes(transformer_factory):
 def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
-    ax = ng.make_name_scope("ax")
+    ax = ng.make_name_scope().named("ax")
     ax.C = ng.make_axis(3)
     ax.T = ng.make_axis(1)
     ax.R = ng.make_axis(5)
@@ -303,7 +302,7 @@ def test_shuffled_deriv():
     cost = ng.sum(ctrs, out_axes=None)
     grad = ng.deriv(cost, v)
 
-    with  ExecutorFactory() as ex:
+    with ExecutorFactory() as ex:
         d_fun = ex.executor(grad)
         d_fun()
 

@@ -44,6 +44,7 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
@@ -153,6 +154,7 @@ class NumPyConvEngine(object):
                 else:
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
+
         """
         return pycode
 
@@ -242,6 +244,30 @@ class NumPyPoolEngine(object):
                     firstI = x
                 lastI = x
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
+
+
+class NumPyCodeEngine(object):
+
+    @staticmethod
+    def lut_code():
+        pycode = """
+        def fprop_lut(self, lut, idx, axis, output):
+            output[:] = lut.take(idx.astype(int), axis)
+
+        def update_lut(self, error, idx, pad_idx, axis, dW):
+            dW[:] = 0
+            idx = idx.astype(int)
+            unqidx, inv = np.unique(idx, return_inverse=True)
+            groups = [np.where(inv == i) for i in range(len(unqidx))]
+            for (wrd_id, group) in zip(unqidx, groups):
+                if wrd_id != pad_idx:
+                    if axis == 0:
+                        dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
+                    else:
+                        dW[:, wrd_id] = np.sum(error.take(group[0], axis=axis), axis=axis)
+
+        """
+        return pycode
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
@@ -447,6 +473,17 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta):
         self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
                     op.index, delta, outputs)
+
+    @generate_op.on_type(LookupTableOp)
+    def generate_op(self, op, outputs, lut, idx):
+        self.append("self.fprop_lut(lut={}, idx={}, axis={}, output={})",
+                    lut, idx, op.lut_axis, outputs)
+
+    @generate_op.on_type(update_lut)
+    def generatea_op(self, op, outputs, delta, idx):
+        if op.update:
+            self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
+                        delta, idx, op.pad_idx, op.lut_axis, outputs)
 
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):
@@ -771,6 +808,7 @@ class NumPyTransformer(Transformer):
             self.code.endl()
 
             self.code.append(NumPyConvEngine.all_conv_code())
+            self.code.append(NumPyCodeEngine.lut_code())
             self.code.endl()
 
             self.code.append(self.allocate_storage_code.code)

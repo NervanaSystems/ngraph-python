@@ -59,8 +59,8 @@ def test_wrong_number_of_batch_axes_at_input():
     """
     C = 3
     D = 1
-    ax_C = ng.make_axis(length=C, name='C', batch=True)
-    ax_D = ng.make_axis(length=D, name='D', batch=True)
+    ax_C = ng.make_axis(length=C, batch=True).named('C')
+    ax_D = ng.make_axis(length=D, batch=True).named('D')
     pool_params = dict(op='max')
 
     ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
@@ -120,10 +120,10 @@ def test_pooling():
     inputs = ng.placeholder(axes=ax_i)
 
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 

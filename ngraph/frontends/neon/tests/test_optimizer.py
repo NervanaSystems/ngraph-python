@@ -67,8 +67,8 @@ def test_gdm(args, transformer_factory):
     Test the ngraph GradientDescentMomentum against the neon version across 10 update steps.
     """
     # set up parameters
-    C = ng.make_axis(20, name="C")
-    N = ng.make_axis(32, name="N", batch=True)
+    C = ng.make_axis(20).named('C')
+    N = ng.make_axis(32, batch=True).named('N')
 
     # generate dummy data (to initialize values)
     w_init = np.random.rand(C.length).astype('float32')
@@ -132,8 +132,8 @@ def test_gdm_nesterov(args, transformer_factory):
         gdm = GradientDescentMomentum(learning_rate=lrate, momentum_coef=mom,
                                       wdecay=wdecay, nesterov=True)
 
-        C = ng.make_axis(20, name="C")
-        N = ng.make_axis(32, name="N", batch=True)
+        C = ng.make_axis(20).named('C')
+        N = ng.make_axis(32, batch=True).named('N')
 
         # params to be updated using GDM
         np_W = np.random.rand(C.length)
