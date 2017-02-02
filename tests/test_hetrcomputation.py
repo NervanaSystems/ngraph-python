@@ -56,6 +56,8 @@ def check_result_values(input_vector, result_expected, placeholder, op_list=[], 
         assert (np.array(tuple(result_obtained)) ==
                 np.array(result_expected[0])).all()
 
+    transformer.cleanup()
+
 
 def check_device_assign_pass(default_device, default_device_id,
                              graph_op_metadata, graph_op=[], *args):
@@ -77,7 +79,7 @@ def check_device_assign_pass(default_device, default_device_id,
     transformers = set()
     expected_transformers = set()
     obj = DeviceAssignPass(default_device, default_device_id, transformers)
-    obj.do_pass(graph_op)
+    obj.do_pass(graph_op, [])
 
     for op in graph_op_metadata.keys():
         assert op.metadata['device'] == graph_op_metadata[op][0]
@@ -105,7 +107,7 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
     """
     send_nodes = list()
     obj = CommunicationPass(send_nodes)
-    obj.do_pass(ops_to_transform)
+    obj.do_pass(ops_to_transform, [])
 
     op_list_instance_type = list()
     num_expected_sendnodes = len(expected_recv_nodes)
@@ -148,7 +150,7 @@ def test_hetr_graph_passes():
 
     # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
     obj = ChildTransformerPass([])
-    obj.do_pass(graph_op_list)
+    obj.do_pass(graph_op_list, [])
     assert set(transformer_list) == set(obj.transformer_list)
 
 
