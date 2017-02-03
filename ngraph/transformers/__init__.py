@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
+
 from ngraph.transformers.base import make_transformer, set_transformer_factory, \
     transformer_choices,  \
     allocate_transformer, make_transformer_factory, Transformer
@@ -38,5 +40,5 @@ except ImportError:
 try:
     import ngraph.transformers.hetrtransform  # noqa
 except ImportError as e:
-    print e
+    print (e)
     pass
