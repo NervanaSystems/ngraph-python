@@ -844,6 +844,14 @@ class ComputationOp(ParallelOp):
         for arg in args:
             self.add_other_dep(arg)
 
+    def update_forwards(self):
+        super(ComputationOp, self).update_forwards()
+        if isinstance(self.returns, collections.Container):
+            self.returns = type(self.returns)(_.forwarded for _ in self.returns)
+        elif isinstance(self.returns, Op):
+            self.returns = self.returns.forwarded
+
+
 
 def computation(returns, *args):
     """
