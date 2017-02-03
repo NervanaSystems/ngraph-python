@@ -592,7 +592,7 @@ class Op(NameableValue, DebugInfo):
         for o in reversed(Op.ordered_ops([self])):
             if o in adjoints:
                 adjoint = adjoints[o]
-                if getattr(o, "scale", None) is not None:
+                if o.scale is not None:
                     adjoint = adjoint * o.scale
 
                 o.generate_adjoints(adjoints, adjoint, *o.args)
@@ -1210,6 +1210,10 @@ class SequentialOp(TensorOp, ControlBlockOp):
     @property
     def dtype(self):
         return self.value_op.dtype
+
+    @dtype.setter
+    def dtype(self, dtype):
+        self.value_op.dtype = dtype
 
     @property
     def scale(self):

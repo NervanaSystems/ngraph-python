@@ -91,43 +91,57 @@ def test_sequential_reduce():
 
 def test_sequential_side():
     N = ng.make_axis(3)
-    x = ng.variable([N], initial_value=[1, 2, 3])
-    x1 = ng.persistent_tensor(axes=(), initial_value=2)
-    x2 = ng.persistent_tensor(axes=(), initial_value=3)
-    x1_initial = ng.value_of(x1)
-    x2_initial = ng.value_of(x2)
-    b = ng.persistent_tensor(axes=(), initial_value=1)
+    x1_np = 2
+    x2_np = 3
+    b_np = 1
+    x_np = np.array([1, 2, 3], dtype=np.float32)
+
+    x = ng.variable([N], initial_value=x_np)
+    x1 = ng.persistent_tensor(axes=(), initial_value=x1_np)
+    x2 = ng.persistent_tensor(axes=(), initial_value=x2_np)
+    x1_vo = ng.value_of(x1)
+    x2_vo = ng.value_of(x2)
+    b = ng.persistent_tensor(axes=(), initial_value=b_np)
 
     y = ng.sequential([
+        x1_vo,
+        x2_vo,
         ng.assign(x1, ng.sum(x, out_axes=()) + x1 * b + (1 - b)),
         ng.assign(x2, ng.mean(x, out_axes=()) + x2 * b + (1 - b)),
         x * 2
     ])
 
     with ExecutorFactory() as ex:
-        main_effect = ex.executor(y)
-        initial_values = ex.executor((x1_initial, x2_initial))
+        main_effect = ex.executor((y, x1_vo, x2_vo, x1, x2))
+        current_values = ex.executor((x1, x2))
 
     # Run main path #1
-    y_val = main_effect()
-    x_np = np.array([1, 2, 3], dtype=np.float32)
+    y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
     y_np = x_np * 2
 
     assert np.allclose(y_val, y_np)
+    assert np.allclose(x1_init_val, x1_np)
+    assert np.allclose(x2_init_val, x2_np)
+    x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
+    x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
+    assert np.allclose(x1_final_val, x1_np)
+    assert np.allclose(x2_final_val, x2_np)
+
+    x1_val, x2_val = current_values()
+    assert np.allclose(x1_val, x1_np)
+    assert np.allclose(x2_val, x2_np)
 
     # Run main path #2 (Should be the same as before)
-    y_val = main_effect()
+    y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
+    y_np = x_np * 2
 
     assert np.allclose(y_val, y_np)
-
-    # Now check side effects
-    x1_val, x2_val = initial_values()
-
-    x1_np = x_np.sum() + (x_np.sum() + 2)
-    x2_np = x_np.mean() + (x_np.mean() + 3)
-
-    assert np.allclose(x2_val, x2_np)
-    assert np.allclose(x1_val, x1_np)
+    assert np.allclose(x1_init_val, x1_np)
+    assert np.allclose(x2_init_val, x2_np)
+    x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
+    x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
+    assert np.allclose(x1_final_val, x1_np)
+    assert np.allclose(x2_final_val, x2_np)
 
 
 def test_pad_invalid_paddings_length():
