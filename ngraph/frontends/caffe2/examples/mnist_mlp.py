@@ -32,7 +32,7 @@ def mnist_mlp(args):
 
     train_x, train_y = mnist.train.next_batch(args.batch)
     workspace.FeedBlob('train_x', train_x)  # TODO change
-    workspace.FeedBlob('train_y', train_y)
+    workspace.FeedBlob('train_y', train_y.astype('int32'))
 
     init_net = core.Net("init")
     main_net = core.Net("main")
@@ -52,28 +52,25 @@ def mnist_mlp(args):
     main_net.FC(['activ1', 'fc_w2', 'fc_b2'], 'FC2', dim_in=fc_size[1], dim_out=fc_size[2])
     main_net.Relu('FC2', 'activ2')
     main_net.FC(['activ2', 'fc_w3', 'fc_b3'], 'FC3', dim_in=fc_size[2], dim_out=fc_size[3])
-    sm = main_net.Softmax('FC3', 'softmax')
+    main_net.Softmax('FC3', 'softmax')
 
     # main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
     # main_net.Softmax('FC1', 'softmax')
 
-    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'xent')
-    main_net.AveragedLoss('xent', 'loss')
-
+    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss') # TODO should be xent
+    # main_net.AveragedLoss('xent', 'loss')
+    #
     # workspace.RunNetOnce(init_net)
-    # workspace.FeedBlob('train_x', train_x)
-    # workspace.FeedBlob('train_y', train_y)
     # workspace.CreateNet(main_net)
     # workspace.RunNet(main_net.Proto().name)
     # print("C2 softmax is: {}".format(workspace.FetchBlob("softmax")))
     # print("C2 train_y is: {}".format(workspace.FetchBlob("train_y")))
+    # print("C2 loss is: {}".format(workspace.FetchBlob("loss")))
     # print("C2 xent is: {}".format(workspace.FetchBlob("xent")))
-    # print("C2 loss is: {}".format(workspace.FetchBlob("loss")))
-
-    # print("C2 loss is: {}".format(workspace.FetchBlob("loss")))
 
     # Ngraph part
     if ng_on:
+        print(">>>>>>>>>>>>>> Ngraph")
         # import graph_def
         importer = C2Importer()
         importer.parse_net_def(net_def=main_net.Proto(),
@@ -116,6 +113,7 @@ def mnist_mlp(args):
                 true_iter[0] += 1
     # ======================================
     if c2_on:
+        print(">>>>>>>>>>>>>> Caffe")
         # caffe2 backward pass and computation to compare results with ngraph
         ONE = init_net.ConstantFill([], "ONE", shape=[1], value=1.)
         ITER = init_net.ConstantFill([], "ITER", shape=[1], value=0, dtype=core.DataType.INT32)
