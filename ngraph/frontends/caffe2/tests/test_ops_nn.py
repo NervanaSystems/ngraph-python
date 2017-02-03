@@ -45,11 +45,11 @@ def test_fc():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
 def test_SquaredL2Distance():
@@ -72,10 +72,10 @@ def test_SquaredL2Distance():
     f_ng = importer.get_op_handle("dist")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    assert(np.allclose(f_result, workspace.FetchBlob("dist"), equal_nan=False))
+        assert(np.allclose(f_result, workspace.FetchBlob("dist"), equal_nan=False))
 
 
 def test_AveragedLoss():
@@ -97,10 +97,10 @@ def test_AveragedLoss():
     f_ng = importer.get_op_handle("loss")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    assert(np.allclose(f_result, workspace.FetchBlob("loss"), equal_nan=False))
+        assert(np.allclose(f_result, workspace.FetchBlob("loss"), equal_nan=False))
 
 
 def test_LabelCrossEntropy():
@@ -128,10 +128,10 @@ def test_LabelCrossEntropy():
     f_ng = importer.get_op_handle("xent")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    assert(np.allclose(f_result, workspace.FetchBlob("xent"), equal_nan=False))
+        assert(np.allclose(f_result, workspace.FetchBlob("xent"), equal_nan=False))
 
 
 def test_maxpool():
@@ -164,11 +164,11 @@ def test_maxpool():
         f_ng = importer.get_op_handle("Y")
 
         # Execute
-        ex = ExecutorFactory()
-        f_result = ex.executor(f_ng)()
+        with ExecutorFactory() as ex:
+            f_result = ex.executor(f_ng)()
 
-        # compare Caffe2 and ngraph results
-        assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+            # compare Caffe2 and ngraph results
+            assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
 
 
 def test_avgpool():
@@ -200,12 +200,12 @@ def test_avgpool():
         f_ng = importer.get_op_handle("Y")
 
         # Execute
-        ex = ExecutorFactory()
-        f_result = ex.executor(f_ng)()
+        with ExecutorFactory() as ex:
+            f_result = ex.executor(f_ng)()
 
-        # compare Caffe2 and ngraph results
-        assert(np.allclose(f_result, workspace.FetchBlob("Y"),
-                           atol=1e-4, rtol=1e-3, equal_nan=False))
+            # compare Caffe2 and ngraph results
+            assert(np.allclose(f_result, workspace.FetchBlob("Y"),
+                               atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
 def test_convolution_nhwc_no_pad():
@@ -250,14 +250,14 @@ def test_convolution_nhwc_no_pad():
         f_ng = importer.get_op_handle("Y")
 
         # Execute
-        ex = ExecutorFactory()
-        f_result = ex.executor(f_ng)()
+        with ExecutorFactory() as ex:
+            f_result = ex.executor(f_ng)()
 
-        # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
-        # print("ngraph result: {}:\n{}".format("Y", f_result))
-        # compare Caffe2 and ngraph results
-        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-                           equal_nan=False))
+            # print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
+            # print("ngraph result: {}:\n{}".format("Y", f_result))
+            # compare Caffe2 and ngraph results
+            assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                               equal_nan=False))
 
 
 def test_convolution_nchw_no_pad():
@@ -299,12 +299,12 @@ def test_convolution_nchw_no_pad():
         f_ng = importer.get_op_handle("Y")
 
         # Execute
-        ex = ExecutorFactory()
-        f_result = ex.executor(f_ng)()
+        with ExecutorFactory() as ex:
+            f_result = ex.executor(f_ng)()
 
-        # compare Caffe2 and ngraph results
-        assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-                            equal_nan=False))
+            # compare Caffe2 and ngraph results
+            assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                                equal_nan=False))
 
 
 def test_convolution_nhwc_no_pad_no_bias():
@@ -340,12 +340,12 @@ def test_convolution_nhwc_no_pad_no_bias():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-                       equal_nan=False))
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                           equal_nan=False))
 
 
 def test_convolution_nchw_no_pad_no_bias():
@@ -381,9 +381,9 @@ def test_convolution_nchw_no_pad_no_bias():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
-                        equal_nan=False))
+        # compare Caffe2 and ngraph results
+        assert (np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                            equal_nan=False))
