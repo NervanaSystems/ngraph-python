@@ -1,4 +1,4 @@
-FROM ngraph_base
+FROM ngraph_base_cpu
 
 # install neon
 WORKDIR /root
