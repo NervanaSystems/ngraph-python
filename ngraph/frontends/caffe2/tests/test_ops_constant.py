@@ -18,7 +18,6 @@ from __future__ import division
 from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 from ngraph.testing import ExecutorFactory
-import ngraph.transformers as ngt
 import numpy as np
 import random as random
 

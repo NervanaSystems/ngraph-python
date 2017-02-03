@@ -49,7 +49,8 @@ def test_fc():
         f_result = ex.executor(f_ng)()
 
         # compare Caffe2 and ngraph results
-        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3, equal_nan=False))
+        assert(np.allclose(f_result, workspace.FetchBlob("Y"), atol=1e-4, rtol=1e-3,
+                           equal_nan=False))
 
 
 def test_SquaredL2Distance():
