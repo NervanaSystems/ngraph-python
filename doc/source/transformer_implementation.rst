@@ -51,7 +51,6 @@ Transformer passes are run in ``Transformer._transform_computations`` here:
         Transform computation graphs to a form that can be run.
         """
 
-        # with Op.saved_user_deps():
         # Run passes on the computation graphs
         self.run_registered_graph_passes(self.all_results)
 

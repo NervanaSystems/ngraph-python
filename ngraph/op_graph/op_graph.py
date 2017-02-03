@@ -1144,7 +1144,7 @@ class SequentialOp(TensorOp, ControlBlockOp):
     Arguments:
         ops: Sequence of ops to compute.
     """
-    def __init__(self, ops=None, defer=False, dtype=None, **kwargs):
+    def __init__(self, ops=None, defer=False, **kwargs):
         super(SequentialOp, self).__init__(args=(), is_value_op=True, **kwargs)
         if ops is None:
             ops = []
@@ -2010,7 +2010,7 @@ def variable(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-class StackSchema(object):
+class StackOp(SequentialOp):
     """
     Joins a list of identically-axed tensors along a new axis.
 
@@ -2028,15 +2028,16 @@ class StackSchema(object):
     """
 
     def __init__(self, x_list, axis, pos=0, **kwargs):
+        super(StackOp, self).__init__(defer=True, **kwargs)
         self.pos = pos
-        self.args = tuple(as_op(_) for _ in x_list)
-        x_axes = self.args[0].axes
+        self.x_list = tuple(as_op(_) for _ in x_list)
+        x_axes = self.x_list[0].axes
         axes_0 = x_axes[:pos]
         axes_1 = x_axes[pos:]
         arg_axes = axes_0 + axes_1
 
         axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
-        self.temp = temporary(axes=axes)
+        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype)
 
         # In order to avoid setting copies of our storage, we need a flattened
         # version of our storage so we can treat the slices as 2d tensors without
@@ -2052,7 +2053,7 @@ class StackSchema(object):
         if len(axes_1) > 0:
             flat_axes.append(FlattenedAxis(axes_1))
             flat_slices.append(slice(None))
-        flat_self = flatten(self.temp, flat_axes)
+        flat_self = flatten(self.tensor, flat_axes)
 
         if len(axes_0) == 0 or len(axes_1) == 0:
             assign_op = AssignOneDOp
@@ -2060,7 +2061,7 @@ class StackSchema(object):
             assign_op = AssignTwoDOp
 
         deps = []
-        for i, arg in enumerate(self.args):
+        for i, arg in enumerate(self.x_list):
             slices = list(flat_slices)
             slices[flat_pos] = i
             slice_op = tensor_slice(flat_self, slices)
@@ -2070,13 +2071,13 @@ class StackSchema(object):
             flattened_arg = flatten_at(ordered_arg, pos)
             # All users of this need to do the assigns
             deps.append(assign_op(slice_op, flattened_arg))
-        self.op = sequential([doall(deps), self.temp])
-        self.op.add_schema(self)
+        self.ops = [doall(deps), self.tensor]
+        self.finish()
 
-    def generate_adjoints(self, adjoints, delta, op):
-        s = [slice(None)] * len(self.temp.axes)
+    def generate_adjoints(self, adjoints, delta):
+        s = [slice(None)] * len(self.tensor.axes)
         arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
-        for i, x in enumerate(self.args):
+        for i, x in enumerate(self.x_list):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
@@ -2097,16 +2098,24 @@ def stack(x_list, axis, pos=0):
         TensorOp: The joined tensors.
 
     """
-    return StackSchema(x_list, axis, pos).op
+    return StackOp(x_list, axis, pos)
 
 
-class UnsliceSchema(object):
+class UnsliceOp(SequentialOp):
 
-    def __init__(self, x, slices):
+    def __init__(self, x, slices, axes, **kwargs):
+        super(UnsliceOp, self).__init__(defer=True, **kwargs)
         self.x = x
         self.slices = slices
+        temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
+        self.ops = [
+            Fill(temp, 0),
+            SetItemOp(temp, slices, x),
+            temp
+        ]
+        self.finish()
 
-    def generate_adjoints(self, adjoints, delta, op):
+    def generate_adjoints(self, adjoints, delta):
         self.x.generate_add_delta(adjoints, tensor_slice(delta, self.slices, axes=self.x.axes))
 
 
@@ -2125,14 +2134,7 @@ def _unslice(x, slices, axes):
         slices: The slices.
         input_axes: The axes of the input x.
     """
-    temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
-    op = sequential([
-        Fill(temp, 0),
-        SetItemOp(temp, slices, x),
-        temp
-    ])
-    op.add_schema(UnsliceSchema(x, slices))
-    return op
+    return UnsliceOp(x, slices, axes)
 
 
 class RngOp(TensorOp):
