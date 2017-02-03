@@ -14,6 +14,9 @@
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function
 from builtins import object
+
+import collections
+
 import ngraph as ng
 from ngraph.frontends.neon.axis import ar
 
@@ -88,6 +91,73 @@ class Linear(Layer):
             self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes))
 
         return ng.dot(self.W, in_obj)
+
+
+class LookupTable(Layer):
+    """
+    Lookup table layer that often is used as word embedding layer
+
+    Args:
+        vocab_size (int): the vocabulary size
+        embed_dim (int): the size of embedding vector
+        init (Initializor): initialization function
+        update (bool): if the word vectors get updated through training
+        pad_idx (int): by knowing the pad value, the update will make sure always
+                       have the vector representing pad value to be 0s.
+
+    """
+    metadata = {'layer_type': 'lookuptable'}
+
+    def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None, **kwargs):
+        super(LookupTable, self).__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.init = init
+        self.update = update
+        self.pad_idx = pad_idx
+        self.role_order = (ar.time, ar.batch)
+
+    def lut_init(self, axes, pad_word_axis, pad_idx):
+        """
+        Initialization function for the lut.
+        After using the initialization to fill the whole array, set the part that represents
+        padding to be 0.
+        """
+        init_w = self.init(axes)
+        if pad_word_axis is 0:
+            init_w[pad_idx] = 0
+        else:
+            init_w[:, pad_idx] = 0
+        return init_w
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj):
+        """
+        Arguments:
+            in_obj (Tensor): object that provides the lookup indices
+        """
+        in_obj.axes.find_by_short_name('time')[0].add_role(ar.time)
+        in_obj.axes.find_by_short_name('time')[0].is_recurrent = True
+        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = ng.flatten(in_obj)
+        in_axes = in_obj.axes
+
+        self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
+        self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
+
+        self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
+        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
+
+        self.W = ng.variable(axes=self.w_axes,
+                             initial_value=self.lut_init(
+                                 self.w_axes, self.lut_v_axis, self.pad_idx)
+                             ).named('W')
+
+        lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
+                                    pad_idx=self.pad_idx)
+        return ng.axes_with_order(ng.unflatten(lut_result), self.o_axes)
 
 
 class ConvBase(Layer):
@@ -442,8 +512,8 @@ class Recurrent(Layer):
                                             parameters.  If absent, will default to using same
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
-        reset_cells (bool): default to be False to make the layer stateful,
-                            set to True to be stateless.
+        reset_cells (bool): default to be True to make the layer stateless,
+                            set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
         backward (bool): default to be False to process the sequence left to right
         name (str, optional): name to refer to this layer as.
@@ -457,7 +527,7 @@ class Recurrent(Layer):
     metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=False, return_sequence=True, backward=False, **kwargs):
+                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
 
         self.nout = nout
@@ -467,6 +537,32 @@ class Recurrent(Layer):
         self.reset_cells = reset_cells
         self.return_sequence = return_sequence
         self.backward = backward
+
+    def interpret_axes(self, in_obj, init_state):
+        in_axes = in_obj.axes
+
+        self.time_axis = in_axes.recurrent_axes()[0]
+        self.time_axis_idx = in_axes.index(self.time_axis)
+
+        # if init state is given, use that as hidden axes
+        if init_state:
+            self.hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
+        else:
+            self.hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
+
+        self.hidden_state_axes = self.hidden_axes + in_axes.batch_axes()
+
+        # using the axes to create weight matrices
+        self.w_in_axes = self.hidden_axes + [axis - 1 for axis in (in_axes.sample_axes()
+                                                                   - self.time_axis)]
+
+        self.w_re_axes = self.hidden_axes + [axis - 1 for axis in self.hidden_axes]
+
+    def _step(self, inp, states):
+        h_ff = ng.dot(self.W_input, inp)
+        h_rec = ng.dot(self.W_recur, states)
+        h = self.activation(h_rec + h_ff + self.b)
+        return h
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj, init_state=None):
@@ -484,59 +580,43 @@ class Recurrent(Layer):
 
         """
         # try to understand the axes from the input
-        in_axes = in_obj.axes
 
-        self.time_axis = in_axes.recurrent_axes()[0]
-        self.time_axis_idx = in_axes.index(self.time_axis)
-
-        # if init state is given, use that as hidden axes
-        if init_state:
-            hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
-        else:
-            if self.axes is not None:
-                hidden_axes = self.axes - self.axes.recurrent_axes()
-            else:
-                hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
-
-        # using the axes to create weight matrices
-        w_in_axes = hidden_axes + [axis - 1 for axis in in_axes.sample_axes() -
-                                   in_axes.recurrent_axes()]
-        w_re_axes = hidden_axes + [axis - 1 for axis in hidden_axes]
-
-        hidden_state_axes = hidden_axes + in_axes.batch_axes()
-
-        self.W_input = ng.variable(axes=w_in_axes,
-                                   initial_value=self.init(w_in_axes)
-                                   ).named("W_in")
-        self.W_recur = ng.variable(axes=w_re_axes,
-                                   initial_value=self.init_inner(w_re_axes)
-                                   ).named("W_re")
-        self.b = ng.variable(axes=hidden_axes, initial_value=0).named("bias")
+        self.interpret_axes(in_obj, init_state)
 
         # initialize the hidden states
         if init_state is not None:
             self.h_init = init_state
         else:
             if self.reset_cells:
-                self.h_init = ng.constant(const=0, axes=hidden_state_axes).named('h_init')
+                self.h_init = ng.constant(
+                    const=0, axes=self.hidden_state_axes).named('h_init')
             else:
-                self.h_init = ng.variable(initial_value=0, axes=hidden_state_axes).named('h_init')
+                self.h_init = ng.variable(
+                    initial_value=0, axes=self.hidden_state_axes).named('h_init')
 
-        h_list = [self.h_init]
+        self.W_input = ng.variable(axes=self.w_in_axes,
+                                   initial_value=self.init(self.w_in_axes)
+                                   ).named("W_in")
+        self.W_recur = ng.variable(axes=self.w_re_axes,
+                                   initial_value=self.init_inner(self.w_re_axes)
+                                   ).named("W_re")
+        self.b = ng.variable(axes=self.hidden_axes, initial_value=0).named("bias")
 
-        # feedforward computation
+        h = self.h_init
+        h_list = []
+
+        # slice the inputs into time slices
         in_s = get_steps(in_obj, self.time_axis, self.backward)
 
-        # recurrent computation
+        # unrolling computations
         for i in range(self.time_axis.length):
             with ng.metadata(recurrent_step=str(i)):
-                h_ff = ng.dot(self.W_input, in_s[i]).named("W_in_dot_in_{}".format(i))
-                h_rec = ng.dot(self.W_recur, h_list[i]).named("W_rec_dot_h_{}".format(i))
-                h = self.activation(h_rec + h_ff + self.b).named("h_{}".format(i))
+                h = self._step(in_s[i], h)
                 h_list.append(h)
 
         if self.return_sequence is True:
-            h_list = h_list[1:][::-1] if self.backward else h_list[1:]
+            # only when returning a sequence, need to reverse the output
+            h_list = h_list[::-1] if self.backward else h_list
             rnn_out = ng.stack(h_list, self.time_axis, pos=self.time_axis_idx)
         else:
             rnn_out = h_list[-1]
@@ -557,8 +637,8 @@ class BiRNN(Layer):
                                             parameters.  If absent, will default to using same
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
-        reset_cells (bool): default to be False to make the layer stateful,
-                            set to True to be stateless.
+        reset_cells (bool): default to be True to make the layer stateless,
+                            set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
         sum_out (bool): default to be False to return both directional outputs in a list.
                         When True, sum the outputs from both directions, so it can go to
@@ -574,7 +654,7 @@ class BiRNN(Layer):
     metadata = {'layer_type': 'birnn'}
 
     def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=False, return_sequence=True, sum_out=False, **kwargs):
+                 reset_cells=True, return_sequence=True, sum_out=False, **kwargs):
         super(BiRNN, self).__init__(**kwargs)
         self.sum_out = sum_out
         self.nout = nout
@@ -599,7 +679,7 @@ class BiRNN(Layer):
             rnn_out (Tensor): output
 
         """
-        if isinstance(in_obj, list) and len(in_obj) == 2:
+        if isinstance(in_obj, collections.Sequence) and len(in_obj) == 2:
             # make sure these 2 streams of inputs share axes
             assert in_obj[0].axes == in_obj[1].axes
             fwd_in = in_obj[0]
@@ -610,7 +690,7 @@ class BiRNN(Layer):
             bwd_in = in_obj
             in_axes = in_obj.axes
 
-        if isinstance(init_state, list) and len(init_state) == 2:
+        if isinstance(init_state, collections.Sequence) and len(init_state) == 2:
             assert init_state[0].axes == init_state[1].axes
             fwd_init = init_state[0]
             bwd_init = init_state[1]
@@ -630,3 +710,137 @@ class BiRNN(Layer):
             return fwd_out + bwd_out
         else:
             return [fwd_out, bwd_out]
+
+
+class LSTM(Recurrent):
+    """
+    Long Short-Term Memory (LSTM) layer based on
+    Hochreiter and Schmidhuber, Neural Computation 9(8): 1735-80 (1997).
+
+    Arguments:
+        nout (int): Number of hidden/output units
+        init (Initializer): Function for initializing the model's input to hidden weights.  By
+                            default, this initializer will also be used for recurrent parameters
+                            unless init_inner is also specified.  Biases will always be
+                            initialized to zero.
+        init_inner (Initializer, optional): Function for initializing the model's recurrent
+                                            parameters.  If absent, will default to using same
+                                            initializer provided to init.
+        activation (Transform): Activation function for the input modulation
+        reset_cells (bool): default to be True to make the layer stateless,
+                            set to False to be stateful.
+        return_sequence (bool): default to be True to return the whole sequence output.
+        backward (bool): default to be False to process the sequence left to right
+        name (str, optional): name to refer to this layer as.
+    Attributes:
+        W_input (Tensor): weights from inputs to output units
+            (output_size, input_size)
+        W_recur (Tensor): weights for recurrent connections
+            (output_size, output_size)
+        b (Tensor): Biases on output units (output_size, 1)
+
+    Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
+
+    """
+    metadata = {'layer_type': 'LSTM',
+                'gates': ['i', 'f', 'o', 'g']}
+
+    def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
+                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
+        super(LSTM, self).__init__(nout, init, init_inner, activation, reset_cells,
+                                   return_sequence, backward, **kwargs)
+
+        self.gate_activation = gate_activation
+
+    def _step(self, inp, states):
+        h_state = states[0]
+        c_state = states[1]
+
+        ifog = {k: ng.dot(self.W_input[k], inp) + ng.dot(self.W_recur[k], h_state)
+                + self.b[k] for k in self.metadata['gates']}
+
+        ifog_act = {k: self.activation(ifog[k]) if k is 'g'
+                    else self.gate_activation(ifog[k]) for k in self.metadata['gates']}
+
+        c = ifog_act['f'] * c_state + ifog_act['i'] * ifog_act['g']
+        # c_prev is the state before applying activation
+        h = ifog_act['o'] * self.activation(c)
+        return [h, c]
+
+    @ng.with_op_metadata
+    def train_outputs(self, in_obj, init_state=None):
+        """
+        Sets shape based parameters of this layer given an input tuple or int
+        or input layer.
+
+        Arguments:
+            in_obj (int, tuple, Layer or Tensor): object that provides shape
+                                                 information for layer
+            init_state (tuple of Tensor): object that provides initial state, and in LSTM,
+                                          it includes hidden state, and cell states
+
+        Returns:
+            rnn_out (Tensor): output
+
+        """
+        # try to understand the axes from the input
+        if init_state is not None:
+            assert len(init_state) == 2 and init_state[0].axes == init_state[1].axes
+            self.interpret_axes(in_obj, init_state[0])
+        else:
+            self.interpret_axes(in_obj, init_state)
+
+        # initialize the hidden states
+        if init_state is not None:
+            self.h_init = init_state[0]
+            self.c_init = init_state[1]
+        else:
+            if self.reset_cells:
+                self.h_init = ng.constant(const=0, axes=self.hidden_state_axes).named('h_init')
+                self.c_init = ng.constant(const=0, axes=self.hidden_state_axes).named('c_init')
+            else:
+                self.h_init = ng.variable(initial_value=0,
+                                          axes=self.hidden_state_axes).named('h_init')
+                self.c_init = ng.variable(initial_value=0,
+                                          axes=self.hidden_state_axes).named('c_init')
+
+        # params are dictionary for i, f, o, g
+        self.W_input = {k: ng.variable(axes=self.w_in_axes,
+                                       initial_value=self.init(self.w_in_axes)
+                                       ).
+                        named("W_in_{}".format(k)) for k in self.metadata['gates']}
+
+        self.W_recur = {k: ng.variable(axes=self.w_re_axes,
+                                       initial_value=self.init_inner(self.w_re_axes)
+                                       ).
+                        named("W_re_{}".format(k)) for k in self.metadata['gates']}
+
+        self.b = {k: ng.variable(axes=self.hidden_axes,
+                                 initial_value=0).
+                  named("bias_{}".format(k)) for k in self.metadata['gates']}
+
+        h = self.h_init
+        c = self.c_init
+
+        h_list = []
+        c_list = []
+
+        # feedforward computation
+        in_s = get_steps(in_obj, self.time_axis, self.backward)
+
+        # recurrent computation
+        for i in range(self.time_axis.length):
+            with ng.metadata(recurrent_step=str(i)):
+                [h, c] = self._step(in_s[i], [h, c])
+                h_list.append(h)
+                c_list.append(c)
+
+        if self.return_sequence is True:
+            if self.backward:
+                h_list = h_list[::-1]
+                c_list = c_list[::-1]
+            lstm_out = ng.stack(h_list, self.time_axis, pos=self.time_axis_idx)
+        else:
+            lstm_out = h_list[-1]
+
+        return lstm_out

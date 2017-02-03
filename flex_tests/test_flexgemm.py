@@ -14,14 +14,9 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import pytest
-from neon import NervanaObject
-from neon.backends import gen_backend
 
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
-
-
-NervanaObject.be = gen_backend()
 
 
 # matrix multiply

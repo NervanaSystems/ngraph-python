@@ -41,19 +41,14 @@ class OpsNN(OpsBase):
         """
         # get inputs
         left, right, bias = inputs
-
         # check shape
         assert left.axes[1].length == right.axes[1].length
-
         # cast axis
         left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
-
         # add op
         add_op = ng.dot(left_casted, right)
-
         # cast bias axis
         bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
-
         # result op
         result_op = ng.add(add_op, bias_casted, name=c2_op.name)
         return result_op
@@ -205,6 +200,11 @@ class OpsNN(OpsBase):
         output = ng.tensor_slice(output, out_slicing)
 
         return output
+
+    def StopGradient(self, c2_op, inputs):
+        """ TODO """
+        assert 1 == len(inputs)
+        return ng.stop_gradient(inputs[0])
 
     def Conv(self, c2_op, inputs):
         """
