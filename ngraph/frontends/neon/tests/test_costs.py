@@ -19,14 +19,14 @@ from ngraph.testing import ExecutorFactory
 
 
 def compare_tensors(func, outputs, targets, expected_result, tol=0.):
-    ex = ExecutorFactory()
-    N = ng.make_axis("N")
-    N.length = outputs.shape[0]
-    y = ng.placeholder([N])
-    t = ng.placeholder([N])
+    with ExecutorFactory() as ex:
+        N = ng.make_axis("N")
+        N.length = outputs.shape[0]
+        y = ng.placeholder([N])
+        t = ng.placeholder([N])
 
-    costfunc = ex.executor(func.__call__(y, t), y, t)
-    ng.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
+        costfunc = ex.executor(func.__call__(y, t), y, t)
+        ng.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
 
 
 """

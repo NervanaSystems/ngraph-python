@@ -66,48 +66,48 @@ def test_lut(transformer_factory, lut_args):
     test lut fprop and bprop
     """
     pad_idx = 0
-    ex = ExecutorFactory()
+    with ExecutorFactory() as ex:
 
-    vocab_size, embed_dim, bsz, seq_len = lut_args
+        vocab_size, embed_dim, bsz, seq_len = lut_args
 
-    V = ng.make_axis(vocab_size)
-    F = ng.make_axis(embed_dim)
-    ax.N.length = bsz
-    ax.REC.length = seq_len
+        V = ng.make_axis(vocab_size)
+        F = ng.make_axis(embed_dim)
+        ax.N.length = bsz
+        ax.REC.length = seq_len
 
-    ax_idx = ng.make_axes([ax.REC, ax.N])
-    ax_lut = ng.make_axes([V, F])
+        ax_idx = ng.make_axes([ax.REC, ax.N])
+        ax_lut = ng.make_axes([V, F])
 
-    lut = ng.placeholder(ax_lut)
-    idx = ng.placeholder(ax_idx)
-    idx_flat = ng.flatten(idx)
-    ax_out = idx_flat.axes + ng.make_axes([F])
+        lut = ng.placeholder(ax_lut)
+        idx = ng.placeholder(ax_idx)
+        idx_flat = ng.flatten(idx)
+        ax_out = idx_flat.axes + ng.make_axes([F])
 
-    # fprop
-    lut_out_ng = ng.lookuptable(lut, idx_flat, ax_out, pad_idx=pad_idx)
-    fprop_fun = ex.executor(lut_out_ng, lut, idx)
+        # fprop
+        lut_out_ng = ng.lookuptable(lut, idx_flat, ax_out, pad_idx=pad_idx)
+        fprop_fun = ex.executor(lut_out_ng, lut, idx)
 
-    # bprop
-    update_error = ng.placeholder(ax_out)
-    update_out_ng = lookuptable_update(update_error, lut, idx, lut_out_ng)
-    update_fun = ex.executor(update_out_ng, update_error, lut, idx)
+        # bprop
+        update_error = ng.placeholder(ax_out)
+        update_out_ng = lookuptable_update(update_error, lut, idx, lut_out_ng)
+        update_fun = ex.executor(update_out_ng, update_error, lut, idx)
 
-    # provide actual inputs and execute the graph
-    lut_value = rng.uniform(-1, 1, lut.axes)
-    idx_value = rng.random_integers(0, vocab_size - 1, idx.axes)
-    fprop_lut = fprop_fun(lut_value, idx_value).copy()
+        # provide actual inputs and execute the graph
+        lut_value = rng.uniform(-1, 1, lut.axes)
+        idx_value = rng.random_integers(0, vocab_size - 1, idx.axes)
+        fprop_lut = fprop_fun(lut_value, idx_value).copy()
 
-    # compare fprop
-    fprop_ref = lut_fprop_ref(lut_value, idx_value)
-    ng.testing.assert_allclose(fprop_lut, fprop_ref, rtol=0.0, atol=1.0e-5)
+        # compare fprop
+        fprop_ref = lut_fprop_ref(lut_value, idx_value)
+        ng.testing.assert_allclose(fprop_lut, fprop_ref, rtol=0.0, atol=1.0e-5)
 
-    # provide actual delta and execute the update op
-    update_value = rng.uniform(-1, 1, update_error.axes)
-    update_lut = update_fun(update_value, lut_value, idx_value).copy()
+        # provide actual delta and execute the update op
+        update_value = rng.uniform(-1, 1, update_error.axes)
+        update_lut = update_fun(update_value, lut_value, idx_value).copy()
 
-    # compare bprop (udpate)
-    update_ref = lut_update_ref(update_value, lut_value, idx_value, pad_idx=pad_idx)
-    ng.testing.assert_allclose(update_lut, update_ref, rtol=0.0, atol=1.0e-5)
+        # compare bprop (udpate)
+        update_ref = lut_update_ref(update_value, lut_value, idx_value, pad_idx=pad_idx)
+        ng.testing.assert_allclose(update_lut, update_ref, rtol=0.0, atol=1.0e-5)
 
 
 if __name__ == '__main__':

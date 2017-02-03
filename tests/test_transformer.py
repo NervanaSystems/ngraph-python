@@ -46,10 +46,9 @@ def test_evalutaion_twice(transformer_factory):
 
     hidden1 = ng.dot(hidden1_weights, x) + hidden1_biases
 
-    comp = executor(hidden1)
-
-    result_1 = comp()
-    result_2 = comp()
+    with executor(hidden1) as comp:
+        result_1 = comp()
+        result_2 = comp()
     assert np.array_equal(result_1, result_2)
 
 
@@ -63,9 +62,9 @@ def test_missing_arguments_to_execute():
     x = ng.placeholder([N])
     y = ng.placeholder([N])
 
-    f = executor(x + y, x, y)
-    with pytest.raises(ValueError):
-        f(1)
+    with executor(x + y, x, y) as f:
+        with pytest.raises(ValueError):
+            f(1)
 
 
 def test_execute_non_placeholder():
@@ -79,4 +78,5 @@ def test_execute_non_placeholder():
     y = ng.variable([N])
 
     with pytest.raises(ValueError):
-        executor(x + y, x, y)
+        with executor(x + y, x, y) as ex:
+            ex

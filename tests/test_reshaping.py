@@ -52,7 +52,6 @@ def test_expand_dims(transformer_factory):
             tensor_axes_lengths = test['tensor_axes_lengths']
 
             for dim in range(len(tensor_axes) + 1):
-                ex = ExecutorFactory()
                 for axis, length in zip(tensor_axes, tensor_axes_lengths):
                     axis.length = length
 
@@ -65,31 +64,31 @@ def test_expand_dims(transformer_factory):
                 tensor = ng.placeholder(tensor_axes)
 
                 expanded = ng.ExpandDims(tensor, new_axis, dim)
-                expander_fun = ex.executor(expanded, tensor)
+                with ExecutorFactory() as ex:
+                    expander_fun = ex.executor(expanded, tensor)
+                    num_deriv_fun = ex.numeric_derivative(expanded, tensor, delta)
+                    sym_deriv_fun = ex.derivative(expanded, tensor)
 
-                num_deriv_fun = ex.numeric_derivative(expanded, tensor, delta)
-                sym_deriv_fun = ex.derivative(expanded, tensor)
+                    expanded_shape = tensor_np.shape[:dim] \
+                        + (new_axis.length,) + tensor_np.shape[dim:]
+                    expanded_strides = tensor_np.strides[:dim] \
+                        + (0,) + tensor_np.strides[dim:]
+                    expanded_np = np.ndarray(
+                        buffer=tensor_np,
+                        shape=expanded_shape,
+                        strides=expanded_strides,
+                        dtype=tensor_np.dtype
+                    )
 
-                expanded_shape = tensor_np.shape[:dim] \
-                    + (new_axis.length,) + tensor_np.shape[dim:]
-                expanded_strides = tensor_np.strides[:dim] \
-                    + (0,) + tensor_np.strides[dim:]
-                expanded_np = np.ndarray(
-                    buffer=tensor_np,
-                    shape=expanded_shape,
-                    strides=expanded_strides,
-                    dtype=tensor_np.dtype
-                )
+                    expanded_result = expander_fun(tensor_np)
+                    assert np.array_equal(expanded_np, expanded_result)
 
-                expanded_result = expander_fun(tensor_np)
-                assert np.array_equal(expanded_np, expanded_result)
-
-                # Test backpropagation
-                numeric_deriv = num_deriv_fun(tensor_np)
-                sym_deriv = sym_deriv_fun(tensor_np)
-                assert ng.testing.allclose(
-                    numeric_deriv, sym_deriv, rtol=rtol, atol=atol
-                )
+                    # Test backpropagation
+                    numeric_deriv = num_deriv_fun(tensor_np)
+                    sym_deriv = sym_deriv_fun(tensor_np)
+                    assert ng.testing.allclose(
+                        numeric_deriv, sym_deriv, rtol=rtol, atol=atol
+                    )
 
 
 def test_slice(transformer_factory):
@@ -150,36 +149,36 @@ def test_slice(transformer_factory):
     ]
 
     for test in tests:
-        ex = ExecutorFactory()
-        for axis, length in test['axes_lengths'].items():
-            axis.length = length
-        tensor_axes = test['tensor_axes']
+        with ExecutorFactory() as ex:
+            for axis, length in test['axes_lengths'].items():
+                axis.length = length
+            tensor_axes = test['tensor_axes']
 
-        tensor_np = np.array(
-            test['tensor'], dtype='float32'
-        )
-        tensor = ng.placeholder(tensor_axes)
-        expected = np.array(test['expected'], dtype='float32')
+            tensor_np = np.array(
+                test['tensor'], dtype='float32'
+            )
+            tensor = ng.placeholder(tensor_axes)
+            expected = np.array(test['expected'], dtype='float32')
 
-        s = test['slice']
-        s_axes = test['sliced_axes']
+            s = test['slice']
+            s_axes = test['sliced_axes']
 
-        sliced = ng.tensor_slice(tensor, s, s_axes)
-        sliced_val_fun = ex.executor(sliced, tensor)
+            sliced = ng.tensor_slice(tensor, s, s_axes)
+            sliced_val_fun = ex.executor(sliced, tensor)
 
-        num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
-        # Test backpropagation
-        sym_deriv_fun = ex.derivative(sliced, tensor)
+            num_deriv_fun = ex.numeric_derivative(sliced, tensor, delta)
+            # Test backpropagation
+            sym_deriv_fun = ex.derivative(sliced, tensor)
 
-        sliced_val = sliced_val_fun(tensor_np)
-        assert np.array_equal(sliced_val, expected)
+            sliced_val = sliced_val_fun(tensor_np)
+            assert np.array_equal(sliced_val, expected)
 
-        numeric_deriv = num_deriv_fun(tensor_np)
-        sym_deriv = sym_deriv_fun(tensor_np)
+            numeric_deriv = num_deriv_fun(tensor_np)
+            sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert ng.testing.allclose(
-            numeric_deriv, sym_deriv, rtol=rtol, atol=atol
-        )
+            assert ng.testing.allclose(
+                numeric_deriv, sym_deriv, rtol=rtol, atol=atol
+            )
 
 
 def test_padding(transformer_factory):
@@ -207,53 +206,51 @@ def test_padding(transformer_factory):
     ]
 
     for test in tests:
-        ex = ExecutorFactory()
-        for axis, length in test['axes_lengths'].items():
-            axis.length = length
-        tensor_axes = test['tensor_axes']
-        tensor_np = np.array(
-            test['tensor'], dtype='float32'
-        )
-        tensor = ng.placeholder(tensor_axes)
-        padding = test['padding']
-        padded_axes = test['padded_axes']
-        padded = ng.pad(tensor, padding, padded_axes)
-        computed_val_fun = ex.executor(padded, tensor)
+        with ExecutorFactory() as ex:
+            for axis, length in test['axes_lengths'].items():
+                axis.length = length
+            tensor_axes = test['tensor_axes']
+            tensor_np = np.array(
+                test['tensor'], dtype='float32'
+            )
+            tensor = ng.placeholder(tensor_axes)
+            padding = test['padding']
+            padded_axes = test['padded_axes']
+            padded = ng.pad(tensor, padding, padded_axes)
+            computed_val_fun = ex.executor(padded, tensor)
 
-        # Test backpropagation
-        numeric_deriv_fun = ex.numeric_derivative(padded, tensor, delta)
-        sym_deriv_fun = ex.derivative(padded, tensor)
+            # Test backpropagation
+            numeric_deriv_fun = ex.numeric_derivative(padded, tensor, delta)
+            sym_deriv_fun = ex.derivative(padded, tensor)
 
-        def to_tuple(p):
-            """
-            TODO.
+            def to_tuple(p):
+                """
+                TODO.
 
-            Arguments:
-              p: TODO
+                Arguments:
+                  p: TODO
 
-            Returns:
+                Returns:
 
-            """
-            return (p, p) if isinstance(p, int) else p
-        np_padding = tuple(to_tuple(p) for p in padding)
-        expected_val = np.pad(tensor_np, np_padding, mode='constant')
+                """
+                return (p, p) if isinstance(p, int) else p
+            np_padding = tuple(to_tuple(p) for p in padding)
+            expected_val = np.pad(tensor_np, np_padding, mode='constant')
 
-        computed_val = computed_val_fun(tensor_np)
-        assert np.array_equal(expected_val, computed_val)
+            computed_val = computed_val_fun(tensor_np)
+            assert np.array_equal(expected_val, computed_val)
 
-        numeric_deriv = numeric_deriv_fun(tensor_np)
-        sym_deriv = sym_deriv_fun(tensor_np)
+            numeric_deriv = numeric_deriv_fun(tensor_np)
+            sym_deriv = sym_deriv_fun(tensor_np)
 
-        assert ng.testing.allclose(
-            numeric_deriv, sym_deriv, rtol=rtol, atol=atol
-        )
+            assert ng.testing.allclose(
+                numeric_deriv, sym_deriv, rtol=rtol, atol=atol
+            )
 
 
 def test_cast_axes(transformer_factory):
     C = ng.make_axis(name='C')
     D = ng.make_axis(name='D')
-
-    ex = ExecutorFactory()
 
     C.length = 2
     D.length = 3
@@ -269,22 +266,23 @@ def test_cast_axes(transformer_factory):
 
     # Verfiy that the tensor broadcasts along ax.D
     y = x + x_cast
-    y_fun = ex.executor(y, x)
-    num_deriv_fun = ex.numeric_derivative(y, x, delta)
-    sym_deriv_fun = ex.derivative(y, x)
+    with ExecutorFactory() as ex:
+        y_fun = ex.executor(y, x)
+        num_deriv_fun = ex.numeric_derivative(y, x, delta)
+        sym_deriv_fun = ex.derivative(y, x)
 
-    x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
-    assert ng.testing.allclose(
-        y_fun(x_np),
-        np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
-    )
+        x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
+        assert ng.testing.allclose(
+            y_fun(x_np),
+            np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
+        )
 
-    assert ng.testing.allclose(
-        num_deriv_fun(x_np),
-        sym_deriv_fun(x_np),
-        rtol=rtol,
-        atol=atol
-    )
+        assert ng.testing.allclose(
+            num_deriv_fun(x_np),
+            sym_deriv_fun(x_np),
+            rtol=rtol,
+            atol=atol
+        )
 
 
 def test_shuffled_deriv():
@@ -304,9 +302,9 @@ def test_shuffled_deriv():
     cost = ng.sum(ctrs, out_axes=None)
     grad = ng.deriv(cost, v)
 
-    ex = ExecutorFactory()
-    d_fun = ex.executor(grad)
-    d_fun()
+    with ExecutorFactory() as ex:
+        d_fun = ex.executor(grad)
+        d_fun()
 
 
 def test_slice_tensor_description(transformer_factory):
