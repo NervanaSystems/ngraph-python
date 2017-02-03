@@ -69,7 +69,6 @@ __all__ = [
     'reciprocal',
     'safelog',
     'sequential',
-    'sequential_op_factory',
     'sigmoid',
     'sign',
     'sin',
