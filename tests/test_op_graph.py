@@ -254,7 +254,6 @@ def test_setting():
                         (2, 3, 2),
                         (15, 5, 1)])
 def concatenate_variables(request):
-    print request.param
     num_vars, num_axes, concat_pos = request.param
     concat_role = ng.make_axis_role("Concat")
     common_axes = [ng.make_axis(length=2) for _ in range(num_axes - 1)]

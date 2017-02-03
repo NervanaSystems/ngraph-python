@@ -385,6 +385,8 @@ class Op(NameableValue, DebugInfo):
 
         Returns: self
         """
+        if self.forward is not None:
+            return self.forward.device_op
         return self
 
     @property
@@ -444,7 +446,7 @@ class Op(NameableValue, DebugInfo):
         Returns:
             Ops that must execute before this one can.
         """
-        return self.device_op.other_deps + self.args
+        return self.other_deps + self.args
 
     def add_other_dep(self, dep):
         dep = dep.forwarded
@@ -472,6 +474,8 @@ class Op(NameableValue, DebugInfo):
         self.initializers = OrderedSet(op.forwarded for op in self.initializers)
 
     def replace_self(self, rep):
+        self.update_forwards()
+        rep.update_forwards()
         self.forward = rep
         for dep in self.other_deps:
             rep.add_other_dep(dep)
