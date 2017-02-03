@@ -95,9 +95,12 @@ class OpsNN(OpsBase):
        """
         y, labels = inputs
 
-        labels_one_hot = labels
-        # labels_one_hot = ng.one_hot(labels, axis=y.axes[1])  # TODO maybe it should stay?
-        labels_one_hot = ng.cast_axes(labels_one_hot, [y.axes[0], y.axes[1]])
+        # labels_one_hot = labels
+        # labels_one_hot = ng.cast_axes(labels_one_hot, [y.axes[0], y.axes[1]])
+
+        labels_one_hot = ng.one_hot(labels, axis=y.axes[1])
+        labels_one_hot = ng.cast_axes(labels_one_hot, [labels_one_hot.axes[0], y.axes[0]])
+
         ret = ng.cross_entropy_multi(y, labels_one_hot, out_axes=y.axes[0])
         return ret
 
