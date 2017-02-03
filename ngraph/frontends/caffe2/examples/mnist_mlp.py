@@ -24,8 +24,8 @@ import numpy as np
 import ngraph as ng
 import os
 
-c2_on = 0
-ng_on = 1
+c2_on = 01
+ng_on = 01
 
 def mnist_mlp(args):
     mnist = input_data.read_data_sets(args.data_dir, one_hot=False)
@@ -38,12 +38,12 @@ def mnist_mlp(args):
     main_net = core.Net("main")
 
     fc_size = [784, 512, 128, 10]
-    init_net.UniformFill([], 'fc_w1', shape=[fc_size[1], fc_size[0]], min=-1., max=1.)
-    init_net.UniformFill([], 'fc_w2', shape=[fc_size[2], fc_size[1]], min=-1., max=1.)
-    init_net.UniformFill([], 'fc_w3', shape=[fc_size[3], fc_size[2]], min=-1., max=1.)
-    init_net.UniformFill([], 'fc_b1', shape=[fc_size[1]], min=-1., max=1.)
-    init_net.UniformFill([], 'fc_b2', shape=[fc_size[2]], min=-1., max=1.)
-    init_net.UniformFill([], 'fc_b3', shape=[fc_size[3]], min=-1., max=1.)
+    init_net.UniformFill([], 'fc_w1', shape=[fc_size[1], fc_size[0]], min=-0.1, max=0.1)
+    init_net.UniformFill([], 'fc_w2', shape=[fc_size[2], fc_size[1]], min=-0.1, max=0.1)
+    init_net.UniformFill([], 'fc_w3', shape=[fc_size[3], fc_size[2]], min=-0.1, max=0.1)
+    init_net.UniformFill([], 'fc_b1', shape=[fc_size[1]], min=0.1, max=0.1)
+    init_net.UniformFill([], 'fc_b2', shape=[fc_size[2]], min=0.1, max=0.1)
+    init_net.UniformFill([], 'fc_b3', shape=[fc_size[3]], min=0.1, max=0.1)
     # init_net.UniformFill([], 'fc_w1', shape=[fc_size[3], fc_size[0]], min=-1., max=1.) # TODO single leayer mlp
     # init_net.UniformFill([], 'fc_b1', shape=[fc_size[3]], min=-1., max=1.)
 
@@ -57,16 +57,8 @@ def mnist_mlp(args):
     # main_net.FC(['train_x', 'fc_w1', 'fc_b1'], 'FC1', dim_in=fc_size[0], dim_out=fc_size[3])
     # main_net.Softmax('FC1', 'softmax')
 
-    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'loss') # TODO should be xent
-    # main_net.AveragedLoss('xent', 'loss')
-    #
-    # workspace.RunNetOnce(init_net)
-    # workspace.CreateNet(main_net)
-    # workspace.RunNet(main_net.Proto().name)
-    # print("C2 softmax is: {}".format(workspace.FetchBlob("softmax")))
-    # print("C2 train_y is: {}".format(workspace.FetchBlob("train_y")))
-    # print("C2 loss is: {}".format(workspace.FetchBlob("loss")))
-    # print("C2 xent is: {}".format(workspace.FetchBlob("xent")))
+    main_net.LabelCrossEntropy(['softmax', 'train_y'], 'xent') # TODO should be xent
+    main_net.AveragedLoss('xent', 'loss')
 
     # Ngraph part
     if ng_on:
@@ -126,7 +118,9 @@ def mnist_mlp(args):
         # Get gradients for all the computations above and do the weighted sum
         # LR = main_net.LearningRate(ITER, "LR", base_lr=-lrate, policy="step",
         #                             stepsize=step_size, gamma=gamma)
-        LR = main_net.LearningRate(ITER, "LR", base_lr=args.lrate, policy="inv", power=-0.75, gamma=0.0001)
+        # LR = main_net.LearningRate(ITER, "LR", base_lr=args.lrate, policy="inv", power=-0.75, gamma=0.0001)
+        LR = main_net.LearningRate(ITER, "LR", base_lr=-0.1, policy="step", stepsize=1, gamma=0.999)
+
         main_net.WeightedSum(['fc_w1', 'ONE', gradient_map['fc_w1'], 'LR'], 'fc_w1')
         main_net.WeightedSum(['fc_w2', 'ONE', gradient_map['fc_w2'], 'LR'], 'fc_w2')
         main_net.WeightedSum(['fc_w3', 'ONE', gradient_map['fc_w3'], 'LR'], 'fc_w3')
@@ -139,31 +133,40 @@ def mnist_mlp(args):
         workspace.RunNetOnce(init_net)
         workspace.CreateNet(main_net)
 
-        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=False)
         for i in range(args.max_iter):
             train_x, train_y = mnist.train.next_batch(args.batch)
             workspace.FeedBlob('train_x', train_x)
-            workspace.FeedBlob('train_y', train_y)
+            workspace.FeedBlob('train_y', train_y.astype('int32'))
+            # print("x: {}".format(workspace.FetchBlob("train_x")))
             workspace.RunNet(main_net.Proto().name)
-            if i % 200 == 0: print("Iter: {}, C2 loss is: {}".format(i, workspace.FetchBlob("loss")))
+
+            # print('train_y: {}'.format(workspace.FetchBlob('train_y')))
+            # print('FC3: {}'.format(workspace.FetchBlob('FC3')))
+            # print('softmax: {}'.format(workspace.FetchBlob('softmax')))
+            # print('loss: {}'.format(workspace.FetchBlob('loss')))
+            # print('loss_autogen_grad: {}'.format(workspace.FetchBlob('loss_autogen_grad')))
+            # print('softmax_grad: {}'.format(workspace.FetchBlob('softmax_grad')))
+
+            if i % 200 == 0:
+                print("Iter: {}, C2 loss is: {}".format(i, workspace.FetchBlob("loss")))
+            #     print("y: {}".format(workspace.FetchBlob("train_y")))
 
         print("Caffe2 loss is: {}".format(workspace.FetchBlob("loss")))
         # end of caffe2 part
 
         # printing out results
-        print("Done {} iterations over the batch data, with noise coefficient set to {}".
-              format(iter_num, noise_scale))
-        print("Caffe2 after training, W3 is: {}".format(workspace.FetchBlob("fc_w3")))
-        print("Caffe2 after training, B3 is: {}".format(workspace.FetchBlob("fc_b3")))
-        print("Ngraph after training, W3 is: {}".format(fc_w3_ng))
-        print("Ngraph after training, B3 is: {}".format(fc_b3_ng))
+        # print("Caffe2 after training, W3 is: {}".format(workspace.FetchBlob("fc_w3")))
+        # print("Caffe2 after training, B3 is: {}".format(workspace.FetchBlob("fc_b3")))
+        # print("Ngraph after training, W3 is: {}".format(fc_w3_ng))
+        # print("Ngraph after training, B3 is: {}".format(fc_b3_ng))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--data_dir', default='/tmp/data')
     parser.add_argument('-i', '--max_iter', type=int, default=10000)
-    parser.add_argument('-l', '--lrate', type=float, default=0.01,
+    parser.add_argument('-l', '--lrate', type=float, default=0.05,
                         help="Learning rate")
     parser.add_argument('-b', '--batch', type=int, default=1)  # TODO
     args = parser.parse_args()
