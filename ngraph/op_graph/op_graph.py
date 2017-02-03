@@ -24,7 +24,7 @@ from functools import wraps
 from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
-    make_axis, make_axes, Axes, FlattenedAxis, SlicedAxis, default_dtype, \
+    make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
     default_int_dtype, casting_axis
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
@@ -1725,7 +1725,7 @@ class TensorSliceOp(ReshapeOp):
                     if s == slice(None, None, None):
                         axes.append(axis)
                     else:
-                        axes.append(SlicedAxis(axis, s))
+                        axes.append(slice_axis(axis, s))
 
             axes = make_axes(axes)
 
