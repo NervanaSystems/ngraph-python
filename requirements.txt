@@ -1,5 +1,5 @@
 # tensorflow & protobuf
-tensorflow==0.12.0
+tensorflow==0.12.1
 # scipy (temporary add)
 scipy==0.18.1
 # autopep8 (temporary add)
