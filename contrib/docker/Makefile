@@ -3,7 +3,7 @@ VOLUME = -v ${DIR}:/root/ngraph-test -v $$HOME/nervana/data:/root/nervana/data
 GIT_COMMIT = $(shell git rev-parse HEAD)
 BUILD_VERSION = ${GIT_COMMIT}_${PYTHON_VERSION}
 BUILD_DIR = ${DIR}/contrib/docker/.build-${BUILD_VERSION}
-NVCC_VER_OUT := $(shell nvcc --version | grep release)
+NVCC_VER_OUT := $(shell nvcc --version | grep release || echo nvcc not found)
 
 TEST_OPTS := --timeout=300
 UNIT_TEST_DIRS := tests/
