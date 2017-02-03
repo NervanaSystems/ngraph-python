@@ -123,8 +123,8 @@ def test_wrong_number_of_batch_axes_at_input():
 
     C = 3
     D = 1
-    ax_C = ng.make_axis(length=C, name='C', batch=True)
-    ax_D = ng.make_axis(length=D, name='D', batch=True)
+    ax_C = ng.make_axis(length=C, batch=True).named('C')
+    ax_D = ng.make_axis(length=D, batch=True).named('D')
 
     ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax_C, ax.T, ax.R, ax.S, ax.K])
@@ -165,10 +165,10 @@ def test_convolution_backprop(transformer_factory):
     ax_i.set_shape((C, D, H, W, N))
     ax_f.set_shape((C, T, R, S, K))
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 
@@ -223,10 +223,10 @@ def test_convolution(transformer_factory):
     ax_f.set_shape((C, T, R, S, K))
 
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 
@@ -311,10 +311,10 @@ def test_conv_flatten_deriv(transformer_factory):
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
     ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+        ng.make_axis(roles=[ar.features_input]).named('C'),
+        ng.make_axis(roles=[ar.features_0]).named('D'),
+        ng.make_axis(roles=[ar.features_1]).named('H'),
+        ng.make_axis(roles=[ar.features_2]).named('W'),
         ax.N
     ])
 

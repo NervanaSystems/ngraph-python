@@ -50,7 +50,7 @@ class OpsNN(OpsBase):
         # cast bias axis
         bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
         # result op
-        result_op = ng.add(add_op, bias_casted, name=c2_op.name)
+        result_op = ng.add(add_op, bias_casted)
         return result_op
 
     def SquaredL2Distance(self, c2_op, inputs):
@@ -134,10 +134,10 @@ class OpsNN(OpsBase):
         ng.make_axes([ax_N, ax_C, ax_H, ax_W]).set_shape(image.axes.lengths)
 
         # create placeholders for output axes
-        oC = ng.make_axis(name='C', roles=[ar.Channel])
-        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.Height])
-        oW = ng.make_axis(name='W', roles=[ar.Width])
+        oC = ng.make_axis(roles=[ar.Channel]).named('C')
+        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.Height]).named('H')
+        oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         # spatial kernel size
         kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
@@ -246,10 +246,10 @@ class OpsNN(OpsBase):
         ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
 
         # create placeholders for output axes
-        oC = ng.make_axis(name='C', roles=[ar.Channel])
-        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.Height])
-        oW = ng.make_axis(name='W', roles=[ar.Width])
+        oC = ng.make_axis(roles=[ar.Channel]).named('C')
+        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.Height]).named('H')
+        oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         axes_order = {
             'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],

@@ -25,9 +25,9 @@ rtol = atol = 1e-2
 
 def test_expand_dims(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    N = ng.make_axis().named('N')
 
     max_new_axis_length = 4
 
@@ -94,8 +94,8 @@ def test_expand_dims(transformer_factory):
 def test_slice(transformer_factory):
     """TODO."""
 
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
 
     tests = [
         {
@@ -183,10 +183,10 @@ def test_slice(transformer_factory):
 
 def test_padding(transformer_factory):
     """TODO."""
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
-    M = ng.make_axis(name='M')
-    N = ng.make_axis(name='N')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
+    M = ng.make_axis().named('M')
+    N = ng.make_axis().named('N')
 
     tests = [
         {
@@ -249,8 +249,8 @@ def test_padding(transformer_factory):
 
 
 def test_cast_axes(transformer_factory):
-    C = ng.make_axis(name='C')
-    D = ng.make_axis(name='D')
+    C = ng.make_axis().named('C')
+    D = ng.make_axis().named('D')
 
     C.length = 2
     D.length = 3
@@ -288,7 +288,7 @@ def test_cast_axes(transformer_factory):
 def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
-    ax = ng.make_name_scope("ax")
+    ax = ng.make_name_scope().named("ax")
     ax.C = ng.make_axis(3)
     ax.T = ng.make_axis(1)
     ax.R = ng.make_axis(5)

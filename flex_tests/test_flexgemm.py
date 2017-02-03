@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ def test_gemm(transformer_factory):
     """
     n, c = 32, 32
 
-    ax = ng.make_name_scope("ax")
+    ax = ng.make_name_scope().named('ax')
     ax.N = ng.make_axis(length=n, batch=True)
     ax.C = ng.make_axis(length=c)
 
@@ -38,11 +38,12 @@ def test_gemm(transformer_factory):
 
     Y_hat = ng.dot(W, X)
 
-    mm_executor = executor(Y_hat, X)
+    with executor(Y_hat, X) as ex:
+        mm_executor = ex
 
-    w = np.ones(c)*0.1
-    xs = np.ones(n*c).reshape(c, n)
+        w = np.ones(c)*0.1
+        xs = np.ones(n*c).reshape(c, n)
 
-    for ii in range(3):
-        y_hat_val = mm_executor(xs)
-        assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
+        for ii in range(3):
+            y_hat_val = mm_executor(xs)
+            assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))

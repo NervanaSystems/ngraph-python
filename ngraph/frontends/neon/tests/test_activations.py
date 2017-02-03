@@ -28,8 +28,8 @@ from ngraph.testing import ExecutorFactory
 
 def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
     with ExecutorFactory() as ex:
-        C = ng.make_axis('C')
-        N = ng.make_axis('N', batch=True)
+        C = ng.make_axis().named('C')
+        N = ng.make_axis(batch=True).named('N')
         C.length, N.length = inputs.shape
         x = ng.placeholder([C, N])
 
