@@ -83,6 +83,7 @@ __all__ = [
     'testing',
     'tensor_size',
     'tensor_slice',
+    'value_of',
     'variable',
     'variance',
     'with_name_scope',

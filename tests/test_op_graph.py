@@ -89,12 +89,13 @@ def test_sequential_reduce():
         assert np.allclose(p_val, x2_np)
 
 
-@pytest.mark.skip(reason="Need value_op to correctly check side-effects")
 def test_sequential_side():
     N = ng.make_axis(3)
     x = ng.variable([N], initial_value=[1, 2, 3])
     x1 = ng.persistent_tensor(axes=(), initial_value=2)
     x2 = ng.persistent_tensor(axes=(), initial_value=3)
+    x1_initial = ng.value_of(x1)
+    x2_initial = ng.value_of(x2)
     b = ng.persistent_tensor(axes=(), initial_value=1)
 
     y = ng.sequential([
@@ -105,6 +106,7 @@ def test_sequential_side():
 
     with ExecutorFactory() as ex:
         main_effect = ex.executor(y)
+        initial_values = ex.executor((x1_initial, x2_initial))
 
     # Run main path #1
     y_val = main_effect()
@@ -118,9 +120,8 @@ def test_sequential_side():
 
     assert np.allclose(y_val, y_np)
 
-    # TODO: use value_op for this type of retrieval instead
     # Now check side effects
-    x1_val, x2_val = x1.value.tensor, x2.value.tensor
+    x1_val, x2_val = initial_values()
 
     x1_np = x_np.sum() + (x_np.sum() + 2)
     x2_np = x_np.mean() + (x_np.mean() + 3)

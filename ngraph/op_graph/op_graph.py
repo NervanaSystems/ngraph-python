@@ -1812,6 +1812,16 @@ class AssignableTensorOp(TensorOp):
         pass
 
 
+def value_of(tensor):
+    if tensor.is_constant:
+        return tensor
+    temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
+    return sequential([
+        AssignOp(temp, tensor, force=True),
+        temp
+    ])
+
+
 def constant(const, axes=None, dtype=None):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
@@ -1946,7 +1956,7 @@ def placeholder(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, initial_value=None):
+def temporary(axes, dtype=None, initial_value=None, constant=False):
     """
     Temporary storage.
 
@@ -1957,13 +1967,14 @@ def temporary(axes, dtype=None, initial_value=None):
         dtype (optional): The dtype of the storage.
         initial_value (optional): A host constant or callable. If callable, will
             be called to generate an initial value.
+        constant (optional): Once initialization is complete, this tensor should not change.
 
     Returns:
         AssignableTensorOp: The placeholder.
 
     """
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=False, persistent=True, trainable=False,
+                              constant=constant, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2037,7 +2048,7 @@ class StackOp(SequentialOp):
         arg_axes = axes_0 + axes_1
 
         axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
-        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype)
+        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
 
         # In order to avoid setting copies of our storage, we need a flattened
         # version of our storage so we can treat the slices as 2d tensors without
@@ -2070,7 +2081,7 @@ class StackOp(SequentialOp):
             # Arg is now 1d or 2d, depending on pos
             flattened_arg = flatten_at(ordered_arg, pos)
             # All users of this need to do the assigns
-            deps.append(assign_op(slice_op, flattened_arg))
+            deps.append(assign_op(slice_op, flattened_arg, force=True))
         self.ops = [doall(deps), self.tensor]
         self.finish()
 
@@ -2137,7 +2148,7 @@ class ConcatOp(SequentialOp):
         # contiguous in memory. This is most easily achieved by flattening, with concat_axis as
         # either the first or last axis.
         axes = make_axes((concat_axis,) + tuple(common_axes))
-        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype)
+        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
         self._axis_list = axis_list
 
         # Since the concatenation axis is first, we'll flatten the rest.
@@ -2165,7 +2176,7 @@ class ConcatOp(SequentialOp):
             flat_arg = flatten_at(ordered_arg, 1)
 
             # Assign into the slice
-            deps.append(assign_op(slice_op, flat_arg))
+            deps.append(assign_op(slice_op, flat_arg, force=True))
             start += ax.length
 
         concat_axis.length = start
