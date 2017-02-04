@@ -3273,122 +3273,32 @@ class ReductionOp(TensorOp):
         return True
 
 
-def create_twod_reduction_op(name,
-                             red_cls,
-                             two_dim_generate_adjoints=None):
-    def valid_two(self):
-        x, = self.args
-        return len(x.axes) == 2\
-            and self.reduction_axes == x.axes[:1]\
-            and self.out_axes == x.axes[1:]
-    d = {'valid': valid_two, 'must_reduce': False}
-
-    if two_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = two_dim_generate_adjoints
-
-    RedTwoDimClass = type(name, (red_cls,), d)
-    return RedTwoDimClass
-
-
-def create_oned_reduction_op(name,
-                             red_cls,
-                             one_dim_generate_adjoints=None):
-    def valid_one(self):
-        x, = self.args
-        return len(x.axes) == 1\
-            and self.reduction_axes == x.axes
-
-    d = {'valid': valid_one, 'must_reduce': False}
-    if one_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = one_dim_generate_adjoints
-
-    RedOneDimClass = type(name, (red_cls,), d)
-    return RedOneDimClass
-
-
 def create_reduction_op(name,
-                        two_dim_name,
-                        one_dim_name,
                         func_name=None,
-                        generate_adjoints=None,
-                        two_dim_generate_adjoints=None,
-                        one_dim_generate_adjoints=None):
+                        generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
     RedClass = type(name, (ReductionOp,), d)
 
-    RedTwoDimClass = create_twod_reduction_op(
-        two_dim_name,
-        RedClass,
-        two_dim_generate_adjoints
-    )
-
-    RedOneDimClass = create_oned_reduction_op(
-        one_dim_name,
-        RedClass,
-        one_dim_generate_adjoints
-    )
-
-    def reduce_to_twod(self):
-        x, = self.args
-        reduction_axes = self.reduction_axes
-        out_axes = self.axes
-
-        if len(reduction_axes) == 0:
-            return broadcast(x, axes=out_axes)
-        elif len(x.axes) == 0:
-            return broadcast(x, axes=out_axes)
-
-        if len(out_axes) == 0:
-            x = flatten(x)
-            return RedOneDimClass(
-                x,
-                reduction_axes=x.axes,
-                out_axes=make_axes(()),
-                dtype=self.dtype,
-                **self.kwargs
-            )
-        else:
-            x = broadcast(x, axes=reduction_axes + out_axes)
-            x = flatten_at(x, len(reduction_axes))
-
-            out = RedTwoDimClass(
-                x,
-                reduction_axes=make_axes((x.axes[0],)),
-                out_axes=make_axes((x.axes[1],)),
-                dtype=self.dtype,
-                **self.kwargs
-            )
-            out = unflatten(out)
-            return broadcast(out, axes=out_axes)
-    RedClass.reduce_to_twod = reduce_to_twod
-
-    if func_name is None:
-        return RedClass, RedTwoDimClass, RedOneDimClass
-    else:
-        def func(*args, **kwargs):
-            return RedClass(*args, **kwargs)
-        func.__name__ = func_name
-        return RedClass, RedTwoDimClass, RedOneDimClass, func
+    def func(*args, **kwargs):
+        return RedClass(*args, **kwargs)
+    func.__name__ = func_name
+    return RedClass, func
 
 
 def max_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
-Max, MaxTwoDim, MaxOneDim, max = create_reduction_op(
-    'Max', 'MaxTwoDim', 'MaxOneDim', 'max', max_adjoints
-)
+Max, max = create_reduction_op('Max', 'max', max_adjoints)
 
 
 def min_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
-Min, MinTwoDim, MinOneDim, min = create_reduction_op(
-    'Min', 'MinTwoDim', 'MinOneDim', 'min', min_adjoints
-)
+Min, min = create_reduction_op('Min', 'min', min_adjoints)
 
 
 def sum_adjoints(self, adjoints, delta, x):
@@ -3398,9 +3308,7 @@ def sum_adjoints(self, adjoints, delta, x):
     )
 
 
-Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
-    'Sum', 'SumTwoDim', 'SumOneDim', 'sum', sum_adjoints
-)
+Sum, sum = create_reduction_op('Sum', 'sum', sum_adjoints)
 
 
 def prod_adjoints(self, adjoints, delta, x):
@@ -3434,23 +3342,17 @@ def prod_adjoints(self, adjoints, delta, x):
     )
 
 
-Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
-    'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
-)
+Prod, prod = create_reduction_op('Prod', 'prod', prod_adjoints)
 
 
-Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
-    'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
-)
+Argmax, _ = create_reduction_op('Argmax', 'argmax')
 
 
 def argmax(x, dtype=None, **kwargs):
     return Argmax(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
-Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
-    'Argmin', 'ArgminTwoDim', 'ArgminOneDim'
-)
+Argmin, _ = create_reduction_op('Argmin', 'argmin')
 
 
 def argmin(x, dtype=None, **kwargs):
