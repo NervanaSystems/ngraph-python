@@ -451,13 +451,13 @@ class BatchNorm(Layer):
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
         self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
-        with ng.sequential_op_factory() as pf:
-            xmean = ng.mean(in_obj, reduction_axes=red_axes)
-            xvar = ng.variance(in_obj, reduction_axes=red_axes)
-            ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho))
-            ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho))
+        xmean = ng.mean(in_obj, reduction_axes=red_axes)
+        xvar = ng.variance(in_obj, reduction_axes=red_axes)
+        return ng.sequential([
+            ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
+            ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
             self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
-        return pf()
+        ])
 
     def set_tuning_iteration(self, batch_index):
         # Following tuning, one must divide self.gvar by rho in order to debias

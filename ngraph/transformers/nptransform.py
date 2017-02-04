@@ -48,7 +48,7 @@ from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    SimplePrune, DerivPass, CompUserDepsPass
+    SimplePrune, DerivPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, make_transformer_factory, set_transformer_factory
@@ -727,8 +727,11 @@ class NumPyTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [DerivPass(), CompUserDepsPass(), CPUTensorLayout(),
-                             SimplePrune(), RequiredTensorShaping()]
+        self.graph_passes = [DerivPass(),
+                             CPUTensorLayout(),
+                             SimplePrune(),
+                             RequiredTensorShaping()
+                             ]
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
