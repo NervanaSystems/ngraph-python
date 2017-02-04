@@ -2922,43 +2922,18 @@ class BinaryElementWiseLowDOp(ElementWise):
 
 
 def create_binary_elementwise(name,
-                              one_dim_name,
-                              zero_dim_name,
                               func_name=None,
-                              generate_adjoints=None,
-                              one_dim_generate_adjoints=None,
-                              zero_dim_generate_adjoints=None):
+                              generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
     BinClass = type(name, (BinaryElementWiseAxesOp,), d)
 
-    d = {}
-    if one_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = one_dim_generate_adjoints
-    OneDimBinClass = type(one_dim_name, (BinaryElementWiseLowDOp,), d)
+    def func(*args, **kwargs):
+        return BinClass(*args, **kwargs)
+    func.__name__ = func_name
 
-    d = {}
-    if zero_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = zero_dim_generate_adjoints
-    ZeroDimBinClass = type(zero_dim_name, (BinaryElementWiseLowDOp,), d)
-
-    def reduce_to_oned(self):
-        x, y = self.args
-        if x.is_scalar and y.is_scalar:
-            return ZeroDimBinClass(x.scalar_op, y.scalar_op, axes=self.axes, **self.kwargs)
-        else:
-            x, y = flatten(x), flatten(y)
-            return unflatten(OneDimBinClass(x, y, axes=FlattenedAxis(self.axes), **self.kwargs))
-    BinClass.reduce_to_oned = reduce_to_oned
-
-    if func_name is None:
-        return BinClass, OneDimBinClass, ZeroDimBinClass
-    else:
-        def func(*args, **kwargs):
-            return BinClass(*args, **kwargs)
-        func.__name__ = func_name
-        return BinClass, OneDimBinClass, ZeroDimBinClass, func
+    return BinClass, func
 
 
 def add_adjoints(self, adjoints, delta, x, y):
@@ -2966,25 +2941,7 @@ def add_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta)
 
 
-Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
-    'AddOp', 'AddOneDim', 'AddZeroDim', 'addX', add_adjoints
-)
-
-
-def add(x, y):
-    """
-    Returns a TensorOp for the sum of x and y.
-
-    Args:
-        x (TensorOp): The first input.
-        y (TensorOp):  The second input.
-        name (String, optional): A name for the sum.
-
-    Returns:
-        TensorOp: x + y
-
-    """
-    return Add(x, y)
+Add, add = create_binary_elementwise('AddOp', 'add', add_adjoints)
 
 
 def subtract_adjoints(self, adjoints, delta, x, y):
@@ -2992,10 +2949,7 @@ def subtract_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta)
 
 
-Subtract, SubtractOneDim, SubtractZeroDim, subtract = create_binary_elementwise(
-    'Subtract', 'SubtractOneDim', 'SubtractZeroDim',
-    'subtract', subtract_adjoints
-)
+Subtract, subtract = create_binary_elementwise('Subtract', 'subtract', subtract_adjoints)
 
 
 def multiply_adjoints(self, adjoints, delta, x, y):
@@ -3003,10 +2957,7 @@ def multiply_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, x * delta)
 
 
-Multiply, MultiplyOneDim, MultiplyZeroDim, multiply = create_binary_elementwise(
-    'Multiply', 'MultiplyOneDim', 'MultiplyZeroDim',
-    'multiply', multiply_adjoints
-)
+Multiply, multiply = create_binary_elementwise('Multiply', 'multiply', multiply_adjoints)
 
 
 def divide_adjoints(self, adjoints, delta, x, y):
@@ -3014,15 +2965,9 @@ def divide_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta * self / y)
 
 
-Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
-    'Divide', 'DivideOneDim', 'DivideZeroDim',
-    'divide', divide_adjoints
-)
+Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
 
-Mod, ModOneDim, ModZeroDim, mod = create_binary_elementwise(
-    'Mod', 'ModOneDim', 'ModZeroDim',
-    'mod', None
-)
+Mod, mod = create_binary_elementwise('Mod', 'mod')
 
 
 def maximum_adjoints(self, adjoints, delta, x, y):
@@ -3030,9 +2975,7 @@ def maximum_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, greater(y, x) * delta)
 
 
-Maximum, MaximumOneDim, MaximumZeroDim, maximum = create_binary_elementwise(
-    'Maximum', 'MaximumOneDim', 'MaximumZeroDim', 'maximum', maximum_adjoints
-)
+Maximum, maximum = create_binary_elementwise('Maximum', 'maximum', maximum_adjoints)
 
 
 def minimum_adjoints(self, adjoints, delta, x, y):
@@ -3040,9 +2983,7 @@ def minimum_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, less(y, x) * delta)
 
 
-Minimum, MinimumOneDim, MinimumZeroDim, minimum = create_binary_elementwise(
-    'Minimum', 'MinimumOneDim', 'MinimumZeroDim', 'minimum', minimum_adjoints
-)
+Minimum, minimum = create_binary_elementwise('Minimum', 'minimum', minimum_adjoints)
 
 
 def power_adjoints(self, adjoints, delta, x, y):
@@ -3050,36 +2991,25 @@ def power_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta * self * log(x))
 
 
-Power, PowerOneDim, PowerZeroDim, power = create_binary_elementwise(
-    'Power', 'PowerOneDim', 'PowerZeroDim', 'power', power_adjoints
-)
+Power, power = create_binary_elementwise('Power', 'power', power_adjoints)
 
 
-Equal, EqualOneDim, EqualZeroDim, equal\
-    = create_binary_elementwise('Equal', 'EqualOneDim', 'EqualZeroDim', 'equal')
+Equal, equal = create_binary_elementwise('Equal', 'equal')
 
 
-NotEqual, NotEqualOneDim, NotEqualZeroDim, not_equal\
-    = create_binary_elementwise('NotEqual', 'NotEqualOneDim', 'NotEqualZeroDim', 'not_equal')
+NotEqual, not_equal = create_binary_elementwise('NotEqual', 'not_equal')
 
 
-Greater, GreaterOneDim, GreaterZeroDim, greater\
-    = create_binary_elementwise('Greater', 'GreaterOneDim', 'GreaterZeroDim', 'greater')
+Greater, greater = create_binary_elementwise('Greater', 'greater')
 
 
-Less, LessOneDim, LessZeroDim, less\
-    = create_binary_elementwise('Less', 'LessOneDim', 'LessZeroDim', 'less')
+Less, less = create_binary_elementwise('Less', 'less')
 
 
-GreaterEqual, GreaterEqualOneDim, GreaterEqualZeroDim, greater_equal\
-    = create_binary_elementwise(
-        'GreaterEqual', 'GreaterEqualOneDim',
-        'GreaterEqualZeroDim', 'greater_equal'
-    )
+GreaterEqual, greater_equal = create_binary_elementwise('GreaterEqual', 'greater_equal')
 
 
-LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
-    = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
+LessEqual, less_equal = create_binary_elementwise('LessEqual', 'less_equal')
 
 
 class ContiguousOp(TensorOp):
