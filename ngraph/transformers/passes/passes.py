@@ -18,13 +18,12 @@ from future.utils import with_metaclass
 from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
-from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
-    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
-    OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, ParallelOp, SequentialOp, \
-    negative, cast_axes, power, DerivOp
-
+from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
+    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
+    ContiguousOp, AssignOp, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    ExpOp, LogOp, NegativeOp, AssignOneDOp, ReshapeOp, flatten, constant, \
+    Multiply, Add, Divide, Op, Sum, Prod, negative, power, DerivOp, \
+    ParallelOp, SequentialOp
 from ngraph.util.generics import generic_method
 
 
@@ -143,18 +142,7 @@ class RequiredTensorShaping(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
-        """
-        TODO.
-
-        Arguments:
-          op: TODO
-        """
         pass
-
-    @visit.on_type(ReductionOp)
-    def visit(self, op):
-        if op.must_reduce:
-            self.replace_op(op, op.reduce_to_twod())
 
     @visit.on_type(DotOp)
     def visit(self, op):
@@ -208,59 +196,6 @@ class RequiredTensorShaping(PeepholeGraphPass):
             out = ReorderAxes(out, out_axes)
 
         self.replace_op(op, out)
-
-    @visit.on_type(DotOneDimensional)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DotTwoDimensional)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DotTwoByOne)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(Sum)
-    def visit(self, op):
-        x = op.args[0]
-        if x.is_scalar:
-            # Sum of a scalar is just the scalar times the axes size rebroadcast
-            val = broadcast(cast_axes(x, ()) * op.reduction_axes.size, op.axes)
-            self.replace_op(op, val)
-            return
-        # call-next-method
-        if op.must_reduce:
-            self.replace_op(op, op.reduce_to_twod())
-
-    @visit.on_type(Prod)
-    def visit(self, op):
-        x = op.args[0]
-        if x.is_scalar:
-            # Prod of a scalar is just the scalar raised to the power of the
-            # axes size rebroadcast
-            val = broadcast(power(cast_axes(x, ()), op.reduction_axes.size), op.axes)
-            self.replace_op(op, val)
-            return
-        # call-next-method
-        if op.must_reduce:
-            self.replace_op(op, op.reduce_to_twod())
-
-    @visit.on_type(OneHotOp)
-    def visit(self, op):
-        self.replace_op(op, op.as_two_dim())
-
-    @visit.on_type(OneHotTwoDimOp)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(UnaryElementwiseAxesOp)
-    def visit(self, op):
-        self.replace_op(op, op.reduce_to_one_d())
-
-    @visit.on_type(BinaryElementWiseAxesOp)
-    def visit(self, op):
-        self.replace_op(op, op.reduce_to_oned())
 
     @visit.on_type(ContiguousOp)
     def visit(self, op):
