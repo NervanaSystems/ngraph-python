@@ -466,16 +466,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         if self.allocated:
             return
 
-        with Op.saved_user_deps():
-            # Disable user_deps during transformations
+        if not self.finalized:
+            self._transform_computations()
 
-            if not self.finalized:
-                self._transform_computations()
+        self.allocate_storage()
 
-            self.allocate_storage()
-
-            for op in OrderedSet(self.ops):
-                self.initialize_constant(op)
+        for op in OrderedSet(self.ops):
+            self.initialize_constant(op)
 
         self.allocated = True
 
