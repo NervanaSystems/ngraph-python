@@ -19,9 +19,9 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
-    OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
+    OneHotTwoDimOp, BinaryElementWiseOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, OneHotOp, Flatten, \
-    Op, Sum, UnaryElementwiseAxesOp, \
+    Op, Sum, UnaryElementWiseOp, \
     SetItemOp, tensor_slice
 from ngraph.op_graph.axes import make_axis, FlattenedAxis
 
@@ -152,11 +152,11 @@ class GPUContiguousPrune(PeepholeGraphPass):
         """
         pass
 
-    @visit.on_type(UnaryElementwiseAxesOp)
+    @visit.on_type(UnaryElementWiseOp)
     def visit(self, op):
         self.visit_ew_kernel_op(op)
 
-    @visit.on_type(BinaryElementWiseAxesOp)
+    @visit.on_type(BinaryElementWiseOp)
     def visit(self, op):
         self.visit_ew_kernel_op(op)
 
@@ -452,7 +452,7 @@ class GPUTensorShaping(PeepholeGraphPass):
     def visit(self, op):
         pass
 
-    @visit.on_type(UnaryElementwiseAxesOp)
+    @visit.on_type(UnaryElementWiseOp)
     def visit(self, op):
         arg0 = op.args[0]
         arg0_td = arg0.tensor_description()
@@ -471,7 +471,7 @@ class GPUTensorShaping(PeepholeGraphPass):
             new_op = flatten_op(op, axes, axes_list)
             self.replace_op(op, new_op)
 
-    @visit.on_type(BinaryElementWiseAxesOp)
+    @visit.on_type(BinaryElementWiseOp)
     def visit(self, op):
         arg0 = op.args[0]
         arg0_td = arg0.tensor_description()

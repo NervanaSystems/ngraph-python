@@ -2449,18 +2449,18 @@ class AllReduce(Op):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
 
 
-class ElementWise(TensorOp):
+class ElementWiseOp(TensorOp):
     pass
 
 
-class UnaryElementwiseAxesOp(ElementWise):
+class UnaryElementWiseOp(ElementWiseOp):
     """
     Handles initialization and 1d shaping for unary elementwise operations.
     """
     one_d_class = None
 
     def __init__(self, x):
-        super(UnaryElementwiseAxesOp, self).__init__(args=(x,), axes=x.axes)
+        super(UnaryElementWiseOp, self).__init__(args=(x,), axes=x.axes)
 
     def reduce_to_one_d(self):
         """
@@ -2475,7 +2475,7 @@ class UnaryElementwiseAxesOp(ElementWise):
         return unflatten(self.__class__.one_d_class(flatten(self.args[0])).named(self.name))
 
 
-class UnaryElementwiseOneDOp(ElementWise):
+class UnaryElementwiseOneDOp(ElementWiseOp):
     """
     Handles initialization for unary operations.
     """
@@ -2491,7 +2491,7 @@ class StopGradientOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class StopGradient(UnaryElementwiseAxesOp):
+class StopGradient(UnaryElementWiseOp):
     """ TODO """
     one_d_class = StopGradientOneDOp
 
@@ -2527,7 +2527,7 @@ class NegativeOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class NegativeOp(UnaryElementwiseAxesOp):
+class NegativeOp(UnaryElementWiseOp):
     """
     Negative of a tensor.
     """
@@ -2558,7 +2558,7 @@ class AbsoluteOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class AbsoluteOp(UnaryElementwiseAxesOp):
+class AbsoluteOp(UnaryElementWiseOp):
     """
     Absolute value of a tensor.
     """
@@ -2589,7 +2589,7 @@ class SinOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class SinOp(UnaryElementwiseAxesOp):
+class SinOp(UnaryElementWiseOp):
     """
     Sin of a tensor.
     """
@@ -2620,7 +2620,7 @@ class CosOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class CosOp(UnaryElementwiseAxesOp):
+class CosOp(UnaryElementWiseOp):
     """
     Cos of a tensor.
     """
@@ -2651,7 +2651,7 @@ class TanhOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class TanhOp(UnaryElementwiseAxesOp):
+class TanhOp(UnaryElementWiseOp):
     """
     Tanh of a tensor.
     """
@@ -2682,7 +2682,7 @@ class ExpOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class ExpOp(UnaryElementwiseAxesOp):
+class ExpOp(UnaryElementWiseOp):
     """
     Exp of a tensor.
     """
@@ -2713,7 +2713,7 @@ class LogOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class LogOp(UnaryElementwiseAxesOp):
+class LogOp(UnaryElementWiseOp):
     """
     Log of a tensor.
     """
@@ -2761,7 +2761,7 @@ class ReciprocalOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class ReciprocalOp(UnaryElementwiseAxesOp):
+class ReciprocalOp(UnaryElementWiseOp):
     """
     Reciprocal of a tensor.
     """
@@ -2790,7 +2790,7 @@ class SignOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class SignOp(UnaryElementwiseAxesOp):
+class SignOp(UnaryElementWiseOp):
     "Sign of a tensor."
     one_d_class = SignOneDOp
 
@@ -2816,7 +2816,7 @@ class SquareOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class SquareOp(UnaryElementwiseAxesOp):
+class SquareOp(UnaryElementWiseOp):
     """
     Square of a tensor.
     """
@@ -2845,7 +2845,7 @@ class SqrtOneDOp(UnaryElementwiseOneDOp):
     pass
 
 
-class SqrtOp(UnaryElementwiseAxesOp):
+class SqrtOp(UnaryElementWiseOp):
     """
     Square root of a tensor.
     """
@@ -2869,7 +2869,7 @@ def sqrt(x):
     return SqrtOp(x)
 
 
-class BinaryElementWiseAxesOp(ElementWise):
+class BinaryElementWiseOp(ElementWiseOp):
 
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
@@ -2878,35 +2878,9 @@ class BinaryElementWiseAxesOp(ElementWise):
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
-        super(BinaryElementWiseAxesOp, self).__init__(
+        super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
             axes=axes,
-            **kwargs
-        )
-
-    @property
-    def one_dimensional(self):
-        x, y = self.args
-        return len(x.axes) <= 1 and len(y.axes) <= 1
-
-    @property
-    def zero_dimensional(self):
-        x, y = self.args
-        return len(x.axes) == 0 and len(y.axes) == 0
-
-
-class BinaryElementWiseLowDOp(ElementWise):
-
-    def __init__(self, x, y, **kwargs):
-        self.kwargs = kwargs
-
-        if x.is_scalar:
-            x = x.scalar_op
-        if y.is_scalar:
-            y = y.scalar_op
-
-        super(BinaryElementWiseLowDOp, self).__init__(
-            args=(x, y),
             **kwargs
         )
 
@@ -2927,7 +2901,7 @@ def create_binary_elementwise(name,
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
-    BinClass = type(name, (BinaryElementWiseAxesOp,), d)
+    BinClass = type(name, (BinaryElementWiseOp,), d)
 
     def func(*args, **kwargs):
         return BinClass(*args, **kwargs)
