@@ -1,7 +1,15 @@
 from ngraph.op_graph.op_graph import make_axes, make_axis
 
 
-def clone(node, new_axes, device_id, scatter_shared_queue=None, gather_shared_queue=None, send_nodes=None, arg1=None, arg2=None):
+def clone(
+        node,
+        new_axes,
+        device_id,
+        scatter_shared_queue=None,
+        gather_shared_queue=None,
+        send_nodes=None,
+        arg1=None,
+        arg2=None):
     if node.__class__.__name__ is 'AddOp':
         new_node = node.__class__(arg1, arg2)
         new_node._TensorOp__axes = new_axes

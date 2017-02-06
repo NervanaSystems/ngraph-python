@@ -91,7 +91,6 @@ def check_device_assign_pass(default_device, default_device_id,
 
 
 def check_communication_pass(ops_to_transform, expected_recv_nodes):
-
     """
     The communication pass should insert send/recv nodes wherever
     the metadata[transformer] differs between nodes.
@@ -192,7 +191,7 @@ def test_distributed_graph():
             x_plus_y,
             x_plus_y,
             x_plus_y_plus_z])
-    
+
     # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
     obj = ChildTransformerPass([])
     obj.do_pass(graph_op_list, [])

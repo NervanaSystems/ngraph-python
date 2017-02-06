@@ -99,7 +99,7 @@ class CommunicationPass(PeepholeGraphPass):
         args.append(Recv(axes=arg.axes, dtype=arg.dtype, queue=shared_queue,
                          send_node=self.send_nodes[-1],
                          device=op.metadata['device'],
-                        device_id=op.metadata['device_id']))
+                         device_id=op.metadata['device_id']))
 
     def visit(self, op):
         args = list()
@@ -108,7 +108,7 @@ class CommunicationPass(PeepholeGraphPass):
                 self.insert_scatter_nodes(op, arg, args)
             elif isinstance(arg.metadata['device_id'], (list, tuple)):
                 self.insert_gather_nodes(op, arg, args)
-            elif op.metadata['device_id'] != arg.metadata['device_id']:
+            elif op.metadata['device_id'] != arg.metadata['device_id'] or op.metadata['device'] != arg.metadata['device']:
                 self.insert_send_recv_nodes(op, arg, args)
             else:
                 args.append(arg)
@@ -189,7 +189,7 @@ class DistributedPass(PeepholeGraphPass):
                 for i in add_op_list:
                     v = visit[i]
                     for arg in v.args:
-                        new_node = clone(node=arg, new_axes=new_axes, 
+                        new_node = clone(node=arg, new_axes=new_axes,
                                          scatter_shared_queue=scatter_shared_queue,
                                          gather_shared_queue=gather_shared_queue,
                                          device_id=device_id)
@@ -204,7 +204,7 @@ class DistributedPass(PeepholeGraphPass):
             else:
                 node = visit.pop()
                 subgraph.append(clone(node=node, new_axes=new_axes, device_id=device_id,
-                                      scatter_shared_queue=scatter_shared_queue, 
+                                      scatter_shared_queue=scatter_shared_queue,
                                       gather_shared_queue=gather_shared_queue,
                                       send_nodes=self.send_nodes, arg1=subgraph[-1]))
                 elem = elem + 1
@@ -250,6 +250,7 @@ class DistributedPass(PeepholeGraphPass):
             else:
                 op.args(args)
         return ops, inits
+
 
 class ChildTransformerPass(PeepholeGraphPass):
 

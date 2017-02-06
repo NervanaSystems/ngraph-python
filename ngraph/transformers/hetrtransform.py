@@ -39,6 +39,7 @@ def build_transformer(name):
 
 
 class AsyncTransformer(Process):
+
     def __init__(self, transformer_type):
         super(AsyncTransformer, self).__init__()
         self.transformer_type = transformer_type
@@ -66,6 +67,7 @@ class AsyncTransformer(Process):
         #
         # instead, return a lightweight computation wrapper that can be used later.
         class AsyncComputation(object):
+
             def __init__(self, async_transformer):
                 self.async_transformer = async_transformer
                 self.comp_id = self.async_transformer.new_comp_id()
@@ -152,7 +154,7 @@ class AsyncTransformer(Process):
             # Find all the Receivers fro depends on
             visit = set()
             recvs = set()
-            visit.add(fro)    
+            visit.add(fro)
             while visit:
                 v = visit.pop()
                 if isinstance(v, Receiver):
@@ -231,6 +233,8 @@ class ResultOp(TensorOp):
 # TODO
 # revisit making HetrComputation a Computation;
 # update it to not take results, *parameters, but instead a computation_op
+
+
 class HetrComputation(object):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
@@ -253,7 +257,7 @@ class HetrComputation(object):
             results = [results]
         for op in results:
             if 'device_id' in op.metadata and \
-                isinstance(op.metadata['device_id'], (list, tuple)):
+                    isinstance(op.metadata['device_id'], (list, tuple)):
                 op.metadata['is_split_op'] = True
                 new_result = ResultOp(device_id=0, args=op)
                 results.remove(op)
@@ -284,7 +288,8 @@ class HetrComputation(object):
 
         self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
-        self.is_distributed = any('Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes_list)
+        self.is_distributed = any(
+            'Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes_list)
 
         # update the transformer to send node mappings
         for s in self.send_nodes_list:
@@ -306,7 +311,6 @@ class HetrComputation(object):
                 else:
                     self.transformer_to_node[tname].append(op)
                 self.child_results_map.setdefault(tname, []).append(pos)
-
 
         ###
         # TODO WIP was trying to make the loops below more concise
