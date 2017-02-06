@@ -46,4 +46,4 @@ plus_two = hetr.computation(x_plus_two, x)
 for i in range(args.iter_count):
     print(plus_two(i))
 
-hetr.cleanup()    
+hetr.cleanup()

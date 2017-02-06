@@ -278,7 +278,6 @@ class HetrTransformer(Transformer):
         if tname not in self.child_transformers:
             at = AsyncTransformer(tname)
             self.child_transformers[tname] = at
-            atexit.register(at.cleanup)
 
         return self.child_transformers[tname]
 
