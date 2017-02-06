@@ -27,6 +27,7 @@ ng_on = 1
 
 log_interval = 200
 
+
 def mnist_mlp(args):
     mnist = input_data.read_data_sets(args.data_dir, one_hot=False)
 
@@ -68,24 +69,28 @@ def mnist_mlp(args):
                                c2_workspace=workspace)
 
         # get handle of ngraph ops
-        x_train_ng, y_train_ng, fc_w1_ng, fc_w2_ng, fc_w3_ng, fc_b1_ng, fc_b2_ng, fc_b3_ng, loss_ng = \
-            importer.get_op_handle(['train_x', 'train_y', 'fc_w1', 'fc_w2', 'fc_w3', 'fc_b1', 'fc_b2', 'fc_b3', 'loss'])
+        x_train_ng, y_train_ng, loss_ng, \
+            fc_w1_ng, fc_w2_ng, fc_w3_ng, fc_b1_ng, fc_b2_ng, fc_b3_ng = importer.get_op_handle(
+                ['train_x', 'train_y', 'loss',
+                 'fc_w1', 'fc_w2', 'fc_w3', 'fc_b1', 'fc_b2', 'fc_b3'])
 
-        # setting learning rate for ngraph, that matches the one that it will be used for caffe2 below
+        # setting learning rate for ngraph,
+        # that matches the one that it will be used for caffe2 below
         alpha = ng.placeholder(axes=(), initial_value=[args.lrate])
 
         # transformer and computations
-        parallel_update = util.CommonSGDOptimizer(args.lrate).minimize(loss_ng, [fc_w1_ng, fc_w2_ng,fc_w3_ng, fc_b1_ng, fc_b2_ng, fc_b3_ng])
+        parallel_update = util.CommonSGDOptimizer(args.lrate) \
+            .minimize(loss_ng, [fc_w1_ng, fc_w2_ng, fc_w3_ng, fc_b1_ng, fc_b2_ng, fc_b3_ng])
         transformer = ngt.make_transformer()
         update_fun = transformer.computation(
-            [loss_ng, fc_w1_ng, fc_b1_ng, parallel_update], alpha, x_train_ng, y_train_ng)
+            [loss_ng, parallel_update], alpha, x_train_ng, y_train_ng)
 
         # train
         # ngraph actual computation
         for i in range(args.max_iter):
             train_x, train_y = mnist.train.next_batch(args.batch)
             lr = args.lrate * (1 + args.gamma * i) ** (-args.power)
-            loss_val, _, _, _ = update_fun(lr, train_x, train_y)
+            loss_val, _ = update_fun(lr, train_x, train_y)
             if args.verbose and i % log_interval == 0:
                 print('iter %s, loss %s ' % (i, loss_val))
     # ======================================
@@ -143,4 +148,3 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     mnist_mlp(args)
-

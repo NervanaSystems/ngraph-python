@@ -22,7 +22,7 @@ rtol = atol = 1e-2
 
 
 def test_stack(transformer_factory):
-    ax = ng.make_name_scope(name="ax")
+    ax = ng.make_name_scope().named('ax')
     ax.W = ng.make_axis(length=4)
     ax.H = ng.make_axis(length=5)
     ax.I = ng.make_axis(length=3)
@@ -38,14 +38,11 @@ def test_stack(transformer_factory):
 
         s = ng.stack(a, ax.I, pos)
 
-        ex = ExecutorFactory()
+        with ExecutorFactory() as ex:
+            num_funs = [ex.numeric_derivative(s, _, delta) for _ in a]
+            sym_funs = [ex.derivative(s, _) for _ in a]
 
-        num_funs = [ex.numeric_derivative(s, _, delta) for _ in a]
-        sym_funs = [ex.derivative(s, _) for _ in a]
-
-        ex.transformer.initialize()
-
-        for n_fun, s_fun, a_i in zip(num_funs, sym_funs, a_v):
-            d_n = n_fun(a_i)
-            d_s = s_fun(a_i)
+            for n_fun, s_fun, a_i in zip(num_funs, sym_funs, a_v):
+                d_n = n_fun(a_i)
+                d_s = s_fun(a_i)
             ng.testing.allclose(d_n, d_s, rtol=rtol, atol=atol)

@@ -48,6 +48,7 @@ def logistic_regression(args):
     # transformer and computations
     transformer = ngt.make_transformer()
     updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
+
     train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
     init_comp = transformer.computation(init_op_ng)
     transformer.initialize()
@@ -59,6 +60,8 @@ def logistic_regression(args):
         cost_val, _ = train_comp(xs_np, ys_np)
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    transformer.cleanup()
 
     # tensorflow for comparison
     with tf.Session() as sess:

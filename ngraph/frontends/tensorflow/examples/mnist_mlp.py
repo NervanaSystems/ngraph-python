@@ -60,6 +60,8 @@ def mnist_mlp(args):
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
+    transformer.cleanup()
+
     # train in tensorflow as comparison
     with tf.Session() as sess:
         # train in tensorflow

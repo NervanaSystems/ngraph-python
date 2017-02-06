@@ -300,6 +300,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
         """
         self.roles.add(axis_role)
+        return self
 
     @property
     def annotated_axis(self):
@@ -358,7 +359,8 @@ class CastingAxis(Axis):
     """
     def __init__(self, annotated_axis, cast_axis):
         self.__annotated_axis = annotated_axis.annotated_axis
-        super(CastingAxis, self).__init__(annotated_axis, name=annotated_axis.name)
+        super(CastingAxis, self).__init__(annotated_axis)
+        self.named(annotated_axis.name)
         self.__cast_axis = cast_axis
 
     @property
@@ -905,6 +907,7 @@ class Axes(object):
     def add_role(self, role):
         for axis in self:
             axis.add_role(role)
+        return self
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -1062,16 +1065,20 @@ class Axes(object):
             False otherwise.
         """
         axes = make_axes(axes)
-        if not axes and not self:
-            return True
 
-        if self:
-            if not axes and self.lengths.count(1) == len(self.lengths):
-                return True
+        # TODO should we treat objects without any axes and
+        # objects with any number of axes each of length 1 as a scalar
 
-        if axes:
-            if not self and axes.lengths.count(1) == len(axes):
-                return True
+        # if not axes and not self:
+        #     return True
+        #
+        # if self:
+        #     if not axes and self.lengths.count(1) == len(self.lengths):
+        #         return True
+        #
+        # if axes:
+        #     if not self and axes.lengths.count(1) == len(axes):
+        #         return True
 
         for x in self:
             if x not in axes:
@@ -1481,7 +1488,7 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides)
 
-    def flatten(self, new_axes, name=None):
+    def flatten(self, new_axes):
         """
         Flattens a tensor description to give it the Axes in new_axes.
         See Axes.assert_valid_flatten for a description of permitted values of new_axes.
@@ -1519,11 +1526,10 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self,
-            name=name
+            next_tensor_description=self
         )
 
-    def unflatten(self, new_axes, name=None):
+    def unflatten(self, new_axes):
         """
         Unflattens a tensor description to give it the Axes in new_axes.
         See Axes.assert_valid_unflatten for a description of the permitted values of
@@ -1609,11 +1615,10 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self,
-            name=name
+            next_tensor_description=self
         )
 
-    def transpose(self, name=None):
+    def transpose(self):
         """
         Reverses the axes of the tensor description.
 
@@ -1623,16 +1628,17 @@ class TensorDescription(NameableValue):
         new_axes = reversed(self.axes)
         full_sizes = reversed(self.full_sizes)
         full_strides = reversed(self.full_strides)
-        return TensorDescription(Axes(new_axes),
-                                 base=self.base,
-                                 dtype=self.dtype,
-                                 full_strides=tuple(full_strides),
-                                 full_sizes=tuple(full_sizes),
-                                 offset=self.offset,
-                                 next_tensor_description=self,
-                                 name=name)
+        return TensorDescription(
+            Axes(new_axes),
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=tuple(full_strides),
+            full_sizes=tuple(full_sizes),
+            offset=self.offset,
+            next_tensor_description=self
+        )
 
-    def broadcast(self, new_axes, name=None):
+    def broadcast(self, new_axes):
         """
         Adds axes to a tensor description to give it a new shape.
         See Axes.assert_valid_broadcast for a description of the permitted
@@ -1645,9 +1651,9 @@ class TensorDescription(NameableValue):
             TensorDescription: The broadcasted tensor description.
         """
         Axes.assert_valid_broadcast(self.axes, new_axes)
-        return self.reorder_and_broadcast(new_axes, name)
+        return self.reorder_and_broadcast(new_axes)
 
-    def reorder(self, new_axes, name=None):
+    def reorder(self, new_axes):
         """
         Shuffles axes of a tensor to give it a new shape. The axes of
         this tensor description and new_axes must have the same elements.
@@ -1659,9 +1665,9 @@ class TensorDescription(NameableValue):
             TensorDescription: The reordered tensor description.
         """
         self.axes.has_same_axes(new_axes)
-        return self.reorder_and_broadcast(new_axes, name)
+        return self.reorder_and_broadcast(new_axes)
 
-    def reorder_and_broadcast(self, new_axes, name):
+    def reorder_and_broadcast(self, new_axes):
         """
         Adds or shuffles axes to give a tensor description a new shape.
         This function is used to implement broadcast and reorder.
@@ -1704,11 +1710,10 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self,
-            name=name
+            next_tensor_description=self
         )
 
-    def cast(self, new_axes, name=None):
+    def cast(self, new_axes):
         """
         Return a tensor desciption for a view of the tensor.
 
@@ -1732,11 +1737,10 @@ class TensorDescription(NameableValue):
             full_strides=full_strides,
             full_sizes=full_sizes,
             offset=self.offset,
-            next_tensor_description=self,
-            name=name
+            next_tensor_description=self
         )
 
-    def slice(self, slices, new_axes, name=None):
+    def slice(self, slices, new_axes):
         """
         Return a tensor description for a slice view of this tensor.
 
@@ -1797,14 +1801,15 @@ class TensorDescription(NameableValue):
             # TODO: write a test that fails if abs() is removed
             offset += idx * abs(stride)
 
-        return TensorDescription(new_axes,
-                                 base=self.base,
-                                 dtype=self.dtype,
-                                 full_strides=tuple(full_strides),
-                                 full_sizes=tuple(full_sizes),
-                                 offset=offset,
-                                 next_tensor_description=self,
-                                 name=name)
+        return TensorDescription(
+            new_axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=tuple(full_strides),
+            full_sizes=tuple(full_sizes),
+            offset=offset,
+            next_tensor_description=self
+        )
 
     @property
     def shape(self):

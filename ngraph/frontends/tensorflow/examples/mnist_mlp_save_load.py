@@ -24,7 +24,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 import ngraph.transformers as ngt
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
-from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
+import ngraph.frontends.common.utils as util
 
 
 def train_mnist(args):
@@ -104,7 +104,7 @@ def ng_retrain_mnist(args):
 
     # transformer and computations
     transformer = ngt.make_transformer()
-    updates = SGDOptimizer(args.lrate).minimize(cost_ng)
+    updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
     train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
     init_comp = transformer.computation(init_op_ng)
     restore_comp = transformer.computation(restore_op_ng)
@@ -119,6 +119,8 @@ def ng_retrain_mnist(args):
         cost_val, _ = train_comp(batch_xs, batch_ys)
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
+
+    transformer.cleanup()
 
     return ng_cost_vals
 
