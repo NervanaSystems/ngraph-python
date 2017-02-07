@@ -3099,7 +3099,6 @@ def softmax(x, normalization_axes=None, **kwargs):
 
 
 class ReductionOp(TensorOp):
-    must_reduce = True
 
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         if reduction_axes is None and out_axes is None:
