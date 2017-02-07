@@ -255,7 +255,7 @@ class HetrComputation(object):
 
         orig_results = results
         if not isinstance(results, list):
-            results = [results]
+            results = [results] if results else []
         for op in results:
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
@@ -366,8 +366,10 @@ class HetrComputation(object):
         if isinstance(return_list, collections.Sequence):
             if len(return_list) > 1:
                 return tuple(return_list)
-            else:
+            elif len(return_list) == 1:
                 return return_list[0]
+            else:
+                return None
 
 
 class HetrTransformer(Transformer):

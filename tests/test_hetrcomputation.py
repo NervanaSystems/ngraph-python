@@ -253,3 +253,11 @@ def test_gpu_send_and_recv():
     check_result_values(input_vector=[10, 20, 30],
                         result_expected=[(12), (22), (32)],
                         placeholder=x, op_list=[x_plus_two])
+
+
+def test_empty_computation():
+    transformer = ngt.make_transformer_factory('hetr')()
+    computation = transformer.computation(None)
+    res = computation()
+    assert not res
+    transformer.cleanup()
