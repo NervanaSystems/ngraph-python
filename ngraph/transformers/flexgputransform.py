@@ -110,6 +110,10 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
         return tensor
 
     def __setitem__(self, key, value):
+
+        # initialize flex entry (only happens if not already initialized)
+        self.flex_entry.initialize(value)
+
         value = value / self.scale
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
 
