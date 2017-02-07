@@ -108,7 +108,9 @@ class CommunicationPass(PeepholeGraphPass):
                 self.insert_scatter_nodes(op, arg, args)
             elif isinstance(arg.metadata['device_id'], (list, tuple)):
                 self.insert_gather_nodes(op, arg, args)
-            elif op.metadata['device_id'] != arg.metadata['device_id'] or op.metadata['device'] != arg.metadata['device']:
+            elif op.metadata['device_id'] != arg.metadata['device_id']:
+                self.insert_send_recv_nodes(op, arg, args)
+            elif op.metadata['device'] != arg.metadata['device']:
                 self.insert_send_recv_nodes(op, arg, args)
             else:
                 args.append(arg)
@@ -239,9 +241,9 @@ class DistributedPass(PeepholeGraphPass):
                                                                    len(arg.from_id), True)
 
                             nodes = self.do_traversal(arg.send_node())
-                            subgraph = self.clone_nodes(nodes, arg.from_id[d], self.new_axes,
-                                                        self.scatter_shared_queues[d],
-                                                        self.gather_shared_queues[d])
+                            self.clone_nodes(nodes, arg.from_id[d], self.new_axes,
+                                             self.scatter_shared_queues[d],
+                                             self.gather_shared_queues[d])
 
                 args.append(arg)
 

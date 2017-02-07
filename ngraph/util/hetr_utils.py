@@ -1,3 +1,4 @@
+from __future__ import division
 from ngraph.op_graph.op_graph import make_axes, make_axis
 
 
@@ -75,7 +76,7 @@ def calculate_new_axes(axes, parallel_axis, num_devices, is_last):
     for a in axes:
         if parallel_axis == a:
             remainder = a.length % num_devices
-            new_length = a.length / num_devices
+            new_length = a.length // num_devices
             if remainder > 0:
                 if is_last:
                     new_length += remainder

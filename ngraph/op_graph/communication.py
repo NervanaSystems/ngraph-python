@@ -1,3 +1,4 @@
+from __future__ import division
 from op_graph import TensorOp
 
 
@@ -61,7 +62,7 @@ class Scatter_Send(TensorOp):
                 s = slice(None)
                 if parallel_axis == a:
                     remainder = a.length % len(to_id)
-                    new_length = a.length / len(to_id)
+                    new_length = a.length // len(to_id)
                     start = i * new_length
                     stop = (i + 1) * new_length
                     step = 1
@@ -123,7 +124,7 @@ class Gather_Recv(Receiver):
                 s = slice(None)
                 if parallel_axis == a:
                     remainder = a.length % len(from_id)
-                    new_length = a.length / len(from_id)
+                    new_length = a.length // len(from_id)
                     start = i * new_length
                     stop = (i + 1) * new_length
                     step = 1

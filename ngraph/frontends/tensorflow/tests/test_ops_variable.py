@@ -25,9 +25,9 @@ import pytest
 
 
 class Tester(ImporterTester):
-    @pytest.mark.skip(reason="hetr failure at this unit test hard to duplicate: \
-                             only present with make test")
     def test_variable(self):
+        if self.transformer_name == 'hetr':
+            pytest.xfail("hetr fails this during make test")
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))

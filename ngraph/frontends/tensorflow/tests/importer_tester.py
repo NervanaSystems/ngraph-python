@@ -34,6 +34,7 @@ class ImporterTester(object):
 
     @pytest.fixture(autouse=True)
     def build_transformer(self, transformer_factory):
+        self.transformer_name = transformer_factory.name
         pass
 
     @classmethod

@@ -59,8 +59,9 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('reflstmargs', fargs)
 
 
-@pytest.mark.skip(reason="Need value_op to correctly check side-effects")
 def test_ref_compare_rand(transformer_factory, reflstmargs):
+        if transformer_factory.name == 'hetr':
+            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         # run comparison with reference code
         # for Gaussian random init
         seq_len, input_size, hidden_size, batch_size = reflstmargs
@@ -68,8 +69,9 @@ def test_ref_compare_rand(transformer_factory, reflstmargs):
                    GaussianInit(0.0, 0.1))
 
 
-@pytest.mark.skip(reason="Need value_op to correctly check side-effects")
 def test_ref_stacked(transformer_factory, reflstmargs):
+        if transformer_factory.name == 'hetr':
+            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         seq_len, input_size, hidden_size, batch_size = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
                            GaussianInit(0.0, 0.1))

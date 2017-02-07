@@ -18,6 +18,8 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass, ChildTransformerPass
+from ngraph.transformers.base import transformer_choices
+import pytest
 
 
 def check_result_values(input_vector, result_expected, placeholder, op_list=[], *args):
@@ -224,6 +226,9 @@ def test_simple_graph():
 
 
 def test_gpu_send_and_recv():
+    # First check whether do we have gputransformer available, if not, xfail
+    if 'gpu' not in transformer_choices():
+        pytest.xfail("GPUTransformer not available")
 
     # put x+1 on cpu numpy
     with ng.metadata(device='numpy'):

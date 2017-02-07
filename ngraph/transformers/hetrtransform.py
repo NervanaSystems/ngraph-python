@@ -1,19 +1,16 @@
 from neon import NervanaObject  # noqa
 
-import atexit
 import time
-from multiprocessing import Process, Queue, Manager, Event
+from multiprocessing import Process, Manager, Event
 import collections
 from ngraph.util.ordered import OrderedSet
-from ngraph.op_graph.op_graph import computation, TensorOp
-from ngraph.transformers.base import Transformer, Computation
+from ngraph.op_graph.op_graph import TensorOp
+from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
-from ngraph.transformers.base import set_transformer_factory
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
-from ngraph.transformers.nptransform import NumPyTransformer
 from ngraph.op_graph.communication import Receiver
 
 
@@ -117,12 +114,14 @@ class AsyncTransformer(Process):
         Results for this tranformer:
             Send0, Z
 
-        Deadlock would occur if Z ran before Send0, but there are no explicit edges connecting them.
+        Deadlock would occur if Z ran before Send0, but there are no explicit edges
+        connecting them.
         Using other_deps, the subgraph for this transformer looks like:
 
         X -> Send0 ====other_dep====> Recv1 -> Z
 
-        This ensures that the built in logic in any child transformer, which sorts nodes based on all_deps,
+        This ensures that the built in logic in any child transformer, which sorts
+        nodes based on all_deps,
         will produce a correct order if one is possible.
         """
         if len(self.child_ops) <= 1:
@@ -130,7 +129,8 @@ class AsyncTransformer(Process):
 
         def comm_path_exists(fro, to):
             """
-            Find a path from fro to to, including paths non-explicit edges from a Receiver to its Sender.
+            Find a path from fro to to, including paths non-explicit edges from
+            a Receiver to its Sender.
 
             Note- this is a non-standard traversal, as most traversals stop at a Receiver.
             """
@@ -220,7 +220,8 @@ class AsyncTransformer(Process):
                     pass
                 else:
                     # TODO handle and exit gracefully
-                    print "!!!exception!!!", e
+                    # print "!!!exception!!!", e
+                    pass
 
 
 class ResultOp(TensorOp):
@@ -353,7 +354,7 @@ class HetrComputation(object):
 
         # Reverse map child results to flattend list of results
         # in order expected by parent caller.
-        for tname, result_map in self.child_results_map.iteritems():
+        for tname, result_map in self.child_results_map.items():
             child_results = self.child_computations[tname].get_results()
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 if self.is_distributed is True:
@@ -409,7 +410,7 @@ class HetrTransformer(Transformer):
 
     def cleanup(self):
         HetrTransformer.hetr_counter -= 1
-        for t in self.child_transformers.itervalues():
+        for t in self.child_transformers.values():
             t.cleanup()
 
     def transformer(self, tname):
@@ -441,16 +442,17 @@ class HetrTransformer(Transformer):
         return hc
 
     def initialize(self):
-        print("Dummy Initialize, skipping")
+        # print("Dummy Initialize, skipping")
         pass
 
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            print("Ignoring vizpass")
+            # print("Ignoring vizpass")
             # self.vizpass = graph_pass
+            pass
         else:
-            print("Ignoring unsupported graph pass in hetr", graph_pass)
+            # print("Ignoring unsupported graph pass in hetr", graph_pass)
             pass
 
     def device_buffer_storage(self, bytes, dtype, name):
@@ -466,7 +468,7 @@ class HetrTransformer(Transformer):
         assert False, "Should not be used, TODO cleanup"
 
     def transform_ordered_ops(self, ordered_ops, name):
-        print(name, ordered_ops)
+        # print(name, ordered_ops)
         return name + str(1)
 
     def finish_transform(self):
@@ -475,5 +477,6 @@ class HetrTransformer(Transformer):
     def allocate_storage(self):
         assert False, "Should not be used, TODO cleanup"
 
+# from ngraph.transformers.base import set_transformer_factory
 # set_transformer_factory(
 #    make_transformer_factory(HetrTransformer.transformer_name))
