@@ -615,7 +615,7 @@ def slice_axis(axis, s):
     _validate_slice(s)
 
     # get sliced length
-    new_length = _sliced_length(s, axis.length)
+    new_length = None if axis.length is None else _sliced_length(s, axis.length)
 
     # create sliced axis
     new_axis = make_axis(length=new_length,
@@ -1697,7 +1697,7 @@ class TensorDescription(NameableValue):
                 _validate_slice(s)
 
                 # ensure new_axis has the correct length
-                _check_sliced_axis_length(s, axis, new_axis)
+                new_axis.length = _sliced_length(s, axis.length)
 
                 start, stop, step = s.indices(axis.length)
 
