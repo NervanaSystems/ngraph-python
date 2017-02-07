@@ -46,4 +46,8 @@ def test_gemm(transformer_factory):
 
         for ii in range(3):
             y_hat_val = mm_executor(xs)
-            assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
+            # 8.8 fixed point test
+            # assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
+
+            # autoflex test
+            assert_allclose(np.dot(xs, w), y_hat_val)
