@@ -242,3 +242,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         """
         # flex management
         self.transformer.flex_manager.manage_after_computation(kernel)
+
+    def __call__(self):
+
+        self.transformer.flex_manager.autoflex_count += 1
+        super(FlexGPUKernelGroup, self).__call__()
