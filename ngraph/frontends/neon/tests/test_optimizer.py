@@ -88,7 +88,7 @@ def test_gdm(args, transformer_factory):
         # to call ngraph gdm, use (ngraph_W, _) = ngraph_optimize(x, y)
         # where (x, y) are nparrays that fill the placeholders X and Y
         updates = gdm(cost)
-        ngraph_optimize = transformer.computation([W, updates], X, Y)
+        ngraph_optimize = transformer.computation(ng.sequential([updates, W]), X, Y)
 
         # set up the reference values for gradient descent
         w_ref = w_init.copy()
@@ -100,7 +100,7 @@ def test_gdm(args, transformer_factory):
         # run for 20 minibatches
         for i, (x, y) in enumerate([generate_data(C.length, N.length) for _ in range(20)]):
             # obtain ngraph results
-            (ng_W, _) = ngraph_optimize(x, y)
+            ng_W = ngraph_optimize(x, y)
         #    gdm.update_learning_rate()
             ng_Ws.append(copy.deepcopy(ng_W))
 
