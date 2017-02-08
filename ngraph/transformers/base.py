@@ -491,8 +491,12 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.initialized = True
         self.init_computation()
 
-    def cleanup(self):
+    def close(self):
         pass
+
+    def __del__(self):
+        self.close()
+
 
 __transformer_factory = None
 

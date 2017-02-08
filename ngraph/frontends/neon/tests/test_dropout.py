@@ -96,4 +96,4 @@ def test_dropout_bprop_single_comp(transformer_factory):
     fout, bout, mask = comp(x, 2)
     # Calculate derivative by hand and compare
     np.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)
-    trans.cleanup()
+    trans.close()
