@@ -167,4 +167,5 @@ class OpsUnary(OpsBase):
         Inputs to c2_op:
             x, name
         """
+        assert 1 == len(inputs)
         return ng.negative(inputs[0]).named(c2_op.name)
