@@ -42,4 +42,4 @@ plus_one = hetr.computation(x_plus_one, x)
 for i in range(args.iter_count):
     print(plus_one(i))
 
-hetr.cleanup()
+hetr.close()

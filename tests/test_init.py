@@ -47,4 +47,4 @@ def test_init_gaussian():
     loss_val, w_val = update_fun(5.0, xs, ys)
 
     print(loss_val)
-    transformer.cleanup()
+    transformer.close()

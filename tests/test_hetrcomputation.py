@@ -57,7 +57,7 @@ def check_result_values(input_vector, result_expected, placeholder, op_list=[], 
         assert (np.array(tuple(result_obtained)) ==
                 np.array(result_expected[0])).all()
 
-    transformer.cleanup()
+    transformer.close()
 
 
 def check_device_assign_pass(default_device, default_device_id,
@@ -260,4 +260,4 @@ def test_empty_computation():
     computation = transformer.computation(None)
     res = computation()
     assert not res
-    transformer.cleanup()
+    transformer.close()

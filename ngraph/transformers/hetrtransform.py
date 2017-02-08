@@ -94,7 +94,7 @@ class AsyncTransformer(Process):
         self.computation_q.put(c.comp_id)
         return c
 
-    def cleanup(self):
+    def close(self):
         self.exit.set()
         self.join()
 
@@ -410,10 +410,11 @@ class HetrTransformer(Transformer):
         assert HetrTransformer.hetr_counter <= 1
         assert HetrTransformer.hetr_counter >= 0
 
-    def cleanup(self):
-        HetrTransformer.hetr_counter -= 1
-        for t in self.child_transformers.values():
-            t.cleanup()
+    def close(self):
+        if HetrTransformer.hetr_counter > 0:
+            HetrTransformer.hetr_counter -= 1
+            for t in self.child_transformers.values():
+                t.close()
 
     def transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple

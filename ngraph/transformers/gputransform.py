@@ -1148,7 +1148,7 @@ class GPUTransformer(Transformer):
 
         self.runtime = GPUTransformer.__runtime
 
-    def cleanup(self):
+    def close(self):
         GPUTransformer.close_gpu()
 
     def device_register_storage(self, dtype, name):

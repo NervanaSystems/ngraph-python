@@ -109,7 +109,7 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
         thetas_collect.append(thetas_val.copy())
 
     ret = loss_collect, grad_collect, thetas_collect
-    transformer.cleanup()
+    transformer.close()
     return ret
 
 
