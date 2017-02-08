@@ -33,5 +33,5 @@ f_ng = importer.get_op_handle(f)
 # execute
 transformer = ngt.make_transformer()
 f_result = transformer.computation(f_ng)()
-transformer.cleanup()
+transformer.close()
 print(f_result)
