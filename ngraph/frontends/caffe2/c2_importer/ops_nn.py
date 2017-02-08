@@ -41,21 +41,16 @@ class OpsNN(OpsBase):
         """
         # get inputs
         left, right, bias = inputs
-
         # check shape
         assert left.axes[1].length == right.axes[1].length
-
         # cast axis
         left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
-
         # add op
         add_op = ng.dot(left_casted, right)
-
         # cast bias axis
         bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
-
         # result op
-        result_op = ng.add(add_op, bias_casted, name=c2_op.name)
+        result_op = ng.add(add_op, bias_casted)
         return result_op
 
     def SquaredL2Distance(self, c2_op, inputs):
@@ -139,10 +134,10 @@ class OpsNN(OpsBase):
         ng.make_axes([ax_N, ax_C, ax_H, ax_W]).set_shape(image.axes.lengths)
 
         # create placeholders for output axes
-        oC = ng.make_axis(name='C', roles=[ar.Channel])
-        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.Height])
-        oW = ng.make_axis(name='W', roles=[ar.Width])
+        oC = ng.make_axis(roles=[ar.Channel]).named('C')
+        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.Height]).named('H')
+        oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         # spatial kernel size
         kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
@@ -206,6 +201,11 @@ class OpsNN(OpsBase):
 
         return output
 
+    def StopGradient(self, c2_op, inputs):
+        """ TODO """
+        assert 1 == len(inputs)
+        return ng.stop_gradient(inputs[0])
+
     def Conv(self, c2_op, inputs):
         """
         Computes a 2-D convolution given 4D input and filter tensors.
@@ -246,10 +246,10 @@ class OpsNN(OpsBase):
         ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
 
         # create placeholders for output axes
-        oC = ng.make_axis(name='C', roles=[ar.Channel])
-        oD = ng.make_axis(name='D', roles=[ar.Depth], length=1)
-        oH = ng.make_axis(name='H', roles=[ar.Height])
-        oW = ng.make_axis(name='W', roles=[ar.Width])
+        oC = ng.make_axis(roles=[ar.Channel]).named('C')
+        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
+        oH = ng.make_axis(roles=[ar.Height]).named('H')
+        oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         axes_order = {
             'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],
@@ -292,7 +292,8 @@ class OpsNN(OpsBase):
 
         # conv params
         params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
-                      str_d=1, str_h=str_h, str_w=str_w)
+                      str_d=1, str_h=str_h, str_w=str_w,
+                      dil_d=1, dil_h=1, dil_w=1)
 
         # input, weight, output axes
         internal_ax_dict = {

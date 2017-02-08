@@ -13,9 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-# importer
 from ngraph.frontends.caffe2.c2_importer.ops_bridge import OpsBridge
 from caffe2.python import workspace
+import ngraph as ng
+import copy
 
 
 class C2Importer:
@@ -35,7 +36,7 @@ class C2Importer:
         self.init_ops = []
         self.net_def = None
 
-    def parse_net_def(self, net_def, verbose=False):
+    def parse_net_def(self, net_def, init_net_def=None, c2_workspace=None, verbose=False):
         """
         Imports a net_def to ngraph.
 
@@ -43,19 +44,65 @@ class C2Importer:
             net_def: GraphDef object
             verbose: Prints net_def at each node if True.
         """
-        self.net_def = net_def
+
+        def _register_op(op, c2_op):
+            # convert to list for convenience
+            if isinstance(op, tuple):
+                op = list(op)
+            else:
+                op = [op]
+
+            # post-process output ops
+            for idx in range(len(op)):
+                op[idx] = self.post_process_op(op[idx])
+
+            # convert back to tuple or op
+            if len(op) > 1:
+                op = tuple(op)
+            else:
+                op = op[0]
+
+            # TBD: what if some c2_op have more than one output?
+            key = c2_op.name if c2_op.name != '' else c2_op.output[0]
+            self.name_op_map[key] = op
+
+        self.init_net_def = init_net_def
+        self.net_def = net_def if not init_net_def else copy.deepcopy(net_def)
+
+        if init_net_def:
+            self.net_def.op._values = init_net_def.op._values + net_def.op._values
+            pass
 
         # process nodes
-        for c2_op in net_def.op:
+        for c2_op in self.net_def.op:
             # print node
             if verbose:
                 print("------")
                 print(c2_op)
 
             # resolve inputs
-            input_ops = [
-                self.get_op_handle_by_name(name) for name in c2_op.input
-            ]
+            input_ops = []
+            for name in c2_op.input:
+                try:
+                    input_ops.append(self.get_op_handle_by_name(name))
+                except KeyError as e:
+                    if not c2_workspace.HasBlob(e.message):
+                        raise e
+
+                    c2_blob = c2_workspace.FetchBlob(e.message)
+                    external_input = ng.placeholder(
+                        axes=ng.make_axes([ng.make_axis(i) for i in c2_blob.shape]),
+                        dtype=c2_blob.dtype,
+                        initial_value=c2_blob).named(e.message)
+                    external_input.axes[0]._Axis__is_batch = True  # TODO: find nice way to do it
+                    input_ops.append(external_input)
+
+                    class mock_c2_op:
+                        def __init__(self, name):
+                            self.name = name
+
+                    mock_obj = mock_c2_op(e.message)
+                    _register_op(external_input, mock_obj)
 
             # get output op
             if None in input_ops:
@@ -69,25 +116,7 @@ class C2Importer:
                     print("!!! Unknown Operation '{}' of type '{}' !!!"
                           .format(c2_op.name, c2_op.type))
 
-            # convert to list for convenience
-            if isinstance(output_op, tuple):
-                output_op = list(output_op)
-            else:
-                output_op = [output_op]
-
-            # post-process output ops
-            for idx in range(len(output_op)):
-                output_op[idx] = self.post_process_op(output_op[idx])
-
-            # convert back to tuple or op
-            if len(output_op) > 1:
-                output_op = tuple(output_op)
-            else:
-                output_op = output_op[0]
-
-            # TBD: what if some c2_op have more than one output?
-            key = c2_op.name if c2_op.name != '' else c2_op.output[0]
-            self.name_op_map[key] = output_op
+            _register_op(output_op, c2_op)
 
     def post_process_op(self, op):
         """

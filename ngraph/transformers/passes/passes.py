@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp,
     OneHotTwoDimOp, BinaryElementWiseAxesOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
     DotTwoByOne, ExpOp, LogOp, NegativeOp, OneHotOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, UnaryElementwiseAxesOp, \
-    negative, cast_axes, power, DerivOp, ComputationOp
+    negative, cast_axes, power, DerivOp
 
 from ngraph.util.generics import generic_method
 from ngraph.util.ordered import OrderedSet
@@ -66,7 +66,7 @@ class PeepholeGraphPass(GraphPass):
         has_work = True
         while has_work or self.find_initializers(ops):
             self.replacement_list = []
-            ops = OrderedSet(op.forwarded for op in self.inits + ops)
+            ops = OrderedSet(op.forwarded for op in self.inits + list(ops))
             for op in Op.ordered_ops(ops):
                 op.update_forwards()
                 self.visit(op)
@@ -120,9 +120,9 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = broadcast(y, y_reduction_axes + y.axes)
 
         if x.is_scalar:
-            temp = x
-            x = y
-            y = temp
+            x, y = y, x
+            x_reduction_axes, y_reduction_axes = y_reduction_axes, x_reduction_axes
+
         if y.is_scalar:
             if x.is_scalar:
                 out = x.scalar_op * y.scalar_op
@@ -277,24 +277,6 @@ class DerivPass(PeepholeGraphPass):
         # redundant names to keep consistent for now
         deriv = DerivPass._deriv(op.dependent, op.independent, op.error)
         self.replace_op(op, deriv)
-
-
-class CompUserDepsPass(PeepholeGraphPass):
-    """
-    Pass that converts ComputationOp's user_deps. Currently CompUserDepsPass
-    is required since passes are not able to add ops that require user_deps,
-    which may need to be refactored.
-
-    TODO: This is a temporary fix until user_deps gets cleaned up.
-    """
-
-    @generic_method()
-    def visit(self, op):
-        pass
-
-    @visit.on_type(ComputationOp)
-    def visit(self, op):
-        op.require_user_deps(list(map(lambda x: x.forwarded, op.other_deps)))
 
 
 class SimplePrune(PeepholeGraphPass):

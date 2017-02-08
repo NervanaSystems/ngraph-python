@@ -38,9 +38,10 @@ from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argm
     Subtract, TanhOp, SetItemOp, Prod
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, DerivPass, CompUserDepsPass
+from ngraph.transformers.passes.passes import SimplePrune, DerivPass
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -49,6 +50,7 @@ from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
+from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -98,7 +100,7 @@ class ElementWiseKernel(GPUKernel):
         if len(op.reduction_axes) == 0:
             self._buffer_op("assign", x=x, out=out)
         else:
-            axis = op.args[0].axes.index(op.reduction_axes[0])
+            axis = op.args[0].axes.index_unique(op.reduction_axes[0])
             self._buffer_op(string, x=x, axis=axis, out=out)
 
     @generic_method(Op)
@@ -249,6 +251,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(LogOp)
     def add_op(self, op, out, x):
         self._buffer_op("log", x=x, out=out)
+
+    @add_op.on_type(LookupTableOp)
+    def add_op(self, op, outputs, lut, idx):
+        self._buffer_op("take", x=idx, y=lut, out=outputs, axis=op.lut_axis)
 
     @add_op.on_type(Max)
     def add_op(self, op, out, x):
@@ -585,6 +591,10 @@ class GPUKernelGroup(object):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
                                        op.reduction_axes.size))
 
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        self.kernels.append(LUTBpropKernel(self.transformer, op))
+
     def compile_all(self):
         """
         Compiles all CUDA C kernels in this group's source file and updates the
@@ -595,6 +605,17 @@ class GPUKernelGroup(object):
             kernel.compile(self.sourcefile)
 
     def setup_kernel_execute(self, kernel):
+        """
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
+        """
+        pass
+
+    def after_kernel_execute(self, kernel):  # TODO: what to name this
+        """
+        Used by subclass transformers to manage kernel arguments not handled by
+        kernel bind_buffers method (e.g. for flexsim)
+        """
         pass
 
     def __call__(self):
@@ -610,6 +631,7 @@ class GPUKernelGroup(object):
 
             self.setup_kernel_execute(k)
             k.execute()
+            self.after_kernel_execute(k)
 
 
 class GPUBufferAllocator():
@@ -1099,7 +1121,7 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [DerivPass(), CompUserDepsPass(),
+        self.graph_passes = [DerivPass(),
                              SimplePrune(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 

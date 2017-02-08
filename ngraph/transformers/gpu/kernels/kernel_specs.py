@@ -150,7 +150,7 @@ kernels = {
 
 _params = {
     # large N direct convolution (multiples of 64)
-    "fprop": [
+        "fprop": [
         "float* param_Sum",
         "float* param_X",
         "float* param_O",
@@ -184,6 +184,9 @@ _params = {
         "unsigned param_str_d",
         "unsigned param_str_h",
         "unsigned param_str_w",
+        "unsigned param_dil_d",
+        "unsigned param_dil_h",
+        "unsigned param_dil_w",
         "unsigned param_P2",
         "unsigned param_Q",
         "unsigned param_PQk",
@@ -322,6 +325,9 @@ _params = {
         "int param_pad_d",
         "int param_pad_h",
         "int param_pad_w",
+        "unsigned param_dil_d",
+        "unsigned param_dil_h",
+        "unsigned param_dil_w",
         "unsigned param_DHWN",
         "unsigned param_HWN",
         "unsigned param_WN",
@@ -370,7 +376,6 @@ _params = {
         "unsigned param_SuperQ",
         "unsigned param_SuperN",
     ],
-    # small N direct convolution (superblocking)
     "updat2": [
         "float* param_F",
         "float* param_I",
@@ -391,6 +396,9 @@ _params = {
         "int param_pad_d",
         "int param_pad_h",
         "int param_pad_w",
+        "unsigned param_dil_d",
+        "unsigned param_dil_h",
+        "unsigned param_dil_w",
         "unsigned param_DHWN",
         "unsigned param_HWN",
         "unsigned param_WN",

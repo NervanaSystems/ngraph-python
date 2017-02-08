@@ -20,4 +20,4 @@ ENV PATH="/tmp/env3/bin:$PATH"
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-WORKDIR /root/private-ngraph
+WORKDIR /root/ngraph-test

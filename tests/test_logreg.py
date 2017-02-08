@@ -60,7 +60,7 @@ def numpy_logreg(xs, ys, max_iter, alpha):
 
 def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     # axis
-    C, N = ng.make_axis("C"), ng.make_axis("N")
+    C, N = ng.make_axis().named('C'), ng.make_axis().named('N')
 
     def sigmoid(x):
         return 1. / (1. + ng.exp(-x))
@@ -84,15 +84,14 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
 
     # init weights
     thetas_np = np.array([0., 0., 0.])
-    thetas_numpy_tensor = ng.constant(thetas_np, [C])
+    thetas_numpy_tensor = ng.constant(thetas_np, [C - 1])
     thetas = ng.variable([C - 1], initial_value=thetas_numpy_tensor)
 
     # define ops
     loss = get_loss(thetas, xs, ys)
     variable = list(loss.variables())[0]  # we only have one variable thetas
     grad = ng.deriv(loss, variable)
-    with ng.Op.saved_user_deps():
-        update = ng.assign(variable, variable - alpha * grad)
+    update = ng.assign(variable, variable - alpha * grad)
 
     # transformer
     transformer = ngt.make_transformer()

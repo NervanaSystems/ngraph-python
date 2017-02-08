@@ -173,7 +173,44 @@ class LearningRateOptimizer(Optimizer):
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
-    """TODO."""
+    """
+    Stochastic gradient descent with momentum.
+
+    Given the parameters :math:`\\theta`, the learning rate :math:`\\alpha`,
+    and the gradients :math:`\\nabla J(\\theta; x)`
+    computed on the minibatch data :math:`x`, SGD updates the parameters via
+
+    .. math::
+        \\theta' = \\theta - \\alpha\\nabla J(\\theta; x)
+
+    Here we implement SGD with momentum. Momentum tracks the history of
+    gradient updates to help the system move faster through saddle points.
+    Given the additional parameters: momentum :math:`\gamma`, weight decay :math:`\lambda`,
+    and current velocity :math:`v`, we use the following update equations
+
+    .. math::
+        v' = \\gamma v - \\alpha(\\nabla J(\\theta; x) + \\lambda\\theta)
+        theta' = \\theta + v'
+
+    The optional `nesterov` parameter implements Nesterov Accelerated Gradient.
+    If this is set, we use the following update equations instead
+    .. math::
+        v' = \\gamma^2 v + \\alpha (\\gamma + 1) (\\nabla J(\\theta; x) + \\lambda\\theta)
+        theta' = \\theta + v'
+
+    Example usage:
+
+    .. code-block:: python
+
+        import ngraph as ng
+        from ngraph.frontends.neon.optimizers import GradientDescentMomentum
+
+        # use SGD with learning rate 0.01 and momentum 0.9, while
+        # clipping the gradient magnitude to between -5 and 5.
+        loss = ng.squared_l2(actual - estimate)
+        opt = GradientDescentMomentum(0.01, 0.9, gradient_clip_value=5)
+        updates = opt(loss)
+    """
     metadata = {'layer_type': 'gradient_descent_optimizer'}
 
     def __init__(
@@ -186,6 +223,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
             gradient_clip_value=None,
             name=None,
             schedule=Schedule(),
+            nesterov=False,
             **kwargs):
         super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
         self.momentum_coef = momentum_coef
@@ -193,28 +231,30 @@ class GradientDescentMomentum(LearningRateOptimizer):
         self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
         self.schedule = schedule
+        self.nesterov = nesterov
         self.stochastic_round = stochastic_round
 
     @ng.with_op_metadata
     def __call__(self, cost_func):
-        with ng.Op.saved_user_deps():
+        all_updates = []
+        batch_cost = ng.sum(cost_func, out_axes=())
+        batch_size = cost_func.axes.batch_axes()[0].length
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
+        for variable, grad in zip(batch_cost.variables(), grads):
             updates = []
-            batch_cost = ng.sum(cost_func, out_axes=())
-            batch_size = cost_func.axes.batch_axes()[0].length
-            grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
-            scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
-
-            for variable, grad in zip(batch_cost.variables(), grads):
-                with ng.sequential_op_factory() as opfac:
-                    velocity = ng.persistent_tensor(axes=variable.axes,
-                                                    initial_value=0.).named(variable.name + '_vel')
-                    clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
-                    ng.assign(velocity, velocity * self.momentum_coef - self.lrate * (
-                        scale_factor * clip_grad + self.wdecay * variable))
-                    ng.assign(variable, variable + velocity)
-                updates.append(opfac())
-
-            return ng.doall(updates)
+            velocity = ng.persistent_tensor(axes=variable.axes,
+                                            initial_value=0.).named(variable.name + '_vel')
+            clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
+            lr = - self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
+            updates.append(ng.assign(velocity, velocity * self.momentum_coef + lr))
+            if self.nesterov:
+                delta = (self.momentum_coef * velocity + lr)
+            else:
+                delta = velocity
+            updates.append(ng.assign(variable, variable + delta))
+            all_updates.append(ng.sequential(updates))
+        return ng.doall(all_updates)
 
 
 class RMSProp(LearningRateOptimizer):
@@ -269,22 +309,21 @@ class RMSProp(LearningRateOptimizer):
 
     @ng.with_op_metadata
     def __call__(self, cost_func):
-        with ng.Op.saved_user_deps():
-            updates = []
-            batch_cost = ng.sum(cost_func, out_axes=())
-            batch_size = cost_func.axes.batch_axes()[0].length
+        all_updates = []
+        batch_cost = ng.sum(cost_func, out_axes=())
+        batch_size = cost_func.axes.batch_axes()[0].length
 
-            grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
-            scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
 
-            epsilon, decay = (self.epsilon, self.decay_rate)
-            for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
-                with ng.sequential_op_factory() as opfac:
-                    grad = clip_gradient_value(grad, self.gradient_clip_value)
-                    state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
-                    ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad))
-                    ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
-                                                    / (ng.sqrt(state + epsilon) + epsilon)))
-                updates.append(opfac())
+        epsilon, decay = (self.epsilon, self.decay_rate)
+        for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
+            grad = clip_gradient_value(grad, self.gradient_clip_value)
+            state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+            all_updates.append(ng.sequential([
+                ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
+                ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
+                                                / (ng.sqrt(state + epsilon) + epsilon)))
+            ]))
 
-        return ng.doall(updates)
+        return ng.doall(all_updates)

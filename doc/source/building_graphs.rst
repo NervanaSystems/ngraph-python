@@ -60,7 +60,7 @@ We see here that ``mysum`` doesn't have any initializers because its value is on
 
 Non-data Control Dependencies
 -----------------------------
-Finally, consider the following code:
+Finally, consider the following graph construction:
 
 .. code-block:: python
 
@@ -68,63 +68,17 @@ Finally, consider the following code:
     >>> a = ng.assign(x, 5)
     >>> z = x + 1
 
-Here we create a scalar placeholder ``x``, then fill that placeholder with the value ``5``. Then we add one to ``x``. It is not clear initially if ``z`` when evaluated should equal ``1`` or ``6``. In Python at the last line of the previous code block, ``x`` still points to the initial ``placeholder`` with value ``0``. However, in Nervana Graph we believe most users intend the assign operation to occur before the final incrementing by one. Therefore the ordering semantics of ``ng.assign`` happen in accordance with the graph creation order.
-
-In order to enforce these ordering semantics, Nervana Graph accounts for control dependencies between ``Ops`` when ``AssignOps`` are involved. To illustrate:
+Here we create a scalar placeholder ``x``, an assignment of 5 to the placeholder ``x``, and an addition of 1 to ``x``. It may not be clear if ``z`` when evaluated should equal ``1`` or ``6``. The sub-graph for ``z`` does not include the assignment, so the result would be ``1``. To include the assignment, we provide ``ng.sequential`` which causes ops to be executed in the order listed, with the last op serving as the value, subject to the constraint that ops in a computation are only executed once. To force the assignment, we would write:
 
 .. code-block:: python
 
-    >>> z.other_deps
-    {<AssignOp(AssignOp_1):4501621200>}
+  >>> x = ng.placeholder((), initial_value=0)
+  >>> z = ng.sequential([
+            ng_assign(x, 5),
+            x + 1
+          ])
 
-    >>> type(z.other_deps)
-    ngraph.util.ordered.OrderedSet
-
-    >>> z.other_deps.pop() is a
-    True
-
-All ``Ops`` have an ordered set in ``other_deps`` to contain the ops that must occur first in execution order before this op can be executed *even when those ops are not explicitly captured* as data dependencies of that ``Op``. The ``AddOp`` pointed to by the python variable ``z`` contains a ``other_deps`` control dependency on the ``AssignOp`` to ensure that it occurs first before z is computed.
-
-Nervana graph also allows for contexts where the dependencies can be ignored, particularly when a variable has a self-assignment. For example, consider the following toy example:
-
-.. code-block:: python
-
-    import ngraph as ng
-    import numpy as np
-    from ngraph.transformers.nptransform import NumPyTransformer
-
-    # set w
-    w = ng.variable((), initial_value=0)
-
-    # update op
-    update_op = ng.assign(w, w + 1)
-
-    # transformer
-    transformer = NumPyTransformer()
-    w_comp = transformer.computation(w)
-
-    print(w_comp())
-    print(w_comp())
-    print(w_comp())
-
-The above code will print ``1, 2, 3``. Even though the defined computation only retrieves the variable ``w``, the ``ng.assign`` dependencies get triggered such that the variable still updates with every call even though we simply want to retrieve the results.
-
-We can guard the ``update_op`` with a context ``ng.Op.saved_user_deps`` to make sure that this dependency exists outside of the main stream.
-
-.. code-block:: python
-
-    with ng.Op.saved_user_deps():
-        update_op = ng.assign(w, w + 1)
-
-This modification will then allow the ``w_comp()`` to properly print ``0, 0, 0`` for each call. Ops that are defined inside the context are not included in the dependencies of the computation unless explicitly named. To recreate the ``1, 2, 3`` behavior now that the ``update_op`` is guarded, we would have to explicitly name the ``update_op`` in the computation:
-
-.. code-block:: python
-
-    w_comp = transformer.computation([w, update_op])
-
-We see this context being used in the optimizer where velocities and parameters have a self-assignment with ``ng.assign``.
-
-Note: The ``user_deps`` facility is likely to be replaced.
+Now ``z`` performs the assignment and then returns the value of ``x + 1``.
 
 General properties of ops
 =========================

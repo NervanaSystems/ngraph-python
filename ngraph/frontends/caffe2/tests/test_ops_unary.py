@@ -46,17 +46,17 @@ def run_all_close_compare_initiated_with_random_gauss(c2_op_name,
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    c2_y = workspace.FetchBlob("Y")
+        c2_y = workspace.FetchBlob("Y")
 
-    # compare Caffe2 and ngraph results
-    assert(np.allclose(f_result, c2_y, atol=1e-4, rtol=0, equal_nan=False))
+        # compare Caffe2 and ngraph results
+        assert(np.allclose(f_result, c2_y, atol=1e-4, rtol=0, equal_nan=False))
 
-    # compare expected results and ngraph results
-    if expected:
-        assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
+        # compare expected results and ngraph results
+        if expected:
+            assert(np.allclose(f_result, expected, atol=1e-3, rtol=0, equal_nan=False))
 
 
 def test_relu():
@@ -132,11 +132,11 @@ def test_NCHW2NHWC():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+        # compare Caffe2 and ngraph results
+        assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
 
 
 def test_NHWC2NCHW():
@@ -161,8 +161,8 @@ def test_NHWC2NCHW():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+        # compare Caffe2 and ngraph results
+        assert(np.array_equal(f_result, workspace.FetchBlob("Y")))

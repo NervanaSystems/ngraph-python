@@ -43,8 +43,8 @@ def test_sum():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+        # compare Caffe2 and ngraph results
+        assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
