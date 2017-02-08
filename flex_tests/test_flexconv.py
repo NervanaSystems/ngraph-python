@@ -121,6 +121,7 @@ def test_conv(transformer_factory):
 
     pad_d, pad_h, pad_w = 0, 0, 0
     str_d, str_h, str_w = 1, 1, 1
+    dil_d, dil_h, dil_w = 1, 1, 1
 
     M = output_dim(D, T, pad_d, str_d)
     P = output_dim(H, R, pad_h, str_h)
@@ -128,8 +129,10 @@ def test_conv(transformer_factory):
 
     padding = dict(pad_d=pad_d, pad_h=pad_h, pad_w=pad_w)
     strides = dict(str_d=str_d, str_h=str_h, str_w=str_w)
+    dilation = dict(dil_d=dil_d, dil_h=dil_h, dil_w=dil_w)
     conv_params = padding.copy()
     conv_params.update(strides)
+    conv_params.update(dilation)
 
     ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
     ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
@@ -165,8 +168,8 @@ def test_conv(transformer_factory):
     bprop_out = bprop_conv(errors, inputs, filters, output)
     updat_out = update_conv(errors, inputs, filters, output)
 
-    conv_executor = executor([output, bprop_out, updat_out], inputs, filters, errors)
-    result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
+    with executor([output, bprop_out, updat_out], inputs, filters, errors) as conv_executor:
+        result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
 
     # Compute reference with NumPy
     result_np, gradI_np, gradF_np = reference_conv(C, N, K, D, H, W, T, R, S, M, P, Q,

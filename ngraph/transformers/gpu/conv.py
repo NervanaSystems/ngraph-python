@@ -52,12 +52,12 @@ class ConvFpropKernel(GPUKernel):
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                         pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = runtime.enable_winograd
         use_cudac_kernels = runtime.use_cudac_kernels
@@ -149,12 +149,12 @@ class ConvBpropKernel(GPUKernel):
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                         pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = runtime.enable_winograd
         use_cudac_kernels = runtime.use_cudac_kernels
@@ -245,12 +245,12 @@ class ConvUpdateKernel(GPUKernel):
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
         self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                         pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
-                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w)
+                M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
         enable_winograd = runtime.enable_winograd
         use_cudac_kernels = runtime.use_cudac_kernels

@@ -53,10 +53,15 @@ class FlexConvFpropKernel(ConvFpropKernel):
     def __init__(self, transformer, op):
         self.alpha = 1.0
         self.beta = 0.0
+        # flex does not support dilated convolution
+        msg = 'flexsim does not support dilated convolution'
+        assert op.conv_params['dil_d'] == 1, msg
+        assert op.conv_params['dil_h'] == 1, msg
+        assert op.conv_params['dil_w'] == 1, msg
         super(FlexConvFpropKernel, self).__init__(transformer, op)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
         self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
         self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
@@ -213,7 +218,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
         super(FlexConvBpropKernel, self).__init__(transformer, op)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
         self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
         self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
@@ -439,7 +444,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         super(FlexConvUpdateKernel, self).__init__(transformer, op)
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
-                    pad_d, pad_h, pad_w, str_d, str_h, str_w):
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
         self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
         self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
         self.U = TensorDescriptionWrapper(self.U, len(self.U.shape))
