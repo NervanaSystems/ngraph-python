@@ -1065,6 +1065,7 @@ class Axes(object):
             False otherwise.
         """
         axes = make_axes(axes)
+
         for x in self:
             if x not in axes:
                 return False
