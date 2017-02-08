@@ -260,14 +260,16 @@ class Transformer_ABC_Meta(abc.ABCMeta):
     metaclass for the backend objects
     takes care of registering all the backend subclasses
     """
-    def __init__(self, name, bases, dict_):
-        if not hasattr(self, 'transformers'):
-            self.transformers = {}
-        else:
-            name = getattr(self, 'transformer_name', None)
-            if name and name not in ['Transformer']:
-                self.transformers[name] = self
-        super(Transformer_ABC_Meta, self).__init__(name, bases, dict_)
+    def __init__(cls, name, bases, dict_):
+        if not hasattr(cls, 'transformers'):
+            # First possible transformer class sets things up
+            cls.transformers = {}
+
+        # If this transformer has a transformer_name, register it
+        transformer_name = getattr(cls, 'transformer_name', None)
+        if transformer_name is not None:
+            cls.transformers[transformer_name] = cls
+        super(Transformer_ABC_Meta, cls).__init__(name, bases, dict_)
 
 
 class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
@@ -489,8 +491,12 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.initialized = True
         self.init_computation()
 
-    def cleanup(self):
+    def close(self):
         pass
+
+    def __del__(self):
+        self.close()
+
 
 __transformer_factory = None
 

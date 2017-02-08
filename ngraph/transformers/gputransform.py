@@ -1041,7 +1041,7 @@ class GPURuntime(object):
         self.deterministic = deterministic
         self.cache_dir = get_cache_dir()
 
-    def cleanup(self):
+    def close(self):
         try:
             self.ctx.pop()
             self.ctx.detach()
@@ -1116,7 +1116,7 @@ class GPUTransformer(Transformer):
     @staticmethod
     def close_gpu():
         if GPUTransformer.__runtime is not None:
-            GPUTransformer.__runtime.cleanup()
+            GPUTransformer.__runtime.close()
             GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):

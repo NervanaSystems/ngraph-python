@@ -1049,7 +1049,7 @@ def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
     t = ngt.make_transformer()
     t.initialize()
-    t.cleanup()
+    t.close()
 
 
 def test_tensor_derivative():
