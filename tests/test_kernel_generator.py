@@ -38,7 +38,7 @@ def test_exit_condition(transformer_factory):
     val2 = comp()
     np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
-    transformer.cleanup()
+    transformer.close()
 
 
 def test_4d_elementwise(transformer_factory):

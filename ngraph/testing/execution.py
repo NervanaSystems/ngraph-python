@@ -32,7 +32,7 @@ class ExecutorFactory(object):
         return self
 
     def __exit__(self, *args):
-        self.transformer.cleanup()
+        self.transformer.close()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)

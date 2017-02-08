@@ -18,7 +18,6 @@ from __future__ import division
 from caffe2.python import core, workspace
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 from ngraph.testing import ExecutorFactory
-import ngraph.transformers as ngt
 import numpy as np
 import random as random
 
@@ -42,11 +41,12 @@ def test_constant():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
-    assert(np.isclose(f_result[0][0], val, atol=1e-6, rtol=0))
+        # compare Caffe2 and ngraph results
+        assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+        assert(np.isclose(f_result[0][0], val, atol=1e-6, rtol=0))
 
 
 def test_gaussianfill():
@@ -70,22 +70,23 @@ def test_gaussianfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    f_result = ngt.make_transformer().computation(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # get caffe result
-    caffe_res = workspace.FetchBlob("Y")
+        # get caffe result
+        caffe_res = workspace.FetchBlob("Y")
 
-    # Elementwise difference of the two random matrixes
-    difference_res = caffe_res - f_result
+        # Elementwise difference of the two random matrixes
+        difference_res = caffe_res - f_result
 
-    # standard deviation of Difference Matrix
-    diffe_res_std = difference_res.std()
+        # standard deviation of Difference Matrix
+        diffe_res_std = difference_res.std()
 
-    # testing can only be approximate (so in rare cases may fail!!)
-    # if fails once try to re-run a couple of times to make sure there is a problem)
-    # the difference must be still gaussian and P(|m'-m|)<3*std = 99.73%, and
-    # std(m) = std/N, having N*N elements
-    assert(np.isclose(difference_res.mean(), 0, atol=3 * diffe_res_std / N, rtol=0))
+        # testing can only be approximate (so in rare cases may fail!!)
+        # if fails once try to re-run a couple of times to make sure there is a problem)
+        # the difference must be still gaussian and P(|m'-m|)<3*std = 99.73%, and
+        # std(m) = std/N, having N*N elements
+        assert(np.isclose(difference_res.mean(), 0, atol=3 * diffe_res_std / N, rtol=0))
 
 
 def test_uniformfill():
@@ -108,23 +109,23 @@ def test_uniformfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # get caffe result
-    caffe_res = workspace.FetchBlob("Y")
+        # get caffe result
+        caffe_res = workspace.FetchBlob("Y")
 
-    # Elementwise difference of the two random matrixes
-    difference_res = caffe_res - f_result
+        # Elementwise difference of the two random matrixes
+        difference_res = caffe_res - f_result
 
-    # standard deviation of Difference Matrix
-    diffe_res_std = difference_res.std()
+        # standard deviation of Difference Matrix
+        diffe_res_std = difference_res.std()
 
-    # testing can only be approximated, so sometimes can fail!!
-    # approach mimicking gaussian test, and this time the multiplier is set to 5
-    # to account for distorsion from gaussian
-    # if fails once try to re-run a couple of times to make sure there is a problem)
-    assert(np.isclose(difference_res.mean(), 0, atol=5 * diffe_res_std / N, rtol=0))
+        # testing can only be approximated, so sometimes can fail!!
+        # approach mimicking gaussian test, and this time the multiplier is set to 5
+        # to account for distorsion from gaussian
+        # if fails once try to re-run a couple of times to make sure there is a problem)
+        assert(np.isclose(difference_res.mean(), 0, atol=5 * diffe_res_std / N, rtol=0))
 
 
 def test_uniformintfill():
@@ -146,23 +147,23 @@ def test_uniformintfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # get caffe result
-    caffe_res = workspace.FetchBlob("Y")
+        # get caffe result
+        caffe_res = workspace.FetchBlob("Y")
 
-    # Elementwise difference of the two random matrixes
-    difference_res = caffe_res - f_result
+        # Elementwise difference of the two random matrixes
+        difference_res = caffe_res - f_result
 
-    # standard deviation of Difference Matrix
-    diffe_res_std = difference_res.std()
+        # standard deviation of Difference Matrix
+        diffe_res_std = difference_res.std()
 
-    # testing can only be approximated, so sometimes can fail!!
-    # approach mimicking gaussian test, and this time the multiplier is set
-    # to 8 to account for distorsion from gaussian
-    # if fails once try to re-run a couple of times to make sure there is a problem)
-    assert(np.isclose(difference_res.mean(), 0, atol=8 * diffe_res_std / N, rtol=0))
+        # testing can only be approximated, so sometimes can fail!!
+        # approach mimicking gaussian test, and this time the multiplier is set
+        # to 8 to account for distorsion from gaussian
+        # if fails once try to re-run a couple of times to make sure there is a problem)
+        assert(np.isclose(difference_res.mean(), 0, atol=8 * diffe_res_std / N, rtol=0))
 
 
 def test_xavierfill():
@@ -184,22 +185,22 @@ def test_xavierfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # get caffe result
-    caffe_res = workspace.FetchBlob("Y")
+        # get caffe result
+        caffe_res = workspace.FetchBlob("Y")
 
-    # Elementwise difference of the two random matrixes
-    difference_res = caffe_res - f_result
+        # Elementwise difference of the two random matrixes
+        difference_res = caffe_res - f_result
 
-    # standard deviation of Difference Matrix
-    diffe_res_std = difference_res.std()
+        # standard deviation of Difference Matrix
+        diffe_res_std = difference_res.std()
 
-    # testing can only be approximated, so sometimes can fail!!
-    # approach mimicking gaussian test
-    # if fails once try to re-run a couple of times to make sure there is a problem)
-    assert(np.isclose(difference_res.mean(), 0, atol=3 * diffe_res_std / N, rtol=0))
+        # testing can only be approximated, so sometimes can fail!!
+        # approach mimicking gaussian test
+        # if fails once try to re-run a couple of times to make sure there is a problem)
+        assert(np.isclose(difference_res.mean(), 0, atol=3 * diffe_res_std / N, rtol=0))
 
 
 def test_giventensorfill():
@@ -222,12 +223,12 @@ def test_giventensorfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
-    assert(np.ma.allclose(f_result, data1, atol=1e-6, rtol=0))
+        # compare Caffe2 and ngraph results
+        assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+        assert(np.ma.allclose(f_result, data1, atol=1e-6, rtol=0))
 
 
 def test_giventensorintfill():
@@ -250,9 +251,9 @@ def test_giventensorintfill():
     f_ng = importer.get_op_handle("Y")
 
     # Execute
-    ex = ExecutorFactory()
-    f_result = ex.executor(f_ng)()
+    with ExecutorFactory() as ex:
+        f_result = ex.executor(f_ng)()
 
-    # compare Caffe2 and ngraph results
-    assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
-    assert(np.ma.allequal(f_result, data1))
+        # compare Caffe2 and ngraph results
+        assert(np.ma.allequal(f_result, workspace.FetchBlob("Y")))
+        assert(np.ma.allequal(f_result, data1))

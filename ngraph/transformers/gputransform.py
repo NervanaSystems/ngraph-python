@@ -42,7 +42,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, DerivPass, CompUserDepsPass
+from ngraph.transformers.passes.passes import SimplePrune, DerivPass
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -1050,7 +1050,7 @@ class GPURuntime(object):
         self.deterministic = deterministic
         self.cache_dir = get_cache_dir()
 
-    def cleanup(self):
+    def close(self):
         try:
             self.ctx.pop()
             self.ctx.detach()
@@ -1125,12 +1125,12 @@ class GPUTransformer(Transformer):
     @staticmethod
     def close_gpu():
         if GPUTransformer.__runtime is not None:
-            GPUTransformer.__runtime.cleanup()
+            GPUTransformer.__runtime.close()
             GPUTransformer.__runtime = None
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [DerivPass(), CompUserDepsPass(),
+        self.graph_passes = [DerivPass(),
                              SimplePrune(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 

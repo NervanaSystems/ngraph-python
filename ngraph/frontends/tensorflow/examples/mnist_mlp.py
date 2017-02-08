@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from tensorflow.examples.tutorials.mnist import input_data
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
-from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
+import ngraph.frontends.common.utils as util
 import tensorflow as tf
 import ngraph.transformers as ngt
 import argparse
@@ -45,7 +45,7 @@ def mnist_mlp(args):
 
     # transformer and computations
     transformer = ngt.make_transformer()
-    updates = SGDOptimizer(args.lrate).minimize(cost_ng)
+    updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
     train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
     init_comp = transformer.computation(init_op_ng)
     transformer.initialize()
@@ -60,7 +60,7 @@ def mnist_mlp(args):
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
-    transformer.cleanup()
+    transformer.close()
 
     # train in tensorflow as comparison
     with tf.Session() as sess:
