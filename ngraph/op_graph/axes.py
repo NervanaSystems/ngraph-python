@@ -1066,20 +1066,6 @@ class Axes(object):
         """
         axes = make_axes(axes)
 
-        # TODO should we treat objects without any axes and
-        # objects with any number of axes each of length 1 as a scalar
-
-        # if not axes and not self:
-        #     return True
-        #
-        # if self:
-        #     if not axes and self.lengths.count(1) == len(self.lengths):
-        #         return True
-        #
-        # if axes:
-        #     if not self and axes.lengths.count(1) == len(axes):
-        #         return True
-
         for x in self:
             if x not in axes:
                 return False
