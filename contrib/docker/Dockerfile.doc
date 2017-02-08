@@ -1,9 +1,9 @@
 FROM ngraph_base
 
-WORKDIR /root/private-ngraph
+WORKDIR /root/ngraph-test
 
 RUN apt-get install -y pandoc
-ADD doc_requirements.txt /root/private-ngraph/doc_requirements.txt
+ADD doc_requirements.txt /root/ngraph-test/doc_requirements.txt
 RUN pip install -r doc_requirements.txt
 
 # make ngraph Makefile happy :-(

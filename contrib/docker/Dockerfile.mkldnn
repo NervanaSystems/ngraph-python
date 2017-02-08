@@ -1,0 +1,33 @@
+FROM ngraph_test_cpu
+
+WORKDIR /root/ngraph-test
+ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
+RUN pip install -r test_requirements.txt
+
+# install mkl-dnn
+WORKDIR /root
+RUN apt-get install -y cmake
+RUN apt-get install -y doxygen
+RUN apt-get install -y wget
+RUN which wget
+RUN git clone https://github.com/01org/mkl-dnn.git
+WORKDIR mkl-dnn
+RUN cd scripts && ./prepare_mkl.sh && cd ..
+RUN mkdir -p build && cd build && cmake .. && make
+WORKDIR build
+RUN make install
+
+# set environment to build mkldnn_engine.so and run with mkldnn_engine
+# setup with `pip install -e .`
+ENV MKLDNN_ROOT=/usr/local
+WORKDIR /root/ngraph-test
+ADD . /root/ngraph-test
+RUN pip install -e .
+# verify the mkldnn_engine.so is built correctly and save it to a
+# temporary location for in the docker container
+# skip these and keep going if the library is not built in setup.py
+RUN ls -l /tmp/mkldnn_engine.so || echo keep going if no library is present
+RUN ldd /tmp/mkldnn_engine.so || echo keep going if no library is present
+
+ENV PYTHONPATH=.:/tmp/:$PYTHONPATH
+ENV MKL_TEST_ENABLE=True
