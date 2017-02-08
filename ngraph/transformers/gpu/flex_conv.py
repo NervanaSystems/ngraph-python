@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, _get_register_type
@@ -23,7 +22,7 @@ from pycuda.compiler import SourceModule
 from pycuda.tools import context_dependent_memoize
 import pycuda.driver as drv
 
-from operator import itemgetter, mul
+from operator import mul
 import numpy as np
 import sys
 
@@ -94,60 +93,51 @@ class FlexConvFpropKernel(ConvFpropKernel):
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        self.dimI   = (C, D, H, W, N)
-        self.dimF   = (C, T, R, S, K)
-        self.dimFb  = (K, T, R, S, C)
-        self.dimO   = (K, M, P, Q, N)
-        self.dimI2  = (C*D*H*W, N)
-        self.dimF2  = (C*T*R*S, K)
-        self.dimF2t = (K, C*T*R*S)
-        self.dimO2  = (K*M*P*Q, N)
-        self.dimS   = (K, 1)
-        self.sizeI  = reduce(mul, self.dimI, 1)
-        self.sizeF  = reduce(mul, self.dimF, 1)
-        self.sizeO  = reduce(mul, self.dimO, 1)
-        self.nOut   = reduce(mul, self.MPQ, 1) * K
+        self.dimI = (C, D, H, W, N)
+        self.dimF = (C, T, R, S, K)
+        self.dimF = (K, T, R, S, C)
+        self.dimO = (K, M, P, Q, N)
+        self.dimI2 = (C * D * H * W, N)
+        self.dimF2 = (C * T * R * S, K)
+        self.dimF2t = (K, C * T * R * S)
+        self.dimO2 = (K * M * P * Q, N)
+        self.dimS = (K, 1)
+        self.sizeI = reduce(mul, self.dimI, 1)
+        self.sizeF = reduce(mul, self.dimF, 1)
+        self.sizeO = reduce(mul, self.dimO, 1)
+        self.nOut = reduce(mul, self.MPQ, 1) * K
 
         # precompute some multiplications for fast constant memory access
-        HW    = H*W
-        DHW   = D*HW
-        WN    = W*N
-        HWN   = H*WN
-        DHWN  = D*HWN
-        RS    = R*S
-        RST   = T*RS
-        CRST  = C*RST
-        CRSTK = K*CRST
-        KRST  = K*RST
-        PQ    = P*Q
-        PQM   = M*PQ
-        QN    = Q*N
-        PQN   = P*QN
-        MPQN  = M*PQN
+        WN = W * N
+        HWN = H * WN
+        DHWN = D * HWN
+        RS = R * S
+        RST = T * RS
+        CRST = C * RST
+        KRST = K * RST
+        PQ = P * Q
+        PQM = M * PQ
+        QN = Q * N
+        PQN = P * QN
+        MPQN = M * PQN
 
         if CRST > 2**16:
-            assert CRST  < 2**16, "Integer division is faster with 16bit numerators"
+            assert CRST < 2**16, "Integer division is faster with 16bit numerators"
 
         # precompute the magic numbers and shift amounts for integer division
-        magic_HW    = _magic64(HW)
-        magic_W     = _magic64(W)
-        magic_PQ    = _magic64(PQ)
-        magic_Q     = _magic64(Q)
-        magic_RST   = _magic32(CRST, RST)
-        magic_RS    = _magic32(RST+32, RS)
-        magic_S     = _magic32(RS+32, S)
-        magic_str_w = _magic32(W + S, str_w)
-        magic_str_h = _magic32(H + R, str_h)
-        magic_str_d = _magic32(D + T, str_d)
+        magic_PQ = _magic64(PQ)
+        magic_Q = _magic64(Q)
+        magic_RS = _magic32(RST + 32, RS)
+        magic_S = _magic32(RS + 32, S)
 
         # flop count for benchmarking
         self.flops = PQM * K * N * CRST * 2.0
 
-        tile_N   = 128 if N > 64 else 64
-        grid_N   = _grid_dim(tile_N, N)
+        tile_N = 128 if N > 64 else 64
+        grid_N = _grid_dim(tile_N, N)
         tiles_CK = (128, 64, 32) if tile_N == 128 else (128, 64)
 
-        ####### FPROP ###########
+        # FPROP #
         self.fprop_kernels = kernel_specs.xprop_conv_kernels(
             clss, "fprop", "K", tile_N, grid_N, K, tiles_CK, PQM, RST,
             _flatten([N, K, D, H, W, WN, HWN, DHWN,
@@ -254,48 +244,46 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        self.dimI   = (C, D, H, W, N)
-        self.dimF   = (C, T, R, S, K)
-        self.dimFb  = (K, T, R, S, C)
-        self.dimO   = (K, M, P, Q, N)
-        self.dimI2  = (C*D*H*W, N)
-        self.dimF2  = (C*T*R*S, K)
-        self.dimF2t = (K, C*T*R*S)
-        self.dimO2  = (K*M*P*Q, N)
-        self.dimS   = (K, 1)
-        self.sizeI  = reduce(mul, self.dimI, 1)
-        self.sizeF  = reduce(mul, self.dimF, 1)
-        self.sizeO  = reduce(mul, self.dimO, 1)
-        self.nOut   = reduce(mul, self.MPQ, 1) * K
+        self.dimI = (C, D, H, W, N)
+        self.dimF = (C, T, R, S, K)
+        self.dimFb = (K, T, R, S, C)
+        self.dimO = (K, M, P, Q, N)
+        self.dimI2 = (C * D * H * W, N)
+        self.dimF2 = (C * T * R * S, K)
+        self.dimF2t = (K, C * T * R * S)
+        self.dimO2 = (K * M * P * Q, N)
+        self.dimS = (K, 1)
+        self.sizeI = reduce(mul, self.dimI, 1)
+        self.sizeF = reduce(mul, self.dimF, 1)
+        self.sizeO = reduce(mul, self.dimO, 1)
+        self.nOut = reduce(mul, self.MPQ, 1) * K
 
         # precompute some multiplications for fast constant memory access
-        HW    = H*W
-        DHW   = D*HW
-        WN    = W*N
-        HWN   = H*WN
-        DHWN  = D*HWN
-        RS    = R*S
-        RST   = T*RS
-        CRST  = C*RST
-        CRSTK = K*CRST
-        KRST  = K*RST
-        PQ    = P*Q
-        PQM   = M*PQ
-        QN    = Q*N
-        PQN   = P*QN
-        MPQN  = M*PQN
+        HW = H * W
+        DHW = D * HW
+        WN = W * N
+        HWN = H * WN
+        DHWN = D * HWN
+        RS = R * S
+        RST = T * RS
+        CRST = C * RST
+        PQ = P * Q
+        PQM = M * PQ
+        QN = Q * N
+        PQN = P * QN
+        MPQN = M * PQN
 
         if CRST > 2**16:
-            assert CRST  < 2**16, "Integer division is faster with 16bit numerators"
+            assert CRST < 2**16, "Integer division is faster with 16bit numerators"
 
         # precompute the magic numbers and shift amounts for integer division
-        magic_HW    = _magic64(HW)
-        magic_W     = _magic64(W)
-        magic_PQ    = _magic64(PQ)
-        magic_Q     = _magic64(Q)
-        magic_RST   = _magic32(CRST, RST)
-        magic_RS    = _magic32(RST+32, RS)
-        magic_S     = _magic32(RS+32, S)
+        magic_HW = _magic64(HW)
+        magic_W = _magic64(W)
+        magic_PQ = _magic64(PQ)
+        magic_Q = _magic64(Q)
+        magic_RST = _magic32(CRST, RST)
+        magic_RS = _magic32(RST + 32, RS)
+        magic_S = _magic32(RS + 32, S)
         magic_str_w = _magic32(W + S, str_w)
         magic_str_h = _magic32(H + R, str_h)
         magic_str_d = _magic32(D + T, str_d)
@@ -303,16 +291,16 @@ class FlexConvBpropKernel(ConvBpropKernel):
         # flop count for benchmarking
         self.flops = PQM * K * N * CRST * 2.0
 
-        tile_N   = 128 if N > 64 else 64
-        grid_N   = _grid_dim(tile_N, N)
+        tile_N = 128 if N > 64 else 64
+        grid_N = _grid_dim(tile_N, N)
         tiles_CK = (128, 64, 32) if tile_N == 128 else (128, 64)
 
-        ####### BPROP ###########
+        # BPROP #
         if C < 16 or C % vec_size != 0:
             # special kernel for deconv into first layer
             kernel_name = "%s_bprop_C1_N64" % clss
 
-            grid  = (PQM, _grid_dim(32, CRST), _grid_dim(64, N))
+            grid = (PQM, _grid_dim(32, CRST), _grid_dim(64, N))
             block = (32, 1, 1)
 
             self.bprop_kernels = [[kernel_name, grid, block, 0, _flatten([
@@ -320,15 +308,15 @@ class FlexConvBpropKernel(ConvBpropKernel):
                 C, CRST, RST, magic_RST, RS, magic_RS, S, magic_S,
                 pad_d, pad_h, pad_w, str_d, str_h, str_w,
                 Q, PQ, QN, PQN, MPQN, magic_Q, magic_PQ,
-                CRST*8*self.dtype.itemsize, MPQN*8*self.dtype.itemsize])]]
+                CRST * 8 * self.dtype.itemsize, MPQN * 8 * self.dtype.itemsize])]]
 
             # generate the kernel args for transpose CRST,K => K,CRST
             self.shuffle_args = [CRST, K]
-            gridX   = (K    >> 5) + (K    & 31 != 0)
-            gridY   = (CRST >> 5) + (CRST & 31 != 0)
-            self.shuffle_grid   = (gridX, gridY, 1)
-            self.shuffle_block  = (32, 8, 1)
-            self.bprop_zero     = self.sizeI * self.dtype.itemsize
+            gridX = (K >> 5) + (K & 31 != 0)
+            gridY = (CRST >> 5) + (CRST & 31 != 0)
+            self.shuffle_grid = (gridX, gridY, 1)
+            self.shuffle_block = (32, 8, 1)
+            self.bprop_zero = self.sizeI * self.dtype.itemsize
             self.bprop_lut_size = 0
 
         else:
@@ -342,14 +330,14 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
             # generate the kernel args for dim shuffling CRSTK => KRSTC
             self.shuffle_args = _flatten([
-                RST*K, RS*K, S*K, K,
-                RST*C, RS*C, S*C, C,
+                RST * K, RS * K, S * K, K,
+                RST * C, RS * C, S * C, C,
                 RS, magic_RS, S, magic_S])
             gridX = (K >> 5) + (K & 31 != 0)
             gridY = (C >> 5) + (C & 31 != 0)
-            self.shuffle_grid   = (gridX, gridY, RST)
-            self.shuffle_block  = (32, 8, 1)
-            self.bprop_zero     = 0
+            self.shuffle_grid = (gridX, gridY, RST)
+            self.shuffle_block = (32, 8, 1)
+            self.bprop_zero = 0
             self.bprop_lut_size = RST * 4 * 2
 
         # Set to 5 for the current T1000 HW config
@@ -416,7 +404,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
         alpha = self.alpha * scaleAB
         beta = self.beta * scaleC
 
-        for kernel in self.kernels[1:1+len(self.bprop_kernels)]:
+        for kernel in self.kernels[1:1 + len(self.bprop_kernels)]:
             kernel[8] = alpha
             kernel[9] = beta
             kernel[-1] = 1. / scaleC
@@ -426,7 +414,6 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
     def execute(self):
         if self.bprop_zero:
-            import pdb; pdb.set_trace()
             self.O.td.value[:] = 0
 
         for kernel in self.kernels:
@@ -479,67 +466,53 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
 
         self.all_params = (N, C, K, D, H, W, T, R, S, pad_d, pad_h, pad_w, str_d, str_h, str_w)
 
-        self.dimI   = (C, D, H, W, N)
-        self.dimF   = (C, T, R, S, K)
-        self.dimFb  = (K, T, R, S, C)
-        self.dimO   = (K, M, P, Q, N)
-        self.dimI2  = (C*D*H*W, N)
-        self.dimF2  = (C*T*R*S, K)
-        self.dimF2t = (K, C*T*R*S)
-        self.dimO2  = (K*M*P*Q, N)
-        self.dimS   = (K, 1)
-        self.sizeI  = reduce(mul, self.dimI, 1)
-        self.sizeF  = reduce(mul, self.dimF, 1)
-        self.sizeO  = reduce(mul, self.dimO, 1)
-        self.nOut   = reduce(mul, self.MPQ, 1) * K
+        self.dimI = (C, D, H, W, N)
+        self.dimF = (C, T, R, S, K)
+        self.dimFb = (K, T, R, S, C)
+        self.dimO = (K, M, P, Q, N)
+        self.dimI2 = (C * D * H * W, N)
+        self.dimF2 = (C * T * R * S, K)
+        self.dimF2t = (K, C * T * R * S)
+        self.dimO2 = (K * M * P * Q, N)
+        self.dimS = (K, 1)
+        self.sizeI = reduce(mul, self.dimI, 1)
+        self.sizeF = reduce(mul, self.dimF, 1)
+        self.sizeO = reduce(mul, self.dimO, 1)
+        self.nOut = reduce(mul, self.MPQ, 1) * K
 
         # precompute some multiplications for fast constant memory access
-        HW    = H*W
-        DHW   = D*HW
-        WN    = W*N
-        HWN   = H*WN
-        DHWN  = D*HWN
-        RS    = R*S
-        RST   = T*RS
-        CRST  = C*RST
-        CRSTK = K*CRST
-        KRST  = K*RST
-        PQ    = P*Q
-        PQM   = M*PQ
-        QN    = Q*N
-        PQN   = P*QN
-        MPQN  = M*PQN
+        WN = W * N
+        HWN = H * WN
+        DHWN = D * HWN
+        RS = R * S
+        RST = T * RS
+        CRST = C * RST
+        CRSTK = K * CRST
+        PQ = P * Q
+        PQM = M * PQ
+        QN = Q * N
+        PQN = P * QN
+        MPQN = M * PQN
 
         if CRST > 2**16:
-            assert CRST  < 2**16, "Integer division is faster with 16bit numerators"
+            assert CRST < 2**16, "Integer division is faster with 16bit numerators"
 
         # precompute the magic numbers and shift amounts for integer division
-        magic_HW    = _magic64(HW)
-        magic_W     = _magic64(W)
-        magic_PQ    = _magic64(PQ)
-        magic_Q     = _magic64(Q)
-        magic_RST   = _magic32(CRST, RST)
-        magic_RS    = _magic32(RST+32, RS)
-        magic_S     = _magic32(RS+32, S)
-        magic_str_w = _magic32(W + S, str_w)
-        magic_str_h = _magic32(H + R, str_h)
-        magic_str_d = _magic32(D + T, str_d)
+        magic_RST = _magic32(CRST, RST)
+        magic_RS = _magic32(RST + 32, RS)
+        magic_S = _magic32(RS + 32, S)
 
         # flop count for benchmarking
         self.flops = PQM * K * N * CRST * 2.0
 
-        tile_N   = 128 if N > 64 else 64
-        grid_N   = _grid_dim(tile_N, N)
-        tiles_CK = (128, 64, 32) if tile_N == 128 else (128, 64)
+        # UPDATE #
 
-        ####### UPDATE ###########
-
-        grid_C   = _grid_dim(128, CRST)
+        grid_C = _grid_dim(128, CRST)
         sm_count = _get_sm_count()
 
         # in float32 for big feature_map layers the smaller tile is actually faster
         # so restrict tile selection to just that.
-        if self.dtype.type is np.float32 and PQ > 56*56:
+        if self.dtype.type is np.float32 and PQ > 56 * 56:
             K_tiles = (64,)
         else:
             K_tiles = (128, 64)
@@ -551,23 +524,23 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         for tile_K, grid_K, offset_K in kernel_specs.K_partitions(K, K_tiles):
 
             kernel_name = "%s_updat%s_C128_K%d" % (clss, determ, tile_K)
-            base_blocks = M*grid_C*grid_K
+            base_blocks = M * grid_C * grid_K
 
-            grid_P, grid_Q, threads = kernel_specs.update_grid(kernel_name, base_blocks, P, Q, sm_count)
-            # print grid_P, grid_Q
+            grid_P, grid_Q, threads = kernel_specs.update_grid(kernel_name,
+                                                               base_blocks, P, Q, sm_count)
 
-            grid_PQ   = grid_P * grid_Q
+            grid_PQ = grid_P * grid_Q
             magic_PQu = _magic64(grid_PQ)
-            magic_Qu  = _magic64(grid_Q)
+            magic_Qu = _magic64(grid_Q)
 
             block = (threads, 1, 1)
             if RST > 1:
-                grid = (M*grid_PQ, grid_C, grid_K)
+                grid = (M * grid_PQ, grid_C, grid_K)
             else:
-                grid = (grid_C, grid_K, M*grid_PQ)
+                grid = (grid_C, grid_K, M * grid_PQ)
 
-            self.determ *= M*grid_PQ
-            self.determ_shape = (M*grid_PQ, CRSTK)
+            self.determ *= M * grid_PQ
+            self.determ_shape = (M * grid_PQ, CRSTK)
 
             self.updat_kernels.append([kernel_name, grid, block, offset_K, _flatten([
                 N, K, D, H, W, WN, HWN, DHWN,
@@ -758,7 +731,7 @@ def _prepare_convert_kernel(src_data, src_type, dst_data, shape, flex_data):
     kernel_args = [dst_data, src_data, shape[1], 1.0, flex_data]
 
     kernel = _get_convert_kernel(src_type)
-    return [kernel, (shape[0], 1, 1), (32, 1, 1), None,] + kernel_args
+    return [kernel, (shape[0], 1, 1), (32, 1, 1), None, ] + kernel_args
 
 
 # fast axis=0 reduction kernel used for deterministic update
@@ -792,13 +765,13 @@ __global__ void convert(short* out, const %(type)s* in, int dim,
 """
     if dtype == "f4":
         template_vals = {
-            "type"   : "float",
-            "cvt"    : "",
+            "type": "float",
+            "cvt": "",
         }
     elif dtype == "f2":
         template_vals = {
-            "type"   : "unsigned short",
-            "cvt"    : "__half2float"
+            "type": "unsigned short",
+            "cvt": "__half2float"
         }
     else:
         raise ValueError("Invalid conversion type")
