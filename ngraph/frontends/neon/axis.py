@@ -35,7 +35,6 @@ ar.features_output = ng.make_axis_role()
 ax = ng.make_name_scope().named('ax')
 
 ax.N = ng.make_axis(name='N', roles=[ar.batch], docstring="minibatch size")
-
 ax.C = ng.make_axis(roles=[ar.features_input], docstring="number of input feature maps")
 ax.D = ng.make_axis(roles=[ar.features_0], docstring="input image depth")
 ax.H = ng.make_axis(roles=[ar.features_1], docstring="input image height")

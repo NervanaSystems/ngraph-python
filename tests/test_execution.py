@@ -539,7 +539,7 @@ def cross_entropy_binary_logistic_shortcut(x, t):
 def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
     """TODO."""
     W = ng.make_axis(length=20)
-    N = ng.make_axis(length=128, batch=True)
+    N = ng.make_axis(length=128, name='N')
     axes = ng.make_axes([W, N])
 
     p_u = ng.placeholder(axes)
@@ -559,7 +559,7 @@ def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
 def test_cross_entropy_binary(transformer_factory):
     """TODO."""
     W = ng.make_axis(length=20)
-    N = ng.make_axis(length=128, batch=True)
+    N = ng.make_axis(length=128, name='N')
     axes = ng.make_axes([W, N])
 
     delta = .001
@@ -622,7 +622,7 @@ def adiff_softmax(x):
 
 def test_np_softmax(transformer_factory):
     """TODO."""
-    N = ng.make_axis(length=128, batch=True)
+    N = ng.make_axis(length=128, name='N')
     C = ng.make_axis(length=20)
 
     # set up some distributions
@@ -674,7 +674,7 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 def test_softmax(transformer_factory):
     """TODO."""
-    N = ng.make_axis(name='N', batch=True)
+    N = ng.make_axis(name='N')
     W = ng.make_axis().named('W')
 
     W.length = 128

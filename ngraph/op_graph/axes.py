@@ -55,7 +55,6 @@ def make_axis_role(name=None, docstring=None):
 
 
 def make_axis(length=None, name=None,
-              batch=False, recurrent=False,
               match_on_length=False,
               roles=None, docstring=None):
     """
@@ -76,7 +75,6 @@ def make_axis(length=None, name=None,
 
     """
     return Axis(length=length, name=name,
-                batch=batch, recurrent=recurrent,
                 match_on_length=match_on_length,
                 roles=roles, docstring=docstring)
 
@@ -142,12 +140,13 @@ class Axis(object):
 
     def __init__(self,
                  length=None,
-                 batch=False,
-                 recurrent=False,
                  match_on_length=False,
                  roles=None,
                  name=None,
                  **kwargs):
+        assert 'batch' not in kwargs
+        assert 'recurrent' not in kwargs
+
         if name is None:
             # generate name for axis if None was provided
             name = 'Axis_' + str(type(self).__name_counter)
@@ -155,20 +154,6 @@ class Axis(object):
 
         self.name = name
         self.__length = length
-
-        self.__is_batch = batch
-        if batch and self.name != 'N':
-            raise ValueError((
-                'All Axis objects with batch=True must be named "N", was '
-                'named: {}'
-            ).format(self.name))
-
-        self.__is_recurrent = recurrent
-        if recurrent and self.name != 'R':
-            raise ValueError((
-                'All Axis objects with recurrent=True must be named "R", was '
-                'named: {}'
-            ).format(self.name))
 
         self.__match_on_length = match_on_length
         self.__duals = WeakValueDictionary()
@@ -197,7 +182,7 @@ class Axis(object):
             bool: True if the axis is a batch axis.
 
         """
-        return self.__is_batch
+        return self.name == 'N'
 
     @property
     def is_recurrent(self):
@@ -208,7 +193,7 @@ class Axis(object):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.__is_recurrent
+        return self.name == 'R'
 
     @is_recurrent.setter
     def is_recurrent(self, value):
@@ -644,9 +629,7 @@ def slice_axis(axis, s):
 
     # create sliced axis
     new_axis = make_axis(length=new_length,
-                         name=axis.name + "_sliced",
-                         batch=axis.is_batch,
-                         recurrent=axis.is_recurrent,
+                         name=axis.name,
                          roles=axis.roles)
     return new_axis
 
