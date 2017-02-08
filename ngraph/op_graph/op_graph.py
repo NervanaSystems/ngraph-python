@@ -2048,6 +2048,8 @@ class StackOp(SequentialOp):
         super(StackOp, self).__init__(**kwargs)
         self.pos = pos
         self.x_list = tuple(as_op(arg) for arg in x_list)
+        if axis.length != len(x_list):
+            raise ValueError("Axis must have the same length as x_list")
         arg_axes = self.x_list[0].axes
         axes_0 = arg_axes[:pos]
         axes_1 = arg_axes[pos:]
@@ -2070,7 +2072,6 @@ class StackOp(SequentialOp):
 
     def generate_adjoints(self, adjoints, delta):
         s = [slice(None)] * len(self.storage.axes)
-        arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
         for i, x in enumerate(self.x_list):
             s[self.pos] = i
             x.generate_add_delta(
