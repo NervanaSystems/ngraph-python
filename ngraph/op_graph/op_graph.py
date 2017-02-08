@@ -2047,58 +2047,35 @@ class StackOp(SequentialOp):
     def __init__(self, x_list, axis, pos=0, **kwargs):
         super(StackOp, self).__init__(**kwargs)
         self.pos = pos
-        self.x_list = tuple(as_op(_) for _ in x_list)
-        x_axes = self.x_list[0].axes
-        axes_0 = x_axes[:pos]
-        axes_1 = x_axes[pos:]
-        arg_axes = axes_0 + axes_1
+        self.x_list = tuple(as_op(arg) for arg in x_list)
+        arg_axes = self.x_list[0].axes
+        axes_0 = arg_axes[:pos]
+        axes_1 = arg_axes[pos:]
+        # Axis layout for the result
+        result_axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
 
-        axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
-        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
+        # With axes, we should be able to just setitem into a tensor shaped like the
+        # result, but things don't quite work that way so we use a temp that would have
+        # each arg in its own contiguous section, setitem into that, and reshape the result.
+        storage_axes = make_axes((axis,) + tuple(arg_axes))
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        slices = [slice(None)] * len(arg_axes)
 
-        # In order to avoid setting copies of our storage, we need a flattened
-        # version of our storage so we can treat the slices as 2d tensors without
-        # tensor shaping doing the sets into a copy of our slices.
-        flat_axes = []
-        flat_slices = []
-        if len(axes_0) > 0:
-            flat_axes.append(FlattenedAxis(axes_0))
-            flat_slices.append(slice(None))
-        flat_pos = len(flat_axes)
-        flat_axes.append(axis)
-        flat_slices.append(0)
-        if len(axes_1) > 0:
-            flat_axes.append(FlattenedAxis(axes_1))
-            flat_slices.append(slice(None))
-        flat_self = flatten(self.tensor, flat_axes)
-
-        if len(axes_0) == 0 or len(axes_1) == 0:
-            assign_op = AssignOneDOp
-        else:
-            assign_op = AssignTwoDOp
-
-        deps = []
-        for i, arg in enumerate(self.x_list):
-            slices = list(flat_slices)
-            slices[flat_pos] = i
-            slice_op = tensor_slice(flat_self, slices)
-            # Make sure the args are in the same order as our axes
-            ordered_arg = axes_with_order(arg, arg_axes)
-            # Arg is now 1d or 2d, depending on pos
-            flattened_arg = flatten_at(ordered_arg, pos)
-            # All users of this need to do the assigns
-            deps.append(assign_op(slice_op, flattened_arg, force=True))
-        self.ops = [doall(deps), self.tensor]
+        self.ops = [
+            doall([SetItemOp(self.storage, [i] + slices, arg)
+                   for i, arg in enumerate(self.x_list)
+                   ]),
+            axes_with_order(self.storage, result_axes)
+        ]
 
     def generate_adjoints(self, adjoints, delta):
-        s = [slice(None)] * len(self.tensor.axes)
+        s = [slice(None)] * len(self.storage.axes)
         arg_axes = delta.axes[:self.pos] + delta.axes[self.pos + 1:]
         for i, x in enumerate(self.x_list):
             s[self.pos] = i
             x.generate_add_delta(
                 adjoints,
-                axes_with_order(tensor_slice(delta, tuple(s), axes=arg_axes),
-                                x.axes)
+                axes_with_order(tensor_slice(delta, tuple(s)), x.axes)
             )
 
 
