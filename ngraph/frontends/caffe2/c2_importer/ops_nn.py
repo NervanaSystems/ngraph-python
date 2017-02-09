@@ -21,6 +21,35 @@ import ngraph as ng
 import numpy as np
 
 
+def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
+    pad_num = [val.i for val in c2_op.arg._values if val.name == 'legacy_pad']
+    pad_dict = {0: 'NOTSET', 1: 'VALID', 2: 'SAME', 3: 'CAFFE_LEGACY_POOLING'}
+    if not pad_num:
+        pad_num = 0
+    elif len(pad_num) != 1:
+        raise ValueError(c2_op.type + " uses multiple paddings")
+    else:
+        pad_num = pad_num[0]
+
+    if pad_num >= 0 and pad_num <= 3:
+        pad_type = pad_dict[pad_num]
+    else:
+        raise ValueError(c2_op.type + " uses unknown padding")
+
+    if 'NOTSET' == pad_type:
+        padding = np.mod(np.array(in_NHWC) - np.array([1] + kernel_HWIO[:-1]),
+                         np.array(stride_NHWC))
+        if not np.array_equal(padding, [0] * len(padding)):
+            raise NotImplementedError(c2_op.type + " padding type is not defined.")
+    else:
+        padding = common_conv2d_pool_padding(
+            in_NHWC=in_NHWC,
+            f_HWIO=kernel_HWIO,
+            str_NHWC=stride_NHWC,
+            padding=pad_type)
+    return padding
+
+
 class OpsNN(OpsBase):
     """
     Mix-in class for NN ops:
@@ -154,39 +183,11 @@ class OpsNN(OpsBase):
         stride_h = stride_w = stride_size[0]
 
         # padding params
-        # TODO: how to handle padding in caffe2?
-        # padding = c2_op.attr['padding'].s.decode("ascii")
-        # padding = (image_size - kernel_size) % stride_size
-
-        pad_num = [val.i for val in c2_op.arg._values if val.name == 'legacy_pad']
-        pad_dict = {0 : 'NOTSET', 1 : 'VALID', 2 : 'SAME', 3 : 'CAFFE_LEGACY_POOLING'}
-        if not pad_num:
-            pad_num = 0
-            pad_type = 'NOTSET'
-        elif len(pad_num) != 1:
-            raise ValueError("Pooling uses multiple paddings")
-        else:
-            pad_num = pad_num[0]
-
-        if pad_num >= 0 and pad_num <= 3:
-            pad_type = pad_dict[pad_num]
-        else:
-           raise ValueError("Pooling uses unknown padding")
-
-        if 'NOTSET' == pad_type:
-            padding = np.mod(np.array(image.axes.lengths) - np.array([1, 1, kernel_h, kernel_w]),
-                         np.array([1, 1, stride_size[0], stride_size[0]]))
-            if not np.array_equal(padding, [0] * len(padding)):
-                raise NotImplementedError("Pooling padding type is not defined.")
-        else:
-            padding = common_conv2d_pool_padding(
-                in_NHWC=[ax_N.length, ax_H.length, ax_W.length, ax_C.length],
-                f_HWIO=[kernel_h, kernel_w, ax_C.length, ax_C.length],
-                str_NHWC=[1, stride_h, stride_w, 1],
-                padding=pad_type
-                )
-
-        pad_t, pad_b, pad_l, pad_r = padding
+        pad_t, pad_b, pad_l, pad_r = \
+            _c2_padding(c2_op,
+                        in_NHWC=[ax_N.length, ax_H.length, ax_W.length, ax_C.length],
+                        kernel_HWIO=[kernel_h, kernel_w, ax_C.length, ax_C.length],
+                        stride_NHWC=[1, stride_h, stride_w, 1])
         if pad_t != pad_b or pad_l != pad_r:
             raise NotImplementedError("Requires symmetric padding in ngraph:"
                                       "pad_t(%s) == pad_b(%s) and"
@@ -296,16 +297,12 @@ class OpsNN(OpsBase):
         str_h = str_w = stride_size[0]
 
         # padding params
-        # TODO: how to handle padding in caffe2?
-        # padding = c2_op.attr['padding'].s.decode("ascii")
-        # padding = (image_size - kernel_size) % stride_size
-        padding = np.mod(np.array([ax_H.length, ax_W.length])
-                         - np.array([ax_kernel_H.length, ax_kernel_W.length]),
-                         np.array([str_h, str_w]))
-        if not np.array_equal(padding, [0] * len(padding)):
-            raise NotImplementedError("Convolution does not support padding yet")
-
-        pad_t = pad_b = pad_l = pad_r = 0
+        pad_t, pad_b, pad_l, pad_r = \
+            _c2_padding(c2_op,
+                        in_NHWC=[ax_N.length, ax_H.length, ax_W.length, ax_C.length],
+                        kernel_HWIO=[ax_kernel_H.length, ax_kernel_W.length,
+                                     ax_C.length, ax_kernel_ofm.length],
+                        stride_NHWC=[1, str_h, str_w, 1])
 
         if pad_t != pad_b or pad_l != pad_r:
             raise NotImplementedError("Requires symmetric padding in ngraph:"

@@ -122,60 +122,60 @@ class Tester(ImporterTester):
         image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
         result = tf.nn.max_pool(image, ksize, strides=strides, padding=padding)
         self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
-    #
-    # @pytest.mark.parametrize("all_args", gen_conv_testcase())
-    # def test_bias_add(self, all_args):
-    #     C, D, H, W, N, _, _, _, _, strides, padding = all_args
-    #     image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
-    #     bias = tf.constant(np.random.rand(C).astype(np.float32))
-    #     result = image + bias
-    #     self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
-    #
-    # def test_sparse_softmax_cross_entropy_with_logits(self):
-    #     # numpy random values
-    #     np_logits = np.random.randn(128, 10).astype(np.float32)
-    #     np_labels = np.random.randint(10, size=(128,))
-    #
-    #     # tf placeholders
-    #     tf_logits = tf.placeholder(tf.float32, shape=np_logits.shape)
-    #     tf_labels = tf.placeholder(tf.int32, shape=np_labels.shape)
-    #
-    #     # tf op
-    #     tf_result_op = tf.nn.sparse_softmax_cross_entropy_with_logits(
-    #         tf_logits, tf_labels)
-    #
-    #     # feed_dict
-    #     feed_dict = {tf_logits: np_logits, tf_labels: np_labels}
-    #
-    #     # test
-    #     self.run(tf_result_op, tf_feed_dict=feed_dict)
-    #
-    # def test_softmax(self):
-    #     # tf ops
-    #     y = tf.placeholder(tf.float32, [8, 5])
-    #     f = tf.nn.softmax(y)
-    #     y_np = np.random.randn(8, 5)
-    #     feed_dict = {y: y_np}
-    #
-    #     # test
-    #     self.run(f, tf_feed_dict=feed_dict)
-    #
-    # def test_mnist_softmax_forward(self):
-    #     # tf placeholder
-    #     from tensorflow.examples.tutorials.mnist import input_data
-    #     with TempDir() as tmpdir:
-    #         mnist = input_data.read_data_sets(tmpdir, one_hot=True)
-    #         x = tf.placeholder(tf.float32, [128, 784])
-    #         W = tf.Variable(tf.zeros([784, 10]))
-    #         b = tf.Variable(tf.zeros([10]))
-    #         y = tf.matmul(x, W) + b
-    #         y_ = tf.placeholder(tf.float32, [128, 10])
-    #         cross_entropy = tf.reduce_mean(-tf.reduce_sum(
-    #             y_ * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
-    #         init_op = tf.global_variables_initializer()
-    #         batch_xs, batch_ys = mnist.train.next_batch(128)
-    #
-    #         # test
-    #         feed_dict = {x: batch_xs, y_: batch_ys}
-    #
-    #         self.run(cross_entropy, tf_init_op=init_op, tf_feed_dict=feed_dict)
+
+    @pytest.mark.parametrize("all_args", gen_conv_testcase())
+    def test_bias_add(self, all_args):
+        C, D, H, W, N, _, _, _, _, strides, padding = all_args
+        image = tf.constant(np.random.rand(N, H, W, C).astype(np.float32))
+        bias = tf.constant(np.random.rand(C).astype(np.float32))
+        result = image + bias
+        self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
+
+    def test_sparse_softmax_cross_entropy_with_logits(self):
+        # numpy random values
+        np_logits = np.random.randn(128, 10).astype(np.float32)
+        np_labels = np.random.randint(10, size=(128,))
+
+        # tf placeholders
+        tf_logits = tf.placeholder(tf.float32, shape=np_logits.shape)
+        tf_labels = tf.placeholder(tf.int32, shape=np_labels.shape)
+
+        # tf op
+        tf_result_op = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            tf_logits, tf_labels)
+
+        # feed_dict
+        feed_dict = {tf_logits: np_logits, tf_labels: np_labels}
+
+        # test
+        self.run(tf_result_op, tf_feed_dict=feed_dict)
+
+    def test_softmax(self):
+        # tf ops
+        y = tf.placeholder(tf.float32, [8, 5])
+        f = tf.nn.softmax(y)
+        y_np = np.random.randn(8, 5)
+        feed_dict = {y: y_np}
+
+        # test
+        self.run(f, tf_feed_dict=feed_dict)
+
+    def test_mnist_softmax_forward(self):
+        # tf placeholder
+        from tensorflow.examples.tutorials.mnist import input_data
+        with TempDir() as tmpdir:
+            mnist = input_data.read_data_sets(tmpdir, one_hot=True)
+            x = tf.placeholder(tf.float32, [128, 784])
+            W = tf.Variable(tf.zeros([784, 10]))
+            b = tf.Variable(tf.zeros([10]))
+            y = tf.matmul(x, W) + b
+            y_ = tf.placeholder(tf.float32, [128, 10])
+            cross_entropy = tf.reduce_mean(-tf.reduce_sum(
+                y_ * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
+            init_op = tf.global_variables_initializer()
+            batch_xs, batch_ys = mnist.train.next_batch(128)
+
+            # test
+            feed_dict = {x: batch_xs, y_: batch_ys}
+
+            self.run(cross_entropy, tf_init_op=init_op, tf_feed_dict=feed_dict)

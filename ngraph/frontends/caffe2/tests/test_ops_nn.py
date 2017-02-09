@@ -217,21 +217,25 @@ def test_avgpool():
                                atol=1e-4, rtol=1e-3, equal_nan=False))
 
 
-def test_convolution_nhwc_no_pad():
+def test_convolution_nhwc():
     workspace.ResetWorkspace()
 
     # shape is in NCHW format
-    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride, c2_pad_type]
     param_list = [
-        [1, 3, 2, 1, 2, 2],
-        [1, 1, 4, 1, 2, 2],
-        [2, 3, 8, 1, 2, 2],
-        [8, 2, 5, 4, 3, 1],
-        [1, 2, 5, 2, 3, 1],
+        [1, 3, 2, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [1, 1, 4, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [2, 3, 8, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [8, 2, 5, 4, 3, 1, caffe2_legacy_pb2.NOTSET],
+        [1, 2, 5, 2, 3, 1, caffe2_legacy_pb2.NOTSET],
+        [8, 3, 4, 4, 3, 3, caffe2_legacy_pb2.VALID],
+        [12, 6, 5, 5, 4, 3, caffe2_legacy_pb2.VALID],
+        [8, 3, 4, 4, 3, 3, caffe2_legacy_pb2.SAME],
+        [12, 6, 5, 5, 4, 3, caffe2_legacy_pb2.SAME]
     ]
 
     for param_iter in param_list:
-        n, ifm, spatial, ofm, kernel, stride = param_iter
+        n, ifm, spatial, ofm, kernel, stride, pad_type = param_iter
 
         shape_x = (n, spatial, spatial, ifm)
         shape_w = (ofm, kernel, kernel, ifm)
@@ -246,7 +250,7 @@ def test_convolution_nhwc_no_pad():
         W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
         B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
 
-        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NHWC')
+        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NHWC', legacy_pad=pad_type)
 
         # Execute via Caffe2
         workspace.RunNetOnce(net)
@@ -269,18 +273,22 @@ def test_convolution_nhwc_no_pad():
                                equal_nan=False))
 
 
-def test_convolution_nchw_no_pad():
-    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride]
+def test_convolution_nchw():
+    # [batch, input_feature_map, spatial, output_feature_map, kernel, stride, c2_padding_type]
     param_list = [
-        [1, 3, 2, 1, 2, 2],
-        [1, 1, 4, 1, 2, 2],
-        [2, 3, 8, 1, 2, 2],
-        [8, 2, 5, 4, 3, 1],
-        [1, 2, 5, 2, 3, 1],
+        [1, 3, 2, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [1, 1, 4, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [2, 3, 8, 1, 2, 2, caffe2_legacy_pb2.NOTSET],
+        [8, 2, 5, 4, 3, 1, caffe2_legacy_pb2.NOTSET],
+        [1, 2, 5, 2, 3, 1, caffe2_legacy_pb2.NOTSET],
+        [8, 3, 4, 4, 3, 3, caffe2_legacy_pb2.VALID],
+        [12, 6, 5, 5, 4, 3, caffe2_legacy_pb2.VALID],
+        [8, 3, 4, 4, 3, 3, caffe2_legacy_pb2.SAME],
+        [12, 6, 5, 5, 4, 3, caffe2_legacy_pb2.SAME]
     ]
 
     for param_iter in param_list:
-        n, ifm, spatial, ofm, kernel, stride = param_iter
+        n, ifm, spatial, ofm, kernel, stride, pad_type = param_iter
 
         shape_x = (n, ifm, spatial, spatial)
         shape_w = (ofm, ifm, kernel, kernel)
@@ -295,7 +303,7 @@ def test_convolution_nchw_no_pad():
         W = net.GivenTensorFill([], ["W"], shape=shape_w, values=data_w, name="W")
         B = net.GivenTensorFill([], ["B"], shape=shape_b, values=data_b, name="B")
 
-        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NCHW')
+        net.Conv([X, W, B], 'Y', kernel=kernel, stride=stride, order='NCHW', legacy_pad=pad_type)
 
         # Execute via Caffe2
         workspace.RunNetOnce(net)
