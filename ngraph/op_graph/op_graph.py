@@ -264,7 +264,7 @@ class Op(NameableValue, DebugInfo):
             if node in counts:
                 continue
 
-            children = OrderedSet((child.forwarded for child in node.all_deps))
+            children = OrderedSet((child.forwarded for child in node.control_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -296,9 +296,8 @@ class Op(NameableValue, DebugInfo):
                  initializers=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
-        self.__args = ()
+        self.__args = tuple(as_op(arg) for arg in args)
         self.metadata = dict()
-        self.args = args
 
         if metadata is not None:
             if not isinstance(metadata, dict):
@@ -307,7 +306,7 @@ class Op(NameableValue, DebugInfo):
             self.metadata.update(metadata)
 
         # List to keep generation deterministic
-        self.other_deps = OrderedSet()
+        self.__control_deps = OrderedSet()
         self.schemas = []
         self.const = const
         self.__is_constant = constant
@@ -327,8 +326,34 @@ class Op(NameableValue, DebugInfo):
             all_ops.append(self)
 
         self.style = {}
-        self.ops = []
         self.__forward = None
+
+    @property
+    def tensor(self):
+        """
+
+        Returns: The op providing the value.
+
+        """
+        return self
+
+    @property
+    def states_read(self):
+        """
+
+        Returns: All state read by this op.
+
+        """
+        return OrderedSet()
+
+    @property
+    def states_written(self):
+        """
+
+        Returns: All state written by this op.
+
+        """
+        return OrderedSet()
 
     def __str__(self):
         return self.graph_label
@@ -379,30 +404,9 @@ class Op(NameableValue, DebugInfo):
         return self
 
     @property
-    def device_op(self):
-        """
-        Returns the op that performs the operations on the device.
-
-        Returns: self
-        """
-        if self.forward is not None:
-            return self.forward.device_op
-        return self
-
-    @property
     def args(self):
         """All the inputs to this node."""
         return self.__args
-
-    @args.setter
-    def args(self, args):
-        """
-        Replace old inputs with new inputs.
-
-        Arguments:
-            args: New arguments
-        """
-        self.__args = tuple(args)
 
     @property
     def forward(self):
@@ -418,10 +422,14 @@ class Op(NameableValue, DebugInfo):
 
     @forward.setter
     def forward(self, value):
+        self.update_forwards()
+        value.update_forwards()
+
+        # Make sure everything that is supposed to happen
+        # before this op still happens
+        for dep in self.__control_deps:
+            value.add_control_dep(dep)
         self.__forward = value
-        # Transfer the other_deps to value. Initializations have already been captured.
-        for dep in self.other_deps:
-            value.add_other_dep(dep)
         tdcache.tensor_description_cache.clear()
         value.metadata.update(self.metadata)
 
@@ -440,45 +448,67 @@ class Op(NameableValue, DebugInfo):
             result = result.__forward
 
     @property
-    def all_deps(self):
+    def control_deps(self):
         """
 
         Returns:
             Ops that must execute before this one can.
         """
-        return self.other_deps + self.args
+        return self.__control_deps + self.args
 
-    def add_other_dep(self, dep):
+    def add_control_dep(self, dep):
+        """
+        Add an op that needs to run before this op.
+
+        Args:
+            dep: The op.
+
+        """
         dep = dep.forwarded
-        device_op = self.device_op
-        if device_op is self:
-            if dep is not self and dep not in self.all_deps:
-                self.other_deps.add(dep)
-        else:
-            # Add the dep to the op that actually does the work.
-            device_op.add_other_dep(dep)
+        if dep is not self and dep not in self.control_deps:
+            self.__control_deps.add(dep)
+
+    def remove_control_dep(self, dep):
+        """
+        Remove an op from the list of ops that need to run before this op.
+
+        Args:
+            dep: The op.
+
+        """
+        self.update_forwards()
+        self.__control_deps.remove(dep.forwarded)
 
     def add_initializer(self, init):
         self.initializers.add(init)
 
     def update_forwards(self):
         """
-        Updates internal op references with their forwarded versions.
+        Replaces internal op references with their forwarded versions.
+
+        Any subclass that uses ops stored outside of args, control_deps, and initializers
+        needs to override this method to update those additional ops.
+
+        This is mainly to reduce the number of places that need to explicitly check
+        for forwarding.
+
         """
 
-        self.args = tuple(arg.forwarded for arg in self.args)
-        other_deps = self.other_deps
-        self.other_deps = OrderedSet()
-        for op in other_deps:
-            self.add_other_dep(op)
-        self.initializers = OrderedSet(op.forwarded for op in self.initializers)
+        for op in self.control_deps:
+            if op.forward is not None:
+                self.__args = tuple(arg.forwarded for arg in self.__args)
+                control_deps = self.__control_deps
+                self.__control_deps = OrderedSet()
+                for op in control_deps:
+                    self.add_control_dep(op.forwarded)
+                break
+        for op in self.initializers:
+            if op.forward is not None:
+                self.initializers = OrderedSet(op.forwarded for op in self.initializers)
+                break
 
     def replace_self(self, rep):
-        self.update_forwards()
-        rep.update_forwards()
         self.forward = rep
-        for dep in self.other_deps:
-            rep.add_other_dep(dep)
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -562,8 +592,8 @@ class Op(NameableValue, DebugInfo):
             Arguments:
               node: TODO
             """
-            if filter(node):
-                params.add(node)
+            if filter(node.tensor):
+                params.add(node.tensor)
 
         Op.visit_input_closure([self], visitor)
 
@@ -634,6 +664,9 @@ def as_op(x):
     Returns:
       Op:
     """
+    if isinstance(x, AssignableTensorOp):
+        return TensorValueOp(x)
+
     if isinstance(x, Op):
         return x
 
@@ -651,34 +684,6 @@ def as_ops(xs):
         A tuple of Ops.
     """
     return tuple(as_op(x) for x in xs)
-
-
-class InitTensorOp(Op):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-        kwargs: Other op args.
-
-    Attributes:
-        valfun: A CPU function that produces the initial value for the tensor.
-
-    """
-
-    def __init__(self, tensor, valfun, **kwargs):
-        super(InitTensorOp, self).__init__(args=(tensor,), **kwargs)
-        self.valfun = valfun
-
-    @property
-    def is_device_op(self):
-        """
-
-        Returns:
-            False, because this is run from the CPU.
-        """
-        return False
 
 
 def init_tensor(tensor, valfun):
@@ -715,6 +720,10 @@ class AssignOp(Op):
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
 
+    @property
+    def states_written(self):
+        return self.args[0].states_read
+
 
 class AssignOneDOp(Op):
     """
@@ -730,6 +739,10 @@ class AssignOneDOp(Op):
             val = val.scalar_op
         super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
+
+    @property
+    def states_written(self):
+        return self.args[0].states_read
 
 
 class AssignTwoDOp(AssignOneDOp):
@@ -772,6 +785,10 @@ class SetItemOp(Op):
         super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
         self.item = tuple(item)
 
+    @property
+    def states_written(self):
+        return self.args[0].states_read
+
 
 class ControlBlockOp(Op):
     """
@@ -801,7 +818,7 @@ class ParallelOp(ControlBlockOp):
     def __init__(self, all, **kwargs):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
-            self.add_other_dep(op)
+            self.add_control_dep(op)
 
 
 def doall(all):
@@ -821,8 +838,9 @@ class ComputationOp(ParallelOp):
         parameters: Parameter ops.
     """
     def __init__(self, returns, *args, **kwargs):
+        args = tuple(as_op(arg) for arg in args)
         for arg in args:
-            if not isinstance(arg, Op) or not arg.input:
+            if not isinstance(arg.tensor, AssignableTensorOp) or not arg.tensor.input:
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
                     'input=True, but the op passed had input=False.  In most '
@@ -834,26 +852,19 @@ class ComputationOp(ParallelOp):
                 ))
 
         if isinstance(returns, collections.Container):
-            all = returns
+            all = type(returns)(as_op(ret) for ret in returns)
         elif isinstance(returns, Op):
-            all = [returns]
+            all = [as_op(returns)]
         elif returns is not None:
             raise ValueError()
         else:
             all = []
 
-        super(ComputationOp, self).__init__(all=all, **kwargs)
         self.returns = returns
+        super(ComputationOp, self).__init__(all=all, **kwargs)
         self.parameters = args
         for arg in args:
-            self.add_other_dep(arg)
-
-    def update_forwards(self):
-        super(ComputationOp, self).update_forwards()
-        if isinstance(self.returns, collections.Container):
-            self.returns = type(self.returns)(_.forwarded for _ in self.returns)
-        elif isinstance(self.returns, Op):
-            self.returns = self.returns.forwarded
+            self.add_control_dep(arg)
 
 
 def computation(returns, *args):
@@ -898,6 +909,10 @@ class Fill(Op):
 
         self.scalar = scalar
 
+    @property
+    def states_written(self):
+        return self.args[0].states_read
+
 
 class TensorOp(Op):
     """
@@ -907,6 +922,8 @@ class TensorOp(Op):
         axes: The axes of the tensor.
         dtype: The element type of the tensor.
         scale: If specified, a scaling factor applied during updates.
+        is_value_op: If specified, the normal dtype/axes/scale defaulting is disabled
+          since those values will be supplied by a subclass, such as ValueOp.
         **kwargs: Arguments for related classes.
     """
 
@@ -1145,13 +1162,105 @@ class TensorOp(Op):
         return self.forwarded.tensor_description().value
 
 
-class SequentialOp(TensorOp, ControlBlockOp):
+class ValueOp(TensorOp, ControlBlockOp):
+    """
+    Mixin class for ops whose value is another op.
+
+    """
+    def __init__(self, tensor=None, **kwargs):
+        super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
+        self.__tensor = tensor
+
+    def tensor_description(self):
+        return self.tensor.tensor_description()
+
+    @property
+    def tensor(self):
+        """
+        The op that supplies the value.
+
+        Returns:
+            The op that supplies the value.
+
+        """
+        return self.__tensor
+
+    @tensor.setter
+    def tensor(self, tensor):
+        self.__tensor = tensor
+
+    @property
+    def is_tensor_op(self):
+        return self.tensor.is_tensor_op
+
+    @property
+    def value(self):
+        return self.tensor.value
+
+    @property
+    def axes(self):
+        return self.tensor.axes
+
+    @property
+    def dtype(self):
+        return self.tensor.dtype
+
+    @dtype.setter
+    def dtype(self, dtype):
+        self.tensor.dtype = dtype
+
+    @property
+    def scale(self):
+        return self.tensor.scale
+
+    @property
+    def states_read(self):
+        return self.tensor.states_read
+
+    @property
+    def states_written(self):
+        return self.tensor.states_written
+
+    def generate_adjoints(self, adjoints, delta):
+        self.tensor.generate_add_delta(adjoints, delta)
+
+    def generate_add_delta(self, adjoints, delta):
+        self.tensor.generate_add_delta(adjoints, delta)
+
+
+class InitTensorOp(ValueOp):
+    """
+    Initializes a device tensor from a CPU tensor.
+
+    Arguments:
+        tensor: Tensor to be intialized.
+        valfun: Function that performs initialization
+        kwargs: Other op args.
+
+    Attributes:
+        valfun: A CPU function that produces the initial value for the tensor.
+
+    """
+
+    def __init__(self, tensor, valfun, **kwargs):
+        super(InitTensorOp, self).__init__(tensor=tensor, **kwargs)
+        self.valfun = valfun
+
+    @property
+    def states_written(self):
+        return OrderedSet([self.tensor])
+
+
+class SequentialOp(ValueOp):
     """
     Given a list of ops, ensure that every op that has not already been executed is executed in
     the given order. The value of the last op is the value of this op.
 
     Ops will only be executed once, so to return the value of an earlier op, just add it again at
     the end of the list.
+
+    Control dependencies are not computed until after the graph is computed, i.e. after derivatives
+    are expanded.
 
     Arguments:
         ops: Sequence of ops to compute. If not specified, set the attribute ops when known. This
@@ -1161,9 +1270,10 @@ class SequentialOp(TensorOp, ControlBlockOp):
         ops: The list of ops to be computed. The last op is the returned value.
     """
     def __init__(self, ops=None, **kwargs):
-        super(SequentialOp, self).__init__(args=(), is_value_op=True, **kwargs)
-        self.value_op = None
+        super(SequentialOp, self).__init__(**kwargs)
+        self.tensor = None
         self.__ops = None
+        self.control_dependencies_computed = False
         if ops is not None:
             self.ops = ops
 
@@ -1173,61 +1283,51 @@ class SequentialOp(TensorOp, ControlBlockOp):
 
     @ops.setter
     def ops(self, ops):
-        # Set dependencies between ops, avoiding ops that aren't really ops, and skipping
-        # dependencies for ops that would already have been executed, to avoid introducing
-        # inconsistent control dependencies.
-        self.value_op = None
-        self.__ops = tuple(as_op(_) for _ in ops)
-        last_executed_op = None
+        self.__ops = list(as_op(op).forwarded for op in ops)
+
+        for op in self.__ops:
+            self.add_control_dep(op)
+        self.tensor = self.__ops[-1]
+        self.control_dependencies_computed = False
+
+    def compute_control_dependencies(self):
+        # Called in passes after graph expansion, such as derivatives, has been
+        # performed.
+        if self.control_dependencies_computed:
+            return
+
+        # Ops that have already executed.
         done_ops = set()
+
+        # State => op_tops that have written state
+        writers = defaultdict(OrderedSet)
+        # State => op_tops that have read state
+        readers = defaultdict(OrderedSet)
         for op_top in self.__ops:
-            self.value_op = op_top
             ordered_ops = Op.ordered_ops([op_top])
-            last_executed_top_op = last_executed_op
+            # Make ops that read/write state execute after the op_tops that last read/wrote
+            # the state.
             for op in ordered_ops:
-                dev_op = op.device_op
-                if isinstance(dev_op, AssignableTensorOp):
+                if op in done_ops:
+                    # The op already ran, so it doesn't run here
                     continue
-                if dev_op not in done_ops:
-                    if last_executed_op is not None:
-                        dev_op.add_other_dep(last_executed_op)
-                    last_executed_top_op = dev_op
-                    self.add_other_dep(dev_op)
-                    done_ops.add(dev_op)
-            last_executed_op = last_executed_top_op
-
-    def tensor_description(self):
-        return self.value_op.tensor_description()
-
-    @property
-    def is_tensor_op(self):
-        return self.value_op.is_tensor_op
-
-    @property
-    def value(self):
-        return self.value_op.value
-
-    @property
-    def axes(self):
-        return self.value_op.axes
-
-    @property
-    def dtype(self):
-        return self.value_op.dtype
-
-    @dtype.setter
-    def dtype(self, dtype):
-        self.value_op.dtype = dtype
-
-    @property
-    def scale(self):
-        return self.value_op.scale
-
-    def generate_adjoints(self, adjoints, delta):
-        self.value_op.generate_add_delta(adjoints, delta)
-
-    def generate_add_delta(self, adjoints, delta):
-        self.value_op.generate_add_delta(adjoints, delta)
+                for state in op.states_read:
+                    for write_op in writers[state]:
+                        op.add_control_dep(write_op)
+                for state in op.states_written:
+                    for read_op in readers[state]:
+                        op.add_control_dep(read_op)
+            # Register this op_top with each state it read/wrote.
+            for op in ordered_ops:
+                if op in done_ops:
+                    # The op already ran, so it doesn't run here
+                    continue
+                for state in op.states_written:
+                    writers[state].add(op_top)
+                for state in op.states_read:
+                    readers[state].add(op_top)
+            done_ops.update(ordered_ops)
+        self.control_dependencies_computed = True
 
 
 def sequential(ops=None):
@@ -1242,6 +1342,22 @@ def sequential(ops=None):
 
     """
     return SequentialOp(ops)
+
+
+class TensorValueOp(ValueOp):
+    """
+    A read of an AssignableTensorOp.
+
+    This provides a way to maintain different control information on different
+    versions of state.
+
+    """
+    def __init__(self, tensor, **kwargs):
+        super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
+
+    @property
+    def states_read(self):
+        return OrderedSet([self.tensor])
 
 
 class ReshapeOp(TensorOp):
@@ -1275,16 +1391,6 @@ class ReshapeOp(TensorOp):
             False, because this is handled by the transformer.
         """
         return False
-
-    @property
-    def device_op(self):
-        """
-        Returns the op that performs the operations on the device.
-
-        Returns: Argument's device_op
-
-        """
-        return self.args[0].device_op
 
 
 class Transpose(ReshapeOp):
@@ -1770,7 +1876,7 @@ class AssignableTensorOp(TensorOp):
         self.input = input
 
         if callable(initial_value):
-            self.add_initializer(assign(self, initial_value()))
+            self.add_initializer(assign(self, initial_value(self.axes)))
         elif initial_value is not None:
             self.add_initializer(assign(self, initial_value))
 
@@ -1795,9 +1901,9 @@ class AssignableTensorOp(TensorOp):
         """
         return False
 
-    def add_other_dep(self, op):
+    def add_control_dep(self, op):
         """
-        Allocations happen before executed ops, so other_deps are ignored.
+        Allocations happen before executed ops, so control_deps are ignored.
 
         Args:
             op:
@@ -2110,7 +2216,7 @@ class ConcatOp(SequentialOp):
 
     def __init__(self, x_list, axis_list, **kwargs):
         super(ConcatOp, self).__init__(**kwargs)
-        self.x_list = tuple(as_op(_) for _ in x_list)
+        self.x_list = tuple(as_op(arg) for arg in x_list)
         # Get common axes from first tensor in list
         x_axes = self.x_list[0].axes
         ax = axis_list[0]
@@ -2131,11 +2237,11 @@ class ConcatOp(SequentialOp):
         # contiguous in memory. This is most easily achieved by flattening, with concat_axis as
         # either the first or last axis.
         axes = make_axes((concat_axis,) + tuple(common_axes))
-        self.tensor = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
         self._axis_list = axis_list
 
         # Since the concatenation axis is first, we'll flatten the rest.
-        flat = flatten_at(self.tensor, 1)
+        flat = flatten_at(self.storage, 1)
         slices = [slice(None)] * len(flat.axes)
         assign_op = AssignTwoDOp if len(flat.axes) == 2 else AssignOneDOp
 
@@ -2163,14 +2269,14 @@ class ConcatOp(SequentialOp):
             start += ax.length
 
         concat_axis.length = start
-        self.ops = [doall(deps), axes_with_order(self.tensor, self._axes_order)]
+        self.ops = [doall(deps), axes_with_order(self.storage, self._axes_order)]
 
     def generate_adjoints(self, adjoints, delta):
-        delta = axes_with_order(delta, self.tensor.axes)
-        s = [slice(None)] * len(self.tensor.axes)
+        delta = axes_with_order(delta, self.storage.axes)
+        s = [slice(None)] * len(self.storage.axes)
         start = 0
         for i, (x, ax) in enumerate(zip(self.x_list, self._axis_list)):
-            arg_axes = make_axes((ax,) + tuple(self.tensor.axes[1:]))
+            arg_axes = make_axes((ax,) + tuple(self.storage.axes[1:]))
             s[0] = slice(start, start + ax.length)
             x.generate_add_delta(adjoints,
                                  axes_with_order(tensor_slice(delta,
@@ -2392,7 +2498,7 @@ class StopGradient(UnaryElementwiseAxesOp):
 
     @tdcache()
     def tensor_description(self):
-        return self.value_op.tensor_description()
+        return self.tensor.tensor_description()
 
     @property
     def is_tensor_op(self):
@@ -2400,11 +2506,11 @@ class StopGradient(UnaryElementwiseAxesOp):
 
     @property
     def value(self):
-        return self.value_op.value
+        return self.tensor.value
 
     @property
     def axes(self):
-        return self.value_op.axes
+        return self.tensor.axes
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 0.)
@@ -3646,7 +3752,6 @@ class Function(Op):
     """TODO."""
 
     def __init__(self, ops):
-        super(Function, self).__init__()
         self.ops = ops
         self.instructions = Op.ordered_ops(self.ops)
         args, defs = set(), set()
@@ -3656,7 +3761,7 @@ class Function(Op):
             # Kernel uses the args of each operation
             # except whatever is being defined
             args |= set(op.args) - defs
-        self.args = args
+        super(Function, self).__init__(args=args)
         self.__defs = defs
         self.initializers = [x for x in op.initializers
                              for op in self.instructions]
@@ -3701,9 +3806,9 @@ class DerivOp(TensorOp):
 
         if not error.axes.has_same_axes(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
-        self.dependent = dependent
-        self.independent = independent
-        self.error = error
+        self.dependent = as_op(dependent)
+        self.independent = as_op(independent)
+        self.error = as_op(error)
         self.axes = make_axes(independent.axes)
 
 

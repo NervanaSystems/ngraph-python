@@ -15,71 +15,54 @@
 '''
 Test of the mlp/linear layer
 '''
-import itertools as itt
-
+import pytest
 import numpy as np
-
 import ngraph as ng
 from ngraph.frontends.neon import Linear, UniformInit
 from ngraph.testing.execution import executor
 
 
-def pytest_generate_tests(metafunc):
-
-    bsz_rng = [128]
-
-    if 'basic_linargs' in metafunc.fixturenames:
-        nin_rng = [1, 2, 1023, 1024, 1025]
-        nout_rng = [1, 4, 1023, 1024, 1025]
-        fargs = itt.product(nin_rng, nout_rng, bsz_rng)
-        metafunc.parametrize('basic_linargs', fargs)
+@pytest.fixture(scope='module', params=[1, 2, 1023, 1024, 1025])
+def feature_axis(request):
+    return ng.make_axis(request.param)
 
 
-def test_linear_zeros(basic_linargs, transformer_factory):
+@pytest.fixture(scope='module', params=[128])
+def batch_axis(request):
+    return ng.make_axis(request.param, batch=True)
+
+
+@pytest.fixture(scope='module', params=[1, 4, 1023, 1024, 1025])
+def output_size(request):
+    return request.param
+
+
+@pytest.fixture(scope='module')
+def input_placeholder(feature_axis, batch_axis):
+    return ng.placeholder([feature_axis, batch_axis])
+
+
+def test_linear_zeros(input_placeholder, output_size, transformer_factory):
     # basic sanity check with 0 weights random inputs
-    nin, nout, batch_size = basic_linargs
+    x = np.random.random(input_placeholder.axes.lengths)
+    layer = Linear(nout=output_size, init=UniformInit(0.0, 0.0))
 
-    # set inputs
-    N = ng.make_axis(batch_size, batch=True).named('N')
-    F = ng.make_axis(nin).named('F')
+    with executor(layer.train_outputs(input_placeholder), input_placeholder) as ex:
+        output_values = ex(x)
 
-    inp = ng.placeholder([F, N])
-    layer = Linear(nout=nout, init=UniformInit(0.0, 0.0))
-    fprop = layer.train_outputs(inp)
-
-    # create data
-    x = np.random.random((nin, batch_size))
-
-    # evaluate
-    with executor(fprop, inp) as ex:
-        out = ex(x)
-
-    assert np.min(out) == 0.0 and np.max(out) == 0.0
+    assert np.min(output_values) == 0.0 and np.max(output_values) == 0.0
 
 
-def test_linear_ones(basic_linargs, transformer_factory):
+def test_linear_ones(input_placeholder, output_size, transformer_factory):
+    # basic sanity check with all ones on the inputs and weights, check that
+    # each row in output is the sum of the weights for that output this check
+    # will confirm that the correct number of operations is being run
+    x = np.ones(input_placeholder.axes.lengths)
+    layer = Linear(nout=output_size, init=UniformInit(1.0, 1.0))
 
-    # basic sanity check with all ones on the inputs
-    # and weights, check that each row in output
-    # is the sum of the weights for that output
-    # this check will confirm that the correct number
-    # of operations is being run
-    nin, nout, batch_size = basic_linargs
+    with executor([layer.train_outputs(input_placeholder), layer.W], input_placeholder) as ex:
+        output_values, w = ex(x)
 
-    # set inputs
-    N = ng.make_axis(batch_size, batch=True).named('N')
-    F = ng.make_axis(nin).named('F')
+    sums = np.sum(w, axis=1, keepdims=True) * np.ones((1, x.shape[1]))
 
-    inp = ng.placeholder([F, N])
-    layer = Linear(nout=nout, init=UniformInit(1.0, 1.0))
-    fprop = layer.train_outputs(inp)
-
-    # create data
-    x = np.ones((nin, batch_size))
-
-    # evaluate
-    with executor([fprop, layer.W], inp) as ex:
-        out, w = ex(x)
-    sums = np.sum(w, 1).reshape((nout, 1)) * np.ones((1, batch_size))
-
-    assert ng.testing.allclose(sums, out, atol=0.0, rtol=0.0), '%e' % np.max(np.abs(out - sums))
+    assert ng.testing.allclose(sums, output_values, atol=0.0, rtol=0.0)

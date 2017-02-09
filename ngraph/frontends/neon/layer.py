@@ -88,7 +88,7 @@ class Linear(Layer):
 
         w_axes = out_axes + [axis - 1 for axis in in_axes]
         if self.W is None:
-            self.W = ng.variable(axes=w_axes, initial_value=self.init(w_axes))
+            self.W = ng.variable(axes=w_axes, initial_value=self.init)
 
         return ng.dot(self.W, in_obj)
 
@@ -169,18 +169,19 @@ class ConvBase(Layer):
         init (function): function for later initializing filters
         strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
+        dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
 
     """
     metadata = {'layer_type': 'convolution'}
 
-    def __init__(self, fshape, init, strides, padding, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
                                str_h=None, str_w=None, str_d=None,
                                dil_h=None, dil_w=None, dil_d=None)
 
-        for d in [fshape, strides, padding]:
+        for d in [fshape, strides, padding, dilation]:
             self.convparams.update(d)
 
         missing_keys = [k for k, v in self.convparams.items() if v is None]
@@ -206,7 +207,7 @@ class ConvBase(Layer):
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
                 self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init(self.f_axes))
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init)
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
@@ -360,7 +361,7 @@ class Bias(Layer):
             if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
                 w_axes = in_obj.axes.role_axes(ar.features_input)
 
-            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init(w_axes))
+            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init)
             return in_obj + self.W
         else:
             return in_obj
@@ -595,11 +596,9 @@ class Recurrent(Layer):
                     initial_value=0, axes=self.hidden_state_axes).named('h_init')
 
         self.W_input = ng.variable(axes=self.w_in_axes,
-                                   initial_value=self.init(self.w_in_axes)
-                                   ).named("W_in")
+                                   initial_value=self.init).named("W_in")
         self.W_recur = ng.variable(axes=self.w_re_axes,
-                                   initial_value=self.init_inner(self.w_re_axes)
-                                   ).named("W_re")
+                                   initial_value=self.init_inner).named("W_re")
         self.b = ng.variable(axes=self.hidden_axes, initial_value=0).named("bias")
 
         h = self.h_init
@@ -796,8 +795,10 @@ class LSTM(Recurrent):
             self.c_init = init_state[1]
         else:
             if self.reset_cells:
-                self.h_init = ng.constant(const=0, axes=self.hidden_state_axes).named('h_init')
-                self.c_init = ng.constant(const=0, axes=self.hidden_state_axes).named('c_init')
+                self.h_init = ng.temporary(initial_value=0,
+                                           axes=self.hidden_state_axes).named('h_init')
+                self.c_init = ng.temporary(initial_value=0,
+                                           axes=self.hidden_state_axes).named('c_init')
             else:
                 self.h_init = ng.variable(initial_value=0,
                                           axes=self.hidden_state_axes).named('h_init')
@@ -806,13 +807,11 @@ class LSTM(Recurrent):
 
         # params are dictionary for i, f, o, g
         self.W_input = {k: ng.variable(axes=self.w_in_axes,
-                                       initial_value=self.init(self.w_in_axes)
-                                       ).
+                                       initial_value=self.init).
                         named("W_in_{}".format(k)) for k in self.metadata['gates']}
 
         self.W_recur = {k: ng.variable(axes=self.w_re_axes,
-                                       initial_value=self.init_inner(self.w_re_axes)
-                                       ).
+                                       initial_value=self.init_inner).
                         named("W_re_{}".format(k)) for k in self.metadata['gates']}
 
         self.b = {k: ng.variable(axes=self.hidden_axes,
@@ -843,4 +842,13 @@ class LSTM(Recurrent):
         else:
             lstm_out = h_list[-1]
 
-        return lstm_out
+        if self.reset_cells is True:
+            return lstm_out
+        else:
+            return ng.sequential([
+                ng.doall([
+                    ng.assign(self.h_init, h_list[-1]),
+                    ng.assign(self.c_init, c_list[-1])
+                ]),
+                lstm_out
+            ])

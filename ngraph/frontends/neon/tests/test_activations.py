@@ -17,254 +17,176 @@ Test of the activation functions
 '''
 from math import tanh as true_tanh
 
-import numpy as np
 import pytest
-
+import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
                                               Softmax, Tanh, Logistic)
 from ngraph.testing import ExecutorFactory
 
 
-def compare_tensors(func, inputs, expected_result, deriv=False, tol=0.):
-    with ExecutorFactory() as ex:
-        C = ng.make_axis().named('C')
-        N = ng.make_axis(batch=True).named('N')
-        C.length, N.length = inputs.shape
-        x = ng.placeholder([C, N])
+class ActivationPair(object):
+    tolerance = 0.0
 
-        if deriv is False:
-            costfunc = ex.executor(func.__call__(x), x)
-            result = costfunc(inputs)
-        else:
-            costfunc = ex.derivative(func.__call__(x), x)
+    def reference_value(self, x):
+        raise NotImplementedError("Must specify reference activation function")
 
-            result = costfunc(inputs)
+    def reference_derivative(self, x):
+        raise NotImplementedError("Must specify reference activation function")
+
+    def baseline_value(self, x):
+        '''
+        Use defined ngraph constructed computation to evaluate
+        activation on inputs x
+        '''
+        X = ng.placeholder([ng.make_axis(), ng.make_axis(batch=True)])
+        X.axes.set_shape(x.shape)
+        with ExecutorFactory() as ex:
+            activation_function = ex.executor(self.neon_activation(X), X)
+            return activation_function(x)
+
+    def baseline_derivative(self, x):
+        X = ng.placeholder([ng.make_axis(), ng.make_axis(batch=True)])
+        X.axes.set_shape(x.shape)
+        with ExecutorFactory() as ex:
+            activation_derivative = ex.derivative(self.neon_activation(X), X)
 
             # hack to get derivatives
-            result = result.ravel()
-            result = result[0:result.size:(C.length * N.length + 1)]
-            result = result.reshape(inputs.shape)
+            result = activation_derivative(x)
+            result = result.ravel()[0:result.size:(x.size + 1)]
+            result = result.reshape(x.shape)
 
-        ng.testing.assert_allclose(result, expected_result, rtol=tol)
-
-
-"""Identity
-"""
+            return result
 
 
-def test_identity(transformer_factory):
-    inputs = np.array([0, 1, -2]).reshape((3, 1))
-    outputs = np.array([0, 1, -2]).reshape((3, 1))
-    compare_tensors(Identity(), inputs, outputs)
+class IdentityPair(ActivationPair):
+    neon_activation = Identity()
+
+    def reference_value(self, x):
+        return x
+
+    def reference_derivative(self, x):
+        return 1
 
 
-def test_identity_derivative(transformer_factory):
-    inputs = np.array([[0, 1, -2], [1, 5, 6]]).reshape((3, 2))
-    outputs = np.ones(inputs.shape)
-    compare_tensors(Identity(), inputs, outputs, deriv=True)
+class RectlinPair(ActivationPair):
+    neon_activation = Rectlin()
+
+    def reference_value(self, x):
+        return np.maximum(x, 0)
+
+    def reference_derivative(self, x):
+        return np.greater(x, 0).astype(np.float32)
 
 
-"""Rectified Linear unit
-"""
-
-
-def test_rectlin_positives(transformer_factory):
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 3, 2]).reshape((3, 1))
-    compare_tensors(Rectlin(), inputs, outputs)
-
-
-def test_rectlin_negatives(transformer_factory):
-    inputs = np.array([[-1, -3], [-2, -4]])
-    outputs = np.array([[0, 0], [0, 0]])
-    compare_tensors(Rectlin(), inputs, outputs)
-
-
-def test_rectlin_mixed(transformer_factory):
-    inputs = np.array([[4, 0], [-2, 9]])
-    outputs = np.array([[4, 0], [0, 9]])
-    compare_tensors(Rectlin(), inputs, outputs)
-
-
-def test_rectlin_derivative_positives(transformer_factory):
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 1, 1]).reshape((3, 1))
-    compare_tensors(Rectlin(), inputs, outputs, deriv=True)
-
-
-def test_rectlin_derivative_negatives(transformer_factory):
-    inputs = np.array([[-1, -3], [-2, -4]])
-    outputs = np.array([[0, 0], [0, 0]])
-    compare_tensors(Rectlin(), inputs, outputs, deriv=True)
-
-
-def test_rectlin_derivative_mixed(transformer_factory):
-    inputs = np.array([[4, 0], [-2, 9]])
-    outputs = np.array([[1, 0], [0, 1]])
-    compare_tensors(Rectlin(), inputs, outputs, deriv=True)
-
-
-"""Leaky Rectified Linear unit
-"""
-
-
-def test_leaky_rectlin_positives(transformer_factory):
+class LeakyRectlinPair(ActivationPair):
     slope = 0.2
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 3, 2]).reshape((3, 1))
-    compare_tensors(Rectlin(slope=slope), inputs, outputs)
+    neon_activation = Rectlin(slope=0.2)
+
+    def reference_value(self, x):
+        return np.maximum(x, 0) + np.minimum(x, 0) * self.slope
+
+    def reference_derivative(self, x):
+        return np.greater(x, 0) + np.less(x, 0) * self.slope
 
 
-def test_leaky_rectlin_negatives(transformer_factory):
-    slope = 0.2
-    inputs = np.array([[-1, -3], [-2, -4]])
-    outputs = inputs * slope
-    compare_tensors(Rectlin(slope=slope), inputs, outputs, tol=1e-7)
+class RectlinClipPair(ActivationPair):
+    cutoff = 0.2
+    neon_activation = Rectlinclip(cutoff=0.2)
+
+    def reference_value(self, x):
+        return np.minimum(np.maximum(x, 0), self.cutoff)
+
+    def reference_derivative(self, x):
+        return ((x > 0) * (x < self.cutoff)).astype(np.float32)
 
 
-def test_leaky_rectlin_mixed(transformer_factory):
-    slope = 0.2
-    inputs = np.array([[4, 0], [-2, 9]])
-    outputs = np.array([[4, 0], [-2 * slope, 9]])
-    compare_tensors(Rectlin(slope=slope), inputs, outputs, tol=1e-7)
+class TanhPair(ActivationPair):
+    neon_activation = Tanh()
+    tolerance = 1e-7
+
+    def reference_value(self, x):
+        return np.vectorize(true_tanh)(x)
+
+    def reference_derivative(self, x):
+        f = self.reference_value(x)
+        return (1 - np.square(f))
 
 
-def test_leaky_rectlin_derivative_positives(transformer_factory):
-    slope = 0.2
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 1, 1]).reshape((3, 1))
-    compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True)
+class LogisticPair(ActivationPair):
+    neon_activation = Logistic()
+    tolerance = 1e-7
+
+    def reference_value(self, x):
+        return 1.0 / (1.0 + np.exp(-x))
+
+    def reference_derivative(self, x):
+        f = self.reference_value(x)
+        return f * (1.0 - f)
 
 
-def test_leaky_rectlin_derivative_negatives(transformer_factory):
-    """
-    ngraph derivative for negative values is 0, not the slope
-    """
-    slope = 0.2
-    inputs = np.array([[-1, -3], [-2, -4]], dtype=np.float32)
-    outputs = np.array([[0, 0], [0, 0]]) + slope
-    compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
+class SoftmaxPair(ActivationPair):
+    neon_activation = Softmax()
+    tolerance = 1e-6
+
+    def reference_value(self, x):
+        return (np.exp(x - 1) / np.sum(np.exp(x - 1), axis=0, keepdims=True))
+
+    def reference_derivative(self, x):
+        f = self.reference_value(x)
+        return f * (1.0 - f)
 
 
-def test_leaky_rectlin_derivative_mixed(transformer_factory):
-    slope = 0.2
-    inputs = np.array([[4, 0], [-2, 9]], dtype=np.float32)
-    outputs = np.array([[1, 0], [slope, 1]])
-    compare_tensors(Rectlin(slope=slope), inputs, outputs, deriv=True, tol=1e-7)
+@pytest.fixture(scope='module',
+                params=[
+                    IdentityPair(),
+                    RectlinPair(),
+                    LeakyRectlinPair(),
+                    RectlinClipPair(),
+                    TanhPair(),
+                    LogisticPair(),
+                    SoftmaxPair()
+                ],
+                ids=[
+                    'Identity',
+                    'Rectlin',
+                    'LeakyRectlin',
+                    'RectlinClip',
+                    'Tanh',
+                    'Logistic',
+                    'Softmax'
+                ])
+def activation_pair(request):
+    return request.param
 
 
-"""Clipped Rectified Linear unit
-"""
+@pytest.fixture(scope='module',
+                params=[
+                    np.array([[1], [3], [2]]),
+                    np.array([[0], [1], [-2]]),
+                    np.array([[4, 0], [-2, 5]]),
+                    np.array([[-1, -3], [-2, -4]])
+                ],
+                ids=[
+                    'all_positive_1d',
+                    'mixed_1d',
+                    'mixed_2d',
+                    'all_negative_2d'
+                ])
+def all_inputs(request):
+    return request.param.astype(np.float32)
 
 
-def test_rectlinclip_positives(transformer_factory):
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 3, 2]).reshape((3, 1))
-    compare_tensors(Rectlinclip(), inputs, outputs)
+def test_activation(all_inputs, activation_pair, transformer_factory):
+    ng.testing.assert_allclose(activation_pair.baseline_value(all_inputs),
+                               activation_pair.reference_value(all_inputs),
+                               rtol=activation_pair.tolerance)
 
 
-def test_rectlinclip_negatives(transformer_factory):
-    inputs = np.array([[-1, -3], [-2, -4]])
-    outputs = np.array([[0, 0], [0, 0]])
-    compare_tensors(Rectlinclip(), inputs, outputs)
+def test_derivative(all_inputs, activation_pair, transformer_factory):
+    if (all_inputs.shape[1] != 1 and isinstance(activation_pair, TanhPair)):
+        pytest.xfail('Expected tolerance issues for tanh on large-ish values')
 
-
-def test_rectlinclip_mixed(transformer_factory):
-    cutoff = 20
-    inputs = np.array([[4, 0], [-2, 24]])
-    outputs = np.array([[4, 0], [0, cutoff]])
-    compare_tensors(Rectlinclip(cutoff=cutoff), inputs, outputs)
-
-
-def test_rectlinclip_derivative_positives(transformer_factory):
-    inputs = np.array([1, 3, 2]).reshape((3, 1))
-    outputs = np.array([1, 1, 1]).reshape((3, 1))
-    compare_tensors(Rectlinclip(), inputs, outputs, deriv=True)
-
-
-def test_rectlinclip_derivative_negatives(transformer_factory):
-    inputs = np.array([[-1, -3], [-2, -4]])
-    outputs = np.array([[0, 0], [0, 0]])
-    compare_tensors(Rectlinclip(), inputs, outputs, deriv=True)
-
-
-def test_rectlinclip_derivative_mixed(transformer_factory):
-    cutoff = 20
-    inputs = np.array([[4, 0], [-2, 24]])
-    outputs = np.array([[1, 0], [0, 0]])
-    compare_tensors(Rectlinclip(cutoff=cutoff), inputs, outputs, deriv=True)
-
-
-"""Softmax
-"""
-
-
-def test_softmax(transformer_factory):
-    inputs = np.array([0, 1, -2]).reshape((3, 1))
-    outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1))).reshape((3, 1))
-    compare_tensors(Softmax(), inputs, outputs, tol=1e-5)
-
-
-def test_softmax_derivative(transformer_factory):
-    inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
-    outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1)))
-    outputs = outputs * (1 - outputs)  # shortcut only
-    compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
-
-
-@pytest.mark.xfail(reason="runs out of system memory", run=False)
-def test_softmax_big_inputs(transformer_factory):
-    """
-    This fails with memory error because the ex.derivative function
-    attempts to compute the full derivative.
-
-    Keeping this test since it was in original neon.
-    """
-    inputs = np.random.random((1000, 128))
-    outputs = (np.exp(inputs - 1) / np.sum(np.exp(inputs - 1)))
-    outputs = outputs * (1 - outputs)  # shortcut only
-    compare_tensors(Softmax(), inputs, outputs, deriv=True, tol=1e-6)
-
-
-"""Tanh
-"""
-
-
-def test_tanh(transformer_factory):
-    inputs = np.array([0, 1, -2]).reshape((3, 1))
-    outputs = np.array(
-        [true_tanh(0), true_tanh(1), true_tanh(-2)]).reshape((3, 1))
-    compare_tensors(Tanh(), inputs, outputs, tol=1e-7)
-
-
-def test_tanh_derivative(transformer_factory):
-    inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
-
-    # bprop is on the output
-    outputs = np.array([1 - true_tanh(0) ** 2,
-                        1 - true_tanh(1) ** 2,
-                        1 - true_tanh(-2) ** 2]).reshape((3, 1))
-    compare_tensors(Tanh(), inputs, outputs, deriv=True, tol=1e-6)
-
-
-"""Logistic
-"""
-
-
-def test_logistic(transformer_factory):
-    # inputs = np.array([0, 1, -2]).reshape((3, 1))
-    if transformer_factory.name == 'hetr':
-        pytest.xfail("Hetr is expected to fail. Hetr only passes with tol=1e-6.")
-    inputs = np.random.random((50, 50))
-    outputs = 1.0 / (1.0 + np.exp(-inputs)).reshape((50, 50))
-    compare_tensors(Logistic(), inputs, outputs, tol=1e-10)
-
-
-def test_logistic_derivative(transformer_factory):
-    # bprop is on the output
-    inputs = np.array([0, 1, -2], dtype=np.float).reshape((3, 1))
-    f = 1.0 / (1.0 + np.exp(-inputs))
-    outputs = f * (1.0 - f)
-    compare_tensors(Logistic(),
-                    inputs, outputs, deriv=True, tol=1e-7)
+    ng.testing.assert_allclose(activation_pair.baseline_derivative(all_inputs),
+                               activation_pair.reference_derivative(all_inputs),
+                               rtol=activation_pair.tolerance)
