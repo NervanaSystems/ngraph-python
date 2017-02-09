@@ -1161,6 +1161,19 @@ class TensorOp(Op):
         """
         return self.forwarded.tensor_description().value
 
+    @property
+    @tdcache()
+    def one(self):
+        """
+        Returns a singleton constant 1 for this Op. Used by DerivOp to ensure that
+         we don't build unique backprop graphs for every variable.
+
+        Returns:
+            A unique constant 1 associated with this TensorOp.
+
+        """
+        return as_op(1)
+
 
 class ValueOp(TensorOp, ControlBlockOp):
     """
@@ -3800,10 +3813,17 @@ def mean(x, reduction_axes=None, out_axes=None):
 
 
 class DerivOp(TensorOp):
-
     def __init__(self, dependent, independent, error):
         super(DerivOp, self).__init__()
 
+        self.dependent = as_op(dependent)
+        self.independent = as_op(independent)
+        if error is None:
+            # Get a singleton constant one for dependent. This ensures that all the
+            # independents share the same backprop, which would not happen if we
+            # made a constant 1 here, since we do not do common subexpression elimination,
+            # while it also ensures that independent graphs do not share ops.
+            error = self.dependent.one
         if not error.axes.has_same_axes(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
         self.dependent = as_op(dependent)
@@ -3828,8 +3848,6 @@ def deriv(dependent, independent, error=None):
         TensorOp: Derivative applied to error. Has axes of independent.
 
     """
-    if error is None:
-        error = constant(1.)
     return DerivOp(dependent, independent, error)
 
 
