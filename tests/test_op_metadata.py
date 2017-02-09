@@ -29,13 +29,16 @@ def test_op_capturing():
         with ng.Op.all_ops() as ops2:
             z = x + y
             with ng.Op.captured_ops() as ops3:
-                ng.exp(z)
+                w = ng.exp(z)
     # negate and add
-    assert len(ops1) == 2
+    assert y in ops1
+    assert y.args[0] in ops1
     # add and exp
-    assert len(ops2) == 2
+    assert z in ops2
+    assert w in ops2
     # exp
-    assert len(ops3) == 1
+    assert w in ops3
+    assert z not in ops3
 
 
 class Dummy(ng.NameableValue):
