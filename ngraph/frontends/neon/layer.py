@@ -682,7 +682,7 @@ class BiRNN(Layer):
         """
         if isinstance(in_obj, collections.Sequence) and len(in_obj) == 2:
             # make sure these 2 streams of inputs share axes
-            # assert in_obj[0].axes == in_obj[1].axes
+            assert in_obj[0].axes == in_obj[1].axes
             fwd_in = in_obj[0]
             bwd_in = in_obj[1]
         else:
@@ -690,7 +690,7 @@ class BiRNN(Layer):
             bwd_in = in_obj
 
         if isinstance(init_state, collections.Sequence) and len(init_state) == 2:
-            # assert init_state[0].axes == init_state[1].axes
+            assert init_state[0].axes == init_state[1].axes
             fwd_init = init_state[0]
             bwd_init = init_state[1]
         else:
