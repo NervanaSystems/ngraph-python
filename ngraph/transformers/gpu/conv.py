@@ -51,11 +51,16 @@ class ConvFpropKernel(GPUKernel):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
+        self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
+
+    def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
+        args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
-        use_cudac_kernels = transformer.runtime.use_cudac_kernels
+        enable_winograd = runtime.enable_winograd
+        use_cudac_kernels = runtime.use_cudac_kernels
 
         dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
         if dilated_conv:
@@ -143,11 +148,16 @@ class ConvBpropKernel(GPUKernel):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
+        self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
+
+    def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
+        args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
-        use_cudac_kernels = transformer.runtime.use_cudac_kernels
+        enable_winograd = runtime.enable_winograd
+        use_cudac_kernels = runtime.use_cudac_kernels
 
         dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
         if dilated_conv:
@@ -234,11 +244,16 @@ class ConvUpdateKernel(GPUKernel):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_dims)
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_dims)
 
-        args = (transformer.runtime, self.dtype, N, C, K, D, H, W, T, R, S,
+        self.gen_kernels(transformer.runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                         pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
+
+    def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
+                    pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
+        args = (runtime, self.dtype, N, C, K, D, H, W, T, R, S,
                 M, P, Q, pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w)
 
-        enable_winograd = transformer.runtime.enable_winograd
-        use_cudac_kernels = transformer.runtime.use_cudac_kernels
+        enable_winograd = runtime.enable_winograd
+        use_cudac_kernels = runtime.use_cudac_kernels
 
         dilated_conv = (dil_d != 1 or dil_h != 1 or dil_w != 1)
         if dilated_conv:
@@ -294,30 +309,3 @@ class ConvUpdateKernel(GPUKernel):
         Call into convolution library to execute kernels
         """
         self.updat_kernels.execute(1, unbind=False)
-
-
-class FlexConvFpropKernel(ConvFpropKernel):
-    """
-    Inherits all parent class ConvFpropKernel behavior except
-    selects flex convolution kernel and sets up flex parameters
-    """
-    def __init__(self, transformer, op):
-        raise NotImplementedError
-
-
-class FlexConvBpropKernel(ConvBpropKernel):
-    """
-    Inherits all parent class ConvBpropKernel behavior except
-    selects flex convolution kernel and sets up flex parameters
-    """
-    def __init__(self, transformer, op):
-        raise NotImplementedError
-
-
-class FlexConvUpdateKernel(ConvUpdateKernel):
-    """
-    Inherits all parent class ConvUpdateKernel behavior except
-    selects flex convolution kernel and sets up flex parameters
-    """
-    def __init__(self, transformer, op):
-        raise NotImplementedError
