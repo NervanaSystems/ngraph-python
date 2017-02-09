@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from tensorflow.examples.tutorials.mnist import input_data
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
-from ngraph.frontends.tensorflow.tf_importer.utils import SGDOptimizer
+from ngraph.frontends.common.utils import CommonSGDOptimizer
 import tensorflow as tf
 import ngraph as ng
 import ngraph.transformers as ngt
@@ -46,7 +46,7 @@ def mnist_mlp(args):
 
     # transformer and computations
     transformer = ngt.make_transformer()
-    updates = SGDOptimizer(args.lrate).minimize(cost_ng)
+    updates = CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
     train_comp = transformer.computation(ng.sequential([updates, cost_ng]), x_ng, t_ng)
     init_comp = transformer.computation(init_op_ng)
     transformer.initialize()
