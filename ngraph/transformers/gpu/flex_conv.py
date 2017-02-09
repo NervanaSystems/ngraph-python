@@ -217,8 +217,8 @@ class FlexConvBpropKernel(ConvBpropKernel):
         self.flex_entry_F = self.F.flex_entry()
         self.flex_entry_O = self.O.flex_entry()
 
-        F_size = np.prod(self.F.shape) * 2
-        O_size = np.prod(self.O.shape) * 2
+        F_size = int(np.prod(self.F.shape) * 2)
+        O_size = int(np.prod(self.O.shape) * 2)
 
         vec_size = 4 if self.dtype.itemsize == 4 else 8
 
@@ -359,7 +359,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
         # Have to zero output buffer and use type conversion for kernel using atomics
         if self.bprop_zero:
-            shape = [np.prod(self.O.shape[:-1]), self.O.shape[-1]]
+            shape = [int(np.prod(self.O.shape[:-1])), self.O.shape[-1]]
             convert_kernel = _prepare_convert_kernel(Out, "f2", self.O, shape,
                                                      self.flex_entry_O.ptr)
             self.convert_out = True
@@ -440,7 +440,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_U = self.U.flex_entry()
 
-        U_size = np.prod(self.U.shape) * 4
+        U_size = int(np.prod(self.U.shape) * 4)
 
         vec_size = 4 if self.dtype.itemsize == 4 else 8
 
@@ -555,7 +555,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
 
         # Have to convert output from float to flex
         U_data = ScratchBufferWrapper(U_size, 0, runtime)
-        shape = [np.prod(self.U.shape[:-1]), self.U.shape[-1]]
+        shape = [int(np.prod(self.U.shape[:-1])), self.U.shape[-1]]
         convert_kernel = _prepare_convert_kernel(U_data, "f4", self.U, shape,
                                                  self.flex_entry_U.ptr)
 
@@ -606,7 +606,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
     def execute(self):
         # This zeros out the scratch buffer which is accumulated into using atomics
         # for update output kernels
-        drv.memset_d32(self.kernels[0][5], 0, np.prod(self.U.shape))
+        drv.memset_d32(self.kernels[0][5], 0, int(np.prod(self.U.shape)))
 
         for kernel in self.kernels:
             kernel[0].prepared_async_call(*kernel[1:])
