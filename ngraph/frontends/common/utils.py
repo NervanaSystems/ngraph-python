@@ -14,6 +14,84 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
+import math
+
+
+def common_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding):
+    """
+    Get tensorflow's tf.nn.conv2d output shape
+    TODO: currently only support NHWC * RSCK, to support NCHW.
+
+    Args:
+        input_shape: [batch, in_height, in_width, in_channels].
+        filter_shape: [filter_height, filter_width, in_channels, out_channels].
+        strides: List of ints of length 4.
+        padding: A string from: "SAME", "VALID".
+
+    Returns:
+        output shape of tf.nn.conv2d
+    """
+    # check inputs
+    if padding != 'SAME' and padding != 'VALID':
+        raise ValueError("Padding must be 'SAME' or 'valid'.")
+    if not (len(input_shape) == len(filter_shape) == len(strides) == 4):
+        raise ValueError(
+            "input_shape, filter_shape, strides must be length 4.")
+
+    # get input / filter shape
+    N, H, W, C = input_shape
+    R, S, C_, K = filter_shape
+    if C != C_:
+        raise ValueError("Input channel must be the same as filter channel.")
+
+    # only support [1, X, X, 1] strides for importer now
+    if strides[0] != 1 or strides[3] != 1:
+        raise NotImplementedError("Strides on batch axis (N) and channel axis "
+                                  "(C) must be 1 for importer.")
+
+    # get output shape
+    if 'SAME' == padding:
+        out_height = math.ceil(float(H) / float(strides[1]))
+        out_width = math.ceil(float(W) / float(strides[2]))
+    elif 'VALID' == padding:
+        out_height = math.ceil(float(H - R + 1) / float(strides[1]))
+        out_width = math.ceil(float(W - S + 1) / float(strides[2]))
+
+    return (N, out_height, out_width, K)
+
+
+def common_conv2d_pool_padding(in_NHWC, f_HWIO, str_NHWC, padding):
+    """
+    Get tensorflow's tf.nn.conv2d padding size
+    TODO: currently only support NHWC * RSCK, to support NCHW.
+
+    Args:
+        in_NHWC: [batch, in_height, in_width, in_channels].
+        f_HWIO: [filter_height, filter_width, in_channels, out_channels].
+        str_NHWC: List of ints of length 4.
+        padding: A string from: "SAME", "VALID".
+
+    Returns:
+        pad_top, pad_bottom, pad_left, pad_right
+    """
+    # check validity and get output size
+    _, out_height, out_width, _ = common_conv2d_pool_output_shape(
+        in_NHWC, f_HWIO, str_NHWC, padding)
+    if padding == 'SAME':
+        # get input / filter shape
+        N, H, W, C = in_NHWC
+        R, S, C_, K = f_HWIO
+
+        # get padding size
+        pad_along_height = ((out_height - 1) * str_NHWC[1] + R - H)
+        pad_along_width = ((out_width - 1) * str_NHWC[2] + S - W)
+        pad_top = int(pad_along_height) // 2
+        pad_bottom = int(pad_along_height - pad_top)
+        pad_left = int(pad_along_width) // 2
+        pad_right = int(pad_along_width - pad_left)
+        return (pad_top, pad_bottom, pad_left, pad_right)
+    else:
+        return (0, 0, 0, 0)
 
 
 class CommonSGDOptimizer(object):

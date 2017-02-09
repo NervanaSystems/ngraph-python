@@ -15,6 +15,7 @@
 
 from __future__ import print_function
 from caffe2.python import core, workspace
+from caffe2.proto import caffe2_legacy_pb2
 from ngraph.frontends.caffe2.c2_importer.importer import C2Importer
 from ngraph.testing import ExecutorFactory
 import numpy as np
@@ -139,20 +140,23 @@ def test_maxpool():
     workspace.ResetWorkspace()
 
     # shape is in NCHW format
-    # [[shape], kernel, stride] #TODO: add padding
-    param_list = [[[1, 3, 10, 10], 2, 2],
-                  [[2, 3, 5, 5], 1, 1],
-                  [[2, 2, 7, 7], 3, 2],
-                  [[8, 5, 8, 8], 4, 4]
-                  ]
+    # [[shape], kernel, stride, caffe_padding_type]
+    param_list = [[[1, 3, 10, 10], 2, 2, caffe2_legacy_pb2.NOTSET],
+                  [[2, 3, 5, 5], 1, 1, caffe2_legacy_pb2.NOTSET],
+                  [[2, 2, 7, 7], 3, 2, caffe2_legacy_pb2.NOTSET],
+                  [[8, 5, 8, 8], 4, 4, caffe2_legacy_pb2.NOTSET],
+                  [[2, 2, 3, 3], 2, 2, caffe2_legacy_pb2.VALID],
+                  [[4, 3, 5, 5], 2, 2, caffe2_legacy_pb2.VALID],
+                  [[8, 3, 4, 4], 3, 3, caffe2_legacy_pb2.SAME],
+                  [[12, 6, 5, 5], 4, 3, caffe2_legacy_pb2.SAME]]
 
     for param_iter in param_list:
-        shape, kernel, stride = param_iter
+        shape, kernel, stride, pad_type = param_iter
         data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
 
         net = core.Net("net")
         X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
-        net.MaxPool(X, 'Y', kernel=kernel, stride=stride)
+        net.MaxPool(X, 'Y', kernel=kernel, stride=stride, legacy_pad=pad_type)
 
         # Execute via Caffe2
         workspace.RunNetOnce(net)
@@ -176,19 +180,23 @@ def test_avgpool():
     workspace.ResetWorkspace()
 
     # shape is in NCHW format
-    # [[shape], kernel, stride] #TODO: add padding
-    param_list = [[[1, 3, 10, 10], 2, 2],
-                  [[2, 3, 5, 5], 1, 1],
-                  [[2, 2, 7, 7], 3, 2],
-                  [[8, 5, 8, 8], 4, 4]]
+    # [[shape], kernel, stride, caffe_padding_type]
+    param_list = [[[1, 3, 10, 10], 2, 2, caffe2_legacy_pb2.NOTSET],
+                  [[2, 3, 5, 5], 1, 1, caffe2_legacy_pb2.NOTSET],
+                  [[2, 2, 7, 7], 3, 2, caffe2_legacy_pb2.NOTSET],
+                  [[8, 5, 8, 8], 4, 4, caffe2_legacy_pb2.NOTSET],
+                  [[8, 3, 4, 4], 3, 3, caffe2_legacy_pb2.VALID],
+                  [[12, 6, 5, 5], 4, 3, caffe2_legacy_pb2.VALID],
+                  [[8, 3, 4, 4], 3, 3, caffe2_legacy_pb2.SAME],
+                  [[12, 6, 5, 5], 4, 3, caffe2_legacy_pb2.SAME]]
 
     for param_iter in param_list:
-        shape, kernel, stride = param_iter
+        shape, kernel, stride, pad_type = param_iter
         data1 = [random.gauss(mu=0, sigma=10) for i in range(np.prod(shape))]
 
         net = core.Net("net")
-        X = net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
-        net.AveragePool(X, 'Y', kernel=kernel, stride=stride)
+        net.GivenTensorFill([], ["X"], shape=shape, values=data1, name="X")
+        net.AveragePool('X', 'Y', kernel=kernel, stride=stride, legacy_pad=pad_type)
 
         # Execute via Caffe2
         workspace.RunNetOnce(net)
