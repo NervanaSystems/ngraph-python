@@ -795,8 +795,10 @@ class LSTM(Recurrent):
             self.c_init = init_state[1]
         else:
             if self.reset_cells:
-                self.h_init = ng.constant(const=0, axes=self.hidden_state_axes).named('h_init')
-                self.c_init = ng.constant(const=0, axes=self.hidden_state_axes).named('c_init')
+                self.h_init = ng.temporary(initial_value=0,
+                                           axes=self.hidden_state_axes).named('h_init')
+                self.c_init = ng.temporary(initial_value=0,
+                                           axes=self.hidden_state_axes).named('c_init')
             else:
                 self.h_init = ng.variable(initial_value=0,
                                           axes=self.hidden_state_axes).named('h_init')
@@ -840,4 +842,13 @@ class LSTM(Recurrent):
         else:
             lstm_out = h_list[-1]
 
-        return lstm_out
+        if self.reset_cells is True:
+            return lstm_out
+        else:
+            return ng.sequential([
+                ng.doall([
+                    ng.assign(self.h_init, h_list[-1]),
+                    ng.assign(self.c_init, c_list[-1])
+                ]),
+                lstm_out
+            ])
