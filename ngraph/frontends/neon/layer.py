@@ -685,11 +685,9 @@ class BiRNN(Layer):
             # assert in_obj[0].axes == in_obj[1].axes
             fwd_in = in_obj[0]
             bwd_in = in_obj[1]
-            in_axes = in_obj[0].axes
         else:
             fwd_in = in_obj
             bwd_in = in_obj
-            in_axes = in_obj.axes
 
         if isinstance(init_state, collections.Sequence) and len(init_state) == 2:
             # assert init_state[0].axes == init_state[1].axes
@@ -699,11 +697,6 @@ class BiRNN(Layer):
             fwd_init = init_state
             bwd_init = init_state
 
-        # create the hidden axes here and set for both directions
-        rnn_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden'),
-                                 in_axes.recurrent_axes()[0]])
-
-        self.fwd_rnn.axes = self.bwd_rnn.axes = rnn_axes
         with ng.metadata(direction="fwd"):
             fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
         with ng.metadata(direction="bwd"):
