@@ -130,16 +130,17 @@ class FillKernel(GPUKernel):
 class SendKernel(GPUKernel):
     def __init__(self, transformer, send_op):
         super(SendKernel, self).__init__(transformer)
-        self.send_op = send_op
+        self.q = send_op.shared_q
+        self.tensor = send_op.args[0].tensor_description()
 
     def bind_buffers(self):
-        pass
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(SendKernel, self).bind_buffers()
 
     def execute(self):
-        tensor = self.send_op.args[0].value
-        value = tensor.get(None)
-        q = self.send_op.shared_q
-        q.put(value)
+        value = self.tensor.get(None)
+        self.q.put(value)
 
 
 class RecvKernel(GPUKernel):
@@ -178,7 +179,7 @@ class RecvKernel(GPUKernel):
         if self.tensor.shape == ():
             self.tensor.tensor.fill(x)
         else:
-            self.tensor.__setitem__(self.item, x)
+            self.tensor.__setitem__(None, x)
 
 
 class RngFillKernel(GPUKernel):
