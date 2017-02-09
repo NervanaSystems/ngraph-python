@@ -1770,7 +1770,7 @@ class AssignableTensorOp(TensorOp):
         self.input = input
 
         if callable(initial_value):
-            self.add_initializer(assign(self, initial_value()))
+            self.add_initializer(assign(self, initial_value(self.axes)))
         elif initial_value is not None:
             self.add_initializer(assign(self, initial_value))
 
