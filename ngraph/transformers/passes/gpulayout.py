@@ -17,13 +17,10 @@ from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp
-from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, ReductionOp, make_axes, \
-    axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, ContiguousOp, \
-    OneHotTwoDimOp, BinaryElementWiseOp, AssignOp, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, OneHotOp, Flatten, \
-    Op, Sum, UnaryElementWiseOp, \
-    SetItemOp, tensor_slice
-from ngraph.op_graph.axes import make_axis, FlattenedAxis
+from ngraph.op_graph.op_graph import BroadcastOp, ReductionOp, make_axes, \
+    unflatten, ReorderAxes, ContiguousOp, OneHotTwoDimOp, BinaryElementWiseOp, \
+    AssignOp, OneHotOp, Flatten, Op, UnaryElementWiseOp, SetItemOp, tensor_slice
+from ngraph.op_graph.axes import FlattenedAxis
 
 
 def _is_strides_contiguous(shape, strides):
@@ -384,71 +381,6 @@ class GPUTensorShaping(PeepholeGraphPass):
         pass
 
     @visit.on_type(OneHotTwoDimOp)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DotOp)
-    def visit(self, op):
-        x, y = op.args
-        x_reduction_axes = op.x_reduction_axes
-        y_reduction_axes = op.y_reduction_axes
-        out_axes = op.axes
-        if len(x_reduction_axes) == 0:
-            d = make_axis(1)
-            x_reduction_axes = make_axes((d,))
-            y_reduction_axes = x_reduction_axes
-            x = broadcast(x, x.axes + x_reduction_axes)
-            y = broadcast(y, y_reduction_axes + y.axes)
-
-        if x.is_scalar:
-            temp = x
-            x = y
-            y = temp
-        if y.is_scalar:
-            if x.is_scalar:
-                out = x.scalar_op * y.scalar_op
-                if len(x_reduction_axes) > 0:
-                    out = out * x_reduction_axes.size
-                out = broadcast(out, op.axes)
-            else:
-                out = Sum(x, x_reduction_axes) * y.scalar_op
-            out = broadcast(out, op.axes)
-        else:
-            x_rem_axes = x.axes - x_reduction_axes
-            x = axes_with_order(x, x_rem_axes + x_reduction_axes)
-
-            y_rem_axes = y.axes - y_reduction_axes
-            y = axes_with_order(y, y_reduction_axes + y_rem_axes)
-
-            x = flatten_at(x, len(x.axes) - len(x_reduction_axes))
-            y = flatten_at(y, len(y_reduction_axes))
-
-            if len(out_axes) == 0:
-                out = DotOneDimensional(x, y, axes=())
-            elif len(x.axes) == 1:
-                y = Transpose(y)
-                out = DotTwoByOne(y, x, axes=y.axes[0])
-            elif len(y.axes) == 1:
-                out = DotTwoByOne(x, y, axes=x.axes[0])
-            else:
-                out = DotTwoDimensional(x, y,
-                                        axes=([op.x_out_axes.flatten(True),
-                                               op.y_out_axes.flatten(True)]))
-
-            out = unflatten(out)
-            out = ReorderAxes(out, out_axes)
-
-        self.replace_op(op, out)
-
-    @visit.on_type(DotOneDimensional)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DotTwoDimensional)
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DotTwoByOne)
     def visit(self, op):
         pass
 

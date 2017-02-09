@@ -3015,37 +3015,10 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
     return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
-class LowDimensionalDot(TensorOp):
+class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, **kwargs):
-        super(LowDimensionalDot, self).__init__(args=(x, y), axes=axes, **kwargs)
-
-
-class DotOneDimensional(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 1 and len(y.axes) == 1
-        super(DotOneDimensional, self).__init__(
-            x, y, axes, **kwargs
-        )
-
-
-class DotTwoDimensional(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 2 and len(y.axes) == 2
-        super(DotTwoDimensional, self).__init__(
-            x, y, axes, **kwargs
-        )
-
-
-class DotTwoByOne(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 2 and len(y.axes) == 1
-        super(DotTwoByOne, self).__init__(
-            x, y, axes, **kwargs
-        )
+        super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
 class Softmax(object):

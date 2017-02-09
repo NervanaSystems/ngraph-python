@@ -27,8 +27,8 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
-    ContiguousOp, CosOp, Op, Divide, DotOneDimensional, DotTwoDimensional, \
-    DotTwoByOne, Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
+    ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
+    Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOneDOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
@@ -39,7 +39,7 @@ from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    SimplePrune, DerivPass
+    CPUTensorShaping, SimplePrune, DerivPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -511,15 +511,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(DotOneDimensional)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(DotTwoDimensional)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(DotTwoByOne)
+    @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
         self.append("""np.dot({}, {}, out={})""", x, y, out)
 
@@ -683,7 +675,8 @@ class NumPyTransformer(Transformer):
         self.graph_passes = [DerivPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
-                             RequiredTensorShaping()
+                             RequiredTensorShaping(),
+                             CPUTensorShaping()
                              ]
 
     def device_buffer_storage(self, bytes, dtype, name):

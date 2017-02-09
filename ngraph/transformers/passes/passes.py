@@ -20,7 +20,7 @@ from collections import Iterable
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
-    ContiguousOp, AssignOp, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
+    ContiguousOp, AssignOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, AssignOneDOp, ReshapeOp, flatten, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, negative, power, DerivOp, \
     ParallelOp, SequentialOp
@@ -139,7 +139,11 @@ class PeepholeGraphPass(GraphBuildingPass):
 
 
 class RequiredTensorShaping(PeepholeGraphPass):
-    """TODO."""
+    """
+    Tensor shaping pass common to gpu and cpu.
+    Currently used in DotOp.
+    """
+
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         pass
@@ -181,21 +185,27 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = flatten_at(y, len(y_reduction_axes))
 
             if len(out_axes) == 0:
-                out = DotOneDimensional(x, y, axes=())
+                out = DotLowDimension(x, y, axes=())
             elif len(x.axes) == 1:
                 y = Transpose(y)
-                out = DotTwoByOne(y, x, axes=y.axes[0])
+                out = DotLowDimension(y, x, axes=y.axes[0])
             elif len(y.axes) == 1:
-                out = DotTwoByOne(x, y, axes=x.axes[0])
+                out = DotLowDimension(x, y, axes=x.axes[0])
             else:
-                out = DotTwoDimensional(x, y,
-                                        axes=([op.x_out_axes.flatten(True),
-                                               op.y_out_axes.flatten(True)]))
+                out = DotLowDimension(x, y, axes=([op.x_out_axes.flatten(True),
+                                                   op.y_out_axes.flatten(True)]))
 
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
 
         self.replace_op(op, out)
+
+
+class CPUTensorShaping(PeepholeGraphPass):
+    """TODO."""
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op):
+        pass
 
     @visit.on_type(ContiguousOp)
     def visit(self, op):

@@ -18,7 +18,7 @@ import atexit
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
-    DotOneDimensional, DotTwoDimensional, DotTwoByOne, Max, Min, OneHotOp, \
+    DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
     Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
@@ -29,7 +29,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, DerivPass
+from ngraph.transformers.passes.passes import SimplePrune, DerivPass, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -383,15 +383,7 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
 
-    @add_kernel.on_type(DotOneDimensional)
-    def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self.transformer, op))
-
-    @add_kernel.on_type(DotTwoDimensional)
-    def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self.transformer, op))
-
-    @add_kernel.on_type(DotTwoByOne)
+    @add_kernel.on_type(DotLowDimension)
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
@@ -957,8 +949,8 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [DerivPass(),
-                             SimplePrune(), GPUTensorShaping(),
+        self.graph_passes = [DerivPass(), SimplePrune(),
+                             RequiredTensorShaping(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 
         self.buffer_allocators = []
