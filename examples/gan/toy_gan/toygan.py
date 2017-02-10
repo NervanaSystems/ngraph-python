@@ -27,7 +27,9 @@ class ToyGAN(object):  # analogy to MNIST or PTB classes. bleh on what to name t
         self.noise_range = noise_range
 
     def data_samples(self, num):
-        return np.random.normal(self.data_mu, self.data_sigma, num)  # unlike TF code, not sorted
+        samples = np.random.normal(self.data_mu, self.data_sigma, num)
+        samples.sort()
+        return samples  # unlike TF code, not sorted
 
     def noise_samples(self, num):
         # stratified sampling

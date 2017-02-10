@@ -23,6 +23,8 @@ from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
 from toygan import ToyGAN
 
+np.random.seed(42)
+
 # define commonly used layer in this example
 def affine_layer(h_dim, activation, name):
     return Affine(nout=h_dim, 
@@ -38,7 +40,7 @@ h_dim_G = h_dim
 h_dim_D = 2 * h_dim
 minibatch_discrimination = False  # for this toy example, seems to be better w/o mb discrim?
 
-num_iterations = 940
+num_iterations = 1200 #940
 batch_size = 12
 num_examples = num_iterations*batch_size
 
@@ -101,13 +103,18 @@ G = generator.train_outputs(z)  # generated sample
 x = inputs['data_sample']
 # *** does this work with ngraph, using discriminator for two outputs?
 D1 = discriminator.train_outputs(x)  # discriminator output on real data sample
-D2 = discriminator.train_outputs(G)  # discriminator output on generated sample
+
+# cast G axes into x
+x_axes_reorder = reversed(x.axes)
+G_cast = ng.cast_axes(G, x_axes_reorder)
+
+D2 = discriminator.train_outputs(G_cast)  # discriminator output on generated sample
 
 # why does ngraph have both log (LogOp) and safelog?
 
-loss_d = -ng.log(D1) - ng.log(1 - D2)  # use cross_entropy_binary?
+# loss_d = -ng.log(D1) - ng.log(1 - D2)  # use cross_entropy_binary?
 # ** cross_entropy_binary causes error - axes of D1 and D2 don't match
-#loss_d = ng.cross_entropy_binary(D1, D2)  # TODO: come back to this: this is: - log(D1)*D2 - log(1 - D1)*(1-D2) with sigmoid optimization
+loss_d = ng.cross_entropy_binary(D1, D2)  # TODO: come back to this: this is: - log(D1)*D2 - log(1 - D1)*(1-D2) with sigmoid optimization
 					  # TODO: not sure about enable_sig_opt, enable_diff_opt
 mean_cost_d = ng.mean(loss_d, out_axes=[])  # difference betw using out_axes and reduction_axes?
 loss_g = -ng.log(D2)
@@ -181,6 +188,17 @@ for i in range(num_points // batch_size):
     sl = slice(i*batch_size, (i+1)*batch_size)
     g[sl] = generator_inference(zs[sl].reshape(batch_size, 1)).reshape(batch_size, 1)
 pg, i_pg = np.histogram(g, bins=bins, density=True)
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    plt.plot(pd, 'b', label='real data')
+    plt.plot(pg, 'g', label='generated data')
+    plt.legend(loc='upper left')
+    plt.savefig('simple_gan.png')
+except ImportError:
+    print ("needs matplotlib")
 
 # save off data for plot generation 
 import h5py
