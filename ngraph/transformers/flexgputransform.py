@@ -53,8 +53,8 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     # TODO haven't investigated how these should be set, start with small tol
-    default_rtol = 1e-05
-    default_atol = 1 * fixed_point_res
+    default_rtol = 2e-05
+    default_atol = 0.20
 
     def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
 
