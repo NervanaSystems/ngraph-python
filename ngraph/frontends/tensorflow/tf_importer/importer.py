@@ -93,7 +93,7 @@ class TFImporter:
         for tf_node in graph_def.node:
             # print node
             # if verbose:
-            print(tf_node)
+            # print(tf_node)
 
             # resolve inputs
             input_ops = [

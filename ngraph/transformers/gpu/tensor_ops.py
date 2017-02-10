@@ -91,6 +91,9 @@ class DimShuffleKernel(GPUKernel):
         self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                         None, *self.params)
 
+    def bind_flex_scales(self):
+        pass
+
 
 class FillKernel(GPUKernel):
     """
@@ -125,6 +128,9 @@ class FillKernel(GPUKernel):
         Temporarily uses neon GPUTensor's fill method
         """
         self.tensor.fill(self.value)
+
+    def bind_flex_scales(self):
+        pass
 
 
 class RngFillKernel(GPUKernel):
