@@ -47,7 +47,7 @@ def clone(
             queue=gather_shared_queue,
             device=node.metadata['device'],
             device_id=device_id)
-        send_nodes.append(new_node)
+        send_nodes.add(new_node)
 
     elif node.__class__.__name__ is 'Gather_Recv':
         pass

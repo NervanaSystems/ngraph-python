@@ -152,7 +152,7 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant.
         constant (bool): The value is constant.
         initializers (list): Additional Ops to run before this Op is run the first time.
-        other_deps (OrderedSet): Ops in addtion to args that must run before this op.
+        control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         schemas: Information about how the Op was generated.
@@ -1354,6 +1354,10 @@ class TensorValueOp(ValueOp):
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
+
+        for key in ['device', 'device_id', 'parallel']:
+            if key in tensor.metadata:
+                self.metadata[key] = tensor.metadata[key]
 
     @property
     def states_read(self):

@@ -5,8 +5,7 @@ from op_graph import TensorOp
 class Send(TensorOp):
 
     def __init__(self, from_node, queue, device=None, device_id=None):
-        super(Send, self).__init__()
-        self.args = tuple([from_node])
+        super(Send, self).__init__(args=tuple([from_node]))
         self.metadata['device'] = device
         self.metadata['device_id'] = device_id
         self.axes = from_node.axes
@@ -30,7 +29,6 @@ class Recv(Receiver):
         super(Recv, self).__init__(send_node)
         self.metadata['device'] = device
         self.metadata['device_id'] = device_id
-        self.args = ()
         self.axes = axes
         self.dtype = dtype
         self.shared_q = queue
@@ -47,8 +45,7 @@ class Scatter_Send(TensorOp):
             device=None,
             device_id=None,
             to_id=None):
-        super(Scatter_Send, self).__init__(self)
-        self.args = tuple([from_node])
+        super(Scatter_Send, self).__init__(args=tuple([from_node]))
         self.metadata['device'] = device
         self.metadata['device_id'] = device_id
         self.dtype = from_node.dtype
@@ -88,8 +85,7 @@ class Scatter_Recv(Receiver):
 class Gather_Send(TensorOp):
 
     def __init__(self, from_node, axes, queue, device=None, device_id=None, **kwargs):
-        super(Gather_Send, self).__init__(self)
-        self.args = tuple([from_node])
+        super(Gather_Send, self).__init__(args=tuple([from_node]))
         self.metadata['device'] = device
         self.metadata['device_id'] = device_id
         self.axes = axes

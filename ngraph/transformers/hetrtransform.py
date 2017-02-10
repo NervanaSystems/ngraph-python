@@ -102,7 +102,7 @@ class AsyncTransformer(Process):
         """
         Sort the 'results' for this transformer using communication dependencies.
 
-        Find any Receiver nodes that a result depends on; add 'other_deps' from Receivers
+        Find any Receiver nodes that a result depends on; add 'control_deps' from Receivers
         to any other results in this transformer which the Sender for that Receiver depends on.
 
         Ex.
@@ -116,12 +116,12 @@ class AsyncTransformer(Process):
 
         Deadlock would occur if Z ran before Send0, but there are no explicit edges
         connecting them.
-        Using other_deps, the subgraph for this transformer looks like:
+        Using control_deps, the subgraph for this transformer looks like:
 
         X -> Send0 ====other_dep====> Recv1 -> Z
 
         This ensures that the built in logic in any child transformer, which sorts
-        nodes based on all_deps,
+        nodes based on control_deps,
         will produce a correct order if one is possible.
         """
         if len(self.child_ops) <= 1:
@@ -176,7 +176,7 @@ class AsyncTransformer(Process):
                 for r in recvs:
                     if comm_path_exists(fro=r.send_node(), to=op):
                         if r.metadata['transformer'] == op.metadata['transformer']:
-                            r.other_deps.add(op)
+                            r.control_deps.add(op)
 
     def run(self):
 
@@ -220,8 +220,7 @@ class AsyncTransformer(Process):
                     pass
                 else:
                     # TODO handle and exit gracefully
-                    # print "!!!exception!!!", e
-                    pass
+                    raise
 
 
 class ResultOp(TensorOp):
@@ -247,15 +246,17 @@ class HetrComputation(object):
         self.child_results_map = dict()
         self.transformer = hetr
         self.transformer_name_list = hetr.transformer_list
-        self.send_nodes_list = hetr.send_nodes_list
+        self.send_nodes = hetr.send_nodes
         self.hetr_passes = hetr.hetr_passes
         self.num_results = 0
         self.num_send_nodes = dict()
         self.is_distributed = False
 
         orig_results = results
-        if not isinstance(results, list):
-            results = [results] if results else []
+        if not isinstance(results, OrderedSet):
+            if not isinstance(results, list):
+                results = [results] if results else []
+            results = OrderedSet(results)
         for op in results:
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
@@ -274,26 +275,25 @@ class HetrComputation(object):
 
         if orig_results is not None:
             # Do Hetr passes
-            inits = OrderedSet()
             for graph_pass in self.hetr_passes:
-                all_results = all_results + hetr.send_nodes_list
-                all_results, inits = graph_pass.do_pass(all_results, inits)
+                all_results = all_results + hetr.send_nodes
+                graph_pass.do_pass(all_results, self.transformer)
 
             # TODO replicate placeholders for nodes which got replicated;
             # update the placeholder mapping below, so at __call__ time we know
             # which transformers to pass copies of the provided placeholder value to
 
             if hetr.vizpass:
-                vis_results = all_results + hetr.send_nodes_list
-                hetr.vizpass.do_pass(vis_results, inits)
+                vis_results = all_results + hetr.send_nodes
+                hetr.vizpass.do_pass(vis_results, self)
 
         self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
         self.is_distributed = any(
-            'Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes_list)
+            'Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes)
 
         # update the transformer to send node mappings
-        for s in self.send_nodes_list:
+        for s in self.send_nodes:
             tname = s.metadata['transformer']
             self.transformer_to_node[tname].append(s)
             self.num_send_nodes[tname] = self.num_send_nodes.get(tname, 0) + 1
@@ -313,10 +313,6 @@ class HetrComputation(object):
                     self.transformer_to_node[tname].append(op)
                 self.child_results_map.setdefault(tname, []).append(pos)
 
-        ###
-        # TODO WIP was trying to make the loops below more concise
-        # [(i, p) for (i, p) in enumerate(parameters) if p.metadata['transformer'] == tname]
-        ###
         self.placeholders = {t: list() for t in self.transformer_name_list}
         self.placeholders_pos = {t: list() for t in self.transformer_name_list}
         for i, p in enumerate(parameters):
@@ -391,20 +387,22 @@ class HetrTransformer(Transformer):
         self.child_transformers = dict()
         self.transformer_list = list()
         self.transformers = set()
-        self.send_nodes_list = list()
+        self.send_nodes = OrderedSet()
         self.scatter_shared_queues = list()
         self.gather_shared_queues = list()
         self.hetr_passes = [DeviceAssignPass(default_device='numpy',
                                              default_device_id=0,
                                              transformers=self.transformers),
-                            CommunicationPass(self.send_nodes_list,
+                            CommunicationPass(self.send_nodes,
                                               self.scatter_shared_queues,
                                               self.gather_shared_queues),
-                            DistributedPass(self.send_nodes_list,
+                            DistributedPass(self.send_nodes,
                                             self.scatter_shared_queues,
                                             self.gather_shared_queues),
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None
+
+        self.inits = OrderedSet()
 
         HetrTransformer.hetr_counter += 1
         assert HetrTransformer.hetr_counter <= 1
@@ -479,6 +477,12 @@ class HetrTransformer(Transformer):
 
     def allocate_storage(self):
         assert False, "Should not be used, TODO cleanup"
+
+    def add_initialization_ops(self, ops):
+        pass
+
+    def state_initializations(self, states):
+        pass
 
 # from ngraph.transformers.base import set_transformer_factory
 # set_transformer_factory(

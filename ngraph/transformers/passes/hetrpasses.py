@@ -61,7 +61,7 @@ class CommunicationPass(PeepholeGraphPass):
                                              device=op.metadata['device'],
                                              device_id=op.metadata['device_id'][0])
 
-            self.send_nodes.append(scatter_send_node)
+            self.send_nodes.add(scatter_send_node)
             args.append(scatter_recv_node)
 
         else:
@@ -87,14 +87,14 @@ class CommunicationPass(PeepholeGraphPass):
                                        device_id=op.metadata['device_id'],
                                        from_id=gather_from.metadata['device_id'])
 
-        self.send_nodes.append(gather_send_node)
+        self.send_nodes.add(gather_send_node)
         args.append(gather_recv_node)
 
     def insert_send_recv_nodes(self, op, arg, args):
         shared_queue = multiprocessing.Queue()
-        self.send_nodes.append(Send(from_node=arg, queue=shared_queue,
-                                    device=arg.metadata['device'],
-                                    device_id=arg.metadata['device_id']))
+        self.send_nodes.add(Send(from_node=arg, queue=shared_queue,
+                                 device=arg.metadata['device'],
+                                 device_id=arg.metadata['device_id']))
 
         args.append(Recv(axes=arg.axes, dtype=arg.dtype, queue=shared_queue,
                          send_node=self.send_nodes[-1],
@@ -116,14 +116,13 @@ class CommunicationPass(PeepholeGraphPass):
                 args.append(arg)
 
         if isinstance(op.args, tuple):
-            op.args = tuple(args)
+            op._Op__args = tuple(args)
         else:
             op.args(args)  # setter is called args
 
-    def do_pass(self, ops, inits):
-        ops, inits = super(CommunicationPass, self).do_pass(ops, inits)
+    def do_pass(self, ops, transformer):
+        super(CommunicationPass, self).do_pass(ops, transformer)
         ops.update(self.send_nodes)
-        return ops, inits
 
 
 class DistributedPass(PeepholeGraphPass):
@@ -151,7 +150,7 @@ class DistributedPass(PeepholeGraphPass):
             if node in counts:
                 continue
 
-            children = [child.forwarded for child in node.all_deps]
+            children = [child.forwarded for child in node.control_deps]
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -213,7 +212,7 @@ class DistributedPass(PeepholeGraphPass):
 
         return subgraph
 
-    def do_pass(self, ops, inits):
+    def do_pass(self, ops, transformer):
         ops = OrderedSet(op.forwarded for op in ops)
 
         def set_new_axes(root, num_devices):
@@ -248,10 +247,9 @@ class DistributedPass(PeepholeGraphPass):
                 args.append(arg)
 
             if isinstance(op.args, tuple):
-                op.args = tuple(args)
+                op._Op__args = tuple(args)
             else:
                 op.args(args)
-        return ops, inits
 
 
 class ChildTransformerPass(PeepholeGraphPass):
