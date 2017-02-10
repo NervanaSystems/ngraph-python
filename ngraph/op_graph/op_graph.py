@@ -670,7 +670,7 @@ def as_op(x):
     if isinstance(x, Op):
         return x
 
-    return constant(x)
+    return TensorValueOp(constant(x))
 
 
 def as_ops(xs):
@@ -3826,8 +3826,7 @@ class DerivOp(TensorOp):
             error = self.dependent.one
         if not error.axes.has_same_axes(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
-        self.dependent = as_op(dependent)
-        self.independent = as_op(independent)
+
         self.error = as_op(error)
         self.axes = make_axes(independent.axes)
 
