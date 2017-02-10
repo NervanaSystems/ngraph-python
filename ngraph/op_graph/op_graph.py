@@ -24,7 +24,7 @@ from functools import wraps
 from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
-    make_axis, make_axes, Axes, FlattenedAxis, PaddedAxis, SlicedAxis, default_dtype, \
+    make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
     default_int_dtype, casting_axis
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
@@ -1725,7 +1725,7 @@ class TensorSliceOp(ReshapeOp):
                     if s == slice(None, None, None):
                         axes.append(axis)
                     else:
-                        axes.append(SlicedAxis(axis, s))
+                        axes.append(slice_axis(axis, s))
 
             axes = make_axes(axes)
 
@@ -3241,6 +3241,7 @@ def batch_size(x):
 def pad(x, paddings, axes=None):
     """
     Pads a tensor with zeroes along each of its dimensions.
+    TODO: clean up slice / unslice used here
 
     Arguments:
       x: the tensor to be padded
@@ -3269,27 +3270,20 @@ def pad(x, paddings, axes=None):
             pad = (pad, pad)
         return pad
 
-    paddings = tuple(pad_to_tuple(pad) for pad in paddings)
-    if axes is None:
-        axes = make_axes(
-            PaddedAxis(axis, pad) if pad != (0, 0) else axis
-            for axis, pad in zip(x.axes, paddings)
-        )
-
     def to_slice(pad):
-        """
-        TODO.
-
-        Arguments:
-          pad: TODO
-
-        Returns:
-          TODO
-        """
         s = (pad[0], -pad[1])
         s = tuple(None if p == 0 else p for p in s)
         return slice(s[0], s[1], 1)
+
+    paddings = tuple(pad_to_tuple(pad) for pad in paddings)
+    if axes is None:
+        axes = make_axes(
+            make_axis(length=axis.length + pad[0] + pad[1])
+            if pad != (0, 0) else axis
+            for axis, pad in zip(x.axes, paddings)
+        )
     slices = tuple(to_slice(p) for p in paddings)
+
     return _unslice(x, slices, axes)
 
 

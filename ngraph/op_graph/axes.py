@@ -574,43 +574,6 @@ class DualAxis(Axis):
         return 'DualAxis({axis}:{level})'.format(axis=self.primary_axis, level=self.dual_level)
 
 
-class FunctionAxis(Axis):
-    """
-    A function axis is an axis whose length is computed by a user-supplied function.
-
-    Instances should only be created internally because using a
-    function that changes the length after a transformation will result in
-    undefined behaviour.
-
-    Currently, this class is only used by the SlicedAxis and PaddedAxis subclasses,
-    which derive their length from a parent axis's length. This satisfies the above
-    restriction, because we expect the parent axis to become immutable once
-    the transformation begins.
-    """
-
-    def __init__(self, parent, length_fun, **kwargs):
-        super(FunctionAxis, self).__init__(length=-1,
-                                           **kwargs)
-        self.parent = parent
-        self.length_fun = length_fun
-
-    @property
-    def length(self):
-        return self.length_fun()
-
-    @property
-    def is_recurrent(self):
-        return self.parent.is_recurrent
-
-    @property
-    def roles(self):
-        return self.parent.roles
-
-    @property
-    def is_batch(self):
-        return self.parent.is_batch
-
-
 def _sliced_length(s, incoming_length):
     start, stop, step = s.indices(incoming_length)
 
@@ -636,69 +599,31 @@ def _validate_slice(s):
         ))
 
 
-class SlicedAxis(FunctionAxis):
+def slice_axis(axis, s):
     """
-    An axis created by slicing a parent axis.
-
-    The length is computed dynamically from the length of the parent.
+    Slice an axis, return complete new axis
+    TODO: deprecate this after the axis refactoring
 
     Arguments:
-        parent: The axis being sliced.
-        s: The slice.
-        kwargs: Arguments for related classes.
+        axis: the axis to be sliced
+        s: slice
 
-    TODO: Right now, a 0 length slice is allowed.  Perhaps we want to raise an
-    exception instead?
+    Returns:
+        Axis instance, the new sliced axis
     """
-    def __init__(self, parent, s, **kwargs):
+    # validate
+    _validate_slice(s)
 
-        self.slice = s
-        _validate_slice(s)
+    # get sliced length
+    new_length = None if axis.length is None else _sliced_length(s, axis.length)
 
-        super(SlicedAxis, self).__init__(
-            parent=parent,
-            length_fun=lambda: _sliced_length(s, parent.length),
-            **kwargs
-        )
-
-    def __repr__(self):
-        return (
-            'SlicedAxis({name}: {length}; parent: {parent}; slice: {slice})'
-        ).format(
-            name=self.name,
-            length=self.length,
-            parent=self.parent,
-            slice=self.slice,
-        )
-
-
-class PaddedAxis(FunctionAxis):
-    """
-    An axis created by padding a parent axis.
-
-    Arguments:
-        parent: The axis being padded.
-        pad: A two-element array of pre and post padding.
-    """
-    def __init__(self, parent, pad, **kwargs):
-        self.pad = pad
-
-        def padded_length():
-            return parent.length + pad[0] + pad[1]
-
-        super(PaddedAxis, self).__init__(
-            parent=parent, length_fun=padded_length, **kwargs
-        )
-
-    def __repr__(self):
-        return (
-            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
-        ).format(
-            name=self.name,
-            length=self.length,
-            parent=self.parent,
-            pad=self.pad,
-        )
+    # create sliced axis
+    new_axis = make_axis(length=new_length,
+                         name=axis.name + "_sliced",
+                         batch=axis.is_batch,
+                         recurrent=axis.is_recurrent,
+                         roles=axis.roles)
+    return new_axis
 
 
 def no_duplicates(arr):
@@ -1772,7 +1697,7 @@ class TensorDescription(NameableValue):
                 _validate_slice(s)
 
                 # ensure new_axis has the correct length
-                _check_sliced_axis_length(s, axis, new_axis)
+                new_axis.length = _sliced_length(s, axis.length)
 
                 start, stop, step = s.indices(axis.length)
 

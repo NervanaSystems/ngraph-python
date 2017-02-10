@@ -19,7 +19,7 @@ import pytest
 
 import ngraph as ng
 import ngraph.util.names as names
-from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
+from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, slice_axis
 from ngraph.testing import ExecutorFactory
 
 # Make some axes
@@ -206,57 +206,57 @@ def test_simple_tensors():
 
 def test_sliced_axis():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert s.length == 5
 
 
 def test_sliced_axis_invalid():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(5, 0))
+    s = slice_axis(a, slice(5, 0))
     assert s.length == 0
 
 
 def test_sliced_axis_none_end():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, None))
+    s = slice_axis(a, slice(0, None))
     assert s.length == 10
 
 
 def test_sliced_axis_negative():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(5, 0, -1))
+    s = slice_axis(a, slice(5, 0, -1))
     assert s.length == 5
 
 
 def test_sliced_axis_negative_invalid():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, 5, -1))
+    s = slice_axis(a, slice(0, 5, -1))
     assert s.length == 0
 
 
 def test_sliced_axis_flip():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(None, None, -1))
+    s = slice_axis(a, slice(None, None, -1))
     assert s.length == 10
 
 
 def test_sliced_axis_invalid_step():
     a = ng.make_axis(10)
     with pytest.raises(ValueError):
-        SlicedAxis(a, slice(0, 5, 2))
+        slice_axis(a, slice(0, 5, 2))
 
 
 def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
     a = ng.make_axis(10, batch=True)
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert s.is_batch is True
 
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
     a = ng.make_axis(10, recurrent=True)
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
 
 
@@ -265,7 +265,7 @@ def test_sliced_axis_roles():
     role1 = ng.make_axis_role()
     role2 = ng.make_axis_role()
     a = ng.make_axis(10, roles=[role1, role2])
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert all(r in s.roles for r in a.roles)
 
 
