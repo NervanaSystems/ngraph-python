@@ -184,7 +184,7 @@ Properties
   ::
 
     ax = ng.make_name_scope(name="ax")
-    ax.N = ng.make_axis(name='N', batch=True, docstring="minibatch size")
+    ax.N = ng.make_axis(name='N', docstring="minibatch size")
     ax.C = ng.make_axis(roles=[ar.Channel], docstring="number of input feature maps")
     ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
     ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
@@ -212,7 +212,7 @@ Properties
 
   ::
 
-    ax.REC = ng.make_axis(roles=[ar.Time], recurrent=True, docstring="recurrent axis")
+    ax.REC = ng.make_axis(name='R', roles=[ar.Time], docstring="recurrent axis")
 
   - Target
 

@@ -152,6 +152,8 @@ class Axis(object):
             name = 'Axis_' + str(type(self).__name_counter)
             type(self).__name_counter += 1
 
+        assert 'batch' not in kwargs
+        assert 'recurrent' not in kwargs
         self.name = name
         self.__length = length
 
@@ -194,11 +196,6 @@ class Axis(object):
 
         """
         return self.name == 'R'
-
-    @is_recurrent.setter
-    def is_recurrent(self, value):
-        assert self.name == 'R'
-        self.__is_recurrent = value
 
     @property
     def match_on_length(self):
