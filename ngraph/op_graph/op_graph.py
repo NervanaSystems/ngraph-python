@@ -2449,51 +2449,18 @@ class AllReduce(Op):
         super(AllReduce, self).__init__(args=(x,), **kwargs)
 
 
-class ElementWise(TensorOp):
+class ElementWiseOp(TensorOp):
     pass
 
 
-class UnaryElementwiseAxesOp(ElementWise):
-    """
-    Handles initialization and 1d shaping for unary elementwise operations.
-    """
-    one_d_class = None
+class UnaryElementWiseOp(ElementWiseOp):
 
     def __init__(self, x):
-        super(UnaryElementwiseAxesOp, self).__init__(args=(x,), axes=x.axes)
-
-    def reduce_to_one_d(self):
-        """
-        Flatten the argument, do the op, and then unflatten the result.
-
-        The class attribure one_d_class should hold the Op class for the flattened operation.
-
-        Returns:
-            Flattened computation.
-
-        """
-        return unflatten(self.__class__.one_d_class(flatten(self.args[0])).named(self.name))
+        super(UnaryElementWiseOp, self).__init__(args=(x,), axes=x.axes)
 
 
-class UnaryElementwiseOneDOp(ElementWise):
-    """
-    Handles initialization for unary operations.
-    """
-
-    def __init__(self, x):
-        super(UnaryElementwiseOneDOp, self).__init__(args=(x,), axes=x.axes)
-
-
-class StopGradientOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d stop gradient.
-    """
-    pass
-
-
-class StopGradient(UnaryElementwiseAxesOp):
+class StopGradient(UnaryElementWiseOp):
     """ TODO """
-    one_d_class = StopGradientOneDOp
 
     @tdcache()
     def tensor_description(self):
@@ -2520,18 +2487,10 @@ def stop_gradient(x):
     return StopGradient(x)
 
 
-class NegativeOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d negative.
-    """
-    pass
-
-
-class NegativeOp(UnaryElementwiseAxesOp):
+class NegativeOp(UnaryElementWiseOp):
     """
     Negative of a tensor.
     """
-    one_d_class = NegativeOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta)
@@ -2551,18 +2510,10 @@ def negative(x):
     return NegativeOp(x)
 
 
-class AbsoluteOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d absolute value.
-    """
-    pass
-
-
-class AbsoluteOp(UnaryElementwiseAxesOp):
+class AbsoluteOp(UnaryElementWiseOp):
     """
     Absolute value of a tensor.
     """
-    one_d_class = AbsoluteOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, sign(x) * delta)
@@ -2582,18 +2533,10 @@ def absolute(x):
     return AbsoluteOp(x)
 
 
-class SinOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d sin.
-    """
-    pass
-
-
-class SinOp(UnaryElementwiseAxesOp):
+class SinOp(UnaryElementWiseOp):
     """
     Sin of a tensor.
     """
-    one_d_class = SinOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * cos(x))
@@ -2613,18 +2556,10 @@ def sin(x):
     return SinOp(x)
 
 
-class CosOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d cos.
-    """
-    pass
-
-
-class CosOp(UnaryElementwiseAxesOp):
+class CosOp(UnaryElementWiseOp):
     """
     Cos of a tensor.
     """
-    one_d_class = CosOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -delta * sin(x))
@@ -2644,18 +2579,10 @@ def cos(x):
     return CosOp(x)
 
 
-class TanhOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d tanh.
-    """
-    pass
-
-
-class TanhOp(UnaryElementwiseAxesOp):
+class TanhOp(UnaryElementWiseOp):
     """
     Tanh of a tensor.
     """
-    one_d_class = TanhOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * (1.0 - self * self))
@@ -2675,18 +2602,10 @@ def tanh(x):
     return TanhOp(x)
 
 
-class ExpOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d exp.
-    """
-    pass
-
-
-class ExpOp(UnaryElementwiseAxesOp):
+class ExpOp(UnaryElementWiseOp):
     """
     Exp of a tensor.
     """
-    one_d_class = ExpOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta * self)
@@ -2706,18 +2625,10 @@ def exp(x):
     return ExpOp(x)
 
 
-class LogOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d log.
-    """
-    pass
-
-
-class LogOp(UnaryElementwiseAxesOp):
+class LogOp(UnaryElementWiseOp):
     """
     Log of a tensor.
     """
-    one_d_class = LogOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         def do_adjoints(delta, x):
@@ -2754,18 +2665,10 @@ def safelog(x, limit=np.exp(-safelog_cutoff)):
     return log(maximum(x, limit))
 
 
-class ReciprocalOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d reciprocal.
-    """
-    pass
-
-
-class ReciprocalOp(UnaryElementwiseAxesOp):
+class ReciprocalOp(UnaryElementWiseOp):
     """
     Reciprocal of a tensor.
     """
-    one_d_class = ReciprocalOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, -self * self * delta)
@@ -2785,14 +2688,9 @@ def reciprocal(x):
     return ReciprocalOp(x)
 
 
-class SignOneDOp(UnaryElementwiseOneDOp):
-    "1d Sign."
-    pass
-
-
-class SignOp(UnaryElementwiseAxesOp):
+class SignOp(UnaryElementWiseOp):
     "Sign of a tensor."
-    one_d_class = SignOneDOp
+    pass
 
 
 def sign(x):
@@ -2809,18 +2707,10 @@ def sign(x):
     return SignOp(x)
 
 
-class SquareOneDOp(UnaryElementwiseOneDOp):
-    """
-    1d square.
-    """
-    pass
-
-
-class SquareOp(UnaryElementwiseAxesOp):
+class SquareOp(UnaryElementWiseOp):
     """
     Square of a tensor.
     """
-    one_d_class = SquareOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 2.0 * delta * x)
@@ -2840,16 +2730,10 @@ def square(x):
     return SquareOp(x)
 
 
-class SqrtOneDOp(UnaryElementwiseOneDOp):
-    "1d square root."
-    pass
-
-
-class SqrtOp(UnaryElementwiseAxesOp):
+class SqrtOp(UnaryElementWiseOp):
     """
     Square root of a tensor.
     """
-    one_d_class = SqrtOneDOp
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, 0.5 * delta / self)
@@ -2869,7 +2753,7 @@ def sqrt(x):
     return SqrtOp(x)
 
 
-class BinaryElementWiseAxesOp(ElementWise):
+class BinaryElementWiseOp(ElementWiseOp):
 
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
@@ -2878,7 +2762,7 @@ class BinaryElementWiseAxesOp(ElementWise):
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
-        super(BinaryElementWiseAxesOp, self).__init__(
+        super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
             axes=axes,
             **kwargs
@@ -2895,70 +2779,19 @@ class BinaryElementWiseAxesOp(ElementWise):
         return len(x.axes) == 0 and len(y.axes) == 0
 
 
-class BinaryElementWiseLowDOp(ElementWise):
-
-    def __init__(self, x, y, **kwargs):
-        self.kwargs = kwargs
-
-        if x.is_scalar:
-            x = x.scalar_op
-        if y.is_scalar:
-            y = y.scalar_op
-
-        super(BinaryElementWiseLowDOp, self).__init__(
-            args=(x, y),
-            **kwargs
-        )
-
-    @property
-    def one_dimensional(self):
-        x, y = self.args
-        return len(x.axes) <= 1 and len(y.axes) <= 1
-
-    @property
-    def zero_dimensional(self):
-        x, y = self.args
-        return len(x.axes) == 0 and len(y.axes) == 0
-
-
 def create_binary_elementwise(name,
-                              one_dim_name,
-                              zero_dim_name,
                               func_name=None,
-                              generate_adjoints=None,
-                              one_dim_generate_adjoints=None,
-                              zero_dim_generate_adjoints=None):
+                              generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
-    BinClass = type(name, (BinaryElementWiseAxesOp,), d)
+    BinClass = type(name, (BinaryElementWiseOp,), d)
 
-    d = {}
-    if one_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = one_dim_generate_adjoints
-    OneDimBinClass = type(one_dim_name, (BinaryElementWiseLowDOp,), d)
+    def func(*args, **kwargs):
+        return BinClass(*args, **kwargs)
+    func.__name__ = func_name
 
-    d = {}
-    if zero_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = zero_dim_generate_adjoints
-    ZeroDimBinClass = type(zero_dim_name, (BinaryElementWiseLowDOp,), d)
-
-    def reduce_to_oned(self):
-        x, y = self.args
-        if x.is_scalar and y.is_scalar:
-            return ZeroDimBinClass(x.scalar_op, y.scalar_op, axes=self.axes, **self.kwargs)
-        else:
-            x, y = flatten(x), flatten(y)
-            return unflatten(OneDimBinClass(x, y, axes=FlattenedAxis(self.axes), **self.kwargs))
-    BinClass.reduce_to_oned = reduce_to_oned
-
-    if func_name is None:
-        return BinClass, OneDimBinClass, ZeroDimBinClass
-    else:
-        def func(*args, **kwargs):
-            return BinClass(*args, **kwargs)
-        func.__name__ = func_name
-        return BinClass, OneDimBinClass, ZeroDimBinClass, func
+    return BinClass, func
 
 
 def add_adjoints(self, adjoints, delta, x, y):
@@ -2966,25 +2799,7 @@ def add_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta)
 
 
-Add, AddOneDim, AddZeroDim, add = create_binary_elementwise(
-    'AddOp', 'AddOneDim', 'AddZeroDim', 'addX', add_adjoints
-)
-
-
-def add(x, y):
-    """
-    Returns a TensorOp for the sum of x and y.
-
-    Args:
-        x (TensorOp): The first input.
-        y (TensorOp):  The second input.
-        name (String, optional): A name for the sum.
-
-    Returns:
-        TensorOp: x + y
-
-    """
-    return Add(x, y)
+Add, add = create_binary_elementwise('AddOp', 'add', add_adjoints)
 
 
 def subtract_adjoints(self, adjoints, delta, x, y):
@@ -2992,10 +2807,7 @@ def subtract_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta)
 
 
-Subtract, SubtractOneDim, SubtractZeroDim, subtract = create_binary_elementwise(
-    'Subtract', 'SubtractOneDim', 'SubtractZeroDim',
-    'subtract', subtract_adjoints
-)
+Subtract, subtract = create_binary_elementwise('Subtract', 'subtract', subtract_adjoints)
 
 
 def multiply_adjoints(self, adjoints, delta, x, y):
@@ -3003,10 +2815,7 @@ def multiply_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, x * delta)
 
 
-Multiply, MultiplyOneDim, MultiplyZeroDim, multiply = create_binary_elementwise(
-    'Multiply', 'MultiplyOneDim', 'MultiplyZeroDim',
-    'multiply', multiply_adjoints
-)
+Multiply, multiply = create_binary_elementwise('Multiply', 'multiply', multiply_adjoints)
 
 
 def divide_adjoints(self, adjoints, delta, x, y):
@@ -3014,15 +2823,9 @@ def divide_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta * self / y)
 
 
-Divide, DivideOneDim, DivideZeroDim, divide = create_binary_elementwise(
-    'Divide', 'DivideOneDim', 'DivideZeroDim',
-    'divide', divide_adjoints
-)
+Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
 
-Mod, ModOneDim, ModZeroDim, mod = create_binary_elementwise(
-    'Mod', 'ModOneDim', 'ModZeroDim',
-    'mod', None
-)
+Mod, mod = create_binary_elementwise('Mod', 'mod')
 
 
 def maximum_adjoints(self, adjoints, delta, x, y):
@@ -3030,9 +2833,7 @@ def maximum_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, greater(y, x) * delta)
 
 
-Maximum, MaximumOneDim, MaximumZeroDim, maximum = create_binary_elementwise(
-    'Maximum', 'MaximumOneDim', 'MaximumZeroDim', 'maximum', maximum_adjoints
-)
+Maximum, maximum = create_binary_elementwise('Maximum', 'maximum', maximum_adjoints)
 
 
 def minimum_adjoints(self, adjoints, delta, x, y):
@@ -3040,9 +2841,7 @@ def minimum_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, less(y, x) * delta)
 
 
-Minimum, MinimumOneDim, MinimumZeroDim, minimum = create_binary_elementwise(
-    'Minimum', 'MinimumOneDim', 'MinimumZeroDim', 'minimum', minimum_adjoints
-)
+Minimum, minimum = create_binary_elementwise('Minimum', 'minimum', minimum_adjoints)
 
 
 def power_adjoints(self, adjoints, delta, x, y):
@@ -3050,36 +2849,25 @@ def power_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta * self * log(x))
 
 
-Power, PowerOneDim, PowerZeroDim, power = create_binary_elementwise(
-    'Power', 'PowerOneDim', 'PowerZeroDim', 'power', power_adjoints
-)
+Power, power = create_binary_elementwise('Power', 'power', power_adjoints)
 
 
-Equal, EqualOneDim, EqualZeroDim, equal\
-    = create_binary_elementwise('Equal', 'EqualOneDim', 'EqualZeroDim', 'equal')
+Equal, equal = create_binary_elementwise('Equal', 'equal')
 
 
-NotEqual, NotEqualOneDim, NotEqualZeroDim, not_equal\
-    = create_binary_elementwise('NotEqual', 'NotEqualOneDim', 'NotEqualZeroDim', 'not_equal')
+NotEqual, not_equal = create_binary_elementwise('NotEqual', 'not_equal')
 
 
-Greater, GreaterOneDim, GreaterZeroDim, greater\
-    = create_binary_elementwise('Greater', 'GreaterOneDim', 'GreaterZeroDim', 'greater')
+Greater, greater = create_binary_elementwise('Greater', 'greater')
 
 
-Less, LessOneDim, LessZeroDim, less\
-    = create_binary_elementwise('Less', 'LessOneDim', 'LessZeroDim', 'less')
+Less, less = create_binary_elementwise('Less', 'less')
 
 
-GreaterEqual, GreaterEqualOneDim, GreaterEqualZeroDim, greater_equal\
-    = create_binary_elementwise(
-        'GreaterEqual', 'GreaterEqualOneDim',
-        'GreaterEqualZeroDim', 'greater_equal'
-    )
+GreaterEqual, greater_equal = create_binary_elementwise('GreaterEqual', 'greater_equal')
 
 
-LessEqual, LessEqualOneDim, LessEqualZeroDim, less_equal\
-    = create_binary_elementwise('LessEqual', 'LessEqualOneDim', 'LessEqualZeroDim', 'less_equal')
+LessEqual, less_equal = create_binary_elementwise('LessEqual', 'less_equal')
 
 
 class ContiguousOp(TensorOp):
@@ -3227,37 +3015,10 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
     return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
-class LowDimensionalDot(TensorOp):
+class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, **kwargs):
-        super(LowDimensionalDot, self).__init__(args=(x, y), axes=axes, **kwargs)
-
-
-class DotOneDimensional(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 1 and len(y.axes) == 1
-        super(DotOneDimensional, self).__init__(
-            x, y, axes, **kwargs
-        )
-
-
-class DotTwoDimensional(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 2 and len(y.axes) == 2
-        super(DotTwoDimensional, self).__init__(
-            x, y, axes, **kwargs
-        )
-
-
-class DotTwoByOne(LowDimensionalDot):
-
-    def __init__(self, x, y, axes, **kwargs):
-        assert len(x.axes) == 2 and len(y.axes) == 1
-        super(DotTwoByOne, self).__init__(
-            x, y, axes, **kwargs
-        )
+        super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
 class Softmax(object):
@@ -3311,7 +3072,6 @@ def softmax(x, normalization_axes=None, **kwargs):
 
 
 class ReductionOp(TensorOp):
-    must_reduce = True
 
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         if reduction_axes is None and out_axes is None:
@@ -3343,122 +3103,32 @@ class ReductionOp(TensorOp):
         return True
 
 
-def create_twod_reduction_op(name,
-                             red_cls,
-                             two_dim_generate_adjoints=None):
-    def valid_two(self):
-        x, = self.args
-        return len(x.axes) == 2\
-            and self.reduction_axes == x.axes[:1]\
-            and self.out_axes == x.axes[1:]
-    d = {'valid': valid_two, 'must_reduce': False}
-
-    if two_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = two_dim_generate_adjoints
-
-    RedTwoDimClass = type(name, (red_cls,), d)
-    return RedTwoDimClass
-
-
-def create_oned_reduction_op(name,
-                             red_cls,
-                             one_dim_generate_adjoints=None):
-    def valid_one(self):
-        x, = self.args
-        return len(x.axes) == 1\
-            and self.reduction_axes == x.axes
-
-    d = {'valid': valid_one, 'must_reduce': False}
-    if one_dim_generate_adjoints is not None:
-        d['generate_adjoints'] = one_dim_generate_adjoints
-
-    RedOneDimClass = type(name, (red_cls,), d)
-    return RedOneDimClass
-
-
 def create_reduction_op(name,
-                        two_dim_name,
-                        one_dim_name,
                         func_name=None,
-                        generate_adjoints=None,
-                        two_dim_generate_adjoints=None,
-                        one_dim_generate_adjoints=None):
+                        generate_adjoints=None):
     d = {}
     if generate_adjoints is not None:
         d['generate_adjoints'] = generate_adjoints
     RedClass = type(name, (ReductionOp,), d)
 
-    RedTwoDimClass = create_twod_reduction_op(
-        two_dim_name,
-        RedClass,
-        two_dim_generate_adjoints
-    )
-
-    RedOneDimClass = create_oned_reduction_op(
-        one_dim_name,
-        RedClass,
-        one_dim_generate_adjoints
-    )
-
-    def reduce_to_twod(self):
-        x, = self.args
-        reduction_axes = self.reduction_axes
-        out_axes = self.axes
-
-        if len(reduction_axes) == 0:
-            return broadcast(x, axes=out_axes)
-        elif len(x.axes) == 0:
-            return broadcast(x, axes=out_axes)
-
-        if len(out_axes) == 0:
-            x = flatten(x)
-            return RedOneDimClass(
-                x,
-                reduction_axes=x.axes,
-                out_axes=make_axes(()),
-                dtype=self.dtype,
-                **self.kwargs
-            )
-        else:
-            x = broadcast(x, axes=reduction_axes + out_axes)
-            x = flatten_at(x, len(reduction_axes))
-
-            out = RedTwoDimClass(
-                x,
-                reduction_axes=make_axes((x.axes[0],)),
-                out_axes=make_axes((x.axes[1],)),
-                dtype=self.dtype,
-                **self.kwargs
-            )
-            out = unflatten(out)
-            return broadcast(out, axes=out_axes)
-    RedClass.reduce_to_twod = reduce_to_twod
-
-    if func_name is None:
-        return RedClass, RedTwoDimClass, RedOneDimClass
-    else:
-        def func(*args, **kwargs):
-            return RedClass(*args, **kwargs)
-        func.__name__ = func_name
-        return RedClass, RedTwoDimClass, RedOneDimClass, func
+    def func(*args, **kwargs):
+        return RedClass(*args, **kwargs)
+    func.__name__ = func_name
+    return RedClass, func
 
 
 def max_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
-Max, MaxTwoDim, MaxOneDim, max = create_reduction_op(
-    'Max', 'MaxTwoDim', 'MaxOneDim', 'max', max_adjoints
-)
+Max, max = create_reduction_op('Max', 'max', max_adjoints)
 
 
 def min_adjoints(self, adjoints, delta, x):
     x.generate_add_delta(adjoints, equal(x, self) * delta)
 
 
-Min, MinTwoDim, MinOneDim, min = create_reduction_op(
-    'Min', 'MinTwoDim', 'MinOneDim', 'min', min_adjoints
-)
+Min, min = create_reduction_op('Min', 'min', min_adjoints)
 
 
 def sum_adjoints(self, adjoints, delta, x):
@@ -3468,9 +3138,7 @@ def sum_adjoints(self, adjoints, delta, x):
     )
 
 
-Sum, SumTwoDim, SumOneDim, sum = create_reduction_op(
-    'Sum', 'SumTwoDim', 'SumOneDim', 'sum', sum_adjoints
-)
+Sum, sum = create_reduction_op('Sum', 'sum', sum_adjoints)
 
 
 def prod_adjoints(self, adjoints, delta, x):
@@ -3504,23 +3172,17 @@ def prod_adjoints(self, adjoints, delta, x):
     )
 
 
-Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
-    'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
-)
+Prod, prod = create_reduction_op('Prod', 'prod', prod_adjoints)
 
 
-Argmax, ArgmaxTwoDim, ArgmaxOneDim = create_reduction_op(
-    'Argmax', 'ArgmaxTwoDim', 'ArgmaxOneDim'
-)
+Argmax, _ = create_reduction_op('Argmax', 'argmax')
 
 
 def argmax(x, dtype=None, **kwargs):
     return Argmax(x, dtype=default_int_dtype(dtype), **kwargs)
 
 
-Argmin, ArgminTwoDim, ArgminOneDim = create_reduction_op(
-    'Argmin', 'ArgminTwoDim', 'ArgminOneDim'
-)
+Argmin, _ = create_reduction_op('Argmin', 'argmin')
 
 
 def argmin(x, dtype=None, **kwargs):

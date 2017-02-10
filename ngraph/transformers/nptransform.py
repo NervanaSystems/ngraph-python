@@ -26,32 +26,24 @@ from ngraph.op_graph import axes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    ContiguousOp, CosOneDOp, Op, \
-    DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
-    ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, ExpOneDOp, \
-    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
-    LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
-    MinimumOneDim, MinimumZeroDim, \
-    MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
-    Power, PowerZeroDim, \
-    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
-    SubtractOneDim, SubtractZeroDim, \
-    Sum, Prod, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    SetItemOp
+from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
+    ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
+    Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
+    LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
+    ReciprocalOp, Power, AssignOneDOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
+    Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
+    SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    SimplePrune, DerivPass
+    CPUTensorShaping, SimplePrune, DerivPass
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, make_transformer_factory, set_transformer_factory
+from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+    DeviceBufferReference, DeviceTensor, make_transformer_factory, \
+    set_transformer_factory
 
 
 class NumPyConvEngine(object):
@@ -408,6 +400,23 @@ class NumPyCodeGenerator(PyGen):
             return x.ref_str
         return x
 
+    def np_reduction_axis(self, op):
+        """
+        Returns numpy reduction axis of an op
+
+        Args:
+            op: instance of ReductionOp
+
+        Returns:
+            tuple of numpy reduction axis
+        """
+        if not isinstance(op, ReductionOp):
+            raise ValueError("Op %s must be an instance of ReductionOp" % op)
+        input_axes = op.args[0].axes
+        reduction_axes = op.reduction_axes
+        np_axis = tuple([input_axes.index_unique(axis) for axis in reduction_axes])
+        return np_axis[0] if len(np_axis) == 1 else np_axis
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -420,25 +429,21 @@ class NumPyCodeGenerator(PyGen):
                 op=op.__class__.__name__,
             ))
 
-    @generate_op.on_type(AbsoluteOneDOp)
+    @generate_op.on_type(AbsoluteOp)
     def generate_op(self, op, out, x):
         self.append("np.abs({}, out={}", x, out)
 
-    @generate_op.on_type(AddOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.add({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(AddZeroDim)
+    @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
+        self.append("np.ndarray.argmax({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(Argmin)
     def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
+        self.append("np.ndarray.argmin({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
@@ -490,7 +495,7 @@ class NumPyCodeGenerator(PyGen):
 
         self.append("{out}[()] = np.random.{rstr}, size={out}.shape)", out=out, rstr=rstr)
 
-    @generate_op.on_type(CosOneDOp)
+    @generate_op.on_type(CosOp)
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
@@ -498,43 +503,23 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}[()] = {}", out, x)
 
-    @generate_op.on_type(DivideOneDim)
+    @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(DivideZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.divide({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(ModOneDim)
+    @generate_op.on_type(Mod)
     def generate_op(self, op, out, x, y):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(ModZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.mod({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(DotOneDimensional)
+    @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
         self.append("""np.dot({}, {}, out={})""", x, y, out)
 
-    @generate_op.on_type(DotTwoDimensional)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(DotTwoByOne)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(EqualOneDim)
+    @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
         self.append("np.equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(EqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(ExpOneDOp)
+    @generate_op.on_type(ExpOp)
     def generate_op(self, op, out, x):
         self.append("np.exp({}, out={})", x, out)
 
@@ -542,83 +527,51 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", x, op.scalar)
 
-    @generate_op.on_type(GreaterOneDim)
+    @generate_op.on_type(Greater)
     def generate_op(self, op, out, x, y):
         self.append("np.greater({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(GreaterZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.greater({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(GreaterEqualOneDim)
+    @generate_op.on_type(GreaterEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(GreaterEqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.greater_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LessOneDim)
+    @generate_op.on_type(Less)
     def generate_op(self, op, out, x, y):
         self.append("np.less({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(LessZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.less({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LessEqualOneDim)
+    @generate_op.on_type(LessEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.less_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(LessEqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.less_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LogOneDOp)
+    @generate_op.on_type(LogOp)
     def generate_op(self, op, out, x):
         self.append("np.log({}, out={})", x, out)
 
     @generate_op.on_type(Max)
     def generate_op(self, op, out, x):
-        self.append("np.max({}, 0, out={})", x, out)
+        self.append("np.max({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(MaximumOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.maximum({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(MaximumZeroDim)
+    @generate_op.on_type(Maximum)
     def generate_op(self, op, out, x, y):
         self.append("np.maximum({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Min)
     def generate_op(self, op, out, x):
-        self.append("np.min({}, 0, out={})", x, out)
+        self.append("np.min({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(MinimumOneDim)
+    @generate_op.on_type(Minimum)
     def generate_op(self, op, out, x, y):
         self.append("np.minimum({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(MinimumZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.minimum({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(MultiplyOneDim)
+    @generate_op.on_type(Multiply)
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(MultiplyZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.multiply({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(NegativeOneDOp)
+    @generate_op.on_type(NegativeOp)
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
 
-    @generate_op.on_type(NotEqualOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.not_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(NotEqualZeroDim)
+    @generate_op.on_type(NotEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
@@ -629,10 +582,6 @@ class NumPyCodeGenerator(PyGen):
         """, x=x, o=out)
 
     @generate_op.on_type(Power)
-    def generate_op(self, op, out, x, y):
-        self.append("np.power({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(PowerZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={})", x, y, out)
 
@@ -649,7 +598,7 @@ class NumPyCodeGenerator(PyGen):
                 {out}[()] = {x}
             """, out=out, x=x)
 
-    @generate_op.on_type(ReciprocalOneDOp)
+    @generate_op.on_type(ReciprocalOp)
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
@@ -661,39 +610,35 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__({}, {})", tensor, tuple(op.item), value)
 
-    @generate_op.on_type(SignOneDOp)
+    @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
         self.append("np.sign({}, out=out)", x, out)
 
-    @generate_op.on_type(SinOneDOp)
+    @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
         self.append("np.sin({}, out={})", x, out)
 
-    @generate_op.on_type(SqrtOneDOp)
+    @generate_op.on_type(SqrtOp)
     def generate_op(self, op, out, x):
         self.append("np.sqrt({}, out={})", x, out)
 
-    @generate_op.on_type(SquareOneDOp)
+    @generate_op.on_type(SquareOp)
     def generate_op(self, op, out, x):
         self.append("np.square({}, out={})", x, out)
 
-    @generate_op.on_type(SubtractOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.subtract({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(SubtractZeroDim)
+    @generate_op.on_type(Subtract)
     def generate_op(self, op, out, x, y):
         self.append("np.subtract({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Sum)
     def generate_op(self, op, out, x):
-        self.append("np.sum({}, axis=0, out={})", x, out)
+        self.append("np.sum({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(Prod)
     def generate_op(self, op, out, x):
-        self.append("np.prod({}, axis=0, out={})", x, out)
+        self.append("np.prod({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(TanhOneDOp)
+    @generate_op.on_type(TanhOp)
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
 
@@ -730,7 +675,8 @@ class NumPyTransformer(Transformer):
         self.graph_passes = [DerivPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
-                             RequiredTensorShaping()
+                             RequiredTensorShaping(),
+                             CPUTensorShaping()
                              ]
 
     def device_buffer_storage(self, bytes, dtype, name):
