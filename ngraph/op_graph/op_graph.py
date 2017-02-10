@@ -670,7 +670,7 @@ def as_op(x):
     if isinstance(x, Op):
         return x
 
-    return constant(x)
+    return TensorValueOp(constant(x))
 
 
 def as_ops(xs):
@@ -1961,39 +1961,25 @@ def constant(const, axes=None, dtype=None):
     Returns:
         An AssignableTensorOp for the constant.
     """
+
+    nptensor = np.asarray(const, dtype=dtype)
+    if axes and len(axes) == len(nptensor.shape):
+        nptensor_axes = axes
+    else:
+        nptensor_axes = make_axes([make_axis(l, match_on_length=True) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=axes, constant=True, persistent=True,
+    val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
                              trainable=False, graph_label_type=graph_label_type,
                              dtype=dtype)
-
-    nptensor = np.asarray(const, dtype=val.dtype)
-
-    if not val.has_axes:
-        val.axes = make_axes([make_axis(x, match_on_length=True) for x in nptensor.shape])
-
-    if np.isscalar(const):
-        nptensor = np.zeros(val.axes.lengths, dtype=val.dtype) + const
-
-    if nptensor.shape != val.axes.lengths:
-        raise ValueError((
-            "Tried to initialize constant with numpy array of "
-            "shape {np_shape} though gave axes with a different "
-            "shape {axes_shape}."
-        ).format(
-            np_shape=nptensor.shape,
-            axes_shape=val.axes.lengths,
-        ))
-
-    val_tensor = nptensor
-    if len(val.axes) == 0:
-        val_tensor = nptensor[()]
-    val.const = val_tensor
+    val.const = nptensor
 
     def value_fun(tensor):
-        return val_tensor
+        return nptensor
 
     val.add_initializer(init_tensor(val, value_fun))
 
+    if axes and len(axes) > 0 and val.is_scalar:
+        val = broadcast(val, axes)
     return val
 
 
