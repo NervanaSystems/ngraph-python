@@ -97,12 +97,13 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
                                                   tensor_description,
                                                   **kwargs)
 
-        # create flex entry
-        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
-
     @property
     def scale(self):
         return self.flex_entry.scale
+
+    @property
+    def flex_entry(self):
+        return self.device_buffer.flex_entry
 
     def get(self, tensor):
         tensor = super(FlexGPUDeviceTensor, self).get(tensor)
@@ -122,6 +123,9 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(FlexGPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
+
+        # create flex entry
+        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
 
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
