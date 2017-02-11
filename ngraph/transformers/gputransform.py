@@ -17,22 +17,10 @@ import atexit
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor
-from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    ContiguousOp, CosOneDOp, Op, \
-    DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
-    ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, ExpOneDOp, \
-    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
-    LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
-    MinimumOneDim, MinimumZeroDim, \
-    MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, Power, PowerZeroDim, \
-    ReciprocalOneDOp, RngOp, \
-    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, \
-    SubtractOneDim, SubtractZeroDim, \
-    Sum, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
+    DotLowDimension, Max, Min, OneHotOp, \
+    Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
+    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod
@@ -42,7 +30,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, DerivPass
+from ngraph.transformers.passes.passes import SimplePrune, DerivPass, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -109,23 +97,11 @@ class ElementWiseKernel(GPUKernel):
         if op.is_device_op:
             raise ValueError("Unhandled op: {}".format(op))
 
-    @add_op.on_type(AbsoluteOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("abs", x=x, out=out)
-
     @add_op.on_type(AbsoluteOp)
     def add_op(self, op, out, x):
         self._buffer_op("abs", x=x, out=out)
 
-    @add_op.on_type(AddOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("add", x=x, y=y, out=out)
-
     @add_op.on_type(Add)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("add", x=x, y=y, out=out)
-
-    @add_op.on_type(AddZeroDim)
     def add_op(self, op, out, x, y):
         self._buffer_op("add", x=x, y=y, out=out)
 
@@ -145,109 +121,41 @@ class ElementWiseKernel(GPUKernel):
                         axis=0,
                         out=out)
 
-    @add_op.on_type(CosOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("cos", x=x, out=out)
-
     @add_op.on_type(CosOp)
     def add_op(self, op, out, x):
         self._buffer_op("cos", x=x, out=out)
-
-    @add_op.on_type(DivideOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("div", x=x, y=y, out=out)
-
-    @add_op.on_type(DivideZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("div", x=x, y=y, out=out)
 
     @add_op.on_type(Divide)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
 
-    @add_op.on_type(ModOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("mod", x=x, y=y, out=out)
-
-    @add_op.on_type(ModZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("mod", x=x, y=y, out=out)
-
     @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
         self._buffer_op("mod", x=x, y=y, out=out)
-
-    @add_op.on_type(EqualOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("eq", x=x, y=y, out=out)
-
-    @add_op.on_type(EqualZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("eq", x=x, y=y, out=out)
 
     @add_op.on_type(Equal)
     def add_op(self, op, out, x, y):
         self._buffer_op("eq", x=x, y=y, out=out)
 
-    @add_op.on_type(ExpOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("exp", x=x, out=out)
-
     @add_op.on_type(ExpOp)
     def add_op(self, op, out, x):
         self._buffer_op("exp", x=x, out=out)
-
-    @add_op.on_type(GreaterOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("gt", x=x, y=y, out=out)
-
-    @add_op.on_type(GreaterZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("gt", x=x, y=y, out=out)
 
     @add_op.on_type(Greater)
     def add_op(self, op, out, x, y):
         self._buffer_op("gt", x=x, y=y, out=out)
 
-    @add_op.on_type(GreaterEqualOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("ge", x=x, y=y, out=out)
-
-    @add_op.on_type(GreaterEqualZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("ge", x=x, y=y, out=out)
-
     @add_op.on_type(GreaterEqual)
     def add_op(self, op, out, x, y):
         self._buffer_op("ge", x=x, y=y, out=out)
-
-    @add_op.on_type(LessOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("lt", x=x, y=y, out=out)
-
-    @add_op.on_type(LessZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("lt", x=x, y=y, out=out)
 
     @add_op.on_type(Less)
     def add_op(self, op, out, x, y):
         self._buffer_op("lt", x=x, y=y, out=out)
 
-    @add_op.on_type(LessEqualOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("le", x=x, y=y, out=out)
-
-    @add_op.on_type(LessEqualZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("le", x=x, y=y, out=out)
-
     @add_op.on_type(LessEqual)
     def add_op(self, op, out, x, y):
         self._buffer_op("le", x=x, y=y, out=out)
-
-    @add_op.on_type(LogOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("log", x=x, out=out)
 
     @add_op.on_type(LogOp)
     def add_op(self, op, out, x):
@@ -261,14 +169,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self.add_reduction_op("max", op, out, x)
 
-    @add_op.on_type(MaximumOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("maximum", x=x, y=y, out=out)
-
-    @add_op.on_type(MaximumZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("maximum", x=x, y=y, out=out)
-
     @add_op.on_type(Maximum)
     def add_op(self, op, out, x, y):
         self._buffer_op("maximum", x=x, y=y, out=out)
@@ -277,45 +177,17 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self.add_reduction_op("min", op, out, x)
 
-    @add_op.on_type(MinimumOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("minimum", x=x, y=y, out=out)
-
-    @add_op.on_type(MinimumZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("minimum", x=x, y=y, out=out)
-
     @add_op.on_type(Minimum)
     def add_op(self, op, out, x, y):
         self._buffer_op("minimum", x=x, y=y, out=out)
-
-    @add_op.on_type(MultiplyOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("mul", x=x, y=y, out=out)
-
-    @add_op.on_type(MultiplyZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("mul", x=x, y=y, out=out)
 
     @add_op.on_type(Multiply)
     def add_op(self, op, out, x, y):
         self._buffer_op("mul", x=x, y=y, out=out)
 
-    @add_op.on_type(NegativeOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("neg", x=x, out=out)
-
     @add_op.on_type(NegativeOp)
     def add_op(self, op, out, x):
         self._buffer_op("neg", x=x, out=out)
-
-    @add_op.on_type(NotEqualOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("ne", x=x, y=y, out=out)
-
-    @add_op.on_type(NotEqualZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("ne", x=x, y=y, out=out)
 
     @add_op.on_type(NotEqual)
     def add_op(self, op, out, x, y):
@@ -329,17 +201,9 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x, y):
         self._buffer_op("pow", x=x, y=y, out=out)
 
-    @add_op.on_type(PowerZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("pow", x=x, y=y, out=out)
-
     @add_op.on_type(Prod)
     def add_op(self, op, out, x):
         self.add_reduction_op("prod", op, out, x)
-
-    @add_op.on_type(ReciprocalOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("rcp", x=x, out=out)
 
     @add_op.on_type(ReciprocalOp)
     def add_op(self, op, out, x):
@@ -353,45 +217,21 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, tensor, value):
         self._buffer_op("assign", x=value, out=tensor)
 
-    @add_op.on_type(SignOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("sgn", x=x, out=out)
-
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
-
-    @add_op.on_type(SinOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("sin", x=x, out=out)
 
     @add_op.on_type(SinOp)
     def add_op(self, op, out, x):
         self._buffer_op("sin", x=x, out=out)
 
-    @add_op.on_type(SqrtOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("sqrt", x=x, out=out)
-
     @add_op.on_type(SqrtOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqrt", x=x, out=out)
 
-    @add_op.on_type(SquareOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("sqr", x=x, out=out)
-
     @add_op.on_type(SquareOp)
     def add_op(self, op, out, x):
         self._buffer_op("sqr", x=x, out=out)
-
-    @add_op.on_type(SubtractOneDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("sub", x=x, y=y, out=out)
-
-    @add_op.on_type(SubtractZeroDim)
-    def add_op(self, op, out, x, y):
-        self._buffer_op("sub", x=x, y=y, out=out)
 
     @add_op.on_type(Subtract)
     def add_op(self, op, out, x, y):
@@ -400,10 +240,6 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Sum)
     def add_op(self, op, out, x):
         self.add_reduction_op("sum", op, out, x)
-
-    @add_op.on_type(TanhOneDOp)
-    def add_op(self, op, out, x):
-        self._buffer_op("tanh", x=x, out=out)
 
     @add_op.on_type(TanhOp)
     def add_op(self, op, out, x):
@@ -548,15 +384,7 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
 
-    @add_kernel.on_type(DotOneDimensional)
-    def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self.transformer, op))
-
-    @add_kernel.on_type(DotTwoDimensional)
-    def add_kernel(self, op):
-        self.kernels.append(GEMMKernel(self.transformer, op))
-
-    @add_kernel.on_type(DotTwoByOne)
+    @add_kernel.on_type(DotLowDimension)
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
@@ -1130,8 +958,8 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [DerivPass(),
-                             SimplePrune(), GPUTensorShaping(),
+        self.graph_passes = [DerivPass(), SimplePrune(),
+                             RequiredTensorShaping(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 
         self.buffer_allocators = []

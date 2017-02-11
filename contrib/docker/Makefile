@@ -136,6 +136,9 @@ build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
+test_parallel: build_test
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
+
 test_mkldnn: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}

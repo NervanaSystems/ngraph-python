@@ -340,10 +340,10 @@ class TensorDescriptionWrapper:
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
     def is_flex(self):
-        return hasattr(self.td.buffer.device_tensor(self.td), 'flex_entry')
+        return hasattr(self.td.buffer, 'flex_entry')
 
     def flex_entry(self):
-        return self.td.buffer.device_tensor(self.td).flex_entry
+        return self.td.buffer.flex_entry
 
 
 class GenerationContext:

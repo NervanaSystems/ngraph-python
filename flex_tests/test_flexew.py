@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing import executor
+from ngraph.testing import executor, assert_allclose
 
 
 def test_abs(transformer_factory):
@@ -67,4 +67,12 @@ def test_plusconst(transformer_factory):
         plusconst_executor = ex
 
         for i in range(5):
-            assert plusconst_executor(i) == i + 1.5
+            # 8.8 fixed point test
+            # assert plusconst_executor(i) == i + 1.5
+
+            # autoflex test
+            if i == 1:
+                # expect overflow
+                assert_allclose(plusconst_executor(i), 1.9999)
+            else:
+                assert plusconst_executor(i) == i + 1.5
