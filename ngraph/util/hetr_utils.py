@@ -22,11 +22,14 @@ def clone(
     elif node.__class__.__name__ is 'BroadcastOp':
         new_arg = clone(node.args[0], new_axes, device_id)
         new_node = node.__class__(new_arg, new_axes)
-        new_node.args = (new_arg,)
+        #new_node.args = (new_arg,)
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         node.metadata['device_id'] = node.metadata['device_id'][0]
+
+    elif node.__class__.__name__ is 'TensorValueOp':
+        new_node = node.__class__(node)
 
     elif node.__class__.__name__ is 'Scatter_Recv':
         new_node = node.__class__(

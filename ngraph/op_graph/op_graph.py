@@ -1223,6 +1223,10 @@ class ValueOp(TensorOp, ControlBlockOp):
         self.tensor.dtype = dtype
 
     @property
+    def is_constant(self):
+        return self.tensor.is_constant
+
+    @property
     def scale(self):
         return self.tensor.scale
 
