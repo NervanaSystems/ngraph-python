@@ -61,7 +61,7 @@ class JSONPass(GraphPass):
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg), 'color': 'green'})
-            for arg in op.other_deps:
+            for arg in op.control_deps:
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg), 'color': 'blue'})
@@ -108,10 +108,8 @@ class VizPass(GraphPass):
             graph.edge(op.name, arg.name)
         for arg in op.initializers:
             graph.edge(op.name, arg.name, color='green')
-        for arg in op.other_deps:
+        for arg in op.control_deps:
             graph.edge(op.name, arg.name, color='blue')
-        for arg in op.user_deps:
-            graph.edge(op.name, arg.name, color='gold')
         if op.forwarded and op.forwarded is not op:
             graph.edge(op.name, op.forwarded.name, color='red')
 
@@ -133,10 +131,7 @@ class VizPass(GraphPass):
             for arg in op.initializers:
                 if arg not in visited:
                     frontier.add(arg)
-            for arg in op.other_deps:
-                if arg not in visited:
-                    frontier.add(arg)
-            for arg in op.user_deps:
+            for arg in op.control_deps:
                 if arg not in visited:
                     frontier.add(arg)
             if op.forwarded is not op:
