@@ -110,9 +110,6 @@ class VizPass(GraphPass):
             graph.edge(op.name, arg.name, color='green')
         for arg in op.control_deps:
             graph.edge(op.name, arg.name, color='blue')
-        if hasattr(op, 'user_deps'):
-            for arg in op.user_deps:
-                graph.edge(op.name, arg.name, color='gold')
         if op.forwarded and op.forwarded is not op:
             graph.edge(op.name, op.forwarded.name, color='red')
 
