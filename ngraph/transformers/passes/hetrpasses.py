@@ -1,4 +1,4 @@
-from passes import PeepholeGraphPass
+from passes import GraphBuildingPass
 from ngraph.op_graph.communication import Send
 from ngraph.op_graph.communication import Recv
 from ngraph.op_graph.communication import Gather_Send, Gather_Recv, Scatter_Send, Scatter_Recv
@@ -9,7 +9,7 @@ import multiprocessing
 import collections
 
 
-class DeviceAssignPass(PeepholeGraphPass):
+class DeviceAssignPass(GraphBuildingPass):
 
     def __init__(self, default_device, default_device_id, transformers):
         super(DeviceAssignPass, self).__init__()
@@ -26,7 +26,7 @@ class DeviceAssignPass(PeepholeGraphPass):
         self.transformers.add(transformer)
 
 
-class CommunicationPass(PeepholeGraphPass):
+class CommunicationPass(GraphBuildingPass):
 
     def __init__(self, send_nodes, scatter_shared_queues, gather_shared_queues):
         super(CommunicationPass, self).__init__()
@@ -125,7 +125,7 @@ class CommunicationPass(PeepholeGraphPass):
         ops.update(self.send_nodes)
 
 
-class DistributedPass(PeepholeGraphPass):
+class DistributedPass(GraphBuildingPass):
 
     def __init__(self, send_nodes, scatter_shared_queues, gather_shared_queues):
         super(DistributedPass, self).__init__()
@@ -252,7 +252,7 @@ class DistributedPass(PeepholeGraphPass):
                 op.args(args)
 
 
-class ChildTransformerPass(PeepholeGraphPass):
+class ChildTransformerPass(GraphBuildingPass):
 
     def __init__(self, transformer_list):
         super(ChildTransformerPass, self).__init__()
