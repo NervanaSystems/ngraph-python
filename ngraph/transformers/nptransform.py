@@ -37,9 +37,9 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
-from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune, DerivPass
+from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -727,8 +727,7 @@ class NumPyTransformer(Transformer):
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
-                             CPUTensorShaping()
-                             ]
+                             CPUTensorShaping()]
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
