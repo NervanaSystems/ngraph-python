@@ -50,4 +50,4 @@ RUN mkdir build && cd build && \
 
 # Set path to the Python modules required by Caffe2 Frontend
 ENV PYTHONPATH=/opt/caffe2/build/:$PYTHONPATH
-WORKDIR /root/private-ngraph
+WORKDIR /root/ngraph-test
