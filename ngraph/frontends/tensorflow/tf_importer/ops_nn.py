@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 import ngraph as ng
-from ngraph.frontends.common.utils import common_conv2d_pool_padding
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
+from ngraph.frontends.common.utils import common_conv2d_pool_padding, common_conv2d_pool_output_shape
 
 
 class OpsNN(OpsBase):
@@ -98,9 +98,9 @@ class OpsNN(OpsBase):
         ax_o_tf = ng.make_axes([N, P, Q, K])
         ax_i_tf.set_shape(image.axes.lengths)
         ax_f_tf.set_shape(weight.axes.lengths)
-        ax_o_tf.set_shape(tf_conv2d_pool_output_shape(image.axes.lengths,
-                                                      weight.axes.lengths,
-                                                      tf_strides, padding))
+        ax_o_tf.set_shape(common_conv2d_pool_output_shape(image.axes.lengths,
+                                                          weight.axes.lengths,
+                                                          tf_strides, padding))
 
         # ngraph's i, f, o axes
         ax_i = ng.make_axes([C, D, H, W, N])
@@ -193,7 +193,8 @@ class OpsNN(OpsBase):
         # padding params
         padding = tf_node.attr['padding'].s.decode("ascii")
         pad_t, pad_b, pad_l, pad_r = common_conv2d_pool_padding(
-            image.axes.lengths, (R, S, C, C), tf_strides, padding)
+            image.axes.lengths, (R_length, S_length, C.length, C.length),
+            tf_strides, padding)
         if pad_t != pad_b or pad_l != pad_r:
             raise NotImplementedError("Requires symmetric padding in ngraph:"
                                       "pad_t(%s) == pad_b(%s) and"
@@ -207,10 +208,10 @@ class OpsNN(OpsBase):
 
         # tf's output axes
         ax_o_tf = ng.make_axes([N, P, Q, K])
-        ax_o_tf.set_shape(tf_conv2d_pool_output_shape(image.axes.lengths,
-                                                      (R_length, S_length,
-                                                       C.length, C.length),
-                                                      tf_strides, padding))
+        ax_o_tf.set_shape(common_conv2d_pool_output_shape(image.axes.lengths,
+                                                          (R_length, S_length,
+                                                           C.length, C.length),
+                                                          tf_strides, padding))
 
         # ngraph's i, f, o axes
         ax_i = ng.make_axes([C, D, H, W, N])

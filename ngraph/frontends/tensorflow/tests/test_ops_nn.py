@@ -22,7 +22,7 @@ import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tests.test_util import TempDir
-from ngraph.frontends.tensorflow.tf_importer.ops_nn import common_conv2d_pool_padding
+from ngraph.frontends.common.utils import common_conv2d_pool_padding
 import pytest
 import itertools
 

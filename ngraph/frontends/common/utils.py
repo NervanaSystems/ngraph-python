@@ -18,15 +18,15 @@ import ngraph as ng
 import math
 
 
-def common_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding):
+def common_conv2d_pool_output_shape(in_NHWC, f_HWIO, str_NHWC, padding):
     """
     Get tensorflow's tf.nn.conv2d output shape
     TODO: currently only support NHWC * RSCK, to support NCHW.
 
     Args:
-        input_shape: [batch, in_height, in_width, in_channels].
-        filter_shape: [filter_height, filter_width, in_channels, out_channels].
-        strides: List of ints of length 4.
+        in_NHWC: [batch, in_height, in_width, in_channels].
+        f_HWIO: [filter_height, filter_width, in_channels, out_channels].
+        str_NHWC: List of ints of length 4.
         padding: A string from: "SAME", "VALID".
 
     Returns:
@@ -35,30 +35,30 @@ def common_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding)
     # check inputs
     if padding != 'SAME' and padding != 'VALID':
         raise ValueError("Padding must be 'SAME' or 'valid'.")
-    if not (len(input_shape) == len(filter_shape) == len(strides) == 4):
+    if not (len(in_NHWC) == len(f_HWIO) == len(str_NHWC) == 4):
         raise ValueError(
-            "input_shape, filter_shape, strides must be length 4.")
+            "in_NHWC, f_HWIO, str_NHWC must be length 4.")
 
     # get input / filter shape
-    N, H, W, C = input_shape
-    R, S, C_, K = filter_shape
+    N, H, W, C = in_NHWC
+    R, S, C_, K = f_HWIO
     if C != C_:
         raise ValueError("Input channel must be the same as filter channel.")
 
-    # only support [1, X, X, 1] strides for importer now
-    if strides[0] != 1 or strides[3] != 1:
+    # only support [1, X, X, 1] str_NHWC for importer now
+    if str_NHWC[0] != 1 or str_NHWC[3] != 1:
         raise NotImplementedError("Strides on batch axis (N) and channel axis "
                                   "(C) must be 1 for importer.")
 
     # get output shape
     if 'SAME' == padding:
-        out_height = math.ceil(float(H) / float(strides[1]))
-        out_width = math.ceil(float(W) / float(strides[2]))
+        out_height = math.ceil(float(H) / float(str_NHWC[1]))
+        out_width = math.ceil(float(W) / float(str_NHWC[2]))
     elif 'VALID' == padding:
-        out_height = math.ceil(float(H - R + 1) / float(strides[1]))
-        out_width = math.ceil(float(W - S + 1) / float(strides[2]))
+        out_height = math.ceil(float(H - R + 1) / float(str_NHWC[1]))
+        out_width = math.ceil(float(W - S + 1) / float(str_NHWC[2]))
 
-    return (N, out_height, out_width, K)
+    return tuple([int(i) for i in N, out_height, out_width, K])
 
 
 def common_conv2d_pool_padding(in_NHWC, f_HWIO, str_NHWC, padding):
