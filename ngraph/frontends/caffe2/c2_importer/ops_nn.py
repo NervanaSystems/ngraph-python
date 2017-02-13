@@ -46,11 +46,11 @@ class OpsNN(OpsBase):
         # cast axis
         left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
         # add op
-        add_op = ng.dot(left_casted, right)
+        dot_op = ng.dot(left_casted, right)
         # cast bias axis
-        bias_casted = ng.cast_axes(bias, [add_op.axes[-1]])
+        bias_casted = ng.cast_axes(bias, [dot_op.axes[-1]])
         # result op
-        result_op = ng.add(add_op, bias_casted, name=c2_op.name)
+        result_op = ng.add(dot_op, bias_casted)
         return result_op
 
     def SquaredL2Distance(self, c2_op, inputs):
@@ -94,7 +94,6 @@ class OpsNN(OpsBase):
             A ngraph Op corresponding to the caffe2 node.
        """
         y, labels = inputs
-
         labels_one_hot = ng.one_hot(labels, axis=y.axes[1])
         labels_one_hot = ng.cast_axes(labels_one_hot, [labels_one_hot.axes[0], y.axes[0]])
         return ng.cross_entropy_multi(y, labels_one_hot, out_axes=y.axes[0])
@@ -292,7 +291,8 @@ class OpsNN(OpsBase):
 
         # conv params
         params = dict(pad_d=0, pad_h=pad_t, pad_w=pad_l,
-                      str_d=1, str_h=str_h, str_w=str_w)
+                      str_d=1, str_h=str_h, str_w=str_w,
+                      dil_d=1, dil_h=1, dil_w=1)
 
         # input, weight, output axes
         internal_ax_dict = {

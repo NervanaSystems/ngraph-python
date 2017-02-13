@@ -122,23 +122,21 @@ kernels = {
     "persistent_rnn_bprop":          {"threads": 256, "sass": "persistent_rnn_bprop",      "params": "rnn_bprop",      "share": "(64*48) + 4"},
 
     # Flex conv
-    "fconv_direct_bprop_128x128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    "fconv_direct_bprop_128x64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    # "fconv_direct_bprop_32x128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    # "fconv_direct_bprop_64x128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "bprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-    # "fconv_direct_bprop_64x64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "bprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
-
-    "fconv_direct_fprop_128x128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "fprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    "fconv_direct_fprop_128x64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "fprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    # "fconv_direct_fprop_32x128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "fprop",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    # "fconv_direct_fprop_64x128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "fprop",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-    # "fconv_direct_fprop_64x64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "fprop",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
-
-    "fconv_direct_updat_128x128":  {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
-    # deterministic kernel not tested:
-    "fconv_direct_updatD_128x128": {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
-    # "fconv_direct_updat_128x64":   {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
-    # "fconv_direct_updatD_128x64":  {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
+    "fconv_bprop_C1_N64":   {"threads":  32, "sass": "hconv_bprop_C1_N64",      "params": "bprop_flex",  "share": " 32*8*2 +  64*8*2",     "args": {"int16": 1}},
+    "fconv_bprop_C128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "bprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "bprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "bprop_flex",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "bprop_flex",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_bprop_C64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "bprop_flex",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "b", "int16": 1}},
+    "fconv_fprop_K128_N128":  {"threads": 256, "sass": "fconv_xprop_X128_N128", "params": "fprop_flex",  "share": "128*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K128_N64":   {"threads": 128, "sass": "fconv_xprop_X128_N64",  "params": "fprop_flex",  "share": "128*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K32_N128":   {"threads":  64, "sass": "fconv_xprop_X32_N128",  "params": "fprop_flex",  "share": " 32*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K64_N128":   {"threads": 128, "sass": "fconv_xprop_X64_N128",  "params": "fprop_flex",  "share": " 64*8*2 + 128*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_fprop_K64_N64":    {"threads":  64, "sass": "fconv_xprop_X64_N64",   "params": "fprop_flex",  "share": " 64*8*2 +  64*8*2 + 8", "args": {"prop": "f", "int16": 1}},
+    "fconv_updat_C128_K128":  {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"int16": 1}},
+    "fconv_updatD_C128_K128": {"threads": 256, "sass": "fconv_updat_C128_K128", "params": "updat_flex",  "share": "(128*16 + 32)*2 + (128*16 + 32)*2 + 8", "occupancy": 4.0, "args": {"determ": "1", "int16": 1}},
+    "fconv_updat_C128_K64":   {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat_flex",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"int16": 1}},
+    "fconv_updatD_C128_K64":  {"threads": 128, "sass": "fconv_updat_C128_K64",  "params": "updat_flex",  "share": "(128*16 + 32)*2 + ( 64*16 + 32)*2 + 8", "occupancy": 3.0, "args": {"determ": "1", "int16": 1}},
 
     # Flex gemm
     "fgemm_nn_128x128":       {"threads": 256, "sass": "fgemm_nn_128x128",      "params": "gemm",   "share": "128*8*2 + 128*8*2 + 4", "args": {"int16": 1}},
@@ -235,13 +233,9 @@ _params = {
         "unsigned param_S",
         "unsigned param_magic_S",
         "unsigned param_shift_S",
-        # dont' think flex kernels support negative pad
-        "unsigned param_pad_d",
-        "unsigned param_pad_h",
-        "unsigned param_pad_w",
-        # "int param_pad_d",
-        # "int param_pad_h",
-        # "int param_pad_w",
+        "int param_pad_d",
+        "int param_pad_h",
+        "int param_pad_w",
         "unsigned param_str_d",
         "unsigned param_str_h",
         "unsigned param_str_w",
@@ -284,13 +278,9 @@ _params = {
         "unsigned param_S",
         "unsigned param_magic_S",
         "unsigned param_shift_S",
-        # dont' think flex kernels support negative pad
-        "unsigned param_pad_d",
-        "unsigned param_pad_h",
-        "unsigned param_pad_w",
-        # "int param_pad_d",
-        # "int param_pad_h",
-        # "int param_pad_w",
+        "int param_pad_d",
+        "int param_pad_h",
+        "int param_pad_w",
         "unsigned param_str_d",
         "unsigned param_str_h",
         "unsigned param_str_w",
@@ -307,7 +297,8 @@ _params = {
         "unsigned param_part_P",
         "unsigned param_part_Q",
         "unsigned param_part_PQ",
-        #"int param_CRSTK",
+        #"unsigned param_CRSTK",
+
     ],
     # small N direct convolution (superblocking for N<64)
     "fprop2": [
@@ -1067,3 +1058,33 @@ def update_grid(kernel_name, base_blocks, P, Q, SM_count):
     grid.sort(key=lambda x: x[-1])
     return (grid[0][0], grid[0][1], threads)
 
+
+def K_partitions(K, tiles):
+    k = K
+    partitions = []
+    for tile_K in tiles:
+        grid_K = (k + tiles[-1] - 1) // tile_K
+        if grid_K > 0:
+            partitions.append([tile_K, grid_K, K-k])
+            k -= grid_K * tile_K
+        if k <= 0:
+            break
+    return partitions
+
+
+def xprop_conv_kernels(clss, op, tile_dim, tile_N, grid_N, K, tiles, PQM, RST, args):
+
+    kernel_list = []
+    for tile_K, grid_K, offset_K in K_partitions(K, tiles):
+
+        kernel_name = "%s_%s_%s%d_N%d" % (clss, op, tile_dim, tile_K, tile_N)
+
+        block = (kernels[kernel_name]["threads"], 1, 1)
+        if RST > 1:
+            grid = (PQM, grid_K, grid_N)
+        else:
+            grid = (grid_K, grid_N, PQM)
+
+        kernel_list.append([kernel_name, grid, block, offset_K, args])
+
+    return kernel_list

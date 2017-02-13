@@ -20,7 +20,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
-from ngraph.transformers.gpu.conv import FlexConvFpropKernel, FlexConvBpropKernel, \
+from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription
@@ -53,10 +53,10 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     # TODO haven't investigated how these should be set, start with small tol
-    default_rtol = 1e-05
-    default_atol = 20 * fixed_point_res
+    default_rtol = 2e-05
+    default_atol = 0.20
 
-    def __init__(self, fixed_point=True, flex_verbose=False, **kwargs):
+    def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
 
         super(FlexGPUTransformer, self).__init__()
         self.fixed_point = fixed_point
@@ -97,12 +97,13 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
                                                   tensor_description,
                                                   **kwargs)
 
-        # create flex entry
-        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
-
     @property
     def scale(self):
         return self.flex_entry.scale
+
+    @property
+    def flex_entry(self):
+        return self.device_buffer.flex_entry
 
     def get(self, tensor):
         tensor = super(FlexGPUDeviceTensor, self).get(tensor)
@@ -110,6 +111,10 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
         return tensor
 
     def __setitem__(self, key, value):
+
+        # initialize flex entry (only happens if not already initialized)
+        self.flex_entry.initialize(value)
+
         value = value / self.scale
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
 
@@ -118,6 +123,9 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(FlexGPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
+
+        # create flex entry
+        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
 
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
@@ -238,3 +246,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         """
         # flex management
         self.transformer.flex_manager.manage_after_computation(kernel)
+
+    def __call__(self):
+
+        self.transformer.flex_manager.autoflex_count += 1
+        super(FlexGPUKernelGroup, self).__call__()

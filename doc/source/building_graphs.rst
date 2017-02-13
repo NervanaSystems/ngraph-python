@@ -85,8 +85,8 @@ General properties of ops
 
 All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former provides ``Ops`` with automatically generated unique names and the latter provides debug info as to the line number and filename where this node was constructed.
 
-In addition to the three graph properties explained above (``args``,
-``initializers``, and ``other_deps``), all ops have the additional attributes:
+In addition to the three graph properties explained above (``args`` and
+``initializers``), all ops have the additional attributes:
 
 `axes`
     The axes of the result of the computation. This only needs to be specified

@@ -12,138 +12,77 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import pytest
 import numpy as np
-
 import ngraph as ng
-from ngraph.testing import ExecutorFactory
+from ngraph.testing import executor
 
 
-def compare_tensors(func, outputs, targets, expected_result, tol=0.):
-    with ExecutorFactory() as ex:
-        N = ng.make_axis().named('N')
-        N.length = outputs.shape[0]
-        y = ng.placeholder([N])
-        t = ng.placeholder([N])
-
-        costfunc = ex.executor(func.__call__(y, t), y, t)
-        ng.testing.assert_allclose(costfunc(outputs, targets), expected_result, rtol=tol)
+def safelog(x):
+    return np.log(np.maximum(x, np.exp(-50)))
 
 
-"""
-    Cross Entropy Binary
-"""
+class CostPair(object):
+    tolerance = 1e-6
+
+    def reference_value(self, y, t):
+        raise NotImplementedError("Must specify reference cost function")
+
+    def baseline_value(self, y, t):
+        '''
+        Use defined ngraph constructed computation to evaluate
+        cost function on inputs y and t
+        '''
+        N = ng.make_axis(length=y.shape[0])
+        Y, T = ng.placeholder([N]), ng.placeholder([N])
+
+        with executor(self.ng_computation(Y, T), Y, T) as ex:
+            return ex(y, t)
 
 
-def test_cross_entropy_binary(transformer_factory):
-    outputs = np.array([0.5, 0.9, 0.1, 0.0001])
-    targets = np.array([0.5, 0.99, 0.01, 0.2])
-    eps = np.exp(-50)
-    expected_log = np.log(np.maximum(outputs, eps))
-    expected_mlog = np.log(np.maximum(1 - outputs, eps))
-    expected_result = np.sum((-targets * expected_log) - (1 - targets) * expected_mlog,
-                             keepdims=True)
+class CrossEntropyBinaryPair(CostPair):
+    def __init__(self):
+        self.ng_computation = lambda Y, T: ng.cross_entropy_binary(Y, T)
 
-    def cost(y, t):
-        return ng.cross_entropy_binary(y, t)
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
+    def reference_value(self, y, t):
+        return np.sum((-t * safelog(y) - (1 - t) * safelog(1 - y)), keepdims=True)
 
 
-def test_cross_entropy_binary_limits(transformer_factory):
-    outputs = np.array([0.5, 1.0, 0.0, 0.0001])
-    targets = np.array(([0.5, 0.0, 1.0, 0.2]))
-    eps = np.exp(-50)
-    expected_log = np.log(np.maximum(outputs, eps))
-    expected_mlog = np.log(np.maximum(1 - outputs, eps))
-    expected_result = np.sum((-targets * expected_log) - (1 - targets) * expected_mlog,
-                             keepdims=True)
+class CrossEntropyMultiPair(CostPair):
+    def __init__(self):
+        self.ng_computation = lambda Y, T: ng.cross_entropy_multi(Y, T)
 
-    def cost(y, t):
-        return ng.cross_entropy_binary(y, t)
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
+    def reference_value(self, y, t):
+        return np.sum(-t * safelog(y), axis=0, keepdims=True)
 
 
-"""
-    Cross Entropy Multi
-"""
+class SumSquaredPair(CostPair):
+    def __init__(self):
+        self.ng_computation = lambda Y, T: ng.squared_L2(Y - T, out_axes=()) / 2
+
+    def reference_value(self, y, t):
+        return np.sum((y - t) ** 2, axis=0, keepdims=True) / 2
 
 
-def test_cross_entropy_multi(transformer_factory):
-    outputs = np.array([0.5, 0.9, 0.1, 0.0001])
-    targets = np.array([0.5, 0.99, 0.01, 0.2])
-    eps = np.exp(-50)
-    expected_log = np.log(np.maximum(outputs, eps))
-    expected_result = np.sum(-targets * expected_log, axis=0, keepdims=True)
+class MeanSquaredPair(CostPair):
+    def __init__(self):
+        self.ng_computation = lambda Y, T: ng.mean(ng.square(Y - T), out_axes=()) / 2.
 
-    def cost(y, t):
-        return ng.cross_entropy_multi(y, t)
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
+    def reference_value(self, y, t):
+        return np.mean((y - t) ** 2, axis=0, keepdims=True) / 2.
 
 
-def test_cross_entropy_multi_limits(transformer_factory):
-    outputs = np.array([0.5, 1.0, 0.0, 0.0001])
-    targets = np.array(([0.5, 0.0, 1.0, 0.2]))
-    eps = np.exp(-50)
-    expected_log = np.log(np.maximum(outputs, eps))
-    expected_result = np.sum(-targets * expected_log, axis=0, keepdims=True)
-
-    def cost(y, t):
-        return ng.cross_entropy_multi(y, t)
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
-
-
-"""
-    SumSquared
-"""
-
-
-def test_sum_squared(transformer_factory):
-    outputs = np.array([0.5, 0.9, 0.1, 0.0001])
-    targets = np.array(([0.5, 0.99, 0.01, 0.2]))
-    expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
-
-    def cost(y, t):
-        return ng.squared_L2(y - t, out_axes=None) / 2
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
-
-
-def test_sum_squared_limits(transformer_factory):
-    outputs = np.array([0.5, 1.0, 0.0, 0.0001])
-    targets = np.array(([0.5, 0.0, 1.0, 0.2]))
-    expected_result = np.sum((outputs - targets) ** 2, axis=0) / 2.
-
-    def cost(y, t):
-        return ng.squared_L2(y - t, out_axes=None) / 2
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-7)
-
-
-"""
-    MeanSquared
-"""
-
-
-def test_mean_squared(transformer_factory):
-    outputs = np.array([0.5, 0.9, 0.1, 0.0001])
-    targets = np.array([0.5, 0.99, 0.01, 0.2])
-    expected_result = np.mean((outputs - targets) ** 2, axis=0, keepdims=True) / 2.
-
-    def cost(y, t):
-        return ng.mean(ng.square(y - t), out_axes=()) / 2.
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-6)
-
-
-def test_mean_squared_limits(transformer_factory):
-    outputs = np.array([0.5, 1.0, 0.0, 0.0001])
-    targets = np.array(([0.5, 0.0, 1.0, 0.2]))
-    expected_result = np.mean((outputs - targets) ** 2, axis=0, keepdims=True) / 2.
-
-    def cost(y, t):
-        return ng.mean(ng.square(y - t), out_axes=()) / 2.
-
-    compare_tensors(cost, outputs, targets, expected_result, tol=1e-7)
+@pytest.mark.parametrize("y,t", [
+    (np.array([0.5, 0.9, 0.1, 0.0001]), np.array([0.5, 0.99, 0.01, 0.2])),
+    (np.array([0.5, 1.0, 0.0, 0.0001]), np.array([0.5, 0.0, 1.0, 0.2])),
+])
+@pytest.mark.parametrize("cost", [
+    CrossEntropyMultiPair(),
+    CrossEntropyBinaryPair(),
+    SumSquaredPair(),
+    MeanSquaredPair()
+])
+def test_costs(y, t, cost, transformer_factory):
+    ng.testing.assert_allclose(cost.baseline_value(y, t),
+                               cost.reference_value(y, t),
+                               rtol=cost.tolerance)

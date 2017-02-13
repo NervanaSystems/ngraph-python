@@ -16,8 +16,6 @@ from __future__ import division
 import ngraph as ng
 import math
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
-from ngraph.frontends.neon import ar
-from ngraph.frontends.neon.layer import output_dim
 
 
 def tf_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding):
@@ -60,7 +58,7 @@ def tf_conv2d_pool_output_shape(input_shape, filter_shape, strides, padding):
         out_height = math.ceil(float(H - R + 1) / float(strides[1]))
         out_width = math.ceil(float(W - S + 1) / float(strides[2]))
 
-    return (N, out_height, out_width, K)
+    return tuple(map(int, (N, out_height, out_width, K)))
 
 
 def tf_conv2d_pool_padding(input_shape, filter_shape, strides, padding):
@@ -120,33 +118,26 @@ class OpsNN(OpsBase):
               need to support NCHW as well
               need to clean up / merge with maxpool
 
+        Axes:
+                      Tensorflow          Ngraph
+            in       (N, H, W, C)     (C, D, H, W, N)
+            filter   (R, S, C, K)     (C, T, R, S, K)
+            out      (N, P, Q, K)     (K, M, P, Q, N)
+
         Notes on output shape:
             https://www.tensorflow.org/api_docs/python/nn.html#convolution
         """
         image, weight = inputs
 
         # TODO: currently NHWC only
-        assert tf_node.attr['data_format'].s.decode("ascii") == "NHWC"
+        if tf_node.attr['data_format'].s.decode("ascii") != "NHWC":
+            raise NotImplementedError("Only supports NHWC import for now.")
 
-        # set axes shape
-        ax_N = ng.make_axis(batch=True)
-        ax_C = ng.make_axis(roles=[ar.features_input])
-        ax_D = ng.make_axis(roles=[ar.features_0], length=1)
-        ax_H = ng.make_axis(roles=[ar.features_1])
-        ax_W = ng.make_axis(roles=[ar.features_2])
-
-        ax_T = ng.make_axis(roles=[ar.features_0], length=1)
-        ax_R = ng.make_axis(roles=[ar.features_1])
-        ax_S = ng.make_axis(roles=[ar.features_2])
-        ax_K = ng.make_axis(roles=[ar.features_output])
-
-        oC = ng.make_axis(roles=[ar.features_input]).named('C')
-        oD = ng.make_axis(roles=[ar.features_0], length=1).named('D')
-        oH = ng.make_axis(roles=[ar.features_1]).named('H')
-        oW = ng.make_axis(roles=[ar.features_2]).named('W')
-
-        ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
-        ng.make_axes([ax_R, ax_S, ax_C, ax_K]).set_shape(weight.axes.lengths)
+        # check in_C == f_C
+        if image.axes.lengths[3] != weight.axes.lengths[2]:
+            raise ValueError("Image's C dimension (%s) must be equal to "
+                             "filter's C dimension (%s)."
+                             % (image.axes.lengths[3], weight.axes.lengths[2]))
 
         # strides params
         tf_strides = [int(s) for s in list(tf_node.attr['strides'].list.i)]
@@ -173,33 +164,44 @@ class OpsNN(OpsBase):
                       str_d=1, str_h=str_h, str_w=str_w,
                       dil_d=1, dil_h=1, dil_w=1)
 
-        # i, f, o axes
-        ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
-        ax_f = ng.make_axes([ax_C, ax_T, ax_R, ax_S, ax_K])
-        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
+        # new axes
+        C, D, H, W, T, R, S, K, M, P, Q = [ng.make_axis() for _ in range(11)]
+        N = ng.make_axis(batch=True)
+        D.length, T.length, M.length = 1, 1, 1  # only supports 2D conv for now
 
-        oC.length = ax_K.length
-        oH.length = output_dim(ax_H.length, ax_R.length, pad_t, str_h)
-        oW.length = output_dim(ax_W.length, ax_S.length, pad_l, str_w)
+        # tf's i, f, o axes
+        ax_i_tf = ng.make_axes([N, H, W, C])
+        ax_f_tf = ng.make_axes([R, S, C, K])
+        ax_o_tf = ng.make_axes([N, P, Q, K])
+        ax_i_tf.set_shape(image.axes.lengths)
+        ax_f_tf.set_shape(weight.axes.lengths)
+        ax_o_tf.set_shape(tf_conv2d_pool_output_shape(image.axes.lengths,
+                                                      weight.axes.lengths,
+                                                      tf_strides, padding))
 
-        # broadcast input / filter axes
-        image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
-        image = ng.expand_dims(image, ax_D, 1)  # NHWC -> NDHWC
-        image = ng.axes_with_order(image, axes=ax_i)  # NDHWC -> CDHWN
-        weight = ng.cast_axes(weight, ng.make_axes([ax_R, ax_S, ax_C, ax_K]))
-        weight = ng.expand_dims(weight, ax_T, 0)  # RSCK -> TRSCK
-        weight = ng.axes_with_order(weight, axes=ax_f)  # TRSCK -> CTRSK
+        # ngraph's i, f, o axes
+        ax_i = ng.make_axes([C, D, H, W, N])
+        ax_f = ng.make_axes([C, T, R, S, K])
+        ax_o = ng.make_axes([K, M, P, Q, N])
+
+        # image NHWC -> CDHWN
+        image = ng.cast_axes(image, ng.make_axes([N, H, W, C]))
+        image = ng.expand_dims(image, D, 1)  # NHWC -> NDHWC
+        image = ng.axes_with_order(image, ax_i)  # NDHWC -> CDHWN
+
+        # weights RSCK -> CTRSK
+        weight = ng.cast_axes(weight, ng.make_axes([R, S, C, K]))
+        weight = ng.expand_dims(weight, T, 0)  # RSCK -> TRSCK
+        weight = ng.axes_with_order(weight, ax_f)  # TRSCK -> CTRSK
 
         # convolution
         output = ng.convolution(params, image, weight, axes=ax_o)
 
-        # cast back to NHWC
-        oC, oD, oH, oW, oN = output.axes
-        output = ng.broadcast(output, ng.make_axes([oN, oD, oH, oW, oC]))
-
-        # slice away the oD
-        out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.tensor_slice(output, out_slicing)
+        # output KMPQN -> NPQK
+        output = ng.axes_with_order(output, ng.make_axes(
+            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+        output = ng.tensor_slice(output, [slice(None), 0, slice(None),
+                                          slice(None), slice(None)])  # NMPQK -> NPQK
 
         return output
 
@@ -221,6 +223,11 @@ class OpsNN(OpsBase):
               need to support NCHW as well
               need to clean up / merge with conv2d
 
+        Axes:
+                      Tensorflow          Ngraph
+            in       (N, H, W, C)     (C, D, H, W, N)
+            out      (N, P, Q, K)     (K, M, P, Q, N)
+
         Notes on output shape:
             https://www.tensorflow.org/api_docs/python/nn.html#convolution
         """
@@ -229,19 +236,14 @@ class OpsNN(OpsBase):
         # TODO: currently NHWC only
         assert tf_node.attr['data_format'].s.decode("ascii") == "NHWC"
 
-        # set axes shape
-        ax_N = ng.make_axis(batch=True)
-        ax_C = ng.make_axis(roles=[ar.features_input])
-        ax_D = ng.make_axis(roles=[ar.features_0], length=1)
-        ax_H = ng.make_axis(roles=[ar.features_1])
-        ax_W = ng.make_axis(roles=[ar.features_2])
+        # new axes
+        C, D, H, W, K, M, P, Q = [ng.make_axis() for _ in range(8)]
+        N = ng.make_axis(batch=True)
+        D.length, M.length = 1, 1  # only supports 2D conv for now
 
-        oC = ng.make_axis(roles=[ar.features_input]).named('C')
-        oD = ng.make_axis(roles=[ar.features_0], length=1).named('D')
-        oH = ng.make_axis(roles=[ar.features_1]).named('H')
-        oW = ng.make_axis(roles=[ar.features_2]).named('W')
-
-        ng.make_axes([ax_N, ax_H, ax_W, ax_C]).set_shape(image.axes.lengths)
+        # tf's input axes
+        ax_i_tf = ng.make_axes([N, H, W, C])
+        ax_i_tf.set_shape(image.axes.lengths)
 
         # ksize params
         tf_ksize = [int(s) for s in list(tf_node.attr['ksize'].list.i)]
@@ -252,8 +254,8 @@ class OpsNN(OpsBase):
         if tf_ksize[3] != 1:
             raise NotImplementedError('Ksize on channel axis (C) must be 1.'
                                       'Cross map pooling to be implemented.')
-        R, S = tf_ksize[1:3]
-        T = J = 1
+        R_length, S_length = tf_ksize[1:3]
+        T_length = J_length = 1
 
         # strides params
         tf_strides = [int(s) for s in list(tf_node.attr['strides'].list.i)]
@@ -268,8 +270,8 @@ class OpsNN(OpsBase):
         # padding params
         padding = tf_node.attr['padding'].s.decode("ascii")
         pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding(
-            image.axes.lengths, (R, S, ax_C.length, ax_C.length), tf_strides,
-            padding)
+            image.axes.lengths, (R_length, S_length, C.length, C.length),
+            tf_strides, padding)
         if pad_t != pad_b or pad_l != pad_r:
             raise NotImplementedError("Requires symmetric padding in ngraph:"
                                       "pad_t(%s) == pad_b(%s) and"
@@ -279,30 +281,33 @@ class OpsNN(OpsBase):
         params = dict(op='max',
                       pad_d=0, pad_h=pad_t, pad_w=pad_l, pad_c=0,
                       str_d=1, str_h=str_h, str_w=str_w, str_c=1,
-                      J=J, T=T, R=R, S=S)
+                      J=J_length, T=T_length, R=R_length, S=S_length)
 
-        oC.length = output_dim(ax_C.length, J, 0, 1)
-        oH.length = output_dim(ax_H.length, R, pad_t, str_h)
-        oW.length = output_dim(ax_W.length, S, pad_l, str_w)
+        # tf's output axes
+        ax_o_tf = ng.make_axes([N, P, Q, K])
+        ax_o_tf.set_shape(tf_conv2d_pool_output_shape(image.axes.lengths,
+                                                      (R_length, S_length,
+                                                       C.length, C.length),
+                                                      tf_strides, padding))
 
-        # i, o axes
-        ax_i = ng.make_axes([ax_C, ax_D, ax_H, ax_W, ax_N])
-        ax_o = ng.make_axes([oC, oD, oH, oW, ax_N])
+        # ngraph's i, f, o axes
+        ax_i = ng.make_axes([C, D, H, W, N])
+        ax_o = ng.make_axes([K, M, P, Q, N])
 
-        # broadcast input / filter axes
-        image = ng.cast_axes(image, ng.make_axes([ax_N, ax_H, ax_W, ax_C]))
-        image = ng.expand_dims(image, ax_D, 1)  # NHWC -> NDHWC
-        image = ng.axes_with_order(image, axes=ax_i)  # NDHWC -> CDHWN
+        # image NHWC -> CDHWN
+        image = ng.cast_axes(image, ng.make_axes([N, H, W, C]))
+        image = ng.expand_dims(image, D, 1)  # NHWC -> NDHWC
+        image = ng.axes_with_order(image, ax_i)  # NDHWC -> CDHWN
 
         # pooling
         output = ng.pooling(params, image, axes=ax_o)
 
-        # cast back to NHWC
-        output = ng.broadcast(output, ng.make_axes([ax_N, oD, oH, oW, oC]))
-
-        # slice away the oD
-        out_slicing = [slice(None), 0, slice(None), slice(None), slice(None)]
-        output = ng.tensor_slice(output, out_slicing)
+        # output KMPQN -> NPQK
+        output = ng.axes_with_order(output, ng.make_axes(
+            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+        output = ng.tensor_slice(output, [slice(None), 0, slice(None),
+                                          slice(None),
+                                          slice(None)])  # NMPQK -> NPQK
 
         return output
 

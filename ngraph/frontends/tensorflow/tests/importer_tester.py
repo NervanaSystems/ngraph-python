@@ -151,7 +151,7 @@ class ImporterTester(object):
         if print_ng_result:
             print(ng_result)
 
-        transformer.cleanup()
+        transformer.close()
         return ng_result
 
     def tf_run(self,

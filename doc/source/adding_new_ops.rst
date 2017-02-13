@@ -177,14 +177,14 @@ instance ::
    are used to simplify graph, to optimize ops for execution and to meet device
    specific constraints. Some optimization passes are optional, while other
    passes could be required to ensure correctness. The two default passes we
-   currently have are ``SimplePrune`` and ``RequiredTensorShaping``. Please
+   currently have are ``SimplePrune`` and ``CPUTensorShaping``. Please
    refer to :ref:`transformer passes <transformer_passes>` doc for more details.
 
    For ``Prod``, one of the optimization we can do is that, if the tensor are
    filled with the identical value, we could replace it by the ``Power`` op.
    Therefore, in ``ngraph/transformers/passes/passes.py``, we add ::
 
-        class RequiredTensorShaping(PeepholeGraphPass):
+        class CPUTensorShaping(PeepholeGraphPass):
             ...
 
             @visit.on_type(Prod)

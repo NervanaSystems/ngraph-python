@@ -48,6 +48,14 @@ def test_deriv_missing_connection():
         ng.deriv(x + y, z)
 
 
+def test_one():
+    # Test that the cacheing on constant one used in DerivOp works.
+    op = ng.variable([])
+    one_0 = op.one
+    one_1 = op.one
+    assert one_0 is one_1
+
+
 def test_sequential():
     N = ng.make_axis(1)
     x = ng.variable([N], initial_value=0)
