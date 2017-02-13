@@ -15,13 +15,14 @@
 
 from __future__ import print_function
 from __future__ import division
-from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.op_graph import Op, RngOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
+from ngraph.transformers.gpu.tensor_ops import FlexRngFillKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
@@ -167,6 +168,13 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexConvUpdateKernel(self.transformer, op))
 
+    @add_kernel.on_type(RngOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexRngFillKernel(self.transformer,
+                                          op.tensor_description(),
+                                          op.distribution,
+                                          op.params))
+
     def compile_all(self):
         """
         subclass deals with ElementWiseKernel flex interface here in order to
@@ -192,8 +200,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         "output" tensors: tensors that will be modified by this kernel group
         """
         # TODO: explicitly list kernels for now to catch any missing
-        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel, RngFillKernel
-        no_output_id_kernels = (FillKernel, DimShuffleKernel, RngFillKernel)
+        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel
+        no_output_id_kernels = (FillKernel, DimShuffleKernel, )
 
         # create output_flex_ids for overall kernel group and
         # create output_flex_ids for kernels that don't already have them

@@ -291,3 +291,32 @@ class SetItemKernel(GPUKernel):
             self.tensor.tensor.fill(self.value)
         else:
             self.tensor.__setitem__(self.item, self.value)
+
+
+class FlexRngFillKernel(RngFillKernel):
+    """
+    Flex version of RngFillKernel
+    """
+    def __init__(self, transformer, td, distribution, params):
+        super(FlexRngFillKernel, self).__init__(transformer, td, distribution, params)
+
+        # save flex entry for bind_flex_scales
+        self.flex_entry = td.value.flex_entry
+        # output flex ids for autoflex to manage
+        self.output_flex_ids = [self.flex_entry.flex_id]
+
+    def execute(self):
+        # self.out.dtype is int16, which is not supported by fill_uniform
+        # generate floating point random values, then apply flex scale
+        out_float = self.out.astype(np.float32)
+        if self.distribution == 'uniform':
+            self.transformer.runtime.pcg.fill_uniform(out_float)
+            self.out[:] = ((out_float * (self.params['high'] - self.params['low']) +
+                    self.params['low']) / self.scale ).astype(self.out.dtype)
+        elif self.distribution == 'normal':
+            self.transformer.runtime.pcg.fill_normal(out_float)
+            self.out[:] = ((out_float * self.params['scale'] + self.params['loc'])
+                    / self.scale).astype(self.out.dtype)
+
+    def bind_flex_scales(self):
+        self.scale = self.flex_entry.scale
