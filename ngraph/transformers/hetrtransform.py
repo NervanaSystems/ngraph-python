@@ -37,6 +37,8 @@ def build_transformer(name):
 
 class AsyncTransformer(Process):
 
+    SLEEP_S = 0.2
+
     def __init__(self, transformer_type):
         super(AsyncTransformer, self).__init__()
         self.transformer_type = transformer_type
@@ -79,7 +81,17 @@ class AsyncTransformer(Process):
                 self.async_transformer.work_q.put((self.comp_id, values))
 
             def get_results(self):
-                return self.async_transformer.results_qs[self.comp_id].get()
+                while True:
+                    try:
+                        q = self.async_transformer.results_qs[self.comp_id]
+                        return q.get(timeout=AsyncTransformer.SLEEP_S)
+                    except Exception as e:
+                        import Queue
+                        if isinstance(e, Queue.Empty):
+                            if not self.async_transformer.is_alive():
+                                raise RuntimeError("Child process unexpectedly exited")
+                        else:
+                            raise
 
         self.child_ops = returns
         self.child_args = placeholders
@@ -179,16 +191,14 @@ class AsyncTransformer(Process):
                             r.control_deps.add(op)
 
     def run(self):
-
         # build the transformer first to catch any errors
         transformer = build_transformer(self.transformer_type)
 
         # collect requests to make computations, but do them all at once
-        SLEEP_S = 0.2
         while self.work_q.empty():
             if self.exit.is_set():
                 return
-            time.sleep(SLEEP_S)
+            time.sleep(AsyncTransformer.SLEEP_S)
 
         # build all the computations
         while not self.computation_q.empty():
@@ -199,13 +209,14 @@ class AsyncTransformer(Process):
             comp_id = self.computation_q.get()
             returns, placeholders = self.computation_builds[comp_id]
             computation = transformer.computation(returns, *placeholders)
+
             self.computations[comp_id] = computation
 
         # begin doing work; trigger transformer init on first call
         while not self.exit.is_set():
             try:
                 # shared work q serializes work requests
-                comp_id, inputs = self.work_q.get(timeout=SLEEP_S)
+                comp_id, inputs = self.work_q.get(timeout=AsyncTransformer.SLEEP_S)
 
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
