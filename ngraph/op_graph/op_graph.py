@@ -308,7 +308,7 @@ class Op(NameableValue, DebugInfo):
         # List to keep generation deterministic
         self.__control_deps = OrderedSet()
         self.schemas = []
-        self.const = const
+        self.__const = const
         self.__is_constant = constant
         self.__is_persistent = persistent
         self.__is_trainable = trainable
@@ -368,6 +368,16 @@ class Op(NameableValue, DebugInfo):
     @property
     def is_constant(self):
         return self.__is_constant
+
+    @property
+    def const(self):
+        return self.__const
+
+    @const.setter
+    def const(self, value):
+        if self.__const is not None:
+            raise ValueError("Cannot change const value")
+        self.__const = value
 
     @property
     def is_persistent(self):
@@ -508,7 +518,7 @@ class Op(NameableValue, DebugInfo):
                 break
 
     def replace_self(self, rep):
-        self.forward = rep
+        self.forward = as_op(rep)
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -1162,7 +1172,7 @@ class TensorOp(Op):
         return self.forwarded.tensor_description().value
 
     @property
-    @tdcache()
+    @cachetools.cached(cache=dict())
     def one(self):
         """
         Returns a singleton constant 1 for this Op. Used by DerivOp to ensure that
@@ -1225,6 +1235,14 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def is_constant(self):
         return self.tensor.is_constant
+
+    @property
+    def const(self):
+        return self.tensor.const
+
+    @const.setter
+    def const(self, value):
+        self.tensor.const = value
 
     @property
     def scale(self):
