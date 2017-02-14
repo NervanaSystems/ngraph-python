@@ -15,14 +15,14 @@
 
 from __future__ import print_function
 from __future__ import division
-from ngraph.op_graph.op_graph import Op, RngOp
+from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
-from ngraph.transformers.gpu.tensor_ops import FlexRngFillKernel
+from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
@@ -30,6 +30,11 @@ from ngraph.flex import GPUFlexManager, GPUFlex
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
 
+
+# kernels that do not require flex integration
+# non_flex_kernels: output_flex_ids set to empty list
+from ngraph.transformers.gputransform import DimShuffleKernel
+non_flex_kernels = (DimShuffleKernel, )
 
 # create and attach bind_flex_scales method to EW kernel
 # done this way to avoid editing gputransform
@@ -119,6 +124,7 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
     def __setitem__(self, key, value):
 
         # initialize flex entry (only happens if not already initialized)
+        # required by InitTensorOp
         self.flex_entry.initialize(value)
 
         value = value / self.scale
@@ -168,12 +174,21 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexConvUpdateKernel(self.transformer, op))
 
+    @add_kernel.on_type(Fill)
+    def add_kernel(self, op):
+        self.kernels.append(FlexFillKernel(self.transformer, op.call_info()[0], op.scalar))
+
     @add_kernel.on_type(RngOp)
     def add_kernel(self, op):
         self.kernels.append(FlexRngFillKernel(self.transformer,
                                           op.tensor_description(),
                                           op.distribution,
                                           op.params))
+
+    @add_kernel.on_type(TensorSizeOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
+                                       op.reduction_axes.size))
 
     def compile_all(self):
         """
@@ -199,9 +214,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
         "output" tensors: tensors that will be modified by this kernel group
         """
-        # TODO: explicitly list kernels for now to catch any missing
-        from ngraph.transformers.gputransform import FillKernel, DimShuffleKernel
-        no_output_id_kernels = (FillKernel, DimShuffleKernel, )
 
         # create output_flex_ids for overall kernel group and
         # create output_flex_ids for kernels that don't already have them
@@ -216,7 +228,7 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                     if isinstance(p, FlexScaleDescription) and p.is_output:
                         kernel_output_ids.append(p.flex_entry.flex_id)
                 kernel.output_flex_ids = kernel_output_ids
-            elif isinstance(kernel, no_output_id_kernels):
+            elif isinstance(kernel, non_flex_kernels):
                 kernel.output_flex_ids = []
 
             # now add kernel output_flex_ids to kernel group list of output ids

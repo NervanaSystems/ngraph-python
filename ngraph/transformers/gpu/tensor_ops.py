@@ -102,7 +102,7 @@ class FillKernel(GPUKernel):
     Arguments:
         transformer (GPUTransformer): GPU transformer containing instance of
             NervanaGPU
-        td (TensorDescription): Tensor to fill
+        tensor (TensorDescription): Tensor to fill
         value : Scalar value used to fill tensor
 
     Attributes:
@@ -128,9 +128,6 @@ class FillKernel(GPUKernel):
         Temporarily uses neon GPUTensor's fill method
         """
         self.tensor.fill(self.value)
-
-    def bind_flex_scales(self):
-        pass
 
 
 class SendKernel(GPUKernel):
@@ -291,6 +288,39 @@ class SetItemKernel(GPUKernel):
             self.tensor.tensor.fill(self.value)
         else:
             self.tensor.__setitem__(self.item, self.value)
+
+
+class FlexFillKernel(FillKernel):
+    """
+    Flex version of FillKernel
+    """
+    def __init__(self, transformer, tensor, value):
+        super(FlexFillKernel, self).__init__(transformer, tensor, value)
+
+        self.flex_entry = self.tensor.value.flex_entry
+        self.output_flex_ids = [self.flex_entry.flex_id]
+
+    def execute(self):
+        val = int(self.value / self.scale)  # flex value storage
+
+        # if overflow, fill tensor with clipped value and set maxabs to clipped value
+        if val > self.flex_entry.dtype.pclip:
+            # overflow on positive side
+            clipped = int(self.flex_entry.dtype.pclip)
+            self.tensor.fill(clipped)  # tensor is int for flex storage
+            self.maxabs = clipped  # positive, scalar value
+        elif val < self.flex_entry.dtype.nclip:
+            # overflow on negative side
+            clipped = int(self.flex_entry.dtype.nclip)
+            self.tensor.fill(clipped)
+            self.maxabs = abs(clipped)
+        else:
+            # no overflow
+            self.tensor.fill(val)
+            self.maxabs = abs(val)
+
+    def bind_flex_scales(self):
+        self.scale = self.flex_entry.scale
 
 
 class FlexRngFillKernel(RngFillKernel):
