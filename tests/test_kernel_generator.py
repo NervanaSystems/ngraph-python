@@ -14,11 +14,25 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 import numpy as np
-
+import pytest
 import ngraph as ng
 import ngraph.transformers as ngt
 
 from ngraph.testing import executor
+
+
+@pytest.fixture(scope='module', params=[
+    (64, 10, 28, 32),
+    (3, 16, 16, 4),
+    (7, 15, 19, 5),
+    (3, 5, 7, 2)])
+def input_axes(request):
+    return ng.make_axes([
+        ng.make_axis(length=request.param[0]),
+        ng.make_axis(length=request.param[1]),
+        ng.make_axis(length=request.param[2]),
+        ng.make_axis(length=request.param[3])
+    ])
 
 
 def test_exit_condition(transformer_factory):
@@ -41,42 +55,26 @@ def test_exit_condition(transformer_factory):
     transformer.close()
 
 
-def test_4d_elementwise(transformer_factory):
-    for c_len, h_len, w_len, n_len in [(16, 10, 28, 32),
-                                       (3, 16, 16, 4),
-                                       (7, 15, 19, 5)]:
-        C = ng.make_axis(c_len)
-        H = ng.make_axis(h_len)
-        W = ng.make_axis(w_len)
-        N = ng.make_axis(n_len)
+def test_4d_elementwise(transformer_factory, input_axes):
+    x_val = np.absolute(np.random.randn(*input_axes.lengths))
+    y_val = np.absolute(np.random.randn(*input_axes.lengths))
+    x = ng.constant(x_val, input_axes)
+    y = ng.constant(y_val, input_axes)
 
-        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
-        y_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
-        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
-        y = ng.constant(y_val, ng.make_axes([C, H, W, N]))
+    out = ng.add(x, y)
 
-        out = ng.add(x, y)
-
-        with executor(out) as ex:
-            graph_val = ex()
-        np_val = np.add(x_val, y_val)
-        np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+    with executor(out) as ex:
+        graph_val = ex()
+    np_val = np.add(x_val, y_val)
+    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
-def test_4d_reduction(transformer_factory):
-    for c_len, h_len, w_len, n_len in [(16, 10, 28, 32),
-                                       (3, 16, 16, 4),
-                                       (7, 15, 19, 5)]:
-        C = ng.make_axis(c_len)
-        H = ng.make_axis(h_len)
-        W = ng.make_axis(w_len)
-        N = ng.make_axis(n_len)
+def test_4d_reduction(transformer_factory, input_axes):
+    x_val = np.absolute(np.random.randn(*input_axes.lengths))
+    x = ng.constant(x_val, input_axes)
 
-        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
-        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
-
-        out1 = ng.sum(x, reduction_axes=[H])
-        out2 = ng.sum(x, reduction_axes=[N])
+    out1 = ng.sum(x, reduction_axes=input_axes[1])
+    out2 = ng.sum(x, reduction_axes=input_axes[3])
 
     with executor([out1, out2]) as ex:
         graph_val1, graph_val2 = ex()
@@ -86,25 +84,16 @@ def test_4d_reduction(transformer_factory):
         np.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
 
 
-def test_4d_chained(transformer_factory):
-    for c_len, h_len, w_len, n_len in [(64, 10, 28, 32),
-                                       (3, 16, 16, 4),
-                                       (7, 15, 19, 5),
-                                       (3, 5, 7, 2)]:
-        C = ng.make_axis(c_len)
-        H = ng.make_axis(h_len)
-        W = ng.make_axis(w_len)
-        N = ng.make_axis(n_len)
+def test_4d_chained(transformer_factory, input_axes):
+    x_val = np.absolute(np.random.randn(*input_axes.lengths))
+    y_val = np.absolute(np.random.randn(*input_axes.lengths))
+    x = ng.constant(x_val, input_axes)
+    y = ng.constant(y_val, input_axes)
 
-        x_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
-        y_val = np.absolute(np.random.randn(c_len, h_len, w_len, n_len))
-        x = ng.constant(x_val, ng.make_axes([C, H, W, N]))
-        y = ng.constant(y_val, ng.make_axes([C, H, W, N]))
+    im = ng.reciprocal(x)
+    out = ng.sum(ng.add(im, y), reduction_axes=input_axes[0])
 
-        im = ng.reciprocal(x)
-        out = ng.sum(ng.add(im, y), reduction_axes=[C])
-
-        with executor(out) as ex:
-            graph_val = ex()
-        np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
-        np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+    with executor(out) as ex:
+        graph_val = ex()
+    np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
+    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)

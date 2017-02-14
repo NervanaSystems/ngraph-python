@@ -17,19 +17,21 @@ Test the usage of ng.constant
 """
 from __future__ import print_function
 
+import pytest
 import numpy as np
-
 import ngraph as ng
 from ngraph.testing import executor
 
+@pytest.fixture()
+def input_tensor():
+    axes = ng.make_axes([ng.make_axis(length=5),
+                         ng.make_axis(length=8)])
+    return ng.persistent_tensor(axes, initial_value=10.0)
 
-def test_uniform_range_pos(transformer_factory):
+
+def test_uniform_range_pos(transformer_factory, input_tensor):
     """TODO."""
-    M = ng.make_axis(5).named('M')
-    N = ng.make_axis(8).named('N')
-
-    ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
-    ng_a = ng.uniform(ng_a, low=0.0, high=0.5)
+    ng_a = ng.uniform(input_tensor, low=0.0, high=0.5)
 
     with executor(ng_a) as ex:
         result = ex()
@@ -40,13 +42,9 @@ def test_uniform_range_pos(transformer_factory):
     assert not np.all(result == 0.0)
 
 
-def test_uniform_range_posneg(transformer_factory):
+def test_uniform_range_posneg(transformer_factory, input_tensor):
     """TODO."""
-    M = ng.make_axis(5).named('M')
-    N = ng.make_axis(8).named('N')
-
-    ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
-    ng_a = ng.uniform(ng_a, low=-0.5, high=0.5)
+    ng_a = ng.uniform(input_tensor, low=-0.5, high=0.5)
 
     with executor(ng_a) as ex:
         result = ex()

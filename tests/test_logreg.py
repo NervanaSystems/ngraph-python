@@ -60,7 +60,7 @@ def numpy_logreg(xs, ys, max_iter, alpha):
 
 def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
     # axis
-    C, N = ng.make_axis().named('C'), ng.make_axis().named('N')
+    C, N = ng.make_axis(length=3), ng.make_axis(length=4)
 
     def sigmoid(x):
         return 1. / (1. + ng.exp(-x))
@@ -74,12 +74,8 @@ def ngraph_logreg(xs_np, ys_np, max_iter, alpha):
         loss = -ng.sum(log_likelihoods, reduction_axes=[N])
         return loss
 
-    # axis
-    C.length = 3
-    N.length = 4
-
     # input tensors
-    xs = ng.placeholder((C, N))
+    xs = ng.placeholder([C, N])
     ys = ng.placeholder([N])
 
     # init weights
