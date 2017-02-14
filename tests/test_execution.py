@@ -848,7 +848,7 @@ def test_cross_enropy_rec(transformer_factory):
     W.length = 3
     T.length = 4
     N.length = 10
-    axes = ng.make_axes([W, T, N])
+    axes = ng.make_axes([W, N, T])
 
     p_x = ng.placeholder(axes)
     p_t = ng.placeholder(axes)
@@ -872,7 +872,7 @@ def test_cross_entropy_softmax_rec_deriv(transformer_factory):
     W.length = 3
     T.length = 4
     N.length = 10
-    axes = ng.make_axes([W, T, N])
+    axes = ng.make_axes([W, N, T])
 
     p_x = ng.placeholder(axes)
     p_t = ng.placeholder(axes)

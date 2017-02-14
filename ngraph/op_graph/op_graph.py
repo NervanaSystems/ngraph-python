@@ -3534,7 +3534,7 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None,
         The cross-entropy.
     """
     if out_axes is None:
-        out_axes = y.axes.recurrent_axes() + y.axes.batch_axes()
+        out_axes = y.axes.batch_axes() + y.axes.recurrent_axes()
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:
         # This depends on sum(t) being 1
