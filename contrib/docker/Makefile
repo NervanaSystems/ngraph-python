@@ -154,6 +154,9 @@ test_mkldnn: build_mkldnn_test
 test_caffe2: build_caffe2
 	docker run --rm ${VOLUME} -t ngraph_caffe2:${BUILD_VERSION} make test_caffe2
 
+test_caffe2_shell: build_caffe2
+	docker run --rm ${VOLUME} -it ngraph_caffe2:${BUILD_VERSION} /bin/bash
+
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
