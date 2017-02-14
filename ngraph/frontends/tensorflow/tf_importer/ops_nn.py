@@ -15,7 +15,8 @@
 from __future__ import division
 import ngraph as ng
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
-from ngraph.frontends.common.utils import common_conv2d_pool_padding, common_conv2d_pool_output_shape
+from ngraph.frontends.common.utils import common_conv2d_pool_padding,\
+    common_conv2d_pool_output_shape
 
 
 class OpsNN(OpsBase):
