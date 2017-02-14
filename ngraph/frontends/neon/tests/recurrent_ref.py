@@ -31,9 +31,10 @@ The adaptation includes
 """
 
 import numpy as np
+import collections
 
 
-class Recurrent(object):
+class RefRecurrent(object):
 
     def __init__(self, in_size, hidden_size, return_sequence=True):
         self.hidden_size = hidden_size
@@ -42,6 +43,12 @@ class Recurrent(object):
         self.Whh = np.zeros((hidden_size, hidden_size))  # hidden to hidden
         self.bh = np.zeros((hidden_size, 1))  # hidden bias
         self.return_sequence = return_sequence
+
+    def set_weights(self, input_weights=None, recurrent_weights=None, bias=None):
+
+        self.Wxh = input_weights if input_weights is not None else self.Wxh
+        self.Whh = recurrent_weights if recurrent_weights is not None else self.Whh
+        self.bh = bias if bias is not None else self.bh
 
     def lossFun(self, inputs, errors, init_states=None):
         """
@@ -92,6 +99,28 @@ class Recurrent(object):
 
         return dWxh, dWhh, dbh, hs_return, dh_list_out, dout_list
 
+    def fprop_forwards(self, inputs, init_states=None):
+        xs, hs = {}, {}
+        if init_states is not None:
+            assert init_states.shape == (self.hidden_size, 1)
+            hs[-1] = init_states
+        else:
+            hs[-1] = np.zeros((self.hidden_size, 1))
+        seq_len = len(inputs)
+        hs_list = np.zeros((self.hidden_size, seq_len))
+
+        # forward pass
+        for t in range(seq_len):
+            xs[t] = np.matrix(inputs[t])
+            # hidden state
+            hs[t] = np.tanh(
+                np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[t - 1]) + self.bh)
+            hs_list[:, t] = hs[t].flatten()
+
+        hs_return = hs_list if self.return_sequence else hs_list[:, -1].reshape(-1, 1)
+
+        return hs_return
+
     def fprop_backwards(self, inputs, init_states=None):
         """
         forward propagation by going through the input sequence backwards.
@@ -116,3 +145,55 @@ class Recurrent(object):
 
         hs_return = hs_list if self.return_sequence else hs_list[:, 0].reshape(-1, 1)
         return hs_return
+
+
+class RefBidirectional(object):
+
+    def __init__(self, in_size, hidden_size, return_sequence=True,
+                 sum_out=False, concat_out=False):
+
+        self.fwd_rnn = RefRecurrent(in_size, hidden_size, return_sequence=return_sequence)
+        self.bwd_rnn = RefRecurrent(in_size, hidden_size, return_sequence=return_sequence)
+        self.return_sequence = return_sequence
+        self.sum_out = sum_out
+        self.concat_out = concat_out
+
+    def set_weights(self, input_weights=None, recurrent_weights=None, bias=None):
+
+        self.fwd_rnn.set_weights(input_weights, recurrent_weights, bias)
+        self.bwd_rnn.set_weights(input_weights, recurrent_weights, bias)
+
+    def fprop(self, inputs, init_states=None):
+
+        if isinstance(inputs, collections.Sequence):
+            if len(inputs) != 2:
+                raise ValueError("If in_obj is a sequence, it must have length 2")
+            if inputs[0].axes != inputs[1].axes:
+                raise ValueError("If in_obj is a sequence, each element must have the same axes")
+            fwd_in = inputs[0]
+            bwd_in = inputs[1]
+        else:
+            fwd_in = inputs
+            bwd_in = inputs
+
+        if isinstance(init_states, collections.Sequence):
+            if len(init_states) != 2:
+                raise ValueError("If init_state is a sequence, it must have length 2")
+            if init_states[0].axes != init_states[1].axes:
+                raise ValueError("If init_state is a sequence, " +
+                                 "each element must have the same axes")
+            fwd_init = init_states[0]
+            bwd_init = init_states[1]
+        else:
+            fwd_init = init_states
+            bwd_init = init_states
+
+        fwd_out = self.fwd_rnn.fprop_forwards(fwd_in, fwd_init)
+        bwd_out = self.bwd_rnn.fprop_backwards(bwd_in, bwd_init)
+
+        if self.sum_out:
+            return fwd_out + bwd_out
+        elif self.concat_out:
+            return np.concatenate([fwd_out, bwd_out], 0)
+        else:
+            return [fwd_out, bwd_out]
