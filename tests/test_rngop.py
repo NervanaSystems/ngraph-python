@@ -22,6 +22,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
 
+
 @pytest.fixture()
 def input_tensor():
     axes = ng.make_axes([ng.make_axis(length=5),
