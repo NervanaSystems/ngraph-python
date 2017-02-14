@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 # Required Python packages
 RUN pip install --upgrade pip && pip install \
     numpy \
-    protobuf
+    protobuf==3.1.0
 
 # Supported revision of Caffe2
 ENV CAFFE2_CLONE_TAG=master
