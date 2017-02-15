@@ -1,7 +1,7 @@
 from neon import NervanaObject  # noqa
 
 import time
-from multiprocessing import Process, Manager, Event, active_children
+from multiprocessing import Process, Manager, Event
 import collections
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp
@@ -13,6 +13,7 @@ from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.op_graph.communication import Receiver
 import os
+import sys
 
 
 def build_transformer(name):
@@ -119,8 +120,6 @@ class AsyncTransformer(Process):
         self.exit.set()
         self.join()
         self.manager.shutdown()
-        print "Join"
-        self.manager.join()
 
     def sort_child_ops(self):
         """
@@ -444,8 +443,7 @@ class HetrTransformer(Transformer):
             for t in self.child_transformers.values():
                 t.close()
         super(HetrTransformer, self).close()
-        print active_children()
-        assert len(active_children()) == 0
+        self.is_closed = True
 
     def transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
