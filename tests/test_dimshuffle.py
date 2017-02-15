@@ -22,48 +22,6 @@ from ngraph.testing import check_derivative, RandomTensorGenerator, executor
 rng = RandomTensorGenerator(0, np.float32)
 
 
-def test_dimshuffle_fprop(transformer_factory):
-    """
-    dimshuffle a 2d array and make sure fprop works
-    """
-    A = ng.make_axis(2)
-    B = ng.make_axis(3)
-
-    x = ng.placeholder(ng.make_axes([A, B]))
-
-    # compute convolution with graph
-    output = ng.axes_with_order(x, [B, A])
-
-    assert output.axes == ng.make_axes([B, A])
-
-    # randomly initialize
-    x_value = rng.uniform(-1, 1, x.axes)
-
-    with executor(output, x) as ex:
-        result = ex(x_value)
-
-    ng.testing.assert_allclose(result, x_value.T)
-
-
-def test_dimshuffle_bprop(transformer_factory):
-    """
-    dimshuffle a 2d array and make sure bprop works
-    """
-    A = ng.make_axis(2)
-    B = ng.make_axis(3)
-
-    x = ng.placeholder(ng.make_axes([A, B]))
-
-    # randomly initialize
-    x_value = rng.uniform(-1, 1, x.axes)
-
-    check_derivative(
-        ng.axes_with_order(x, [B, A]),
-        x, 0.001, x_value,
-        atol=1e-3, rtol=1e-3
-    )
-
-
 @pytest.fixture
 def A():
     return ng.make_axis(2)
@@ -80,8 +38,40 @@ def C():
 
 
 @pytest.fixture
-def x(A, B, C):
+def x(A, B):
     return ng.placeholder(ng.make_axes([A, B]))
+
+
+def test_dimshuffle_fprop(transformer_factory, x, A, B):
+    """
+    dimshuffle a 2d array and make sure fprop works
+    """
+    # compute convolution with graph
+    output = ng.axes_with_order(x, [B, A])
+
+    assert output.axes == ng.make_axes([B, A])
+
+    # randomly initialize
+    x_value = rng.uniform(-1, 1, x.axes)
+
+    with executor(output, x) as ex:
+        result = ex(x_value)
+
+    ng.testing.assert_allclose(result, x_value.T)
+
+
+def test_dimshuffle_bprop(transformer_factory, x, A, B):
+    """
+    dimshuffle a 2d array and make sure bprop works
+    """
+    # randomly initialize
+    x_value = rng.uniform(-1, 1, x.axes)
+
+    check_derivative(
+        ng.axes_with_order(x, [B, A]),
+        x, 0.001, x_value,
+        atol=1e-3, rtol=1e-3
+    )
 
 
 def test_fail_on_missing(transformer_factory, x, B):

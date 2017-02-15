@@ -49,14 +49,13 @@ def test_logreg(transformer_factory):
 
     np_logreg = NumpyLogreg(xs, ys, thetas)
 
-    C = ng.make_axis(length=3).named('C')
-    N = ng.make_axis(length=4).named('N')
+    C, N = ng.make_axis(length=3), ng.make_axis(length=4)
 
     # input tensors
-    xs_v = ng.placeholder((C, N)).named('xs')
-    ys_v = ng.placeholder([N]).named('ys')
-    alpha_v = ng.placeholder(()).named('alpha')
-    thetas_var = ng.variable([C - 1], initial_value=thetas).named("thetas")
+    xs_v = ng.placeholder((C, N))
+    ys_v = ng.placeholder([N])
+    alpha_v = ng.placeholder(())
+    thetas_var = ng.variable([C - 1], initial_value=thetas)
 
     # define ops
     ys_pred = ng.sigmoid(ng.dot(thetas_var, xs_v))
