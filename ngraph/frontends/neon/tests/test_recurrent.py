@@ -132,8 +132,8 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
     rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_sequence)
     rnn_ref.set_weights(W_in.reshape(rnn_ref.Wxh.shape), W_rec, b.reshape(rnn_ref.bh.shape))
     input_shape = (input_size, sequence_length, batch_size)
-    h_ref_list = rnn_ref.fprop_forwards(input_value.reshape(input_shape).transpose([1, 0, 2]),
-                                        init_states=init_state_value)
+    h_ref_list = rnn_ref.fprop_only(input_value.reshape(input_shape).transpose([1, 0, 2]),
+                                    init_states=init_state_value)
 
     # Generate ngraph RNN
     rnn_ng = Recurrent(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
@@ -185,8 +185,8 @@ def test_rnn_fprop_backward(sequence_length, input_size, hidden_size, batch_size
 
     # Compute reference numpy RNN
     input_shape = (input_size, sequence_length, batch_size)
-    h_ref_list = rnn_ref.fprop_backwards(input_value.reshape(input_shape).transpose([1, 0, 2]),
-                                         init_states=init_state_value)
+    h_ref_list = rnn_ref.fprop_only(input_value.reshape(input_shape).transpose([1, 0, 2]),
+                                    init_states=init_state_value, backward=True)
 
     # Generate ngraph RNN
     rnn_ng = Recurrent(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),

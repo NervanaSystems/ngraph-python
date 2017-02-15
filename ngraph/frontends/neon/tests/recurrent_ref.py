@@ -99,51 +99,32 @@ class RefRecurrent(object):
 
         return dWxh, dWhh, dbh, hs_return, dh_list_out, dout_list
 
-    def fprop_forwards(self, inputs, init_states=None):
-        xs, hs = {}, {}
-        if init_states is not None:
-            assert init_states.shape == (self.hidden_size, 1)
-            hs[-1] = init_states
-        else:
-            hs[-1] = np.zeros((self.hidden_size, 1))
+    def fprop_only(self, inputs, backward=False, init_states=None):
         seq_len = len(inputs)
-        hs_list = np.zeros((self.hidden_size, seq_len))
 
-        # forward pass
-        for t in range(seq_len):
-            xs[t] = np.matrix(inputs[t])
-            # hidden state
-            hs[t] = np.tanh(
-                np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[t - 1]) + self.bh)
-            hs_list[:, t] = hs[t].flatten()
-
-        hs_return = hs_list if self.return_sequence else hs_list[:, -1].reshape(-1, 1)
-
-        return hs_return
-
-    def fprop_backwards(self, inputs, init_states=None):
-        """
-        forward propagation by going through the input sequence backwards.
-        """
-        seq_len = len(inputs)
+        init_idx = seq_len if backward is True else -1
+        step_list = reversed(range(seq_len)) if backward is True else range(seq_len)
+        last_idx = 0 if backward is True else -1
 
         xs, hs = {}, {}
         if init_states is not None:
             assert init_states.shape == (self.hidden_size, 1)
-            hs[seq_len] = init_states
+            hs[init_idx] = init_states
         else:
-            hs[seq_len] = np.zeros((self.hidden_size, 1))
+            hs[init_idx] = np.zeros((self.hidden_size, 1))
 
         hs_list = np.zeros((self.hidden_size, seq_len))
 
-        for t in reversed(range(seq_len)):
+        for t in step_list:
             xs[t] = np.matrix(inputs[t])
+            prev_idx = t + 1 if backward is True else t - 1
             # hidden state
             hs[t] = np.tanh(
-                np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[t + 1]) + self.bh)
+                np.dot(self.Wxh, xs[t]) + np.dot(self.Whh, hs[prev_idx]) + self.bh)
             hs_list[:, t] = hs[t].flatten()
 
-        hs_return = hs_list if self.return_sequence else hs_list[:, 0].reshape(-1, 1)
+        hs_return = hs_list if self.return_sequence else hs_list[:, last_idx].reshape(-1, 1)
+
         return hs_return
 
 
@@ -188,8 +169,8 @@ class RefBidirectional(object):
             fwd_init = init_states
             bwd_init = init_states
 
-        fwd_out = self.fwd_rnn.fprop_forwards(fwd_in, fwd_init)
-        bwd_out = self.bwd_rnn.fprop_backwards(bwd_in, bwd_init)
+        fwd_out = self.fwd_rnn.fprop_only(fwd_in, init_states=fwd_init)
+        bwd_out = self.bwd_rnn.fprop_only(bwd_in, init_states=bwd_init, backward=True)
 
         if self.sum_out:
             return fwd_out + bwd_out
