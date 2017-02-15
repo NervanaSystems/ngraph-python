@@ -83,7 +83,7 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
 
     # Set up data placeholders
     C = ng.make_axis(20)
-    N = ng.make_axis(32, batch=True)
+    N = ng.make_axis(32, name='N')
 
     data = ng.placeholder([C, N])
     target = ng.placeholder([N])

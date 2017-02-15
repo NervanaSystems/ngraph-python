@@ -82,8 +82,8 @@ def check_lstm(seq_len, input_size, hidden_size,
                reset_cells=False, num_iter=2):
 
     Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, recurrent=True)
-    N = ng.make_axis(batch_size, batch=True)
+    REC = ng.make_axis(seq_len, name='R')
+    N = ng.make_axis(batch_size, name='N')
 
     with ExecutorFactory() as ex:
         np.random.seed(0)
@@ -163,8 +163,8 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                        reset_cells=False, num_iter=2):
 
     Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, recurrent=True)
-    N = ng.make_axis(batch_size, batch=True)
+    REC = ng.make_axis(seq_len, name='R')
+    N = ng.make_axis(batch_size, name='N')
 
     with ExecutorFactory() as ex:
         np.random.seed(0)

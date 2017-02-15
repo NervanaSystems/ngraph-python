@@ -200,7 +200,7 @@ def test_pad_mixed():
 
 def test_slice_nop():
     """
-    slicing with nop slice should return same axis
+    slicing an axis shouldn't change the name
     """
     input_axes = ng.make_axes([
         ng.make_axis(1),
@@ -214,7 +214,7 @@ def test_slice_nop():
     ])
 
     assert s.axes[0] == x.axes[0]
-    assert s.axes[1] != x.axes[1]
+    assert s.axes[1] == x.axes[1]
 
 
 def test_tensor_slice():
