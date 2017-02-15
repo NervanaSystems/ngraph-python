@@ -43,9 +43,9 @@ def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
             raise NotImplementedError(c2_op.type + " padding type is not defined.")
     else:
         padding = common_conv2d_pool_padding(
-            in_NHWC=in_NHWC,
-            f_HWIO=kernel_HWIO,
-            str_NHWC=stride_NHWC,
+            input_NHWC=in_NHWC,
+            filter_HWIO=kernel_HWIO,
+            stride_NHWC=stride_NHWC,
             padding=pad_type)
     return padding
 
