@@ -41,7 +41,7 @@ ax.D = ng.make_axis(roles=[ar.features_0], docstring="input image depth")
 ax.H = ng.make_axis(roles=[ar.features_1], docstring="input image height")
 ax.W = ng.make_axis(roles=[ar.features_2], docstring="input image width")
 
-ax.REC = ng.make_axis(name='R', roles=[ar.time], recurrent=True, docstring="recurrent axis")
+ax.REC = ng.make_axis(name='R', roles=[ar.time], docstring="recurrent axis")
 
 ax.T = ng.make_axis(roles=[ar.features_0], docstring="filter depth")
 ax.R = ng.make_axis(roles=[ar.features_1], docstring="filter height")
