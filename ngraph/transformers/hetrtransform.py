@@ -13,7 +13,6 @@ from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.op_graph.communication import Receiver
 import os
-import sys
 
 
 def build_transformer(name):
