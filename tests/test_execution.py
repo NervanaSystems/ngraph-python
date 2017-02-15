@@ -674,7 +674,7 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 def test_softmax(transformer_factory):
     """TODO."""
-    N = ng.make_axis(batch=True).named('N')
+    N = ng.make_axis(name='N', batch=True)
     W = ng.make_axis().named('W')
 
     W.length = 128
@@ -709,7 +709,7 @@ def test_softmax(transformer_factory):
 
 def test_softmax2(transformer_factory):
     W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, batch=True)
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N])
 
     x = rng.uniform(0, 1, axes)
@@ -720,7 +720,7 @@ def test_softmax2(transformer_factory):
 
 def test_softmax_deriv(transformer_factory):
     W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, batch=True)
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N])
 
     x = rng.uniform(0, 1, axes)
@@ -731,8 +731,8 @@ def test_softmax_deriv(transformer_factory):
 
 def test_softmax_rec(transformer_factory):
     W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, recurrent=True)
-    N = ng.make_axis(length=10, batch=True)
+    T = ng.make_axis(length=4, name='R')
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N, T])
 
     x = rng.uniform(0, 1, axes)
@@ -742,8 +742,8 @@ def test_softmax_rec(transformer_factory):
 
 def test_softmax_rec_deriv(transformer_factory):
     W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, recurrent=True)
-    N = ng.make_axis(length=10, batch=True)
+    T = ng.make_axis(length=4, name='R')
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N, T])
 
     x = rng.uniform(0, 1, axes)
@@ -753,7 +753,7 @@ def test_softmax_rec_deriv(transformer_factory):
 
 def test_cross_entropy_softmax(transformer_factory):
     W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, batch=True)
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N])
 
     p_x = ng.placeholder(axes)
@@ -772,7 +772,7 @@ def test_cross_entropy_softmax(transformer_factory):
 
 def test_cross_entropy_softmax_deriv(transformer_factory):
     W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, batch=True)
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N])
 
     p_x = ng.placeholder(axes)
@@ -792,8 +792,8 @@ def test_cross_entropy_softmax_deriv(transformer_factory):
 
 def test_cross_enropy_rec(transformer_factory):
     W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, recurrent=True)
-    N = ng.make_axis(length=10, batch=True)
+    T = ng.make_axis(length=4, name='R')
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N, T])
 
     p_x = ng.placeholder(axes)
@@ -812,8 +812,8 @@ def test_cross_enropy_rec(transformer_factory):
 
 def test_cross_entropy_softmax_rec_deriv(transformer_factory):
     W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, recurrent=True)
-    N = ng.make_axis(length=10, batch=True)
+    T = ng.make_axis(length=4, name='R')
+    N = ng.make_axis(length=10, name='N')
     axes = ng.make_axes([W, N, T])
 
     p_x = ng.placeholder(axes)
@@ -919,7 +919,7 @@ def test_onehot(transformer_factory):
     C = ng.make_axis(length=4)
     H = ng.make_axis(length=32)
     W = ng.make_axis(length=32)
-    N = ng.make_axis(batch=True, length=128)
+    N = ng.make_axis(length=128, name='N')
 
     one_hot_comparison(ng.make_axes([C, N]), ng.make_axes([N]), C)
     one_hot_comparison(ng.make_axes([C, W, H, N]), ng.make_axes([W, H, N]), C)
@@ -990,7 +990,7 @@ def test_tensor_derivative():
 
 
 def test_mean(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, batch=True)])
+    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
 
     inputs = ng.placeholder(axes)
     targets = ng.placeholder(axes)
@@ -1009,7 +1009,7 @@ def test_mean(transformer_factory):
 
 
 def test_variance_wgrad(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, batch=True)])
+    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
 
     inputs = ng.placeholder(axes)
     targets = ng.placeholder(axes)
@@ -1033,7 +1033,7 @@ def test_variance_wgrad(transformer_factory):
 
 
 def test_variance_sqrt_inverse(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, batch=True)])
+    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
 
     inputs = ng.placeholder(axes)
     targets = ng.placeholder(axes)

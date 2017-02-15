@@ -22,9 +22,7 @@ from functools import reduce, wraps
 import numpy as np
 import types
 from weakref import WeakValueDictionary
-from abc import ABCMeta
 from builtins import object, map, range, zip
-from future.utils import with_metaclass
 
 from ngraph.util.names import NameableValue
 
@@ -112,7 +110,7 @@ class AxisRole(NameableValue):
         super(AxisRole, self).__init__(**kwargs)
 
 
-class Axis(with_metaclass(ABCMeta, NameableValue)):
+class Axis(object):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
     the identity of Axis objects to pair and specify dimensions in
@@ -140,22 +138,47 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             equality against other Axis values. This is useful for anonymous Axis of
             constant tensors.
     """
+    __name_counter = 0
+
     def __init__(self,
                  length=None,
                  batch=False,
                  recurrent=False,
                  match_on_length=False,
                  roles=None,
+                 name=None,
                  **kwargs):
-        super(Axis, self).__init__(**kwargs)
+        if name is None:
+            # generate name for axis if None was provided
+            name = 'Axis_' + str(type(self).__name_counter)
+            type(self).__name_counter += 1
+
+        self.name = name
         self.__length = length
+
         self.__is_batch = batch
+        if batch and self.name != 'N':
+            raise ValueError((
+                'All Axis objects with batch=True must be named "N", was '
+                'named: {}'
+            ).format(self.name))
+
         self.__is_recurrent = recurrent
+        if recurrent and self.name != 'R':
+            raise ValueError((
+                'All Axis objects with recurrent=True must be named "R", was '
+                'named: {}'
+            ).format(self.name))
+
         self.__match_on_length = match_on_length
         self.__duals = WeakValueDictionary()
         self.__roles = set()
         if roles is not None:
             self.roles.update(roles)
+
+    def named(self, name):
+        self.name = name
+        return self
 
     @property
     def is_flattened(self):
@@ -189,12 +212,12 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
 
     @is_recurrent.setter
     def is_recurrent(self, value):
+        assert self.name == 'R'
         self.__is_recurrent = value
 
     @property
     def match_on_length(self):
         """
-
         Returns:
             bool: True if this axis matches axes with the same length.
         """
@@ -322,6 +345,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             return False
         elif self.match_on_length or other.match_on_length:
             return self.length == other.length
+        elif self.name == other.name:
+            return True
         return self.annotated_axis is other.annotated_axis
 
     def __hash__(self):
@@ -825,6 +850,9 @@ class Axes(object):
             return
         raise ValueError('Number of axes %d too low for shape %s' % (
                          len(axes), shape))
+
+    def find_by_name(self, name):
+        return Axes(axis for axis in self if axis.name == name)
 
     def find_by_short_name(self, short_name):
         return Axes(axis for axis in self if axis.short_name == short_name)

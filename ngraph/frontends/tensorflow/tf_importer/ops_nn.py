@@ -166,7 +166,7 @@ class OpsNN(OpsBase):
 
         # new axes
         C, D, H, W, T, R, S, K, M, P, Q = [ng.make_axis() for _ in range(11)]
-        N = ng.make_axis(batch=True)
+        N = ng.make_axis(name='N')
         D.length, T.length, M.length = 1, 1, 1  # only supports 2D conv for now
 
         # tf's i, f, o axes
@@ -238,7 +238,7 @@ class OpsNN(OpsBase):
 
         # new axes
         C, D, H, W, K, M, P, Q = [ng.make_axis() for _ in range(8)]
-        N = ng.make_axis(batch=True)
+        N = ng.make_axis(name='N')
         D.length, M.length = 1, 1  # only supports 2D conv for now
 
         # tf's input axes
