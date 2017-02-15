@@ -1,7 +1,7 @@
 from neon import NervanaObject  # noqa
 
 import time
-from multiprocessing import Process, Manager, Event
+from multiprocessing import Process, Manager, Event, active_children
 import collections
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp
@@ -12,6 +12,7 @@ from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 from ngraph.op_graph.communication import Receiver
+import os
 
 
 def build_transformer(name):
@@ -42,10 +43,11 @@ class AsyncTransformer(Process):
     def __init__(self, transformer_type):
         super(AsyncTransformer, self).__init__()
         self.transformer_type = transformer_type
+        self.init_id = id(self)
 
-        manager = Manager()
-        self.computation_q = manager.Queue()
-        self.work_q = manager.Queue()
+        self.manager = Manager()
+        self.computation_q = self.manager.Queue()
+        self.work_q = self.manager.Queue()
         self.results_qs = dict()
         self.computations = dict()
         self.computation_builds = dict()
@@ -54,6 +56,8 @@ class AsyncTransformer(Process):
         self.started = False
         self.exit = Event()
         self.daemon = True
+        self.is_closed = False
+        self.my_pid = os.getpid()
 
     def new_comp_id(self):
         c_id = self.comp_id_ctr
@@ -100,15 +104,23 @@ class AsyncTransformer(Process):
 
         c = AsyncComputation(self)
 
-        manager = Manager()
-        self.results_qs[c.comp_id] = manager.Queue()
+        self.results_qs[c.comp_id] = self.manager.Queue()
         self.computation_builds[c.comp_id] = (returns, placeholders)
         self.computation_q.put(c.comp_id)
         return c
 
     def close(self):
+        if self.is_closed:
+            return
+        if self.my_pid != os.getpid():
+            # Forked into another process
+            return
+        self.is_closed = True
         self.exit.set()
         self.join()
+        self.manager.shutdown()
+        print "Join"
+        self.manager.join()
 
     def sort_child_ops(self):
         """
@@ -395,6 +407,8 @@ class HetrTransformer(Transformer):
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
+        self.my_pid = os.getpid()
+        self.is_closed = False
         self.child_transformers = dict()
         self.transformer_list = list()
         self.transformers = set()
@@ -420,10 +434,18 @@ class HetrTransformer(Transformer):
         assert HetrTransformer.hetr_counter >= 0
 
     def close(self):
+        if self.is_closed:
+            return
+        if self.my_pid != os.getpid():
+            # Only close once, and don't close if this is a copy in a child process
+            return
         if HetrTransformer.hetr_counter > 0:
             HetrTransformer.hetr_counter -= 1
             for t in self.child_transformers.values():
                 t.close()
+        super(HetrTransformer, self).close()
+        print active_children()
+        assert len(active_children()) == 0
 
     def transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
