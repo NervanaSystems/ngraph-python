@@ -23,7 +23,8 @@ from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
 from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
-from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription
+from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
+    FlexPtrDescription
 from ngraph.flex import GPUFlexManager, GPUFlex
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
@@ -36,6 +37,7 @@ def _ew_bind_flex_scales(kernel):
         scale = flex_scale_desc.flex_entry.scale
         scale = 1.0 / scale if flex_scale_desc.is_output else scale
         kernel.params[index] = scale
+    FlexPtrDescription.bind_ptr(kernel.params)
 ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
 
 
@@ -76,7 +78,10 @@ class FlexGPUTransformer(GPUTransformer):
 
     def transform_ordered_ops(self, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
-        # TODO allocate dev and host stat buffers associated with this computation here?
+
+        # device memory allocation after drv init
+        self.flex_manager.allocate()
+
         return ret_val
 
     def storage_dtype(self, dtype):
