@@ -863,8 +863,9 @@ class ComputationOp(ParallelOp):
         def is_input(arg):
             return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
 
-        in_placeholders = {x.name: x for x in self.variables(filter=is_input)}
-        args = [in_placeholders[arg] if isinstance(arg, str) else arg for arg in args]
+        if len(args) == 1 and args[0] == 'all':
+            args = self.variables(filter=is_input)
+
         args = tuple(as_op(arg) for arg in args)
 
         for arg in args:

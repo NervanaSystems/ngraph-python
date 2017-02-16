@@ -52,13 +52,15 @@ class Computation(NameableValue):
         """
         Executes the computation passing args in to the function.
         """
-        if len(kwargs) != 0:
+        mapped_inputs = kwargs.pop('mapped_inputs', None)
+        if mapped_inputs is not None:
             if len(args) != 0:
                 raise ValueError((
-                    'Can not supply both positional and named arguments '
+                    'Can not supply both positional and mapped input arguments '
                     'to Computation'
                 ))
-            args = tuple(kwargs[param.tensor.name] for param in self.computation.parameters)
+
+            args = tuple(mapped_inputs[param.tensor] for param in self.computation.parameters)
 
         if len(args) != len(self.computation.parameters):
             raise ValueError((
