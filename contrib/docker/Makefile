@@ -138,7 +138,7 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_CAFFE2_IMG)), ${BUILD_VERSION})
 	@docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
 endif
 
-build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test
+build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
@@ -181,4 +181,4 @@ shell: build_dev
 combined_coverage:
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
-all: doc style test test_gpu test_mkldnn
+all: doc style test test_gpu test_mkldnn test_caffe2
