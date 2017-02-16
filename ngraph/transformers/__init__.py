@@ -40,5 +40,4 @@ except ImportError:
 try:
     import ngraph.transformers.hetrtransform  # noqa
 except ImportError as e:
-    print (e)
     pass

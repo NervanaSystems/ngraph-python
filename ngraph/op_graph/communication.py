@@ -1,5 +1,5 @@
 from __future__ import division
-from op_graph import TensorOp
+from ngraph.op_graph.op_graph import TensorOp
 
 
 class Send(TensorOp):

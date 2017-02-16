@@ -1,4 +1,4 @@
-from passes import GraphBuildingPass
+from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.op_graph.communication import Send
 from ngraph.op_graph.communication import Recv
 from ngraph.op_graph.communication import Gather_Send, Gather_Recv, Scatter_Send, Scatter_Recv

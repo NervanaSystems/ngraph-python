@@ -2,6 +2,7 @@ from neon import NervanaObject  # noqa
 
 import time
 from multiprocessing import Process, Manager, Event
+from queue import Empty
 import collections
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp
@@ -90,8 +91,7 @@ class AsyncTransformer(Process):
                         q = self.async_transformer.results_qs[self.comp_id]
                         return q.get(timeout=AsyncTransformer.SLEEP_S)
                     except Exception as e:
-                        import Queue
-                        if isinstance(e, Queue.Empty):
+                        if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
                                 raise RuntimeError("Child process unexpectedly exited")
                         else:
@@ -236,8 +236,7 @@ class AsyncTransformer(Process):
                 self.results_qs[comp_id].put(outputs)
 
             except Exception as e:
-                import Queue
-                if isinstance(e, Queue.Empty):
+                if isinstance(e, Empty):
                     pass
                 else:
                     # TODO handle and exit gracefully
