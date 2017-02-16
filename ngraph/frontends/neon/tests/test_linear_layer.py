@@ -19,7 +19,7 @@ import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Linear, UniformInit
-from ngraph.testing.execution import executor
+from ngraph.testing import ExecutorFactory
 
 
 @pytest.fixture(scope='module', params=[1, 2, 1023, 1024, 1025])
@@ -47,8 +47,12 @@ def test_linear_zeros(input_placeholder, output_size, transformer_factory):
     x = np.random.random(input_placeholder.axes.lengths)
     layer = Linear(nout=output_size, init=UniformInit(0.0, 0.0))
 
-    with executor(layer.train_outputs(input_placeholder), input_placeholder) as ex:
-        output_values = ex(x)
+    with ExecutorFactory() as ex:
+        if ex.transformer.transformer_name == 'hetr':
+            pytest.xfail("hetr fork-safe issue on mac")
+        comp = ex.executor(layer.train_outputs(input_placeholder),
+                           input_placeholder)
+        output_values = comp(x)
 
     assert np.min(output_values) == 0.0 and np.max(output_values) == 0.0
 
@@ -60,8 +64,12 @@ def test_linear_ones(input_placeholder, output_size, transformer_factory):
     x = np.ones(input_placeholder.axes.lengths)
     layer = Linear(nout=output_size, init=UniformInit(1.0, 1.0))
 
-    with executor([layer.train_outputs(input_placeholder), layer.W], input_placeholder) as ex:
-        output_values, w = ex(x)
+    with ExecutorFactory() as ex:
+        if ex.transformer.transformer_name == 'hetr':
+            pytest.xfail("hetr fork-safe issue on mac")
+        comp = ex.executor([layer.train_outputs(input_placeholder), layer.W],
+                           input_placeholder)
+        output_values, w = comp(x)
 
     sums = np.sum(w, axis=1, keepdims=True) * np.ones((1, x.shape[1]))
 

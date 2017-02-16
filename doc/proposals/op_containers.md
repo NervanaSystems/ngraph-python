@@ -1,7 +1,7 @@
 # Containers -- A Proposal
 Currently in ngraph, graphs are represented by a single output Op (or list of Ops) that the user 
 wants computed (and implicitly all of the ops pointed to by its `args`, `initializers`, 
-`other_deps`, and `forwards` attributes).
+`control_deps`, and `forwards` attributes).
 
 ## Motivation
 This low level representation of the computational graph has worked so far, but we see an 

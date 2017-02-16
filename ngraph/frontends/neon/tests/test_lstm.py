@@ -33,6 +33,7 @@ The following are made sure to be the same in both LSTMs
 import itertools as itt
 import numpy as np
 from lstm_ref import LSTM as RefLSTM
+import pytest
 
 import ngraph as ng
 
@@ -61,6 +62,8 @@ def pytest_generate_tests(metafunc):
 
 
 def test_ref_compare_rand(transformer_factory, reflstmargs):
+        if transformer_factory.name == 'hetr':
+            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         # run comparison with reference code
         # for Gaussian random init
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
@@ -70,6 +73,8 @@ def test_ref_compare_rand(transformer_factory, reflstmargs):
 
 
 def test_ref_stacked(transformer_factory, reflstmargs):
+        if transformer_factory.name == 'hetr':
+            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
                            GaussianInit(0.0, 0.1), reset_cells=reset_cells,

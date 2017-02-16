@@ -75,7 +75,10 @@ class PoolingOp(op_graph.TensorOp):
         )
 
     def generate_adjoints(self, adjoints, delta, inputs):
-        inputs.generate_add_delta(adjoints, BpropPoolOp(delta, inputs, self))
+        # requires pooling's forward to be completed before backward
+        bprop_pool_op = BpropPoolOp(delta, inputs, self)
+        bprop_pool_op.add_control_dep(self)
+        inputs.generate_add_delta(adjoints, bprop_pool_op)
 
 
 class PoolDerivOp(op_graph.TensorOp):

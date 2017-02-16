@@ -24,6 +24,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod
+from ngraph.op_graph.communication import Send, Recv
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -40,7 +41,7 @@ from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvU
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    RngFillKernel
+    RngFillKernel, SendKernel, RecvKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -422,6 +423,14 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_lut)
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(Send)
+    def add_kernel(self, op):
+        self.kernels.append(SendKernel(self.transformer, op))
+
+    @add_kernel.on_type(Recv)
+    def add_kernel(self, op):
+        self.kernels.append(RecvKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -960,11 +969,15 @@ class GPUTransformer(Transformer):
         self.finished_transform = False
         self.current_buffer = None
 
+    def initialize_runtime(self):
         if GPUTransformer.__runtime is None:
             GPUTransformer.__runtime = GPURuntime()
             atexit.register(GPUTransformer.close_gpu)
 
         self.runtime = GPUTransformer.__runtime
+
+    def close(self):
+        GPUTransformer.close_gpu()
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
@@ -1002,6 +1015,8 @@ class GPUTransformer(Transformer):
         return GPUKernelGroup(self, name)
 
     def transform_ordered_ops(self, ordered_ops, name):
+        self.initialize_runtime()
+
         # Create kernel group
         kernel_group = self.gpu_kernel_group(name)
         for fun in ordered_ops:
