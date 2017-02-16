@@ -15,7 +15,7 @@
 
 from ngraph.op_graph.axes import Axis, AxisRole, Axes
 from ngraph.op_graph.op_graph import AssignableTensorOp, Op, TensorOp
-from ngraph.util.names import NameScope, NameableValue
+from ngraph.util.names import NameableValue
 from ngraph.transformers.base import Transformer, Computation
 
 __all__ = [
@@ -25,7 +25,6 @@ __all__ = [
     'Axes',
     'Computation',
     'NameableValue',
-    'NameScope',
     'Op',
     'TensorOp',
     'Transformer'
