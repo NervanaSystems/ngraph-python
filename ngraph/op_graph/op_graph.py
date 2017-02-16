@@ -848,19 +848,6 @@ class ComputationOp(ParallelOp):
         parameters: Parameter ops.
     """
     def __init__(self, returns, *args, **kwargs):
-        args = tuple(as_op(arg) for arg in args)
-        for arg in args:
-            if not isinstance(arg.tensor, AssignableTensorOp) or not arg.tensor.input:
-                raise ValueError((
-                    'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
-                    '{op} was passed in, of type {op_type}.'
-                ).format(
-                    op=arg,
-                    op_type=arg.__class__.__name__,
-                ))
-
         if isinstance(returns, collections.Container):
             all = type(returns)(as_op(ret) for ret in returns)
         elif isinstance(returns, Op):
@@ -872,6 +859,26 @@ class ComputationOp(ParallelOp):
 
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
+
+        def is_input(arg):
+            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+
+        in_placeholders = {x.name: x for x in self.variables(filter=is_input)}
+        args = [in_placeholders[arg] if isinstance(arg, str) else arg for arg in args]
+        args = tuple(as_op(arg) for arg in args)
+
+        for arg in args:
+            if not is_input(arg):
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
         self.parameters = args
         for arg in args:
             self.add_control_dep(arg)

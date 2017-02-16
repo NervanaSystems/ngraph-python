@@ -48,10 +48,18 @@ class Computation(NameableValue):
         self.computation_name = None
         self.executor = None
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         """
         Executes the computation passing args in to the function.
         """
+        if len(kwargs) != 0:
+            if len(args) != 0:
+                raise ValueError((
+                    'Can not supply both positional and named arguments '
+                    'to Computation'
+                ))
+            args = tuple(kwargs[param.tensor.name] for param in self.computation.parameters)
+
         if len(args) != len(self.computation.parameters):
             raise ValueError((
                 'Computation was expecting {expected} arguments, but was '
