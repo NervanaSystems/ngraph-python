@@ -20,10 +20,27 @@ from ngraph.testing import ExecutorFactory
 from ngraph.flex.names import flex_gpu_transformer_name
 
 
-def test_variable_init(transformer_factory):
-    C = ng.make_axis().named('C')
-    C.length = 200
+@pytest.fixture()
+def C():
+    return ng.make_axis(length=200)
 
+
+@pytest.fixture()
+def N():
+    return ng.make_axis(length=1)
+
+
+@pytest.fixture()
+def P():
+    return ng.make_axis(length=1)
+
+
+@pytest.fixture()
+def M():
+    return ng.make_axis(length=3)
+
+
+def test_variable_init(transformer_factory, C):
     w_init = np.random.rand(C.length)
     W = ng.variable(ng.make_axes([C]), initial_value=w_init)
 
@@ -32,14 +49,11 @@ def test_variable_init(transformer_factory):
     ng.testing.assert_allclose(result, w_init)
 
 
-def test_deriv_missing_connection():
+def test_deriv_missing_connection(N):
     """
     Taking the derivative of an expression with respect to a variable not
     used to compute the expression should raise an exception.
     """
-
-    N = ng.make_axis(1)
-
     x = ng.variable([N])
     y = ng.variable([N])
     z = ng.variable([N])
@@ -56,8 +70,7 @@ def test_one():
     assert one_0 is one_1
 
 
-def test_sequential():
-    N = ng.make_axis(1)
+def test_sequential(N):
     x = ng.variable([N], initial_value=0)
     x0 = x + x
     x1 = x + x
@@ -74,9 +87,8 @@ def test_sequential():
     assert p_val == 0
 
 
-def test_sequential_reduce():
-    N = ng.make_axis(3)
-    x = ng.variable([N], initial_value=1)
+def test_sequential_reduce(M):
+    x = ng.variable([M], initial_value=1)
     x0 = x + x
     x1 = ng.sum(x0, out_axes=())
     x2 = ng.sum(x0, out_axes=()) + x0
@@ -97,14 +109,13 @@ def test_sequential_reduce():
         assert np.allclose(p_val, x2_np)
 
 
-def test_sequential_side():
-    N = ng.make_axis(3)
+def test_sequential_side(M):
     x1_np = 2
     x2_np = 3
     b_np = 1
     x_np = np.array([1, 2, 3], dtype=np.float32)
 
-    x = ng.variable([N], initial_value=x_np)
+    x = ng.variable([M], initial_value=x_np)
     x1 = ng.persistent_tensor(axes=(), initial_value=x1_np)
     x2 = ng.persistent_tensor(axes=(), initial_value=x2_np)
     x1_vo = ng.value_of(x1)
@@ -152,25 +163,20 @@ def test_sequential_side():
     assert np.allclose(x2_final_val, x2_np)
 
 
-def test_pad_invalid_paddings_length():
+def test_pad_invalid_paddings_length(N):
     """
     pad should raise an exception if the paddings length is not the same as the
     input dimensionality.
     """
-    N = ng.make_axis(1)
-
     x = ng.variable([N])
     with pytest.raises(ValueError):
         ng.pad(x, [1, 0])
 
 
-def test_pad_0():
+def test_pad_0(N):
     """
     pad with length 0 should be a nop
     """
-
-    N = ng.make_axis(1)
-
     x = ng.variable([N])
 
     assert ng.pad(x, [0]).axes == x.axes
@@ -180,11 +186,11 @@ def test_pad_mixed():
     """
     mix 0 padding with non-0 padding
     """
-
-    N = ng.make_axis(1)
-    M = ng.make_axis(1)
-
-    x = ng.variable([N, M])
+    input_axes = ng.make_axes([
+        ng.make_axis(1),
+        ng.make_axis(1)
+    ])
+    x = ng.variable(input_axes)
 
     pad = ng.pad(x, [0, 1])
 
@@ -194,13 +200,13 @@ def test_pad_mixed():
 
 def test_slice_nop():
     """
-    slicing with nop slice should return same axis
+    slicing an axis shouldn't change the name
     """
-
-    N = ng.make_axis(1)
-    M = ng.make_axis(1)
-
-    x = ng.variable([N, M])
+    input_axes = ng.make_axes([
+        ng.make_axis(1),
+        ng.make_axis(1)
+    ])
+    x = ng.variable(input_axes)
 
     s = ng.tensor_slice(x, [
         slice(None, None, None),
@@ -208,29 +214,29 @@ def test_slice_nop():
     ])
 
     assert s.axes[0] == x.axes[0]
-    assert s.axes[1] != x.axes[1]
+    assert s.axes[1] == x.axes[1]
 
 
 def test_tensor_slice():
     """
     slicing a tensor should work like numpy
     """
+    input_axes = ng.make_axes([
+        ng.make_axis(10),
+        ng.make_axis(20),
+        ng.make_axis(5)
+    ])
 
-    M = ng.make_axis(10)
-    N = ng.make_axis(20)
-    O = ng.make_axis(5)
-
-    x = ng.placeholder(axes=[M, N, O])
+    x = ng.placeholder(axes=input_axes)
 
     assert x[:5].axes.full_lengths == (5, 20, 5)
     assert x[:, 2:7].axes.full_lengths == (10, 5, 5)
     assert x[:5, :, :-1].axes.full_lengths == (5, 20, 4)
 
 
-def test_setting():
+def test_setting(M):
     with ExecutorFactory() as ex:
-        X = ng.make_axis(length=3).named('X')
-        axes = ng.make_axes([X])
+        axes = ng.make_axes([M])
 
         np_x = np.array([1, 2, 3], dtype=np.float32)
         np_y = np.array([1, 3, 5], dtype=np.float32)

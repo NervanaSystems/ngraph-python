@@ -93,8 +93,13 @@ class ConvolutionOp(TensorOp):
         """
         TODO
         """
-        filters.generate_add_delta(adjoints, update_conv(delta, inputs, filters, self))
-        inputs.generate_add_delta(adjoints, bprop_conv(delta, inputs, filters, self))
+        # requires conv's forward to be completed before backward
+        update_conv_op = update_conv(delta, inputs, filters, self)
+        update_conv_op.add_control_dep(self)
+        bprop_conv_op = bprop_conv(delta, inputs, filters, self)
+        bprop_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)
+        inputs.generate_add_delta(adjoints, bprop_conv_op)
 
 
 class ConvDerivOp(TensorOp):

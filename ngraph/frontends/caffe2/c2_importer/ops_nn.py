@@ -125,7 +125,7 @@ class OpsNN(OpsBase):
         # TODO: we assume NCHW, make some assert here?
 
         # set input axes shape
-        ax_N = ng.make_axis(batch=True)
+        ax_N = ng.make_axis(name='N')
         ax_C = ng.make_axis(roles=[ar.Channel])
         ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
@@ -232,7 +232,7 @@ class OpsNN(OpsBase):
             raise NotImplementedError("Unsupported order in convolution: {}", order)
 
         # set input axes shape
-        ax_N = ng.make_axis(batch=True)
+        ax_N = ng.make_axis(name='N')
         ax_C = ng.make_axis(roles=[ar.Channel])
         ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])

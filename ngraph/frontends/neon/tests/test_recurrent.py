@@ -95,8 +95,8 @@ def check_birnn(seq_len, input_size, hidden_size, batch_size,
 
     # ========== neon model ==========
     Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, recurrent=True)
-    N = ng.make_axis(batch_size, batch=True)
+    REC = ng.make_axis(seq_len, name='R')
+    N = ng.make_axis(batch_size, name='N')
     H = ng.make_axis(hidden_size)
     ax_s = ng.make_axes([H, N])
 
@@ -198,8 +198,8 @@ def check_rnn(seq_len, input_size, hidden_size, batch_size,
 
     # ========== neon model ==========
     Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, recurrent=True)
-    N = ng.make_axis(batch_size, batch=True)
+    REC = ng.make_axis(seq_len, name='R')
+    N = ng.make_axis(batch_size, name='N')
     H = ng.make_axis(hidden_size)
     ax_s = ng.make_axes([H, N])
 
