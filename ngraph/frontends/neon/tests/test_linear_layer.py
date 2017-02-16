@@ -29,7 +29,7 @@ def feature_axis(request):
 
 @pytest.fixture(scope='module', params=[128])
 def batch_axis(request):
-    return ng.make_axis(request.param, batch=True)
+    return ng.make_axis(request.param, name='N')
 
 
 @pytest.fixture(scope='module', params=[1, 4, 1023, 1024, 1025])

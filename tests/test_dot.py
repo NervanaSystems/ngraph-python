@@ -99,7 +99,7 @@ def test_dot_sum_backprop(transformer_factory):
     rtol = atol = 1e-2
 
     C = ng.make_axis(length=2).named('C')
-    N = ng.make_axis(length=3, batch=True).named('N')
+    N = ng.make_axis(length=3, name='N')
 
     x_axes = ng.make_axes((C - 1, N))
     y_axes = ng.make_axes((C,))
@@ -288,7 +288,7 @@ def test_squared_L2(transformer_factory):
     ax = ng.make_name_scope().named('ax')
     ax.H = ng.make_axis(2)
     ax.W = ng.make_axis(3)
-    ax.N = ng.make_axis(5, batch=True)
+    ax.N = ng.make_axis(5, name='N')
 
     axes = ng.make_axes([ax.H, ax.W, ax.N])
     a = ng.constant(np.ones(axes.lengths), axes=axes)

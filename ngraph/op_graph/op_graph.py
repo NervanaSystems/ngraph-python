@@ -2251,9 +2251,8 @@ class ConcatOp(SequentialOp):
         common_axes = x_axes - ax
 
         # Create long axis for concatenated tens1or
-        concat_axis = make_axis(batch=ax.is_batch,
-                                recurrent=ax.is_recurrent,
-                                roles=ax.roles).named("Concat")
+        concat_axis = make_axis(name=ax.name,
+                                roles=ax.roles)
 
         # Store the axes order equivalent to the first tensor
         ind = x_axes.index(ax)

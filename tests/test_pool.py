@@ -59,8 +59,8 @@ def test_wrong_number_of_batch_axes_at_input():
     """
     C = 3
     D = 1
-    ax_C = ng.make_axis(length=C, batch=True).named('C')
-    ax_D = ng.make_axis(length=D, batch=True).named('D')
+    ax_C = ng.make_axis(name='N', length=C)
+    ax_D = ng.make_axis(name='N', length=D)
     pool_params = dict(op='max')
 
     ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])

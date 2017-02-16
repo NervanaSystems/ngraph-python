@@ -248,14 +248,14 @@ def test_sliced_axis_invalid_step():
 
 def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
-    a = ng.make_axis(10, batch=True)
+    a = ng.make_axis(10, name='N')
     s = slice_axis(a, slice(0, 5))
     assert s.is_batch is True
 
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
-    a = ng.make_axis(10, recurrent=True)
+    a = ng.make_axis(10, name='R')
     s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
 

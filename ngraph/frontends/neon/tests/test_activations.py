@@ -39,7 +39,7 @@ class ActivationPair(object):
         Use defined ngraph constructed computation to evaluate
         activation on inputs x
         '''
-        X = ng.placeholder([ng.make_axis(), ng.make_axis(batch=True)])
+        X = ng.placeholder([ng.make_axis(), ng.make_axis(name='N')])
         X.axes.set_shape(x.shape)
         with ExecutorFactory() as ex:
             if ex.transformer.transformer_name == "hetr":
@@ -48,7 +48,7 @@ class ActivationPair(object):
             return activation_function(x)
 
     def baseline_derivative(self, x):
-        X = ng.placeholder([ng.make_axis(), ng.make_axis(batch=True)])
+        X = ng.placeholder([ng.make_axis(), ng.make_axis(name='N')])
         X.axes.set_shape(x.shape)
         with ExecutorFactory() as ex:
             if ex.transformer.transformer_name == "hetr":
