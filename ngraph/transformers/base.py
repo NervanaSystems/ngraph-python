@@ -52,15 +52,15 @@ class Computation(NameableValue):
         """
         Executes the computation passing args in to the function.
         """
-        mapped_inputs = kwargs.pop('mapped_inputs', None)
-        if mapped_inputs is not None:
+        feed_dict = kwargs.pop('feed_dict', None)
+        if feed_dict is not None:
             if len(args) != 0:
                 raise ValueError((
-                    'Can not supply both positional and mapped input arguments '
+                    'Can not supply both positional and feed_dict arguments '
                     'to Computation'
                 ))
 
-            args = tuple(mapped_inputs[param.tensor] for param in self.computation.parameters)
+            args = tuple(feed_dict[param.tensor] for param in self.computation.parameters)
 
         if len(args) != len(self.computation.parameters):
             raise ValueError((
