@@ -335,14 +335,14 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 # @pytest.mark.skip("Bprop tests are not currently working.")
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("sequence_length", [2])
+@pytest.mark.parametrize("sequence_length", [1])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("return_sequence", [True])
-@pytest.mark.parametrize("sum_out,concat_out", [(False, False),
-                                                (True, False),
-                                                (False, True)])
-# @pytest.mark.parametrize("sum_out,concat_out", [(False, False)])
+# @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
+#                                                 (True, False),
+#                                                 (False, True)])
+@pytest.mark.parametrize("sum_out,concat_out", [(False, False)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
                                sum_out, concat_out, transformer_factory):
@@ -373,14 +373,22 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
     w_in_f.input = w_rec_f.input = b_f.input = True
     w_in_b.input = w_rec_b.input = b_b.input = True
 
-    params_f = [(w_in_f, W_in, (w_rec_f, b_f, w_in_b, w_rec_b, b_b), (W_rec, b, W_in, W_rec, b)),
-              (w_rec_f, W_rec, (w_in_f, b_f, w_in_b, w_rec_b, b_b), (W_in, b, W_in, W_rec, b)),
-              (b_f, b, (w_in_f, w_rec_f, w_in_b, w_rec_b, b_b), (W_in, W_rec, W_in, W_rec, b)),]
+    # params_f = [(w_in_f, W_in, (w_rec_f, b_f, w_in_b, w_rec_b, b_b), (W_rec, b, W_in, W_rec, b)),
+    #           (w_rec_f, W_rec, (w_in_f, b_f, w_in_b, w_rec_b, b_b), (W_in, b, W_in, W_rec, b)),
+    #           (b_f, b, (w_in_f, w_rec_f, w_in_b, w_rec_b, b_b), (W_in, W_rec, W_in, W_rec, b))]
 
-    params_b = [(w_in_b, W_in, (w_in_f, w_rec_f, b_f, w_rec_b, b_b), (W_in, W_rec, b, W_rec, b)),
-              (w_rec_b, W_rec, (w_in_f, w_rec_f, b_f, w_in_b, b_b), (W_in, W_rec, b, W_in, b)),
-              (b_b, b, (w_in_f, w_rec_f, b_f, w_in_b, w_rec_b), (W_in, W_rec, b, W_in, W_rec))]
+    # params_b = [(w_in_b, W_in, (w_in_f, w_rec_f, b_f, w_rec_b, b_b), (W_in, W_rec, b, W_rec, b)),
+    #           (w_rec_b, W_rec, (w_in_f, w_rec_f, b_f, w_in_b, b_b), (W_in, W_rec, b, W_in, b)),
+    #           (b_b, b, (w_in_f, w_rec_f, b_f, w_in_b, w_rec_b), (W_in, W_rec, b, W_in, W_rec))]
 
+
+    params_f = [(w_in_f, W_in, (w_rec_f, b_f), (W_rec, b)),
+              (w_rec_f, W_rec, (w_in_f, b_f), (W_in, b)),
+              (b_f, b, (w_in_f, w_rec_f), (W_in, W_rec))]
+
+    params_b = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
+              (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
+              (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
 
     if sum_out or concat_out:
         out_ng = [out_ng]
@@ -402,7 +410,7 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                 param_updates.append(update)
             dep_list += dependents
 
-        # import pytest; pytest.set_trace()
+        import pytest; pytest.set_trace()
         for ii, ((deriv_s, deriv_n), (_, val, _, other_val)) in enumerate(zip(param_updates, dep_list)):
             actual = deriv_s(val, input_value, *other_val)
             desired = deriv_n(val, input_value, *other_val)
@@ -410,6 +418,7 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
             print val.shape
             print actual.sum()
             print desired.sum()
+            # import pytest; pytest.set_trace()
 
             # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
             #                            deriv_n(val, input_value, *other_val),
