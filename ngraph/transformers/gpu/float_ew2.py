@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import range, zip
-import os
 import tempfile
 
 from ngraph.op_graph.axes import TensorDescription
@@ -22,8 +21,11 @@ from ngraph.transformers.gpu.util import _get_sm_count
 from ngraph.flex.base import Flex
 
 from pycuda.compiler import SourceModule
+from cStringIO import StringIO
 
 import numpy as np
+import cachetools
+
 
 _op_templates = {
     "assign": r"%(out)s = %(x)s;",
@@ -245,8 +247,7 @@ _header_template = r"""
 __global__ void %(kernel_name)s(%(args)s)
 {"""
 
-_includes_template = r"""#include <float.h>
-#include <cuda_fp16.h>
+_includes_template = r"""#define FLT_MAX 3.402823466E+38F
 """
 # flex functions taken from neon flexsim neon/backends/cuda_templates.py
 _flex_includes_template = r"""
@@ -1411,6 +1412,7 @@ def _prepare_compound_kernel(ops):
         code = _includes_template + _flex_includes_template + code
     else:
         code = _includes_template + code
+
     module = SourceModule(code, options=[])
     kernel = module.get_function(kernel_name)
     kernel.name = kernel_name
@@ -1455,17 +1457,18 @@ class CudaSourceFile:
         self.compiled = False
         self.retain_file = retain_file
 
+        self.buffer = StringIO()
         # Open file and add header
-        self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
-        self.filename = self.f.name
-        self.f.write(_includes_template)
+        if self.retain_file:
+            self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.c', prefix=name, delete=False)
+            self.filename = self.f.name
+
+        self.buffer.write(_includes_template)
         if gen_flex:
-            self.f.write(_flex_includes_template)
-        self.f.flush()
+            self.buffer.write(_flex_includes_template)
 
     def add_kernel(self, ops):
         assert not self.compiled
-
         # Take care tensor dimensionality
         ops = _wrap_tensor_descriptions(ops)
         ops = _compress_axes(ops)
@@ -1492,7 +1495,7 @@ class CudaSourceFile:
         params = [tuple(griddim), tuple(blockdim), None] + params
 
         # Add kernel code to source file
-        self.f.write(code)
+        self.buffer.write(code)
 
         # Save arg_desc in dict
         self.arg_descs[kernel_name] = arg_desc
@@ -1504,17 +1507,15 @@ class CudaSourceFile:
         return (kernel_name, params)
 
     def compile(self):
+        if self.num_kernels == 0:
+            return
+
         assert not self.compiled
-        self.f.close()
-
         # Create source module and compile
-        sourcefile = open(self.filename, 'r')
-        code = sourcefile.read()
-        self.module = SourceModule(code, options=[])
-        sourcefile.close()
-
-        if not self.retain_file:
-            os.remove(self.filename)
+        self.module = NvrtcSourceModule(self.buffer.getvalue(), options=[])
+        if self.retain_file:
+            with open(self.filename, 'w') as f:
+                f.write(self.buffer.getvalue())
 
         self.compiled = True
 
@@ -1532,3 +1533,27 @@ class CudaSourceFile:
 
         # Return kernel function
         return self.functions[name]
+
+
+class NvrtcSourceModule(SourceModule):
+    def __init__(self, code, options=[]):
+        from pycuda.driver import module_from_buffer
+        code = "#include <cuda_fp16.h>\nextern \"C\" {\n" + code + "\n}\n"
+        options = options + ['-I/usr/local/cuda/include/', '--gpu-architecture=compute_52']
+        ptx = self.get_ptx(code, options)
+        self.module = module_from_buffer(ptx)
+        self._bind_module()
+
+    @cachetools.cached({}, key=lambda x, y, z: cachetools.keys.hashkey(y))
+    def get_ptx(self, code, options):
+        from pynvrtc.compiler import Program
+        return Program(code).compile(options)
+
+    def _bind_module(self):
+        self.get_global = self.module.get_global
+        self.get_texref = self.module.get_texref
+        if hasattr(self.module, "get_surfref"):
+            self.get_surfref = self.module.get_surfref
+
+    def get_function(self, name):
+        return self.module.get_function(name)

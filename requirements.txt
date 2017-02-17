@@ -24,3 +24,4 @@ flake8==3.2.1
 pytest-cov
 pytest-xdist
 pytest-timeout
+pynvrtc==7.5

@@ -15,7 +15,7 @@
 
 from builtins import str
 from pycuda.tools import context_dependent_memoize
-from pycuda.compiler import SourceModule
+from ngraph.transformers.gpu.float_ew2 import NvrtcSourceModule as SourceModule
 
 from ngraph.transformers.gpu.kernels.cuda import cuda_templates
 from ngraph.transformers.gpu.kernels.cuda.cuda_templates import (_common_fp16_to_fp32,
