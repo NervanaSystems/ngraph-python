@@ -129,7 +129,7 @@ def test_recurrent_batchnorm_fprop(batch_size, input_size, hidden_size, sequence
             input_value = rng.uniform(0, 1, input_axes)
             weighted_input = np.dot(input_weights, input_value.transpose([1, 0, 2]))
             normed_input, gmean_ref, gvar_ref = batch_norm_reference(weighted_input, gmean_ref,
-                                                                     gvar_ref, axis=2)
+                                                                     gvar_ref, axis=(1, 2))
 
             out = fprop_function(input_value)
             gmean, gvar = stats_function()

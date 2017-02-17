@@ -433,10 +433,11 @@ class BatchNorm(Layer):
     """
     metadata = {'layer_type': 'batch_norm'}
 
-    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
+    def __init__(self, rho=0.9, eps=1e-3, reduce_recurrent=True, **kwargs):
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
+        self.reduce_recurrent = reduce_recurrent
         self.gamma = None
         self.beta = None
         self.gmean = None
@@ -450,6 +451,9 @@ class BatchNorm(Layer):
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
             red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+        if self.reduce_recurrent:
+            if len(in_axes.recurrent_axes()) != 0:
+                red_axes += in_axes.recurrent_axes()
         red_axes += in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
