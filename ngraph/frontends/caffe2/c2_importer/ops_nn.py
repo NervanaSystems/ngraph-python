@@ -139,7 +139,7 @@ class OpsNN(OpsBase):
         oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         # spatial kernel size
-        kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
+        kernel_size = [int(val.i) for val in c2_op.arg if val.name == "kernel"]
         if len(kernel_size) != 1:
             raise ValueError("Kernel size must be scalar value")
         # kernel is square
@@ -147,7 +147,7 @@ class OpsNN(OpsBase):
         kernel_d = kernel_c = 1
 
         # strides params
-        stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
+        stride_size = [int(val.i) for val in c2_op.arg if val.name == "stride"]
         if len(stride_size) != 1:
             raise ValueError("Stride size must be scalar value")
         stride_h = stride_w = stride_size[0]
@@ -223,7 +223,7 @@ class OpsNN(OpsBase):
         """
         X, W, bias = inputs
 
-        order = [val.s for val in c2_op.arg._values if val.name == "order"]
+        order = [val.s for val in c2_op.arg if val.name == "order"]
         if 1 != len(order):
             raise ValueError("Multiple order values in convolution")
         order = order[0]
@@ -266,7 +266,7 @@ class OpsNN(OpsBase):
             raise ValueError("Bias's length must equal to number of output feature maps.")
 
         # strides params
-        stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
+        stride_size = [int(val.i) for val in c2_op.arg if val.name == "stride"]
         if len(stride_size) != 1:
             raise ValueError("Stride size must be scalar value")
         str_h = str_w = stride_size[0]
