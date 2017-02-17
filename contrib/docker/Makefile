@@ -7,6 +7,7 @@ NVCC_VER_OUT := $(shell nvcc --version | grep release || echo nvcc not found)
 
 NGRAPH_BASE_IMG := $(shell docker images ngraph_base)
 NGRAPH_DOC_IMG := $(shell docker images ngraph_doc)
+NGRAPH_TEST_BASE_IMG := $(shell docker images ngraph_test_base)
 NGRAPH_TEST_IMG := $(shell docker images ngraph_test)
 NGRAPH_BASE_CPU_IMG := $(shell docker images ngraph_base_cpu)
 NGRAPH_TEST_CPU_IMG := $(shell docker images ngraph_test_cpu)
@@ -49,6 +50,7 @@ expand_dockerfile_templates:
 	mkdir ${BUILD_DIR} || true
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.base > ${BUILD_DIR}/Dockerfile.base
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.doc > ${BUILD_DIR}/Dockerfile.doc
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test_base > ${BUILD_DIR}/Dockerfile.test_base
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test > ${BUILD_DIR}/Dockerfile.test
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.dev > ${BUILD_DIR}/Dockerfile.dev
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.base_cpu > ${BUILD_DIR}/Dockerfile.base_cpu
@@ -88,8 +90,8 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DEV_IMG)), ${BUILD_VERSION})
 	@docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
 endif
 
-build_test: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
+build_test_base: build_base
+ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_BASE_IMG)), ${BUILD_VERSION})
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -99,6 +101,13 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
 	cd ${DIR}/contrib/docker
 	git clone git@github.com:NervanaSystems/autoflex.git
 
+	# now build the docker container
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
+	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test_base:latest
+endif
+
+build_test: build_test_base
+ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
 	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
@@ -132,7 +141,7 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DOC_IMG)), ${BUILD_VERSION})
 	@docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
 endif
 
-build_caffe2: build_test
+build_caffe2: build_test_base
 ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_CAFFE2_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2:${BUILD_VERSION} ${DIR}
 	@docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
@@ -143,8 +152,8 @@ build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
-test_parallel: build_test
-	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
+test_parallel: build_test_run
+	docker run --rm ${VOLUME} -t ngraph_test_run:${BUILD_VERSION} make test_parallel
 
 test_mkldnn: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}

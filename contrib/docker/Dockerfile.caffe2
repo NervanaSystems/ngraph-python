@@ -1,4 +1,4 @@
-FROM ngraph_test
+FROM ngraph_test_base
 
 # Caffe2 dependencies
 RUN apt-get update && apt-get install -y \
@@ -51,3 +51,8 @@ RUN mkdir build && cd build && \
 # Set path to the Python modules required by Caffe2 Frontend
 ENV PYTHONPATH=/opt/caffe2/build/:$PYTHONPATH
 WORKDIR /root/ngraph-test
+
+# necessary for tests/test_walkthrough.py which requires that ngraph is
+# importable from an entrypoint not local to ngraph.
+ADD . /root/ngraph-test
+RUN pip install -e .
