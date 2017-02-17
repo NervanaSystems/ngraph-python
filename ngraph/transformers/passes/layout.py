@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import abc
+
+from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
@@ -28,6 +31,10 @@ class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
     A collection of these makes up the domain for a variable.
     """
     def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    def __str__(self):
         pass
 
 
@@ -109,7 +116,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
     def visit(self, op):
         if op.is_device_op:
             # Generate unary constraint by getting the cost function for this op
-            self.unary_constraints[op] = transformer.get_layout_cost_function(op)
+            self.unary_constraints[op] = self.transformer.get_layout_cost_function(op)
 
             # Find all args that are device ops and generate binary constraints
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
@@ -118,7 +125,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
                 arg_op = self.get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
-                        (arg_op, transformer.get_layout_change_cost_function(op, arg)))
+                        (arg_op, self.transformer.get_layout_change_cost_function(op, arg)))
 
                     # Add this op to the arg's users to construct digraph
                     if arg_op not in self.users:
@@ -152,9 +159,9 @@ class AssignLayouts(GraphPass):
             cost += self.unary_constraints[op].get_cost(op_layout)
 
             # Get all argument default layouts and any transition costs
-            for arg in op.args:
-                arg_layout = self.domains[arg][0]
-                cost += self.binary_constraints[{op, arg}].get_cost(arg_layout, op_layout)
+            for arg_op, constraint in self.binary_constraints[op]:
+                arg_layout = self.domains[arg_op][0]
+                cost += constraint.get_cost(arg_layout, op_layout)
 
         return (assignment, cost)
 
@@ -230,6 +237,5 @@ class AssignLayouts(GraphPass):
         self.min_assignment, cost = self.minimize_cost(self.min_assignment, upper_bound)
 
         # Assign layouts to each tensor
-        for op in ops:
-            if op in assignments:
-                op.metadata["layout"] = assignments[op]
+        for op in self.min_assignment:
+            op.metadata["layout"] = self.min_assignment[op]

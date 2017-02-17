@@ -43,6 +43,9 @@ from ngraph.util.generics import generic_method
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
+from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
+    UnaryLayoutConstraint, GenerateLayoutDomains, GenerateLayoutConstraints, AssignLayouts
+from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
@@ -851,6 +854,31 @@ class GPUDeviceTensor(DeviceTensor):
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
 
+class GPULayoutAssignment(LayoutAssignment):
+    def __init__(self, axes):
+        self.ng_axes = axes
+        self.axes = list(range(len(axes)))
+
+    def __str__(self):
+        return str(self.axes)
+
+
+class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
+    def __init__(self):
+        pass
+
+    def get_cost(self, arg_layout, op_layout):
+        return 0.0
+
+
+class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
+    def __init__(self):
+        pass
+
+    def get_cost(self, op_layout):
+        return 0.0
+
+
 class GPURuntime(object):
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
@@ -992,9 +1020,12 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
+        layout_domain_pass = GenerateLayoutDomains(self)
+        layout_constraints_pass = GenerateLayoutConstraints(self)
+        layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         self.graph_passes = [SimplePrune(),
-                             RequiredTensorShaping(), GPUTensorShaping(),
-                             GPUTensorLayout(), GPUContiguousPrune()]
+                             layout_domain_pass, layout_constraints_pass, layout_assign_pass,
+                             VizPass(show_metadata="layout")]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
@@ -1077,3 +1108,47 @@ class GPUTransformer(Transformer):
 
     def storage_dtype(self, dtype):
         return dtype  # overridden by flex gpu transformer
+
+    def get_layouts(self, op):
+        """
+        Returns a list of possible axis layouts for the op. The default layout must
+        be the first item in the returned list.
+
+        Arguments:
+            op: graph op to get possible layouts for
+
+        Returns:
+            A list of objects that inherit from LayoutAssignment. The first item in the
+            list is the default layout for this op.
+        """
+        if isinstance(op, AssignOp):
+            return [GPULayoutAssignment(op.args[0].axes)]
+        else:
+            return [GPULayoutAssignment(op.axes)]
+
+    def get_layout_cost_function(self, op):
+        """
+        Returns a GPUUnaryLayoutConstraint which computes the cost of an op given an
+        assigned data layout for that op.
+
+        Arguments:
+            op: graph op to get cost function for
+
+        Returns:
+            An object that can be used to calculate the layout assignment cost.
+        """
+        return GPUUnaryLayoutConstraint()
+
+    def get_layout_change_cost_function(self, op, arg):
+        """
+        Returns a BinaryLayoutConstraint which computes the cost of a layout change
+        between the specified op and its specified arg (if any cost).
+
+        Arguments:
+            op: graph op to get cost function for
+            arg: argument to the op to generate cost function for
+
+        Returns:
+            An object that can be used to calculate any layout change cost.
+        """
+        return GPUBinaryLayoutConstraint()
