@@ -1470,15 +1470,10 @@ class AxesCastOp(ReshapeOp):
 
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
-        if not x.is_scalar and x.axes.lengths != axes.lengths:
-            raise ValueError("casting axes {} must have the same length as original axes {}"
-                             .format(axes, x.axes))
-        if len(x.axes) > 0:
-            aliasing_axes = []
-            for new_axis, old_axis in zip(axes, x.axes):
-                aliasing_axes.append(casting_axis(new_axis, old_axis))
-            axes = make_axes(aliasing_axes)
-
+        aliasing_axes = []
+        for new_axis, old_axis in zip(axes, x.axes):
+            aliasing_axes.append(casting_axis(new_axis, old_axis))
+        axes = make_axes(aliasing_axes)
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
@@ -1500,6 +1495,13 @@ def cast_axes(tensor, axes):
     Returns:
         TensorOp: The tensor with new axes.
     """
+    axes = make_axes(axes)
+    if tensor.axes.lengths != axes.lengths:
+        raise ValueError("casting axes {} must have the same length as original axes {}"
+                         .format(axes, tensor.axes))
+    if len(axes.lengths) == 0:
+        return tensor
+
     return AxesCastOp(tensor, axes)
 
 
@@ -2245,70 +2247,56 @@ class ConcatOp(SequentialOp):
     def __init__(self, x_list, axis_list, **kwargs):
         super(ConcatOp, self).__init__(**kwargs)
         self.x_list = tuple(as_op(arg) for arg in x_list)
+        self.axis_list = axis_list
         # Get common axes from first tensor in list
-        x_axes = self.x_list[0].axes
+        arg_axes = self.x_list[0].axes
         ax = axis_list[0]
-        common_axes = x_axes - ax
+        common_axes = arg_axes - ax
 
         # Create long axis for concatenated tens1or
         concat_axis = make_axis(name=ax.name,
                                 roles=ax.roles)
 
         # Store the axes order equivalent to the first tensor
-        ind = x_axes.index(ax)
-        axes_0 = x_axes[:ind]
-        axes_1 = x_axes[ind + 1:]
-        self._axes_order = axes_0 + concat_axis + axes_1
+        ind = arg_axes.index(ax)
+        axes_0 = arg_axes[:ind]
+        axes_1 = arg_axes[ind + 1:]
+        result_axes = axes_0 + concat_axis + axes_1
 
-        # To do the assignments we must first make sure that every slice of the larger tensor is
-        # contiguous in memory. This is most easily achieved by flattening, with concat_axis as
-        # either the first or last axis.
-        axes = make_axes((concat_axis,) + tuple(common_axes))
-        self.storage = temporary(axes=axes, dtype=self.x_list[0].dtype, constant=True)
-        self._axis_list = axis_list
+        # With axes, we should be able to just setitem into a tensor shaped like the
+        # result, but things don't quite work that way so we use a temp that would have
+        # each arg in its own contiguous section, setitem into that, and reshape the result.
+        storage_axes = make_axes([concat_axis] + list(axes_0) + list(axes_1))
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
 
-        # Since the concatenation axis is first, we'll flatten the rest.
-        flat = flatten_at(self.storage, 1)
-        slices = [slice(None)] * len(flat.axes)
-        assign_op = AssignTwoDOp if len(flat.axes) == 2 else AssignOneDOp
-
+        slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
-        deps = []
+        ops = []
         for ii, (x, ax) in enumerate(zip(self.x_list, axis_list)):
             if len(x.axes - common_axes) > 1:
                 raise RuntimeError("Tensor {} has more than 1 axis not in common with"
                                    " other tensors".format(ii))
             if ax.length is None:
                 raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
-
-            slices[0] = slice(start, start + ax.length)
-            slice_op = tensor_slice(flat, slices)
-
-            # Make sure the args are in the same order as our axes
-            ordered_axes = make_axes((ax,) + tuple(common_axes))
-            ordered_arg = axes_with_order(x, ordered_axes)
-
-            # Flatten the arg so that it is the same shape as the slice
-            flat_arg = flatten_at(ordered_arg, 1)
-
-            # Assign into the slice
-            deps.append(assign_op(slice_op, flat_arg, force=True))
+            ops.append(SetItemOp(self.storage,
+                                 [slice(start, start + ax.length)] + slices,
+                                 axes_with_order(x, [ax] + list(storage_axes[1:]))))
             start += ax.length
-
         concat_axis.length = start
-        self.ops = [doall(deps), axes_with_order(self.storage, self._axes_order)]
+        self.ops = [
+            doall(ops),
+            axes_with_order(self.storage, result_axes)
+        ]
 
     def generate_adjoints(self, adjoints, delta):
-        delta = axes_with_order(delta, self.storage.axes)
-        s = [slice(None)] * len(self.storage.axes)
+        slices = [slice(None)] * (len(self.storage.axes) - 1)
+        storage_delta = axes_with_order(delta, self.storage.axes)
         start = 0
-        for i, (x, ax) in enumerate(zip(self.x_list, self._axis_list)):
-            arg_axes = make_axes((ax,) + tuple(self.storage.axes[1:]))
-            s[0] = slice(start, start + ax.length)
+        for x, ax in zip(self.x_list, self.axis_list):
+            delta_slice = tensor_slice(storage_delta,
+                                       [slice(start, start + ax.length)] + slices)
             x.generate_add_delta(adjoints,
-                                 axes_with_order(tensor_slice(delta,
-                                                              tuple(s),
-                                                              axes=arg_axes),
+                                 axes_with_order(delta_slice,
                                                  x.axes))
             start += ax.length
 
