@@ -69,25 +69,24 @@ clean:
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make clean
 
 build_base: expand_dockerfile_templates fallback_cuda_version
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_BASE_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_base:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_base:${BUILD_VERSION}` ngraph_base:latest
-endif
 
 build_base_cpu: expand_dockerfile_templates
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_BASE_CPU_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base_cpu --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_cpu:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_base_cpu:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_base_cpu:${BUILD_VERSION}` ngraph_base_cpu:latest
-endif
 
 build_dev: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DEV_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_dev:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
-endif
 
 build_test: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -99,11 +98,11 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_test:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
-endif
 
 build_test_cpu: build_base_cpu
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_CPU_IMG)), ${BUILD_VERSION})
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -115,20 +114,21 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_CPU_IMG)), ${BUILD_VERSION})
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_test_cpu:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_test_cpu:${BUILD_VERSION}` ngraph_test_cpu:latest
-endif
 
 build_mkldnn_test: build_test_cpu
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_MKLDNN_TEST_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_mkldnn_test:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
-endif
 
 build_doc: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DOC_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_doc:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
-endif
 
 
 build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test
