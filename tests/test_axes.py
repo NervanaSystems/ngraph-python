@@ -319,7 +319,7 @@ def test_cast_axes():
         import pytest; pytest.set_trace()
 
         cost = ng.sum(result, reduction_axes=[])
-        grad = ng.deriv(cost, w)
+        # grad = ng.deriv(cost, w)
 
         # grad_comp = ex.executor(grad)
         # cost_comp = ex.executor(cost)

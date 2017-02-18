@@ -709,8 +709,8 @@ class BiRNN(Layer):
         with ng.metadata(direction="fwd"):
             fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
         with ng.metadata(direction="bwd"):
-            # bwd_out = ng.cast_axes(self.bwd_rnn.train_outputs(bwd_in, bwd_init), fwd_out.axes)
-            bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
+            bwd_out = ng.cast_axes(self.bwd_rnn.train_outputs(bwd_in, bwd_init), fwd_out.axes)
+            # bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
 
         if self.sum_out:
             return fwd_out + bwd_out
