@@ -712,7 +712,6 @@ class BiRNN(Layer):
             # bwd_out = ng.cast_axes(self.bwd_rnn.train_outputs(bwd_in, bwd_init), fwd_out.axes)
             bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
 
-        import pytest; pytest.set_trace()
         if self.sum_out:
             return fwd_out + bwd_out
         elif self.concat_out:

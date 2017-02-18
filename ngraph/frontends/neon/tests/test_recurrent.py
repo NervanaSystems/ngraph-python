@@ -40,14 +40,14 @@ from ngraph.testing.random import RandomTensorGenerator
 
 rng = RandomTensorGenerator()
 
-delta = 1e-3
+delta = 1e-5
 fprop_rtol = 0
 fprop_atol = 1e-5
 bprop_rtol = 1e-2
 bprop_atol = 1e-2
 
 
-@pytest.fixture(params=["random", "ones"])
+@pytest.fixture(params=["random"])
 def weight_initializer(request):
 
     if request.param == "random":
@@ -75,7 +75,7 @@ def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
     input_axes = ng.make_axes([ng.make_axis(length=1) for _ in range(extra_axes)]) + input_axes
 
     input_placeholder = ng.placeholder(input_axes)
-    input_value = rng.uniform(-1, 1, input_axes)
+    input_value = rng.uniform(-0.01, 0.01, input_axes)
 
     return input_placeholder, input_value
 
@@ -335,7 +335,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 # @pytest.mark.skip("Bprop tests are not currently working.")
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("sequence_length", [1])
+@pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("return_sequence", [True])
@@ -418,9 +418,8 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
             print val.shape
             print actual.sum()
             print desired.sum()
-            # import pytest; pytest.set_trace()
 
-            # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
-            #                            deriv_n(val, input_value, *other_val),
-            #                            rtol=bprop_rtol,
-            #                            atol=bprop_atol)
+            ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
+                                       deriv_n(val, input_value, *other_val),
+                                       rtol=bprop_rtol,
+                                       atol=bprop_atol)
