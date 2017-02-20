@@ -96,8 +96,8 @@ class ExecutorFactory(object):
 
                     df = comp(adjoint, x, *args)
 
-                    import pytest; pytest.set_trace()
-                    with open("code_bwd_unit.py", "w") as f: f.write(comp.transformer.code.code)
+                    # import pytest; pytest.set_trace()
+                    # with open("code_sum.py", "w") as f: f.write(comp.transformer.code.code)
 
                     dindex[0:len(fshape)] = idxiter.multi_index
                     npdfdx[tuple(dindex)] = df

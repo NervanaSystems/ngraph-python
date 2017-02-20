@@ -770,7 +770,6 @@ class NumPyTransformer(Transformer):
                 return x.value
             return x
 
-        import pytest; pytest.set_trace()
         with indenting(self.compute_code):
             for op in ordered_ops:
                 out = tensor_description_value(op.tensor_description())

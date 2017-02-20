@@ -418,7 +418,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
-        import pytest; pytest.set_trace()
         for comp in self.computations:
             comp.computation_name = \
                 self.transform_ordered_ops(Op.ordered_ops([comp.computation]),

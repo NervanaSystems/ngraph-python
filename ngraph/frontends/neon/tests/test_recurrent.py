@@ -333,9 +333,18 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
 
+def test_sum_deriv(weight_initializer, bias_initializer, input_size=5,
+                   hidden_size=10, batch_size=1):
+    axis_h_f = ng.make_axis(hidden_size).named('Hidden')
+    axis_h_b = ng.make_axis(hidden_size).named('Hidden')
+
+    
+    
+
+
 def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
                          sequence_length=3, input_size=5, hidden_size=10, batch_size=1,
-                         return_sequence=True, sum_out=False, concat_out=False):
+                         return_sequence=True, sum_out=False, concat_out=True):
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
 
@@ -363,22 +372,32 @@ def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
                     (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
 
     # only do deriv on bwd RNN
-    out_bwd = out_birnn[-1]
+    # out_bwd = rnn_ng.bwd_out 
+    out_bwd = out_birnn
+    # out_bwd = out_birnn[-1]
 
     with ExecutorFactory() as ex:
         # Create derivative computations and execute
         param_updates = list()
         for px, _, other_params, _ in params_bwd:
-            update = ex.derivative(out_bwd, px, input_placeholder,
-                                    *other_params)
+            update = (ex.derivative(out_bwd, px, input_placeholder,
+                                    *other_params),
+                      ex.numeric_derivative(out_bwd, px, delta, input_placeholder,
+                                    *other_params))
             param_updates.append(update)
 
         import pytest; pytest.set_trace()
-        for deriv_s, (_, val, _, other_val) in zip(param_updates, params_bwd):
+        for (deriv_s, deriv_n), (_, val, _, other_val) in zip(param_updates, params_bwd):
 
             actual = deriv_s(val, input_value, *other_val)
+            desired = deriv_n(val, input_value, *other_val)
             print val.shape
             print actual.sum()
+            print desired.sum()
+            # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
+            #                deriv_n(val, input_value, *other_val),
+            #                rtol=bprop_rtol,
+            #                atol=bprop_atol)
 
 
 @pytest.mark.skip("Bprop tests are not currently working.")
@@ -390,10 +409,10 @@ def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
 # @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
 #                                                 (True, False),
 #                                                 (False, True)])
-@pytest.mark.parametrize("sum_out,concat_out", [(False, False)])
+@pytest.mark.parametrize("sum_out,concat_out", [(True, False)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
-                               sum_out, concat_out, transformer_factory):
+                               sum_out, concat_out):
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
@@ -421,22 +440,21 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
     w_in_f.input = w_rec_f.input = b_f.input = True
     w_in_b.input = w_rec_b.input = b_b.input = True
 
-    # params_f = [(w_in_f, W_in, (w_rec_f, b_f, w_in_b, w_rec_b, b_b), (W_rec, b, W_in, W_rec, b)),
-    #           (w_rec_f, W_rec, (w_in_f, b_f, w_in_b, w_rec_b, b_b), (W_in, b, W_in, W_rec, b)),
-    #           (b_f, b, (w_in_f, w_rec_f, w_in_b, w_rec_b, b_b), (W_in, W_rec, W_in, W_rec, b))]
+    # params_f = [(w_in_f, W_in, (w_rec_f, b_f), (W_rec, b)),
+    #           (w_rec_f, W_rec, (w_in_f, b_f), (W_in, b)),
+    #           (b_f, b, (w_in_f, w_rec_f), (W_in, W_rec))]
 
-    # params_b = [(w_in_b, W_in, (w_in_f, w_rec_f, b_f, w_rec_b, b_b), (W_in, W_rec, b, W_rec, b)),
-    #           (w_rec_b, W_rec, (w_in_f, w_rec_f, b_f, w_in_b, b_b), (W_in, W_rec, b, W_in, b)),
-    #           (b_b, b, (w_in_f, w_rec_f, b_f, w_in_b, w_rec_b), (W_in, W_rec, b, W_in, W_rec))]
+    # params_b = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
+    #           (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
+    #           (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
 
+    params_f = [(w_in_f, W_in),
+              (w_rec_f, W_rec),
+              (b_f, b)]
 
-    params_f = [(w_in_f, W_in, (w_rec_f, b_f), (W_rec, b)),
-              (w_rec_f, W_rec, (w_in_f, b_f), (W_in, b)),
-              (b_f, b, (w_in_f, w_rec_f), (W_in, W_rec))]
-
-    params_b = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
-              (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
-              (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
+    params_b = [(w_in_b, W_in),
+              (w_rec_b, W_rec),
+              (b_b, b)]
 
     if sum_out or concat_out:
         out_ng = [out_ng]
@@ -450,24 +468,21 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
         param_updates = list()
         dep_list = list()
         for output, dependents in zip(out_ng, params_birnn):
-            for px, _, other_params, _ in dependents:
-                update = (ex.derivative(output, px, input_placeholder,
-                                        *other_params),
-                          ex.numeric_derivative(output, px, delta, input_placeholder,
-                                                *other_params))
+            for px, _ in dependents:
+                update = (ex.derivative(output, px, input_placeholder),
+                          ex.numeric_derivative(output, px, delta, input_placeholder))
                 param_updates.append(update)
             dep_list += dependents
 
-        # import pytest; pytest.set_trace()
-        for ii, ((deriv_s, deriv_n), (_, val, _, other_val)) in enumerate(zip(param_updates, dep_list)):
-            actual = deriv_s(val, input_value, *other_val)
-            desired = deriv_n(val, input_value, *other_val)
+        import pytest; pytest.set_trace()
+        for ii, ((deriv_s, deriv_n), (_, val)) in enumerate(zip(param_updates, dep_list)):
+            actual = deriv_s(val, input_value)
+            desired = deriv_n(val, input_value)
             print ii
-            print val.shape
             print actual.sum()
             print desired.sum()
 
-            ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
-                                       deriv_n(val, input_value, *other_val),
-                                       rtol=bprop_rtol,
-                                       atol=bprop_atol)
+            # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
+            #                            deriv_n(val, input_value, *other_val),
+            #                            rtol=bprop_rtol,
+            #                            atol=bprop_atol)
