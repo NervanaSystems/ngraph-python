@@ -89,8 +89,8 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
 
     # Set up axes
     F = ng.make_axis(length=input_size, name="input")
-    T = ng.make_axis(length=sequence_length, recurrent=True)
-    N = ng.make_axis(length=batch_size, batch=True)
+    T = ng.make_axis(length=sequence_length, name="R")
+    N = ng.make_axis(length=batch_size, name="N")
     H = ng.make_axis(length=hidden_size, name="hidden")
     F2 = ng.make_axis(length=hidden_size, name="weighted_hidden")
 
