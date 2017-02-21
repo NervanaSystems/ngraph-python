@@ -332,16 +332,20 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                 output = output[:, :, 0]
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
-
+# @pytest.mark.skip("not needed")
 def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
                    hidden_size=10, batch_size=1):
     # test to directly sum or concat two outputs and do derivatives
+    # and narrowed it down to that when tensors being sliced then stacked
+    # the derivatives are lost
+
     input_axis = ng.make_axis(input_size)
+    time_axis = ng.make_axis(3, name='R')
     batch_axis = ng.make_axis(batch_size, name='N')
-    input_axes = ng.make_axes([input_axis, batch_axis])
+    input_axes = ng.make_axes([input_axis, time_axis, batch_axis])
 
     input_placeholder = ng.placeholder(input_axes)
-    input_value = rng.uniform(-0.01, 0.01, input_axes)
+    input_value = rng.uniform(-0.1, 0.1, input_axes)
 
     axis_h_f = ng.make_axis(hidden_size).named('Hidden')
     axis_h_b = ng.make_axis(hidden_size).named('Hidden')
@@ -358,6 +362,12 @@ def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
     out_ng_f = ng.dot(w_f, input_placeholder)
     out_ng_b = ng.dot(w_b, input_placeholder)
 
+    # but if we slice and then stack the tensors, this test will fail
+    out_ng_f_list = [ng.slice_along_axis(out_ng_f, time_axis, i) for i in list(range(3))]
+    out_ng_b_list = [ng.slice_along_axis(out_ng_b, time_axis, i) for i in reversed(range(3))]
+    out_ng_f = ng.stack(out_ng_f_list, time_axis, pos=1)
+    out_ng_b = ng.stack(out_ng_b_list, time_axis, pos=1)
+
     out_ng_sum = out_ng_f + out_ng_b
     out_ng_concat = ng.ConcatOp([out_ng_f, out_ng_b], [axis_h_f, axis_h_b])
 
@@ -366,11 +376,14 @@ def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
         deriv_sum_s_b = ex.derivative(out_ng_sum, w_b, input_placeholder)
         deriv_sum_n_f = ex.numeric_derivative(out_ng_sum, w_f, delta, input_placeholder)
         deriv_sum_n_b = ex.numeric_derivative(out_ng_sum, w_b, delta, input_placeholder)
-
+# 
         deriv_concat_s_f = ex.derivative(out_ng_concat, w_f, input_placeholder)
         deriv_concat_s_b = ex.derivative(out_ng_concat, w_b, input_placeholder)
         deriv_concat_n_f = ex.numeric_derivative(out_ng_concat, w_f, delta, input_placeholder)
         deriv_concat_n_b = ex.numeric_derivative(out_ng_concat, w_b, delta, input_placeholder)
+        
+        print deriv_sum_s_f(w_f_value, input_value).sum()
+        print deriv_sum_n_f(w_f_value, input_value).sum()
 
         ng.testing.assert_allclose(deriv_sum_s_f(w_f_value, input_value),
                                    deriv_sum_n_f(w_f_value, input_value),
@@ -393,7 +406,7 @@ def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
 @pytest.mark.skip("Bprop tests are not currently working.")
 def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
                          sequence_length=3, input_size=5, hidden_size=10, batch_size=1,
-                         return_sequence=True, sum_out=False, concat_out=True):
+                         return_sequence=True, sum_out=True, concat_out=False):
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
 
@@ -417,11 +430,12 @@ def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
     w_in_b.input = w_rec_b.input = b_b.input = True
 
     params_bwd = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
-                    (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
-                    (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
+                    # (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
+                    # (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))
+                 ]
 
     # only do deriv on bwd RNN
-    # out_bwd = rnn_ng.bwd_out 
+    # out_bwd = rnn_ng.bwd_out
     out_bwd = out_birnn
     # out_bwd = out_birnn[-1]
 
