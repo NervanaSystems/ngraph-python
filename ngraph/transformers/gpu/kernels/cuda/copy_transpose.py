@@ -19,6 +19,7 @@ from operator import mul
 
 from ngraph.transformers.gpu.util import _ceil_div, _magic64
 from ngraph.transformers.gpu.float_ew2 import _get_register_type
+from ngraph.flex.base import Flex
 
 from pycuda.compiler import SourceModule
 from pycuda.tools import context_dependent_memoize
@@ -62,7 +63,7 @@ __global__ void copy_oned(%(type)s* out, const %(type)s* in, int dim, long long 
 }
 """
     code = copy % dict(
-        type=_get_register_type(dtype)
+        type=_get_register_type(dtype, memory=isinstance(dtype, Flex))  # FLEX TODO: get Stewart review
     )
 
     # print code
@@ -253,7 +254,7 @@ __global__ void copy_transpose(%(type)s* out, const %(type)s* in, %(params)s)
 """
     code = copy_transpose % dict(
         common=_div64,
-        type=_get_register_type(dtype),
+        type=_get_register_type(dtype, memory=isinstance(dtype, Flex)),  # FLEX TODO: get Stewart review
         params=", ".join(params),
         blk=blkx_name,
         src=src_dim,
