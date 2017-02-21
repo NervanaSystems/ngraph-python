@@ -24,6 +24,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod
+from ngraph.op_graph.communication import Send, Recv
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -40,11 +41,12 @@ from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvU
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    RngFillKernel
+    RngFillKernel, SendKernel, RecvKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
 
+import cachetools
 import numpy as np
 import pycuda.driver as drv
 from pycuda.gpuarray import GPUArray
@@ -422,6 +424,14 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_lut)
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(Send)
+    def add_kernel(self, op):
+        self.kernels.append(SendKernel(self.transformer, op))
+
+    @add_kernel.on_type(Recv)
+    def add_kernel(self, op):
+        self.kernels.append(RecvKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -849,10 +859,6 @@ class GPURuntime(object):
         self.warmup = False
         self.scratch_size = scratch_size
         self.scratch_offset = 0
-        self.sm_count = _get_sm_count()
-
-        # store GPU memory size in bytes
-        self.gpu_memory_size = drv.mem_get_info()[1]
 
         # Fall back to CUDA C kernels on older (pre-Maxwell) GPU generations
         if self.compute_capability[0] < 5:
@@ -863,11 +869,32 @@ class GPURuntime(object):
 
         # TODO
         # self.cublas_handle = cublas.cublasCreate()
-        self.pcg = rng_mrg()
 
         self.enable_winograd = enable_winograd
         self.deterministic = deterministic
-        self.cache_dir = get_cache_dir()
+
+    @property
+    @cachetools.cached({})
+    def sm_count(self):
+        return _get_sm_count()
+
+    @property
+    @cachetools.cached({})
+    def gpu_memory_size(self):
+        """
+        gpu memory size in bytes
+        """
+        return drv.mem_get_info()[1]
+
+    @property
+    @cachetools.cached({})
+    def cache_dir(self):
+        return get_cache_dir()
+
+    @property
+    @cachetools.cached({})
+    def pcg(self):
+        return rng_mrg()
 
     def close(self):
         try:
@@ -960,11 +987,15 @@ class GPUTransformer(Transformer):
         self.finished_transform = False
         self.current_buffer = None
 
+    def initialize_runtime(self):
         if GPUTransformer.__runtime is None:
             GPUTransformer.__runtime = GPURuntime()
             atexit.register(GPUTransformer.close_gpu)
 
         self.runtime = GPUTransformer.__runtime
+
+    def close(self):
+        GPUTransformer.close_gpu()
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
@@ -1002,6 +1033,8 @@ class GPUTransformer(Transformer):
         return GPUKernelGroup(self, name)
 
     def transform_ordered_ops(self, ordered_ops, name):
+        self.initialize_runtime()
+
         # Create kernel group
         kernel_group = self.gpu_kernel_group(name)
         for fun in ordered_ops:

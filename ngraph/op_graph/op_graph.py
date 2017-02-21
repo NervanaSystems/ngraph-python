@@ -152,7 +152,7 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant.
         constant (bool): The value is constant.
         initializers (list): Additional Ops to run before this Op is run the first time.
-        other_deps (OrderedSet): Ops in addtion to args that must run before this op.
+        control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
         schemas: Information about how the Op was generated.
@@ -308,7 +308,7 @@ class Op(NameableValue, DebugInfo):
         # List to keep generation deterministic
         self.__control_deps = OrderedSet()
         self.schemas = []
-        self.const = const
+        self.__const = const
         self.__is_constant = constant
         self.__is_persistent = persistent
         self.__is_trainable = trainable
@@ -368,6 +368,16 @@ class Op(NameableValue, DebugInfo):
     @property
     def is_constant(self):
         return self.__is_constant
+
+    @property
+    def const(self):
+        return self.__const
+
+    @const.setter
+    def const(self, value):
+        if self.__const is not None:
+            raise ValueError("Cannot change const value")
+        self.__const = value
 
     @property
     def is_persistent(self):
@@ -508,7 +518,7 @@ class Op(NameableValue, DebugInfo):
                 break
 
     def replace_self(self, rep):
-        self.forward = rep
+        self.forward = as_op(rep)
 
     def add_schema(self, schema, set_generate_adjoints=True):
         """
@@ -838,19 +848,6 @@ class ComputationOp(ParallelOp):
         parameters: Parameter ops.
     """
     def __init__(self, returns, *args, **kwargs):
-        args = tuple(as_op(arg) for arg in args)
-        for arg in args:
-            if not isinstance(arg.tensor, AssignableTensorOp) or not arg.tensor.input:
-                raise ValueError((
-                    'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
-                    '{op} was passed in, of type {op_type}.'
-                ).format(
-                    op=arg,
-                    op_type=arg.__class__.__name__,
-                ))
-
         if isinstance(returns, collections.Container):
             all = type(returns)(as_op(ret) for ret in returns)
         elif isinstance(returns, Op):
@@ -862,6 +859,27 @@ class ComputationOp(ParallelOp):
 
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
+
+        def is_input(arg):
+            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+
+        if len(args) == 1 and args[0] == 'all':
+            args = self.variables(filter=is_input)
+
+        args = tuple(as_op(arg) for arg in args)
+
+        for arg in args:
+            if not is_input(arg):
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
         self.parameters = args
         for arg in args:
             self.add_control_dep(arg)
@@ -1162,7 +1180,7 @@ class TensorOp(Op):
         return self.forwarded.tensor_description().value
 
     @property
-    @tdcache()
+    @cachetools.cached(cache=dict())
     def one(self):
         """
         Returns a singleton constant 1 for this Op. Used by DerivOp to ensure that
@@ -1221,6 +1239,21 @@ class ValueOp(TensorOp, ControlBlockOp):
     @dtype.setter
     def dtype(self, dtype):
         self.tensor.dtype = dtype
+
+# TODO - this was needed to fix a hetr issue,
+#        but was not complete as implemented.
+#        must also forward const.
+#    @property
+#    def is_constant(self):
+#        return self.tensor.is_constant
+
+    @property
+    def const(self):
+        return self.tensor.const
+
+    @const.setter
+    def const(self, value):
+        self.tensor.const = value
 
     @property
     def scale(self):
@@ -1367,6 +1400,10 @@ class TensorValueOp(ValueOp):
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
+
+        for key in ['device', 'device_id', 'parallel']:
+            if key in tensor.metadata:
+                self.metadata[key] = tensor.metadata[key]
 
     @property
     def states_read(self):
@@ -2222,9 +2259,8 @@ class ConcatOp(SequentialOp):
         common_axes = x_axes - ax
 
         # Create long axis for concatenated tens1or
-        concat_axis = make_axis(batch=ax.is_batch,
-                                recurrent=ax.is_recurrent,
-                                roles=ax.roles).named("Concat")
+        concat_axis = make_axis(name=ax.name,
+                                roles=ax.roles)
 
         # Store the axes order equivalent to the first tensor
         ind = x_axes.index(ax)
@@ -3534,7 +3570,7 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None,
         The cross-entropy.
     """
     if out_axes is None:
-        out_axes = y.axes.recurrent_axes() + y.axes.batch_axes()
+        out_axes = y.axes.batch_axes() + y.axes.recurrent_axes()
     smy = y.find_schema(Softmax)
     if enable_softmax_opt and smy is not None:
         # This depends on sum(t) being 1

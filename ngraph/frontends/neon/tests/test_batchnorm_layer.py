@@ -30,7 +30,7 @@ def test_batchnorm_fprop(batch_size, input_size, rho, epsilon, transformer_facto
     # and properly tracking the side effect variables
     np.random.seed(0)
     # set inputs
-    N = ng.make_axis(batch_size, batch=True)
+    N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(input_size)
 
     input_placeholder = ng.placeholder([F, N])

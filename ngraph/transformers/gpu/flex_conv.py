@@ -15,7 +15,8 @@
 
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.kernels import kernel_specs
-from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, _get_register_type
+from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, _get_register_type, \
+    FlexPtrDescription
 from ngraph.transformers.gpu.kernels.convolution import _magic32, _magic64, _get_sm_count
 
 from pycuda.compiler import SourceModule
@@ -162,13 +163,11 @@ class FlexConvFpropKernel(ConvFpropKernel):
                 kernel[3]] + kernel[4])
 
         for kernel in self.kernels:
-            kernel.extend((self.flex_entry_O.ptr, 1.0))
+            kernel.extend((FlexPtrDescription(self.flex_entry_O), 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
         # record output flex id for autoflex
         self.output_flex_ids = [self.flex_entry_O.flex_id]
-        # bind param values that depend on flex scales
-        self.bind_flex_scales()
 
     def bind_buffers(self):
         for k_id in range(len(self.kernels)):
@@ -191,6 +190,9 @@ class FlexConvFpropKernel(ConvFpropKernel):
             kernel[8] = alpha
             kernel[9] = beta
             kernel[-1] = 1. / scaleC
+
+        for kernel in self.kernels:
+            FlexPtrDescription.bind_ptr(kernel)
 
     def execute(self):
         for kernel in self.kernels:
@@ -361,7 +363,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
         if self.bprop_zero:
             shape = [int(np.prod(self.O.shape[:-1])), self.O.shape[-1]]
             convert_kernel = _prepare_convert_kernel(Out, "f2", self.O, shape,
-                                                     self.flex_entry_O.ptr)
+                                                     FlexPtrDescription(self.flex_entry_O))
             self.convert_out = True
         else:
             self.convert_out = False
@@ -375,7 +377,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
                 0, Out, self.E, F_data, 1.0, 0.0, flags, kernel[3]] + kernel[4])
 
         for kernel in self.kernels:
-            kernel.extend((self.flex_entry_O.ptr, 1.0))
+            kernel.extend((FlexPtrDescription(self.flex_entry_O), 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
         self.kernels = [shuffle_kernel] + self.kernels
@@ -384,8 +386,6 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
         # record output flex id for autoflex
         self.output_flex_ids = [self.flex_entry_O.flex_id]
-        # bind param values that depend on flex scales
-        self.bind_flex_scales()
 
     def bind_buffers(self):
         for k_id in range(len(self.kernels)):
@@ -411,6 +411,9 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
         if self.convert_out:
             self.kernels[-1][-2] = 1. / scaleC
+
+        for kernel in self.kernels:
+            FlexPtrDescription.bind_ptr(kernel)
 
     def execute(self):
         if self.bprop_zero:
@@ -557,7 +560,7 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         U_data = ScratchBufferWrapper(U_size, 0, runtime)
         shape = [int(np.prod(self.U.shape[:-1])), self.U.shape[-1]]
         convert_kernel = _prepare_convert_kernel(U_data, "f4", self.U, shape,
-                                                 self.flex_entry_U.ptr)
+                                                 FlexPtrDescription(self.flex_entry_U))
 
         self.kernels = []
         for kernel in self.updat_kernels:
@@ -569,15 +572,13 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
                 kernel[3]] + kernel[4])
 
         for kernel in self.kernels:
-            kernel.extend((self.flex_entry_U.ptr, 1.0))
+            kernel.extend((FlexPtrDescription(self.flex_entry_U), 1.0))
             kernel[10] &= 0xfffffffe  # Enable output flag
 
         self.kernels.append(convert_kernel)
 
         # record output flex id for autoflex
         self.output_flex_ids = [self.flex_entry_U.flex_id]
-        # bind param values that depend on flex scales
-        self.bind_flex_scales()
 
     def bind_buffers(self):
         for k_id in range(len(self.kernels)):
@@ -602,6 +603,9 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
             kernel[-1] = 1. / scaleC
 
         self.kernels[-1][-2] = 1. / scaleC
+
+        for kernel in self.kernels:
+            FlexPtrDescription.bind_ptr(kernel)
 
     def execute(self):
         # This zeros out the scratch buffer which is accumulated into using atomics

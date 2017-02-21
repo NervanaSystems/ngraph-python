@@ -19,11 +19,9 @@ from __future__ import print_function
 
 import tensorflow as tf
 import ngraph as ng
-import os
-import ngraph.transformers as ngt
 import pytest
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
-import tempfile
+from ngraph.testing.execution import ExecutorFactory
 
 
 @pytest.mark.usefixtures("transformer_factory")
@@ -34,12 +32,12 @@ class ImporterTester(object):
 
     @pytest.fixture(autouse=True)
     def build_transformer(self, transformer_factory):
+        self.transformer_name = transformer_factory.name
         pass
 
     @classmethod
     def setup_class(self):
-        self.tmp_file = tempfile.NamedTemporaryFile(suffix='.txt')
-        self.pb_txt_path = self.tmp_file.name
+        self.graph_string = None
 
     def setup_method(self, method):
         self.sess = tf.Session()
@@ -51,17 +49,10 @@ class ImporterTester(object):
         # clear sess.graph_def
         tf.reset_default_graph()
 
-        # remove dumped protobuf
-        if delete_dump:
-            try:
-                os.remove(self.pb_txt_path)
-            except:
-                print("[clean up] test dump does not exist")
-
     def run(self,
             tf_target_node,
             tf_init_op=None,
-            tf_feed_dict=None,
+            tf_feed_dict={},
             print_tf_result=False,
             print_ng_result=False,
             verbose=False,
@@ -99,11 +90,11 @@ class ImporterTester(object):
     def ng_run(self,
                tf_target_node,
                tf_init_op=None,
-               tf_feed_dict=None,
+               tf_feed_dict={},
                print_ng_result=False,
                verbose=False):
         """
-        Run and get ngrpah results
+        Run and get ngraph results
         Args:
             tf_target_node: target node in tf
             tf_feed_dict: feed_dict in tf
@@ -115,43 +106,28 @@ class ImporterTester(object):
         """
         # init importer, transformer
         importer = TFImporter()
-        importer.import_protobuf(self.pb_txt_path, verbose=verbose)
-        transformer = ngt.make_transformer()
+        graph_def = tf.GraphDef()
+        graph_def.ParseFromString(self.graph_string)
+        importer.import_graph_def(graph_def, verbose=verbose)
 
         # set target node
-        ng_target_node = importer.get_op_handle_by_name(
-            tf_target_node.name[:-2])
+        ng_target_node = importer.get_op_handle_by_name(tf_target_node.name[:-2])
 
-        # init op
-        ng_init_op = importer.get_op_handle(tf_init_op) if tf_init_op else None
-        ng_init_comp = transformer.computation(ng_init_op)
+        # get targeting nodes for ng, convert tf's feed dict to list
+        ng_feed_dict = {
+            importer.get_op_handle_by_name(node.name[:-2]): val
+            for (node, val) in tf_feed_dict.items()
+        }
 
         # evaluate ngraph
-        if tf_feed_dict is not None:
-            # get targeting nodes for ng, convert tf's feed dict to list
-            tf_placeholder_nodes = [node for (node, _) in tf_feed_dict.items()]
-            tf_placeholder_names = [node.name for node in tf_placeholder_nodes]
-            ng_placeholder_nodes = [
-                importer.get_op_handle_by_name(name[:-2])
-                for name in tf_placeholder_names
-            ]
-            ng_placeholder_vals = [val for (_, val) in tf_feed_dict.items()]
+        with ExecutorFactory() as ex:
+            ng_result_comp = ex.transformer.computation(ng_target_node, *ng_feed_dict.keys())
 
-            # evaluate ngraph result
-            ng_result_comp = transformer.computation(ng_target_node,
-                                                     *ng_placeholder_nodes)
-            if ng_init_op:
-                ng_init_comp()
-            ng_result = ng_result_comp(*ng_placeholder_vals)
-        else:
-            ng_result_comp = transformer.computation(ng_target_node)
-            if ng_init_op:
-                ng_init_comp()
-            ng_result = ng_result_comp()
-        if print_ng_result:
-            print(ng_result)
+            if tf_init_op:
+                ex.transformer.computation(importer.get_op_handle(tf_init_op))()
 
-        transformer.close()
+            ng_result = ng_result_comp(feed_dict=ng_feed_dict)
+
         return ng_result
 
     def tf_run(self,
@@ -179,7 +155,5 @@ class ImporterTester(object):
         if print_tf_result:
             print(tf_result)
 
-        # write to protobuf
-        tf.train.write_graph(self.sess.graph_def, "./", self.pb_txt_path, True)
-
+        self.graph_string = self.sess.graph_def.SerializeToString()
         return tf_result

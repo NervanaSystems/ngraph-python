@@ -30,7 +30,7 @@ from ngraph.util.generics import generic_method
 class GraphPass(with_metaclass(abc.ABCMeta, object)):
 
     @abc.abstractmethod
-    def do_pass(self, ops, inits):
+    def do_pass(self, ops, transformer):
         pass
 
 

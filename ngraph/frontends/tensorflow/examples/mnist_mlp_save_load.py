@@ -35,7 +35,11 @@ def train_mnist(args):
         args: command line arguments
     """
     # dataset
-    mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+    if args.random_data is not None:
+        mnist = args.random_data
+        mnist.reset(0)
+    else:
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
 
     graph = tf.Graph()
     with graph.as_default():
@@ -84,7 +88,12 @@ def ng_retrain_mnist(args):
     """
 
     # dataset, with offset max_iter
-    mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+    if args.random_data is not None:
+        mnist = args.random_data
+        mnist.reset(0)
+    else:
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+
     for _ in range(args.max_iter):
         mnist.train.next_batch(args.batch_size)
 
@@ -134,7 +143,12 @@ def tf_retrain_mnist(args):
     """
 
     # dataset, with offset max_iter
-    mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+    if args.random_data is not None:
+        mnist = args.random_data
+        mnist.reset(0)
+    else:
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+
     for _ in range(args.max_iter):
         mnist.train.next_batch(args.batch_size)
 
@@ -173,6 +187,7 @@ if __name__ == "__main__":
                         help="Learning rate")
     parser.add_argument('-b', '--batch_size', type=int, default=128)
     parser.add_argument('-s', '--checkpoint_path', default='model.ckpt')
+    parser.add_argument('--random_data', default=None)
     args = parser.parse_args()
 
     # train in TF for max_iter, and save meta_graph / checkpoint

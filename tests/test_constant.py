@@ -64,9 +64,9 @@ def test_constant_multiply(transformer_factory):
 
 def test_numpytensor_add(transformer_factory):
     """TODO."""
-    Y = ng.make_axis(length=2).named('Y')
-    M = ng.make_axis(length=2).named('M')
-    N = ng.make_axis(length=2).named('N')
+    Y = ng.make_axis(length=2)
+    M = ng.make_axis(length=2)
+    N = ng.make_axis(length=2)
 
     a = ng.constant(np.array([3, 5], dtype=np.float32), [Y])
     b = ng.constant(np.array([3, 5], dtype=np.float32), [Y])
@@ -88,19 +88,15 @@ def test_numpytensor_add(transformer_factory):
 
 
 def test_numpytensor_dot(transformer_factory):
-    Y = ng.make_axis().named('Y')
-    M = ng.make_axis().named('M')
-    N = ng.make_axis().named('N')
+    Y = ng.make_axis(length=2)
+    M = ng.make_axis(length=1)
+    N = ng.make_axis(length=3)
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
     np_c = np.dot(np_a, np_b)
 
-    M.length = 1
-    N.length = 3
     a = ng.constant(np_a, [M, N - 1])
-    N.length = 3
-    Y.length = 2
     b = ng.constant(np_b, [N, Y])
     c = ng.dot(a, b)
 
@@ -112,14 +108,12 @@ def test_numpytensor_dot(transformer_factory):
 
 def test_numpytensor_multiply_constant(transformer_factory):
     """TODO."""
-    M = ng.make_axis().named('M')
-    N = ng.make_axis().named('N')
+    M = ng.make_axis(length=1)
+    N = ng.make_axis(length=3)
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.multiply(np_a, 2)
 
-    M.length = 1
-    N.length = 3
     a = ng.constant(np_a, [M, N])
     b = ng.constant(2)
     c = ng.multiply(a, b)
@@ -132,14 +126,12 @@ def test_numpytensor_multiply_constant(transformer_factory):
 
 def test_numpytensor_add_constant(transformer_factory):
     """TODO."""
-    M = ng.make_axis().named('M')
-    N = ng.make_axis().named('N')
+    M = ng.make_axis(length=1)
+    N = ng.make_axis(length=3)
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_c = np.add(np_a, 2)
 
-    M.length = 1
-    N.length = 3
     a = ng.constant(np_a, [M, N])
     b = ng.constant(2)
     c = ng.add(a, b)
@@ -151,15 +143,13 @@ def test_numpytensor_add_constant(transformer_factory):
 
 def test_numpytensor_fusion(transformer_factory):
     """TODO."""
-    M = ng.make_axis().named('M')
-    N = ng.make_axis().named('N')
+    M = ng.make_axis(length=1)
+    N = ng.make_axis(length=3)
 
     np_a = np.array([[1, 2, 3]], dtype=np.float32)
     np_b = np.array([[3, 2, 1]], dtype=np.float32)
     np_d = np.multiply(np_b, np.add(np_a, 2))
 
-    M.length = 1
-    N.length = 3
     a = ng.constant(np_a, [M, N])
     b = ng.constant(np_b, [M, N])
     c = ng.constant(2)
@@ -173,18 +163,15 @@ def test_numpytensor_fusion(transformer_factory):
 
 def test_numpytensor_mlp(transformer_factory):
     """TODO."""
-    D = ng.make_axis().named('D')
-    H = ng.make_axis().named('H')
-    N = ng.make_axis().named('N')
+    D = ng.make_axis(length=3)
+    H = ng.make_axis(length=2)
+    N = ng.make_axis(length=1)
 
     np_x = np.array([[1, 2, 3]], dtype=np.float32)
     np_w = np.array([[1, 1], [1, 1], [1, 1]], dtype=np.float32)
     np_b = np.array([1, 2], dtype=np.float32)
     np_c = np.dot(np_x, np_w) + np_b
 
-    N.length = 1
-    D.length = 3
-    H.length = 2
     x = ng.constant(np_x, [N, D - 1])
     w = ng.constant(np_w, [D, H])
     b = ng.constant(np_b, [H])
