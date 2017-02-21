@@ -25,7 +25,7 @@ from cStringIO import StringIO
 
 import numpy as np
 import cachetools
-
+import os
 
 _op_templates = {
     "assign": r"%(out)s = %(x)s;",
@@ -1539,7 +1539,12 @@ class NvrtcSourceModule(SourceModule):
     def __init__(self, code, options=[]):
         from pycuda.driver import module_from_buffer
         code = "#include <cuda_fp16.h>\nextern \"C\" {\n" + code + "\n}\n"
-        options = options + ['-I/usr/local/cuda/include/', '--gpu-architecture=compute_52']
+        cuda_home_path = os.getenv('CUDA_HOME', '/usr/local/cuda')
+        if not os.path.exists(cuda_home_path):
+            raise RuntimeError("Could not find cuda home path {}".format(cuda_home_path))
+
+        options = options + ['-I' + os.path.join(cuda_home_path, 'include'),
+                             '--gpu-architecture=compute_52']
         ptx = self.get_ptx(code, options)
         self.module = module_from_buffer(ptx)
         self._bind_module()
