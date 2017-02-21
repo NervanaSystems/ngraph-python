@@ -261,17 +261,16 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     Returns:
 
     """
-    ax = ng.make_name_scope().named('ax')
-    ax.H = ng.make_axis(2)
-    ax.W = ng.make_axis(7)
-    ax.C = ng.make_axis(3)
-    ax.K = ng.make_axis(11)
+    H = ng.make_axis(2)
+    W = ng.make_axis(7)
+    C = ng.make_axis(3)
+    K = ng.make_axis(11)
 
-    axes_a = ng.make_axes([ax.H, ax.W, ax.C])
+    axes_a = ng.make_axes([H, W, C])
     a = ng.constant(np.ones(axes_a.lengths), axes=axes_a)
     flat_a = ng.flatten_at(a, 2)
 
-    axes_b = ng.make_axes([ax.C.get_dual(), ax.K])
+    axes_b = ng.make_axes([C.get_dual(), K])
     b = ng.constant(np.ones(axes_b.lengths), axes=axes_b)
 
     result = ng.dot(b, flat_a)
@@ -280,26 +279,25 @@ def test_flat_tensor_dot_tensor(transformer_factory):
         result_fun = factory.executor(result)
         result_val = result_fun()
 
-    result_correct = np.ones_like(result_val) * ax.C.length
+    result_correct = np.ones_like(result_val) * C.length
     ng.testing.assert_allclose(result_val, result_correct)
 
 
 def test_squared_L2(transformer_factory):
-    ax = ng.make_name_scope().named('ax')
-    ax.H = ng.make_axis(2)
-    ax.W = ng.make_axis(3)
-    ax.N = ng.make_axis(5, name='N')
+    H = ng.make_axis(2)
+    W = ng.make_axis(3)
+    N = ng.make_axis(5, name='N')
 
-    axes = ng.make_axes([ax.H, ax.W, ax.N])
+    axes = ng.make_axes([H, W, N])
     a = ng.constant(np.ones(axes.lengths), axes=axes)
 
     with ExecutorFactory() as factory:
         l2_samples_fun = factory.executor(ng.squared_L2(a))
-        l2_samples_val = np.ones([ax.N.length]) * ax.H.length * ax.W.length
+        l2_samples_val = np.ones([N.length]) * H.length * W.length
         l2_all_fun = factory.executor(ng.squared_L2(a, out_axes=[]))
-        l2_all_val = np.ones([]) * ax.W.length * ax.H.length * ax.N.length
-        l2_W_fun = factory.executor(ng.squared_L2(a, reduction_axes=[ax.H, ax.N]))
-        l2_W_val = np.ones([ax.W.length]) * ax.H.length * ax.N.length
+        l2_all_val = np.ones([]) * W.length * H.length * N.length
+        l2_W_fun = factory.executor(ng.squared_L2(a, reduction_axes=[H, N]))
+        l2_W_val = np.ones([W.length]) * H.length * N.length
         l2_samples_result = l2_samples_fun()
         l2_all_result = l2_all_fun()
         l2_W_result = l2_W_fun()
