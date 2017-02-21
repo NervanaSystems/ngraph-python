@@ -103,7 +103,7 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_BASE_IMG)), ${BUILD_VERSION})
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
-	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test_base:latest
+	@docker tag `docker images -q ngraph_test_base:${BUILD_VERSION}` ngraph_test_base:latest
 endif
 
 build_test: build_test_base
