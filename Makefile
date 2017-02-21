@@ -73,7 +73,7 @@ test_parallel: clean testflex
 
 test: clean testflex
 	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --boxed --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 test_caffe2: clean
