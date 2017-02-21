@@ -171,7 +171,7 @@ Properties
 
   ::
 
-    ar = ng.make_name_scope(name="ar")
+    ar = Namespace()
     ar.Height = ng.make_axis_role()
     ar.Width = ng.make_axis_role()
     ar.Depth = ng.make_axis_role()
@@ -183,7 +183,7 @@ Properties
 
   ::
 
-    ax = ng.make_name_scope(name="ax")
+    ax = Namespace()
     ax.N = ng.make_axis(name='N', docstring="minibatch size")
     ax.C = ng.make_axis(roles=[ar.Channel], docstring="number of input feature maps")
     ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
