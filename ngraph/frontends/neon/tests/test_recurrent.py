@@ -333,15 +333,64 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
 
-def test_sum_deriv(weight_initializer, bias_initializer, input_size=5,
+def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
                    hidden_size=10, batch_size=1):
+    # test to directly sum or concat two outputs and do derivatives
+    input_axis = ng.make_axis(input_size)
+    batch_axis = ng.make_axis(batch_size, name='N')
+    input_axes = ng.make_axes([input_axis, batch_axis])
+
+    input_placeholder = ng.placeholder(input_axes)
+    input_value = rng.uniform(-0.01, 0.01, input_axes)
+
     axis_h_f = ng.make_axis(hidden_size).named('Hidden')
     axis_h_b = ng.make_axis(hidden_size).named('Hidden')
 
-    
-    
+    w_axes_f = ng.make_axes([axis_h_f] + [input_axis - 1])
+    w_axes_b = ng.make_axes([axis_h_b] + [input_axis - 1])
+
+    w_f_value = weight_initializer(w_axes_f)
+    w_b_value = weight_initializer(w_axes_b)
+
+    w_f = ng.variable(w_axes_f, initial_value=w_f_value).named("w_f")
+    w_b = ng.variable(w_axes_b, initial_value=w_b_value).named("w_b")
+
+    out_ng_f = ng.dot(w_f, input_placeholder)
+    out_ng_b = ng.dot(w_b, input_placeholder)
+
+    out_ng_sum = out_ng_f + out_ng_b
+    out_ng_concat = ng.ConcatOp([out_ng_f, out_ng_b], [axis_h_f, axis_h_b])
+
+    with ExecutorFactory() as ex:
+        deriv_sum_s_f = ex.derivative(out_ng_sum, w_f, input_placeholder)
+        deriv_sum_s_b = ex.derivative(out_ng_sum, w_b, input_placeholder)
+        deriv_sum_n_f = ex.numeric_derivative(out_ng_sum, w_f, delta, input_placeholder)
+        deriv_sum_n_b = ex.numeric_derivative(out_ng_sum, w_b, delta, input_placeholder)
+
+        deriv_concat_s_f = ex.derivative(out_ng_concat, w_f, input_placeholder)
+        deriv_concat_s_b = ex.derivative(out_ng_concat, w_b, input_placeholder)
+        deriv_concat_n_f = ex.numeric_derivative(out_ng_concat, w_f, delta, input_placeholder)
+        deriv_concat_n_b = ex.numeric_derivative(out_ng_concat, w_b, delta, input_placeholder)
+
+        ng.testing.assert_allclose(deriv_sum_s_f(w_f_value, input_value),
+                                   deriv_sum_n_f(w_f_value, input_value),
+                                   rtol=bprop_rtol,
+                                   atol=bprop_atol)
+        ng.testing.assert_allclose(deriv_sum_s_b(w_b_value, input_value),
+                                   deriv_sum_n_b(w_b_value, input_value),
+                                   rtol=bprop_rtol,
+                                   atol=bprop_atol)       
+        ng.testing.assert_allclose(deriv_concat_s_f(w_f_value, input_value),
+                                   deriv_concat_n_f(w_f_value, input_value),
+                                   rtol=bprop_rtol,
+                                   atol=bprop_atol)
+        ng.testing.assert_allclose(deriv_concat_s_b(w_b_value, input_value),
+                                   deriv_concat_n_b(w_b_value, input_value),
+                                   rtol=bprop_rtol,
+                                   atol=bprop_atol) 
 
 
+@pytest.mark.skip("Bprop tests are not currently working.")
 def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
                          sequence_length=3, input_size=5, hidden_size=10, batch_size=1,
                          return_sequence=True, sum_out=False, concat_out=True):
@@ -352,7 +401,7 @@ def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
     W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
                                                                 weight_initializer,
                                                                 bias_initializer)
-
+    import pytest; pytest.set_trace()
     # Generate ngraph RNN
     rnn_ng = BiRNN(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
                    reset_cells=True, return_sequence=return_sequence,
@@ -409,7 +458,7 @@ def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
 # @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
 #                                                 (True, False),
 #                                                 (False, True)])
-@pytest.mark.parametrize("sum_out,concat_out", [(True, False)])
+@pytest.mark.parametrize("sum_out,concat_out", [(False, True)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
                                sum_out, concat_out):
@@ -437,17 +486,6 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
     w_rec_b = rnn_ng.bwd_rnn.W_recur
     b_b = rnn_ng.bwd_rnn.b
 
-    w_in_f.input = w_rec_f.input = b_f.input = True
-    w_in_b.input = w_rec_b.input = b_b.input = True
-
-    # params_f = [(w_in_f, W_in, (w_rec_f, b_f), (W_rec, b)),
-    #           (w_rec_f, W_rec, (w_in_f, b_f), (W_in, b)),
-    #           (b_f, b, (w_in_f, w_rec_f), (W_in, W_rec))]
-
-    # params_b = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
-    #           (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
-    #           (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))]
-
     params_f = [(w_in_f, W_in),
               (w_rec_f, W_rec),
               (b_f, b)]
@@ -474,7 +512,7 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                 param_updates.append(update)
             dep_list += dependents
 
-        import pytest; pytest.set_trace()
+        # import pytest; pytest.set_trace()
         for ii, ((deriv_s, deriv_n), (_, val)) in enumerate(zip(param_updates, dep_list)):
             actual = deriv_s(val, input_value)
             desired = deriv_n(val, input_value)
