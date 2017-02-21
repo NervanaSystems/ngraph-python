@@ -27,14 +27,13 @@ def test_gemm(transformer_factory):
     """
     n, c = 32, 32
 
-    ax = ng.make_name_scope().named('ax')
-    ax.N = ng.make_axis(length=n, name='N')
-    ax.C = ng.make_axis(length=c)
+    N = ng.make_axis(length=n, name='N')
+    C = ng.make_axis(length=c)
 
-    X = ng.placeholder(axes=[ax.C, ax.N])
-    Y = ng.placeholder(axes=[ax.N])
+    X = ng.placeholder(axes=[C, N])
+    Y = ng.placeholder(axes=[N])
 
-    W = ng.variable(axes=[ax.C - 1], initial_value=0.1)
+    W = ng.variable(axes=[C - 1], initial_value=0.1)
 
     Y_hat = ng.dot(W, X)
 
