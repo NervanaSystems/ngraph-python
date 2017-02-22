@@ -693,7 +693,7 @@ def test_softmax(transformer_factory):
     p_x = ng.placeholder(axes)
 
     with ExecutorFactory() as ex:
-        smax_w_fun = ex.executor(ng.softmax(p_x, softmax_axes=ng.make_axes([W])), p_x)
+        smax_w_fun = ex.executor(ng.softmax(p_x, normalization_axes=ng.make_axes([W])), p_x)
         smax_fun = ex.executor(ng.softmax(p_x), p_x)
 
         s = smax_w_fun(x)
@@ -1066,3 +1066,5 @@ def test_variance_sqrt_inverse(transformer_factory):
 
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
+
+test_softmax(None)
