@@ -305,10 +305,6 @@ class Axis(object):
         self.roles.add(axis_role)
         return self
 
-    @property
-    def is_casting_axis(self):
-        return False
-
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
@@ -1281,14 +1277,6 @@ class TensorDescription(NameableValue):
                         for sub_idx, b in enumerate(a.axes):
                             if b == axis:
                                 return full_strides[sub_idx], full_sizes[sub_idx]
-
-                    if a.is_casting_axis:
-                        # The axis is a cast of some other axis pulled in through some
-                        # operation like dot. Try to work down through what it was
-                        # casting.
-                        cast_axis = a.cast_axis
-                        if cast_axis == axis:
-                            return full_strides, full_sizes
 
                 # Move on to the next tensor description in the reshaping chain
                 td = td.next_tensor_description
