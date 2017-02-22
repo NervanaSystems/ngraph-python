@@ -286,46 +286,6 @@ def test_idempotent_axes_a():
         assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
 
 
-def test_cast_axes():
-    """
-    Test test axes transformations with autodiff, case a, reference test
-    """
-    with ExecutorFactory() as ex:
-
-        axis_0 = ng.make_axis(3)
-        axis_0_cast = ng.make_axis(3)
-        axis_1 = ng.make_axis(1)
-        axes = ng.make_axes([axis_0, axis_1])
-        axes_cast = ng.make_axes([axis_0_cast, axis_1])
-        w_value = np.zeros((3, 1))
-        w = ng.variable(axes, initial_value=w_value)
-        w1_value = np.zeros((3, 1))
-        w1 = ng.variable(axes_cast, initial_value=w1_value)
-        result = w + ng.cast_axes(w1, axes)
-
-        w.input = w1.input = True
-
-        deriv_s_w = ex.derivative(result, w, w1)
-        deriv_n_w = ex.numeric_derivative(result, w, 1e-3, w1)
-        deriv_s_w1 = ex.derivative(result, w1, w)
-        deriv_n_w1 = ex.numeric_derivative(result, w1, 1e-3, w)
-
-        dw_s_w = deriv_s_w(w_value, w1_value)
-        dw_n_w = deriv_n_w(w_value, w1_value)
-
-        dw_s_w1 = deriv_s_w1(w1_value, w_value)
-        dw_n_w1 = deriv_n_w1(w1_value, w_value)
-
-        cost = ng.sum(result, reduction_axes=[])
-        # grad = ng.deriv(cost, w)
-
-        # grad_comp = ex.executor(grad)
-        # cost_comp = ex.executor(cost)
-
-        # assert cost_comp() == 6.0
-        # assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
-
-
 def test_idempotent_axes_b():
     """
     Test test axes transformations with autodiff, case b, with broadcast applied
