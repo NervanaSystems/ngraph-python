@@ -609,46 +609,6 @@ class Op(NameableValue, DebugInfo):
 
         return params
 
-    @cachetools.cached({})
-    def adjoints(self, error):
-        """
-        Returns a map containing the adjoints of this op with respect to other
-        ops.
-
-        Creates the map if it does not already exist.
-
-        Arguments:
-            error (TensorOp, optional): The tensor holding the error value
-                the derivative will be computed at. Must have the same axes as dependent.
-
-
-        Returns:
-            Map from Op to dSelf/dOp.
-        """
-        adjoints = {
-            self: error,
-        }
-
-        # visit ops in reverse depth first post-order. it is important that
-        # ordered_ops returns a copy of this traversal order since the graph
-        # may change as we generate adjoints and we don't want to visit those
-        # new ops.
-        for o in reversed(Op.ordered_ops([self])):
-            if o in adjoints:
-                adjoint = adjoints[o]
-                if o.scale is not None:
-                    adjoint = adjoint * o.scale
-
-                o.generate_adjoints(adjoints, adjoint, *o.args)
-
-        # Add adjoints for state since they may show up in multiple TensorValueOps.
-        state = {}
-        for o in adjoints:
-            if o.tensor not in adjoints:
-                state[o.tensor] = adjoints[o]
-        adjoints.update(state)
-        return adjoints
-
     def tensor_description(self):
         return None
 
@@ -964,6 +924,59 @@ class TensorOp(Op):
     def is_tensor_op(self):
         return True
 
+    @property
+    @cachetools.cached(cache=dict())
+    def one(self):
+        """
+        Returns a singleton constant 1 for this Op. Used by DerivOp to ensure that
+         we don't build unique backprop graphs for every variable.
+
+        Returns:
+            A unique constant 1 associated with this TensorOp.
+
+        """
+        return as_op(1)
+
+    @cachetools.cached({})
+    def adjoints(self, error):
+        """
+        Returns a map containing the adjoints of this op with respect to other
+        ops.
+
+        Creates the map if it does not already exist.
+
+        Arguments:
+            error (TensorOp, optional): The tensor holding the error value
+                the derivative will be computed at. Must have the same axes as dependent.
+
+
+        Returns:
+            Map from Op to dSelf/dOp.
+        """
+        adjoints = {
+            self: error,
+        }
+
+        # visit ops in reverse depth first post-order. it is important that
+        # ordered_ops returns a copy of this traversal order since the graph
+        # may change as we generate adjoints and we don't want to visit those
+        # new ops.
+        for o in reversed(Op.ordered_ops([self])):
+            if o in adjoints:
+                adjoint = adjoints[o]
+                if o.scale is not None:
+                    adjoint = adjoint * o.scale
+
+                o.generate_adjoints(adjoints, adjoint, *o.args)
+
+        # Add adjoints for state since they may show up in multiple TensorValueOps.
+        state = {}
+        for o in adjoints:
+            if o.tensor not in adjoints:
+                state[o.tensor] = adjoints[o]
+        adjoints.update(state)
+        return adjoints
+
     def generate_add_delta(self, adjoints, delta):
         """
         Adds delta to the backprop contribution..
@@ -1184,19 +1197,6 @@ class TensorOp(Op):
         :return: A handle to the device tensor.
         """
         return self.forwarded.tensor_description().value
-
-    @property
-    @cachetools.cached(cache=dict())
-    def one(self):
-        """
-        Returns a singleton constant 1 for this Op. Used by DerivOp to ensure that
-         we don't build unique backprop graphs for every variable.
-
-        Returns:
-            A unique constant 1 associated with this TensorOp.
-
-        """
-        return as_op(1)
 
 
 class ValueOp(TensorOp, ControlBlockOp):
