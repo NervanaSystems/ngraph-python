@@ -313,13 +313,16 @@ class Axis(object):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
     def __eq__(self, other):
+        # other is not Axis
         if not isinstance(other, Axis):
             return False
-        elif self.match_on_length or other.match_on_length:
+
+        # handle match_on_length
+        if self.match_on_length or other.match_on_length:
             return self.length == other.length
-        elif self.name == other.name:
-            return True
-        return self is other
+
+        # normal case, check name
+        return self.name == other.name
 
     def __hash__(self):
         return id(self)
