@@ -67,7 +67,7 @@ class OpsNN(OpsBase):
         x, y = inputs
 
         y = ng.cast_axes(y, x.axes)
-        return 0.5 * ng.squared_L2(x - y)
+        return 0.5 * ng.squared_L2(x - y, out_axes=y.axes[0])
 
     def AveragedLoss(self, c2_op, inputs):
         """
@@ -80,7 +80,7 @@ class OpsNN(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
         """
-        return ng.mean(inputs[0], reduction_axes=inputs[0].axes.batch_axes())
+        return ng.mean(inputs[0], reduction_axes=ng.make_axes(inputs[0].axes[0]))
 
     def LabelCrossEntropy(self, c2_op, inputs):
         """
