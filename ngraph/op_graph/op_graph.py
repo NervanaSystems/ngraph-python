@@ -848,19 +848,6 @@ class ComputationOp(ParallelOp):
         parameters: Parameter ops.
     """
     def __init__(self, returns, *args, **kwargs):
-        args = tuple(as_op(arg) for arg in args)
-        for arg in args:
-            if not isinstance(arg.tensor, AssignableTensorOp) or not arg.tensor.input:
-                raise ValueError((
-                    'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
-                    '{op} was passed in, of type {op_type}.'
-                ).format(
-                    op=arg,
-                    op_type=arg.__class__.__name__,
-                ))
-
         if isinstance(returns, collections.Container):
             all = type(returns)(as_op(ret) for ret in returns)
         elif isinstance(returns, Op):
@@ -872,6 +859,27 @@ class ComputationOp(ParallelOp):
 
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
+
+        def is_input(arg):
+            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+
+        if len(args) == 1 and args[0] == 'all':
+            args = self.variables(filter=is_input)
+
+        args = tuple(as_op(arg) for arg in args)
+
+        for arg in args:
+            if not is_input(arg):
+                raise ValueError((
+                    'The arguments to a computation must all be Ops with property '
+                    'input=True, but the op passed had input=False.  In most '
+                    'cases you want to pass placeholder ops in as arguments.  '
+                    '{op} was passed in, of type {op_type}.'
+                ).format(
+                    op=arg,
+                    op_type=arg.__class__.__name__,
+                ))
+
         self.parameters = args
         for arg in args:
             self.add_control_dep(arg)
@@ -2326,13 +2334,12 @@ def concat_along_axis(x_list, axis):
         The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
 
     Examples:
-        ax = ng.make_name_scope("ax")
-        ax.H = ng.make_axis(length=5)
-        ax.W = ng.make_axis(length=4)
-        axes = ng.make_axes([ax.H, ax.W])
+        H = ng.make_axis(length=5)
+        W = ng.make_axis(length=4)
+        axes = ng.make_axes([H, W])
         x = ng.constant(np.ones(axes.full_lengths), axes=axes)
         y = ng.constant(np.ones(axes.full_lengths), axes=axes)
-        c = ng.concat_along_axis([x, y], ax.H)
+        c = ng.concat_along_axis([x, y], H)
     """
 
     if len(x_list) < 1:
@@ -2355,12 +2362,11 @@ def concat_role_axis(x_list, role):
 
     Examples:
         role = ng.make_axis_role("Concat")
-        ax = ng.make_name_scope("ax")
-        ax.H1 = ng.make_axis(length=5, roles=[role])
-        ax.H2 = ng.make_axis(length=8, roles=[role])
-        ax.W = ng.make_axis(length=4)
-        x = ng.constant(np.ones((ax.H1.length, ax.W.length)), axes=[ax.H1, ax.W])
-        y = ng.constant(np.ones((ax.H2.length, ax.W.length)), axes=[ax.H2, ax.W])
+        H1 = ng.make_axis(length=5, roles=[role])
+        H2 = ng.make_axis(length=8, roles=[role])
+        W = ng.make_axis(length=4)
+        x = ng.constant(np.ones((H1.length, W.length)), axes=[H1, W])
+        y = ng.constant(np.ones((H2.length, W.length)), axes=[H2, W])
         c = ng.concat_role_axis([x, y], role)
     """
     if len(x_list) < 1:

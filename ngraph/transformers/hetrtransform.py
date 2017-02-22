@@ -271,6 +271,7 @@ class HetrComputation(object):
         self.num_results = 0
         self.num_send_nodes = dict()
         self.is_distributed = False
+        self.parameters = parameters
 
         orig_results = results
         if not isinstance(results, OrderedSet):
@@ -351,7 +352,7 @@ class HetrComputation(object):
                                                  tuple(self.placeholders[tname]))
             self.child_computations[tname] = async_comp
 
-    def __call__(self, *params):
+    def __call__(self, *params, **kwargs):
         """
         Executes child computations in parallel.
 
@@ -360,6 +361,15 @@ class HetrComputation(object):
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
         return_list = [None for i in range(self.num_results)]
+
+        feed_dict = kwargs.pop('feed_dict', None)
+        if feed_dict is not None:
+            if len(params) != 0:
+                raise ValueError((
+                    'Can not supply both positional and mapped input arguments '
+                    'to Computation'
+                ))
+            params = tuple(feed_dict[param.tensor] for param in self.parameters)
 
         # Map params to each child transformer
         # Run each child in a separate process in process_helper

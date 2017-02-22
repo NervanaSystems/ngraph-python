@@ -152,8 +152,6 @@ class Axis(object):
             name = 'Axis_' + str(type(self).__name_counter)
             type(self).__name_counter += 1
 
-        assert 'batch' not in kwargs
-        assert 'recurrent' not in kwargs
         self.name = name
         self.__length = length
 
