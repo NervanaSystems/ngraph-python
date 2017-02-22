@@ -161,8 +161,6 @@ class Tester(ImporterTester):
         self.run(f, tf_feed_dict=feed_dict)
 
     def test_mnist_softmax_forward(self):
-        if self.transformer_name == 'hetr':
-            pytest.xfail("hetr fails this during make test")
         # tf placeholder
         from tensorflow.examples.tutorials.mnist import input_data
         with TempDir() as tmpdir:

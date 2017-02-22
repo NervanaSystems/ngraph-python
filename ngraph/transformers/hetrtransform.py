@@ -399,6 +399,9 @@ class HetrTransformer(Transformer):
 
     transformer_name = "hetr"
 
+    default_rtol = 1e-05
+    default_atol = 1e-08
+
     hetr_counter = 0
 
     def __init__(self, **kwargs):
