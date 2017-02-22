@@ -40,16 +40,18 @@ from ngraph.testing.random import RandomTensorGenerator
 
 rng = RandomTensorGenerator()
 
-delta = 1e-5
+delta = 1e-3
 fprop_rtol = 0
 fprop_atol = 1e-5
-bprop_rtol = 1e-2
-bprop_atol = 1e-2
+bprop_rtol = 0
+bprop_atol = 1e-5
+
+# numerical derivative is useful but shows large errors. Give high tolerance
+num_atol = num_rtol = 1e-2
 
 
 @pytest.fixture(params=["random"])
 def weight_initializer(request):
-
     if request.param == "random":
         return lambda w_axes: rng.normal(0, 1, w_axes)
     elif request.param == "ones":
@@ -104,7 +106,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
     return W_in, W_rec, b, init_state, init_state_value
 
-@pytest.mark.skip("Bprop tests are not currently working.")
+
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -161,7 +163,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
             fprop_neon = fprop_neon[:, :, 0]
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
-@pytest.mark.skip("Bprop tests are not currently working.")
+
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -223,7 +225,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        ref_val.squeeze(),
                                        rtol=bprop_rtol, atol=bprop_atol)
 
-@pytest.mark.skip("Bprop tests are not currently working.")
+
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -250,30 +252,24 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
     # fprop ngraph RNN
     out_ng = rnn_ng.train_outputs(input_placeholder)
 
-    rnn_ng.W_input.input = True
-    rnn_ng.W_recur.input = True
-    rnn_ng.b.input = True
-
-    params = [
-              (rnn_ng.W_input, W_in, (rnn_ng.W_recur, rnn_ng.b), (W_rec, b)),
-              (rnn_ng.W_recur, W_rec, (rnn_ng.W_input, rnn_ng.b), (W_in, b)),
-              (rnn_ng.b, b, (rnn_ng.W_input, rnn_ng.W_recur), (W_in, W_rec))
-              ]
+    params = [(rnn_ng.W_input, W_in),
+              (rnn_ng.W_recur, W_rec),
+              (rnn_ng.b, b)]
 
     with ExecutorFactory() as ex:
         # Create derivative computations and execute
         param_updates = list()
-        for px, _, other_params, _ in params:
-            update = (ex.derivative(out_ng, px, input_placeholder, *other_params),
-                      ex.numeric_derivative(out_ng, px, delta, input_placeholder, *other_params))
+        for px, _ in params:
+            update = (ex.derivative(out_ng, px, input_placeholder),
+                      ex.numeric_derivative(out_ng, px, delta, input_placeholder))
             param_updates.append(update)
 
-        for (deriv_s, deriv_n), (_, val, _, other_val) in zip(param_updates, params):
-            ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
-                                       deriv_n(val, input_value, *other_val),
-                                       rtol=bprop_rtol, atol=bprop_atol)
+        for (deriv_s, deriv_n), (_, val) in zip(param_updates, params):
+            ng.testing.assert_allclose(deriv_s(val, input_value),
+                                       deriv_n(val, input_value),
+                                       rtol=num_rtol, atol=num_atol)
 
-@pytest.mark.skip("Bprop tests are not currently working.")
+
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -332,147 +328,15 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                 output = output[:, :, 0]
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
-# @pytest.mark.skip("not needed")
-def test_sum_concat_direct(weight_initializer, bias_initializer, input_size=5,
-                   hidden_size=10, batch_size=1):
-    # test to directly sum or concat two outputs and do derivatives
-    # and narrowed it down to that when tensors being sliced then stacked
-    # the derivatives are lost
 
-    input_axis = ng.make_axis(input_size)
-    time_axis = ng.make_axis(3, name='R')
-    batch_axis = ng.make_axis(batch_size, name='N')
-    input_axes = ng.make_axes([input_axis, time_axis, batch_axis])
-
-    input_placeholder = ng.placeholder(input_axes)
-    input_value = rng.uniform(-0.1, 0.1, input_axes)
-
-    axis_h_f = ng.make_axis(hidden_size).named('Hidden')
-    axis_h_b = ng.make_axis(hidden_size).named('Hidden')
-
-    w_axes_f = ng.make_axes([axis_h_f] + [input_axis - 1])
-    w_axes_b = ng.make_axes([axis_h_b] + [input_axis - 1])
-
-    w_f_value = weight_initializer(w_axes_f)
-    w_b_value = weight_initializer(w_axes_b)
-
-    w_f = ng.variable(w_axes_f, initial_value=w_f_value).named("w_f")
-    w_b = ng.variable(w_axes_b, initial_value=w_b_value).named("w_b")
-
-    out_ng_f = ng.dot(w_f, input_placeholder)
-    out_ng_b = ng.dot(w_b, input_placeholder)
-
-    # but if we slice and then stack the tensors, this test will fail
-    out_ng_f_list = [ng.slice_along_axis(out_ng_f, time_axis, i) for i in list(range(3))]
-    out_ng_b_list = [ng.slice_along_axis(out_ng_b, time_axis, i) for i in reversed(range(3))]
-    out_ng_f = ng.stack(out_ng_f_list, time_axis, pos=1)
-    out_ng_b = ng.stack(out_ng_b_list, time_axis, pos=1)
-
-    out_ng_sum = out_ng_f + out_ng_b
-    out_ng_concat = ng.ConcatOp([out_ng_f, out_ng_b], [axis_h_f, axis_h_b])
-
-    with ExecutorFactory() as ex:
-        deriv_sum_s_f = ex.derivative(out_ng_sum, w_f, input_placeholder)
-        deriv_sum_s_b = ex.derivative(out_ng_sum, w_b, input_placeholder)
-        deriv_sum_n_f = ex.numeric_derivative(out_ng_sum, w_f, delta, input_placeholder)
-        deriv_sum_n_b = ex.numeric_derivative(out_ng_sum, w_b, delta, input_placeholder)
-# 
-        deriv_concat_s_f = ex.derivative(out_ng_concat, w_f, input_placeholder)
-        deriv_concat_s_b = ex.derivative(out_ng_concat, w_b, input_placeholder)
-        deriv_concat_n_f = ex.numeric_derivative(out_ng_concat, w_f, delta, input_placeholder)
-        deriv_concat_n_b = ex.numeric_derivative(out_ng_concat, w_b, delta, input_placeholder)
-        
-        print deriv_sum_s_f(w_f_value, input_value).sum()
-        print deriv_sum_n_f(w_f_value, input_value).sum()
-
-        ng.testing.assert_allclose(deriv_sum_s_f(w_f_value, input_value),
-                                   deriv_sum_n_f(w_f_value, input_value),
-                                   rtol=bprop_rtol,
-                                   atol=bprop_atol)
-        ng.testing.assert_allclose(deriv_sum_s_b(w_b_value, input_value),
-                                   deriv_sum_n_b(w_b_value, input_value),
-                                   rtol=bprop_rtol,
-                                   atol=bprop_atol)       
-        ng.testing.assert_allclose(deriv_concat_s_f(w_f_value, input_value),
-                                   deriv_concat_n_f(w_f_value, input_value),
-                                   rtol=bprop_rtol,
-                                   atol=bprop_atol)
-        ng.testing.assert_allclose(deriv_concat_s_b(w_b_value, input_value),
-                                   deriv_concat_n_b(w_b_value, input_value),
-                                   rtol=bprop_rtol,
-                                   atol=bprop_atol) 
-
-
-@pytest.mark.skip("Bprop tests are not currently working.")
-def test_birnn_bwd_deriv(weight_initializer, bias_initializer,
-                         sequence_length=3, input_size=5, hidden_size=10, batch_size=1,
-                         return_sequence=True, sum_out=True, concat_out=False):
-    # Get input placeholder and numpy array
-    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
-
-    # Construct network weights and initial state, if desired
-    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
-                                                                weight_initializer,
-                                                                bias_initializer)
-    import pytest; pytest.set_trace()
-    # Generate ngraph RNN
-    rnn_ng = BiRNN(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
-                   reset_cells=True, return_sequence=return_sequence,
-                   sum_out=sum_out, concat_out=concat_out)
-
-    # fprop ngraph RNN
-    out_birnn = rnn_ng.train_outputs(input_placeholder)
-
-    w_in_b = rnn_ng.bwd_rnn.W_input
-    w_rec_b = rnn_ng.bwd_rnn.W_recur
-    b_b = rnn_ng.bwd_rnn.b
-
-    w_in_b.input = w_rec_b.input = b_b.input = True
-
-    params_bwd = [(w_in_b, W_in, (w_rec_b, b_b), (W_rec, b)),
-                    # (w_rec_b, W_rec, (w_in_b, b_b), (W_in, b)),
-                    # (b_b, b, (w_in_b, w_rec_b), (W_in, W_rec))
-                 ]
-
-    # only do deriv on bwd RNN
-    # out_bwd = rnn_ng.bwd_out
-    out_bwd = out_birnn
-    # out_bwd = out_birnn[-1]
-
-    with ExecutorFactory() as ex:
-        # Create derivative computations and execute
-        param_updates = list()
-        for px, _, other_params, _ in params_bwd:
-            update = (ex.derivative(out_bwd, px, input_placeholder,
-                                    *other_params),
-                      ex.numeric_derivative(out_bwd, px, delta, input_placeholder,
-                                    *other_params))
-            param_updates.append(update)
-
-        import pytest; pytest.set_trace()
-        for (deriv_s, deriv_n), (_, val, _, other_val) in zip(param_updates, params_bwd):
-
-            actual = deriv_s(val, input_value, *other_val)
-            desired = deriv_n(val, input_value, *other_val)
-            print val.shape
-            print actual.sum()
-            print desired.sum()
-            # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
-            #                deriv_n(val, input_value, *other_val),
-            #                rtol=bprop_rtol,
-            #                atol=bprop_atol)
-
-
-@pytest.mark.skip("Bprop tests are not currently working.")
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [True])
-# @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
-#                                                 (True, False),
-#                                                 (False, True)])
-@pytest.mark.parametrize("sum_out,concat_out", [(False, True)])
+@pytest.mark.parametrize("return_sequence", [False, True])
+@pytest.mark.parametrize("sum_out,concat_out", [(False, False),
+                                                (True, False),
+                                                (False, True)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
                                sum_out, concat_out):
@@ -501,12 +365,12 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
     b_b = rnn_ng.bwd_rnn.b
 
     params_f = [(w_in_f, W_in),
-              (w_rec_f, W_rec),
-              (b_f, b)]
+                (w_rec_f, W_rec),
+                (b_f, b)]
 
     params_b = [(w_in_b, W_in),
-              (w_rec_b, W_rec),
-              (b_b, b)]
+                (w_rec_b, W_rec),
+                (b_b, b)]
 
     if sum_out or concat_out:
         out_ng = [out_ng]
@@ -526,15 +390,8 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                 param_updates.append(update)
             dep_list += dependents
 
-        # import pytest; pytest.set_trace()
         for ii, ((deriv_s, deriv_n), (_, val)) in enumerate(zip(param_updates, dep_list)):
-            actual = deriv_s(val, input_value)
-            desired = deriv_n(val, input_value)
-            print ii
-            print actual.sum()
-            print desired.sum()
-
-            # ng.testing.assert_allclose(deriv_s(val, input_value, *other_val),
-            #                            deriv_n(val, input_value, *other_val),
-            #                            rtol=bprop_rtol,
-            #                            atol=bprop_atol)
+            ng.testing.assert_allclose(deriv_s(val, input_value),
+                                       deriv_n(val, input_value),
+                                       rtol=num_rtol,
+                                       atol=num_atol)
