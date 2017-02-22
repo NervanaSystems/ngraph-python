@@ -2196,7 +2196,7 @@ class StackOp(SequentialOp):
         axes_0 = arg_axes[:pos]
         axes_1 = arg_axes[pos:]
         # Axis layout for the result
-        result_axes = make_axes(tuple(axes_0) + (axis,) + tuple(axes_1))
+        result_axes = axes_0 + axis + axes_1
 
         # With axes, we should be able to just setitem into a tensor shaped like the
         # result, but things don't quite work that way so we use a temp that would have
