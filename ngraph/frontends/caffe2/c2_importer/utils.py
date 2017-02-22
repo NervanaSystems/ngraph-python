@@ -18,8 +18,7 @@ import ngraph as ng
 
 def shape_to_axes(shape):
     # axis 0 is batch in Caffe2 layouts: NCHW and NHWC
-    return [ng.make_axis(s, name='N' if idx is 0 else None)
-            for idx, s in enumerate(shape)] if shape else ng.make_axis()
+    return [ng.make_axis(s) for s in shape] if shape else ng.make_axis()
 
 
 def args_shape_to_axes(pos):
