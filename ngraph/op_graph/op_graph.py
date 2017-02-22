@@ -641,6 +641,12 @@ class Op(NameableValue, DebugInfo):
 
                 o.generate_adjoints(adjoints, adjoint, *o.args)
 
+        # Add adjoints for state since they may show up in multiple TensorValueOps.
+        state = {}
+        for o in adjoints:
+            if o.tensor not in adjoints:
+                state[o.tensor] = adjoints[o]
+        adjoints.update(state)
         return adjoints
 
     def tensor_description(self):
@@ -1197,10 +1203,15 @@ class ValueOp(TensorOp, ControlBlockOp):
     """
     Mixin class for ops whose value is another op.
 
+    Arguments:
+        tensor: The tensor supplying the value for this op.
+        delegate_adjoint: If true, we pass generate_add_delta to the tensor.
+
     """
-    def __init__(self, tensor=None, **kwargs):
+    def __init__(self, tensor=None, delegate_adjoint=True, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
         self.__tensor = tensor
+        self.delegate_adjoint = delegate_adjoint
 
     def tensor_description(self):
         return self.tensor.tensor_description()
@@ -1267,11 +1278,11 @@ class ValueOp(TensorOp, ControlBlockOp):
     def states_written(self):
         return self.tensor.states_written
 
-    def generate_adjoints(self, adjoints, delta):
-        self.tensor.generate_add_delta(adjoints, delta)
-
     def generate_add_delta(self, adjoints, delta):
-        self.tensor.generate_add_delta(adjoints, delta)
+        if self.delegate_adjoint:
+            self.tensor.generate_add_delta(adjoints, delta)
+        else:
+            super(ValueOp, self).generate_add_delta(adjoints, delta)
 
 
 class InitTensorOp(ValueOp):
@@ -2189,7 +2200,7 @@ class StackOp(SequentialOp):
     """
 
     def __init__(self, x_list, axis, pos=0, **kwargs):
-        super(StackOp, self).__init__(**kwargs)
+        super(StackOp, self).__init__(delegate_adjoint=False, **kwargs)
         self.pos = pos
         self.x_list = tuple(as_op(arg) for arg in x_list)
         if axis.length != len(x_list):
@@ -2253,7 +2264,7 @@ class ConcatOp(SequentialOp):
     """
 
     def __init__(self, x_list, axis_list, **kwargs):
-        super(ConcatOp, self).__init__(**kwargs)
+        super(ConcatOp, self).__init__(delegate_adjoint=False, **kwargs)
         self.x_list = tuple(as_op(arg) for arg in x_list)
         self.axis_list = axis_list
         # Get common axes from first tensor in list
