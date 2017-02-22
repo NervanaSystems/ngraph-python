@@ -316,8 +316,6 @@ def test_cast_axes():
         dw_s_w1 = deriv_s_w1(w1_value, w_value)
         dw_n_w1 = deriv_n_w1(w1_value, w_value)
 
-        import pytest; pytest.set_trace()
-
         cost = ng.sum(result, reduction_axes=[])
         # grad = ng.deriv(cost, w)
 
