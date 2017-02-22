@@ -33,7 +33,7 @@ MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;ldd /tmp/mkldnn_engine.s
 
 COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;coverage combine;coverage xml -i;coverage report"
 
-.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test shell test_shell test_mkldnn_shell
+.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_all
 
 DOCKER_BUILD=docker build --rm=true
 
@@ -148,6 +148,8 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_CAFFE2_IMG)), ${BUILD_VERSION})
 endif
 
 build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2
+
+test_all: test test_gpu test_mkldnn test_caffe2
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
