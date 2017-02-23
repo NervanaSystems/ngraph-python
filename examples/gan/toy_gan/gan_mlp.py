@@ -1,11 +1,23 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 # GAN
 # following example code from https://github.com/AYLIEN/gan-intro
 # MLP generator and discriminator 
 # toy example with 1-D Gaussian data distribution
 
 
-# issues:
-# - cross entropy binary axes mismatch between D1 and D2
 # TODO
 #  - discriminator pretraining
 #  - optimizer schedule    
@@ -23,7 +35,7 @@ from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
 from toygan import ToyGAN
 
-np.random.seed(42)
+# np.random.seed(42)
 
 # define commonly used layer in this example
 def affine_layer(h_dim, activation, name):
@@ -33,14 +45,13 @@ def affine_layer(h_dim, activation, name):
                   bias_init=ConstantInit(val=0.0),
                   name=name)
 
-
 #  model parameters
 h_dim = 4  # GAN.mlp_hidden_size
 h_dim_G = h_dim
 h_dim_D = 2 * h_dim
 minibatch_discrimination = False  # for this toy example, seems to be better w/o mb discrim?
 
-num_iterations = 1200 #940
+num_iterations = 1200
 batch_size = 12
 num_examples = num_iterations*batch_size
 
@@ -48,8 +59,9 @@ num_examples = num_iterations*batch_size
 # use relu instead of softplus (focus on porting infrastucture fundamental to GAN)
 # fixed 1200 training iterations: relu retains distribution width but box without peak at mean; 
 # early stopping at 940 iterations, cost of 0.952, 3.44 looks better
-generator = Sequential([affine_layer(h_dim, Rectlin(), name='g0'),
-                        affine_layer(1, Identity(), name='g1')])
+generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
+                    affine_layer(1, Identity(), name='g1')]
+generator = Sequential(generator_layers)
 
 # 2. discriminator (not implementing minibatch discrimination right now)
 discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
@@ -104,19 +116,19 @@ x = inputs['data_sample']
 # *** does this work with ngraph, using discriminator for two outputs?
 D1 = discriminator.train_outputs(x)  # discriminator output on real data sample
 
+# copy the discriminator
+discriminator_copy = discriminator.copy()
+
 # cast G axes into x
-x_axes_reorder = reversed(x.axes)
-G_cast = ng.cast_axes(G, x_axes_reorder)
+G_t = ng.axes_with_order(G, reversed(G.axes))
+G_cast = ng.cast_axes(G_t, x.axes)
 
-D2 = discriminator.train_outputs(G_cast)  # discriminator output on generated sample
+# discriminator output on generated sample
+D2 = discriminator_copy.train_outputs(G_cast)
 
-# why does ngraph have both log (LogOp) and safelog?
-
-# loss_d = -ng.log(D1) - ng.log(1 - D2)  # use cross_entropy_binary?
-# ** cross_entropy_binary causes error - axes of D1 and D2 don't match
-loss_d = ng.cross_entropy_binary(D1, D2)  # TODO: come back to this: this is: - log(D1)*D2 - log(1 - D1)*(1-D2) with sigmoid optimization
-					  # TODO: not sure about enable_sig_opt, enable_diff_opt
-mean_cost_d = ng.mean(loss_d, out_axes=[])  # difference betw using out_axes and reduction_axes?
+# loss_d = -ng.log(D1) - ng.log(1 - D2)
+loss_d = ng.cross_entropy_binary(D1, D2)
+mean_cost_d = ng.mean(loss_d, out_axes=[])
 loss_g = -ng.log(D2)
 mean_cost_g = ng.mean(loss_g, out_axes=[])
 
@@ -134,7 +146,6 @@ transformer = ngt.make_transformer()
 train_computation_g = make_bound_computation(transformer, generator_train_outputs, inputs)  # TODO: G inputs just z - does this matter?
 train_computation_d = make_bound_computation(transformer, discriminator_train_outputs, inputs)
 
-# with current graph design, inference outputs need to be defined before any computations are run
 discriminator_inference_output = discriminator.inference_outputs(x)
 generator_inference_output = generator.inference_outputs(z)
 
@@ -196,7 +207,7 @@ try:
     plt.plot(pd, 'b', label='real data')
     plt.plot(pg, 'g', label='generated data')
     plt.legend(loc='upper left')
-    plt.savefig('simple_gan.png')
+    plt.savefig('ng_gan.png')
 except ImportError:
     print ("needs matplotlib")
 

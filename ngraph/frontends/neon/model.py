@@ -31,6 +31,10 @@ class Sequential(object):
             in_obj = l.inference_outputs(in_obj)
         return in_obj
 
+    def copy(self):
+        new_seq = self.__class__(layers=None)
+        new_seq.layers = [l.copy() for l in self.layers]
+        return new_seq
 
 class Container(object):
     """

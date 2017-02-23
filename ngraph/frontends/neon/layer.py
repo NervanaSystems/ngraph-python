@@ -92,6 +92,13 @@ class Linear(Layer):
 
         return ng.dot(self.W, in_obj)
 
+    def copy(self):
+        # not sure this is the right way to copy. if the copy is called before
+        # train_output(), the variables are not created and will not be copied.
+        new_linear = self.__class__(init=self.init, nout=self.nout)
+        if self.W is not None:
+            new_linear.W = self.W
+        return new_linear
 
 class LookupTable(Layer):
     """
@@ -366,30 +373,51 @@ class Bias(Layer):
         else:
             return in_obj
 
+    def copy(self):
+        new_layer = self.__class__(init=self.init, shared=self.shared)
+        if self.W is not None:
+            new_layer.W = self.W
+        return new_layer
+
 
 class Affine(Layer):
 
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
+        self.weight_init = weight_init
+        self.nout = nout
+        self.bias_init = bias_init
+        self.activation = activation
+        self.batch_norm = batch_norm
         self.linear = Linear(init=weight_init, nout=nout, **kwargs)
         self.bias = Bias(init=bias_init)
-        self.batch_norm = BatchNorm() if batch_norm else None
-        self.activation = Activation(transform=activation)
+        self.batch_norm_layer = BatchNorm() if batch_norm else None
+        self.activation_layer = Activation(transform=self.activation)
 
     def train_outputs(self, in_obj):
         l_out = self.linear.train_outputs(in_obj)
         b_out = self.bias.train_outputs(l_out)
-        bn_out = self.batch_norm.train_outputs(b_out) if self.batch_norm else b_out
-        a_out = self.activation.train_outputs(bn_out)
+        bn_out = self.batch_norm_layer.train_outputs(b_out) if self.batch_norm_layer else b_out
+        a_out = self.activation_layer.train_outputs(bn_out)
         return a_out
 
     def inference_outputs(self, in_obj):
         l_out = self.linear.inference_outputs(in_obj)
         b_out = self.bias.inference_outputs(l_out)
-        bn_out = self.batch_norm.inference_outputs(b_out) if self.batch_norm else b_out
-        a_out = self.activation.inference_outputs(bn_out)
+        bn_out = self.batch_norm_layer.inference_outputs(b_out) if self.batch_norm_layer else b_out
+        a_out = self.activation_layer.inference_outputs(bn_out)
         return a_out
 
+    def copy(self):
+        new_layer = self.__class__(weight_init=self.weight_init,
+                        nout=self.nout,
+                        bias_init=self.bias_init,
+                        activation=self.activation,
+                        batch_norm=self.batch_norm)
+        new_layer.linear = self.linear.copy()
+        new_layer.bias = self.bias.copy()
+        new_layer.batch_norm_layer = self.batch_norm_layer.copy() if self.batch_norm else None
+        return new_layer
 
 class Convolution(Layer):
 
@@ -466,6 +494,15 @@ class BatchNorm(Layer):
 
     def inference_outputs(self, in_obj):
         return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
+
+    def copy(self):
+        new_layer = self.__class__(rho=self.rho, eps=self.eps)
+        new_layer.gamma = self.gamma
+        new_layer.beta = self.beta
+        new_layer.gmean = self.gmean
+        new_layer.gvar = self.gvar
+
+        return new_layer
 
 
 class Dropout(Layer):
