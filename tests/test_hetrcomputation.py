@@ -252,10 +252,9 @@ def test_simple_graph():
 
 
 def test_gpu_send_and_recv():
-    pytest.skip("error loading GPU driver in child process")
     # First check whether do we have gputransformer available, if not, xfail
     if 'gpu' not in transformer_choices():
-        pytest.xfail("GPUTransformer not available")
+        pytest.skip("GPUTransformer not available")
 
     # put x+1 on cpu numpy
     with ng.metadata(device='numpy'):

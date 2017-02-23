@@ -1,0 +1,28 @@
+FROM ngraph_base
+
+# install neon
+WORKDIR /root
+RUN apt-get install -y python-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
+RUN git clone https://github.com/NervanaSystems/neon.git
+WORKDIR neon
+RUN make sysinstall
+
+WORKDIR /root/ngraph-test
+ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
+RUN pip install -r test_requirements.txt
+# it seems that sometimes neon fails to install this dependency.
+# Sticking it here for now to get jenkins up and running.  Ideally we
+# won't depend on neon for install and will have something like
+# gpu_requirements.txt in ngraph
+RUN pip install pycuda
+
+# add in autoflex.  This should will only be added if the user building
+# this dockerfile has permission to access the autoflex repo.  This is a
+# temporary solution to get things working quickly.
+ADD contrib/docker/autoflex /root/autoflex
+RUN pip install -e /root/autoflex
+
+# make ngraph Makefile happy :-(
+ENV VIRTUAL_ENV='making ngraph makefile happy'

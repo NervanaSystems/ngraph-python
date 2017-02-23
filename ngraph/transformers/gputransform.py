@@ -46,6 +46,7 @@ from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transp
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
 
+import cachetools
 import numpy as np
 import pycuda.driver as drv
 from pycuda.gpuarray import GPUArray
@@ -858,10 +859,6 @@ class GPURuntime(object):
         self.warmup = False
         self.scratch_size = scratch_size
         self.scratch_offset = 0
-        self.sm_count = _get_sm_count()
-
-        # store GPU memory size in bytes
-        self.gpu_memory_size = drv.mem_get_info()[1]
 
         # Fall back to CUDA C kernels on older (pre-Maxwell) GPU generations
         if self.compute_capability[0] < 5:
@@ -872,11 +869,32 @@ class GPURuntime(object):
 
         # TODO
         # self.cublas_handle = cublas.cublasCreate()
-        self.pcg = rng_mrg()
 
         self.enable_winograd = enable_winograd
         self.deterministic = deterministic
-        self.cache_dir = get_cache_dir()
+
+    @property
+    @cachetools.cached({})
+    def sm_count(self):
+        return _get_sm_count()
+
+    @property
+    @cachetools.cached({})
+    def gpu_memory_size(self):
+        """
+        gpu memory size in bytes
+        """
+        return drv.mem_get_info()[1]
+
+    @property
+    @cachetools.cached({})
+    def cache_dir(self):
+        return get_cache_dir()
+
+    @property
+    @cachetools.cached({})
+    def pcg(self):
+        return rng_mrg()
 
     def close(self):
         try:
