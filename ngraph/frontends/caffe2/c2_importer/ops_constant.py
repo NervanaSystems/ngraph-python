@@ -16,6 +16,7 @@
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
 import caffe2.python.core as c2core
+import caffe2.proto.caffe2_pb2 as c2proto
 import numpy as np
 from utils import make_const_op
 
@@ -157,15 +158,12 @@ class OpsConstant(OpsBase):
         input_neurons = np.prod(args["shape"].ints)
         scale = np.sqrt(3. / input_neurons)
 
-        # mock class
-        class augumented_args:
-            def __init__(self, scale, name):
-                self.f = scale
-                self.name = name
-
         # add arguments for uniform fill to list
-        c2_op.arg._values.extend([augumented_args(-scale, "min"), augumented_args(scale, "max")])
+        arg1, arg2 = c2proto.Argument(), c2proto.Argument()
+        arg1.name, arg2.name = "max", "min"
+        arg1.f, arg2.f = scale, -scale
 
+        c2_op.arg.extend([arg1, arg2])
         ng_op = self.UniformFill(c2_op=c2_op, inputs=inputs)
 
         return ng_op

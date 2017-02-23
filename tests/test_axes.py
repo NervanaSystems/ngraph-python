@@ -321,12 +321,10 @@ def test_idempotent_axes_c():
 
         # variable
         w = ng.variable(axes, initial_value=np.ones((3, 1)))
-        l = w
-        r = w
 
         # broadcast l / r, introducing dummy length 1 axes
-        l = ng.broadcast(l, axes)
-        r = ng.broadcast(r, axes)
+        l = ng.broadcast(w, axes)
+        r = ng.broadcast(w, axes)
 
         # slice
         axes_slice = [slice(None, None, None), slice(None, None, None)]
@@ -350,8 +348,11 @@ def test_idempotent_axes_c():
         grad_comp = ex.executor(grad)
         cost_comp = ex.executor(cost)
 
-        assert cost_comp() == 6.0
-        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+        cost_comp_ng = cost_comp()
+        grad_comp_ng = grad_comp()
+        grad_comp_np = np.ones((3, 1)) * 2.
+        assert cost_comp_ng == 6.0
+        assert np.array_equal(grad_comp_ng, grad_comp_np)
 
 
 def test_scalar_broadcast():
