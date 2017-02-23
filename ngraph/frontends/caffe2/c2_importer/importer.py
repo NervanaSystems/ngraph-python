@@ -62,16 +62,17 @@ class C2Importer:
             else:
                 op = op[0]
 
-            # TBD: what if some c2_op have more than one output?
+            # TODO: what if some c2_op have more than one output?
             key = c2_op.name if c2_op.name != '' else c2_op.output[0]
             self.name_op_map[key] = op
 
         self.init_net_def = init_net_def
-        self.net_def = net_def if not init_net_def else copy.deepcopy(net_def)
 
         if init_net_def:
-            self.net_def.op._values = init_net_def.op._values + net_def.op._values
-            pass
+            self.net_def = copy.deepcopy(init_net_def)
+            self.net_def.op.extend(net_def.op)
+        else:
+            self.net_def = net_def
 
         # process nodes
         for c2_op in self.net_def.op:
