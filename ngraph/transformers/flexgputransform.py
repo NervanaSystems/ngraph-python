@@ -23,7 +23,7 @@ from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
-from ngraph.transformers.passes.flexpass import FlexPass, ClearTensorDescriptions
+from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex import GPUFlexManager, GPUFlex
@@ -71,7 +71,7 @@ class FlexGPUTransformer(GPUTransformer):
 
         # flex passes for setting Op dtypes to flex
         self.register_graph_pass(ClearTensorDescriptions())
-        self.register_graph_pass(FlexPass())
+        self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point, verbose=flex_verbose)
@@ -81,6 +81,11 @@ class FlexGPUTransformer(GPUTransformer):
 
     def gpu_kernel_group(self, name):
         return FlexGPUKernelGroup(self, name)
+
+    def finish_transform_allocate(self):
+        super(FlexGPUTransformer, self).finish_transform_allocate()
+
+        FlexDECPass().do_pass(self.ops, self)
 
     def transform_ordered_ops(self, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
