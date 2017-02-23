@@ -106,7 +106,7 @@ def test_dot_sum_backprop(transformer_factory):
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
 
-    x_np[...] = [[1.0, 0.0,1.0], [2.0, 0.0, 3.0]]
+    x_np[...] = [[1.0, 0.0, 1.0], [2.0, 0.0, 3.0]]
     y_np[...] = [-1.0, 1.0]
 
     x = ng.placeholder(x_axes)

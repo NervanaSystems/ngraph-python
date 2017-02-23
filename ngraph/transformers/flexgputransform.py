@@ -36,6 +36,7 @@ from ngraph.util.generics import generic_method
 from ngraph.transformers.gputransform import DimShuffleKernel
 non_flex_kernels = (DimShuffleKernel, )
 
+
 # create and attach bind_flex_scales method to EW kernel
 # done this way to avoid editing gputransform
 def _ew_bind_flex_scales(kernel):
@@ -186,14 +187,14 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     @add_kernel.on_type(RngOp)
     def add_kernel(self, op):
         self.kernels.append(FlexRngFillKernel(self.transformer,
-                                          op.tensor_description(),
-                                          op.distribution,
-                                          op.params))
+                                              op.tensor_description(),
+                                              op.distribution,
+                                              op.params))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
-                                       op.reduction_axes.size))
+                                           op.reduction_axes.size))
 
     def compile_all(self):
         """

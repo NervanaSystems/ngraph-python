@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import division
 from builtins import range
 
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
@@ -342,11 +343,11 @@ class FlexRngFillKernel(RngFillKernel):
         if self.distribution == 'uniform':
             self.transformer.runtime.pcg.fill_uniform(out_float)
             self.out[:] = ((out_float * (self.params['high'] - self.params['low']) +
-                    self.params['low']) / self.scale ).astype(self.out.dtype)
+                            self.params['low']) / self.scale).astype(self.out.dtype)
         elif self.distribution == 'normal':
             self.transformer.runtime.pcg.fill_normal(out_float)
             self.out[:] = ((out_float * self.params['scale'] + self.params['loc'])
-                    / self.scale).astype(self.out.dtype)
+                           / self.scale).astype(self.out.dtype)
 
     def bind_flex_scales(self):
         self.scale = self.flex_entry.scale

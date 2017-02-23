@@ -17,7 +17,6 @@ Test tensor size
 On GPU, ng.tensor_size uses FillKernel
 """
 
-import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
@@ -33,7 +32,7 @@ def test_tensor_size(transformer_factory):
     x = ng.placeholder(aaxes)
 
     size_fun = ng.tensor_size(x)
-    nptensor = np.arange(n*m).reshape(n, m)
+    nptensor = np.arange(n * m).reshape(n, m)
 
     with executor(size_fun, x) as ex:
         assert ex(nptensor) == n * m
