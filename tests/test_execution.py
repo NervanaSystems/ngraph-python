@@ -1066,5 +1066,3 @@ def test_variance_sqrt_inverse(transformer_factory):
 
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
-
-test_softmax(None)

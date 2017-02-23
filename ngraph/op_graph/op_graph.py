@@ -155,7 +155,6 @@ class Op(NameableValue, DebugInfo):
         control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
-        schemas: Information about how the Op was generated.
         metadata: Dictionary with of string keys and values used for attaching
             arbitrary metadata to nodes.
         trainable: The value is trainable.
@@ -307,7 +306,7 @@ class Op(NameableValue, DebugInfo):
 
         # List to keep generation deterministic
         self.__control_deps = OrderedSet()
-        self.schemas = []
+        self.__deriv_handler = None
         self.__const = const
         self.__is_constant = constant
         self.__is_persistent = persistent
@@ -520,55 +519,26 @@ class Op(NameableValue, DebugInfo):
     def replace_self(self, rep):
         self.forward = as_op(rep)
 
-    def add_schema(self, schema, set_generate_adjoints=True):
+    @property
+    def deriv_handler(self):
         """
-        Adds a description of some op substructure.
-
-        When a function generates a groups of nodes, it can add a schema
-        describing the roles of these nodes.  The schema may include its
-        own generate_adjoints.
-
-        Arguments:
-          schema: param set_generate_adjoints: Whether to override the node's generate_adjoints
-        with the version from the schema.
-          set_generate_adjoints: TODO
+        Overrides processing of this op for this derivative.
 
         Returns:
-          TODO
+            The op that should be used to process this op. If no deriv_handler has been set,
+            self is returned.
+
         """
-        self.schemas.insert(0, schema)
-        if set_generate_adjoints:
-            # generate_adjoints is normally called with *args, but for a
-            # schema we call it with the associated node.
-            def generate_adjoints(adjoints, adjoint, *ignore):
-                """
-                TODO.
+        if self.__deriv_handler is None:
+            return self
+        else:
+            return self.__deriv_handler
 
-                Arguments:
-                  adjoints: TODO
-                  adjoint: TODO
-                  *ignore: TODO
-                """
-                schema.generate_adjoints(adjoints, adjoint, self)
-            # Replace generate_adjoints for self
-            self.generate_adjoints = generate_adjoints
-
-    def find_schema(self, t):
-        """
-        Find a schema of particular type.
-
-        Searches added schema for one of type t.
-
-        Arguments:
-          t: The type of schema desired.
-
-        Returns:
-          A schema of type t, or None.
-        """
-        for schema in self.schemas:
-            if isinstance(schema, t):
-                return schema
-        return None
+    @deriv_handler.setter
+    def deriv_handler(self, deriv_handler):
+        if deriv_handler is self:
+            deriv_handler = None
+        self.__deriv_handler = deriv_handler
 
     @property
     def defs(self):
@@ -954,27 +924,23 @@ class TensorOp(Op):
             Map from Op to dSelf/dOp.
         """
         adjoints = {
-            self: error,
+            self.tensor: error,
         }
 
         # visit ops in reverse depth first post-order. it is important that
         # ordered_ops returns a copy of this traversal order since the graph
         # may change as we generate adjoints and we don't want to visit those
-        # new ops.
-        for o in reversed(Op.ordered_ops([self])):
+        # new ops. Some ops may be containers for other ops, so we create an
+        # ordered set to ensure we don't do multiple backprops.
+        for o in OrderedSet(op.tensor for op in reversed(Op.ordered_ops([self]))):
             if o in adjoints:
                 adjoint = adjoints[o]
                 if o.scale is not None:
                     adjoint = adjoint * o.scale
 
-                o.generate_adjoints(adjoints, adjoint, *o.args)
+                deriv_handler = o.deriv_handler
+                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
 
-        # Add adjoints for state since they may show up in multiple TensorValueOps.
-        state = {}
-        for o in adjoints:
-            if o.tensor not in adjoints:
-                state[o.tensor] = adjoints[o]
-        adjoints.update(state)
         return adjoints
 
     def generate_add_delta(self, adjoints, delta):
@@ -1208,10 +1174,9 @@ class ValueOp(TensorOp, ControlBlockOp):
         delegate_adjoint: If true, we pass generate_add_delta to the tensor.
 
     """
-    def __init__(self, tensor=None, delegate_adjoint=True, **kwargs):
+    def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
         self.__tensor = tensor
-        self.delegate_adjoint = delegate_adjoint
 
     def tensor_description(self):
         return self.tensor.tensor_description()
@@ -1219,17 +1184,32 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def tensor(self):
         """
-        The op that supplies the value.
+        The op that ultimately supplies the value. See value_tensor.
 
         Returns:
             The op that supplies the value.
 
         """
+        return self.__tensor.tensor
+
+    @property
+    def value_tensor(self):
+        """
+        The op whose value is returned by this op.
+
+        Returns:
+            The immediate value returned by this op; see tensor for the closure.
+
+        """
         return self.__tensor
 
-    @tensor.setter
-    def tensor(self, tensor):
+    @value_tensor.setter
+    def value_tensor(self, tensor):
         self.__tensor = tensor
+
+    @property
+    def control_deps(self):
+        return super(ValueOp, self).control_deps + [self.value_tensor]
 
     @property
     def is_tensor_op(self):
@@ -1279,10 +1259,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         return self.tensor.states_written
 
     def generate_add_delta(self, adjoints, delta):
-        if self.delegate_adjoint:
-            self.tensor.generate_add_delta(adjoints, delta)
-        else:
-            super(ValueOp, self).generate_add_delta(adjoints, delta)
+        self.tensor.generate_add_delta(adjoints, delta)
 
 
 class InitTensorOp(ValueOp):
@@ -1328,7 +1305,7 @@ class SequentialOp(ValueOp):
     """
     def __init__(self, ops=None, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
-        self.tensor = None
+        self.value_tensor = None
         self.__ops = None
         self.control_dependencies_computed = False
         if ops is not None:
@@ -1344,7 +1321,7 @@ class SequentialOp(ValueOp):
 
         for op in self.__ops:
             self.add_control_dep(op)
-        self.tensor = self.__ops[-1]
+        self.value_tensor = self.__ops[-1]
         self.control_dependencies_computed = False
 
     def compute_control_dependencies(self):
@@ -2200,7 +2177,7 @@ class StackOp(SequentialOp):
     """
 
     def __init__(self, x_list, axis, pos=0, **kwargs):
-        super(StackOp, self).__init__(delegate_adjoint=False, **kwargs)
+        super(StackOp, self).__init__(**kwargs)
         self.pos = pos
         self.x_list = tuple(as_op(arg) for arg in x_list)
         if axis.length != len(x_list):
@@ -2217,13 +2194,15 @@ class StackOp(SequentialOp):
         storage_axes = make_axes((axis,) + tuple(arg_axes))
         self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
         slices = [slice(None)] * len(arg_axes)
-
         self.ops = [
             doall([SetItemOp(self.storage, [i] + slices, arg)
                    for i, arg in enumerate(self.x_list)
                    ]),
             axes_with_order(self.storage, result_axes)
         ]
+
+        # Handle adjoint generation for the result
+        self.tensor.deriv_handler = self
 
     def generate_adjoints(self, adjoints, delta):
         s = [slice(None)] * len(self.storage.axes)
@@ -2264,7 +2243,7 @@ class ConcatOp(SequentialOp):
     """
 
     def __init__(self, x_list, axis_list, **kwargs):
-        super(ConcatOp, self).__init__(delegate_adjoint=False, **kwargs)
+        super(ConcatOp, self).__init__(**kwargs)
         self.x_list = tuple(as_op(arg) for arg in x_list)
         self.axis_list = axis_list
         # Get common axes from first tensor in list
@@ -2306,6 +2285,9 @@ class ConcatOp(SequentialOp):
             doall(ops),
             axes_with_order(self.storage, result_axes)
         ]
+
+        # Handle adjoint generation for the result
+        self.tensor.deriv_handler = self
 
     def generate_adjoints(self, adjoints, delta):
         slices = [slice(None)] * (len(self.storage.axes) - 1)
@@ -2394,6 +2376,9 @@ class UnsliceOp(SequentialOp):
             SetItemOp(temp, slices, x),
             temp
         ]
+
+        # Handle adjoint generation for the result
+        self.tensor.deriv_handler = self
 
     def generate_adjoints(self, adjoints, delta):
         self.x.generate_add_delta(adjoints, tensor_slice(delta, self.slices, axes=self.x.axes))
@@ -3054,17 +3039,19 @@ class DotLowDimension(TensorOp):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
 
 
-class Softmax(object):
-    """
-    A schema to use to shortcut formula for the softmax derivative.
-    """
+class SoftmaxOp(ValueOp):
+    def __init__(self, x, normalization_axes=None, **kwargs):
+        super(SoftmaxOp, self).__init__(**kwargs)
 
-    def __init__(self, x, exps, Z):
-        self.x = x
-        self.exps = exps
-        self.Z = Z
+        if normalization_axes is None:
+            normalization_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
+        self.x = x - max(x, reduction_axes=normalization_axes)
+        self.exps = exp(self.x)
+        self.Z = sum(self.exps, reduction_axes=normalization_axes)
+        self.value_tensor = self.exps / self.Z
+        self.tensor.deriv_handler = self
 
-    def generate_adjoints(self, adjoints, delta, op):
+    def generate_adjoints(self, adjoints, delta):
         """
         TODO.
 
@@ -3076,32 +3063,13 @@ class Softmax(object):
         Returns:
           TODO
         """
-        z = delta * op
+        z = delta * self.tensor
         zs = sum(z)
-        self.x.generate_add_delta(adjoints, (z - zs * op))
+        self.x.generate_add_delta(adjoints, (z - zs * self.tensor))
 
 
 def softmax(x, normalization_axes=None, **kwargs):
-    """
-    The softmax activation function.
-
-    Arguments:
-      x: input
-      normalization_axes: dimensions over which we normalize
-      **kwargs: options
-
-    Returns:
-        y: output of softmax function
-    """
-    if normalization_axes is None:
-        normalization_axes = x.axes.sample_axes()\
-            - x.axes.recurrent_axes()
-    x = x - max(x, reduction_axes=normalization_axes)
-    exps = exp(x)
-    Z = sum(exps, reduction_axes=normalization_axes)
-    result = exps / Z
-    result.add_schema(Softmax(x=x, exps=exps, Z=Z))
-    return result
+    return SoftmaxOp(x, normalization_axes, **kwargs).tensor
 
 
 class ReductionOp(TensorOp):
@@ -3394,46 +3362,38 @@ class OneHotTwoDimOp(OneHotOp):
         super(OneHotTwoDimOp, self).__init__(x, axis, **kwargs)
 
 
-class Sigmoid(object):
+class SigmoidOp(ValueOp):
     """
-    Marks a subgraph as a sigmoid to improve computation and autodiff.
-    """
+    Computes the sigmoid of x and handles autodiff for sigmoid.
 
-    def __init__(self, x):
+    Arguments:
+        x: The tensor argument.
+        kwargs: Other construction arguments.
+
+    Parameters:
+        x: The tensor argument.
+    """
+    def __init__(self, x, **kwargs):
+        super(SigmoidOp, self).__init__(**kwargs)
         self.x = x
+        self.value_tensor = reciprocal(exp(-x) + 1)
+        self.tensor.deriv_handler = self
 
-    def generate_adjoints(self, adjoints, delta, op):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          op: TODO
-
-        Returns:
-          TODO
-        """
-        self.x.generate_add_delta(adjoints, delta * op * (1.0 - op))
+    def generate_adjoints(self, adjoints, delta):
+        self.x.generate_add_delta(adjoints, delta * self.tensor * (1.0 - self.tensor))
 
 
 def sigmoid(x):
     """
-    sigmoid(x)
+    Computes the sigmoid of x.
 
-    .. math::
-        \\frac{1}{1+e^{-x}}
-
-    Arguments:
-        x: A tensor
+    Args:
+        x:
 
     Returns:
-        TensorOp: sigmoid(x).
-
+        The sigmoid computation.
     """
-    result = reciprocal(exp(-x) + 1)
-    result.add_schema(Sigmoid(x=x))
-    return result
+    return SigmoidOp(x).tensor
 
 
 class Function(Op):
@@ -3525,26 +3485,42 @@ def deriv(dependent, independent, error=None):
     return DerivOp(dependent, independent, error)
 
 
-class CrossEntropyMultiInner(object):
-    """TODO."""
+class CrossEntropyMultiOp(ValueOp):
+    """
+    Computes the cross-entropy of two distributions.
 
-    def __init__(self, x, y, s):
-        self.x = x
-        self.y = y
-        self.s = s
+    Arguments:
+        y: The output of the model; each sample is a PDF.
+        t: The true values; each sample is PDF.
+        usebits: Use binary log.
+        out_axes: Axes in result.  Default batch and reduction axes.
+        enable_softmax_opt: Use optimization when y is softmax. Default True.
+        enable_diff_opt: User derivative optimization when y is softmax.  Default True.
 
-    def generate_adjoints(self, adjoints, delta, op):
-        """
-        TODO.
+    Returns:
+        The cross-entropy.
+    """
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          op: TODO
+    def __init__(self, y, t, usebits=False, out_axes=None,
+                 enable_softmax_opt=True,
+                 enable_diff_opt=True, **kwargs):
+        super(CrossEntropyMultiOp, self).__init__(**kwargs)
+        if out_axes is None:
+            out_axes = y.axes.batch_axes() + y.axes.recurrent_axes()
+        if enable_softmax_opt and isinstance(y.deriv_handler, SoftmaxOp):
+            # This depends on sum(t) being 1
+            self.y = y
+            self.x = y.deriv_handler.x
+            self.s = -sum(self.x * t, out_axes=out_axes)
+            self.value_tensor = self.s + safelog(y.deriv_handler.Z)
+            if enable_diff_opt:
+                self.tensor.deriv_handler = self
+        else:
+            self.value_tensor = -sum(safelog(y) * t, out_axes=out_axes)
+        if usebits:
+            self.value_tensor = self.tensor * np.float(1. / np.log(2.0))
 
-        Returns:
-          TODO
-        """
+    def generate_adjoints(self, adjoints, delta):
         self.s.generate_add_delta(adjoints, delta)
         self.x.generate_add_delta(adjoints, self.y * delta)
 
@@ -3566,44 +3542,42 @@ def cross_entropy_multi(y, t, usebits=False, out_axes=None,
     Returns:
         The cross-entropy.
     """
-    if out_axes is None:
-        out_axes = y.axes.batch_axes() + y.axes.recurrent_axes()
-    smy = y.find_schema(Softmax)
-    if enable_softmax_opt and smy is not None:
-        # This depends on sum(t) being 1
-        x = smy.x
-        Z = smy.Z
-        s = -sum(x * t, out_axes=out_axes)
-        result = s + safelog(Z)
-        if enable_diff_opt:
-            result.add_schema(CrossEntropyMultiInner(x=x, y=y, s=s))
-    else:
-        result = -sum(safelog(y) * t, out_axes=out_axes)
-    if usebits:
-        result = result * np.float(1. / np.log(2.0))
-    return result
+
+    return CrossEntropyMultiOp(y=y,
+                               t=t,
+                               usebits=usebits,
+                               out_axes=out_axes,
+                               enable_softmax_opt=enable_softmax_opt,
+                               enable_diff_opt=enable_diff_opt).tensor
 
 
-class CrossEntropyBinaryInner(object):
-    """TODO."""
+class CrossEntropyBinaryInnerOp(ValueOp):
+    """
+    Computes cross-entropy of individual samples.
 
-    def __init__(self, x, y, t):
-        self.x = x
+    Arguments:
+        y: Output of model, in range [0, 1].
+        t: True values, in [0, 1].
+        enable_sig_opt: Enable optimization when y is sigmoid.  Default True.
+        enable_diff_opt: Enable optimization of derivative when y is sigmoid.  Default True.
+
+    Returns:
+        Cross entropy of individual samples.
+    """
+    def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
+        super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)
         self.y = y
         self.t = t
+        self.value_tensor = -(safelog(y) * t + safelog(1 - y) * (1 - t))
+        if isinstance(y.deriv_handler, SigmoidOp):
+            self.x = y.deriv_handler.x
+            if enable_sig_opt:
+                # Simpler equivalent
+                self.value_tensor = (1 - t) * maximum(self.x, -safelog_cutoff) - safelog(y)
+            if enable_diff_opt:
+                self.tensor.deriv_handler = self
 
-    def generate_adjoints(self, adjoints, delta, op):
-        """
-        TODO.
-
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          op: TODO
-
-        Returns:
-      TODO
-        """
+    def generate_adjoints(self, adjoints, delta):
         self.x.generate_add_delta(adjoints, (self.y - self.t) * delta)
         self.t.generate_add_delta(adjoints, self.x * delta)
 
@@ -3621,17 +3595,9 @@ def cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True):
     Returns:
         Cross entropy of individual samples.
     """
-    result = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-    sigy = y.find_schema(Sigmoid)
-    if sigy is not None:
-        x = sigy.x
-        if enable_sig_opt:
-            # Simpler equivalent
-            result = (1 - t) * maximum(x, -safelog_cutoff) - safelog(y)
-        if enable_diff_opt:
-            result.add_schema(CrossEntropyBinaryInner(x=x, y=y, t=t))
-
-    return result
+    return CrossEntropyBinaryInnerOp(y=y, t=t,
+                                     enable_sig_opt=enable_sig_opt,
+                                     enable_diff_opt=enable_diff_opt).tensor
 
 
 def cross_entropy_binary(y, t, usebits=False, out_axes=None,
