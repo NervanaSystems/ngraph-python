@@ -534,7 +534,7 @@ class Recurrent(Layer):
         self.nout = nout
         self.activation = activation
         self.init = init
-        self.init_inner = init_inner or init
+        self.init_inner = init_inner if init_inner is not None else init
         self.reset_cells = reset_cells
         self.return_sequence = return_sequence
         self.backward = backward
@@ -542,20 +542,24 @@ class Recurrent(Layer):
     def interpret_axes(self, in_obj, init_state):
         in_axes = in_obj.axes
 
-        self.time_axis = in_axes.recurrent_axes()[0]
-        self.time_axis_idx = in_axes.index(self.time_axis)
+        self.recurrent_axis = in_axes.recurrent_axes()[0]
 
         # if init state is given, use that as hidden axes
         if init_state:
             self.hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
+            if sum(self.hidden_axes.full_lengths) != self.nout:
+                raise ValueError("Length of init_state must be the same as nout: " +
+                                 "{} != {}".format(sum(self.hidden_axes.full_lengths),
+                                                   self.nout))
         else:
             self.hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
 
         self.hidden_state_axes = self.hidden_axes + in_axes.batch_axes()
+        self.recurrent_axis_idx = len(self.hidden_axes)
 
         # using the axes to create weight matrices
         self.w_in_axes = self.hidden_axes + [axis - 1 for axis in (in_axes.sample_axes()
-                                                                   - self.time_axis)]
+                                                                   - self.recurrent_axis)]
 
         self.w_re_axes = self.hidden_axes + [axis - 1 for axis in self.hidden_axes]
 
@@ -605,10 +609,10 @@ class Recurrent(Layer):
         h_list = []
 
         # slice the inputs into time slices
-        in_s = get_steps(in_obj, self.time_axis, self.backward)
+        in_s = get_steps(in_obj, self.recurrent_axis, self.backward)
 
         # unrolling computations
-        for i in range(self.time_axis.length):
+        for i in range(self.recurrent_axis.length):
             with ng.metadata(recurrent_step=str(i)):
                 h = self._step(in_s[i], h)
                 h_list.append(h)
@@ -616,7 +620,7 @@ class Recurrent(Layer):
         if self.return_sequence is True:
             # only when returning a sequence, need to reverse the output
             h_list = h_list[::-1] if self.backward else h_list
-            rnn_out = ng.stack(h_list, self.time_axis, pos=self.time_axis_idx)
+            rnn_out = ng.stack(h_list, self.recurrent_axis, pos=self.recurrent_axis_idx)
         else:
             rnn_out = h_list[-1]
 
@@ -639,23 +643,23 @@ class BiRNN(Layer):
         reset_cells (bool): default to be True to make the layer stateless,
                             set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
-        sum_out (bool): default to be False to return both directional outputs in a list.
-                        When True, sum the outputs from both directions, so it can go to
-                        following fully connected layers.
+        sum_out (bool): default to be False. When True, sum the outputs from both directions
+        concat_out (bool): default to False. When True, concatenate the outputs from both
+                           directions. If concat_out and sum_out are both False, output will be a
+                           list.
         name (str, optional): name to refer to this layer as.
-    Attributes:
-        W_input (Tensor): weights from inputs to output units
-            (input_size, output_size)
-        W_recur (Tensor): weights for recurrent connections
-            (output_size, output_size)
-        b (Tensor): Biases on output units (output_size, 1)
     """
     metadata = {'layer_type': 'birnn'}
 
     def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=True, return_sequence=True, sum_out=False, **kwargs):
+                 reset_cells=False, return_sequence=True, sum_out=False,
+                 concat_out=False, **kwargs):
+        if sum_out and concat_out:
+            raise ValueError("sum_out and concat_out cannot both be True")
+
         super(BiRNN, self).__init__(**kwargs)
         self.sum_out = sum_out
+        self.concat_out = concat_out
         self.nout = nout
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
                                  reset_cells=reset_cells, return_sequence=return_sequence)
@@ -675,38 +679,51 @@ class BiRNN(Layer):
             init_state (Tensor or list): object that provides initial state
 
         Returns:
-            rnn_out (Tensor): output
+            if sum_out or concat_out - rnn_out (Tensor): output
+            otherwise - rnn_out (list of Tensors): list of length 2
 
         """
-        if isinstance(in_obj, collections.Sequence) and len(in_obj) == 2:
-            # make sure these 2 streams of inputs share axes
-            assert in_obj[0].axes == in_obj[1].axes
+        if isinstance(in_obj, collections.Sequence):
+            if len(in_obj) != 2:
+                raise ValueError("If in_obj is a sequence, it must have length 2")
+            if in_obj[0].axes != in_obj[1].axes:
+                raise ValueError("If in_obj is a sequence, each element must have the same axes")
             fwd_in = in_obj[0]
             bwd_in = in_obj[1]
-            in_axes = in_obj[0].axes
         else:
             fwd_in = in_obj
             bwd_in = in_obj
-            in_axes = in_obj.axes
 
-        if isinstance(init_state, collections.Sequence) and len(init_state) == 2:
-            assert init_state[0].axes == init_state[1].axes
+        if isinstance(init_state, collections.Sequence):
+            if len(init_state) != 2:
+                raise ValueError("If init_state is a sequence, it must have length 2")
+            if init_state[0].axes != init_state[1].axes:
+                raise ValueError("If init_state is a sequence, " +
+                                 "each element must have the same axes")
             fwd_init = init_state[0]
             bwd_init = init_state[1]
         else:
             fwd_init = init_state
             bwd_init = init_state
 
-        # create the hidden axes here and set for both directions
-        rnn_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden'),
-                                 in_axes.recurrent_axes()[0]])
-
-        self.fwd_rnn.axes = self.bwd_rnn.axes = rnn_axes
-        fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
-        bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
+        with ng.metadata(direction="fwd"):
+            fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
+            self.fwd_out = fwd_out
+        with ng.metadata(direction="bwd"):
+            bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
+            self.bwd_out = bwd_out
 
         if self.sum_out:
             return fwd_out + bwd_out
+        elif self.concat_out:
+            ax_list = list()
+            for out in [fwd_out, bwd_out]:
+                axes = out.axes.sample_axes() - out.axes.recurrent_axes()
+                if len(axes) == 1:
+                    ax_list.append(axes[0])
+                else:
+                    raise ValueError("Multiple hidden axes. Unable to concatenate automatically")
+            return ng.ConcatOp([fwd_out, bwd_out], ax_list)
         else:
             return [fwd_out, bwd_out]
 
@@ -825,10 +842,10 @@ class LSTM(Recurrent):
         c_list = []
 
         # feedforward computation
-        in_s = get_steps(in_obj, self.time_axis, self.backward)
+        in_s = get_steps(in_obj, self.recurrent_axis, self.backward)
 
         # recurrent computation
-        for i in range(self.time_axis.length):
+        for i in range(self.recurrent_axis.length):
             with ng.metadata(recurrent_step=str(i)):
                 [h, c] = self._step(in_s[i], [h, c])
                 h_list.append(h)
@@ -838,7 +855,7 @@ class LSTM(Recurrent):
             if self.backward:
                 h_list = h_list[::-1]
                 c_list = c_list[::-1]
-            lstm_out = ng.stack(h_list, self.time_axis, pos=self.time_axis_idx)
+            lstm_out = ng.stack(h_list, self.recurrent_axis, pos=self.recurrent_axis_idx)
         else:
             lstm_out = h_list[-1]
 

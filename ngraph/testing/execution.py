@@ -93,7 +93,12 @@ class ExecutorFactory(object):
                     adjoint, flags=['multi_index'], op_flags=['readwrite'])
                 for dfdxiter in idxiter:
                     dfdxiter[...] = 1
+
                     df = comp(adjoint, x, *args)
+
+                    # import pytest; pytest.set_trace()
+                    # with open("code_sum.py", "w") as f: f.write(comp.transformer.code.code)
+
                     dindex[0:len(fshape)] = idxiter.multi_index
                     npdfdx[tuple(dindex)] = df
                     dfdxiter[...] = 0
