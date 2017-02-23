@@ -38,7 +38,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.setup_default_args()
 
     def backend_names(self):
-        return ['numpy', 'gpu']
+        return ['numpy', 'gpu', 'argon']
 
     def setup_default_args(self):
         """
