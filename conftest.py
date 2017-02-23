@@ -16,14 +16,15 @@ import pytest
 import ngraph.transformers as ngt
 from ngraph.flex.names import flex_gpu_transformer_name
 
-from ngraph.testing.error_check import transformer_name
-
 
 def pytest_addoption(parser):
     parser.addoption("--enable_flex", action="store_true",
                      help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
     parser.addoption("--enable_mkl", action="store_true",
                      help="Enable and *only* enable CPU MKL transformer.")
+
+def pytest_xdist_node_collection_finished(node, ids):
+    ids.sort()
 
 @pytest.fixture(scope="module",
                 params=ngt.transformer_choices())
