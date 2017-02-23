@@ -26,35 +26,31 @@ from ngraph.op_graph import axes  # noqa
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
-from ngraph.op_graph.op_graph import AbsoluteOneDOp, AddOneDim, AddZeroDim, Argmax, Argmin, \
-    ContiguousOp, CosOneDOp, Op, \
-    DivideOneDim, DivideZeroDim, DotOneDimensional, DotTwoDimensional, DotTwoByOne, \
-    ModOneDim, ModZeroDim, \
-    EqualOneDim, EqualZeroDim, ExpOneDOp, \
-    GreaterOneDim, GreaterZeroDim, GreaterEqualOneDim, GreaterEqualZeroDim, \
-    LessOneDim, LessZeroDim, \
-    LessEqualOneDim, LessEqualZeroDim, LogOneDOp, Max, MaximumOneDim, MaximumZeroDim, Min, \
-    MinimumOneDim, MinimumZeroDim, \
-    MultiplyOneDim, MultiplyZeroDim, \
-    NegativeOneDOp, NotEqualOneDim, NotEqualZeroDim, OneHotOp, ReciprocalOneDOp, \
-    Power, PowerZeroDim, \
-    AssignOneDOp, SignOneDOp, SinOneDOp, SqrtOneDOp, SquareOneDOp, RngOp, \
-    SubtractOneDim, SubtractZeroDim, \
-    Sum, Prod, TanhOneDOp, TensorSizeOp, Fill, TensorDescription, \
-    SetItemOp
+from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
+    ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
+    Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
+    LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
+    ReciprocalOp, Power, AssignOneDOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
+    Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
+    SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
-from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    SimplePrune, DerivPass
+    CPUTensorShaping, SimplePrune, DerivPass
+from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, make_transformer_factory, set_transformer_factory
+from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+    DeviceBufferReference, DeviceTensor, make_transformer_factory, \
+    set_transformer_factory
+
+from ngraph.op_graph.communication import Send, Recv, Gather_Send, Gather_Recv, Scatter_Send, \
+    Scatter_Recv
 
 
 class NumPyConvEngine(object):
+
     @staticmethod
     def all_conv_code():
         pycode = """
@@ -214,6 +210,7 @@ class NumPyConvEngine(object):
 
 
 class NumPyPoolEngine(object):
+
     @staticmethod
     def get_slices(I, O, pool_params):
         C, D, H, W, _ = I.tensor_description.axes.lengths
@@ -269,6 +266,7 @@ class NumPyCodeEngine(object):
 
 
 class NumPyDeviceBufferStorage(DeviceBufferStorage):
+
     def __init__(self, transformer, bytes, dtype, **kwargs):
         super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
@@ -324,11 +322,13 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
 
 
 class NumPyDeviceBufferReference(DeviceBufferReference):
+
     def __init__(self, transformer, **kwargs):
         super(NumPyDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class NumPyDeviceTensor(DeviceTensor):
+
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                                 **kwargs)
@@ -394,12 +394,19 @@ def get_tensors(f):
 
 
 class NumPyCodeGenerator(PyGen):
+
     def __init__(self, **kwargs):
         super(NumPyCodeGenerator, self).__init__(**kwargs)
         self.conv_params = dict()
         self.conv_slices = dict()
         self.pool_params = dict()
         self.pool_slices = dict()
+        self.send_nodes = dict()
+        self.recv_nodes = dict()
+        self.scatter_send_nodes = dict()
+        self.scatter_recv_nodes = dict()
+        self.gather_send_nodes = dict()
+        self.gather_recv_nodes = dict()
 
     def name(self, x):
         if isinstance(x, NumPyDeviceBufferStorage):
@@ -407,6 +414,23 @@ class NumPyCodeGenerator(PyGen):
         if isinstance(x, NumPyDeviceTensor):
             return x.ref_str
         return x
+
+    def np_reduction_axis(self, op):
+        """
+        Returns numpy reduction axis of an op
+
+        Args:
+            op: instance of ReductionOp
+
+        Returns:
+            tuple of numpy reduction axis
+        """
+        if not isinstance(op, ReductionOp):
+            raise ValueError("Op %s must be an instance of ReductionOp" % op)
+        input_axes = op.args[0].axes
+        reduction_axes = op.reduction_axes
+        np_axis = tuple([input_axes.index_unique(axis) for axis in reduction_axes])
+        return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -420,25 +444,21 @@ class NumPyCodeGenerator(PyGen):
                 op=op.__class__.__name__,
             ))
 
-    @generate_op.on_type(AbsoluteOneDOp)
+    @generate_op.on_type(AbsoluteOp)
     def generate_op(self, op, out, x):
-        self.append("np.abs({}, out={}", x, out)
+        self.append("np.abs({}, out={})", x, out)
 
-    @generate_op.on_type(AddOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.add({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(AddZeroDim)
+    @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
         self.append("np.add({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmax({}, 0, out={})", x, out)
+        self.append("np.ndarray.argmax({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(Argmin)
     def generate_op(self, op, out, x):
-        self.append("np.ndarray.argmin({}, 0, out={})", x, out)
+        self.append("np.ndarray.argmin({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
@@ -490,7 +510,7 @@ class NumPyCodeGenerator(PyGen):
 
         self.append("{out}[()] = np.random.{rstr}, size={out}.shape)", out=out, rstr=rstr)
 
-    @generate_op.on_type(CosOneDOp)
+    @generate_op.on_type(CosOp)
     def generate_op(self, op, out, x):
         self.append("np.cos({}, out={})", x, out)
 
@@ -498,43 +518,23 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}[()] = {}", out, x)
 
-    @generate_op.on_type(DivideOneDim)
+    @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(DivideZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.divide({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(ModOneDim)
+    @generate_op.on_type(Mod)
     def generate_op(self, op, out, x, y):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(ModZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.mod({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(DotOneDimensional)
+    @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
         self.append("""np.dot({}, {}, out={})""", x, y, out)
 
-    @generate_op.on_type(DotTwoDimensional)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(DotTwoByOne)
-    def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
-
-    @generate_op.on_type(EqualOneDim)
+    @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
         self.append("np.equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(EqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(ExpOneDOp)
+    @generate_op.on_type(ExpOp)
     def generate_op(self, op, out, x):
         self.append("np.exp({}, out={})", x, out)
 
@@ -542,83 +542,51 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", x, op.scalar)
 
-    @generate_op.on_type(GreaterOneDim)
+    @generate_op.on_type(Greater)
     def generate_op(self, op, out, x, y):
         self.append("np.greater({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(GreaterZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.greater({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(GreaterEqualOneDim)
+    @generate_op.on_type(GreaterEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.greater_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(GreaterEqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.greater_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LessOneDim)
+    @generate_op.on_type(Less)
     def generate_op(self, op, out, x, y):
         self.append("np.less({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(LessZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.less({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LessEqualOneDim)
+    @generate_op.on_type(LessEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.less_equal({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(LessEqualZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.less_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(LogOneDOp)
+    @generate_op.on_type(LogOp)
     def generate_op(self, op, out, x):
         self.append("np.log({}, out={})", x, out)
 
     @generate_op.on_type(Max)
     def generate_op(self, op, out, x):
-        self.append("np.max({}, 0, out={})", x, out)
+        self.append("np.max({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(MaximumOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.maximum({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(MaximumZeroDim)
+    @generate_op.on_type(Maximum)
     def generate_op(self, op, out, x, y):
         self.append("np.maximum({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Min)
     def generate_op(self, op, out, x):
-        self.append("np.min({}, 0, out={})", x, out)
+        self.append("np.min({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(MinimumOneDim)
+    @generate_op.on_type(Minimum)
     def generate_op(self, op, out, x, y):
         self.append("np.minimum({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(MinimumZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.minimum({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(MultiplyOneDim)
+    @generate_op.on_type(Multiply)
     def generate_op(self, op, out, x, y):
         self.append("np.multiply({}, {}, out={})", x, y, out)
 
-    @generate_op.on_type(MultiplyZeroDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.multiply({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(NegativeOneDOp)
+    @generate_op.on_type(NegativeOp)
     def generate_op(self, op, out, x):
         self.append("np.negative({}, out={})", x, out)
 
-    @generate_op.on_type(NotEqualOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.not_equal({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(NotEqualZeroDim)
+    @generate_op.on_type(NotEqual)
     def generate_op(self, op, out, x, y):
         self.append("np.not_equal({}, {}, out={})", x, y, out)
 
@@ -629,10 +597,6 @@ class NumPyCodeGenerator(PyGen):
         """, x=x, o=out)
 
     @generate_op.on_type(Power)
-    def generate_op(self, op, out, x, y):
-        self.append("np.power({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(PowerZeroDim)
     def generate_op(self, op, out, x, y):
         self.append("np.power({}, {}, out={})", x, y, out)
 
@@ -649,7 +613,7 @@ class NumPyCodeGenerator(PyGen):
                 {out}[()] = {x}
             """, out=out, x=x)
 
-    @generate_op.on_type(ReciprocalOneDOp)
+    @generate_op.on_type(ReciprocalOp)
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
@@ -661,45 +625,77 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__({}, {})", tensor, tuple(op.item), value)
 
-    @generate_op.on_type(SignOneDOp)
+    @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
         self.append("np.sign({}, out=out)", x, out)
 
-    @generate_op.on_type(SinOneDOp)
+    @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
         self.append("np.sin({}, out={})", x, out)
 
-    @generate_op.on_type(SqrtOneDOp)
+    @generate_op.on_type(SqrtOp)
     def generate_op(self, op, out, x):
         self.append("np.sqrt({}, out={})", x, out)
 
-    @generate_op.on_type(SquareOneDOp)
+    @generate_op.on_type(SquareOp)
     def generate_op(self, op, out, x):
         self.append("np.square({}, out={})", x, out)
 
-    @generate_op.on_type(SubtractOneDim)
-    def generate_op(self, op, out, x, y):
-        self.append("np.subtract({}, {}, out={})", x, y, out)
-
-    @generate_op.on_type(SubtractZeroDim)
+    @generate_op.on_type(Subtract)
     def generate_op(self, op, out, x, y):
         self.append("np.subtract({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Sum)
     def generate_op(self, op, out, x):
-        self.append("np.sum({}, axis=0, out={})", x, out)
+        self.append("np.sum({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(Prod)
     def generate_op(self, op, out, x):
-        self.append("np.prod({}, axis=0, out={})", x, out)
+        self.append("np.prod({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
-    @generate_op.on_type(TanhOneDOp)
+    @generate_op.on_type(TanhOp)
     def generate_op(self, op, out, x):
         self.append("np.tanh({}, out={})", x, out)
 
     @generate_op.on_type(TensorSizeOp)
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
+
+    @generate_op.on_type(Send)
+    def generate_op(self, op, out, *args):
+        send_id = len(self.send_nodes)
+        self.send_nodes[send_id] = op
+        self.append("self.send({})", send_id)
+
+    @generate_op.on_type(Recv)
+    def generate_op(self, op, out, *args):
+        recv_id = len(self.recv_nodes)
+        self.recv_nodes[recv_id] = op
+        self.append("{} = self.recv_from_send({})", out, recv_id)
+
+    @generate_op.on_type(Gather_Send)
+    def generate_op(self, op, out, *args):
+        gather_send_id = len(self.gather_send_nodes)
+        self.gather_send_nodes[gather_send_id] = op
+        self.append("self.gather_send({})", gather_send_id)
+
+    @generate_op.on_type(Gather_Recv)
+    def generate_op(self, op, out, *args):
+        gather_recv_id = len(self.gather_recv_nodes)
+        self.gather_recv_nodes[gather_recv_id] = op
+        self.append("{}[:] = self.gather_recv_from_gather_send({})", out, gather_recv_id)
+
+    @generate_op.on_type(Scatter_Send)
+    def generate_op(self, op, out, *args):
+        scatter_send_id = len(self.scatter_send_nodes)
+        self.scatter_send_nodes[scatter_send_id] = op
+        self.append("self.scatter_send({})", scatter_send_id)
+
+    @generate_op.on_type(Scatter_Recv)
+    def generate_op(self, op, out, *args):
+        scatter_recv_id = len(self.scatter_recv_nodes)
+        self.scatter_recv_nodes[scatter_recv_id] = op
+        self.append("{}[:] = self.scatter_recv_from_scatter_send({})", out, scatter_recv_id)
 
 
 class NumPyTransformer(Transformer):
@@ -730,8 +726,8 @@ class NumPyTransformer(Transformer):
         self.graph_passes = [DerivPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
-                             RequiredTensorShaping()
-                             ]
+                             RequiredTensorShaping(),
+                             CPUTensorShaping()]
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -782,6 +778,7 @@ class NumPyTransformer(Transformer):
             if code is self.compute_code.code:
                 self.compute_code.append("pass")
         self.compute_code.endl()
+        self.name = name
         return name
 
     def finish_transform(self):
@@ -807,11 +804,88 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-            # print(self.code.code)
+            # with open("code_{}.py".format(self.name), "w") as f:
+            #     f.write(self.code.code)
             # print(self.code.filename)
 
         r = self.code.compile("op", globals())
-        self.model = r['Model']()
+        self.model = r['Model']
+
+        def send(self, send_id):
+            send_op = self.send_nodes[send_id]
+            q = send_op.shared_q
+
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            q.put(x_nparr)
+
+        def recv(self, recv_id):
+            recv_op = self.recv_nodes[recv_id]
+            q = recv_op.shared_q
+            x = q.get()
+            return x
+
+        def gather_send(self, gather_send_id):
+            gather_send_op = self.gather_send_nodes[gather_send_id]
+            q = gather_send_op.shared_queue
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = gather_send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            q.put(x_nparr)
+
+        def gather_recv(self, gather_recv_id):
+            gather_recv_op = self.gather_recv_nodes[gather_recv_id]
+            x_devicetensor = gather_recv_op.value
+            x_nparr = x_devicetensor.get(None)
+            for i in range(len(gather_recv_op.from_id)):
+                q = gather_recv_op.shared_queue_list[i]
+                x = q.get()
+                x_nparr[gather_recv_op.slices[i]] = x
+            return x_nparr
+
+        def scatter_send(self, scatter_send_id):
+            scatter_send_op = self.scatter_send_nodes[scatter_send_id]
+
+            # TODO
+            # below converts DeviceTensor to numpy array
+            # should we instead serialize DeviceTensor?
+            x_devicetensor = scatter_send_op.args[0].value
+            x_nparr = x_devicetensor.get(None)
+            for i in range(len(scatter_send_op.to_id)):
+                q = scatter_send_op.shared_queue_list[i]
+                q.put(x_nparr[scatter_send_op.slices[i]])
+
+        def scatter_recv(self, scatter_recv_id):
+            scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
+            q = scatter_recv_op.shared_queue
+            x = q.get()
+            return x
+
+        self.model.recv_from_send = recv
+        self.model.send = send
+
+        self.model.gather_recv_from_gather_send = gather_recv
+        self.model.gather_send = gather_send
+
+        self.model.scatter_recv_from_scatter_send = scatter_recv
+        self.model.scatter_send = scatter_send
+
+        self.model = self.model()
+
+        self.model.send_nodes = self.compute_code.send_nodes
+        self.model.recv_nodes = self.compute_code.recv_nodes
+
+        self.model.gather_send_nodes = self.compute_code.gather_send_nodes
+        self.model.gather_recv_nodes = self.compute_code.gather_recv_nodes
+
+        self.model.scatter_send_nodes = self.compute_code.scatter_send_nodes
+        self.model.scatter_recv_nodes = self.compute_code.scatter_recv_nodes
+
         self.model.conv_params = self.compute_code.conv_params
         self.model.pool_params = self.compute_code.pool_params
         self.model.conv_slices = self.compute_code.conv_slices

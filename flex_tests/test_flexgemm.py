@@ -27,14 +27,13 @@ def test_gemm(transformer_factory):
     """
     n, c = 32, 32
 
-    ax = ng.make_name_scope().named('ax')
-    ax.N = ng.make_axis(length=n, batch=True)
-    ax.C = ng.make_axis(length=c)
+    N = ng.make_axis(length=n, name='N')
+    C = ng.make_axis(length=c)
 
-    X = ng.placeholder(axes=[ax.C, ax.N])
-    Y = ng.placeholder(axes=[ax.N])
+    X = ng.placeholder(axes=[C, N])
+    Y = ng.placeholder(axes=[N])
 
-    W = ng.variable(axes=[ax.C - 1], initial_value=0.1)
+    W = ng.variable(axes=[C - 1], initial_value=0.1)
 
     Y_hat = ng.dot(W, X)
 
@@ -46,4 +45,8 @@ def test_gemm(transformer_factory):
 
         for ii in range(3):
             y_hat_val = mm_executor(xs)
-            assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
+            # 8.8 fixed point test
+            # assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
+
+            # autoflex test
+            assert_allclose(np.dot(xs, w), y_hat_val)

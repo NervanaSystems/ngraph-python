@@ -25,9 +25,9 @@ rtol = atol = 1e-2
 
 def test_expand_dims(transformer_factory):
     """TODO."""
-    C = ng.make_axis().named('C')
-    D = ng.make_axis().named('D')
-    N = ng.make_axis().named('N')
+    C = ng.make_axis()
+    D = ng.make_axis()
+    N = ng.make_axis()
 
     max_new_axis_length = 4
 
@@ -94,8 +94,8 @@ def test_expand_dims(transformer_factory):
 def test_slice(transformer_factory):
     """TODO."""
 
-    C = ng.make_axis().named('C')
-    D = ng.make_axis().named('D')
+    C = ng.make_axis()
+    D = ng.make_axis()
 
     tests = [
         {
@@ -183,10 +183,10 @@ def test_slice(transformer_factory):
 
 def test_padding(transformer_factory):
     """TODO."""
-    C = ng.make_axis().named('C')
-    D = ng.make_axis().named('D')
-    M = ng.make_axis().named('M')
-    N = ng.make_axis().named('N')
+    C = ng.make_axis()
+    D = ng.make_axis()
+    M = ng.make_axis()
+    N = ng.make_axis()
 
     tests = [
         {
@@ -249,22 +249,19 @@ def test_padding(transformer_factory):
 
 
 def test_cast_axes(transformer_factory):
-    C = ng.make_axis().named('C')
-    D = ng.make_axis().named('D')
+    C = ng.make_axis(length=2)
+    D = ng.make_axis(length=3)
 
-    C.length = 2
-    D.length = 3
-
-    x = ng.placeholder((C, D))
+    x = ng.placeholder([C, D])
 
     with pytest.raises(ValueError):
-        ng.cast_axes(x, (D, C))
+        ng.cast_axes(x, [D, C])
 
     x_slice = x[1, :]
     # Cast back to known axes
     x_cast = ng.cast_axes(x_slice, [D])
 
-    # Verfiy that the tensor broadcasts along ax.D
+    # Verfiy that the tensor broadcasts along D
     y = x + x_cast
     with ExecutorFactory() as ex:
         y_fun = ex.executor(y, x)
@@ -288,17 +285,16 @@ def test_cast_axes(transformer_factory):
 def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
-    ax = ng.make_name_scope().named("ax")
-    ax.C = ng.make_axis(3)
-    ax.T = ng.make_axis(1)
-    ax.R = ng.make_axis(5)
-    ax.S = ng.make_axis(5)
+    C = ng.make_axis(length=3)
+    T = ng.make_axis(length=1)
+    R = ng.make_axis(length=5)
+    S = ng.make_axis(length=5)
 
-    axes = [ax.R, ax.S, ax.C]
+    axes = [R, S, C]
     v = ng.variable([ng.make_axis(_.length) for _ in axes])
     rsc = ng.cast_axes(v, axes)
-    trsc = ng.expand_dims(rsc, ax.T, 0)
-    ctrs = ng.axes_with_order(trsc, axes=[ax.C, ax.T, ax.R, ax.S])
+    trsc = ng.expand_dims(rsc, T, 0)
+    ctrs = ng.axes_with_order(trsc, axes=[C, T, R, S])
     cost = ng.sum(ctrs, out_axes=None)
     grad = ng.deriv(cost, v)
 

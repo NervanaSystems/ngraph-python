@@ -27,21 +27,20 @@ def test_stack(transformer_factory):
     if transformer_factory.name == flex_gpu_transformer_name:
         pytest.skip("Allowed to fail until PR2")
 
-    ax = ng.make_name_scope().named('ax')
-    ax.W = ng.make_axis(length=4)
-    ax.H = ng.make_axis(length=5)
-    ax.I = ng.make_axis(length=3)
+    W = ng.make_axis(length=4)
+    H = ng.make_axis(length=5)
+    I = ng.make_axis(length=3)
 
-    axes = ng.make_axes([ax.W, ax.H])
+    axes = ng.make_axes([W, H])
 
     rng = RandomTensorGenerator(0, np.float32)
 
-    a_v = [rng.uniform(0, 1, axes) for i in range(ax.I.length)]
+    a_v = [rng.uniform(0, 1, axes) for i in range(I.length)]
 
     for pos in range(len(axes) + 1):
         a = [ng.placeholder(axes, initial_value=_) for _ in a_v]
 
-        s = ng.stack(a, ax.I, pos)
+        s = ng.stack(a, I, pos)
 
         with ExecutorFactory() as ex:
             num_funs = [ex.numeric_derivative(s, _, delta) for _ in a]

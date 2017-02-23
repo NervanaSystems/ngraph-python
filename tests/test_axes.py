@@ -18,23 +18,19 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-import ngraph.util.names as names
-from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, SlicedAxis
+from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, slice_axis
 from ngraph.testing import ExecutorFactory
 
-# Make some axes
-ax = names.NameScope()
 
-ax.A = ng.make_axis(10)
-ax.B = ng.make_axis(15)
-ax.C = ng.make_axis(20)
-ax.D = ng.make_axis(25)
+ax_A = ng.make_axis(10)
+ax_B = ng.make_axis(15)
+ax_C = ng.make_axis(20)
 
 
 def test_axes_equal():
     """ Test axes == operator """
-    a1 = ng.make_axes([ax.A, ax.B, ax.C])
-    a2 = ng.make_axes([ax.A, ax.B, ax.C])
+    a1 = ng.make_axes([ax_A, ax_B, ax_C])
+    a2 = ng.make_axes([ax_A, ax_B, ax_C])
     assert a1 == a2
 
 
@@ -72,16 +68,16 @@ def test_axes_ops():
         """
         assert ng.make_axes(axes1) - ng.make_axes(axes2) == ng.make_axes(target)
 
-    test_sub([ax.A, ax.B], [ax.A], [ax.B])
-    test_sub([ax.A, ax.B], [ax.B], [ax.A])
+    test_sub([ax_A, ax_B], [ax_A], [ax_B])
+    test_sub([ax_A, ax_B], [ax_B], [ax_A])
 
     # Combined axes length
-    assert FlattenedAxis([ax.A, ax.B]).length \
-        == ax.A.length * ax.B.length
-    assert ng.make_axes([ax.A, (ax.B, ax.C)]).lengths \
-        == (ax.A.length, ax.B.length * ax.C.length)
-    assert FlattenedAxis([ax.A, (ax.B, ax.C)]).length \
-        == ax.A.length * ax.B.length * ax.C.length
+    assert FlattenedAxis([ax_A, ax_B]).length \
+        == ax_A.length * ax_B.length
+    assert ng.make_axes([ax_A, (ax_B, ax_C)]).lengths \
+        == (ax_A.length, ax_B.length * ax_C.length)
+    assert FlattenedAxis([ax_A, (ax_B, ax_C)]).length \
+        == ax_A.length * ax_B.length * ax_C.length
 
 
 def random(tensor_description):
@@ -124,13 +120,13 @@ def test_reaxe_0d_to_1d():
     x = random(td)
 
     # create view of x
-    x_view = tensorview(td.broadcast([ax.A]), x)
+    x_view = tensorview(td.broadcast([ax_A]), x)
 
     # set x
     x[()] = 3
 
     # setting e also sets x_view
-    assert x_view.shape == (ax.A.length,)
+    assert x_view.shape == (ax_A.length,)
     assert np.all(x_view == 3)
 
 
@@ -138,12 +134,12 @@ def test_reaxe_0d_to_2d():
     td = TensorDescription(axes=())
     x = random(td)
 
-    x_view = tensorview(td.broadcast([ax.A, ax.B]), x)
+    x_view = tensorview(td.broadcast([ax_A, ax_B]), x)
 
     # set x
     x[()] = 3
 
-    assert x_view.shape == (ax.A.length, ax.B.length)
+    assert x_view.shape == (ax_A.length, ax_B.length)
     assert np.all(x_view == 3)
 
 
@@ -159,104 +155,104 @@ def test_simple_tensors():
     stopped ...
     """
     # A simple vector
-    td1 = TensorDescription(axes=[ax.A])
+    td1 = TensorDescription(axes=[ax_A])
     e1 = random(td1)
 
-    td2 = TensorDescription(axes=[ax.A, ax.B])
+    td2 = TensorDescription(axes=[ax_A, ax_B])
     e2 = random(td2)
 
     # Reaxes
-    e1_1 = tensorview(td1.broadcast([ax.A, ax.B]), e1)
-    e1_2 = tensorview(td1.broadcast([ax.B, ax.A]), e1)
-    e1_3 = tensorview(td1.broadcast([(ax.B, ax.C), ax.A]), e1)
+    e1_1 = tensorview(td1.broadcast([ax_A, ax_B]), e1)
+    e1_2 = tensorview(td1.broadcast([ax_B, ax_A]), e1)
+    e1_3 = tensorview(td1.broadcast([(ax_B, ax_C), ax_A]), e1)
 
-    e2_1 = tensorview(td2.broadcast([ax.B, ax.A]), e2)
-    e2_2 = tensorview(td2.broadcast([ax.A, ax.B]), e2)
+    e2_1 = tensorview(td2.broadcast([ax_B, ax_A]), e2)
+    e2_2 = tensorview(td2.broadcast([ax_A, ax_B]), e2)
     e2_3 = tensorview(td2.flatten((
-        FlattenedAxis((ax.A, ax.B)),
+        FlattenedAxis((ax_A, ax_B)),
     )), e2_2)
 
-    assert e1_1.shape == (ax.A.length, ax.B.length)
-    assert e1_2.shape == (ax.B.length, ax.A.length)
+    assert e1_1.shape == (ax_A.length, ax_B.length)
+    assert e1_2.shape == (ax_B.length, ax_A.length)
 
-    for i in range(ax.A.length):
+    for i in range(ax_A.length):
         e1_1[i] = i
 
-    for i in range(ax.A.length):
+    for i in range(ax_A.length):
         assert e1[i] == i
-        for j in range(ax.B.length):
+        for j in range(ax_B.length):
             assert e1_1[i, j] == i
             assert e1_2[j, i] == i
-        for j in range(ax.B.length * ax.C.length):
+        for j in range(ax_B.length * ax_C.length):
             assert e1_3[j, i] == i
 
     def val2(i, j):
         return (i + 1) * (j + 2)
 
-    for i in range(ax.A.length):
-        for j in range(ax.B.length):
+    for i in range(ax_A.length):
+        for j in range(ax_B.length):
             e2[i, j] = val2(i, j)
 
-    for i in range(ax.A.length):
-        for j in range(ax.B.length):
+    for i in range(ax_A.length):
+        for j in range(ax_B.length):
             assert e2_1[j, i] == val2(i, j)
             assert e2_2[i, j] == val2(i, j)
-            assert e2_3[i * ax.B.length + j] == val2(i, j)
+            assert e2_3[i * ax_B.length + j] == val2(i, j)
 
 
 def test_sliced_axis():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert s.length == 5
 
 
 def test_sliced_axis_invalid():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(5, 0))
+    s = slice_axis(a, slice(5, 0))
     assert s.length == 0
 
 
 def test_sliced_axis_none_end():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, None))
+    s = slice_axis(a, slice(0, None))
     assert s.length == 10
 
 
 def test_sliced_axis_negative():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(5, 0, -1))
+    s = slice_axis(a, slice(5, 0, -1))
     assert s.length == 5
 
 
 def test_sliced_axis_negative_invalid():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(0, 5, -1))
+    s = slice_axis(a, slice(0, 5, -1))
     assert s.length == 0
 
 
 def test_sliced_axis_flip():
     a = ng.make_axis(10)
-    s = SlicedAxis(a, slice(None, None, -1))
+    s = slice_axis(a, slice(None, None, -1))
     assert s.length == 10
 
 
 def test_sliced_axis_invalid_step():
     a = ng.make_axis(10)
     with pytest.raises(ValueError):
-        SlicedAxis(a, slice(0, 5, 2))
+        slice_axis(a, slice(0, 5, 2))
 
 
 def test_sliced_batch_axis():
     """ slicing a batch axis should result in a batch axis """
-    a = ng.make_axis(10, batch=True)
-    s = SlicedAxis(a, slice(0, 5))
+    a = ng.make_axis(10, name='N')
+    s = slice_axis(a, slice(0, 5))
     assert s.is_batch is True
 
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
-    a = ng.make_axis(10, recurrent=True)
-    s = SlicedAxis(a, slice(0, 5))
+    a = ng.make_axis(10, name='R')
+    s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
 
 
@@ -265,7 +261,7 @@ def test_sliced_axis_roles():
     role1 = ng.make_axis_role()
     role2 = ng.make_axis_role()
     a = ng.make_axis(10, roles=[role1, role2])
-    s = SlicedAxis(a, slice(0, 5))
+    s = slice_axis(a, slice(0, 5))
     assert all(r in s.roles for r in a.roles)
 
 

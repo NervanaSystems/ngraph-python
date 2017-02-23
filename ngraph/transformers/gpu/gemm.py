@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
-from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
+from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, FlexPtrDescription
 from ngraph.transformers.gpu.util import _get_sm_count
 from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.op_graph.axes import TensorDescription
@@ -222,11 +222,9 @@ class GEMMKernel(GPUKernel):
             self.flex_entry_C = C.flex_entry()
 
             # flex params
-            self.params += [self.flex_entry_C.ptr, 1.0]  # maxabs ptr, output scale
+            self.params += [FlexPtrDescription(self.flex_entry_C), 1.0]  # maxabs ptr, output scale
             # record output flex id for autoflex
             self.output_flex_ids = [self.flex_entry_C.flex_id]
-            # bind param values that depend on flex scales
-            self.bind_flex_scales()
 
     def bind_flex_scales(self):
         scaleAB = self.flex_entry_A.scale * self.flex_entry_B.scale
@@ -237,6 +235,8 @@ class GEMMKernel(GPUKernel):
         self.params[6] = alpha
         self.params[7] = beta
         self.params[20] = 1. / scaleC
+
+        FlexPtrDescription.bind_ptr(self.params)
 
     def bind_buffers(self):
         """

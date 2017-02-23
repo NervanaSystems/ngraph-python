@@ -55,15 +55,26 @@ class GDMReference(object):
         return weights
 
 
-@pytest.mark.parametrize("learning_rate", list(np.random.random(2)))
-@pytest.mark.parametrize("momentum_coef", list(np.random.random(4)))
+# generate fixtures this way so that collection names are deterministic and can
+# be run in parallel:
+# https://github.com/pytest-dev/pytest/issues/594
+@pytest.fixture(params=[0, 1])
+def random_learning_rate():
+    return np.random.random()
+
+
+@pytest.fixture(params=[0, 1, 2, 3])
+def random_momentum_coef():
+    return np.random.random()
+
+
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
-def test_gdm(learning_rate, momentum_coef, wdecay, nesterov, transformer_factory):
+def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, transformer_factory):
 
     # Setup the baseline and reference optimizers to be tested
-    gdm_args = {'learning_rate': learning_rate,
-                'momentum_coef': momentum_coef,
+    gdm_args = {'learning_rate': random_learning_rate,
+                'momentum_coef': random_momentum_coef,
                 'wdecay': wdecay,
                 'nesterov': nesterov}
 
@@ -72,7 +83,7 @@ def test_gdm(learning_rate, momentum_coef, wdecay, nesterov, transformer_factory
 
     # Set up data placeholders
     C = ng.make_axis(20)
-    N = ng.make_axis(32, batch=True)
+    N = ng.make_axis(32, name='N')
 
     data = ng.placeholder([C, N])
     target = ng.placeholder([N])

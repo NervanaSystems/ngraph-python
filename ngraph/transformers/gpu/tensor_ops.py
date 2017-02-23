@@ -91,6 +91,9 @@ class DimShuffleKernel(GPUKernel):
         self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
                                         None, *self.params)
 
+    def bind_flex_scales(self):
+        pass
+
 
 class FillKernel(GPUKernel):
     """
@@ -125,6 +128,64 @@ class FillKernel(GPUKernel):
         Temporarily uses neon GPUTensor's fill method
         """
         self.tensor.fill(self.value)
+
+    def bind_flex_scales(self):
+        pass
+
+
+class SendKernel(GPUKernel):
+    def __init__(self, transformer, send_op):
+        super(SendKernel, self).__init__(transformer)
+        self.q = send_op.shared_q
+        self.tensor = send_op.args[0].tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(SendKernel, self).bind_buffers()
+
+    def execute(self):
+        value = self.tensor.get(None)
+        self.q.put(value)
+
+
+class RecvKernel(GPUKernel):
+    """
+    Kernel used to receive a tensor. The tensor's value can be
+    a scalar, another tensor, or a numpy array
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (RecvKernel): Graph op being transformed into this kernel
+
+    Attributes:
+        tensor (GPUTensor): Dest tensor
+    """
+    def __init__(self, transformer, op):
+        super(RecvKernel, self).__init__(transformer)
+        self.recv_op = op
+        self.tensor = op.tensor_description()
+
+    def bind_buffers(self):
+        """
+        Get allocated GPU tensor for output and potentially source value
+        """
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(RecvKernel, self).bind_buffers()
+
+    def execute(self):
+        """
+        Receive tensor
+        """
+        q = self.recv_op.shared_q
+        x = q.get()
+
+        if self.tensor.shape == ():
+            self.tensor.tensor.fill(x)
+        else:
+            self.tensor.__setitem__(None, x)
 
 
 class RngFillKernel(GPUKernel):

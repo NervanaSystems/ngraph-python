@@ -19,8 +19,9 @@ from __future__ import print_function
 
 from tensorflow.examples.tutorials.mnist import input_data
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
-import ngraph.frontends.common.utils as util
+from ngraph.frontends.common.utils import CommonSGDOptimizer
 import tensorflow as tf
+import ngraph as ng
 import ngraph.transformers as ngt
 import argparse
 
@@ -45,18 +46,23 @@ def mnist_mlp(args):
 
     # transformer and computations
     transformer = ngt.make_transformer()
-    updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
-    train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
+    updates = CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
+    train_comp = transformer.computation(ng.sequential([updates, cost_ng]), x_ng, t_ng)
     init_comp = transformer.computation(init_op_ng)
     transformer.initialize()
 
     # train
-    mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+    if args.random_data is not None:
+        mnist = args.random_data
+        mnist.reset(0)
+    else:
+        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+
     init_comp()
     ng_cost_vals = []
     for idx in range(args.max_iter):
         batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
-        cost_val, _ = train_comp(batch_xs, batch_ys)
+        cost_val = train_comp(batch_xs, batch_ys)
         ng_cost_vals.append(float(cost_val))
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
@@ -67,7 +73,11 @@ def mnist_mlp(args):
         # train in tensorflow
         train_step = tf.train.GradientDescentOptimizer(args.lrate).minimize(cost)
         sess.run(init)
-        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        if args.random_data is not None:
+            mnist = args.random_data
+            mnist.reset(0)
+        else:
+            mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
         tf_cost_vals = []
         for idx in range(args.max_iter):
             batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
@@ -86,5 +96,6 @@ if __name__ == "__main__":
     parser.add_argument('-l', '--lrate', type=float, default=0.1,
                         help="Learning rate")
     parser.add_argument('-b', '--batch_size', type=int, default=128)
+    parser.add_argument('--random_data', default=None)
     args = parser.parse_args()
     mnist_mlp(args)

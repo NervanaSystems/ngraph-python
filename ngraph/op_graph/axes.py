@@ -22,9 +22,7 @@ from functools import reduce, wraps
 import numpy as np
 import types
 from weakref import WeakValueDictionary
-from abc import ABCMeta
 from builtins import object, map, range, zip
-from future.utils import with_metaclass
 
 from ngraph.util.names import NameableValue
 
@@ -57,7 +55,6 @@ def make_axis_role(name=None, docstring=None):
 
 
 def make_axis(length=None, name=None,
-              batch=False, recurrent=False,
               match_on_length=False,
               roles=None, docstring=None):
     """
@@ -78,7 +75,6 @@ def make_axis(length=None, name=None,
 
     """
     return Axis(length=length, name=name,
-                batch=batch, recurrent=recurrent,
                 match_on_length=match_on_length,
                 roles=roles, docstring=docstring)
 
@@ -112,7 +108,7 @@ class AxisRole(NameableValue):
         super(AxisRole, self).__init__(**kwargs)
 
 
-class Axis(with_metaclass(ABCMeta, NameableValue)):
+class Axis(object):
     """
     An Axis labels a dimension of a tensor. The op-graph uses
     the identity of Axis objects to pair and specify dimensions in
@@ -140,22 +136,34 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             equality against other Axis values. This is useful for anonymous Axis of
             constant tensors.
     """
+    __name_counter = 0
+
     def __init__(self,
                  length=None,
-                 batch=False,
-                 recurrent=False,
                  match_on_length=False,
                  roles=None,
+                 name=None,
                  **kwargs):
-        super(Axis, self).__init__(**kwargs)
+        assert 'batch' not in kwargs
+        assert 'recurrent' not in kwargs
+
+        if name is None:
+            # generate name for axis if None was provided
+            name = 'Axis_' + str(type(self).__name_counter)
+            type(self).__name_counter += 1
+
+        self.name = name
         self.__length = length
-        self.__is_batch = batch
-        self.__is_recurrent = recurrent
+
         self.__match_on_length = match_on_length
         self.__duals = WeakValueDictionary()
         self.__roles = set()
         if roles is not None:
             self.roles.update(roles)
+
+    def named(self, name):
+        self.name = name
+        return self
 
     @property
     def is_flattened(self):
@@ -174,7 +182,7 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             bool: True if the axis is a batch axis.
 
         """
-        return self.__is_batch
+        return self.name == 'N'
 
     @property
     def is_recurrent(self):
@@ -185,16 +193,11 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.__is_recurrent
-
-    @is_recurrent.setter
-    def is_recurrent(self, value):
-        self.__is_recurrent = value
+        return self.name == 'R'
 
     @property
     def match_on_length(self):
         """
-
         Returns:
             bool: True if this axis matches axes with the same length.
         """
@@ -322,6 +325,8 @@ class Axis(with_metaclass(ABCMeta, NameableValue)):
             return False
         elif self.match_on_length or other.match_on_length:
             return self.length == other.length
+        elif self.name == other.name:
+            return True
         return self.annotated_axis is other.annotated_axis
 
     def __hash__(self):
@@ -574,43 +579,6 @@ class DualAxis(Axis):
         return 'DualAxis({axis}:{level})'.format(axis=self.primary_axis, level=self.dual_level)
 
 
-class FunctionAxis(Axis):
-    """
-    A function axis is an axis whose length is computed by a user-supplied function.
-
-    Instances should only be created internally because using a
-    function that changes the length after a transformation will result in
-    undefined behaviour.
-
-    Currently, this class is only used by the SlicedAxis and PaddedAxis subclasses,
-    which derive their length from a parent axis's length. This satisfies the above
-    restriction, because we expect the parent axis to become immutable once
-    the transformation begins.
-    """
-
-    def __init__(self, parent, length_fun, **kwargs):
-        super(FunctionAxis, self).__init__(length=-1,
-                                           **kwargs)
-        self.parent = parent
-        self.length_fun = length_fun
-
-    @property
-    def length(self):
-        return self.length_fun()
-
-    @property
-    def is_recurrent(self):
-        return self.parent.is_recurrent
-
-    @property
-    def roles(self):
-        return self.parent.roles
-
-    @property
-    def is_batch(self):
-        return self.parent.is_batch
-
-
 def _sliced_length(s, incoming_length):
     start, stop, step = s.indices(incoming_length)
 
@@ -636,69 +604,29 @@ def _validate_slice(s):
         ))
 
 
-class SlicedAxis(FunctionAxis):
+def slice_axis(axis, s):
     """
-    An axis created by slicing a parent axis.
-
-    The length is computed dynamically from the length of the parent.
+    Slice an axis, return complete new axis
+    TODO: deprecate this after the axis refactoring
 
     Arguments:
-        parent: The axis being sliced.
-        s: The slice.
-        kwargs: Arguments for related classes.
+        axis: the axis to be sliced
+        s: slice
 
-    TODO: Right now, a 0 length slice is allowed.  Perhaps we want to raise an
-    exception instead?
+    Returns:
+        Axis instance, the new sliced axis
     """
-    def __init__(self, parent, s, **kwargs):
+    # validate
+    _validate_slice(s)
 
-        self.slice = s
-        _validate_slice(s)
+    # get sliced length
+    new_length = None if axis.length is None else _sliced_length(s, axis.length)
 
-        super(SlicedAxis, self).__init__(
-            parent=parent,
-            length_fun=lambda: _sliced_length(s, parent.length),
-            **kwargs
-        )
-
-    def __repr__(self):
-        return (
-            'SlicedAxis({name}: {length}; parent: {parent}; slice: {slice})'
-        ).format(
-            name=self.name,
-            length=self.length,
-            parent=self.parent,
-            slice=self.slice,
-        )
-
-
-class PaddedAxis(FunctionAxis):
-    """
-    An axis created by padding a parent axis.
-
-    Arguments:
-        parent: The axis being padded.
-        pad: A two-element array of pre and post padding.
-    """
-    def __init__(self, parent, pad, **kwargs):
-        self.pad = pad
-
-        def padded_length():
-            return parent.length + pad[0] + pad[1]
-
-        super(PaddedAxis, self).__init__(
-            parent=parent, length_fun=padded_length, **kwargs
-        )
-
-    def __repr__(self):
-        return (
-            'PaddedAxis({name}: {length}; parent: {parent}; pad: {pad})'
-        ).format(
-            name=self.name,
-            length=self.length,
-            parent=self.parent,
-            pad=self.pad,
-        )
+    # create sliced axis
+    new_axis = make_axis(length=new_length,
+                         name=axis.name,
+                         roles=axis.roles)
+    return new_axis
 
 
 def no_duplicates(arr):
@@ -900,6 +828,9 @@ class Axes(object):
             return
         raise ValueError('Number of axes %d too low for shape %s' % (
                          len(axes), shape))
+
+    def find_by_name(self, name):
+        return Axes(axis for axis in self if axis.name == name)
 
     def find_by_short_name(self, short_name):
         return Axes(axis for axis in self if axis.short_name == short_name)
@@ -1772,7 +1703,7 @@ class TensorDescription(NameableValue):
                 _validate_slice(s)
 
                 # ensure new_axis has the correct length
-                _check_sliced_axis_length(s, axis, new_axis)
+                new_axis.length = _sliced_length(s, axis.length)
 
                 start, stop, step = s.indices(axis.length)
 

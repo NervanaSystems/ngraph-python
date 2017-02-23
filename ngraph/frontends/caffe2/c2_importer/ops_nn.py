@@ -22,7 +22,7 @@ import numpy as np
 
 
 def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
-    pad_num = [val.i for val in c2_op.arg._values if val.name == 'legacy_pad']
+    pad_num = [val.i for val in c2_op.arg if val.name == 'legacy_pad']
     pad_dict = {0: 'NOTSET', 1: 'VALID', 2: 'SAME', 3: 'CAFFE_LEGACY_POOLING'}
     if not pad_num:
         pad_num = 0
@@ -97,7 +97,8 @@ class OpsNN(OpsBase):
         x, y = inputs
 
         y = ng.cast_axes(y, x.axes)
-        return 0.5 * ng.squared_L2(x - y)
+        out_axes = y.axes.batch_axes() if y.axes.batch_axes() else y.axes[0]
+        return 0.5 * ng.squared_L2(x - y, out_axes=out_axes)
 
     def AveragedLoss(self, c2_op, inputs):
         """
@@ -110,7 +111,9 @@ class OpsNN(OpsBase):
         Returns:
             A ngraph Op corresponding to the caffe2 node.
         """
-        return ng.mean(inputs[0], reduction_axes=inputs[0].axes.batch_axes())
+        x = inputs[0]
+        reduction_axes = x.axes.batch_axes() if x.axes.batch_axes() else ng.make_axes(x.axes[0])
+        return ng.mean(x, reduction_axes=reduction_axes)
 
     def LabelCrossEntropy(self, c2_op, inputs):
         """
@@ -155,7 +158,7 @@ class OpsNN(OpsBase):
         # TODO: we assume NCHW, make some assert here?
 
         # set input axes shape
-        ax_N = ng.make_axis(batch=True)
+        ax_N = ng.make_axis(name='N')
         ax_C = ng.make_axis(roles=[ar.Channel])
         ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
@@ -169,7 +172,7 @@ class OpsNN(OpsBase):
         oW = ng.make_axis(roles=[ar.Width]).named('W')
 
         # spatial kernel size
-        kernel_size = [int(val.i) for val in c2_op.arg._values if val.name == "kernel"]
+        kernel_size = [int(val.i) for val in c2_op.arg if val.name == "kernel"]
         if len(kernel_size) != 1:
             raise ValueError("Kernel size must be scalar value")
         # kernel is square
@@ -177,7 +180,7 @@ class OpsNN(OpsBase):
         kernel_d = kernel_c = 1
 
         # strides params
-        stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
+        stride_size = [int(val.i) for val in c2_op.arg if val.name == "stride"]
         if len(stride_size) != 1:
             raise ValueError("Stride size must be scalar value")
         stride_h = stride_w = stride_size[0]
@@ -248,7 +251,7 @@ class OpsNN(OpsBase):
         """
         X, W, bias = inputs
 
-        order = [val.s for val in c2_op.arg._values if val.name == "order"]
+        order = [val.s for val in c2_op.arg if val.name == "order"]
         if 1 != len(order):
             raise ValueError("Multiple order values in convolution")
         order = order[0]
@@ -257,7 +260,7 @@ class OpsNN(OpsBase):
             raise NotImplementedError("Unsupported order in convolution: {}", order)
 
         # set input axes shape
-        ax_N = ng.make_axis(batch=True)
+        ax_N = ng.make_axis(name='N')
         ax_C = ng.make_axis(roles=[ar.Channel])
         ax_D = ng.make_axis(roles=[ar.Depth], length=1)
         ax_H = ng.make_axis(roles=[ar.Height])
@@ -291,7 +294,7 @@ class OpsNN(OpsBase):
             raise ValueError("Bias's length must equal to number of output feature maps.")
 
         # strides params
-        stride_size = [int(val.i) for val in c2_op.arg._values if val.name == "stride"]
+        stride_size = [int(val.i) for val in c2_op.arg if val.name == "stride"]
         if len(stride_size) != 1:
             raise ValueError("Stride size must be scalar value")
         str_h = str_w = stride_size[0]

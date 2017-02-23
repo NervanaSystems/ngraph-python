@@ -49,9 +49,6 @@ Assign the above tensors requires defining ``Axis``, which can be done using the
 	:meth:`ngraph.make_axes` | Create an Axes object.
 	:meth:`ngraph.make_axis` | Create an Axis.
 	:meth:`ngraph.make_axis_role` | Create an Axis role.
-	:meth:`ngraph.make_name_scope` | Create a name scope for ``NameableValue`` objects.
-	:meth:`ngraph.name_scope` | Create and use a new name scope
-	:meth:`ngraph.with_name_scope` | Use a name scope
 
 We also provide several helper function for retrieving information from tensors.
 

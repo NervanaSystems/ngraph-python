@@ -24,8 +24,8 @@ def test_flatten_deriv_simplified(transformer_factory):
     """
     Test derivative with dot and flatten
     """
-    ax_N = ng.make_axis(3)
-    ax_Y = ng.make_axis(2)
+    ax_N = ng.make_axis(length=3)
+    ax_Y = ng.make_axis(length=2)
 
     x = ng.placeholder(ng.make_axes([ax_N]))
     w = ng.constant([5, 2], axes=ng.make_axes([ax_Y]))

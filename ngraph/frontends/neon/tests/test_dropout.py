@@ -27,7 +27,7 @@ def test_dropout_train(transformer_factory):
     nin, batch_size = 32, 2
 
     # set inputs
-    N = ng.make_axis(batch_size, batch=True).named('N')
+    N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(nin).named('F')
 
     inp = ng.placeholder([F, N])
@@ -53,7 +53,7 @@ def test_dropout_inference(transformer_factory):
     nin, batch_size = 8, 2
 
     # set inputs
-    N = ng.make_axis(batch_size, batch=True).named('N')
+    N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(nin).named('F')
 
     inp = ng.placeholder([F, N])
@@ -77,7 +77,7 @@ def test_dropout_bprop_single_comp(transformer_factory):
     nin, batch_size = 32, 2
 
     # set inputs
-    N = ng.make_axis(batch_size, batch=True).named('N')
+    N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(nin).named('F')
 
     mul_factor = ng.placeholder(())

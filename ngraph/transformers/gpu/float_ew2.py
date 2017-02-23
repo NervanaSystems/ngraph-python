@@ -340,10 +340,10 @@ class TensorDescriptionWrapper:
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
     def is_flex(self):
-        return hasattr(self.td.buffer.device_tensor(self.td), 'flex_entry')
+        return hasattr(self.td.buffer, 'flex_entry')
 
     def flex_entry(self):
-        return self.td.buffer.device_tensor(self.td).flex_entry
+        return self.td.buffer.flex_entry
 
 
 class GenerationContext:
@@ -366,6 +366,20 @@ class FlexScaleDescription:
 
 def _are_flex_params(params):
     return any([isinstance(p, FlexScaleDescription) for p in params])
+
+
+class FlexPtrDescription:
+    """
+    handle delayed allocation of flex manager device memory
+    """
+    @staticmethod
+    def bind_ptr(params):
+        for i, p in enumerate(params):
+            if isinstance(p, FlexPtrDescription):
+                params[i] = p.flex_entry.ptr
+
+    def __init__(self, flex_entry):
+        self.flex_entry = flex_entry
 
 
 def _is_buffer(value):
@@ -808,7 +822,7 @@ def _build_register_mapping(stages):
                 if op[3].is_flex():
                     flex_entry = op[3].flex_entry()
                     flex_scale[regname] = (sclname, flex_entry, True)
-                    flex_stats_ptr = flex_entry.ptr
+                    flex_stats_ptr = FlexPtrDescription(flex_entry)
 
             if _is_buffer(op[3]):
                 last_write[op[3]] = (stage_index, op_index)

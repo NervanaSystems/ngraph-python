@@ -23,38 +23,38 @@ digraph {
   Stack -> TensorOp
   Unslice -> TensorOp
   AllReduce -> Op
-  ElementWise -> TensorOp
-  UnaryElementwiseAxesOp -> ElementWise
-  NegativeOp -> UnaryElementwiseAxesOp
-  AbsoluteOp -> UnaryElementwiseAxesOp
-  SinOp -> UnaryElementwiseAxesOp
-  CosOp -> UnaryElementwiseAxesOp
-  TanhOp -> UnaryElementwiseAxesOp
-  ExpOp -> UnaryElementwiseAxesOp
-  LogOp -> UnaryElementwiseAxesOp
-  ReciprocalOp -> UnaryElementwiseAxesOp
-  SignOp -> UnaryElementwiseAxesOp
-  SquareOp -> UnaryElementwiseAxesOp
-  SqrtOp -> UnaryElementwiseAxesOp
-  BinaryElementWiseAxesOp -> ElementWise
+  ElementWiseOp -> TensorOp
+  UnaryElementWiseOp -> ElementWiseOp
+  NegativeOp -> UnaryElementWiseOp
+  AbsoluteOp -> UnaryElementWiseOp
+  SinOp -> UnaryElementWiseOp
+  CosOp -> UnaryElementWiseOp
+  TanhOp -> UnaryElementWiseOp
+  ExpOp -> UnaryElementWiseOp
+  LogOp -> UnaryElementWiseOp
+  ReciprocalOp -> UnaryElementWiseOp
+  SignOp -> UnaryElementWiseOp
+  SquareOp -> UnaryElementWiseOp
+  SqrtOp -> UnaryElementWiseOp
+  BinaryElementWiseOp -> ElementWiseOp
   Dimshuffle -> TensorOp
   DotOp -> TensorOp
   ReductionOp -> TensorOp
   TensorSizeOp -> TensorOp
   OneHotOp -> TensorOp
   Function -> Op
-  AddOp -> BinaryElementWiseAxesOp
-  SubtractOp -> BinaryElementWiseAxesOp
-  MultiplyOp -> BinaryElementWiseAxesOp
-  DivideOp -> BinaryElementWiseAxesOp
-  ModOp -> BinaryElementWiseAxesOp
-  MaximumOp -> BinaryElementWiseAxesOp
-  MinimumOp -> BinaryElementWiseAxesOp
-  PowerOp -> BinaryElementWiseAxesOp
-  EqualOp -> BinaryElementWiseAxesOp
-  NotEqualOp -> BinaryElementWiseAxesOp
-  GreaterOp -> BinaryElementWiseAxesOp
-  GreaterEqualOp -> BinaryElementWiseAxesOp
-  LessOp -> BinaryElementWiseAxesOp
-  LessEqualOp -> BinaryElementWiseAxesOp
+  AddOp -> BinaryElementWiseOp
+  SubtractOp -> BinaryElementWiseOp
+  MultiplyOp -> BinaryElementWiseOp
+  DivideOp -> BinaryElementWiseOp
+  ModOp -> BinaryElementWiseOp
+  MaximumOp -> BinaryElementWiseOp
+  MinimumOp -> BinaryElementWiseOp
+  PowerOp -> BinaryElementWiseOp
+  EqualOp -> BinaryElementWiseOp
+  NotEqualOp -> BinaryElementWiseOp
+  GreaterOp -> BinaryElementWiseOp
+  GreaterEqualOp -> BinaryElementWiseOp
+  LessOp -> BinaryElementWiseOp
+  LessEqualOp -> BinaryElementWiseOp
 }
