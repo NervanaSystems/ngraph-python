@@ -26,7 +26,7 @@ import sys
 # grab notebooks
 base_dir = os.path.dirname(__file__)
 notebook_dir = os.path.join(base_dir, '../examples/walk_through/')
-notebooks = glob.glob(os.path.join(notebook_dir, '*.ipynb'))
+notebooks = sorted(glob.glob(os.path.join(notebook_dir, '*.ipynb')))
 
 # grab python version for notebook processor
 kernel = 'python{}'.format(sys.version_info[0])
