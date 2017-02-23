@@ -1171,7 +1171,6 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     Arguments:
         tensor: The tensor supplying the value for this op.
-        delegate_adjoint: If true, we pass generate_add_delta to the tensor.
 
     """
     def __init__(self, tensor=None, **kwargs):
