@@ -1,10 +1,12 @@
 from neon import NervanaObject  # noqa
 
+import os
 import time
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
 from ngraph.util.ordered import OrderedSet
+from ngraph.util.hetr_utils import sort_ops_by_comm_deps
 from ngraph.op_graph.op_graph import TensorOp
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
@@ -12,8 +14,6 @@ from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
-from ngraph.op_graph.communication import Receiver
-import os
 
 
 def build_transformer(name):
@@ -100,7 +100,7 @@ class AsyncTransformer(Process):
         self.child_ops = returns
         self.child_args = placeholders
 
-        self.sort_child_ops()
+        sort_ops_by_comm_deps(self.child_ops)
 
         c = AsyncComputation(self)
 
@@ -119,86 +119,6 @@ class AsyncTransformer(Process):
         self.exit.set()
         self.join()
         self.manager.shutdown()
-
-    def sort_child_ops(self):
-        """
-        Sort the 'results' for this transformer using communication dependencies.
-
-        Find any Receiver nodes that a result depends on; add 'control_deps' from Receivers
-        to any other results in this transformer which the Sender for that Receiver depends on.
-
-        Ex.
-        Whole Graph:
-            X -> Send0
-            Recv0 -> Y -> Send1
-            Recv1 -> Z
-
-        Results for this tranformer:
-            Send0, Z
-
-        Deadlock would occur if Z ran before Send0, but there are no explicit edges
-        connecting them.
-        Using control_deps, the subgraph for this transformer looks like:
-
-        X -> Send0 ====other_dep====> Recv1 -> Z
-
-        This ensures that the built in logic in any child transformer, which sorts
-        nodes based on control_deps,
-        will produce a correct order if one is possible.
-        """
-        if len(self.child_ops) <= 1:
-            return
-
-        def comm_path_exists(fro, to):
-            """
-            Find a path from fro to to, including paths non-explicit edges from
-            a Receiver to its Sender.
-
-            Note- this is a non-standard traversal, as most traversals stop at a Receiver.
-            """
-
-            # TODO: does this correctly handle traversing multiple send-recv junctions
-            # from fro to to?
-
-            visit = set(fro.args)
-            while visit:
-                v = visit.pop()
-                if v == to:
-                    return True
-                if isinstance(v, Receiver):
-                    visit.add(v.send_node())
-                else:
-                    visit.update(v.args)
-
-            return False
-
-        def find_recvs(fro):
-            # Find all the Receivers fro depends on
-            visit = set()
-            recvs = set()
-            visit.add(fro)
-            while visit:
-                v = visit.pop()
-                if isinstance(v, Receiver):
-                    recvs.add(v)
-                    visit.add(v.send_node())
-                else:
-                    if hasattr(v, 'args'):
-                        visit.update(v.args)
-
-            return recvs
-
-        # For each return (child_ops), find out if there should be an other_dep added from any
-        # other return to it based on communication dependencies
-        ops_to_update = set(self.child_ops)
-        for op in ops_to_update:
-            other_ops = set(self.child_ops) - set([op])
-            for trav_op in other_ops:
-                recvs = find_recvs(fro=trav_op)
-                for r in recvs:
-                    if comm_path_exists(fro=r.send_node(), to=op):
-                        if r.metadata['transformer'] == op.metadata['transformer']:
-                            r.control_deps.add(op)
 
     def run(self):
         # build the transformer first to catch any errors
