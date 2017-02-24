@@ -63,7 +63,7 @@ __global__ void copy_oned(%(type)s* out, const %(type)s* in, int dim, long long 
 }
 """
     code = copy % dict(
-        type=_get_register_type(dtype, memory=isinstance(dtype, Flex))  # FLEX TODO: Stewart review
+        type=_get_register_type(dtype, memory=True)
     )
 
     # print code
@@ -254,7 +254,7 @@ __global__ void copy_transpose(%(type)s* out, const %(type)s* in, %(params)s)
 """
     code = copy_transpose % dict(
         common=_div64,
-        type=_get_register_type(dtype, memory=isinstance(dtype, Flex)),  # FLEX TODO:Stewart review
+        type=_get_register_type(dtype, memory=True),
         params=", ".join(params),
         blk=blkx_name,
         src=src_dim,
