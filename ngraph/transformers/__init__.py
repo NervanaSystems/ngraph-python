@@ -43,6 +43,6 @@ except ImportError as e:
     pass
 
 try:
-    import ngraph.transformers.ar_transformer
+    import artransformer.artransformer
 except ImportError:
     pass
