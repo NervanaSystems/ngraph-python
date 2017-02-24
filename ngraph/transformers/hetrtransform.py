@@ -1,5 +1,8 @@
 from neon import NervanaObject  # noqa
 
+import signal
+import pytest
+import sys
 import os
 import time
 from multiprocessing import Process, Manager, Event
@@ -93,7 +96,11 @@ class AsyncTransformer(Process):
                     except Exception as e:
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
-                                raise RuntimeError("Child process unexpectedly exited")
+                                ecode = self.async_transformer.exitcode
+                                if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
+                                    pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
+                                raise RuntimeError("Child process unexpectedly exited with code ",
+                                                   ecode)
                         else:
                             raise
 
