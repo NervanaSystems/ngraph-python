@@ -16,7 +16,7 @@ from future.utils import native_str
 from pycuda.tools import context_dependent_memoize
 
 from ngraph.transformers.gpu.float_ew2 import _get_register_type
-from pycuda.compiler import SourceModule
+from ngraph.transformers.gpu.float_ew2 import NvrtcSourceModule as SourceModule
 
 """
 CUDA kernels for lookup table layers. Kernels are only given for bprop, since

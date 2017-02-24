@@ -51,8 +51,6 @@ class TestExamples(ImporterTester):
             np.asarray(tf_cost_vals).astype(np.float32))
 
     def test_mnist_mlp(self):
-        if self.transformer_name == 'hetr':
-            pytest.xfail("hetr fails this during make test")
         # args
         parser = argparse.ArgumentParser()
         parser.add_argument('-d', '--data_dir', default=None)
@@ -72,8 +70,6 @@ class TestExamples(ImporterTester):
             np.asarray(tf_cost_vals).astype(np.float32))
 
     def test_mnist_mlp_save_load(self):
-        if self.transformer_name in ['hetr']:
-            pytest.xfail("hetr fails this during make test")
         # args
         parser = argparse.ArgumentParser()
         parser.add_argument('-d', '--data_dir', default=None)

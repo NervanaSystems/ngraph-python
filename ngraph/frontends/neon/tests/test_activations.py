@@ -42,8 +42,6 @@ class ActivationPair(object):
         X = ng.placeholder([ng.make_axis(), ng.make_axis(name='N')])
         X.axes.set_shape(x.shape)
         with ExecutorFactory() as ex:
-            if ex.transformer.transformer_name == "hetr":
-                pytest.xfail("unexplained hetr tolerance errors, need to investigate")
             activation_function = ex.executor(self.neon_activation(X), X)
             return activation_function(x)
 
@@ -51,8 +49,6 @@ class ActivationPair(object):
         X = ng.placeholder([ng.make_axis(), ng.make_axis(name='N')])
         X.axes.set_shape(x.shape)
         with ExecutorFactory() as ex:
-            if ex.transformer.transformer_name == "hetr":
-                pytest.xfail("unexplained hetr tolerance errors, need to investigate")
             activation_derivative = ex.derivative(self.neon_activation(X), X)
 
             # hack to get derivatives
