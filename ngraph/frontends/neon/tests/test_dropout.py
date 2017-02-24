@@ -18,9 +18,9 @@ Test of the dropout layer
 import pytest
 import numpy as np
 
-from ngraph.testing import ExecutorFactory
 import ngraph as ng
 from ngraph.frontends.neon.layer import Layer, Dropout
+from ngraph.testing.execution import ExecutorFactory
 
 
 atol, rtol = 0, 1e-6
