@@ -20,7 +20,7 @@ import numpy as np
 
 import ngraph as ng
 from ngraph.frontends.neon.layer import Layer, Dropout
-from ngraph.testing.execution import executor, ExecutorFactory
+from ngraph.testing.execution import ExecutorFactory
 
 
 atol, rtol = 0, 1e-6

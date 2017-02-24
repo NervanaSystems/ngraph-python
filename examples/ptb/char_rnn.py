@@ -58,6 +58,7 @@ def expand_onehot(x):
     x.axes.find_by_short_name('time')[0].is_recurrent = True
     return ng.one_hot(x, axis=ax.Y)
 
+
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 

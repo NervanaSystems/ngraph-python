@@ -60,6 +60,7 @@ def cifar_mean_subtract(x):
         initial_value=np.array([[104., 119., 127.]]))
     return (x - bgr_mean) / 255.
 
+
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Affine(nout=200, weight_init=UniformInit(-0.1, 0.1), activation=Rectlin()),
                    Affine(axes=ax.Y, weight_init=UniformInit(-0.1, 0.1), activation=Softmax())])
