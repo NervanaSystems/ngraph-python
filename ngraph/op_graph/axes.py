@@ -305,233 +305,23 @@ class Axis(object):
         self.roles.add(axis_role)
         return self
 
-    @property
-    def annotated_axis(self):
-        """
-        Returns:
-            The actual axis.
-        """
-        return self
-
-    @property
-    def is_casting_axis(self):
-        return False
-
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
     def __eq__(self, other):
+        # other is not Axis
         if not isinstance(other, Axis):
             return False
-        elif self.match_on_length or other.match_on_length:
+
+        # handle match_on_length
+        if self.match_on_length or other.match_on_length:
             return self.length == other.length
-        elif self.name == other.name:
-            return True
-        return self.annotated_axis is other.annotated_axis
+
+        # normal case, check name
+        return self.name == other.name
 
     def __hash__(self):
         return id(self)
-
-
-def casting_axis(annotated_axis, aliased_axis):
-    """
-    When an op casts an axis, we need to be able to determine the original axis.
-    We cannot associate this with the axis, since it is dependent on where the
-    axis was cast. For example, in one tensor A might be cast to X and in another
-    A might be cast to Y.
-
-    Arguments:
-        annotated_axis: The new axis in the cast.
-        aliased_axis: The previous axis.
-
-    Returns:
-        A CastingAxis.
-
-    """
-    if annotated_axis == aliased_axis:
-        return annotated_axis
-    else:
-        return CastingAxis(annotated_axis, aliased_axis)
-
-
-class CastingAxis(Axis):
-    """
-    Associates the original axis with a cast axis.
-
-    Arguments:
-        annotated_axis: The new axis in the cast.
-        aliased_axis: The previous axis.
-    """
-    def __init__(self, annotated_axis, cast_axis):
-        self.__annotated_axis = annotated_axis.annotated_axis
-        super(CastingAxis, self).__init__(annotated_axis)
-        self.named(annotated_axis.name)
-        self.__cast_axis = cast_axis
-
-    @property
-    def cast_axis(self):
-        """
-
-        Returns:
-            The axis this axis renames.
-        """
-        return self.__cast_axis
-
-    @property
-    def is_casting_axis(self):
-        """
-
-        Returns:
-            True if this is a casting axis.
-        """
-        return True
-
-    @property
-    def annotated_axis(self):
-        return self.__annotated_axis
-
-    @property
-    def is_flattened(self):
-        return self.annotated_axis.is_flattened
-
-    @property
-    def name(self):
-        return self.annotated_axis.name
-
-    @name.setter
-    def name(self, name):
-        pass
-
-    @property
-    def is_batch(self):
-        """
-        Tests if an axis is a batch axis.
-
-        Returns:
-            bool: True if the axis is a batch axis.
-
-        """
-        return self.annotated_axis.is_batch
-
-    @property
-    def is_recurrent(self):
-        """
-        Tests if an axis is a recurrent axis.
-
-        Returns:
-            bool: True if the axis is a recurrent axis.
-
-        """
-        return self.annotated_axis.is_recurrent
-
-    @property
-    def match_on_length(self):
-        """
-
-        Returns:
-            bool: True if this axis matches axes with the same length.
-        """
-        return self.annotated_axis.match_on_length
-
-    @property
-    def length(self):
-        """
-        Returns:
-            The length of the axis.
-        """
-        return self.annotated_axis.length
-
-    @length.setter
-    def length(self, value):
-        self.annotated_axis.length = value
-
-    @property
-    def axes(self):
-        return self.annotated_axis.axes
-
-    @property
-    def dual_level(self):
-        """
-
-        Returns:
-            Axis displacement for dot.
-
-            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
-            the dual space of level n.
-
-        """
-        return self.annotated_axis.dual_level
-
-    def __add__(self, offset):
-        return CastingAxis(self.annotated_axis.get_dual(offset),
-                           self.cast_axis.get_dual(offset))
-
-    def __sub__(self, offset):
-        return CastingAxis(self.annotated_axis.get_dual(-offset),
-                           self.cast_axis.get_dual(-offset))
-
-    def get_dual(self, offset=-1):
-        """
-        Returns a dual for an axis.
-
-        The dual of an axis in the left side of a dot product matches the axis in the right side.
-
-        Args:
-            axis (Axis):
-            offset (int, optional): The dual offset from axis. Defaults to -1.
-
-        Returns:
-            (Axis): The dual of the axis.
-
-        """
-        return CastingAxis(self.annotated_axis.get_dual(offset),
-                           self.cast_axis.get_dual(offset))
-
-    @property
-    def T(self):
-        return CastingAxis(self.annotated_axis.T, self.casting_axis.T)
-
-    @property
-    def primary_axis(self):
-        return CastingAxis(self.annotated_axis.primary_axis,
-                           self.cast_axis.primary_axis)
-
-    @property
-    def roles(self):
-        """
-
-        Returns: The AxisRoles of this axis.
-
-        """
-        return self.annotated_axis.roles
-
-    def has_role(self, axis_role):
-        """
-
-        Args:
-            axis_role: A role to test.
-
-        Returns:
-            True if this axis has the role.
-
-        """
-        return self.annotated_axis.has_role(axis_role)
-
-    def add_role(self, axis_role):
-        """
-
-        Args:
-            axis_role:
-
-        Returns:
-
-        """
-        self.annotated_axis.add(axis_role)
-
-    def __repr__(self):
-        return 'CastingAxis({name}={cname}: {length})'.format(name=self.annotated_axis.name,
-                                                              cname=self.cast_axis.name,
-                                                              length=self.length)
 
 
 class DualAxis(Axis):
@@ -980,7 +770,7 @@ class Axes(object):
             The index.
         """
         for i in range(len(self._axes)):
-            if self._axes[i].annotated_axis.primary_axis is axis.annotated_axis.primary_axis:
+            if self._axes[i].primary_axis is axis.primary_axis:
                 return i
         raise ValueError("Axis not in axes")
 
@@ -1019,20 +809,7 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        def base_annotated_axis(axis):
-            """
-            Find the base annotated axis.
-
-            If ax_a gets casted to ax_b and then casted to ax_c,
-            base_annotated_axis(ax_c) == ax_a.
-            """
-            if axis != axis.annotated_axis:
-                return base_annotated_axis(axis.annotated_axis)
-            else:
-                return axis
-
-        removed_axes = (set(map(base_annotated_axis, axes)) -
-                        set(map(base_annotated_axis, axes)))
+        removed_axes = (set(axes) - set(new_axes))
 
         if removed_axes:
             raise ValueError(("The new_axes of a broadcast operation must "
@@ -1500,14 +1277,6 @@ class TensorDescription(NameableValue):
                         for sub_idx, b in enumerate(a.axes):
                             if b == axis:
                                 return full_strides[sub_idx], full_sizes[sub_idx]
-
-                    if a.is_casting_axis:
-                        # The axis is a cast of some other axis pulled in through some
-                        # operation like dot. Try to work down through what it was
-                        # casting.
-                        cast_axis = a.cast_axis
-                        if cast_axis == axis:
-                            return full_strides, full_sizes
 
                 # Move on to the next tensor description in the reshaping chain
                 td = td.next_tensor_description
