@@ -43,6 +43,6 @@ except ImportError as e:
     pass
 
 try:
-    import artransformer.artransformer
+    import artransformer.artransformer  # noqa
 except ImportError:
     pass
