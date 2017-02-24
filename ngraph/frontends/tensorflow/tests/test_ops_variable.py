@@ -26,8 +26,6 @@ import pytest
 
 class Tester(ImporterTester):
     def test_variable(self):
-        if self.transformer_name == 'hetr':
-            pytest.xfail("hetr fails this during make test")
         # tf placeholder
         a = tf.Variable(tf.constant(np.random.randn(2, 3), name="a"))
         b = tf.Variable(tf.constant(np.random.randn(2, 3), name="b"))

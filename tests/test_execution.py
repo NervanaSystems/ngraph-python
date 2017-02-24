@@ -115,8 +115,6 @@ def test_placeholder(transformer_factory):
     d2 = ng.squared_L2(x, out_axes=None)
 
     with ExecutorFactory() as ex:
-        if ex.transformer.transformer_name == 'hetr':
-            pytest.xfail("hetr tolerance issue, need to investigate")
         # Return placeholder, param is placeholder
         placeholder_fun = ex.executor(x, x)
         prod_fun = ex.executor([d, d2], x)
@@ -693,7 +691,7 @@ def test_softmax(transformer_factory):
     p_x = ng.placeholder(axes)
 
     with ExecutorFactory() as ex:
-        smax_w_fun = ex.executor(ng.softmax(p_x, softmax_axes=ng.make_axes([W])), p_x)
+        smax_w_fun = ex.executor(ng.softmax(p_x, normalization_axes=ng.make_axes([W])), p_x)
         smax_fun = ex.executor(ng.softmax(p_x), p_x)
 
         s = smax_w_fun(x)

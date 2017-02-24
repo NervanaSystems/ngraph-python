@@ -28,278 +28,370 @@ The following are made sure to be the same in both recurrent layers
     -   the data shape inside recurrent_ref is seq_len, input_size, 1
     -   the data shape inside recurrent (neon) is feature, seq_len * batch_size
 """
-import itertools as itt
+import pytest
 
 import numpy as np
-from recurrent_ref import Recurrent as RefRecurrent
+from recurrent_ref import RefRecurrent, RefBidirectional
 
 import ngraph as ng
-from ngraph.frontends.neon import Recurrent, BiRNN, GaussianInit, Tanh
+from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
 rng = RandomTensorGenerator()
 
 delta = 1e-3
-rtol = atol = 1e-2
+fprop_rtol = 0
+fprop_atol = 1e-5
+bprop_rtol = 0
+bprop_atol = 1e-5
+
+# numerical derivative is useful but shows large errors. Give high tolerance
+num_atol = num_rtol = 1e-2
 
 
-def pytest_generate_tests(metafunc):
-    bsz_rng = [1]
-
-    if 'rnn_args' in metafunc.fixturenames:
-        seq_rng = [3]
-        inp_rng = [5, 10]
-        out_rng = [10, 32]
-        ret_seq = [True, False]
-        bwd = [True, False]
-        fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng, ret_seq, bwd)
-        metafunc.parametrize('rnn_args', fargs)
-
-    if 'birnn_args' in metafunc.fixturenames:
-        seq_rng = [3]
-        inp_rng = [5]
-        out_rng = [10]
-        ret_seq = [True, False]
-        sum_out = [True, False]
-        bi_fargs = itt.product(seq_rng, inp_rng, out_rng, bsz_rng, ret_seq, sum_out)
-        metafunc.parametrize('birnn_args', bi_fargs)
+@pytest.fixture(params=["random"])
+def weight_initializer(request):
+    if request.param == "random":
+        return lambda w_axes: rng.normal(0, 1, w_axes)
+    elif request.param == "ones":
+        return lambda w_axes: np.ones(w_axes.lengths)
 
 
-def test_rnn_ones(rnn_args):
-    # run comparison with reference code
-    # for all ones init
-    seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
-    check_rnn(seq_len, input_size, hidden_size,
-              batch_size, (lambda x: 1.0), return_seq=ret_seq, backward=bwd)
+@pytest.fixture(params=["zeros"])
+def bias_initializer(request):
+    # TODO: Add useful bias init.
+    # For now, bias is initialized to 0 since there is not control within the RNN layer
+    if request.param == "zeros":
+        return lambda hidden_axis: np.zeros(hidden_axis.length)
 
 
-def test_rnn_rand(rnn_args):
-    # run comparison with reference code
-    # for Gaussian random init
-    seq_len, input_size, hidden_size, batch_size, ret_seq, bwd = rnn_args
-    check_rnn(seq_len, input_size, hidden_size, batch_size,
-              GaussianInit(0.0, 1.0), return_seq=ret_seq, backward=bwd)
+def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
+
+    input_axis = ng.make_axis()
+    recurrent_axis = ng.make_axis(name='R')
+    batch_axis = ng.make_axis(name='N')
+
+    input_axes = ng.make_axes([input_axis, recurrent_axis, batch_axis])
+    input_axes.set_shape((input_size, sequence_length, batch_size))
+    input_axes = ng.make_axes([ng.make_axis(length=1) for _ in range(extra_axes)]) + input_axes
+
+    input_placeholder = ng.placeholder(input_axes)
+    input_value = rng.uniform(-0.01, 0.01, input_axes)
+
+    return input_placeholder, input_value
 
 
-def test_birnn(birnn_args):
-    seq_len, input_size, hidden_size, batch_size, ret_seq, sum_out = birnn_args
-    check_birnn(seq_len, input_size, hidden_size, batch_size,
-                GaussianInit(0.0, 1.0), return_seq=ret_seq, sum_out=sum_out)
+def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initializer,
+                 init_state=False):
+
+    full_input_axes = tuple(input_placeholder.axes)[:-2]  # input axis + any extra axes of length 1
+    batch_axis = input_placeholder.axes.batch_axes()[0]
+    hidden_axis = ng.make_axis(hidden_size)
+
+    w_in_axes = ng.make_axes([hidden_axis] + [ax - 1 for ax in full_input_axes])
+    w_rec_axes = ng.make_axes([hidden_axis, hidden_axis - 1])
+
+    W_in = weight_initializer(w_in_axes)
+    W_rec = weight_initializer(w_rec_axes)
+    b = bias_initializer(hidden_axis)
+
+    if init_state is True:
+        ax_s = ng.make_axes([hidden_axis, batch_axis])
+        init_state = ng.placeholder(ax_s)
+        init_state_value = rng.uniform(-1, 1, ax_s)
+    else:
+        init_state = None
+        init_state_value = None
+
+    return W_in, W_rec, b, init_state, init_state_value
 
 
-def check_birnn(seq_len, input_size, hidden_size, batch_size,
-                init_func, return_seq, sum_out):
-    # init_func is the initializer for the model params
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [10])
+@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("init_state", [True, False])
+@pytest.mark.parametrize("extra_axes", [0, 2])
+@pytest.mark.parametrize("backward", [True, False])
+def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
+                   return_sequence, weight_initializer, bias_initializer,
+                   init_state, extra_axes, backward, transformer_factory):
+
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
-    # ========== neon model ==========
-    Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, name='R')
-    N = ng.make_axis(batch_size, name='N')
-    H = ng.make_axis(hidden_size)
-    ax_s = ng.make_axes([H, N])
+    # Get input placeholder and numpy array
+    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size,
+                                                      extra_axes=extra_axes)
+
+    # Construct network weights and initial state, if desired
+    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
+                                                                weight_initializer,
+                                                                bias_initializer,
+                                                                init_state)
+
+    # Compute reference numpy RNN
+    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_sequence)
+    rnn_ref.set_weights(W_in.reshape(rnn_ref.Wxh.shape), W_rec, b.reshape(rnn_ref.bh.shape))
+
+    # Compute reference numpy RNN
+    input_shape = (input_size, sequence_length, batch_size)
+    h_ref_list = rnn_ref.fprop_only(input_value.reshape(input_shape).transpose([1, 0, 2]),
+                                    init_states=init_state_value, backward=backward)
+
+    # Generate ngraph RNN
+    rnn_ng = Recurrent(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
+                       reset_cells=True, return_sequence=return_sequence,
+                       backward=backward)
+
+    # fprop ngraph RNN
+    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
 
     with ExecutorFactory() as ex:
-        np.random.seed(0)
+        # Create computation and execute
+        if init_state is not None:
+            fprop_neon_fun = ex.executor(out_ng, input_placeholder, init_state)
+            fprop_neon = fprop_neon_fun(input_value, init_state_value)
 
-        birnn_ng = BiRNN(hidden_size, init_func, activation=Tanh(),
-                         reset_cells=True, return_sequence=return_seq, sum_out=sum_out)
-
-        inp_ng = ng.placeholder([Cin, REC, N])
-        init_state_ng = ng.placeholder(ax_s)
-
-        # fprop graph
-        out_ng = birnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
-        # out_ng.input = True
-
-        rnn_W_input = birnn_ng.fwd_rnn.W_input
-        rnn_W_input.input = True
-        rnn_W_recur = birnn_ng.fwd_rnn.W_recur
-        rnn_W_recur.input = True
-        rnn_b = birnn_ng.fwd_rnn.b
-        rnn_b.input = True
-
-        # fprop on random inputs
-        input_value = rng.uniform(-1, 1, inp_ng.axes)
-        init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
-
-        return_list = [birnn_ng.fwd_rnn.W_input,
-                       birnn_ng.fwd_rnn.W_recur,
-                       birnn_ng.fwd_rnn.b,
-                       birnn_ng.bwd_rnn.W_input,
-                       birnn_ng.bwd_rnn.W_recur,
-                       birnn_ng.bwd_rnn.b]
-
-        if sum_out:
-            return_list.append(out_ng)
         else:
-            return_list.extend(out_ng)
+            fprop_neon_fun = ex.executor(out_ng, input_placeholder)
+            fprop_neon = fprop_neon_fun(input_value)
 
-        fprop_neon_fun = ex.executor(return_list, inp_ng, init_state_ng)
-        all_outputs = fprop_neon_fun(input_value, init_state_value)
-        fwd_input, fwd_recur, fwd_b, bwd_input, bwd_recur, bwd_b = all_outputs[:6]
-
-        if sum_out:
-            fprop_neon = all_outputs[-1]
-            fprop_neon = fprop_neon.copy()
-        else:
-            fprop_neon, fprop_neon_1 = all_outputs[-2:]
-            fprop_neon_fwd = fprop_neon.copy()
-            fprop_neon_bwd = fprop_neon_1.copy()
-
-        # ========= reference model ==========
-        output_shape = (hidden_size, seq_len * batch_size)
-
-        # generate random deltas tensor
-        deltas = np.random.randn(*output_shape)
-
-        # the reference code expects these shapes:
-        # input_shape: (seq_len, input_size, batch_size)
-        # output_shape: (seq_len, hidden_size, batch_size)
-        deltas_ref = deltas.copy().T.reshape(
-            seq_len, batch_size, hidden_size).swapaxes(1, 2)
-
-        inp_ref = input_value.transpose([1, 0, 2])
-
-        # reference numpy RNN
-        rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
-        rnn_ref.Wxh[:] = fwd_input.copy()
-        rnn_ref.Whh[:] = fwd_recur.copy()
-        rnn_ref.bh[:] = fwd_b.copy().reshape(rnn_ref.bh.shape)
-        (dWxh_ref, dWhh_ref, db_ref, h_ref_fwd,
-            dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
-                                                      init_states=init_state_value)
-
-        rnn_ref.Wxh[:] = bwd_input.copy()
-        rnn_ref.Whh[:] = bwd_recur.copy()
-        rnn_ref.bh[:] = bwd_b.copy().reshape(rnn_ref.bh.shape)
-        h_ref_bwd = rnn_ref.fprop_backwards(inp_ref, init_state_value)
-
-        if sum_out is True:
-            h_ref = h_ref_bwd + h_ref_fwd
-            if return_seq is True:
-                fprop_neon = fprop_neon[:, :, 0]
-            ng.testing.assert_allclose(fprop_neon, h_ref, rtol=0.0, atol=1.0e-5)
-        else:
-            if return_seq is True:
-                fprop_neon_fwd = fprop_neon_fwd[:, :, 0]
-                fprop_neon_bwd = fprop_neon_bwd[:, :, 0]
-            ng.testing.assert_allclose(fprop_neon_fwd, h_ref_fwd, rtol=0.0, atol=1.0e-5)
-            ng.testing.assert_allclose(fprop_neon_bwd, h_ref_bwd, rtol=0.0, atol=1.0e-5)
-        return
-
-
-# compare neon RNN to reference RNN implementation
-def check_rnn(seq_len, input_size, hidden_size, batch_size,
-              init_func, return_seq=True, backward=False):
-    # init_func is the initializer for the model params
-    assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
-
-    # ========== neon model ==========
-    Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, name='R')
-    N = ng.make_axis(batch_size, name='N')
-    H = ng.make_axis(hidden_size)
-    ax_s = ng.make_axes([H, N])
-
-    with ExecutorFactory() as ex:
-        np.random.seed(0)
-
-        rnn_ng = Recurrent(hidden_size, init_func, activation=Tanh(),
-                           reset_cells=True, return_sequence=return_seq,
-                           backward=backward)
-
-        inp_ng = ng.placeholder([Cin, REC, N])
-        init_state_ng = ng.placeholder(ax_s)
-
-        # fprop graph
-        out_ng = rnn_ng.train_outputs(inp_ng, init_state=init_state_ng)
-        out_ng.input = True
-
-        rnn_W_input = rnn_ng.W_input
-        rnn_W_input.input = True
-        rnn_W_recur = rnn_ng.W_recur
-        rnn_W_recur.input = True
-        rnn_b = rnn_ng.b
-        rnn_b.input = True
-
-        fprop_neon_fun = ex.executor([out_ng,
-                                      rnn_ng.W_input, rnn_ng.W_recur, rnn_ng.b],
-                                     inp_ng, init_state_ng)
-
-        dWrecur_s_fun = ex.derivative(out_ng,
-                                      rnn_W_recur, inp_ng, rnn_W_input, rnn_b)
-        dWrecur_n_fun = ex.numeric_derivative(out_ng,
-                                              rnn_W_recur, delta, inp_ng, rnn_W_input, rnn_b)
-        dWinput_s_fun = ex.derivative(out_ng,
-                                      rnn_W_input, inp_ng, rnn_W_recur, rnn_b)
-        dWinput_n_fun = ex.numeric_derivative(out_ng,
-                                              rnn_W_input, delta, inp_ng, rnn_W_recur, rnn_b)
-        dWb_s_fun = ex.derivative(out_ng,
-                                  rnn_b, inp_ng, rnn_W_input, rnn_W_recur)
-        dWb_n_fun = ex.numeric_derivative(out_ng,
-                                          rnn_b, delta, inp_ng, rnn_W_input, rnn_W_recur)
-
-        # fprop on random inputs
-        input_value = rng.uniform(-1, 1, inp_ng.axes)
-        init_state_value = rng.uniform(-1, 1, init_state_ng.axes)
-        fprop_neon, Wxh_neon, Whh_neon, bh_neon = fprop_neon_fun(input_value, init_state_value)
-        fprop_neon = fprop_neon.copy()
-
-        # after the rnn graph has been executed, can get the W values. Get copies so
-        # shared values don't confuse derivatives
-        # bprop derivs
-        dWrecur_s = dWrecur_s_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
-        dWrecur_n = dWrecur_n_fun(Whh_neon, input_value, Wxh_neon, bh_neon)
-        ng.testing.assert_allclose(dWrecur_s, dWrecur_n, rtol=rtol, atol=atol)
-
-        dWb_s = dWb_s_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
-        dWb_n = dWb_n_fun(bh_neon, input_value, Wxh_neon, Whh_neon)
-        ng.testing.assert_allclose(dWb_s, dWb_n, rtol=rtol, atol=atol)
-
-        dWinput_s = dWinput_s_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
-        dWinput_n = dWinput_n_fun(Wxh_neon, input_value, Whh_neon, bh_neon)
-        ng.testing.assert_allclose(dWinput_s, dWinput_n, rtol=rtol, atol=atol)
-
-        # ========= reference model ==========
-        output_shape = (hidden_size, seq_len * batch_size)
-
-        # generate random deltas tensor
-        deltas = np.random.randn(*output_shape)
-
-        # the reference code expects these shapes:
-        # input_shape: (seq_len, input_size, batch_size)
-        # output_shape: (seq_len, hidden_size, batch_size)
-        deltas_ref = deltas.copy().T.reshape(
-            seq_len, batch_size, hidden_size).swapaxes(1, 2)
-
-        inp_ref = input_value.transpose([1, 0, 2])
-
-        # reference numpy RNN
-        rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_seq)
-        rnn_ref.Wxh[:] = Wxh_neon
-        rnn_ref.Whh[:] = Whh_neon
-        rnn_ref.bh[:] = bh_neon.reshape(rnn_ref.bh.shape)
-
-        if backward:
-            h_ref_list = rnn_ref.fprop_backwards(inp_ref, init_state_value)
-        else:
-            (dWxh_ref, dWhh_ref, db_ref, h_ref_list,
-                dh_ref_list, d_out_ref) = rnn_ref.lossFun(inp_ref, deltas_ref,
-                                                          init_states=init_state_value)
-
-        # comparing outputs
-        if return_seq is True:
+        # Compare output with reference implementation
+        if return_sequence is True:
             fprop_neon = fprop_neon[:, :, 0]
-        ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=0.0, atol=1.0e-5)
-
-        return
+        ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-if __name__ == '__main__':
-    seq_len, input_size, hidden_size, batch_size = (3, 3, 6, 1)
-    init = GaussianInit(0.0, 0.1)
-    # check_rnn(seq_len, input_size, hidden_size, batch_size, init, False)
-    check_birnn(seq_len, input_size, hidden_size, batch_size,
-                init, return_seq=True, sum_out=True)
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [10])
+@pytest.mark.parametrize("return_sequence", [True])
+def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
+                       return_sequence, weight_initializer, bias_initializer,
+                       transformer_factory):
+
+    assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+    assert return_sequence is True, "the reference rnn only supports sequences for deriv"
+
+    # Get input placeholder and numpy array
+    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
+
+    # Construct network weights and initial state, if desired
+    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
+                                                                weight_initializer,
+                                                                bias_initializer)
+
+    # Compute reference numpy RNN
+    rnn_ref = RefRecurrent(input_size, hidden_size, return_sequence=return_sequence)
+    rnn_ref.set_weights(W_in, W_rec, b.reshape(rnn_ref.bh.shape))
+
+    # Prepare deltas for gradient check
+    output_shape = (hidden_size, sequence_length, batch_size)
+
+    # generate random deltas tensor
+    deltas = np.random.randn(*output_shape)
+
+    # the reference code expects these shapes:
+    # input_shape: (seq_len, input_size, batch_size)
+    # output_shape: (seq_len, hidden_size, batch_size)
+    dW_in, dW_rec, db = rnn_ref.lossFun(input_value.transpose([1, 0, 2]),
+                                        deltas.copy().transpose([1, 0, 2]),
+                                        init_states=init_state_value)[:3]
+
+    # Generate ngraph RNN
+    rnn_ng = Recurrent(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
+                       reset_cells=True, return_sequence=return_sequence)
+
+    # fprop ngraph RNN
+    out_ng = rnn_ng.train_outputs(input_placeholder)
+
+    deltas_constant = ng.constant(deltas, axes=out_ng.axes)
+    params = [(rnn_ng.W_input, W_in),
+              (rnn_ng.W_recur, W_rec),
+              (rnn_ng.b, b)]
+
+    with ExecutorFactory() as ex:
+        # Create derivative computations and execute
+        param_updates = list()
+        for px, _ in params:
+            update = ng.deriv(out_ng, px, error=deltas_constant)
+            param_updates.append(ex.executor(update, input_placeholder))
+
+        for update_fun, ref_val in zip(param_updates, [dW_in, dW_rec, db]):
+            ng.testing.assert_allclose(update_fun(input_value),
+                                       ref_val.squeeze(),
+                                       rtol=bprop_rtol, atol=bprop_atol)
+
+
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [10])
+@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("backward", [True, False])
+def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
+                             return_sequence, weight_initializer, bias_initializer,
+                             backward, transformer_factory):
+
+    # Get input placeholder and numpy array
+    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
+
+    # Construct network weights and initial state, if desired
+    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
+                                                                weight_initializer,
+                                                                bias_initializer)
+
+    # Generate ngraph RNN
+    rnn_ng = Recurrent(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
+                       reset_cells=True, return_sequence=return_sequence,
+                       backward=backward)
+
+    # fprop ngraph RNN
+    out_ng = rnn_ng.train_outputs(input_placeholder)
+
+    params = [(rnn_ng.W_input, W_in),
+              (rnn_ng.W_recur, W_rec),
+              (rnn_ng.b, b)]
+
+    with ExecutorFactory() as ex:
+        # Create derivative computations and execute
+        param_updates = list()
+        for px, _ in params:
+            update = (ex.derivative(out_ng, px, input_placeholder),
+                      ex.numeric_derivative(out_ng, px, delta, input_placeholder))
+            param_updates.append(update)
+
+        for (deriv_s, deriv_n), (_, val) in zip(param_updates, params):
+            ng.testing.assert_allclose(deriv_s(val, input_value),
+                                       deriv_n(val, input_value),
+                                       rtol=num_rtol, atol=num_atol)
+
+
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [10])
+@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("init_state", [True, False])
+@pytest.mark.parametrize("sum_out,concat_out", [(False, False),
+                                                (True, False),
+                                                (False, True)])
+def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
+                     return_sequence, weight_initializer, bias_initializer,
+                     init_state, sum_out, concat_out, transformer_factory):
+
+    assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+
+    # Get input placeholder and numpy array
+    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
+
+    # Construct network weights and initial state, if desired
+    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
+                                                                weight_initializer,
+                                                                bias_initializer,
+                                                                init_state)
+
+    # Compute reference numpy RNN
+    rnn_ref = RefBidirectional(input_size, hidden_size, return_sequence=return_sequence,
+                               sum_out=sum_out, concat_out=concat_out)
+    rnn_ref.set_weights(W_in, W_rec, b.reshape(rnn_ref.fwd_rnn.bh.shape))
+    h_ref_list = rnn_ref.fprop(input_value.transpose([1, 0, 2]),
+                               init_states=init_state_value)
+
+    # Generate ngraph RNN
+    rnn_ng = BiRNN(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
+                   reset_cells=True, return_sequence=return_sequence,
+                   sum_out=sum_out, concat_out=concat_out)
+
+    # fprop ngraph RNN
+    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
+
+    with ExecutorFactory() as ex:
+        # Create computation and execute
+        if init_state is not None:
+            fprop_neon_fun = ex.executor(out_ng, input_placeholder, init_state)
+            fprop_neon = fprop_neon_fun(input_value, init_state_value)
+
+        else:
+            fprop_neon_fun = ex.executor(out_ng, input_placeholder)
+            fprop_neon = fprop_neon_fun(input_value)
+
+        # Compare output with reference implementation
+        if not isinstance(fprop_neon, tuple):
+            fprop_neon = [fprop_neon]
+            h_ref_list = [h_ref_list]
+        for ii, output in enumerate(fprop_neon):
+            if return_sequence is True:
+                output = output[:, :, 0]
+            ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
+
+
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [10])
+@pytest.mark.parametrize("return_sequence", [False, True])
+@pytest.mark.parametrize("sum_out,concat_out", [(False, False),
+                                                (True, False),
+                                                (False, True)])
+def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
+                               return_sequence, weight_initializer, bias_initializer,
+                               sum_out, concat_out):
+
+    # Get input placeholder and numpy array
+    input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
+
+    # Construct network weights and initial state, if desired
+    W_in, W_rec, b, init_state, init_state_value = make_weights(input_placeholder, hidden_size,
+                                                                weight_initializer,
+                                                                bias_initializer)
+
+    # Generate ngraph RNN
+    rnn_ng = BiRNN(hidden_size, init=W_in, init_inner=W_rec, activation=Tanh(),
+                   reset_cells=True, return_sequence=return_sequence,
+                   sum_out=sum_out, concat_out=concat_out)
+
+    # fprop ngraph RNN
+    out_ng = rnn_ng.train_outputs(input_placeholder)
+
+    w_in_f = rnn_ng.fwd_rnn.W_input
+    w_rec_f = rnn_ng.fwd_rnn.W_recur
+    b_f = rnn_ng.fwd_rnn.b
+    w_in_b = rnn_ng.bwd_rnn.W_input
+    w_rec_b = rnn_ng.bwd_rnn.W_recur
+    b_b = rnn_ng.bwd_rnn.b
+
+    params_f = [(w_in_f, W_in),
+                (w_rec_f, W_rec),
+                (b_f, b)]
+
+    params_b = [(w_in_b, W_in),
+                (w_rec_b, W_rec),
+                (b_b, b)]
+
+    if sum_out or concat_out:
+        out_ng = [out_ng]
+        params_birnn = [params_f + params_b]
+    else:
+        # in this case out_ng will be a list
+        params_birnn = [params_f, params_b]
+
+    with ExecutorFactory() as ex:
+        # Create derivative computations and execute
+        param_updates = list()
+        dep_list = list()
+        for output, dependents in zip(out_ng, params_birnn):
+            for px, _ in dependents:
+                update = (ex.derivative(output, px, input_placeholder),
+                          ex.numeric_derivative(output, px, delta, input_placeholder))
+                param_updates.append(update)
+            dep_list += dependents
+
+        for ii, ((deriv_s, deriv_n), (_, val)) in enumerate(zip(param_updates, dep_list)):
+            ng.testing.assert_allclose(deriv_s(val, input_value),
+                                       deriv_n(val, input_value),
+                                       rtol=num_rtol,
+                                       atol=num_atol)
