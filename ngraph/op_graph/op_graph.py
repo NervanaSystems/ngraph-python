@@ -25,7 +25,7 @@ from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype, casting_axis
+    default_int_dtype
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -1465,10 +1465,9 @@ class AxesCastOp(ReshapeOp):
 
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
-        aliasing_axes = []
-        for new_axis, old_axis in zip(axes, x.axes):
-            aliasing_axes.append(casting_axis(new_axis, old_axis))
-        axes = make_axes(aliasing_axes)
+        if not x.is_scalar and x.axes.lengths != axes.lengths:
+            raise ValueError("casting axes {} must have the same length as original axes {}"
+                             .format(axes, x.axes))
         super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
