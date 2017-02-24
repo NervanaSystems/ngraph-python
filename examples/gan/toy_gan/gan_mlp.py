@@ -35,7 +35,7 @@ from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
 from toygan import ToyGAN
 
-# np.random.seed(42)
+np.random.seed(42)
 
 # define commonly used layer in this example
 def affine_layer(h_dim, activation, name):
@@ -143,7 +143,8 @@ generator_train_outputs = {'batch_cost': mean_cost_g,
 	         	           'updates': updates_g}
 
 transformer = ngt.make_transformer()
-train_computation_g = make_bound_computation(transformer, generator_train_outputs, inputs)  # TODO: G inputs just z - does this matter?
+
+train_computation_g = make_bound_computation(transformer, generator_train_outputs, inputs['noise_sample'])  # TODO: G inputs just z - does this matter?
 train_computation_d = make_bound_computation(transformer, discriminator_train_outputs, inputs)
 
 discriminator_inference_output = discriminator.inference_outputs(x)
@@ -167,7 +168,7 @@ for mb_idx, data in enumerate(train_set):
     # ? what happens when give an unneeded input to a computation? does it just benignly ignore it? 
     # ? for example, if input given to train_computation_g is just data dict which has both noise_sample and unneeded data_sample
     #batch_output_g = train_computation_g(dict(noise_sample=data['noise_sample']))  # since train_computation_d was created with data_sample key, expects it here too
-    batch_output_g = train_computation_g(data)
+    batch_output_g = train_computation_g(data['noise_sample'])
     if mb_idx % iter_interval == 0:
         msg = "Iteration {} complete. Discriminator avg loss: {} Generator avg loss: {}"
         print(msg.format(mb_idx + 1, float(batch_output_d['batch_cost']), float(batch_output_g['batch_cost'])))
