@@ -105,3 +105,27 @@ class RandomTensorGenerator(object):
             The tensor.
         """
         return self.rng.random_integers(low, high, ng.make_axes(axes).lengths).astype(dtype)
+
+    def normal(self, loc, scale, axes, dtype=None):
+        """
+        Returns a tensor initialized with a normal distribution with mean loc and std scale
+
+        Arguments:
+            loc: Mean of the distribution
+            scale: Standard deviation of the distribution
+            axes: The axes of the tensor.
+            dtype: If supplied, the type of the values.
+
+        Returns:
+            The initialized tensor.
+
+        """
+        if dtype is None:
+            dtype = self.dtype
+
+        return np.array(
+            self.rng.normal(
+                loc,
+                scale,
+                ng.make_axes(axes).lengths),
+            dtype=dtype)
