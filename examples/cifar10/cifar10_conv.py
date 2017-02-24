@@ -28,7 +28,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Layer, Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, ar, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
@@ -78,20 +78,21 @@ seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
-output_prob = seq1.train_outputs(inputs['image'])
-errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['label'])
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y))
-mean_cost = ng.mean(loss, out_axes=())
-updates = optimizer(loss)
+train_prob = seq1(inputs['image'])
+train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_outputs = dict(batch_cost=batch_cost)
 
-
-train_outputs = dict(batch_cost=mean_cost, updates=updates)
-loss_outputs = dict(cross_ent_loss=loss, misclass_pct=errors)
+with Layer.inference_mode_on():
+    inference_prob = seq1(inputs['image'])
+errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
+eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
 transformer = ngt.make_transformer()
 train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
 cbs = make_default_callbacks(output_file=args.output_file,
                              frequency=args.iter_interval,

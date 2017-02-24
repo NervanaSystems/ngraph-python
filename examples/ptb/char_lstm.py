@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, Preprocess, LSTM,
+from ngraph.frontends.neon import (Layer, Sequential, Preprocess, LSTM,
                                    Affine, Softmax, Tanh, Logistic)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, ar, loop_train
@@ -70,19 +70,24 @@ seq1 = Sequential([Preprocess(functor=expand_onehot),
 
 optimizer = RMSProp(gradient_clip_value=gradient_clip_value)
 
-output_prob = seq1.train_outputs(inputs['inp_txt'])
+train_prob = seq1(inputs['inp_txt'])
+train_loss = ng.cross_entropy_multi(train_prob,
+                                    ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
+                                    usebits=True)
+batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_outputs = dict(batch_cost=batch_cost)
 
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['tgt_txt'], axis=ax.Y), usebits=True)
-mean_cost = ng.mean(loss, out_axes=[])
-updates = optimizer(loss)
-
-train_outputs = dict(batch_cost=mean_cost, updates=updates)
-loss_outputs = dict(cross_ent_loss=loss)
+with Layer.inference_mode_on():
+    inference_prob = seq1(inputs['inp_txt'])
+eval_loss = ng.cross_entropy_multi(inference_prob,
+                                   ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
+                                   usebits=True)
+eval_outputs = dict(cross_ent_loss=eval_loss)
 
 # Now bind the computations we are interested in
 transformer = ngt.make_transformer()
 train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
 cbs = make_default_callbacks(output_file=args.output_file,
                              frequency=args.iter_interval,

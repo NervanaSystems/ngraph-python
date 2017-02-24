@@ -2423,7 +2423,7 @@ class RngOp(TensorOp):
         )
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, 0)
+        x.generate_add_delta(adjoints, delta)
 
 
 def uniform(x, low=0.0, high=1.0):
