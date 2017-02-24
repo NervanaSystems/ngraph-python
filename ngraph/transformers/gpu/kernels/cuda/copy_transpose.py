@@ -20,7 +20,6 @@ from operator import mul
 from ngraph.transformers.gpu.util import _ceil_div, _magic64
 from ngraph.transformers.gpu.float_ew2 import _get_register_type
 from ngraph.transformers.gpu.float_ew2 import NvrtcSourceModule as SourceModule
-from ngraph.flex.base import Flex
 
 
 from pycuda.tools import context_dependent_memoize
