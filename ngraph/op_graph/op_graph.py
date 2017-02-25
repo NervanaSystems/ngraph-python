@@ -452,7 +452,7 @@ class Op(NameableValue, DebugInfo):
         """
         result = self
         while True:
-            if not result.__forward:
+            if result.__forward is None:
                 return result
             result = result.__forward
 
@@ -1212,7 +1212,12 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     @property
     def control_deps(self):
-        return super(ValueOp, self).control_deps + [self.value_tensor]
+        base_deps = super(ValueOp, self).control_deps
+        if self.value_tensor is not None and self.value_tensor.is_device_op:
+            # Add value_tensor if it is a real op
+            return base_deps + [self.value_tensor]
+        else:
+            return base_deps
 
     @property
     def is_tensor_op(self):
