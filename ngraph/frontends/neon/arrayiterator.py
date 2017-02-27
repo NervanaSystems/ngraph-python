@@ -74,7 +74,7 @@ class ArrayIterator(object):
             p_axes = ng.make_axes([ax.N])
             for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
                 name = axnm[i] if axnm else None
-                p_axes += ng.make_axis(length=sz).named(name)
+                p_axes += ng.make_axis(length=sz, name=name)
             placeholders[k] = ng.placeholder(p_axes)
         return placeholders
 
@@ -152,9 +152,9 @@ class SequentialArrayIterator(object):
             self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
 
     def make_placeholders(self):
-        ax.N.length = self.batch_size
-        time_axis = ng.make_axis(length=self.time_steps).named('time')
-        p_axes = ng.make_axes([ax.N, time_axis])
+        batch_axis = ng.make_axis(length=self.batch_size, name="N")
+        time_axis = ng.make_axis(length=self.time_steps, name="R")
+        p_axes = ng.make_axes([batch_axis, time_axis])
         return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
 
     def reset(self):

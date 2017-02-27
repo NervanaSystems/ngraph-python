@@ -157,8 +157,8 @@ class LookupTable(Layer):
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
         """
-        in_obj.axes.find_by_short_name('time')[0].add_role(ar.time)
-        in_obj.axes.find_by_short_name('time')[0].is_recurrent = True
+        in_obj.axes.find_by_name('time')[0].add_role(ar.time)
+        in_obj.axes.find_by_name('time')[0].is_recurrent = True
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
@@ -233,7 +233,7 @@ class ConvBase(Layer):
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
+                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -327,7 +327,7 @@ class PoolBase(Layer):
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
+                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [

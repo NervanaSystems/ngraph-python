@@ -17,7 +17,7 @@ import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
@@ -53,9 +53,6 @@ ax.Y.length = len(tree_bank_data.vocab)
 
 
 def expand_onehot(x):
-    # Assign roles
-    x.axes.find_by_short_name('time')[0].add_role(ar.time)
-    x.axes.find_by_short_name('time')[0].is_recurrent = True
     return ng.one_hot(x, axis=ax.Y)
 
 
