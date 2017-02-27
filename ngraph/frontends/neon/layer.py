@@ -44,19 +44,6 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-def inference_mode(*args, **kwargs):
-    """
-    cachetools.cached key function to ensure that caching takes into account the current value of
-    Layer.inference_mode.
-    """
-
-    # If the value is provided, just use that instead of the global flag.
-    if "inference_mode" not in kwargs:
-        kwargs["inference_mode"] = Layer.inference_mode
-
-    return keys.hashkey(*args, **kwargs)
-
-
 class Layer(object):
     inference_mode = False
 
@@ -72,6 +59,15 @@ class Layer(object):
         Layer.inference_mode = True
         yield Layer.inference_mode
         Layer.inference_mode = False
+
+    @staticmethod
+    def inference_mode_key(*args, **kwargs):
+        """
+        cachetools.cached key function to ensure that caching takes into account the current value
+        of Layer.inference_mode.
+        """
+
+        return keys.hashkey(inference_mode=Layer.inference_mode, *args, **kwargs)
 
 
 class Preprocess(Layer):
@@ -447,7 +443,7 @@ class BatchNorm(Layer):
         self.gvar = None
 
     @ng.with_op_metadata
-    @cached({}, key=inference_mode)
+    @cached({}, key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes.sample_axes()
@@ -493,7 +489,7 @@ class Dropout(Layer):
         self.mask = None
 
     @ng.with_op_metadata
-    @cached({}, key=inference_mode)
+    @cached({}, key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -582,7 +578,7 @@ class Recurrent(Layer):
         return h
 
     @ng.with_op_metadata
-    @cached({}, key=inference_mode)
+    @cached({}, key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
