@@ -62,7 +62,7 @@ def cifar_mean_subtract(x):
 
     bgr_mean = ng.persistent_tensor(
         axes=x.axes.find_by_name('channel'),
-        initial_value=np.array([[104., 119., 127.]]))
+        initial_value=np.array([104., 119., 127.]))
 
     return (x - bgr_mean) / 255.
 

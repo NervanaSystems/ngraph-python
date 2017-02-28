@@ -3504,7 +3504,9 @@ class CrossEntropyMultiOp(ValueOp):
                  enable_diff_opt=True, **kwargs):
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
         if out_axes is None:
-            out_axes = y.axes.batch_axes() + y.axes.recurrent_axes()
+            # Compute along non-recurrent and non-batch axes
+            index_axes = y.axes.sample_axes() - y.axes.recurrent_axes()
+            out_axes = y.axes - index_axes
         if enable_softmax_opt and isinstance(y.deriv_handler, SoftmaxOp):
             # This depends on sum(t) being 1
             self.y = y

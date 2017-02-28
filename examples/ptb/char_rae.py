@@ -74,11 +74,11 @@ optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
 # build network graph
-one_hot_enc_out = one_hot_enc.train_outputs(inputs['inp_txt'])
-one_hot_dec_out = one_hot_dec.train_outputs(inputs['prev_tgt'])
-enc_out = enc.train_outputs(one_hot_enc_out)
-dec_out = dec.train_outputs(one_hot_dec_out, init_state=enc_out)
-output_prob = linear.train_outputs(dec_out)
+one_hot_enc_out = one_hot_enc(inputs['inp_txt'])
+one_hot_dec_out = one_hot_dec(inputs['prev_tgt'])
+enc_out = enc(one_hot_enc_out)
+dec_out = dec(one_hot_dec_out, init_state=enc_out)
+output_prob = linear(dec_out)
 
 loss = ng.cross_entropy_multi(output_prob,
                               ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
