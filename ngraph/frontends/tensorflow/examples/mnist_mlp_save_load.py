@@ -20,9 +20,9 @@ from __future__ import print_function
 import os
 import argparse
 import tensorflow as tf
+from ngraph.testing import ExecutorFactory
 from tensorflow.examples.tutorials.mnist import input_data
 
-import ngraph.transformers as ngt
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 import ngraph.frontends.common.utils as util
 
@@ -112,24 +112,22 @@ def ng_retrain_mnist(args):
     restore_op_ng = importer.get_restore_op()
 
     # transformer and computations
-    transformer = ngt.make_transformer()
-    updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
-    train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
-    init_comp = transformer.computation(init_op_ng)
-    restore_comp = transformer.computation(restore_op_ng)
-    transformer.initialize()
+    with ExecutorFactory() as ex:
+        updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
+        train_comp = ex.executor([cost_ng, updates], x_ng, t_ng)
+        init_comp = ex.executor(init_op_ng)
+        restore_comp = ex.executor(restore_op_ng)
+        ex.transformer.initialize()
 
-    # train in ngraph
-    init_comp()
-    restore_comp()
-    ng_cost_vals = []
-    for idx in range(args.max_iter):
-        batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
-        cost_val, _ = train_comp(batch_xs, batch_ys)
-        ng_cost_vals.append(float(cost_val))
-        print("[Iter %s] Cost = %s" % (idx, cost_val))
-
-    transformer.close()
+        # train in ngraph
+        init_comp()
+        restore_comp()
+        ng_cost_vals = []
+        for idx in range(args.max_iter):
+            batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
+            cost_val, _ = train_comp(batch_xs, batch_ys)
+            ng_cost_vals.append(float(cost_val))
+            print("[Iter %s] Cost = %s" % (idx, cost_val))
 
     return ng_cost_vals
 

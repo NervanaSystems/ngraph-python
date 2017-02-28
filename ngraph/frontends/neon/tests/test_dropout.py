@@ -17,8 +17,8 @@ Test of the dropout layer
 '''
 import numpy as np
 
+from ngraph.testing import ExecutorFactory
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon.layer import Dropout
 from ngraph.testing.execution import executor
 
@@ -91,9 +91,8 @@ def test_dropout_bprop_single_comp(transformer_factory):
     bprop = ng.deriv(out_graph, mul_factor)
 
     # evaluate
-    trans = ngt.make_transformer()
-    comp = trans.computation([fprop, bprop, layer.mask], inp, mul_factor)
-    fout, bout, mask = comp(x, 2)
-    # Calculate derivative by hand and compare
-    np.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)
-    trans.close()
+    with ExecutorFactory() as ex:
+        comp = ex.executor([fprop, bprop, layer.mask], inp, mul_factor)
+        fout, bout, mask = comp(x, 2)
+        # Calculate derivative by hand and compare
+        np.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)
