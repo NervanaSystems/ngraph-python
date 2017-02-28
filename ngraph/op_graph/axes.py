@@ -540,14 +540,6 @@ class Axes(object):
         return tuple(x.name for x in self)
 
     @property
-    def short_names(self):
-        """
-        Returns:
-            tuple: The names without indices of the outer axes.
-        """
-        return tuple(x.short_name for x in self)
-
-    @property
     def lengths(self):
         """
         Returns:
@@ -621,9 +613,6 @@ class Axes(object):
 
     def find_by_name(self, name):
         return Axes(axis for axis in self if axis.name == name)
-
-    def find_by_short_name(self, short_name):
-        return Axes(axis for axis in self if axis.short_name == short_name)
 
     def add_role(self, role):
         for axis in self:

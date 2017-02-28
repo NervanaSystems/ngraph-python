@@ -790,7 +790,7 @@ def test_cross_entropy_softmax_deriv(transformer_factory):
     )
 
 
-def test_cross_enropy_rec(transformer_factory):
+def test_cross_entropy_rec(transformer_factory):
     W = ng.make_axis(length=3)
     T = ng.make_axis(length=4, name='R')
     N = ng.make_axis(length=10, name='N')

@@ -28,7 +28,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Affine, Preprocess, Sequential
+from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
@@ -57,20 +57,21 @@ seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
                    Affine(axes=ax.Y, weight_init=GaussianInit(), activation=Logistic())])
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
+train_prob = seq1(inputs['image'])
+train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_outputs = dict(batch_cost=batch_cost)
 
-output_prob = seq1.train_outputs(inputs['image'])
-errors = ng.not_equal(ng.argmax(output_prob, out_axes=[ax.N]), inputs['label'])
-loss = ng.cross_entropy_binary(output_prob, ng.one_hot(inputs['label'], axis=ax.Y))
-mean_cost = ng.mean(loss, out_axes=())
-updates = optimizer(loss)
-
-train_outputs = dict(batch_cost=mean_cost, updates=updates)
-loss_outputs = dict(cross_ent_loss=loss, misclass_pct=errors)
+with Layer.inference_mode_on():
+    inference_prob = seq1(inputs['image'])
+errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
+eval_loss = ng.cross_entropy_binary(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
 transformer = ngt.make_transformer()
 train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
 cbs = make_default_callbacks(output_file=args.output_file,
                              frequency=args.iter_interval,

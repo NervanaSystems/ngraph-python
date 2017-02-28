@@ -18,6 +18,7 @@ import ngraph as ng
 class Namespace():
     pass
 
+
 # Define axis roles
 ar = Namespace()
 
