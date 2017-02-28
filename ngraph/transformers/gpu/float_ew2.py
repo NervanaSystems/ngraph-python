@@ -1544,7 +1544,7 @@ class NvrtcSourceModule(SourceModule):
             raise RuntimeError("Could not find cuda home path {}".format(cuda_home_path))
 
         options = options + ['-I' + os.path.join(cuda_home_path, 'include'),
-                             '--gpu-architecture=compute_52']
+                             '--gpu-architecture=compute_50']
         ptx = self.get_ptx(code, options)
         self.module = module_from_buffer(ptx)
         self._bind_module()
