@@ -188,9 +188,9 @@ def test_distributed_graph():
     y = ng.placeholder(())
     z = ng.placeholder(())
     with ng.metadata(device_id=('1', '2'), parallel=W):
-        x_plus_y = x + y
+        x_plus_one = x + 1
 
-    x_plus_y_plus_z = x_plus_y + z
+    # x_plus_y_plus_z = x_plus_y + z
 
 #    # Build the graph metadata
 #    graph_ops = OrderedSet([x_plus_y_plus_z, x_plus_y, x, y, z])
@@ -220,12 +220,14 @@ def test_distributed_graph():
 #    transformer.close()
 #
 #    assert set(transformer_list) == set(obj.transformer_list)
-    pytest.xfail("Some problems due to latest changes from master, fixes in later PR")
-    check_result_values(input_vector=[(10, 20, 30), (1, 2, 3)],
-                        result_expected=[(60,),
-                                         (6,)],
-                        placeholder=(x, y, z),
-                        ops=OrderedSet([x_plus_y_plus_z]))
+#     pytest.xfail("Some problems due to latest changes from master, fixes in later PR")
+
+    np_x = np.random.randint(100, size=[H.length, W.length])
+    np_result = np.add(np_x, 1)
+    check_result_values(input_vector=[np_x],
+                        result_expected=[np_result],
+                        placeholder=x,
+                        ops=OrderedSet([x_plus_one]))
 
 
 def test_simple_graph():

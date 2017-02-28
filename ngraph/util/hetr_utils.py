@@ -31,7 +31,10 @@ def clone(
         node.metadata['device_id'] = node.metadata['device_id'][0]
 
     elif node.__class__.__name__ is 'TensorValueOp':
-        new_node = node.__class__(node)
+        new_node = node.__class__(node.states_read[0])
+        new_node.metadata['device'] = node.metadata['device']
+        new_node.metadata['device_id'] = device_id
+
 
     elif node.__class__.__name__ is 'Scatter_Recv':
         new_node = node.__class__(
