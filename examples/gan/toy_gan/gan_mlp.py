@@ -35,20 +35,22 @@ from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
 from toygan import ToyGAN
 
+deriv_test = False
+
 np.random.seed(42)
 
 # define commonly used layer in this example
 def affine_layer(h_dim, activation, name):
     return Affine(nout=h_dim, 
                   activation=activation,
-                  weight_init=GaussianInit(var=1.0),
+                  # YL: use ConstantInit for W for now
+                  weight_init=ConstantInit(val=1.0),
+                  # weight_init=GaussianInit(var=1.0),
                   bias_init=ConstantInit(val=0.0),
                   name=name)
 
 #  model parameters
 h_dim = 4  # GAN.mlp_hidden_size
-h_dim_G = h_dim
-h_dim_D = 2 * h_dim
 minibatch_discrimination = False  # for this toy example, seems to be better w/o mb discrim?
 
 num_iterations = 1200
@@ -64,6 +66,7 @@ generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
 generator = Sequential(generator_layers)
 
 # 2. discriminator (not implementing minibatch discrimination right now)
+# discriminator_layers = []
 discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
                         affine_layer(2 * h_dim, Tanh(), name='d1')]
 if minibatch_discrimination:
@@ -92,9 +95,9 @@ def make_optimizer(name=None):
     return optimizer
 
 # 5. dataloader
-toy_gan_data = ToyGAN(num_examples)  # use all default parameters, which are the ones from example TF code
+toy_gan_data = ToyGAN(batch_size, num_iterations)  # use all default parameters, which are the ones from example TF code
 train_data = toy_gan_data.load_data()
-train_set = ArrayIterator(train_data, batch_size, num_iterations)  # since num_examples = batch_size*num_iterations, providing num_iterations kw arg is redundant
+train_set = ArrayIterator(train_data, batch_size, num_iterations)
 
 # 6. create model (build network graph)
 
@@ -119,6 +122,16 @@ D1 = discriminator.train_outputs(x)  # discriminator output on real data sample
 # copy the discriminator
 discriminator_copy = discriminator.copy()
 
+print discriminator.layers[0].linear.W
+print discriminator.layers[0].bias.W
+print discriminator.layers[1].linear.W
+print discriminator.layers[1].bias.W
+
+print discriminator_copy.layers[0].linear.W
+print discriminator_copy.layers[0].bias.W
+print discriminator_copy.layers[1].linear.W
+print discriminator_copy.layers[1].bias.W
+
 # cast G axes into x
 G_t = ng.axes_with_order(G, reversed(G.axes))
 G_cast = ng.cast_axes(G_t, x.axes)
@@ -126,11 +139,44 @@ G_cast = ng.cast_axes(G_t, x.axes)
 # discriminator output on generated sample
 D2 = discriminator_copy.train_outputs(G_cast)
 
-# loss_d = -ng.log(D1) - ng.log(1 - D2)
-loss_d = ng.cross_entropy_binary(D1, D2)
+print discriminator.layers[0].linear.W
+print discriminator.layers[0].bias.W
+print discriminator.layers[1].linear.W
+print discriminator.layers[1].bias.W
+print discriminator_copy.layers[0].linear.W
+print discriminator_copy.layers[0].bias.W
+print discriminator_copy.layers[1].linear.W
+print discriminator_copy.layers[1].bias.W
+
+loss_d = -ng.log(D1) - ng.log(1 - D2)
+# loss_d = ng.cross_entropy_binary(D1, D2)
 mean_cost_d = ng.mean(loss_d, out_axes=[])
 loss_g = -ng.log(D2)
 mean_cost_g = ng.mean(loss_g, out_axes=[])
+
+transformer = ngt.make_transformer()
+
+if deriv_test:
+    from ngraph.testing.execution import ExecutorFactory
+    with ExecutorFactory() as ex:
+        wg_shape = generator.layers[0].linear.W.axes.lengths
+        wd_shape = discriminator.layers[0].linear.W.axes.lengths
+        dg_g = ex.derivative(mean_cost_g, generator.layers[0].linear.W, z)
+        dd_d = ex.derivative(mean_cost_d, discriminator.layers[0].linear.W, x, z)
+        dd_g = ex.derivative(mean_cost_d, generator.layers[0].linear.W, z)
+        dg_d = ex.derivative(mean_cost_g, discriminator.layers[0].linear.W, z)
+
+        np.random.seed(0)
+        x_value = np.random.random(x.axes.lengths)
+        z_value = np.random.random(z.axes.lengths)
+        wg_value = np.random.random(wg_shape)
+        wd_value = np.random.random(wd_shape)
+        bprop_g = dg_g(wg_value, z_value)
+        bprop_d = dd_d(wd_value, x_value, z_value)
+        bprop_d_g = dd_g(wg_value, z_value)
+        import ipdb; ipdb.set_trace()
+        bprop_g_d = dg_d(wd_value, z_value)
+
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
@@ -139,10 +185,9 @@ updates_g = optimizer_g(loss_g)
 
 discriminator_train_outputs = {'batch_cost': mean_cost_d,
 		 	                   'updates': updates_d}
-generator_train_outputs = {'batch_cost': mean_cost_g,
-	         	           'updates': updates_g}
-
-transformer = ngt.make_transformer()
+# generator_train_outputs = {'batch_cost': mean_cost_g,
+# 	         	           'updates': updates_g}
+generator_train_outputs = {'batch_cost': mean_cost_g}
 
 train_computation_g = make_bound_computation(transformer, generator_train_outputs, inputs['noise_sample'])  # TODO: G inputs just z - does this matter?
 train_computation_d = make_bound_computation(transformer, discriminator_train_outputs, inputs)
@@ -165,13 +210,10 @@ for mb_idx, data in enumerate(train_set):
         # ** if use cross_entropy_binary for loss_d, errors out here, adjoint axes do not match error
         batch_output_d = train_computation_d(data)  # batch_cost and updates for discriminator
     # update generator
-    # ? what happens when give an unneeded input to a computation? does it just benignly ignore it? 
-    # ? for example, if input given to train_computation_g is just data dict which has both noise_sample and unneeded data_sample
-    #batch_output_g = train_computation_g(dict(noise_sample=data['noise_sample']))  # since train_computation_d was created with data_sample key, expects it here too
     batch_output_g = train_computation_g(data['noise_sample'])
     if mb_idx % iter_interval == 0:
         msg = "Iteration {} complete. Discriminator avg loss: {} Generator avg loss: {}"
-        print(msg.format(mb_idx + 1, float(batch_output_d['batch_cost']), float(batch_output_g['batch_cost'])))
+        print(msg.format(mb_idx, float(batch_output_d['batch_cost']), float(batch_output_g['batch_cost'])))
 
 # 8. visualize generator results
 
@@ -190,7 +232,7 @@ for i in range(num_points // batch_size):
     db[sl] = discriminator_inference(inp).reshape(batch_size, 1)  # * returned in shape (1, batch_size), tripped over this
 
 # data distribution 
-d = toy_gan_data.data_samples(num_points)
+d = toy_gan_data.data_samples(num_points, 1)
 pd, i_pd = np.histogram(d, bins=bins, density=True)
 
 # generated samples
