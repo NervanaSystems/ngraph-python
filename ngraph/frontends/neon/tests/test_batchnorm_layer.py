@@ -18,7 +18,7 @@ Test of the batchnorm layer
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import BatchNorm, Recurrent, GlorotInit, Tanh
+from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
@@ -82,7 +82,8 @@ def test_batchnorm_fprop(batch_size, input_size, rho, epsilon, transformer_facto
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("sequence_length", [5])
-def test_recurrent_batchnorm_fprop(batch_size, input_size, hidden_size, sequence_length,
+@pytest.mark.parametrize("RNN", [Recurrent, LSTM])
+def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, sequence_length,
                                    transformer_factory):
     """Compare RNN with batch norm to rnn without using normalized weighted inputs. """
 
@@ -106,15 +107,22 @@ def test_recurrent_batchnorm_fprop(batch_size, input_size, hidden_size, sequence
     identity_weights = np.eye(hidden_size)
 
     # Generate an RNN with batch norm turned on
-    rnn = Recurrent(hidden_size, init=input_weights, init_inner=hidden_weights,
-                    return_sequence=True, batch_norm=True, activation=Tanh())
-    reference_rnn = Recurrent(hidden_size, init=identity_weights, init_inner=hidden_weights,
-                              return_sequence=True, batch_norm=False, activation=Tanh())
+    batch_norm = BatchNorm()
+    rnn = RNN(hidden_size, init=input_weights, init_inner=hidden_weights,
+              return_sequence=True, batch_norm=batch_norm, activation=Tanh())
+    reference_rnn = RNN(hidden_size, init=identity_weights, init_inner=hidden_weights,
+                        return_sequence=True, activation=Tanh())
 
     # Get output placeholders
     fprop = rnn(input_placeholder)
-    stats = [ng.value_of(rnn.batch_norm.gmean),
-             ng.value_of(rnn.batch_norm.gvar)]
+    if isinstance(rnn.batch_norm, dict):
+        # rnn has multiple gates, so just look at one of them.
+        k = rnn.batch_norm.keys()[0]
+        stats = [ng.value_of(rnn.batch_norm[k].gmean),
+                 ng.value_of(rnn.batch_norm[k].gvar)]
+    else:
+        stats = [ng.value_of(rnn.batch_norm.gmean),
+                 ng.value_of(rnn.batch_norm.gvar)]
     reference_fprop = reference_rnn(normed_input_placeholder)
 
     # Begin execution
@@ -138,9 +146,9 @@ def test_recurrent_batchnorm_fprop(batch_size, input_size, hidden_size, sequence
             assert ng.testing.allclose(out,
                                        ref, atol=1e-5), '%e' % np.max(np.abs(out - ref))
             assert ng.testing.allclose(gmean,
-                                       gmean_ref, atol=1e-6), '%e' % np.max(np.abs(gm - gmean_ref))
+                                       gmean_ref, atol=1e-6), '%e' % np.max(np.abs(gmean - gmean_ref))
             assert ng.testing.allclose(gvar,
-                                       gvar_ref, atol=1e-6), '%e' % np.max(np.abs(gv - gvar_ref))
+                                       gvar_ref, atol=1e-6), '%e' % np.max(np.abs(gvar - gvar_ref))
 
 
 
