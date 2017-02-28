@@ -179,8 +179,8 @@ class LookupTable(Layer):
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
-        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
-        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
+        self.lut_o_axes = in_axes | ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) | in_axes[0].axes
 
         if self.W is None:
             self.W = ng.variable(axes=self.w_axes,
@@ -240,7 +240,7 @@ class ConvBase(Layer):
         if self.f_axes is None:
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
-                self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
+                self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init).named('convwt')
 
         if self.o_axes is None:
@@ -258,7 +258,7 @@ class ConvBase(Layer):
                            cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axes()
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
@@ -349,7 +349,8 @@ class PoolBase(Layer):
                 output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axes()
+
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
 
@@ -465,8 +466,8 @@ class BatchNorm(Layer):
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
-            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
-        red_axes += in_obj.axes.batch_axes()
+            red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+        red_axes |= in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
         self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
@@ -582,7 +583,7 @@ class Recurrent(Layer):
             if len(self.in_feature_axes) == 1:
                 self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        self.out_axes = self.out_feature_axes + self.in_axes.batch_axes()
+        self.out_axes = self.out_feature_axes | self.in_axes.batch_axes()
         self.recurrent_axis_idx = len(self.out_feature_axes)
 
         # create temporary out axes which the dot ops will output.  These
@@ -597,8 +598,9 @@ class Recurrent(Layer):
         ])
 
         # determine the shape of the weight matrices
-        self.w_in_axes = temp_out_axes + self.in_feature_axes
-        self.w_re_axes = temp_out_axes + self.out_feature_axes
+        self.w_in_axes = temp_out_axes | self.in_feature_axes
+        self.w_re_axes = temp_out_axes | self.out_feature_axes
+
 
     def _step(self, inp, states):
         h_ff = ng.cast_role(ng.dot(self.W_input, inp), self.out_axes)

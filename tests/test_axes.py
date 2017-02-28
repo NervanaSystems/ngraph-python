@@ -22,62 +22,116 @@ from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, slice_axis
 from ngraph.testing import ExecutorFactory
 
 
-ax_A = ng.make_axis(10)
-ax_B = ng.make_axis(15)
-ax_C = ng.make_axis(20)
+# axes for testing
+ax_A = ng.make_axis(2, name='A')
+ax_B = ng.make_axis(3, name='B')
+ax_C = ng.make_axis(4, name='C')
+
+# axes for testing name matching behavior
+ax_A_ = ng.make_axis(5, name='A')
+ax_B_ = ng.make_axis(6, name='B')
+ax_C_ = ng.make_axis(7, name='C')
+
+# list of [axes_op_str, lhs_axes, rhs_axes, expected_res]
+# currently Axis matches on name, while lengths is ignored
+# so ax_A and ax_A_ is equivalent below
+axes_ops_test_cases = [
+    # add (list operation)
+    ['__add__', [], [], []],
+    ['__add__', [ax_A], [], [ax_A]],
+    ['__add__', [ax_A_], [], [ax_A]],
+    ['__add__', [ax_A], [ax_B], [ax_A, ax_B]],
+    ['__add__', [ax_A_], [ax_B_], [ax_A, ax_B]],
+    # add (list operation, test exception)
+    ['__add__', [ax_A], [ax_A], ValueError],
+    ['__add__', [ax_A], [ax_A_], ValueError],
+    ['__add__', [ax_A], [ax_A_, ax_B], ValueError],
+    # difference (set operation, ordered)
+    ['__sub__', [], [], []],
+    ['__sub__', [], [ax_A], []],
+    ['__sub__', [ax_A], [], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_B], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_B_], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_A], [ax_B]],
+    ['__sub__', [ax_A, ax_B], [ax_A_], [ax_B]],
+    ['__sub__', [ax_A, ax_B], [ax_B, ax_A], []],
+    ['__sub__', [ax_A, ax_B], [ax_B_, ax_A_], []],
+    # union (set operation, ordered)
+    ['__or__', [], [], []],
+    ['__or__', [], [ax_A], [ax_A]],
+    ['__or__', [ax_A], [], [ax_A]],
+    ['__or__', [ax_A], [ax_B], [ax_A, ax_B]],
+    ['__or__', [ax_A], [ax_A_], [ax_A]],
+    ['__or__', [ax_A], [ax_A_], [ax_A_]],
+    # intersection (set operation, ordered)
+    ['__and__', [], [], []],
+    ['__and__', [], [ax_A], []],
+    ['__and__', [ax_A], [], []],
+    ['__and__', [ax_A], [ax_B], []],
+    ['__and__', [ax_A, ax_B], [ax_B, ax_C], [ax_B]],
+    ['__and__', [ax_A, ax_B_], [ax_B, ax_C], [ax_B]],
+    # equal (list operation, ordered)
+    ['__eq__', [], [], True],
+    ['__eq__', [ax_A], [], False],
+    ['__eq__', [ax_A, ax_B], [ax_B, ax_A], False],
+    ['__eq__', [ax_A, ax_B], [ax_B_, ax_A_], False],
+    ['__eq__', [ax_A, ax_B], [ax_A_, ax_B], True],
+    ['__eq__', [ax_A, ax_B], [ax_A_, ax_B_], True],
+    # not equal (list operation, ordered)
+    ['__ne__', [], [], False],
+    ['__ne__', [ax_A], [], True],
+    ['__ne__', [ax_A, ax_B], [ax_B, ax_A], True],
+    ['__ne__', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    ['__ne__', [ax_A, ax_B], [ax_A_, ax_B], False],
+    ['__ne__', [ax_A, ax_B], [ax_A_, ax_B_], False],
+    # subset
+    ['is_sub_set', [], [], True],
+    ['is_sub_set', [ax_A], [], False],
+    ['is_sub_set', [], [ax_A], True],
+    ['is_sub_set', [ax_A_], [ax_A], True],
+    ['is_sub_set', [ax_A, ax_B], [ax_B, ax_A], True],
+    ['is_sub_set', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    # superset
+    ['is_super_set', [], [], False],
+    ['is_super_set', [ax_A], [], True],
+    ['is_super_set', [], [ax_A], False],
+    ['is_super_set', [ax_A_], [ax_A], False],
+    ['is_super_set', [ax_A, ax_B], [ax_B, ax_A], False],
+    ['is_super_set', [ax_A, ax_B], [ax_B_, ax_A_], False],
+    # set equal
+    ['is_equal_set', [], [], True],
+    ['is_equal_set', [ax_A], [], False],
+    ['is_equal_set', [ax_A], [ax_A], True],
+    ['is_equal_set', [ax_A], [ax_A_], True],
+    ['is_equal_set', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    # set not equal
+    ['is_not_equal_set', [], [], False],
+    ['is_not_equal_set', [ax_A], [], True],
+    ['is_not_equal_set', [ax_A], [ax_A], False],
+    ['is_not_equal_set', [ax_A], [ax_A_], False],
+    ['is_not_equal_set', [ax_A, ax_B], [ax_B_, ax_A_], False],
+]
 
 
-def test_axes_equal():
-    """ Test axes == operator """
-    a1 = ng.make_axes([ax_A, ax_B, ax_C])
-    a2 = ng.make_axes([ax_A, ax_B, ax_C])
-    assert a1 == a2
+@pytest.mark.parametrize("test_cases", axes_ops_test_cases)
+def test_axes_ops(test_cases):
+    # unpack test case
+    axes_op_str, lhs_axes, rhs_axes, expected_res = test_cases
+    lhs_axes = ng.make_axes(lhs_axes)
+    rhs_axes = ng.make_axes(rhs_axes)
+    if isinstance(expected_res, list):
+        expected_res = ng.make_axes(expected_res)
 
-
-def to_nested_tuple(axes):
-    """
-    Recursively replace instances of FlattenedAxis with instances of type tuple.
-
-    Arguments:
-        axes: Axes object or iterable of Axis objects
-
-    Returns:
-        passes through axes objects with everything unchanged except
-        FlattenedAxis are replaced with tuple
-    """
-    return tuple(
-        to_nested_tuple(axis.axes) if axis.is_flattened else axis
-        for axis in axes
-    )
-
-
-def test_axes_ops():
-    """TODO."""
-    # Subtraction
-    def test_sub(axes1, axes2, target):
-        """
-        TODO.
-
-        Arguments:
-          axes1: TODO
-          axes2: TODO
-          target: TODO
-
-        Returns:
-
-        """
-        assert ng.make_axes(axes1) - ng.make_axes(axes2) == ng.make_axes(target)
-
-    test_sub([ax_A, ax_B], [ax_A], [ax_B])
-    test_sub([ax_A, ax_B], [ax_B], [ax_A])
-
-    # Combined axes length
-    assert FlattenedAxis([ax_A, ax_B]).length \
-        == ax_A.length * ax_B.length
-    assert ng.make_axes([ax_A, (ax_B, ax_C)]).lengths \
-        == (ax_A.length, ax_B.length * ax_C.length)
-    assert FlattenedAxis([ax_A, (ax_B, ax_C)]).length \
-        == ax_A.length * ax_B.length * ax_C.length
+    # check results against expected_res
+    if expected_res is ValueError:
+        with pytest.raises(ValueError):
+            getattr(lhs_axes, axes_op_str)(rhs_axes)
+    else:
+        res = getattr(lhs_axes, axes_op_str)(rhs_axes)
+        if res != expected_res:
+            raise ValueError("%s operation with %s and %s, "
+                             "expected result %s, but actually get %s"
+                             % (axes_op_str, lhs_axes, rhs_axes, expected_res, res))
 
 
 def random(tensor_description):

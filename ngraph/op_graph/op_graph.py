@@ -1692,14 +1692,14 @@ def axes_with_role_order(x, roles):
             ax_i = ax_i[0]
         else:
             raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
-        reordered_axes += ax_i
+        reordered_axes |= ax_i
         # This will only add the missing axes to the front
         y = expand_dims(y, ax_i, 0)
 
     # Ensure that axes of x are a subset of y
-    if not x.axes.intersect(y.axes).has_same_axes(x.axes):
+    if not (x.axes & y.axes).has_same_axes(x.axes):
         raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
-            x.axes - x.axes.intersect(y.axes)
+            x.axes - (x.axes & y.axes)
         ))
 
     return axes_with_order(y, reordered_axes)
@@ -1865,7 +1865,7 @@ def slice_along_axis(x, axis, idx):
     """
     pos = x.axes.index(axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
-    axes = x.axes[:pos] + x.axes[pos + 1:]
+    axes = x.axes[:pos] | x.axes[pos + 1:]
     return tensor_slice(x, ss, axes=axes)
 
 
@@ -2242,7 +2242,7 @@ class StackOp(SequentialOp):
         axes_0 = arg_axes[:pos]
         axes_1 = arg_axes[pos:]
         # Axis layout for the result
-        result_axes = axes_0 + axis + axes_1
+        result_axes = axes_0 | axis | axes_1
 
         # With axes, we should be able to just setitem into a tensor shaped like the
         # result, but things don't quite work that way so we use a temp that would have
@@ -2315,7 +2315,7 @@ class ConcatOp(SequentialOp):
         ind = arg_axes.index(ax)
         axes_0 = arg_axes[:ind]
         axes_1 = arg_axes[ind + 1:]
-        result_axes = axes_0 + concat_axis + axes_1
+        result_axes = axes_0 | concat_axis | axes_1
 
         # With axes, we should be able to just setitem into a tensor shaped like the
         # result, but things don't quite work that way so we use a temp that would have
@@ -2832,7 +2832,7 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes + y.axes
+        axes = x.axes | y.axes
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
@@ -2966,13 +2966,13 @@ class ContiguousOp(TensorOp):
 class DotOp(TensorOp):
 
     def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes.intersect(y.axes)
+        self.x_reduction_axes = x.axes & y.axes
         self.y_reduction_axes = self.x_reduction_axes
         assert self.x_reduction_axes == self.y_reduction_axes
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
-        axes = self.x_out_axes + self.y_out_axes
+        axes = self.x_out_axes | self.y_out_axes
 
         super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
@@ -3096,7 +3096,7 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert reduction_axes.intersect(out_axes) == make_axes(())
+        assert (reduction_axes & out_axes) == make_axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -3316,7 +3316,7 @@ class OneHotOp(TensorOp):
         self.axis = axis
         super(OneHotOp, self).__init__(
             args=(x,),
-            axes=make_axes((axis,)) + x.axes,
+            axes=make_axes((axis,)) | x.axes,
             **kwargs
         )
 

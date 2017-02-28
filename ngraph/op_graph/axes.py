@@ -535,16 +535,74 @@ class Axes(object):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes(
-            tuple(self) +
-            tuple(axis for axis in Axes(other) if axis not in self)
-        )
+        """
+        Returns list concatenated axes. Throws exception when there are Axis
+        duplication.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            current axes concatenated with the other axes
+        """
+        # self and other could not have common element
+        common_axes = self & other
+        if len(common_axes) != 0:
+            raise ValueError("Trying to concatenate %s with %s, but they have"
+                             "common axes %s, which is not allowed."
+                             % (self, other, common_axes))
+        return make_axes(tuple(self) + tuple(other))
 
     def __sub__(self, other):
-        other = Axes(other)
-        return Axes((axis for axis in self if axis not in other))
+        """
+        Returns ordered set difference of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set difference of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self if axis not in other))
+
+    def __or__(self, other):
+        """
+        Returns ordered set union of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set union of axes
+        """
+        other = make_axes(other)
+        return make_axes(tuple(self) +
+                         tuple(axis for axis in Axes(other) if axis not in self))
+
+    def __and__(self, other):
+        """
+        Returns ordered set intersection of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set intersection of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self._axes if axis in other))
 
     def __eq__(self, other):
+        """
+        True if each ``Axis`` are matching and in same order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if each ``Axis`` are matching and in same order
+        """
         if not isinstance(other, Axes):
             raise ValueError((
                 'other must be of type Axes, found type {}'
@@ -553,6 +611,16 @@ class Axes(object):
         return self._axes.__eq__(other._axes)
 
     def __ne__(self, other):
+        """
+        The opposite of __eq__, True if not all ``Axis`` are matching or in
+        different order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if not all ``Axis`` are matching or in different order
+        """
         return not self == other
 
     def __nonzero__(self):
@@ -562,18 +630,69 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def intersect(self, axes):
+    def _to_name_set(self):
         """
-        Returns the intersection of the elements, leaving out duplicate Axes.
-
-        Arguments:
-            axes: second axes to intersect
+        Get set of Axis names for all Axis in Axes
 
         Returns:
-            The ordered intersection
+            A set of Axis names
         """
-        axes = make_axes(axes)
-        return make_axes((axis for axis in self._axes if axis in axes))
+        return set([axis.name for axis in self])
+
+    def is_sub_set(self, other):
+        """
+        Returns true if other is subset of self, i.e. <=
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other is subset of self
+        """
+        return self._to_name_set().issubset(make_axes(other)._to_name_set())
+
+    def is_super_set(self, other):
+        """
+        Returns true if other is superset of self, i.e. >=
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other is superset of self
+        """
+        return not self.is_sub_set(other)
+
+    def is_equal_set(self, other):
+        """
+        Returns true if other has the same set of Axis names as self
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other has the same set of Axis names as self
+        """
+        return self._to_name_set() == make_axes(other)._to_name_set()
+
+    def is_not_equal_set(self, other):
+        """
+        Returns true if other does not the same set of Axis names as self
+
+        Arguments:
+           other: the right-hand side operator axes
+
+        Returns:
+           bool, true if other does not has the same set of Axis names as self
+        """
+        return not self.is_equal_set(other)
+
+    def get_dual(self, dual_offset=-1):
+        return Axes((axis.get_dual(dual_offset) for axis in self))
+
+    @property
+    def T(self):
+        return Axes(axis.T for axis in self)
 
     @staticmethod
     @with_args_as_axes
