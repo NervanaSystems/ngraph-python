@@ -536,7 +536,8 @@ class Recurrent(Layer):
     metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
+                 reset_cells=True, return_sequence=True, backward=False,
+                 batch_norm=False, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
 
         self.nout = nout
@@ -546,6 +547,7 @@ class Recurrent(Layer):
         self.reset_cells = reset_cells
         self.return_sequence = return_sequence
         self.backward = backward
+        self.batch_norm = BatchNorm() if batch_norm else None
 
     def interpret_axes(self, in_obj, init_state):
         in_axes = in_obj.axes
@@ -571,8 +573,7 @@ class Recurrent(Layer):
 
         self.w_re_axes = self.hidden_axes + [axis - 1 for axis in self.hidden_axes]
 
-    def _step(self, inp, states):
-        h_ff = ng.dot(self.W_input, inp)
+    def _step(self, h_ff, states):
         h_rec = ng.dot(self.W_recur, states)
         h = self.activation(h_rec + h_ff + self.b)
         return h
@@ -616,8 +617,13 @@ class Recurrent(Layer):
         h = self.h_init
         h_list = []
 
+        # Compute batch norm
+        h_ff = ng.dot(self.W_input, in_obj)
+        if self.batch_norm is not None:
+            h_ff = self.batch_norm(h_ff)
+
         # slice the inputs into time slices
-        in_s = get_steps(in_obj, self.recurrent_axis, self.backward)
+        in_s = get_steps(h_ff, self.time_axis, self.backward)
 
         # unrolling computations
         for i in range(self.recurrent_axis.length):
