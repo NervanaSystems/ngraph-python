@@ -22,7 +22,7 @@ the same sequence in reverse order.
 import ngraph as ng
 from ngraph.frontends.neon import Preprocess, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
-from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
@@ -57,9 +57,6 @@ ax.Y.length = len(tree_bank_data.vocab)
 
 
 def expand_onehot(x):
-    # Assign the recurrent role and property to the axis named 'time'
-    x.axes.find_by_short_name('time')[0].add_role(ar.time)
-    x.axes.find_by_short_name('time')[0].is_recurrent = True
     return ng.one_hot(x, axis=ax.Y)
 
 
@@ -77,11 +74,11 @@ optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
 # build network graph
-one_hot_enc_out = one_hot_enc.train_outputs(inputs['inp_txt'])
-one_hot_dec_out = one_hot_dec.train_outputs(inputs['prev_tgt'])
-enc_out = enc.train_outputs(one_hot_enc_out)
-dec_out = dec.train_outputs(one_hot_dec_out, init_state=enc_out)
-output_prob = linear.train_outputs(dec_out)
+one_hot_enc_out = one_hot_enc(inputs['inp_txt'])
+one_hot_dec_out = one_hot_dec(inputs['prev_tgt'])
+enc_out = enc(one_hot_enc_out)
+dec_out = dec(one_hot_dec_out, init_state=enc_out)
+output_prob = linear(dec_out)
 
 loss = ng.cross_entropy_multi(output_prob,
                               ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
