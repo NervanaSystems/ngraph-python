@@ -809,7 +809,7 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        removed_axes = (set(axes) - set(new_axes))
+        removed_axes = axes - new_axes
 
         if removed_axes:
             raise ValueError(("The new_axes of a broadcast operation must "

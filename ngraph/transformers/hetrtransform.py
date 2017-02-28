@@ -149,6 +149,7 @@ class AsyncTransformer(Process):
                 comp_id, inputs = self.work_q.get(timeout=AsyncTransformer.SLEEP_S)
 
                 # actual computation objects stored in this process, indexed
+                # print('{}{}'.format(comp_id, inputs))
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
                 # individual results q makes it easy for caller to find results

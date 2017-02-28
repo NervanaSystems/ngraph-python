@@ -804,7 +804,7 @@ class NumPyTransformer(Transformer):
             self.code.endl(2)
             self.code.append(self.compute_code.code)
 
-            # with open("code_{}.py".format(self.name), "w") as f:
+            # with open("code_{}.py".format(self.name), "ab") as f:
             #     f.write(self.code.code)
 
         r = self.code.compile("op", globals())
