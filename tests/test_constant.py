@@ -96,7 +96,7 @@ def test_numpytensor_dot(transformer_factory):
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
     np_c = np.dot(np_a, np_b)
 
-    a = ng.constant(np_a, [M, N - 1])
+    a = ng.constant(np_a, [M, N])
     b = ng.constant(np_b, [N, Y])
     c = ng.dot(a, b)
 
@@ -172,7 +172,7 @@ def test_numpytensor_mlp(transformer_factory):
     np_b = np.array([1, 2], dtype=np.float32)
     np_c = np.dot(np_x, np_w) + np_b
 
-    x = ng.constant(np_x, [N, D - 1])
+    x = ng.constant(np_x, [N, D])
     w = ng.constant(np_w, [D, H])
     b = ng.constant(np_b, [H])
     wx = ng.dot(x, w)

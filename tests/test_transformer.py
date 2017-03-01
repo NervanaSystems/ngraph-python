@@ -32,7 +32,7 @@ def test_evaluation_twice(transformer_factory):
 
     hidden1_weights = ng.constant(
         np.array([[1], [1]], dtype='float32'),
-        ng.make_axes([C - 1, W])
+        ng.make_axes([C, W])
     )
 
     hidden1_biases = ng.constant(
