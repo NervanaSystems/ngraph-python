@@ -27,11 +27,11 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/ngraph-test/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;ldd /tmp/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;ldd /tmp/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;ldd /tmp/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
 
-COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;coverage combine;coverage xml -i;coverage report"
+COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;ls -l .coverage*;coverage combine;coverage xml -i;coverage report"
 
 .PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_all
 
@@ -157,10 +157,16 @@ test: build_test
 test_parallel: build_test_run
 	docker run --rm ${VOLUME} -t ngraph_test_run:${BUILD_VERSION} make test_parallel
 
-test_mkldnn: build_mkldnn_test
+test_mkldnn_unit: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
+
+test_mkldnn_neon: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
+
+test_mkldnn_tf: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
+
+test_mkldnn: test_mkldnn_unit test_mkldnn_neon test_mkldnn_tf
 
 test_caffe2: build_caffe2
 	docker run --rm ${VOLUME} -t ngraph_caffe2:${BUILD_VERSION} make test_caffe2
