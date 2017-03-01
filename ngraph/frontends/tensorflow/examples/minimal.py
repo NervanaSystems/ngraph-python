@@ -15,7 +15,7 @@
 
 from __future__ import print_function
 import tensorflow as tf
-import ngraph.transformers as ngt
+from ngraph.testing import ExecutorFactory
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 
 # tensorflow ops
@@ -31,7 +31,6 @@ importer.import_graph_def(tf.get_default_graph().as_graph_def())
 f_ng = importer.get_op_handle(f)
 
 # execute
-transformer = ngt.make_transformer()
-f_result = transformer.computation(f_ng)()
-transformer.close()
+with ExecutorFactory() as ex:
+    f_result = ex.executor(f_ng)()
 print(f_result)
