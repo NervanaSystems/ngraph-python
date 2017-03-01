@@ -64,7 +64,6 @@ def test_linear_ones(input_placeholder, output_size, transformer_factory):
     layer = Linear(nout=output_size, init=UniformInit(1.0, 1.0))
 
     with ExecutorFactory() as ex:
-        comp = ex.executor([layer(input_placeholder), layer.W], input_placeholder)
         if ex.transformer.transformer_name == 'hetr':
             pytest.xfail("hetr fork-safe issue on mac")
         comp = ex.executor([layer(input_placeholder), layer.W], input_placeholder)
