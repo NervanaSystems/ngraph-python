@@ -16,10 +16,10 @@
 from __future__ import print_function
 
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
+from ngraph.testing import ExecutorFactory
 import ngraph.frontends.common.utils as util
 import numpy as np
 import tensorflow as tf
-import ngraph.transformers as ngt
 import argparse
 
 
@@ -46,22 +46,20 @@ def logistic_regression(args):
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init_op])
 
     # transformer and computations
-    transformer = ngt.make_transformer()
-    updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
+    with ExecutorFactory() as ex:
+        updates = util.CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
 
-    train_comp = transformer.computation([cost_ng, updates], x_ng, t_ng)
-    init_comp = transformer.computation(init_op_ng)
-    transformer.initialize()
+        train_comp = ex.executor([cost_ng, updates], x_ng, t_ng)
+        init_comp = ex.executor(init_op_ng)
+        ex.transformer.initialize()
 
-    # train
-    init_comp()
-    ng_cost_vals = []
-    for idx in range(args.max_iter):
-        cost_val, _ = train_comp(xs_np, ys_np)
-        ng_cost_vals.append(float(cost_val))
-        print("[Iter %s] Cost = %s" % (idx, cost_val))
-
-    transformer.close()
+        # train
+        init_comp()
+        ng_cost_vals = []
+        for idx in range(args.max_iter):
+            cost_val, _ = train_comp(xs_np, ys_np)
+            ng_cost_vals.append(float(cost_val))
+            print("[Iter %s] Cost = %s" % (idx, cost_val))
 
     # tensorflow for comparison
     with tf.Session() as sess:

@@ -35,7 +35,7 @@ def test_batchnorm_fprop(batch_size, input_size, rho, epsilon, transformer_facto
 
     input_placeholder = ng.placeholder([F, N])
     layer = BatchNorm(rho, epsilon)
-    fprop = layer.train_outputs(input_placeholder)
+    fprop = layer(input_placeholder)
 
     with ExecutorFactory() as ex:
         fprop_function = ex.transformer.computation(fprop, input_placeholder)

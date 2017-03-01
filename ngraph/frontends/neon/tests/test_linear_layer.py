@@ -48,10 +48,7 @@ def test_linear_zeros(input_placeholder, output_size, transformer_factory):
     layer = Linear(nout=output_size, init=UniformInit(0.0, 0.0))
 
     with ExecutorFactory() as ex:
-        if ex.transformer.transformer_name == 'hetr':
-            pytest.xfail("hetr fork-safe issue on mac")
-        comp = ex.executor(layer.train_outputs(input_placeholder),
-                           input_placeholder)
+        comp = ex.executor(layer(input_placeholder), input_placeholder)
         output_values = comp(x)
 
     assert np.min(output_values) == 0.0 and np.max(output_values) == 0.0
@@ -65,10 +62,7 @@ def test_linear_ones(input_placeholder, output_size, transformer_factory):
     layer = Linear(nout=output_size, init=UniformInit(1.0, 1.0))
 
     with ExecutorFactory() as ex:
-        if ex.transformer.transformer_name == 'hetr':
-            pytest.xfail("hetr fork-safe issue on mac")
-        comp = ex.executor([layer.train_outputs(input_placeholder), layer.W],
-                           input_placeholder)
+        comp = ex.executor([layer(input_placeholder), layer.W], input_placeholder)
         output_values, w = comp(x)
 
     sums = np.sum(w, axis=1, keepdims=True) * np.ones((1, x.shape[1]))

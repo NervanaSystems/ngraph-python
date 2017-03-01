@@ -17,12 +17,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from ngraph.testing import ExecutorFactory
 from tensorflow.examples.tutorials.mnist import input_data
 from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 from ngraph.frontends.common.utils import CommonSGDOptimizer
 import tensorflow as tf
 import ngraph as ng
-import ngraph.transformers as ngt
 import argparse
 
 
@@ -45,28 +45,26 @@ def mnist_mlp(args):
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
 
     # transformer and computations
-    transformer = ngt.make_transformer()
-    updates = CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
-    train_comp = transformer.computation(ng.sequential([updates, cost_ng]), x_ng, t_ng)
-    init_comp = transformer.computation(init_op_ng)
-    transformer.initialize()
+    with ExecutorFactory() as ex:
+        updates = CommonSGDOptimizer(args.lrate).minimize(cost_ng, cost_ng.variables())
+        train_comp = ex.executor(ng.sequential([updates, cost_ng]), x_ng, t_ng)
+        init_comp = ex.executor(init_op_ng)
+        ex.transformer.initialize()
 
-    # train
-    if args.random_data is not None:
-        mnist = args.random_data
-        mnist.reset(0)
-    else:
-        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        # train
+        if args.random_data is not None:
+            mnist = args.random_data
+            mnist.reset(0)
+        else:
+            mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
 
-    init_comp()
-    ng_cost_vals = []
-    for idx in range(args.max_iter):
-        batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
-        cost_val = train_comp(batch_xs, batch_ys)
-        ng_cost_vals.append(float(cost_val))
-        print("[Iter %s] Cost = %s" % (idx, cost_val))
-
-    transformer.close()
+        init_comp()
+        ng_cost_vals = []
+        for idx in range(args.max_iter):
+            batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
+            cost_val = train_comp(batch_xs, batch_ys)
+            ng_cost_vals.append(float(cost_val))
+            print("[Iter %s] Cost = %s" % (idx, cost_val))
 
     # train in tensorflow as comparison
     with tf.Session() as sess:

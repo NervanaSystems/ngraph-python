@@ -38,7 +38,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    CPUTensorShaping, SimplePrune, DerivPass
+    CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
@@ -723,8 +723,7 @@ class NumPyTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [DerivPass(),
-                             CPUTensorLayout(),
+        self.graph_passes = [CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
                              CPUTensorShaping()]
