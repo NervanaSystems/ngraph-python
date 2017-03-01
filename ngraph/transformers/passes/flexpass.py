@@ -1,6 +1,7 @@
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, tdcache, ContiguousOp, ReshapeOp
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.flex import gpuflex16
 
 
@@ -24,6 +25,22 @@ class FlexDECPass(PeepholeGraphPass):
                 op.tensor_description().buffer.flex_entry = self.flex_entry
             self.propagate_flex_entry = False
         if isinstance(op, ReshapeOp):
+            self.propagate_flex_entry = True
+            self.flex_entry = op.tensor_description().buffer.flex_entry
+
+
+class FlexPoolingPass(PeepholeGraphPass):
+
+    def __init__(self):
+        self.propagate_flex_entry = False
+
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op):
+        if self.propagate_flex_entry:
+            if op.is_tensor_op:
+                op.tensor_description().buffer.flex_entry = self.flex_entry
+            self.propagate_flex_entry = False
+        if isinstance(op, (PoolingOp, BpropPoolOp)):
             self.propagate_flex_entry = True
             self.flex_entry = op.tensor_description().buffer.flex_entry
 

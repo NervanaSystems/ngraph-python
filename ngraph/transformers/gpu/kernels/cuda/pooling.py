@@ -76,6 +76,10 @@ __device__ __forceinline__ int msub16(int a, int b, int c)
 }
 """
 
+flex_prefix = "i"  # previously was "x" - TODO: investigate change
+flex_dtype = flex_prefix + "2"
+flex_arg_desc = "Pff"
+
 def prepare_template_vals(dtype, compute_capability, rounding=False):
     """
     Set up template code snippets that are reused across multiple kernels.
@@ -108,11 +112,11 @@ def prepare_template_vals(dtype, compute_capability, rounding=False):
     if dtype == "f2":
         template_vals["common"] += _common_fp16_to_fp32
         template_vals["cvt_out"] = "fp32_to_fp16"
-    elif dtype == "x2":
-        template_vals["stats_args"] += ", int* maxabs, float scale0"
+    elif dtype == flex_dtype:
+        template_vals["stats_args"] += ", int* maxabs, float scale0, float scale1"  # FLEX TODO: investigate why this is necessary even with pass setting out flex entry to in flex entry
         template_vals["cvt"] = "(float)"
         template_vals["cvt_out"] = "fp32_to_int16"
-        template_vals["mul_by_scale"] += "1/scale0 *"
+        template_vals["mul_by_scale"] += "scale0 * 1/scale1 *"  # FLEX TODO: test other pooling kernels besides fprop_max, bprop_max_overlap
         template_vals["atomic_max"] += atomic_max
     elif dtype == "f4":
         pass
@@ -276,7 +280,7 @@ __global__ void spool_fprop_max(
     code = code % template_vals
     module = SourceModule(code)
     kernel = module.get_function("spool_fprop_max")
-    sig = "3P 2f 44I" + ("Pf" if (clss[0] == "x") else "")
+    sig = "3P 2f 44I" + (flex_arg_desc if (clss[0] == flex_prefix) else "")
     kernel.prepare(sig)
     return kernel
 
@@ -426,7 +430,7 @@ __global__ void spool_fprop_avg(
     code = code % template_vals
     module = SourceModule(code, options=["--use_fast_math"])
     kernel = module.get_function("spool_fprop_avg")
-    kernel.prepare("3P 2f 44I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 44I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 
@@ -585,7 +589,7 @@ __global__ void spool_fprop_lrn(
     code = code % template_vals
     module = SourceModule(code)
     kernel = module.get_function("spool_fprop_lrn")
-    kernel.prepare("3P 4f 34I 10I" + ("Pf" if (clss[0] == "x") else ""))  # add superblocking parameter
+    kernel.prepare("3P 4f 34I 10I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))  # add superblocking parameter
     return kernel
 
 
@@ -762,7 +766,7 @@ __global__ void spool_bprop_lrn_overlap(
     code = code % template_vals
     module = SourceModule(code)
     kernel = module.get_function("spool_bprop_lrn_overlap")
-    kernel.prepare("5P 4f 47I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("5P 4f 47I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 @context_dependent_memoize
@@ -932,7 +936,7 @@ __global__ void spool_bprop_max(
     # f = open("spool_bprop_max.cu", "w")
     # print >>f, code
     # f.close()
-    kernel.prepare("3P 2f 44I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 44I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 
@@ -1101,7 +1105,7 @@ __global__ void spool_bprop_avg(
     code = code % template_vals
     module = SourceModule(code, options=["--use_fast_math"])
     kernel = module.get_function("spool_bprop_avg")
-    kernel.prepare("3P 2f 44I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 44I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 
@@ -1283,7 +1287,7 @@ __global__ void spool_bprop_max_overlap(
     code = code % template_vals
     module = SourceModule(code)
     kernel = module.get_function("spool_bprop_max_overlap")
-    kernel.prepare("3P 2f 47I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 47I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 @context_dependent_memoize
@@ -1478,7 +1482,7 @@ __global__ void spool_bprop_avg_overlap(
     code = code % template_vals
     module = SourceModule(code, options=["--use_fast_math"])
     kernel = module.get_function("spool_bprop_avg_overlap")
-    kernel.prepare("3P 2f 47I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 47I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 
@@ -1674,7 +1678,7 @@ __global__ void spool_bprop_max_overlap_smallN(
     code = code % template_vals
     module = SourceModule(code)
     kernel = module.get_function("spool_bprop_max_overlap_smallN")
-    kernel.prepare("3P 2f 58I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 58I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel
 
 
@@ -1879,5 +1883,5 @@ __global__ void spool_bprop_avg_overlap_smallN(
     # f.close()
     module = SourceModule(code, options=["--use_fast_math"])
     kernel = module.get_function("spool_bprop_avg_overlap_smallN")
-    kernel.prepare("3P 2f 58I" + ("Pf" if (clss[0] == "x") else ""))
+    kernel.prepare("3P 2f 58I" + (flex_arg_desc if (clss[0] == flex_prefix) else ""))
     return kernel

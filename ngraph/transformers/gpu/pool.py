@@ -40,6 +40,9 @@ class PoolFpropKernel(GPUKernel):
             pooling operation
         params (list): List of parameters to pass to kernel
     """
+
+    supported_types = [np.float16, np.float32]
+
     def __init__(self, transformer, op):
         super(PoolFpropKernel, self).__init__(transformer)
 
@@ -48,12 +51,8 @@ class PoolFpropKernel(GPUKernel):
         self.dtype = self.O.dtype
         self.index = op.index
 
-        if self.dtype.type is np.float16:
-            clss = "hpool"
-        elif self.dtype.type is np.float32:
-            clss = "spool"
-        else:
-            raise TypeError("Type not supported {}".format(clss))
+        if not (self.dtype.type in self.supported_types):
+            raise TypeError("Type not supported: {}".format(self.dtype.type))
 
         C, D, H, W, _ = self.I.axes.lengths
         K, M, P, Q, N = self.O.axes.lengths
@@ -236,6 +235,9 @@ class PoolBpropKernel(GPUKernel):
             pooling operation
         params (list): List of parameters to pass to kernel
     """
+
+    supported_types = [np.float16, np.float32]
+
     def __init__(self, transformer, op):
         super(PoolBpropKernel, self).__init__(transformer)
 
@@ -244,12 +246,8 @@ class PoolBpropKernel(GPUKernel):
         self.dtype = self.O.dtype
         self.index = op.index
 
-        if self.dtype.type is np.float16:
-            clss = "hpool"
-        elif self.dtype.type is np.float32:
-            clss = "spool"
-        else:
-            raise TypeError("Type not supported {}".format(clss))
+        if not (self.dtype.type in self.supported_types):
+            raise TypeError("Type not supported: {}".format(self.dtype.type))
 
         C, D, H, W, _ = self.O.axes.lengths
         K, M, P, Q, N = self.I.axes.lengths
@@ -475,3 +473,61 @@ class PoolBpropKernel(GPUKernel):
         Executes the pooling kernel.
         """
         self.kernel.prepared_async_call(*self.params, shared_size=self.bprop_lut_size)
+
+
+class FlexPoolFpropKernel(PoolFpropKernel):
+    """
+    Flex version of PoolFpropKernel
+    """
+
+    supported_types = ['flex']
+
+    def __init__(self, transformer, op):
+
+        super(FlexPoolFpropKernel, self).__init__(transformer, op)
+        self.output_flex_ids = []
+
+    def bind_buffers(self):
+        super(FlexPoolFpropKernel, self).bind_buffers()
+        from ngraph.transformers.gpu.float_ew2 import FlexPtrDescription
+        # add maxabs ptr, scale0, scale1
+        self.params.extend([FlexPtrDescription(self.O.buffer.flex_entry), 0.0, 0.0])
+
+    def bind_flex_scales(self):
+        in_scale = self.I.buffer.flex_entry.scale
+        self.params[-2] = in_scale
+        out_scale = self.O.buffer.flex_entry.scale
+        self.params[-1] = out_scale
+
+        from ngraph.transformers.gpu.float_ew2 import FlexPtrDescription
+        self.O.buffer.flex_entry.allocate()
+        FlexPtrDescription.bind_ptr(self.params)
+
+
+class FlexPoolBpropKernel(PoolBpropKernel):
+    """
+    Flex version of PoolBpropKernel
+    """
+
+    supported_types = ['flex']
+
+    def __init__(self, transformer, op):
+
+        super(FlexPoolBpropKernel, self).__init__(transformer, op)
+        self.output_flex_ids = []
+
+    def bind_buffers(self):
+        super(FlexPoolBpropKernel, self).bind_buffers()
+        from ngraph.transformers.gpu.float_ew2 import FlexPtrDescription
+        # add maxabs ptr, scale0, scale1
+        self.params.extend([FlexPtrDescription(self.O.buffer.flex_entry), 0.0, 0.0])
+
+    def bind_flex_scales(self):
+        in_scale = self.I.buffer.flex_entry.scale
+        self.params[-2] = in_scale
+        out_scale = self.O.buffer.flex_entry.scale
+        self.params[-1] = out_scale
+
+        from ngraph.transformers.gpu.float_ew2 import FlexPtrDescription
+        self.O.buffer.flex_entry.allocate()
+        FlexPtrDescription.bind_ptr(self.params)

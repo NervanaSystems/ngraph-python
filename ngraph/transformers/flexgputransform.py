@@ -16,14 +16,16 @@
 from __future__ import print_function
 from __future__ import division
 from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
+from ngraph.transformers.gpu.pool import FlexPoolFpropKernel, FlexPoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
-from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
+from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, FlexPoolingPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex import GPUFlexManager, GPUFlex
@@ -87,6 +89,7 @@ class FlexGPUTransformer(GPUTransformer):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
         FlexDECPass().do_pass(self.ops, self)
+        FlexPoolingPass().do_pass(self.ops, self)
 
     def transform_ordered_ops(self, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
@@ -190,6 +193,14 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                                               op.tensor_description(),
                                               op.distribution,
                                               op.params))
+
+    @add_kernel.on_type(PoolingOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(BpropPoolOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolBpropKernel(self.transformer, op))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
