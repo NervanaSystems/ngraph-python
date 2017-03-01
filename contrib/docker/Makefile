@@ -154,8 +154,8 @@ test_all: test test_gpu test_mkldnn test_caffe2
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
-test_parallel: build_test_run
-	docker run --rm ${VOLUME} -t ngraph_test_run:${BUILD_VERSION} make test_parallel
+test_parallel: build_test
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
 
 test_mkldnn: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
