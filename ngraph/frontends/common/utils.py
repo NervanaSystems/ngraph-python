@@ -13,7 +13,84 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import division
 import ngraph as ng
+import math
+
+
+def common_conv2d_pool_output_shape(input_NHWC, filter_HWIO, stride_NHWC, padding):
+    """
+    Get output shape for convolution or padding.
+
+    Args:
+        input_NHWC: [batch, in_height, in_width, in_channels].
+        filter_HWIO: [filter_height, filter_width, in_channels, out_channels].
+        stride_NHWC: [stride_batch, stride_height, stride_width, stride_channels].
+        padding: A string from: "SAME", "VALID".
+
+    Returns:
+        output shape of convolution in NHWC format
+    """
+    # check inputs
+    if padding != 'SAME' and padding != 'VALID':
+        raise ValueError("Padding must be 'SAME' or 'valid'.")
+    if not (len(input_NHWC) == len(filter_HWIO) == len(stride_NHWC) == 4):
+        raise ValueError(
+            "input_NHWC, filter_HWIO, stride_NHWC must be length 4.")
+
+    # get input / filter shape
+    N, H, W, C = input_NHWC
+    R, S, C_, K = filter_HWIO
+    if C != C_:
+        raise ValueError("Input channel must be the same as filter channel.")
+
+    # only support [1, X, X, 1] stride_NHWC for importer now
+    if stride_NHWC[0] != 1 or stride_NHWC[3] != 1:
+        raise NotImplementedError("Strides on batch axis (N) and channel axis "
+                                  "(C) must be 1 for importer.")
+
+    # get output shape
+    if 'SAME' == padding:
+        out_height = math.ceil(float(H) / float(stride_NHWC[1]))
+        out_width = math.ceil(float(W) / float(stride_NHWC[2]))
+    elif 'VALID' == padding:
+        out_height = math.ceil(float(H - R + 1) / float(stride_NHWC[1]))
+        out_width = math.ceil(float(W - S + 1) / float(stride_NHWC[2]))
+
+    return tuple([int(i) for i in [N, out_height, out_width, K]])
+
+
+def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
+    """
+    Get padding size for convolution or padding.
+
+    Args:
+        input_NHWC: [batch, in_height, in_width, in_channels].
+        filter_HWIO: [filter_height, filter_width, in_channels, out_channels].
+        stride_NHWC: [stride_batch, stride_height, stride_width, stride_channels].
+        padding: A string from: "SAME", "VALID".
+
+    Returns:
+        pad_top, pad_bottom, pad_left, pad_right
+    """
+    # check validity and get output size
+    _, out_height, out_width, _ = common_conv2d_pool_output_shape(
+        input_NHWC, filter_HWIO, stride_NHWC, padding)
+    if padding == 'SAME':
+        # get input / filter shape
+        N, H, W, C = input_NHWC
+        R, S, C_, K = filter_HWIO
+
+        # get padding size
+        pad_along_height = ((out_height - 1) * stride_NHWC[1] + R - H)
+        pad_along_width = ((out_width - 1) * stride_NHWC[2] + S - W)
+        pad_top = int(pad_along_height) // 2
+        pad_bottom = int(pad_along_height - pad_top)
+        pad_left = int(pad_along_width) // 2
+        pad_right = int(pad_along_width - pad_left)
+        return (pad_top, pad_bottom, pad_left, pad_right)
+    else:
+        return (0, 0, 0, 0)
 
 
 class CommonSGDOptimizer(object):
