@@ -46,8 +46,8 @@ from ngraph.util.generics import generic_method
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
-from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
-    UnaryLayoutConstraint, GenerateLayoutDomains, GenerateLayoutConstraints, AssignLayouts
+from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
+    AssignLayouts
 from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
@@ -61,6 +61,8 @@ from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, Set
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
+from ngraph.transformers.gpu.gpulayout import GPULayoutAssignment, GPUUnaryLayoutConstraint, \
+    GPUBinaryLayoutConstraint
 
 import cachetools
 import numpy as np
@@ -857,116 +859,6 @@ class GPUDeviceTensor(DeviceTensor):
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
 
-class Memoize:
-    def __init__(self, f):
-        self.f = f
-        self.cache = dict()
-
-    def __call__(self, *args):
-        if not isinstance(args, collections.Hashable):
-            return self.f(*args)
-        if args in self.cache:
-            return self.cache[args]
-        else:
-            value = self.f(*args)
-            self.cache[args] = value
-            return value
-
-
-class GPUEWLayoutAssignment(LayoutAssignment):
-    def __init__(self, axes, order=None):
-        self.ng_axes = axes
-        if order:
-            self.axes = order
-        else:
-            self.axes = list(range(len(axes)))
-
-    def __str__(self):
-        return str(self.axes)
-
-
-class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
-    def __init__(self):
-        pass
-
-    def get_cost(self, arg_layout, op_layout):
-        return 0.0
-
-
-class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
-    def __init__(self):
-        pass
-
-    def get_cost(self, op_layout):
-        return 0.0
-
-
-def get_axes_list(axes):
-    if isinstance(axes, FlattenedAxis):
-        return [get_axes_list(a) for a in axes.axes]
-    elif isinstance(axes, Axes):
-        return [get_axes_list(a) for a in axes]
-    elif isinstance(axes, Axis):
-        return axes
-
-
-def flatten(l):
-    out = []
-    for item in l:
-        if type(item) == list:
-            out = out + item
-        elif type(item) == FlattenedAxis:
-            for axis in item.axes:
-                out.append(axis)
-        else:
-            out.append(item)
-    return out
-
-
-def enumerate_remaining_axes(remaining_axes):
-    results = []
-    if len(remaining_axes) == 1:
-        return [[remaining_axes[0]]]
-
-    for axis in remaining_axes:
-        other_axes = [a for a in remaining_axes if a != axis]
-        sub_results = enumerate_remaining_axes(other_axes)
-        for result in sub_results:
-            result.insert(0, axis)
-            results.append(result)
-
-    return results
-
-
-@Memoize
-def enumerate_axis_orders(axes):
-    return enumerate_remaining_axes(list(axes))
-
-
-def split_points_to_groups(split_points, num_axes):
-    result = [list(range(s, split_points[i+1])) for i, s in enumerate(split_points[:-1])]
-    result = [list(range(split_points[0]))] + result + [list(range(split_points[-1], num_axes))]
-    return result
-
-
-@Memoize
-def get_split_groups(num_axes, num_groups):
-    num_splits = num_groups - 1
-    split_points = [(i + 1) for i in range(num_splits)]
-    results = []
-
-    for split in reversed(range(num_splits)):
-        limit = num_axes if split == (num_splits - 1) else split_points[split + 1]
-
-        while split_points[split] < (limit - 1):
-            results.append(split_points_to_groups(split_points, num_axes))
-            split_points[split] += 1
-
-    results.append(split_points_to_groups(split_points, num_axes))
-
-    return results
-
-
 class GPURuntime(object):
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
@@ -1197,48 +1089,6 @@ class GPUTransformer(Transformer):
     def storage_dtype(self, dtype):
         return dtype  # overridden by flex gpu transformer
 
-    def generate_ew_layouts(self, axes, max_out_axes):
-        # Get list of individual axes
-        axes_list = flatten(get_axes_list(axes))
-        if len(axes_list) == 0:
-            axes_list = [0]
-
-        # Need to divide op axes into `max_out_axes` sets
-        if len(axes_list) > max_out_axes:
-            groups = get_split_groups(len(axes_list), max_out_axes)
-            num_groups = max_out_axes
-        else:
-            groups = [[i] for i in range(len(axes_list))]
-            num_groups = len(axes_list)
-
-        # Find all permutations of these axis groups
-        permutations = enumerate_axis_orders(tuple(range(num_groups)))
-
-        # Create EW layouts
-        layouts = []
-        for order in permutations:
-            layout_spec = [groups[i] for i in order]
-            layouts.append(GPUEWLayoutAssignment(axes, layout_spec))
-
-        return layouts
-
-    def generate_default_layout(self, axes, max_out_axes):
-        axes_list = flatten(get_axes_list(axes))
-        if len(axes_list) == 0:
-            axes_list = [0]
-
-        # Need to divide op axes into `max_out_axes` sets
-        if len(axes_list) > max_out_axes:
-            split_points = [(i + 1) for i in range(max_out_axes - 1)]
-            layout = split_points_to_groups(split_points, len(axes_list))
-            num_groups = max_out_axes
-        else:
-            layout = [[i] for i in range(len(axes_list))]
-            num_groups = len(axes_list)
-
-        return layout
-
-    @generic_method(Op)
     def get_layouts(self, op):
         """
         Returns a list of possible axis layouts for the op. The default layout must
@@ -1251,37 +1101,7 @@ class GPUTransformer(Transformer):
             A list of objects that inherit from LayoutAssignment. The first item in the
             list is the default layout for this op.
         """
-        raise ValueError("get_layouts not implemented for op type {}".format(op))
-
-    @get_layouts.on_type(AssignOp)
-    def get_layouts(self, op):
-        return self.generate_ew_layouts(op.args[0].axes, 3)
-
-    @get_layouts.on_type(UnaryElementWiseOp)
-    def get_layouts(self, op):
-        return self.generate_ew_layouts(op.args[0].axes, 3)
-
-    @get_layouts.on_type(BinaryElementWiseOp)
-    def get_layouts(self, op):
-        return self.generate_ew_layouts(op.args[0].axes, 3)
-     
-    @get_layouts.on_type(ReductionOp)
-    def get_layouts(self, op):
-        # TODO: force reduction axes to be joined
-        return self.generate_ew_layouts(op.args[0].axes, 3)
-
-    @get_layouts.on_type(OneHotOp)
-    def get_layouts(self, op):
-        # TODO: force reduction axes to be joined
-        return self.generate_ew_layouts(op.axes, 3)
-
-    @get_layouts.on_type(TensorSizeOp)
-    def get_layouts(self, op):
-        return self.generate_default_layout(op.axes, 3)
-
-    @get_layouts.on_type(DotOp)
-    def get_layouts(self, op):
-        return self.generate_default_layout(op.axes, 3)
+        return GPULayoutAssignment.factory(op)
 
     def get_layout_cost_function(self, op):
         """
@@ -1308,4 +1128,4 @@ class GPUTransformer(Transformer):
         Returns:
             An object that can be used to calculate any layout change cost.
         """
-        return GPUBinaryLayoutConstraint()
+        return GPUBinaryLayoutConstraint.factory(op, arg)

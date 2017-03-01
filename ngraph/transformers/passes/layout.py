@@ -174,13 +174,14 @@ class AssignLayouts(GraphPass):
                 cost = cost + constraint.get_cost(layout, assignment[arg_op])
 
         # Compute costs for any ops which use this op as an argument
-        for user in self.users:
-            if user in assignment and assignment[user]:
-                # Find constraint matching this pair (user, op)
-                for arg_op, constraint in self.binary_constraints[user]:
-                    if arg_op is op:
-                        cost = cost + constraint.get_cost(assignment[user], layout)
-                        break
+        if op in self.users:
+            for user in self.users[op]:
+                if user in assignment and assignment[user]:
+                    # Find constraint matching this pair (user, op)
+                    for arg_op, constraint in self.binary_constraints[user]:
+                        if arg_op is op:
+                            cost = cost + constraint.get_cost(assignment[user], layout)
+                            break
 
         return cost
 
@@ -232,6 +233,8 @@ class AssignLayouts(GraphPass):
         # Use default layouts to compute upper bound for cost
         # TODO: remove because this should be the first found assignment anyways
         self.min_assignment, upper_bound = self.compute_default_cost()
+
+        import pdb; pdb.set_trace()
 
         # Run branch and bound algorithm to look for better layout assignments
         self.min_assignment, cost = self.minimize_cost(self.min_assignment, upper_bound)
