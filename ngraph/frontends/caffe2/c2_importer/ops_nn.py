@@ -74,13 +74,13 @@ class OpsNN(OpsBase):
         # check shape
         assert left.axes[1].length == right.axes[1].length
         # cast axis
-        left_casted = ng.cast_axes(left, [left.axes[0], right.axes[1] - 1])
+        left_cast = ng.cast_axes(left, [left.axes[0], right.axes[1]])
         # add op
-        dot_op = ng.dot(left_casted, right)
+        dot_op = ng.dot(left_cast, right)
         # cast bias axis
-        bias_casted = ng.cast_axes(bias, [dot_op.axes[-1]])
+        bias_cast = ng.cast_axes(bias, [dot_op.axes[-1]])
         # result op
-        result_op = ng.add(dot_op, bias_casted)
+        result_op = ng.add(dot_op, bias_cast)
         return result_op
 
     def SquaredL2Distance(self, c2_op, inputs):
