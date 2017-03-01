@@ -166,7 +166,8 @@ test_mkldnn_neon: build_mkldnn_test
 test_mkldnn_tf: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
 
-test_mkldnn: test_mkldnn_unit test_mkldnn_neon test_mkldnn_tf
+test_mkldnn: build_mkldnn_test
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} make test_mkl
 
 test_caffe2: build_caffe2
 	docker run --rm ${VOLUME} -t ngraph_caffe2:${BUILD_VERSION} make test_caffe2
