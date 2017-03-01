@@ -327,6 +327,8 @@ class Op(NameableValue, DebugInfo):
         self.style = {}
         self.__forward = None
 
+        self.scope = None
+
     @property
     def tensor(self):
         """
@@ -1908,6 +1910,7 @@ class AssignableTensorOp(TensorOp):
             initial_value=None,
             input=False,
             persistent=False,
+            scope=None,
             **kwargs):
         if input:
             persistent = True
@@ -1918,6 +1921,8 @@ class AssignableTensorOp(TensorOp):
             self.add_initializer(assign(self, initial_value(self.axes)))
         elif initial_value is not None:
             self.add_initializer(assign(self, initial_value))
+
+        self.scope = scope  # added for GAN, discriminator and generator networks
 
     @property
     def defs(self):
@@ -2138,7 +2143,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def variable(axes, dtype=None, initial_value=None):
+def variable(axes, dtype=None, initial_value=None, scope=None):
     """
     A trainable tensor.
 
@@ -2147,6 +2152,8 @@ def variable(axes, dtype=None, initial_value=None):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
+        scope (optional): scope of variable, can be used to filter on when
+                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2155,7 +2162,8 @@ def variable(axes, dtype=None, initial_value=None):
     return AssignableTensorOp(graph_label_type="Variable",
                               constant=False, persistent=True, trainable=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              scope=scope)
 
 
 class StackOp(SequentialOp):

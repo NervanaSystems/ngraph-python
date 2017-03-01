@@ -45,11 +45,12 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
 
 class Layer(object):
 
-    def __init__(self, name=None, inputs=None, outputs=None, axes=None):
+    def __init__(self, name=None, inputs=None, outputs=None, axes=None, scope=None):
         self.name = name
         self.inputs = inputs
         self.outputs = outputs
         self.axes = axes
+        self.scope = scope  # TODO: implement for all layers, currently just Linear and Bias
 
     def train_outputs(self, in_obj):
         raise NotImplementedError()
@@ -88,7 +89,7 @@ class Linear(Layer):
 
         w_axes = out_axes + [axis - 1 for axis in in_axes]
         if self.W is None:
-            self.W = ng.variable(axes=w_axes, initial_value=self.init)
+            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
 
         return ng.dot(self.W, in_obj)
 
@@ -368,7 +369,7 @@ class Bias(Layer):
             if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
                 w_axes = in_obj.axes.role_axes(ar.features_input)
 
-            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init)
+            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
             return in_obj + self.W
         else:
             return in_obj
@@ -383,16 +384,17 @@ class Bias(Layer):
 class Affine(Layer):
 
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
-                 batch_norm=False, **kwargs):
+                 batch_norm=False, scope=None, **kwargs):
         self.weight_init = weight_init
         self.nout = nout
         self.bias_init = bias_init
         self.activation = activation
         self.batch_norm = batch_norm
-        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
-        self.bias = Bias(init=bias_init)
+        self.linear = Linear(init=weight_init, nout=nout, scope=scope, **kwargs)
+        self.bias = Bias(init=bias_init, scope=scope)
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
+        self.scope = scope
 
     def train_outputs(self, in_obj):
         l_out = self.linear.train_outputs(in_obj)
@@ -408,6 +410,7 @@ class Affine(Layer):
         a_out = self.activation_layer.inference_outputs(bn_out)
         return a_out
 
+    # GAN TODO: check scope gets copied by copy()
     def copy(self):
         new_layer = self.__class__(weight_init=self.weight_init,
                         nout=self.nout,

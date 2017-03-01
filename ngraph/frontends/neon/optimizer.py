@@ -235,13 +235,19 @@ class GradientDescentMomentum(LearningRateOptimizer):
         self.stochastic_round = stochastic_round
 
     @ng.with_op_metadata
-    def __call__(self, cost_func):
+    def __call__(self, cost_func, variable_scope=None):
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axes()[0].length
-        grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
+        if variable_scope is None:
+            # select all variables
+            selected_variables = batch_cost.variables()
+        else:
+            filter = lambda op: op.is_trainable and op.scope == variable_scope
+            selected_variables = batch_cost.variables(filter=filter)
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
         scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
-        for variable, grad in zip(batch_cost.variables(), grads):
+        for variable, grad in zip(selected_variables, grads):
             updates = []
             velocity = ng.persistent_tensor(axes=variable.axes,
                                             initial_value=0.).named(variable.name + '_vel')

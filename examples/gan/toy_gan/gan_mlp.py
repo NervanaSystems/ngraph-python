@@ -14,13 +14,13 @@
 # ----------------------------------------------------------------------------
 # GAN
 # following example code from https://github.com/AYLIEN/gan-intro
-# MLP generator and discriminator 
+# MLP generator and discriminator
 # toy example with 1-D Gaussian data distribution
 
 
 # TODO
 #  - discriminator pretraining
-#  - optimizer schedule    
+#  - optimizer schedule
 
 import numpy as np
 
@@ -39,15 +39,22 @@ deriv_test = False
 
 np.random.seed(42)
 
+parser = NgraphArgparser(description='MLP GAN example from TF code')
+parser.add_argument('--combined_updates',
+                    action="store_true",
+                    help="update variables in both G and D networks when performing D update")
+args = parser.parse_args()
+
 # define commonly used layer in this example
-def affine_layer(h_dim, activation, name):
-    return Affine(nout=h_dim, 
+def affine_layer(h_dim, activation, name, scope=None):
+    return Affine(nout=h_dim,
                   activation=activation,
                   # YL: use ConstantInit for W for now
                   weight_init=ConstantInit(val=1.0),
                   # weight_init=GaussianInit(var=1.0),
                   bias_init=ConstantInit(val=0.0),
-                  name=name)
+                  name=name,
+                  scope=scope)
 
 #  model parameters
 h_dim = 4  # GAN.mlp_hidden_size
@@ -57,23 +64,33 @@ num_iterations = 1200
 batch_size = 12
 num_examples = num_iterations*batch_size
 
+if args.combined_updates:
+    # use default graph behavior; do not filter variables for optimization by network
+    g_scope = None
+    d_scope = None
+else:
+    # correct GAN training; update generator and discriminator separately
+    g_scope = 'generator'
+    d_scope = 'discriminator'
+print "g_scope, d_scope:", g_scope, d_scope
+
 # 1. generator
 # use relu instead of softplus (focus on porting infrastucture fundamental to GAN)
-# fixed 1200 training iterations: relu retains distribution width but box without peak at mean; 
+# fixed 1200 training iterations: relu retains distribution width but box without peak at mean;
 # early stopping at 940 iterations, cost of 0.952, 3.44 looks better
-generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
-                    affine_layer(1, Identity(), name='g1')]
+generator_layers = [affine_layer(h_dim, Rectlin(), name='g0', scope=g_scope), 
+                    affine_layer(1, Identity(), name='g1', scope=g_scope)]
 generator = Sequential(generator_layers)
 
 # 2. discriminator (not implementing minibatch discrimination right now)
 # discriminator_layers = []
-discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
-                        affine_layer(2 * h_dim, Tanh(), name='d1')]
+discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0', scope=d_scope),
+                        affine_layer(2 * h_dim, Tanh(), name='d1', scope=d_scope)]
 if minibatch_discrimination:
     raise NotImplementedError
 else:
-    discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
-discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
+    discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2', scope=d_scope))
+discriminator_layers.append(affine_layer(1, Logistic(), name='d3', scope=d_scope))
 discriminator = Sequential(discriminator_layers)
 
 # 3. TODO discriminator pre-training - skip for now, more concerned with graph infrastructure changes
@@ -84,14 +101,14 @@ discriminator = Sequential(discriminator_layers)
 def make_optimizer(name=None):
     learning_rate = 0.005 if minibatch_discrimination else 0.03
     schedule = Schedule()
-    optimizer = GradientDescentMomentum(learning_rate, 
+    optimizer = GradientDescentMomentum(learning_rate,
                 momentum_coef=0.0,
                 stochastic_round=False,
                 wdecay=0.0,
                 gradient_clip_norm=None,
                 gradient_clip_value=None,
                 name=name,
-                schedule=schedule)	
+                schedule=schedule)
     return optimizer
 
 # 5. dataloader
@@ -122,15 +139,17 @@ D1 = discriminator.train_outputs(x)  # discriminator output on real data sample
 # copy the discriminator
 discriminator_copy = discriminator.copy()
 
-print discriminator.layers[0].linear.W
-print discriminator.layers[0].bias.W
-print discriminator.layers[1].linear.W
-print discriminator.layers[1].bias.W
+print_layer_variables = False
+if print_layer_variables:
+    print discriminator.layers[0].linear.W
+    print discriminator.layers[0].bias.W
+    print discriminator.layers[1].linear.W
+    print discriminator.layers[1].bias.W
 
-print discriminator_copy.layers[0].linear.W
-print discriminator_copy.layers[0].bias.W
-print discriminator_copy.layers[1].linear.W
-print discriminator_copy.layers[1].bias.W
+    print discriminator_copy.layers[0].linear.W
+    print discriminator_copy.layers[0].bias.W
+    print discriminator_copy.layers[1].linear.W
+    print discriminator_copy.layers[1].bias.W
 
 # cast G axes into x
 G_t = ng.axes_with_order(G, reversed(G.axes))
@@ -139,14 +158,15 @@ G_cast = ng.cast_axes(G_t, x.axes)
 # discriminator output on generated sample
 D2 = discriminator_copy.train_outputs(G_cast)
 
-print discriminator.layers[0].linear.W
-print discriminator.layers[0].bias.W
-print discriminator.layers[1].linear.W
-print discriminator.layers[1].bias.W
-print discriminator_copy.layers[0].linear.W
-print discriminator_copy.layers[0].bias.W
-print discriminator_copy.layers[1].linear.W
-print discriminator_copy.layers[1].bias.W
+if print_layer_variables:
+    print discriminator.layers[0].linear.W
+    print discriminator.layers[0].bias.W
+    print discriminator.layers[1].linear.W
+    print discriminator.layers[1].bias.W
+    print discriminator_copy.layers[0].linear.W
+    print discriminator_copy.layers[0].bias.W
+    print discriminator_copy.layers[1].linear.W
+    print discriminator_copy.layers[1].bias.W
 
 loss_d = -ng.log(D1) - ng.log(1 - D2)
 # loss_d = ng.cross_entropy_binary(D1, D2)
@@ -180,8 +200,10 @@ if deriv_test:
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
-updates_d = optimizer_d(loss_d)
-updates_g = optimizer_g(loss_g)
+#updates_d = optimizer_d(loss_d)
+#updates_g = optimizer_g(loss_g)
+updates_d = optimizer_d(loss_d, variable_scope=d_scope)
+updates_g = optimizer_g(loss_g, variable_scope=g_scope)
 
 discriminator_train_outputs = {'batch_cost': mean_cost_d,
 		 	                   'updates': updates_d}
@@ -218,7 +240,7 @@ for mb_idx, data in enumerate(train_set):
 # 8. visualize generator results
 
 # this is basically copied from blog TF code
-nrange = toy_gan_data.noise_range 
+nrange = toy_gan_data.noise_range
 num_points = 10000
 num_bins = 100
 bins = np.linspace(-nrange, nrange, num_bins)
@@ -231,7 +253,7 @@ for i in range(num_points // batch_size):
     inp = xs[sl].reshape(batch_size, 1)
     db[sl] = discriminator_inference(inp).reshape(batch_size, 1)  # * returned in shape (1, batch_size), tripped over this
 
-# data distribution 
+# data distribution
 d = toy_gan_data.data_samples(num_points, 1)
 pd, i_pd = np.histogram(d, bins=bins, density=True)
 
@@ -254,7 +276,7 @@ try:
 except ImportError:
     print ("needs matplotlib")
 
-# save off data for plot generation 
+# save off data for plot generation
 import h5py
 with h5py.File('simple_gan.h5', 'w') as f:
     f.create_dataset('decision_boundary', (len(db), 1), dtype=float)
