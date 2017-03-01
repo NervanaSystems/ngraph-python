@@ -35,7 +35,6 @@ def clone(
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
 
-
     elif node.__class__.__name__ is 'Scatter_Recv':
         new_node = node.__class__(
             axes=new_axes,
@@ -63,7 +62,7 @@ def clone(
     elif 'marker' in node.metadata and node.metadata['marker'] is 'scatter':
         pass  # This node is marked to be scattered, so there is no need to clone it.
 
-    elif  node.__class__.__name__ is 'AssignableTensorOp' and node.is_constant:
+    elif node.__class__.__name__ is 'AssignableTensorOp' and node.is_constant:
         new_node = node.__class__()
         if node.initializers is not None:
             for initializer in node.initializers:
@@ -71,7 +70,6 @@ def clone(
                     tensor=new_node, valfun=initializer.valfun)
                 new_node.add_initializer(new_initializer)
         new_node._TensorOp__axes = new_axes
-        # new_node._TensorOp__args = node.args
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id

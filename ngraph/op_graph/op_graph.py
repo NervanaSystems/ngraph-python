@@ -1236,9 +1236,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     def dtype(self, dtype):
         self.tensor.dtype = dtype
 
-# TODO - this was needed to fix a hetr issue,
-#        but was not complete as implemented.
-#        must also forward const.
     @property
     def is_constant(self):
         return self.tensor.is_constant

@@ -149,7 +149,6 @@ class AsyncTransformer(Process):
                 comp_id, inputs = self.work_q.get(timeout=AsyncTransformer.SLEEP_S)
 
                 # actual computation objects stored in this process, indexed
-                # print('{}{}'.format(comp_id, inputs))
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
                 # individual results q makes it easy for caller to find results
@@ -167,7 +166,6 @@ class ResultOp(TensorOp):
 
     def __init__(self, device_id, args, **kwargs):
         super(ResultOp, self).__init__(self, args=args)
-        # self.args = tuple([args])
         self.metadata['device_id'] = device_id
 
 # TODO
