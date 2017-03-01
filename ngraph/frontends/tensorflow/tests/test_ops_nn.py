@@ -22,7 +22,7 @@ import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tests.test_util import FakeMNIST
-from ngraph.frontends.tensorflow.tf_importer.ops_nn import tf_conv2d_pool_padding
+from ngraph.frontends.common.utils import common_conv2d_pool_padding
 import pytest
 import itertools
 
@@ -43,9 +43,9 @@ def gen_conv_testcase():
             True if args shall be kept.
         """
         C, D, H, W, N, T, R, S, K, strides, padding = args
-        pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding((N, H, W, C),
-                                                            (R, S, C, K),
-                                                            strides, padding)
+        pad_t, pad_b, pad_l, pad_r = common_conv2d_pool_padding((N, H, W, C),
+                                                                (R, S, C, K),
+                                                                strides, padding)
         return pad_t == pad_b and pad_l == pad_r
 
     # test params
@@ -82,9 +82,9 @@ def gen_pool_testcase():
             True if args shall be kept.
         """
         C, D, H, W, N, J, T, R, S, strides, padding = args
-        pad_t, pad_b, pad_l, pad_r = tf_conv2d_pool_padding((N, H, W, C),
-                                                            (R, S, C, C),
-                                                            strides, padding)
+        pad_t, pad_b, pad_l, pad_r = common_conv2d_pool_padding((N, H, W, C),
+                                                                (R, S, C, C),
+                                                                strides, padding)
         return pad_t == pad_b and pad_l == pad_r
 
     # test params
