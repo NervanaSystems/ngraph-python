@@ -69,8 +69,6 @@ def metadata(**metadata):
         if isinstance(op, TensorValueOp):
             # make sure tensorvalue op matches thing it reads from
             op.metadata.update(op.states_read[0].metadata)
-
-            # BUT - if TensorValueOp is writing to a tensor then my code doesnt work
         else:
             op.metadata.update(metadata)
 
