@@ -601,7 +601,6 @@ class Recurrent(Layer):
         self.w_in_axes = temp_out_axes | self.in_feature_axes
         self.w_re_axes = temp_out_axes | self.out_feature_axes
 
-
     def _step(self, inp, states):
         h_ff = ng.cast_role(ng.dot(self.W_input, inp), self.out_axes)
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)

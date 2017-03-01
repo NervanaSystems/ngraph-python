@@ -959,7 +959,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes.is_equal_set(delta.axes):
             raise ValueError(
                 'delta axes {} do not match adjoint axes {}'
                 .format(delta.axes, self.axes)
@@ -1697,7 +1697,7 @@ def axes_with_role_order(x, roles):
         y = expand_dims(y, ax_i, 0)
 
     # Ensure that axes of x are a subset of y
-    if not (x.axes & y.axes).has_same_axes(x.axes):
+    if not (x.axes & y.axes).is_equal_set(x.axes):
         raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
             x.axes - (x.axes & y.axes)
         ))
@@ -1733,7 +1733,7 @@ class ReorderAxes(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
+        if not x.axes.is_equal_set(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -3468,7 +3468,7 @@ class DerivOp(ValueOp):
             # made a constant 1 here, since we do not do common subexpression elimination,
             # while it also ensures that independent graphs do not share ops.
             error = self.dependent.one
-        if not error.axes.has_same_axes(dependent.axes):
+        if not error.axes.is_equal_set(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
 
         self.error = as_op(error)
