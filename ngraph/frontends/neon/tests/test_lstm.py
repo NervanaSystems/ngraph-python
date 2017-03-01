@@ -99,7 +99,7 @@ def check_lstm(seq_len, input_size, hidden_size,
                        reset_cells=reset_cells, return_sequence=return_seq,
                        backward=backward)
 
-        out_ng = lstm_ng.train_outputs(inp_ng)
+        out_ng = lstm_ng(inp_ng)
 
         fprop_neon_fun = ex.executor(out_ng, inp_ng)
 
@@ -183,8 +183,8 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                          reset_cells=reset_cells, return_sequence=return_seq,
                          backward=backward)
 
-        out_ng_1 = lstm_ng_1.train_outputs(inp_ng)
-        out_ng_2 = lstm_ng_2.train_outputs(out_ng_1)
+        out_ng_1 = lstm_ng_1(inp_ng)
+        out_ng_2 = lstm_ng_2(out_ng_1)
 
         fprop_neon_fun_2 = ex.executor(out_ng_2, inp_ng)
 

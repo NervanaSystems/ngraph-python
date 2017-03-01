@@ -125,6 +125,7 @@ class TrainCostCallback(Callback):
             # clue in the data reader to use the 'minibatch' time_markers
             callback_data['cost/train'].attrs['time_markers'] = 'minibatch'
         elif phase == CallbackPhase.minibatch_post:
+            # This is where the training function is actually called
             callback_data['cost/train'][idx] = self.computation(data)['batch_cost']
 
 

@@ -15,85 +15,91 @@
 '''
 Test of the dropout layer
 '''
+import pytest
 import numpy as np
 
 import ngraph as ng
-import ngraph.transformers as ngt
-from ngraph.frontends.neon.layer import Dropout
-from ngraph.testing.execution import executor
+from ngraph.frontends.neon.layer import Layer, Dropout
+from ngraph.testing.execution import ExecutorFactory
 
 
-def test_dropout_train(transformer_factory):
-    nin, batch_size = 32, 2
+atol, rtol = 0, 1e-6
+
+
+@pytest.mark.parametrize("nin,batch_size", [(32, 2)])
+@pytest.mark.parametrize("keep", [1.0, 0.75, 0.5])
+def test_dropout_train(nin, batch_size, keep, transformer_factory):
 
     # set inputs
     N = ng.make_axis(batch_size, name='N')
-    F = ng.make_axis(nin).named('F')
+    F = ng.make_axis(nin, name='F')
 
     inp = ng.placeholder([F, N])
-    layer = Dropout(keep=0.5)
-    fprop = layer.train_outputs(inp)
+    layer = Dropout(keep=keep)
+    fprop = layer(inp)
 
     # create data
     x = np.random.uniform(size=(nin, batch_size))
 
     # evaluate
-    with executor([fprop, layer.mask], inp) as comp:
+    with ExecutorFactory() as ex:
+        comp = ex.executor([fprop, layer.mask], inp)
         out, mask = comp(x)
         numpy_out = x * mask[:, None]
-        np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
+        ng.testing.assert_allclose(out, numpy_out, atol=atol, rtol=rtol)
 
-        out1, mask1 = out.copy(), mask.copy()
-        out2, mask2 = comp(x)
-        assert (out1 != out2).any()
-        assert (mask1 != mask2).any()
+        if keep < 1.0:
+            out1, mask1 = out.copy(), mask.copy()
+            out2, mask2 = comp(x)
+            assert (out1 != out2).any()
+            assert (mask1 != mask2).any()
 
 
-def test_dropout_inference(transformer_factory):
-    nin, batch_size = 8, 2
-
+@pytest.mark.parametrize("nin,batch_size", [(32, 2)])
+def test_dropout_inference(nin, batch_size, transformer_factory):
     # set inputs
     N = ng.make_axis(batch_size, name='N')
-    F = ng.make_axis(nin).named('F')
+    F = ng.make_axis(nin, name='F')
 
     inp = ng.placeholder([F, N])
     layer = Dropout(keep=0.5)
-    fprop = layer.inference_outputs(inp)
+    with Layer.inference_mode_on():
+        fprop = layer(inp)
 
     # create data
     x = np.random.uniform(size=(nin, batch_size))
 
     # evaluate
-    with executor(fprop, inp) as comp:
+    with ExecutorFactory() as ex:
+        comp = ex.executor(fprop, inp)
         out = comp(x)
         numpy_out = x * 0.5
-        np.testing.assert_allclose(out, numpy_out, rtol=1e-6)
+        ng.testing.assert_allclose(out, numpy_out, atol=atol, rtol=rtol)
         out1 = out.copy()
         out2 = comp(x)
-        np.testing.assert_allclose(out1, out2, rtol=1e-6)
+        ng.testing.assert_allclose(out1, out2, atol=atol, rtol=rtol)
 
 
-def test_dropout_bprop_single_comp(transformer_factory):
-    nin, batch_size = 32, 2
-
+@pytest.mark.parametrize("nin,batch_size", [(32, 2)])
+@pytest.mark.parametrize("keep", [1.0, 0.5])
+def test_dropout_bprop_single_comp(nin, batch_size, keep, transformer_factory):
     # set inputs
     N = ng.make_axis(batch_size, name='N')
-    F = ng.make_axis(nin).named('F')
+    F = ng.make_axis(nin, name='F')
 
     mul_factor = ng.placeholder(())
     inp = ng.placeholder([F, N])
-    layer = Dropout(keep=0.5)
-    fprop = layer.train_outputs(inp * mul_factor)
+    layer = Dropout(keep=keep)
+    fprop = layer(inp * mul_factor)
     out_graph = ng.sum(fprop, out_axes=())
+    bprop = ng.deriv(out_graph, mul_factor)
 
     # create data
     x = np.random.uniform(size=(nin, batch_size))
-    bprop = ng.deriv(out_graph, mul_factor)
 
     # evaluate
-    trans = ngt.make_transformer()
-    comp = trans.computation([fprop, bprop, layer.mask], inp, mul_factor)
-    fout, bout, mask = comp(x, 2)
-    # Calculate derivative by hand and compare
-    np.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)
-    trans.close()
+    with ExecutorFactory() as ex:
+        comp = ex.executor([fprop, bprop, layer.mask], inp, mul_factor)
+        fout, bout, mask = comp(x, 2)
+        # Calculate derivative by hand and compare
+        ng.testing.assert_allclose(bout, (x * mask[:, None]).sum(), atol=atol, rtol=rtol)

@@ -146,7 +146,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                        backward=backward)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
+    out_ng = rnn_ng(input_placeholder, init_state=init_state)
 
     with ExecutorFactory() as ex:
         # Create computation and execute
@@ -206,7 +206,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                        reset_cells=True, return_sequence=return_sequence)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     deltas_constant = ng.constant(deltas, axes=out_ng.axes)
     params = [(rnn_ng.W_input, W_in),
@@ -250,7 +250,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
                        backward=backward)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     params = [(rnn_ng.W_input, W_in),
               (rnn_ng.W_recur, W_rec),
@@ -307,7 +307,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                    sum_out=sum_out, concat_out=concat_out)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
+    out_ng = rnn_ng(input_placeholder, init_state=init_state)
 
     with ExecutorFactory() as ex:
         # Create computation and execute
@@ -355,7 +355,7 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                    sum_out=sum_out, concat_out=concat_out)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     w_in_f = rnn_ng.fwd_rnn.W_input
     w_rec_f = rnn_ng.fwd_rnn.W_recur
