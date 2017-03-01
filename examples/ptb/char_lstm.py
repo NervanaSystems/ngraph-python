@@ -13,6 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
+"""
+Train a LSTM or GRU based recurrent network on the Penn Treebank
+dataset parsing on character-level.
+
+Reference:
+
+    Andrej Karpathy's char-rnn `[Karpathy]`_
+.. _[Karpathy]: http://github.com/karpathy/char-rnn
+
+Usage:
+
+    python examples/ptb/char_lstm.py -b gpu -r 0 -t 15940 --iter_interval 1594
+
+    This dataset using this model configuration has 1594 minibatches. This
+    command is to run 10 epochs to compare with the benchmark accuracy.
+
+"""
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, LSTM,
@@ -50,21 +68,22 @@ valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_siz
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
 
-
 def expand_onehot(x):
     return ng.one_hot(x, axis=ax.Y)
-
 
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "lstm":
-    rlayer = LSTM(hidden_size, init, activation=Tanh(),
+    rlayer1 = LSTM(hidden_size, init, activation=Tanh(),
+                  gate_activation=Logistic(), return_sequence=True)
+    rlayer2 = LSTM(hidden_size, init, activation=Tanh(),
                   gate_activation=Logistic(), return_sequence=True)
 
 # model initialization
 seq1 = Sequential([Preprocess(functor=expand_onehot),
-                   rlayer,
+                   rlayer1,
+                   rlayer2,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
 optimizer = RMSProp(gradient_clip_value=gradient_clip_value)
