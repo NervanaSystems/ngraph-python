@@ -562,10 +562,6 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    @property
-    def T(self):
-        return Axes(axis.T for axis in self)
-
     def intersect(self, axes):
         """
         Returns the intersection of the elements, leaving out duplicate Axes.
