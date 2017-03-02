@@ -461,12 +461,14 @@ class Axes(object):
         """
         return Axes(axis for axis in self if not axis.is_batch)
 
-    def recurrent_axes(self):
+    def recurrent_axis(self):
         """
         Returns:
-            The Axes subset that are recurrent axes.
+            The tensor's recurrent Axis or None if there isn't one.
         """
-        return Axes(axis for axis in self if axis.is_recurrent)
+        for axis in self:
+            if axis.is_recurrent:
+                return axis
 
     def role_axes(self, role):
         """

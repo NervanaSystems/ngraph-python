@@ -110,7 +110,7 @@ class Linear(Layer):
     @cached({})
     def __call__(self, in_obj):
         # interpret axes
-        in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()
+        in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axis()
         out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
         temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
                                       for axis in out_feature_axes])
@@ -567,13 +567,13 @@ class Recurrent(Layer):
     def interpret_axes(self, in_obj, init_state):
         self.in_axes = in_obj.axes
 
-        self.recurrent_axis = self.in_axes.recurrent_axes()[0]
+        self.recurrent_axis = self.in_axes.recurrent_axis()
         self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
 
         # if init state is given, use that as hidden axes
         if init_state:
             self.out_feature_axes = (init_state.axes.sample_axes() -
-                                     init_state.axes.recurrent_axes())
+                                     init_state.axes.recurrent_axis())
             if sum(self.out_feature_axes.full_lengths) != self.nout:
                 raise ValueError("Length of init_state must be the same as nout: " +
                                  "{} != {}".format(sum(self.out_feature_axes.full_lengths),
@@ -754,7 +754,7 @@ class BiRNN(Layer):
         elif self.concat_out:
             ax_list = list()
             for out in [fwd_out, bwd_out]:
-                axes = out.axes.sample_axes() - out.axes.recurrent_axes()
+                axes = out.axes.sample_axes() - out.axes.recurrent_axis()
                 if len(axes) == 1:
                     ax_list.append(axes[0])
                 else:
