@@ -434,11 +434,14 @@ class BatchNorm(Layer):
     """
     metadata = {'layer_type': 'batch_norm'}
 
-    def __init__(self, rho=0.9, eps=1e-3, reduce_recurrent=True, **kwargs):
+    def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
+                 reduce_recurrent=True, **kwargs):
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
         self.reduce_recurrent = reduce_recurrent
+        self.init_gamma = init_gamma
+        self.init_beta = init_beta
         self.gamma = None
         self.beta = None
         self.gmean = None
@@ -458,8 +461,8 @@ class BatchNorm(Layer):
         red_axes += in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=0.0).named('beta')
+        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
+        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=self.init_beta).named('beta')
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
         self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
@@ -634,7 +637,7 @@ class Recurrent(Layer):
             h_ff = self.batch_norm(h_ff)
 
         # slice the weighted inputs into time slices
-        in_s = get_steps(h_ff, self.time_axis, self.backward)
+        in_s = get_steps(h_ff, self.recurrent_axis, self.backward)
 
         # unrolling computations
         for i in range(self.recurrent_axis.length):
@@ -885,7 +888,7 @@ class LSTM(Recurrent):
                 h_ff[k] = self.batch_norm[k](h_ff[k])
 
             # slice the weighted inputs into time slices
-        h_ff = get_steps(h_ff, self.time_axis, self.backward)
+        h_ff = get_steps(h_ff, self.recurrent_axis, self.backward)
 
         # recurrent computation
         for i in range(self.recurrent_axis.length):
