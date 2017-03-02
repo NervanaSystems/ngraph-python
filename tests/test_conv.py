@@ -62,29 +62,6 @@ def test_wrong_filters_shape_length():
         .format(len(ax_f))
 
 
-def test_wrong_input_shape_length():
-    """
-    test wrong input shape length
-    """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-
-    inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
-
-    with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
-    assert str(exinfo.value) == 'convolution input shape must be length 5, found {}'\
-        .format(len(ax_i))
-
-
 def test_first_axes_not_same():
     """
     test first axes are not the same
