@@ -3,3 +3,4 @@ pytest-cov
 pytest-xdist
 pytest-timeout
 flake8==3.2.1
+pylint==1.6.4
