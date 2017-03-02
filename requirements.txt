@@ -1,9 +1,7 @@
 # tensorflow & protobuf
 tensorflow==0.12.1
-# scipy (temporary add)
 scipy==0.18.1
-# autopep8 (temporary add)
-autopep8==1.2.4
+
 # other requirements
 tqdm==4.11.2
 enum34==1.1.6
@@ -13,15 +11,15 @@ h5py==2.6.0
 cachetools==2.0.0
 decorator==4.0.11
 requests==2.13.0
+pynvrtc==7.5
+
 # aeon (for examples using aeon only without neon)
 #-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon
+
 # notebooks
 jupyter==1.0.0
 nbconvert==5.1.1
 nbformat==4.3.0
+
+# setuptools is autoflex's requirement, but it is here for now
 setuptools>=18.5
-flake8==3.3.0
-pytest-cov==2.4.0
-pytest-xdist==1.15.0
-pytest-timeout==1.2.0
-pynvrtc==7.5

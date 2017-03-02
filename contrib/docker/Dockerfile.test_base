@@ -23,6 +23,3 @@ RUN pip install pycuda
 # temporary solution to get things working quickly.
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
-
-# make ngraph Makefile happy :-(
-ENV VIRTUAL_ENV='making ngraph makefile happy'
