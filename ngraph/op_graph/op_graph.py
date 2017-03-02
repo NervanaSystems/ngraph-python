@@ -3053,7 +3053,7 @@ class SoftmaxOp(ValueOp):
         super(SoftmaxOp, self).__init__(**kwargs)
 
         if normalization_axes is None:
-            normalization_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
+            normalization_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
         self.x = x - max(x, reduction_axes=normalization_axes)
         self.exps = exp(self.x)
         self.Z = sum(self.exps, reduction_axes=normalization_axes)
@@ -3085,7 +3085,7 @@ class ReductionOp(TensorOp):
 
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         if reduction_axes is None and out_axes is None:
-            reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
+            reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
             out_axes = x.axes - reduction_axes
         elif reduction_axes is None:
             out_axes = make_axes(out_axes)
@@ -3522,7 +3522,7 @@ class CrossEntropyMultiOp(ValueOp):
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
         if out_axes is None:
             # Compute along non-recurrent and non-batch axes
-            index_axes = y.axes.sample_axes() - y.axes.recurrent_axes()
+            index_axes = y.axes.sample_axes() - y.axes.recurrent_axis()
             out_axes = y.axes - index_axes
         if enable_softmax_opt and isinstance(y.deriv_handler, SoftmaxOp):
             # This depends on sum(t) being 1
