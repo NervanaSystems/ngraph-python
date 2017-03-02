@@ -805,7 +805,6 @@ class NumPyTransformer(Transformer):
 
             # with open("code_{}.py".format(self.name), "w") as f:
             #     f.write(self.code.code)
-            # print(self.code.filename)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']
@@ -841,6 +840,7 @@ class NumPyTransformer(Transformer):
             gather_recv_op = self.gather_recv_nodes[gather_recv_id]
             x_devicetensor = gather_recv_op.value
             x_nparr = x_devicetensor.get(None)
+
             for i in range(len(gather_recv_op.from_id)):
                 q = gather_recv_op.shared_queue_list[i]
                 x = q.get()

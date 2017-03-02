@@ -183,47 +183,15 @@ def test_distributed_graph():
     W = ng.make_axis(length=6, name='width')
 
     x = ng.placeholder(axes=[H, W])
-    y = ng.placeholder(())
-    z = ng.placeholder(())
     with ng.metadata(device_id=('1', '2'), parallel=W):
-        x_plus_y = x + y
+        x_plus_one = x + 1
 
-    x_plus_y_plus_z = x_plus_y + z
-
-#    # Build the graph metadata
-#    graph_ops = OrderedSet([x_plus_y_plus_z, x_plus_y, x, y, z])
-#
-#    graph_op_metadata = {op: list() for op in graph_ops}
-#    graph_op_metadata[x] = ["numpy", '0']
-#    graph_op_metadata[y] = ["numpy", '0']
-#    graph_op_metadata[z] = ["numpy", '0']
-#    graph_op_metadata[x_plus_y] = ["numpy", ('1', '2')]
-#    graph_op_metadata[x_plus_y_plus_z] = ["numpy", '0']
-#
-#    transformer_list = ["numpy2", "numpy1", "numpy0"]
-#
-#    # Run the hetr passes one by one, and verify they did the expected things to the graph
-#    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
-#    check_communication_pass(
-#        ops_to_transform=graph_ops,
-#        expected_recv_nodes=[
-#            x_plus_y,
-#            x_plus_y,
-#            x_plus_y_plus_z])
-#
-#    # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
-#    obj = ChildTransformerPass([])
-#    transformer = ngt.make_transformer_factory('hetr')()
-#    obj.do_pass(graph_ops, transformer)
-#    transformer.close()
-#
-#    assert set(transformer_list) == set(obj.transformer_list)
-    pytest.xfail("Some problems due to latest changes from master, fixes in later PR")
-    check_result_values(input_vector=[(10, 20, 30), (1, 2, 3)],
-                        result_expected=[(60,),
-                                         (6,)],
-                        placeholder=(x, y, z),
-                        ops=OrderedSet([x_plus_y_plus_z]))
+    np_x = np.random.randint(100, size=[H.length, W.length])
+    np_result = np.add(np_x, 1)
+    check_result_values(input_vector=[np_x],
+                        result_expected=[np_result],
+                        placeholder=x,
+                        ops=OrderedSet([x_plus_one]))
 
 
 def test_simple_graph():
