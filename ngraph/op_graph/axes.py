@@ -647,15 +647,6 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def _to_name_set(self):
-        """
-        Get set of Axis names for all Axis in Axes
-
-        Returns:
-            A set of Axis names
-        """
-        return set([axis.name for axis in self])
-
     def is_sub_set(self, other):
         """
         Returns true if other is subset of self, i.e. <=
@@ -666,7 +657,7 @@ class Axes(object):
         Returns:
             bool, true if other is subset of self
         """
-        return self._to_name_set().issubset(make_axes(other)._to_name_set())
+        return set(self.names).issubset(set(make_axes(other).names))
 
     def is_super_set(self, other):
         """
@@ -690,7 +681,7 @@ class Axes(object):
         Returns:
             bool, true if other has the same set of Axis names as self
         """
-        return self._to_name_set() == make_axes(other)._to_name_set()
+        return set(self.names) == set(make_axes(other).names)
 
     def is_not_equal_set(self, other):
         """
