@@ -21,7 +21,7 @@ from functools import reduce, wraps
 
 import numpy as np
 import types
-from builtins import object, map, range, zip
+from builtins import object, map, zip
 
 from ngraph.util.names import NameableValue
 
@@ -492,24 +492,17 @@ class Axes(object):
         return FlattenedAxis(self)
 
     def set_shape(self, shape):
-        axes = self._axes
-        diff = len(axes) - len(shape)
-        if diff == 0:
-            for axis, length in zip(axes, shape):
-                axis.length = length
-            return
+        """
+        Set shape of Axes
 
-        if diff > 0:
-            axes[0].length = shape[0]
-            for i in range(1, diff + 1):
-                # Pad missing dimensions with 1.
-                axes[i].length = 1
-            for length in shape[diff:]:
-                i += 1
-                axes[i].length = length
-            return
-        raise ValueError('Number of axes %d too low for shape %s' % (
-                         len(axes), shape))
+        Args:
+            shape: tuple or list of shapes, must be the same length as the axes
+        """
+        if len(shape) != len(self._axes):
+            raise ValueError("shape's length %s must be euqal to axes' length"
+                             "%s" % (len(shape), len(self)))
+        for axis, length in zip(self._axes, shape):
+            axis.length = length
 
     def find_by_name(self, name):
         return Axes(axis for axis in self if axis.name == name)
@@ -535,16 +528,75 @@ class Axes(object):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes(
-            tuple(self) +
-            tuple(axis for axis in Axes(other) if axis not in self)
-        )
+        """
+        Returns list concatenated axes. Throws exception when there are Axis
+        duplication.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            current axes concatenated with the other axes
+        """
+        # self and other could not have common element
+        other = make_axes(other)
+        common_axes = self & other
+        if len(common_axes) != 0:
+            raise ValueError("Trying to concatenate %s with %s, but they have"
+                             "common axes %s, which is not allowed."
+                             % (self, other, common_axes))
+        return make_axes(tuple(self) + tuple(other))
 
     def __sub__(self, other):
-        other = Axes(other)
-        return Axes((axis for axis in self if axis not in other))
+        """
+        Returns ordered set difference of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set difference of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self if axis not in other))
+
+    def __or__(self, other):
+        """
+        Returns ordered set union of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set union of axes
+        """
+        other = make_axes(other)
+        return make_axes(tuple(self) +
+                         tuple(axis for axis in Axes(other) if axis not in self))
+
+    def __and__(self, other):
+        """
+        Returns ordered set intersection of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set intersection of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self._axes if axis in other))
 
     def __eq__(self, other):
+        """
+        True if each ``Axis`` are matching and in same order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if each ``Axis`` are matching and in same order
+        """
         if not isinstance(other, Axes):
             raise ValueError((
                 'other must be of type Axes, found type {}'
@@ -553,6 +605,16 @@ class Axes(object):
         return self._axes.__eq__(other._axes)
 
     def __ne__(self, other):
+        """
+        The opposite of __eq__, True if not all ``Axis`` are matching or in
+        different order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if not all ``Axis`` are matching or in different order
+        """
         return not self == other
 
     def __nonzero__(self):
@@ -562,58 +624,70 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def intersect(self, axes):
+    def _to_name_set(self):
         """
-        Returns the intersection of the elements, leaving out duplicate Axes.
-
-        Arguments:
-            axes: second axes to intersect
+        Get set of Axis names for all Axis in Axes
 
         Returns:
-            The ordered intersection
+            A set of Axis names
         """
-        axes = make_axes(axes)
-        return make_axes((axis for axis in self._axes if axis in axes))
+        return set([axis.name for axis in self])
 
-    @staticmethod
-    @with_args_as_axes
-    def find(axes, sub_axes):
+    def is_sub_set(self, other):
         """
-        Attempts to locate a subsequence of Axes (sub_axes) in axes.
+        Returns true if other is subset of self, i.e. <=
 
         Arguments:
-            axes: The superset of Axes.
-            sub_axes: Axes to search for.
+            other: the right-hand side operator axes
 
         Returns:
-            int: The index at which the subsequence sub_axes occurs in
-            axes.
+            bool, true if other is subset of self
         """
-        assert isinstance(axes, Axes) and isinstance(sub_axes, Axes)
-        for i in range(len(axes) - len(sub_axes) + 1):
-            if axes[i:i + len(sub_axes)] == sub_axes:
-                return i
-        raise ValueError('Could not find sub_axes')
+        return self._to_name_set().issubset(make_axes(other)._to_name_set())
 
-    @staticmethod
-    def find_axis(axes, axis):
+    def is_super_set(self, other):
         """
-        Attempts to locate an axis in Axes.
+        Returns true if other is superset of self, i.e. >=
 
         Arguments:
-            axes: The superset of Axes.
-            axis: Axis to search for.
+            other: the right-hand side operator axes
 
         Returns:
-            int: The index at which the axis occurs in axes.
+            bool, true if other is superset of self
         """
-        axes = Axes(axes)
-        assert isinstance(axis, Axis)
-        return axes._axes.index(axis)
+        return not self.is_sub_set(other)
+
+    def is_equal_set(self, other):
+        """
+        Returns true if other has the same set of Axis names as self
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other has the same set of Axis names as self
+        """
+        return self._to_name_set() == make_axes(other)._to_name_set()
+
+    def is_not_equal_set(self, other):
+        """
+        Returns true if other does not the same set of Axis names as self
+
+        Arguments:
+           other: the right-hand side operator axes
+
+        Returns:
+           bool, true if other does not has the same set of Axis names as self
+        """
+        return not self.is_equal_set(other)
+
+    @property
+    def T(self):
+        return Axes(axis.T for axis in self)
 
     def index(self, axis):
         """
-        Returns the index of an axis.
+        Returns the index of an axis
 
         Arguments:
             axis: The axis to search for.
@@ -622,40 +696,6 @@ class Axes(object):
             The index.
         """
         return self._axes.index(axis)
-
-    def index_unique(self, axis):
-        """
-        Returns the index of an axis and ignores match_on_length behavior
-        TODO: remove this after deprecating match_on_length
-
-        Arguments:
-            axis: The axis to search for.
-
-        Returns:
-            The index.
-        """
-        return self.index(axis)
-
-    def has_same_axes(self, axes):
-        """
-        Checks whether axes have the same set of axes as self.
-
-        Arguments:
-            axes (Axes): axes.
-
-        Returns:
-            True if axes has the same elements,
-            False otherwise.
-        """
-        axes = make_axes(axes)
-
-        for x in self:
-            if x not in axes:
-                return False
-        for x in axes:
-            if x not in self:
-                return False
-        return True
 
     @staticmethod
     @with_args_as_axes
@@ -766,39 +806,17 @@ class Axes(object):
                              "layouts are different"
                              % (unflattend_axes, flattened_axes))
 
-    # TODO: delete this method, the size should come from the tensor
     @property
     def size(self):
-        """TODO."""
-        size = 1
-        for x in self:
-            size *= x.length
-        return size
+        """
+        TODO: delete this method, the size should come from the tensor
+        """
+        return int(np.prod(self.lengths))
 
     def __repr__(self):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
-
-    def append(self, axis):
-        """
-        Appends an axis
-
-        Arguments:
-            other: The Axis object to append.
-        """
-        self._axes = Axes(tuple(self) + (axis,))
-
-    def insert(self, index, axis):
-        """
-        Inserts an axis
-        Arguments:
-            index   : Index to insert at
-            axis    : The Axis object to insert
-        """
-        axes = self._axes
-        axes.insert(index, axis)
-        self._axes = Axes(axes)
 
 
 def _reduce_nested(elem, agg, func):
@@ -857,14 +875,6 @@ class FlattenedAxis(Axis):
         return len(self.__axes) == 0
 
     @property
-    def single(self):
-        """
-        Returns:
-            Whether this axes contains exactly one collapsed axes.
-        """
-        return len(self.__axes) == 1
-
-    @property
     def axes(self):
         """
         Returns:
@@ -896,31 +906,6 @@ def reduce_strides(strides):
     """
     return tuple(int(_reduce_nested(elem, float('inf'), min))
                  for elem in strides)
-
-
-def _check_sliced_axis_length(s, axis, new_axis):
-    """
-    Ensure that the length of the axis resulting from slicing axis with
-    slice s matches the length of new_axis
-    """
-
-    expected_length = _sliced_length(s, axis.length)
-    if expected_length != new_axis.length:
-        raise ValueError((
-            "A slice operation ({slice}) was attempted on axis "
-            "{axis} with length {axis_length}.  The result of "
-            "which is a new sliced axis of length "
-            "{expected_length}.  The new_axis passed in "
-            "{new_axis} has a different length which does not "
-            "match: {new_axis_length}."
-        ).format(
-            slice=s,
-            axis=axis,
-            axis_length=axis.length,
-            expected_length=expected_length,
-            new_axis=new_axis,
-            new_axis_length=new_axis.length,
-        ))
 
 
 def _make_stride(inner_size, axis, fsz):
@@ -1009,7 +994,6 @@ class TensorDescription(NameableValue):
         self.dtype = default_dtype(dtype)
         self.offset = offset
         self.ndim = len(self.axes)
-        self.__read_only = False
         self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
         self.next_tensor_description = next_tensor_description
@@ -1212,7 +1196,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The reordered tensor description.
         """
-        self.axes.has_same_axes(new_axes)
+        self.axes.is_equal_set(new_axes)
         return self.reorder_and_broadcast(new_axes)
 
     def reorder_and_broadcast(self, new_axes):
@@ -1240,7 +1224,7 @@ class TensorDescription(NameableValue):
         new_sizes = []
         for axis in new_axes:
             if axis in self.axes:
-                idx = Axes.find_axis(self.axes, axis)
+                idx = self.axes.index(axis)
                 new_strides.append(self.full_strides[idx])
                 new_sizes.append(self.full_sizes[idx])
             elif axis.is_flattened:

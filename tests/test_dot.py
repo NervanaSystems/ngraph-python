@@ -85,7 +85,7 @@ def ngraph_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (ng.make_axis(length=l).named('axis%s' % i),)
+        axes |= (ng.make_axis(length=l).named('axis%s' % i),)
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)

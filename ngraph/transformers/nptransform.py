@@ -429,7 +429,7 @@ class NumPyCodeGenerator(PyGen):
             raise ValueError("Op %s must be an instance of ReductionOp" % op)
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
-        np_axis = tuple([input_axes.index_unique(axis) for axis in reduction_axes])
+        np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @generic_method(Op)

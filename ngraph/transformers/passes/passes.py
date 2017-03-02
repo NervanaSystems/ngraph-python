@@ -156,8 +156,8 @@ class RequiredTensorShaping(PeepholeGraphPass):
             d = make_axis(1)
             x_reduction_axes = make_axes((d,))
             y_reduction_axes = x_reduction_axes
-            x = broadcast(x, x.axes + x_reduction_axes)
-            y = broadcast(y, y_reduction_axes + y.axes)
+            x = broadcast(x, x.axes | x_reduction_axes)
+            y = broadcast(y, y_reduction_axes | y.axes)
 
         if x.is_scalar:
             x, y = y, x
@@ -174,10 +174,10 @@ class RequiredTensorShaping(PeepholeGraphPass):
             out = broadcast(out, op.axes)
         else:
             x_rem_axes = x.axes - x_reduction_axes
-            x = axes_with_order(x, x_rem_axes + x_reduction_axes)
+            x = axes_with_order(x, x_rem_axes | x_reduction_axes)
 
             y_rem_axes = y.axes - y_reduction_axes
-            y = axes_with_order(y, y_reduction_axes + y_rem_axes)
+            y = axes_with_order(y, y_reduction_axes | y_rem_axes)
 
             x = flatten_at(x, len(x.axes) - len(x_reduction_axes))
             y = flatten_at(y, len(y_reduction_axes))

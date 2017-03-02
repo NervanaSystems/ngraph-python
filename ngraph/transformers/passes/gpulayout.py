@@ -133,8 +133,8 @@ class GPUContiguousPrune(PeepholeGraphPass):
                 can_remove = True
                 for axis in match[1].axes:
                     if type(axis) == FlattenedAxis:
-                        strides = [td.strides[td.axes.index_unique(a)] for a in axis.axes]
-                        shape = [td.strides[td.axes.index_unique(a)] for a in axis.axes]
+                        strides = [td.strides[td.axes.index(a)] for a in axis.axes]
+                        shape = [td.strides[td.axes.index(a)] for a in axis.axes]
                         if not _is_strides_contiguous(shape, strides):
                             can_remove = False
 
@@ -446,7 +446,7 @@ class GPUTensorShaping(PeepholeGraphPass):
         arg0 = op.args[0]
         arg0_td = arg0.tensor_description()
 
-        preserve_axes = [arg0_td.axes.index_unique(axis) for axis in op.reduction_axes]
+        preserve_axes = [arg0_td.axes.index(axis) for axis in op.reduction_axes]
         if len(arg0_td.shape) > 3 or len(preserve_axes) > 1:
             axes_list, red_axis = self.get_new_axes(list(arg0_td.shape), list(arg0_td.strides),
                                                     preserve_axes)
@@ -469,7 +469,7 @@ class GPUTensorShaping(PeepholeGraphPass):
     def visit(self, op):
         op_td = op.tensor_description()
 
-        preserve_axes = [op.axes.index_unique(op.axis)]
+        preserve_axes = [op.axes.index(op.axis)]
         if len(op_td.shape) > 3:
             axes_list, red_axis = self.get_new_axes(list(op_td.shape), list(op_td.strides),
                                                     preserve_axes)

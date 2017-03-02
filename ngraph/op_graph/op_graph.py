@@ -959,7 +959,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes.is_equal_set(delta.axes):
             raise ValueError(
                 'delta axes {} do not match adjoint axes {}'
                 .format(delta.axes, self.axes)
@@ -1692,14 +1692,14 @@ def axes_with_role_order(x, roles):
             ax_i = ax_i[0]
         else:
             raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
-        reordered_axes += ax_i
+        reordered_axes |= ax_i
         # This will only add the missing axes to the front
         y = expand_dims(y, ax_i, 0)
 
     # Ensure that axes of x are a subset of y
-    if not x.axes.intersect(y.axes).has_same_axes(x.axes):
+    if not (x.axes & y.axes).is_equal_set(x.axes):
         raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
-            x.axes - x.axes.intersect(y.axes)
+            x.axes - (x.axes & y.axes)
         ))
 
     return axes_with_order(y, reordered_axes)
@@ -1733,7 +1733,7 @@ class ReorderAxes(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
+        if not x.axes.is_equal_set(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -2832,7 +2832,7 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes + y.axes
+        axes = x.axes | y.axes
         x = broadcast(x, axes)
         y = broadcast(y, axes)
 
@@ -2966,13 +2966,13 @@ class ContiguousOp(TensorOp):
 class DotOp(TensorOp):
 
     def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes.intersect(y.axes)
+        self.x_reduction_axes = x.axes & y.axes
         self.y_reduction_axes = self.x_reduction_axes
         assert self.x_reduction_axes == self.y_reduction_axes
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
 
-        axes = self.x_out_axes + self.y_out_axes
+        axes = self.x_out_axes | self.y_out_axes
 
         super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
@@ -3096,7 +3096,7 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert reduction_axes.intersect(out_axes) == make_axes(())
+        assert (reduction_axes & out_axes) == make_axes(())
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -3468,7 +3468,7 @@ class DerivOp(ValueOp):
             # made a constant 1 here, since we do not do common subexpression elimination,
             # while it also ensures that independent graphs do not share ops.
             error = self.dependent.one
-        if not error.axes.has_same_axes(dependent.axes):
+        if not error.axes.is_equal_set(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
 
         self.error = as_op(error)
