@@ -158,7 +158,6 @@ class AsyncTransformer(Process):
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
-
                 # individual results q makes it easy for caller to find results
                 self.results_qs[comp_id].put(outputs)
 
@@ -173,8 +172,7 @@ class AsyncTransformer(Process):
 class ResultOp(TensorOp):
 
     def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self)
-        self.args = tuple([args])
+        super(ResultOp, self).__init__(self, args=args)
         self.metadata['device_id'] = device_id
 
 # TODO
@@ -209,9 +207,9 @@ class HetrComputation(object):
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
                 op.metadata['is_split_op'] = True
-                new_result = ResultOp(device_id=0, args=op)
+                new_op = ResultOp(device_id=0, args=tuple([op]))
                 results.remove(op)
-                results.append(new_result)
+                results.add(new_op)
 
         all_results = OrderedSet(results)
         all_results.update(parameters)

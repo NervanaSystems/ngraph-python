@@ -55,7 +55,7 @@ def test_logreg(transformer_factory):
     xs_v = ng.placeholder((C, N))
     ys_v = ng.placeholder([N])
     alpha_v = ng.placeholder(())
-    thetas_var = ng.variable([C - 1], initial_value=thetas)
+    thetas_var = ng.variable([C], initial_value=thetas)
 
     # define ops
     ys_pred = ng.sigmoid(ng.dot(thetas_var, xs_v))

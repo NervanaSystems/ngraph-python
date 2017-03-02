@@ -66,7 +66,11 @@ def metadata(**metadata):
     with Op.all_ops() as ops:
         yield
     for op in ops:
-        op.metadata.update(metadata)
+        if isinstance(op, TensorValueOp):
+            # make sure tensorvalue op matches thing it reads from
+            op.metadata.update(op.states_read[0].metadata)
+        else:
+            op.metadata.update(metadata)
 
 
 def with_op_metadata(f, metadata=None):
@@ -1239,12 +1243,9 @@ class ValueOp(TensorOp, ControlBlockOp):
     def dtype(self, dtype):
         self.tensor.dtype = dtype
 
-# TODO - this was needed to fix a hetr issue,
-#        but was not complete as implemented.
-#        must also forward const.
-#    @property
-#    def is_constant(self):
-#        return self.tensor.is_constant
+    @property
+    def is_constant(self):
+        return self.tensor.is_constant
 
     @property
     def const(self):
@@ -1465,10 +1466,13 @@ class AxesCastOp(ReshapeOp):
 
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
+        self._check_valid_axes(x, axes)
+        super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
+
+    def _check_valid_axes(self, x, axes):
         if not x.is_scalar and x.axes.lengths != axes.lengths:
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
-        super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
     @tdcache()
     def tensor_description(self):
@@ -1476,6 +1480,39 @@ class AxesCastOp(ReshapeOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
+
+
+class RoleCastOp(AxesCastOp):
+    """
+    Used to set the names of the axes of a tensor, without altering its value.
+
+    If the names of the new axes are the same as the incoming tensor's axes,
+    leave the original axis alone.  Otherwise, create a new axis with the
+    length of the original and the name of the new.
+
+    Arguments:
+        x: A tensor.
+        axes: The new axes.
+    """
+
+    def __init__(self, x, axes, **kwargs):
+        axes = make_axes([
+            old_axis if old_axis == new_axis else make_axis(old_axis.length, new_axis.name)
+            for old_axis, new_axis in zip(x.axes, axes)
+        ])
+        self._check_valid_axes(x, axes)
+
+        super(RoleCastOp, self).__init__(x, axes=axes, **kwargs)
+
+    def _check_valid_axes(self, x, axes):
+        if len(x.axes) != len(axes):
+            raise ValueError(
+                "casting axes {} must have the same number of axes as original axes {}"
+                .format(axes, x.axes)
+            )
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, cast_role(delta, x.axes))
 
 
 def cast_axes(tensor, axes):
@@ -1497,6 +1534,27 @@ def cast_axes(tensor, axes):
         return tensor
 
     return AxesCastOp(tensor, axes)
+
+
+def cast_role(tensor, axes):
+    """
+    Cast the axes' roles of a tensor to new roles.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes (Axes): The new axes.
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    axes = make_axes(axes)
+    if len(tensor.axes) != len(axes):
+        raise ValueError(
+            'Tried to cast Axes {} to have the roles from {}.  Both Axes '
+            'must have the same number of Axes.'
+            .format(tensor.axes, axes)
+        )
+    return RoleCastOp(tensor, axes)
 
 
 class ExpandDims(ReshapeOp):
@@ -2908,18 +2966,11 @@ class ContiguousOp(TensorOp):
 class DotOp(TensorOp):
 
     def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
-        self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
+        self.x_reduction_axes = x.axes.intersect(y.axes)
+        self.y_reduction_axes = self.x_reduction_axes
+        assert self.x_reduction_axes == self.y_reduction_axes
         self.x_out_axes = x.axes - self.x_reduction_axes
         self.y_out_axes = y.axes - self.y_reduction_axes
-
-        intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
-        if len(intersection_axes):
-            raise ValueError(("Both arguments to a DotOp contained {axes}. "
-                              "In order to dot two tensors with the same Axis together, one "
-                              "of the Axes must be a dual. See: "
-                              "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
-                              ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
 
         axes = self.x_out_axes + self.y_out_axes
 
@@ -2931,19 +2982,12 @@ class DotOp(TensorOp):
         """
         Generates the adjoint contributions for x and y.
 
-        On input, x axes can be grouped as IJ* and y axes as JK where
-        J* is predecessor of J.
+        On input, x axes can be grouped as IJ and y axes as JK.
 
         Axes will be:
             Delta: IK.
-            x adj: IJ*
+            x adj: IJ
             y adj: JK
-
-        For x adj, we have IK and JK, so we dual K for delta and J for y
-        to get IK* and J*K for a product of IJ*.
-
-        For y adj, we have IJ* and IK, to get JK, so we dual I and undual
-        J* in x, to get I*J and IK for a product of JK.
 
         Args:
             adjoints: The adjoints for the deriv being computed.
@@ -2954,50 +2998,19 @@ class DotOp(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            axes_with_order(
-                dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                    dualed_axes(y, self.y_reduction_axes, -1, 0)),
-                x.axes)
+            axes_with_order(dot(delta, y), x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            axes_with_order(
-                dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
-                y.axes)
+            axes_with_order(dot(x, delta), y.axes)
         )
-
-
-def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
-    """
-    Cast axes to a dual offset of axes depending on membership in dual_axes.
-
-    In a dot(a, b), each pair of axes (a_i, b_j) between a and b where
-    a_i = b_j - 1
-    will be paired for multiplication and then summing.
-
-    Args:
-        x (TensorOp): A tensor.
-        filter: A collection of axes.
-        in_dual_offset: Dual shift amount for axes in filter.
-        out_dual_offset: Dual shift amount for axes not in filter.
-
-    Returns:
-        TesnsorOp: x with axes cast.
-
-    """
-    def dualed(axis):
-        if axis in filter:
-            return axis + in_dual_offset
-        else:
-            return axis + out_dual_offset
-    return cast_axes(x, (dualed(axis) for axis in x.axes))
 
 
 def dot(x, y):
     """
     The dot product of x and y.
 
-    Reduction axes in x are those whose dual offset is one less than an axis in y.
+    Reduction axes are the axes shared by x and y.
 
     Args:
         x (TensorOp): First argument.
@@ -3013,8 +3026,6 @@ def dot(x, y):
 
 def squared_L2(x, out_axes=None, reduction_axes=None):
     """
-    Returns the dot of x and y, with the axes of x set to their dual offset.
-
     Args:
         x (TensorOp): The first value, axes shifted down by 1.
         y (TensorOp): The second value.

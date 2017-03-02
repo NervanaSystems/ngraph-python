@@ -21,7 +21,6 @@ from functools import reduce, wraps
 
 import numpy as np
 import types
-from weakref import WeakValueDictionary
 from builtins import object, map, range, zip
 
 from ngraph.util.names import NameableValue
@@ -156,7 +155,6 @@ class Axis(object):
         self.__length = length
 
         self.__match_on_length = match_on_length
-        self.__duals = WeakValueDictionary()
         self.__roles = set()
         if roles is not None:
             self.roles.update(roles)
@@ -220,59 +218,6 @@ class Axis(object):
         return Axes([self])
 
     @property
-    def dual_level(self):
-        """
-
-        Returns:
-            Axis displacement for dot.
-
-            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
-            the dual space of level n.
-
-        """
-        return 0
-
-    def __add__(self, offset):
-        return self.get_dual(offset)
-
-    def __sub__(self, offset):
-        return self.get_dual(-offset)
-
-    def get_dual(self, offset=-1):
-        """
-        Returns a dual for an axis.
-
-        The dual of an axis in the left side of a dot product matches the axis in the right side.
-
-        Args:
-            axis (Axis):
-            offset (int, optional): The dual offset from axis. Defaults to -1.
-
-        Returns:
-            (Axis): The dual of the axis.
-
-        """
-        if offset == 0:
-            return self
-        dual = self.__duals.get(offset, None)
-        if dual is None:
-            dual = DualAxis(self, offset)
-            self.__duals[offset] = dual
-        return dual
-
-    @property
-    def T(self):
-        return self.primary_axis.get_dual(-1 - self.dual_level)
-
-    @property
-    def primary_axis(self):
-        """
-        Returns:
-            The origin axis for a dual axis.
-        """
-        return self
-
-    @property
     def roles(self):
         """
 
@@ -321,52 +266,7 @@ class Axis(object):
         return self.name == other.name
 
     def __hash__(self):
-        return id(self)
-
-
-class DualAxis(Axis):
-    """
-    A DualAxis is returned from Axis.get_dual. It shares length with the primary axis.
-
-    This class should only be constructed by Axis.get_dual.
-    """
-    def __init__(self, primary_axis, dual_level):
-        super(DualAxis, self).__init__()
-        self.__primary_axis = primary_axis
-        self.__dual_level = dual_level
-        if dual_level > 0:
-            dual_level_str = '+' + str(dual_level)
-        else:
-            dual_level_str = str(dual_level)
-        self.name = primary_axis.name + dual_level_str
-
-    @property
-    def length(self):
-        return self.__primary_axis.length
-
-    @property
-    def primary_axis(self):
-        return self.__primary_axis
-
-    @property
-    def dual_level(self):
-        return self.__dual_level
-
-    def get_dual(self, offset=-1):
-        """
-        Get the dual of this axis.
-
-        Args:
-            offset: How many duals, default is -1.
-
-        Returns:
-            A dual axis.
-
-        """
-        return self.primary_axis.get_dual(self.dual_level + offset)
-
-    def __repr__(self):
-        return 'DualAxis({axis}:{level})'.format(axis=self.primary_axis, level=self.dual_level)
+        return hash((self.name, self.length))
 
 
 def _sliced_length(s, incoming_length):
@@ -662,13 +562,6 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def get_dual(self, dual_offset=-1):
-        return Axes((axis.get_dual(dual_offset) for axis in self))
-
-    @property
-    def T(self):
-        return Axes(axis.T for axis in self)
-
     def intersect(self, axes):
         """
         Returns the intersection of the elements, leaving out duplicate Axes.
@@ -681,24 +574,6 @@ class Axes(object):
         """
         axes = make_axes(axes)
         return make_axes((axis for axis in self._axes if axis in axes))
-
-    @staticmethod
-    @with_args_as_axes
-    def linear_map_axes(in_axes, out_axes):
-        """
-        For tensors ``out = dot(T, in)`` used in linear transformations
-        determines the axes ``T`` must have.
-
-        Arguments:
-            in_axes: The axes of ``in``.
-            out_axes: The axes of ``out``.
-
-        Returns:
-            Axes of the weights used in the transformation.
-        """
-        return (
-            out_axes + in_axes.get_dual()
-        )
 
     @staticmethod
     @with_args_as_axes
@@ -751,6 +626,7 @@ class Axes(object):
     def index_unique(self, axis):
         """
         Returns the index of an axis and ignores match_on_length behavior
+        TODO: remove this after deprecating match_on_length
 
         Arguments:
             axis: The axis to search for.
@@ -758,10 +634,7 @@ class Axes(object):
         Returns:
             The index.
         """
-        for i in range(len(self._axes)):
-            if self._axes[i].primary_axis is axis.primary_axis:
-                return i
-        raise ValueError("Axis not in axes")
+        return self.index(axis)
 
     def has_same_axes(self, axes):
         """
@@ -798,7 +671,7 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        removed_axes = (set(axes) - set(new_axes))
+        removed_axes = axes - new_axes
 
         if removed_axes:
             raise ValueError(("The new_axes of a broadcast operation must "
