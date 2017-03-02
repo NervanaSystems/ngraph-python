@@ -598,8 +598,8 @@ class Recurrent(Layer):
         ])
 
         # determine the shape of the weight matrices
-        self.w_in_axes = temp_out_axes | self.in_feature_axes
-        self.w_re_axes = temp_out_axes | self.out_feature_axes
+        self.w_in_axes = temp_out_axes + self.in_feature_axes
+        self.w_re_axes = temp_out_axes + self.out_feature_axes
 
     def _step(self, inp, states):
         h_ff = ng.cast_role(ng.dot(self.W_input, inp), self.out_axes)

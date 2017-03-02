@@ -75,7 +75,7 @@ def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
     input_axes = ng.make_axes([input_axis, recurrent_axis, batch_axis])
     input_axes.set_shape((input_size, sequence_length, batch_size))
     input_axes = ng.make_axes([ng.make_axis(length=1, name='features_' + str(_))
-                               for _ in range(extra_axes)]) | input_axes
+                               for _ in range(extra_axes)]) + input_axes
 
     input_placeholder = ng.placeholder(input_axes)
     input_value = rng.uniform(-0.01, 0.01, input_axes)

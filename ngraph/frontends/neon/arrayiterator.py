@@ -74,7 +74,7 @@ class ArrayIterator(object):
             p_axes = ng.make_axes([ax.N])
             for i, sz in enumerate(self.data_arrays[k].shape[1:], 1):
                 name = axnm[i] if axnm else None
-                p_axes |= ng.make_axis(length=sz, name=name)
+                p_axes += ng.make_axis(length=sz, name=name)
             placeholders[k] = ng.placeholder(p_axes)
         return placeholders
 

@@ -539,6 +539,7 @@ class Axes(object):
             current axes concatenated with the other axes
         """
         # self and other could not have common element
+        other = make_axes(other)
         common_axes = self & other
         if len(common_axes) != 0:
             raise ValueError("Trying to concatenate %s with %s, but they have"

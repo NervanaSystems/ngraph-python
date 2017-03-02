@@ -1865,7 +1865,7 @@ def slice_along_axis(x, axis, idx):
     """
     pos = x.axes.index(axis)
     ss = tuple(idx if i == pos else slice(None) for i in range(len(x.axes)))
-    axes = x.axes[:pos] | x.axes[pos + 1:]
+    axes = x.axes[:pos] + x.axes[pos + 1:]
     return tensor_slice(x, ss, axes=axes)
 
 
@@ -2242,7 +2242,7 @@ class StackOp(SequentialOp):
         axes_0 = arg_axes[:pos]
         axes_1 = arg_axes[pos:]
         # Axis layout for the result
-        result_axes = axes_0 | axis | axes_1
+        result_axes = axes_0 + axis + axes_1
 
         # With axes, we should be able to just setitem into a tensor shaped like the
         # result, but things don't quite work that way so we use a temp that would have
@@ -2315,7 +2315,7 @@ class ConcatOp(SequentialOp):
         ind = arg_axes.index(ax)
         axes_0 = arg_axes[:ind]
         axes_1 = arg_axes[ind + 1:]
-        result_axes = axes_0 | concat_axis | axes_1
+        result_axes = axes_0 + concat_axis + axes_1
 
         # With axes, we should be able to just setitem into a tensor shaped like the
         # result, but things don't quite work that way so we use a temp that would have
@@ -3316,7 +3316,7 @@ class OneHotOp(TensorOp):
         self.axis = axis
         super(OneHotOp, self).__init__(
             args=(x,),
-            axes=make_axes((axis,)) | x.axes,
+            axes=make_axes((axis,)) + x.axes,
             **kwargs
         )
 
