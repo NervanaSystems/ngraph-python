@@ -8,7 +8,6 @@ The adaptation includes
 """
 from builtins import input
 import numpy as np
-from neon import logger as neon_logger
 
 
 class LSTM(object):
@@ -252,12 +251,11 @@ def checkSequentialMatchesBatch():
             dh0 = dhprev
 
     # and make sure the gradients match
-    neon_logger.display('Making sure batched version agrees with sequential version: '
-                        '(should all be True)')
-    neon_logger.display(np.allclose(BdX, dX))
-    neon_logger.display(np.allclose(BdWLSTM, dWLSTM))
-    neon_logger.display(np.allclose(Bdc0, dc0))
-    neon_logger.display(np.allclose(Bdh0, dh0))
+    print('Making sure batched version agrees with sequential version: (should all be True)')
+    print(np.allclose(BdX, dX))
+    print(np.allclose(BdWLSTM, dWLSTM))
+    print(np.allclose(Bdc0, dc0))
+    print(np.allclose(Bdh0, dh0))
 
 
 def checkBatchGradient():
@@ -321,13 +319,14 @@ def checkBatchGradient():
                     status = '!!!!! NOTOK'
 
             # print stats
-            neon_logger.display('%s checking param %s index %s (val = %+8f), analytic = %+8f,' +
-                                'numerical = %+8f, relative error = %+8f'
-                                % (status, name, repr(np.unravel_index(i, mat.shape)), old_val,
-                                   grad_analytic, grad_numerical, rel_error))
+            print('%s checking param %s index %s (val = %+8f), analytic = %+8f,' +
+                  'numerical = %+8f, relative error = %+8f'
+                  % (status, name, repr(np.unravel_index(i, mat.shape)), old_val,
+                     grad_analytic, grad_numerical, rel_error))
+
 
 if __name__ == "__main__":
     checkSequentialMatchesBatch()
     input('check OK, press key to continue to gradient check')
     checkBatchGradient()
-    neon_logger.display('every line should start with OK. Have a nice day!')
+    print('every line should start with OK. Have a nice day!')

@@ -87,7 +87,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
                  init_state=False):
     in_feature_axes = tuple(input_placeholder.axes)[:-2]  # input axis + any extra axes of length 1
     out_feature_axes = ng.make_axes([ng.make_axis(hidden_size)])
-    batch_axis = input_placeholder.axes.batch_axis()
+    batch_axis = input_placeholder.axes.batch_axes()[0]
     hidden_axis = ng.make_axis(hidden_size)
 
     w_in_axes = ng.make_axes(hidden_axis) + in_feature_axes

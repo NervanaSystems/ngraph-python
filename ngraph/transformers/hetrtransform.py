@@ -1,5 +1,3 @@
-from neon import NervanaObject  # noqa
-
 import signal
 import pytest
 import sys
