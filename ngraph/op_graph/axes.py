@@ -450,9 +450,23 @@ class Axes(object):
     def batch_axes(self):
         """
         Returns:
-            The Axes subset that are batch axes.
+            The tensor's batch Axis wrapped in an Axes object if there is one
+            on this tensor, otherwise returns None
         """
-        return Axes(axis for axis in self if axis.is_batch)
+        batch_axis = self.batch_axis()
+        if batch_axis:
+            return Axes([batch_axis])
+        else:
+            return None
+
+    def batch_axis(self):
+        """
+        Returns:
+            The tensor's batch Axis or None if there isn't one.
+        """
+        for axis in self:
+            if axis.is_batch:
+                return axis
 
     def sample_axes(self):
         """

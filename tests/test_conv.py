@@ -110,39 +110,6 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
-def test_wrong_number_of_batch_axes_at_input():
-    """
-    test wrong number of batch axes at input
-    """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    C = 3
-    D = 1
-    ax_C = ng.make_axis(name='N', length=C)
-    ax_D = ng.make_axis(name='N', length=D)
-
-    ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax_C, ax.T, ax.R, ax.S, ax.K])
-
-    inputs = ng.placeholder(axes=ax_i)
-    filters = ng.placeholder(ax_f)
-
-    with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
-
-    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} " \
-        "batch axes: {batch_axes} Found {n_sample_axes} sample axes: {sample_axes}.".format(
-            n_batch_axes=len(inputs.axes.batch_axes()),
-            batch_axes=inputs.axes.batch_axes(),
-            n_sample_axes=len(inputs.axes.sample_axes()),
-            sample_axes=inputs.axes.sample_axes())
-
-
 def test_convolution_backprop(transformer_factory):
     """
     test convolution backprop path

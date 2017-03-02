@@ -258,7 +258,7 @@ class ConvBase(Layer):
                            cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes |= in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
@@ -349,7 +349,7 @@ class PoolBase(Layer):
                 output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes |= in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
 
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
@@ -467,7 +467,7 @@ class BatchNorm(Layer):
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
             red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
-        red_axes |= in_obj.axes.batch_axes()
+        red_axes |= in_obj.axes.batch_axis()
         out_axes = in_axes - red_axes
 
         self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
@@ -583,7 +583,7 @@ class Recurrent(Layer):
             if len(self.in_feature_axes) == 1:
                 self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        self.out_axes = self.out_feature_axes | self.in_axes.batch_axes()
+        self.out_axes = self.out_feature_axes | self.in_axes.batch_axis()
         self.recurrent_axis_idx = len(self.out_feature_axes)
 
         # create temporary out axes which the dot ops will output.  These
