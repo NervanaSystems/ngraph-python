@@ -5,23 +5,23 @@ scipy==0.18.1
 # autopep8 (temporary add)
 autopep8==1.2.4
 # other requirements
-tqdm==4.8.4
+tqdm==4.11.2
 enum34==1.1.6
-future==0.15.2
+future==0.16.0
 configargparse==0.11.0
 h5py==2.6.0
 cachetools==2.0.0
-decorator==4.0.10
-requests==2.12.4
+decorator==4.0.11
+requests==2.13.0
 # aeon (for examples using aeon only without neon)
 #-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon
 # notebooks
 jupyter==1.0.0
-nbconvert==5.0.0
-nbformat==4.2.0
+nbconvert==5.1.1
+nbformat==4.3.0
 setuptools>=18.5
-flake8==3.2.1
-pytest-cov
-pytest-xdist
-pytest-timeout
+flake8==3.3.0
+pytest-cov==2.4.0
+pytest-xdist==1.15.0
+pytest-timeout==1.2.0
 pynvrtc==7.5
