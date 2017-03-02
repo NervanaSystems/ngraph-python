@@ -66,7 +66,11 @@ def metadata(**metadata):
     with Op.all_ops() as ops:
         yield
     for op in ops:
-        op.metadata.update(metadata)
+        if isinstance(op, TensorValueOp):
+            # make sure tensorvalue op matches thing it reads from
+            op.metadata.update(op.states_read[0].metadata)
+        else:
+            op.metadata.update(metadata)
 
 
 def with_op_metadata(f, metadata=None):
@@ -1239,12 +1243,9 @@ class ValueOp(TensorOp, ControlBlockOp):
     def dtype(self, dtype):
         self.tensor.dtype = dtype
 
-# TODO - this was needed to fix a hetr issue,
-#        but was not complete as implemented.
-#        must also forward const.
-#    @property
-#    def is_constant(self):
-#        return self.tensor.is_constant
+    @property
+    def is_constant(self):
+        return self.tensor.is_constant
 
     @property
     def const(self):
