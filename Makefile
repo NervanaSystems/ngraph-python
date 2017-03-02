@@ -71,6 +71,11 @@ test_parallel: clean testflex
 	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
+test_mkl: clean
+	@echo Running unit tests...
+	@py.test --enable_mkl --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
 test: clean testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)

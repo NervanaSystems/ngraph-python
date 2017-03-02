@@ -23,11 +23,6 @@ ENV MKLDNN_ROOT=/usr/local
 WORKDIR /root/ngraph-test
 ADD . /root/ngraph-test
 RUN pip install -e .
-# verify the mkldnn_engine.so is built correctly and save it to a
-# temporary location for in the docker container
-# skip these and keep going if the library is not built in setup.py
-RUN ls -l /tmp/mkldnn_engine.so || echo keep going if no library is present
-RUN ldd /tmp/mkldnn_engine.so || echo keep going if no library is present
 
 ENV PYTHONPATH=.:/tmp/:$PYTHONPATH
 ENV MKL_TEST_ENABLE=True
