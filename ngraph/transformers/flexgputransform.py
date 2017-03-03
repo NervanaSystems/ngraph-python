@@ -45,6 +45,8 @@ def _ew_bind_flex_scales(kernel):
         scale = 1.0 / scale if flex_scale_desc.is_output else scale
         kernel.params[index] = scale
     FlexPtrDescription.bind_ptr(kernel.params)
+
+
 ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
 
 
