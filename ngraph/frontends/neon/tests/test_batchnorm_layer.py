@@ -181,7 +181,7 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
     # Get batch norm side effects
     if isinstance(rnn.batch_norm, dict):  # e.g. LSTM
         # rnn has multiple gates, so just look at one of them.
-        k = rnn.batch_norm.keys()[0]
+        k = list(rnn.batch_norm.keys())[0]
         stats = [ng.value_of(rnn.batch_norm[k].gmean),
                  ng.value_of(rnn.batch_norm[k].gvar)]
     else:
@@ -357,7 +357,7 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
     # Get rnn + batch norm graph
     fprop = rnn(input_placeholder)
     # rnn has multiple gates, so just look at one of them.
-    k = rnn.batch_norm.keys()[0]
+    k = list(rnn.batch_norm.keys())[0]
     bprop_vars = [input_placeholder,
                   rnn.batch_norm[k].gamma,
                   rnn.batch_norm[k].beta]
