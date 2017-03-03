@@ -140,8 +140,10 @@ def test_batchnorm_bprop(batch_size, input_size, epsilon, beta, gamma):
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("sequence_length", [5])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
+@pytest.mark.parametrize("beta,gamma", [(0, 1), (.5, .6)])
+@pytest.mark.parametrize("reduce_recurrent,axis", [(True, (1, 2)), (False, 2)])
 def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, sequence_length,
-                                   transformer_factory):
+                                   beta, gamma, reduce_recurrent, axis, transformer_factory):
     """Compare RNN with batch norm to rnn without using normalized weighted inputs. """
 
     # Set up axes
@@ -165,7 +167,7 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
     identity_weights = np.eye(hidden_size).astype("float32")
 
     # Generate an RNN with batch norm turned on
-    batch_norm = BatchNorm()
+    batch_norm = BatchNorm(init_gamma=gamma, init_beta=beta, reduce_recurrent=reduce_recurrent)
     rnn = RNN(hidden_size, init=input_weights, init_inner=hidden_weights,
               return_sequence=True, batch_norm=batch_norm, activation=Tanh())
 
@@ -204,7 +206,10 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
             # Get reference batch normed input
             normed_input, gmean_ref, gvar_ref = batch_norm_reference_fprop(weighted_input,
                                                                            gmean_ref,
-                                                                           gvar_ref, axis=(1, 2))
+                                                                           gvar_ref,
+                                                                           gamma=gamma,
+                                                                           beta=beta,
+                                                                           axis=axis)
 
             # Get reference RNN output
             ref = reference_function(normed_input)
@@ -224,8 +229,9 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
 @pytest.mark.parametrize("sequence_length", [5])
 @pytest.mark.parametrize("RNN", [Recurrent])
 @pytest.mark.parametrize("beta,gamma", [(0, 1), (.5, .6)])
+@pytest.mark.parametrize("reduce_recurrent,axis", [(True, (1, 2)), (False, 2)])
 def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence_length, RNN, beta,
-                                   gamma):
+                                   gamma, reduce_recurrent, axis, transformer_factory):
 
     # Set up axes
     F = ng.make_axis(length=input_size, name="input")
@@ -248,7 +254,7 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
     identity_weights = np.eye(hidden_size).astype("float32")
 
     # Generate an RNN with batch norm turned on
-    batch_norm = BatchNorm(init_gamma=gamma, init_beta=beta)
+    batch_norm = BatchNorm(init_gamma=gamma, init_beta=beta, reduce_recurrent=reduce_recurrent)
     rnn = RNN(hidden_size, init=input_weights, init_inner=hidden_weights,
               return_sequence=True, batch_norm=batch_norm, activation=Tanh())
 
@@ -293,14 +299,14 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
 
         # Get reference batch normed input
         normed_input = batch_norm_reference_fprop(weighted_input, gamma=gamma, beta=beta,
-                                                  axis=(1, 2))[0]
+                                                  axis=axis)[0]
 
         # Reference backprop through RNN
         rnn_delta = reference_function(normed_input, delta)
 
         # Reference backprop through BN
         dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference_bprop(rnn_delta, weighted_input,
-                                                                   gamma=gamma, axis=(1, 2))
+                                                                   gamma=gamma, axis=axis)
 
         # Backprop through weighted input
         dx_ref = np.dot(input_weights.T, dx_ref.swapaxes(0, 1))

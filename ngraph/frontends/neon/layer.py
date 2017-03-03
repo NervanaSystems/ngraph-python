@@ -445,6 +445,13 @@ class BatchNorm(Layer):
     dividing by batch variance.  Then scales by learned factor gamma and
     shifts by learned bias beta.
 
+    Args:
+        rho (float): smoothing coefficient for global updating global statistics
+        eps (float): constant added to batch variance to prevent instability
+        init_gamma (float): initial value for gamma, the scaling coefficient
+        init_beta (float): initial value for beta, the constant offset
+        reduce_recurrent (bool): whether statistics should be calculated over recurrent axis
+                                 as well.
     Notes:
 
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
