@@ -16,9 +16,8 @@ from __future__ import division
 import numpy as np
 import pytest
 import ngraph as ng
-import ngraph.transformers as ngt
 
-from ngraph.testing import executor
+from ngraph.testing import executor, ExecutorFactory
 
 
 @pytest.fixture(scope='module', params=[
@@ -45,14 +44,12 @@ def test_exit_condition(transformer_factory):
 
     likelihood = ng.log(ng.softmax(y, normalization_axes=y.axes[1]))
 
-    transformer = ngt.make_transformer()
-    comp = transformer.computation(likelihood)
+    with ExecutorFactory() as ex:
+        comp = ex.executor(likelihood)
 
-    val1 = comp()
-    val2 = comp()
-    np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
-
-    transformer.close()
+        val1 = comp()
+        val2 = comp()
+        np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
 
 def test_4d_elementwise(transformer_factory, input_axes):

@@ -102,7 +102,7 @@ def test_batchnorm_fprop(batch_size, input_size, rho, epsilon, beta, gamma, tran
 @pytest.mark.parametrize("input_size", [10])
 @pytest.mark.parametrize("epsilon", [.1])
 @pytest.mark.parametrize("beta,gamma", [(0, 1), (.5, .6)])
-def test_batchnorm_bprop(batch_size, input_size, epsilon, beta, gamma, transformer_factory):
+def test_batchnorm_bprop(batch_size, input_size, epsilon, beta, gamma):
 
     # set inputs
     N = ng.make_axis(batch_size, name='N')
@@ -146,6 +146,7 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
     T = ng.make_axis(length=sequence_length, name="R")
     N = ng.make_axis(length=batch_size, name="N")
     H = ng.make_axis(length=hidden_size, name="hidden")
+    H2 = ng.make_axis(length=hidden_size, name="hidden_tmp")
     F2 = ng.make_axis(length=hidden_size, name="weighted_input")
 
     # Make input placeholder
@@ -154,8 +155,8 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
     normed_input_placeholder = ng.placeholder(axes=[F2, T, N])
 
     # Create weight matrices
-    w_rec_axes = ng.make_axes([H, H - 1])
-    w_in_axes = ng.make_axes([H, F - 1])
+    w_rec_axes = ng.make_axes([H, H2])
+    w_in_axes = ng.make_axes([H, F])
     hidden_weights = rng.uniform(-1, 1, w_rec_axes)
     input_weights = rng.uniform(-1, 1, w_in_axes)
     identity_weights = np.eye(hidden_size).astype("float32")
@@ -208,9 +209,9 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
             out = fprop_function(input_value)
             gmean, gvar = stats_function()
 
-            assert ng.testing.allclose(out, ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gmean, gmean_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gvar, gvar_ref, rtol=rtol, atol=atol)
+            assert ng.testing.allclose(out, ref, rtol=rtol, atol=recurrent_atol)
+            assert ng.testing.allclose(gmean, gmean_ref, rtol=rtol, atol=recurrent_atol)
+            assert ng.testing.allclose(gvar, gvar_ref, rtol=rtol, atol=recurrent_atol)
 
 
 @pytest.mark.parametrize("batch_size", [32])
@@ -227,6 +228,7 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
     T = ng.make_axis(length=sequence_length, name="R")
     N = ng.make_axis(length=batch_size, name="N")
     H = ng.make_axis(length=hidden_size, name="hidden")
+    H2 = ng.make_axis(length=hidden_size, name="hidden_tmp")
     F2 = ng.make_axis(length=hidden_size, name="weighted_input")
 
     # Make input placeholders
@@ -235,8 +237,8 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
     normed_input_placeholder = ng.placeholder(axes=[F2, T, N])
 
     # Create weight matrices
-    w_rec_axes = ng.make_axes([H, H - 1])
-    w_in_axes = ng.make_axes([H, F - 1])
+    w_rec_axes = ng.make_axes([H, H2])
+    w_in_axes = ng.make_axes([H, F])
     hidden_weights = GlorotInit()(w_rec_axes)
     input_weights = GlorotInit()(w_in_axes)
     identity_weights = np.eye(hidden_size).astype("float32")
@@ -279,7 +281,7 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
                                          reference_delta_placeholder)
 
         input_value = rng.uniform(0, 1, input_axes)
-        delta = rng.uniform(-1, 1, fprop.axes)
+        delta = rng.uniform(-.1, .1, fprop.axes)
         dx, dgamma, dbeta = bprop_function(input_value, delta)
 
         # Compute reference weighted input
@@ -318,6 +320,7 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
     T = ng.make_axis(length=sequence_length, name="R")
     N = ng.make_axis(length=batch_size, name="N")
     H = ng.make_axis(length=hidden_size, name="hidden")
+    H2 = ng.make_axis(length=hidden_size, name="hidden_tmp")
     F2 = ng.make_axis(length=hidden_size, name="weighted_input")
 
     # Make input placeholders
@@ -326,8 +329,8 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
     normed_input_placeholder = ng.placeholder(axes=[F2, T, N])
 
     # Create weight matrices
-    w_rec_axes = ng.make_axes([H, H - 1])
-    w_in_axes = ng.make_axes([H, F - 1])
+    w_rec_axes = ng.make_axes([H, H2])
+    w_in_axes = ng.make_axes([H, F])
     hidden_weights = GlorotInit()(w_rec_axes)
     input_weights = GlorotInit()(w_in_axes)
     identity_weights = np.eye(hidden_size).astype("float32")
@@ -381,7 +384,7 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
                                          reference_delta_placeholder)
 
         input_value = rng.uniform(0, 1, input_axes)
-        delta = rng.uniform(-1, 1, fprop.axes)
+        delta = rng.uniform(-.1, .1, fprop.axes)
         dx, dgamma, dbeta = bprop_function(input_value, delta)
 
         # Compute reference weighted input

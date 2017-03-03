@@ -314,7 +314,7 @@ class TensorDescriptionWrapper:
 
             for axis in range(num_kernel_axes):
                 if kernel_axes[axis] in self.td.axes:
-                    td_axis_index = self.td.axes.index_unique(kernel_axes[axis])
+                    td_axis_index = self.td.axes.index(kernel_axes[axis])
                     bcast_shape[axis] = self.shape[td_axis_index]
                     bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
                     converted.append(kernel_axes[axis])
@@ -325,8 +325,8 @@ class TensorDescriptionWrapper:
 
             # Take axis condition where one will not match
             if take_axis:
-                kernel_index = kernel_axes.index_unique(kernel_axes - converted)
-                td_index = self.td.axes.index_unique(self.td.axes - converted)
+                kernel_index = kernel_axes.index(kernel_axes - converted)
+                td_index = self.td.axes.index(self.td.axes - converted)
                 bcast_shape[kernel_index] = self.shape[td_index]
                 bcast_strides[kernel_index] = self.strides[td_index] // self.dtype.itemsize
 

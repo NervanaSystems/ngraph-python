@@ -38,7 +38,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    CPUTensorShaping, SimplePrune, DerivPass
+    CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
@@ -429,7 +429,7 @@ class NumPyCodeGenerator(PyGen):
             raise ValueError("Op %s must be an instance of ReductionOp" % op)
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
-        np_axis = tuple([input_axes.index_unique(axis) for axis in reduction_axes])
+        np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @generic_method(Op)
@@ -723,8 +723,7 @@ class NumPyTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [DerivPass(),
-                             CPUTensorLayout(),
+        self.graph_passes = [CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
                              CPUTensorShaping()]
@@ -806,7 +805,6 @@ class NumPyTransformer(Transformer):
 
             # with open("code_{}.py".format(self.name), "w") as f:
             #     f.write(self.code.code)
-            # print(self.code.filename)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']
@@ -842,6 +840,7 @@ class NumPyTransformer(Transformer):
             gather_recv_op = self.gather_recv_nodes[gather_recv_id]
             x_devicetensor = gather_recv_op.value
             x_nparr = x_devicetensor.get(None)
+
             for i in range(len(gather_recv_op.from_id)):
                 q = gather_recv_op.shared_queue_list[i]
                 x = q.get()

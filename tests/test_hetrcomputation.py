@@ -14,13 +14,15 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 
+from ngraph.testing import ExecutorFactory
 from ngraph.util.ordered import OrderedSet
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass, ChildTransformerPass
 from ngraph.transformers.base import transformer_choices
 from ngraph.op_graph.communication import Gather_Send, Gather_Recv, Scatter_Send, Scatter_Recv
+from ngraph.transformers import (set_transformer_factory,
+                                 make_transformer_factory)
 import pytest
 
 
@@ -40,32 +42,31 @@ def check_result_values(input_vector, result_expected, placeholder, ops=OrderedS
 
     """
     # Select the transformer
-    transformer = ngt.make_transformer_factory('hetr')()
+    set_transformer_factory(make_transformer_factory('hetr'))
 
-    # Build the hetr computation object
-    if isinstance(placeholder, tuple):
-        computation = transformer.computation(ops, *placeholder)
-    else:
-        computation = transformer.computation(ops, placeholder)
-    result_obtained = []
-
-    # Check for the return result list
-    for i in input_vector:
-        if isinstance(i, tuple):
-            result_obtained.append(computation(*i))
+    with ExecutorFactory() as ex:
+        # Build the hetr computation object
+        if isinstance(placeholder, tuple):
+            computation = ex.executor(ops, *placeholder)
         else:
-            result_obtained.append(computation(i))
+            computation = ex.executor(ops, placeholder)
+        result_obtained = []
 
-    # if return result is tuple
-    if len(result_expected) > 1:
-        np.testing.assert_array_equal(result_expected, result_obtained)
+        # Check for the return result list
+        for i in input_vector:
+            if isinstance(i, tuple):
+                result_obtained.append(computation(*i))
+            else:
+                result_obtained.append(computation(i))
 
-    # if return result is  scalar
-    else:
-        assert (np.array(tuple(result_obtained)) ==
-                np.array(result_expected[0])).all()
+        # if return result is tuple
+        if len(result_expected) > 1:
+            np.testing.assert_array_equal(result_expected, result_obtained)
 
-    transformer.close()
+        # if return result is  scalar
+        else:
+            assert (np.array(tuple(result_obtained)) ==
+                    np.array(result_expected[0])).all()
 
 
 def check_device_assign_pass(default_device, default_device_id,
@@ -85,24 +86,23 @@ def check_device_assign_pass(default_device, default_device_id,
     :param: graph_op: list of ops to do the graph traversal
 
     """
-    transformer = ngt.make_transformer_factory('hetr')()
+    set_transformer_factory(make_transformer_factory('hetr'))
 
-    transformers = set()
-    expected_transformers = set()
-    obj = DeviceAssignPass(default_device, default_device_id, transformers)
+    with ExecutorFactory() as ex:
+        transformers = set()
+        expected_transformers = set()
+        obj = DeviceAssignPass(default_device, default_device_id, transformers)
 
-    obj.do_pass(graph_op, transformer)
+        obj.do_pass(graph_op, ex.transformer)
 
-    for op in graph_op_metadata.keys():
-        assert op.metadata['device'] == graph_op_metadata[op][0]
-        assert op.metadata['device_id'] == graph_op_metadata[op][1]
-        assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
-            str(graph_op_metadata[op][1])
+        for op in graph_op_metadata.keys():
+            assert op.metadata['device'] == graph_op_metadata[op][0]
+            assert op.metadata['device_id'] == graph_op_metadata[op][1]
+            assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
+                str(graph_op_metadata[op][1])
 
-        expected_transformers.add(op.metadata['transformer'])
-    assert transformers == expected_transformers
-
-    transformer.close()
+            expected_transformers.add(op.metadata['transformer'])
+        assert transformers == expected_transformers
 
 
 def check_communication_pass(ops_to_transform, expected_recv_nodes):
@@ -118,32 +118,30 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
            be inserted after the communication pass
 
     """
-    transformer = ngt.make_transformer_factory('hetr')()
+    set_transformer_factory(make_transformer_factory('hetr'))
+    with ExecutorFactory() as ex:
+        send_nodes = OrderedSet()
+        scatter_shared_queues = list()
+        gather_shared_queues = list()
+        obj = CommunicationPass(send_nodes, scatter_shared_queues, gather_shared_queues)
+        obj.do_pass(ops_to_transform, ex.transformer)
 
-    send_nodes = OrderedSet()
-    scatter_shared_queues = list()
-    gather_shared_queues = list()
-    obj = CommunicationPass(send_nodes, scatter_shared_queues, gather_shared_queues)
-    obj.do_pass(ops_to_transform, transformer)
+        op_list_instance_type = list()
+        num_expected_sendnodes = len(expected_recv_nodes)
 
-    op_list_instance_type = list()
-    num_expected_sendnodes = len(expected_recv_nodes)
+        # Count if the communication pass inserted the expected number of send nodes
+        assert num_expected_sendnodes == len(send_nodes)
 
-    # Count if the communication pass inserted the expected number of send nodes
-    assert num_expected_sendnodes == len(send_nodes)
+        # verify if Recv nodes are inserted in the right place
+        for op in expected_recv_nodes:
+            for each_arg in op.args:
+                op_list_instance_type.append(type(each_arg))
 
-    # verify if Recv nodes are inserted in the right place
-    for op in expected_recv_nodes:
-        for each_arg in op.args:
-            op_list_instance_type.append(type(each_arg))
-
-        if (ng.op_graph.communication.Recv in op_list_instance_type or
-            ng.op_graph.communication.Gather_Recv in op_list_instance_type or
-                ng.op_graph.communication.Scatter_Recv in op_list_instance_type) is False:
-            assert False
-        del op_list_instance_type[:]
-
-    transformer.close()
+            if (ng.op_graph.communication.Recv in op_list_instance_type or
+                ng.op_graph.communication.Gather_Recv in op_list_instance_type or
+                    ng.op_graph.communication.Scatter_Recv in op_list_instance_type) is False:
+                assert False
+            del op_list_instance_type[:]
 
 
 def test_hetr_graph_passes():
@@ -172,9 +170,9 @@ def test_hetr_graph_passes():
 
     # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
     obj = ChildTransformerPass([])
-    transformer = ngt.make_transformer_factory('hetr')()
-    obj.do_pass(graph_ops, transformer)
-    transformer.close()
+    set_transformer_factory(make_transformer_factory('hetr'))
+    with ExecutorFactory() as ex:
+        obj.do_pass(graph_ops, ex.transformer)
     assert set(transformer_list) == set(obj.transformer_list)
 
 
@@ -185,47 +183,15 @@ def test_distributed_graph():
     W = ng.make_axis(length=6, name='width')
 
     x = ng.placeholder(axes=[H, W])
-    y = ng.placeholder(())
-    z = ng.placeholder(())
     with ng.metadata(device_id=('1', '2'), parallel=W):
-        x_plus_y = x + y
+        x_plus_one = x + 1
 
-    x_plus_y_plus_z = x_plus_y + z
-
-#    # Build the graph metadata
-#    graph_ops = OrderedSet([x_plus_y_plus_z, x_plus_y, x, y, z])
-#
-#    graph_op_metadata = {op: list() for op in graph_ops}
-#    graph_op_metadata[x] = ["numpy", '0']
-#    graph_op_metadata[y] = ["numpy", '0']
-#    graph_op_metadata[z] = ["numpy", '0']
-#    graph_op_metadata[x_plus_y] = ["numpy", ('1', '2')]
-#    graph_op_metadata[x_plus_y_plus_z] = ["numpy", '0']
-#
-#    transformer_list = ["numpy2", "numpy1", "numpy0"]
-#
-#    # Run the hetr passes one by one, and verify they did the expected things to the graph
-#    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
-#    check_communication_pass(
-#        ops_to_transform=graph_ops,
-#        expected_recv_nodes=[
-#            x_plus_y,
-#            x_plus_y,
-#            x_plus_y_plus_z])
-#
-#    # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
-#    obj = ChildTransformerPass([])
-#    transformer = ngt.make_transformer_factory('hetr')()
-#    obj.do_pass(graph_ops, transformer)
-#    transformer.close()
-#
-#    assert set(transformer_list) == set(obj.transformer_list)
-    pytest.xfail("Some problems due to latest changes from master, fixes in later PR")
-    check_result_values(input_vector=[(10, 20, 30), (1, 2, 3)],
-                        result_expected=[(60,),
-                                         (6,)],
-                        placeholder=(x, y, z),
-                        ops=OrderedSet([x_plus_y_plus_z]))
+    np_x = np.random.randint(100, size=[H.length, W.length])
+    np_result = np.add(np_x, 1)
+    check_result_values(input_vector=[np_x],
+                        result_expected=[np_result],
+                        placeholder=x,
+                        ops=OrderedSet([x_plus_one]))
 
 
 def test_simple_graph():
@@ -283,11 +249,11 @@ def test_gpu_send_and_recv():
 
 
 def test_empty_computation():
-    transformer = ngt.make_transformer_factory('hetr')()
-    computation = transformer.computation(None)
-    res = computation()
-    assert not res
-    transformer.close()
+    set_transformer_factory(make_transformer_factory('hetr'))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(None)
+        res = computation()
+        assert not res
 
 
 def test_scatter_gather_node_axes():

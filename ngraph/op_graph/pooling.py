@@ -47,18 +47,6 @@ class PoolingOp(op_graph.TensorOp):
                 'pooling input shape must be length 5, found {}'
             ).format(len(inputs.shape)))
 
-        batch_axes = inputs.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Input must have one batch axis.  Found {n_batch_axes} batch "
-                "axes: {batch_axes} and {n_sample_axes} sample axes: "
-                "{sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(inputs.axes.sample_axes()),
-                sample_axes=inputs.axes.sample_axes(),
-            ))
         pooltype = pool_params['op']
         if pooltype not in ('max', 'avg'):
             raise ValueError((

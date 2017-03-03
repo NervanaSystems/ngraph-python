@@ -86,7 +86,7 @@ def check_lstm(seq_len, input_size, hidden_size,
                batch_size, init_func, return_seq=True, backward=False,
                reset_cells=False, num_iter=2):
 
-    Cin = ng.make_axis(input_size)
+    Cin = ng.make_axis(input_size, name='Feature')
     REC = ng.make_axis(seq_len, name='R')
     N = ng.make_axis(batch_size, name='N')
 
@@ -167,7 +167,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                        batch_size, init_func, return_seq=True, backward=False,
                        reset_cells=False, num_iter=2):
 
-    Cin = ng.make_axis(input_size)
+    Cin = ng.make_axis(input_size, name='Feature')
     REC = ng.make_axis(seq_len, name='R')
     N = ng.make_axis(batch_size, name='N')
 
@@ -176,12 +176,12 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
         inp_ng = ng.placeholder([Cin, REC, N])
 
-        lstm_ng_1 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                         reset_cells=reset_cells, return_sequence=return_seq,
-                         backward=backward)
-        lstm_ng_2 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                         reset_cells=reset_cells, return_sequence=return_seq,
-                         backward=backward)
+        lstm_ng_1 = LSTM(hidden_size, init_func, activation=Tanh(),
+                         gate_activation=Logistic(), reset_cells=reset_cells,
+                         return_sequence=return_seq, backward=backward)
+        lstm_ng_2 = LSTM(hidden_size + 1, init_func, activation=Tanh(),
+                         gate_activation=Logistic(), reset_cells=reset_cells,
+                         return_sequence=return_seq, backward=backward)
 
         out_ng_1 = lstm_ng_1(inp_ng)
         out_ng_2 = lstm_ng_2(out_ng_1)
@@ -230,7 +230,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
         lstm_ref_1 = RefLSTM()
         lstm_ref_2 = RefLSTM()
         WLSTM_1 = lstm_ref_1.init(input_size, hidden_size)
-        WLSTM_2 = lstm_ref_2.init(hidden_size, hidden_size)
+        WLSTM_2 = lstm_ref_2.init(hidden_size, hidden_size + 1)
 
         # make ref weights and biases the same with neon model
         WLSTM_1[0, :] = bh_neon_1
@@ -259,7 +259,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                 h0_2 = hprev_2
 
             # the output needs transpose as well
-            Hout_ref_2 = Hout_ref_2.reshape(seq_len * batch_size, hidden_size).T
+            Hout_ref_2 = Hout_ref_2.reshape(seq_len * batch_size, hidden_size + 1).T
 
             fprop_ref_2_list.append(Hout_ref_2)
 

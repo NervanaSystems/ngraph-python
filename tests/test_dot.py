@@ -85,7 +85,7 @@ def ngraph_l2_norm(np_array):
     """
     axes = ()
     for i, l in enumerate(np_array.shape):
-        axes += (ng.make_axis(length=l).named('axis%s' % i),)
+        axes |= (ng.make_axis(length=l).named('axis%s' % i),)
 
     np_tensor = ng.constant(np_array, axes)
     var = ng.variable(axes, initial_value=np_tensor)
@@ -101,7 +101,7 @@ def test_dot_sum_backprop(transformer_factory):
     C = ng.make_axis(length=2).named('C')
     N = ng.make_axis(length=3, name='N')
 
-    x_axes = ng.make_axes((C - 1, N))
+    x_axes = ng.make_axes((C, N))
     y_axes = ng.make_axes((C,))
     x_np = np.random.random(x_axes.lengths).astype('float32')
     y_np = np.random.random(y_axes.lengths).astype('float32')
@@ -169,7 +169,7 @@ def test_tensor_dot_tensor(transformer_factory):
     tests = [
         {
             'tensor1': [[1, 2], [4, 5], [3, 4]],
-            'tensor1_axes': (C, D - 1),
+            'tensor1_axes': (C, D),
             'tensor2': [2, 5],
             'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
@@ -177,7 +177,7 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[1, 4, 3], [2, 5, 4]],
-            'tensor1_axes': (D - 1, C),
+            'tensor1_axes': (D, C),
             'tensor2': [2, 5],
             'tensor2_axes': (D,),
             'expected_output': [12, 33, 26],
@@ -185,7 +185,7 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
-            'tensor1_axes': (N, D - 1, C - 1),
+            'tensor1_axes': (N, D, C),
             'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
             'tensor2_axes': (H, D, C),
             'expected_output': [[51, 81], [188, 297]],
@@ -201,7 +201,7 @@ def test_tensor_dot_tensor(transformer_factory):
         },
         {
             'tensor1': [[1, 4], [6, 2]],
-            'tensor1_axes': (C - 1, D - 1),
+            'tensor1_axes': (C, D),
             'tensor2': [[1, 4], [6, 2]],
             'tensor2_axes': (C, D),
             'expected_output': 57,
@@ -270,7 +270,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     a = ng.constant(np.ones(axes_a.lengths), axes=axes_a)
     flat_a = ng.flatten_at(a, 2)
 
-    axes_b = ng.make_axes([C.get_dual(), K])
+    axes_b = ng.make_axes([C, K])
     b = ng.constant(np.ones(axes_b.lengths), axes=axes_b)
 
     result = ng.dot(b, flat_a)

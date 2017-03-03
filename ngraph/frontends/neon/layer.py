@@ -45,6 +45,19 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
+def inference_mode(*args, **kwargs):
+    """
+    cachetools.cached key function to ensure that caching takes into account the current value of
+    Layer.inference_mode.
+    """
+
+    # If the value is provided, just use that instead of the global flag.
+    if "inference_mode" not in kwargs:
+        kwargs["inference_mode"] = Layer.inference_mode
+
+    return keys.hashkey(*args, **kwargs)
+
+
 class Layer(object):
     inference_mode = False
 
@@ -97,15 +110,18 @@ class Linear(Layer):
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
-        if self.W is None:
-            out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
-            in_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()
-            out_axes -= out_axes.recurrent_axes()
+        # interpret axes
+        in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axis()
+        out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
+        temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
+                                      for axis in out_feature_axes])
+        out_axes = out_feature_axes + (in_obj.axes - in_feature_axes)
+        w_axes = temp_out_axes + in_feature_axes
 
-            w_axes = out_axes + [axis - 1 for axis in in_axes]
-            self.W = ng.variable(axes=w_axes, initial_value=self.init).named('LinW')
+        # init weights
+        self.W = ng.variable(axes=w_axes, initial_value=self.init).named('LinW')
 
-        return ng.dot(self.W, in_obj)
+        return ng.cast_role(ng.dot(self.W, in_obj), out_axes)
 
 
 class LookupTable(Layer):
@@ -164,8 +180,8 @@ class LookupTable(Layer):
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
-        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
-        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
+        self.lut_o_axes = in_axes | ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) | in_axes[0].axes
 
         if self.W is None:
             self.W = ng.variable(axes=self.w_axes,
@@ -225,7 +241,7 @@ class ConvBase(Layer):
         if self.f_axes is None:
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
-                self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
+                self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init).named('convwt')
 
         if self.o_axes is None:
@@ -243,7 +259,7 @@ class ConvBase(Layer):
                            cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
@@ -334,7 +350,8 @@ class PoolBase(Layer):
                 output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
+
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
 
@@ -454,11 +471,12 @@ class BatchNorm(Layer):
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
-            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+            red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
         if self.reduce_recurrent:
-            if len(in_axes.recurrent_axes()) != 0:
-                red_axes += in_axes.recurrent_axes()
-        red_axes += in_obj.axes.batch_axes()
+            if in_axes.recurrent_axis() is not None:
+                red_axes |= in_axes.recurrent_axis()
+        red_axes |= in_obj.axes.batch_axes()
+        print("Reduction axes: {}".format(red_axes))
         out_axes = in_axes - red_axes
 
         self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
@@ -564,33 +582,47 @@ class Recurrent(Layer):
         self.batch_norm = batch_norm
 
     def interpret_axes(self, in_obj, init_state):
-        in_axes = in_obj.axes
+        self.in_axes = in_obj.axes
 
-        self.recurrent_axis = in_axes.recurrent_axes()[0]
+        self.recurrent_axis = self.in_axes.recurrent_axis()
+        self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
 
         # if init state is given, use that as hidden axes
         if init_state:
-            self.hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
-            if sum(self.hidden_axes.full_lengths) != self.nout:
+            self.out_feature_axes = (init_state.axes.sample_axes() -
+                                     init_state.axes.recurrent_axis())
+            if sum(self.out_feature_axes.full_lengths) != self.nout:
                 raise ValueError("Length of init_state must be the same as nout: " +
-                                 "{} != {}".format(sum(self.hidden_axes.full_lengths),
+                                 "{} != {}".format(sum(self.out_feature_axes.full_lengths),
                                                    self.nout))
         else:
-            self.hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
+            self.out_feature_axes = ng.make_axes([ng.make_axis(self.nout)])
+            if len(self.in_feature_axes) == 1:
+                self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        self.hidden_state_axes = self.hidden_axes + in_axes.batch_axes()
-        self.recurrent_axis_idx = len(self.hidden_axes)
+        self.out_axes = self.out_feature_axes | self.in_axes.batch_axis()
+        self.recurrent_axis_idx = len(self.out_feature_axes)
 
-        # using the axes to create weight matrices
-        self.w_in_axes = self.hidden_axes + [axis - 1 for axis in (in_axes.sample_axes()
-                                                                   - self.recurrent_axis)]
+        # create temporary out axes which the dot ops will output.  These
+        # temporary axes will be immediately cast to self.out_axes
+        # afterwards.  We can't go directly to self.out_axes from the DotOp
+        # because sometimes the self.out_axes intersect with the self.in_axes
+        # and so the weight matrix would have a duplicate Axis which isn't
+        # allowed.
+        temp_out_axes = ng.make_axes([
+            ng.make_axis(axis.length, name=axis.name + '_out')
+            for axis in self.out_feature_axes
+        ])
 
-        self.w_re_axes = self.hidden_axes + [axis - 1 for axis in self.hidden_axes]
+        # determine the shape of the weight matrices
+        self.w_in_axes = temp_out_axes + self.in_feature_axes
+        self.w_re_axes = temp_out_axes + self.out_feature_axes
 
     def _step(self, h_ff, states):
+        # h_ff = ng.cast_role(h_ff, self.out_axes)
+        # h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         h_rec = ng.dot(self.W_recur, states)
-        h = self.activation(h_rec + h_ff + self.b)
-        return h
+        return self.activation(h_rec + h_ff + self.b)
 
     @ng.with_op_metadata
     @cached({}, key=Layer.inference_mode_key)
@@ -617,16 +649,16 @@ class Recurrent(Layer):
         else:
             if self.reset_cells:
                 self.h_init = ng.constant(
-                    const=0, axes=self.hidden_state_axes).named('h_init')
+                    const=0, axes=self.out_axes).named('h_init')
             else:
                 self.h_init = ng.variable(
-                    initial_value=0, axes=self.hidden_state_axes).named('h_init')
+                    initial_value=0, axes=self.out_axes).named('h_init')
 
         self.W_input = ng.variable(axes=self.w_in_axes,
                                    initial_value=self.init).named("W_in")
         self.W_recur = ng.variable(axes=self.w_re_axes,
                                    initial_value=self.init_inner).named("W_re")
-        self.b = ng.variable(axes=self.hidden_axes, initial_value=0).named("bias")
+        self.b = ng.variable(axes=self.out_feature_axes, initial_value=0).named("bias")
 
         h = self.h_init
         h_list = []
@@ -748,7 +780,7 @@ class BiRNN(Layer):
         elif self.concat_out:
             ax_list = list()
             for out in [fwd_out, bwd_out]:
-                axes = out.axes.sample_axes() - out.axes.recurrent_axes()
+                axes = out.axes.sample_axes() - out.axes.recurrent_axis()
                 if len(axes) == 1:
                     ax_list.append(axes[0])
                 else:
@@ -809,16 +841,19 @@ class LSTM(Recurrent):
     def _step(self, h_ff, states):
         h_state = states[0]
         c_state = states[1]
-
-        ifog = {k: h_ff[k] + ng.dot(self.W_recur[k], h_state)
-                + self.b[k] for k in self.metadata['gates']}
-
+        ifog = {
+            k: sum([ng.cast_role(h_ff[k], self.out_axes),
+                    ng.cast_role(ng.dot(self.W_recur[k], h_state), self.out_axes),
+                    self.b[k],
+            ]) for k in self.metadata['gates']
+        }
         ifog_act = {k: self.activation(ifog[k]) if k is 'g'
                     else self.gate_activation(ifog[k]) for k in self.metadata['gates']}
 
         c = ifog_act['f'] * c_state + ifog_act['i'] * ifog_act['g']
         # c_prev is the state before applying activation
         h = ifog_act['o'] * self.activation(c)
+        h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
     @ng.with_op_metadata
@@ -852,14 +887,14 @@ class LSTM(Recurrent):
         else:
             if self.reset_cells:
                 self.h_init = ng.temporary(initial_value=0,
-                                           axes=self.hidden_state_axes).named('h_init')
+                                           axes=self.out_axes).named('h_init')
                 self.c_init = ng.temporary(initial_value=0,
-                                           axes=self.hidden_state_axes).named('c_init')
+                                           axes=self.out_axes).named('c_init')
             else:
                 self.h_init = ng.variable(initial_value=0,
-                                          axes=self.hidden_state_axes).named('h_init')
+                                          axes=self.out_axes).named('h_init')
                 self.c_init = ng.variable(initial_value=0,
-                                          axes=self.hidden_state_axes).named('c_init')
+                                          axes=self.out_axes).named('c_init')
 
         # params are dictionary for i, f, o, g
         self.W_input = {k: ng.variable(axes=self.w_in_axes,
@@ -870,7 +905,7 @@ class LSTM(Recurrent):
                                        initial_value=self.init_inner).
                         named("W_re_{}".format(k)) for k in self.metadata['gates']}
 
-        self.b = {k: ng.variable(axes=self.hidden_axes,
+        self.b = {k: ng.variable(axes=self.out_feature_axes,
                                  initial_value=0).
                   named("bias_{}".format(k)) for k in self.metadata['gates']}
 

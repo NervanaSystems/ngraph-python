@@ -6,6 +6,9 @@
 *.prm
 *.so
 *.swp
+*.swo
+*.swn
+*.swm
 .DS_Store
 neon/version.py
 *@eaDir
@@ -64,3 +67,7 @@ doc/source/Graph_Introduction.rst
 doc/source/Logistic_Regression_Part_1.rst
 doc/source/Logistic_Regression_Part_2.rst
 doc/source/walk_throughs.rst
+
+# docker
+contrib/docker/.build*
+contrib/docker/autoflex

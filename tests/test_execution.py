@@ -18,7 +18,6 @@ from builtins import range
 import numpy as np
 import pytest
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
@@ -975,9 +974,8 @@ def test_elementwise_fp16_out(transformer_factory):
 
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
-    t = ngt.make_transformer()
-    t.initialize()
-    t.close()
+    with ExecutorFactory() as ex:
+        ex.transformer.initialize()
 
 
 def test_tensor_derivative():
