@@ -52,8 +52,17 @@ class BinaryLayoutConstraint(with_metaclass(abc.ABCMeta, object)):
     @abc.abstractmethod
     def get_cost(self, arg_layout, op_layout):
         """
-        If the constraint is fully satisfied, this should return 0. Otherwise this will
-        return the cost of violating the constraint given two values.
+        If no layout transform is needed, this should return 0. Otherwise it returns a cost
+        value for the layout transform required.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        """
+        If no layout transform is needed, this should return None. Otherwise it returns an op
+        which can replace the arg in the graph to satisfy the layout constraint. An example
+        would be a device specific dimshuffle of the arg.
         """
         pass
 
@@ -186,6 +195,11 @@ class AssignLayouts(GraphPass):
         return cost
 
     def branch_and_bound(self, cur_assignment, unassigned, cost, min_assignment, upper_bound):
+        """
+        Uses depth first branch and bound to find the minimum cost layout assignment.
+        This is not useful in most cases, because it is O(d^n) where d is domain size (layouts
+        per op) and n is number of nodes. Even for a small model like MNIST MLP it takes hours.
+        """
         # If all ops are assigned, this is the new minimum cost assignment
         if not unassigned:
             return (cur_assignment.copy(), cost)
@@ -224,21 +238,75 @@ class AssignLayouts(GraphPass):
         return self.branch_and_bound(cur_assignment, unassigned, 0, min_assignment, upper_bound)
 
     def do_pass(self, ops, transformer):
-        # Initialize data needed for WCSP
+        # Initialize data needed for layout optimization
         self.domains = self.domain_pass.domains
         self.unary_constraints = self.constraint_pass.unary_constraints
         self.binary_constraints = self.constraint_pass.binary_constraints
         self.users = self.constraint_pass.users
 
         # Use default layouts to compute upper bound for cost
-        # TODO: remove because this should be the first found assignment anyways
+        # TODO: implement heuristic optimizer(s)
         self.min_assignment, upper_bound = self.compute_default_cost()
-
-        import pdb; pdb.set_trace()
-
-        # Run branch and bound algorithm to look for better layout assignments
-        self.min_assignment, cost = self.minimize_cost(self.min_assignment, upper_bound)
 
         # Assign layouts to each tensor
         for op in self.min_assignment:
             op.metadata["layout"] = self.min_assignment[op]
+
+
+class AddLayoutConversions(PeepholeGraphPass):
+    """
+    Inserts layout conversions into the graph as needed based on assigned layouts
+    """
+    def __init__(self, assign_pass):
+        self.assign_pass = assign_pass
+        self.binary_constraints = None
+
+    def do_pass(self, ops, transformer):
+        self.binary_constraints = self.assign_pass.binary_constraints
+        super(AddLayoutConversions, self).do_pass(ops, transformer)
+
+    def get_device_op(self, op):
+        if op.is_device_op:
+            return op
+
+        for arg in op.args:
+            dev_op = self.get_device_op(arg)
+            if dev_op:
+                return dev_op
+
+        return None
+
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op):
+        if "layout" in op.metadata:
+            new_args = []
+            for arg in op.args:
+                b_constraint = None
+                dev_op = self.get_device_op(arg)
+                orig_arg_op = None
+                if dev_op is None:
+                    new_args.append(arg)
+                    continue
+
+                # Find matching constraint
+                for arg_op, constraint in self.binary_constraints[op]:
+                    if arg_op.forwarded is dev_op:
+                        b_constraint = constraint
+                        orig_arg_op = arg_op
+                        break
+
+                # Get layout conversion ops for this arg
+                if b_constraint is not None:
+                    new_args.append(b_constraint.get_layout_transform(orig_arg_op.metadata["layout"],
+                                                                      op.metadata["layout"],
+                                                                      arg))
+                else:
+                    new_args.append(arg)
+
+            # Replace op if any inputs need to be transformed
+            if any(a is not b for a,b in zip(new_args, list(op.args))):
+                op_type = type(op)
+                new_op = op_type(*new_args)
+
+                self.replace_op(op, new_op)
+                self.binary_constraints[new_op] = self.binary_constraints[op]

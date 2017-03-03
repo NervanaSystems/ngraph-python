@@ -47,7 +47,7 @@ from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
-    AssignLayouts
+    AssignLayouts, AddLayoutConversions
 from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
@@ -1003,9 +1003,10 @@ class GPUTransformer(Transformer):
         layout_domain_pass = GenerateLayoutDomains(self)
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
+        layout_convert_pass = AddLayoutConversions(layout_assign_pass)
         self.graph_passes = [SimplePrune(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
-                             VizPass(show_metadata="layout")]
+                             layout_convert_pass, VizPass(show_metadata="layout")]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
