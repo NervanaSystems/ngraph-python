@@ -121,7 +121,7 @@ def test_batchnorm_bprop(batch_size, input_size, epsilon, beta, gamma):
     with ExecutorFactory() as ex:
         bprop_function = ex.executor(bprops, input_placeholder, delta_placeholder)
         x = rng.uniform(0, 1, axes)
-        delta = rng.uniform(0, 1, axes)
+        delta = rng.uniform(-.1, .1, axes)
 
         dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference_bprop(delta, x, gamma=gamma,
                                                                    epsilon=epsilon)
@@ -239,8 +239,8 @@ def test_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, sequence
     # Create weight matrices
     w_rec_axes = ng.make_axes([H, H2])
     w_in_axes = ng.make_axes([H, F])
-    hidden_weights = GlorotInit()(w_rec_axes)
-    input_weights = GlorotInit()(w_in_axes)
+    hidden_weights = rng.uniform(-.1, .1, w_rec_axes)
+    input_weights = rng.uniform(-.1, .1, w_in_axes)
     identity_weights = np.eye(hidden_size).astype("float32")
 
     # Generate an RNN with batch norm turned on
@@ -331,8 +331,8 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
     # Create weight matrices
     w_rec_axes = ng.make_axes([H, H2])
     w_in_axes = ng.make_axes([H, F])
-    hidden_weights = GlorotInit()(w_rec_axes)
-    input_weights = GlorotInit()(w_in_axes)
+    hidden_weights = rng.uniform(-.1, .1, w_rec_axes)
+    input_weights = rng.uniform(-.1, .1, w_in_axes)
     identity_weights = np.eye(hidden_size).astype("float32")
 
     # Generate an RNN with batch norm turned on

@@ -475,8 +475,7 @@ class BatchNorm(Layer):
         if self.reduce_recurrent:
             if in_axes.recurrent_axis() is not None:
                 red_axes |= in_axes.recurrent_axis()
-        red_axes |= in_obj.axes.batch_axes()
-        print("Reduction axes: {}".format(red_axes))
+        red_axes |= in_obj.axes.batch_axis()
         out_axes = in_axes - red_axes
 
         self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
@@ -489,11 +488,15 @@ class BatchNorm(Layer):
         if Layer.inference_mode:
             return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
         else:
-            return ng.sequential([
+            output = ng.sequential([
                 ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
                 ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
                 self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
             ])
+            # TODO: sequential no longer forwards deriv by default to the value_tensor.
+            # Perhaps it should
+            output.deriv_handler = output.value_tensor
+            return output
 
     def set_tuning_iteration(self, batch_index):
         # Following tuning, one must divide self.gvar by rho in order to debias
@@ -619,9 +622,8 @@ class Recurrent(Layer):
         self.w_re_axes = temp_out_axes + self.out_feature_axes
 
     def _step(self, h_ff, states):
-        # h_ff = ng.cast_role(h_ff, self.out_axes)
-        # h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
-        h_rec = ng.dot(self.W_recur, states)
+        h_ff = ng.cast_role(h_ff, self.out_axes)
+        h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
     @ng.with_op_metadata
