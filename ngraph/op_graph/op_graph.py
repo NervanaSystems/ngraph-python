@@ -1376,7 +1376,12 @@ def sequential(ops=None):
         ops: Sequence of ops to compute.
 
     """
-    return SequentialOp(ops)
+    sequential_op = SequentialOp(ops)
+    sequential_op.deriv_handler = sequential_op.value_tensor
+    # Note: Can't return value_tensor here because we may need some ops to execute
+    # after it. For example,
+    # op_1, op_2, op_3, op_1 has value of op_1, but op_1 won't force op_2 and op_3 to run.
+    return sequential_op
 
 
 class TensorValueOp(ValueOp):
