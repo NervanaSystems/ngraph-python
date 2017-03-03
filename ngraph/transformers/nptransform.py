@@ -908,5 +908,6 @@ class NumPyTransformer(Transformer):
             devlist[buf_index] = np.empty_like(hb)
         devlist[buf_index][:] = hb
 
+
 set_transformer_factory(
     make_transformer_factory(NumPyTransformer.transformer_name))

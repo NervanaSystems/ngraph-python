@@ -330,6 +330,7 @@ def test_reciprocal_derivative(transformer_factory):
 
     check_derivative(rec_u, p_u, delta, u, atol=1e-2, rtol=1e-2)
 
+
 ELEMENTWISE_BINARY_OPS = [
     (np.add, ng.add),
     (np.subtract, ng.subtract),

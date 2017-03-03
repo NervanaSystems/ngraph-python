@@ -5,9 +5,6 @@ WORKDIR /root
 RUN apt-get install -y python-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
-RUN git clone https://github.com/NervanaSystems/neon.git
-WORKDIR neon
-RUN make sysinstall
 
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
