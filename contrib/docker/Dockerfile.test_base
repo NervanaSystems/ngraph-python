@@ -17,3 +17,5 @@ RUN pip install -r gpu_requirements.txt
 # temporary solution to get things working quickly.
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
+
+ADD tests/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
