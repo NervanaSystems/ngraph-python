@@ -664,10 +664,26 @@ class AssignOp(Op):
     """
 
     def __init__(self, tensor, val, force=False, **kwargs):
-        tensor, val = as_ops((tensor, val))
         if not force and tensor.is_constant:
             raise ValueError("{} is not assignable.".format(tensor))
+
+        # convert val to op
+        # TODO: requires explicit broadcast in future
+        if not isinstance(val, Op):
+            val = as_op(val)
+            if len(val.axes) == len(tensor.axes):
+                val = cast_axes(val, tensor.axes)
+
+        # automatic broadcast
+        # currently requires val's axes to be a subset of tensor's axes
+        # TODO: requires explicit broadcast in future
+        if len(val.axes - tensor.axes) > 0:
+            raise ValueError(
+                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "val's axes should be subset of tensor's axes" %
+                (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)
+
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
 
@@ -1976,20 +1992,6 @@ class AssignableTensorOp(TensorOp):
             # convert callable initial value
             if callable(initial_value):
                 initial_value = initial_value(self.axes)
-
-            # convert initial_value to op
-            initial_value = as_op(initial_value)
-
-            # only valid if initial value be scalar or has the same shape
-            if len(initial_value.axes) == len(self.axes):
-                # cast intitial_value's axes to match
-                if initial_value.axes != self.axes:
-                    initial_value = cast_axes(initial_value, self.axes)
-            elif len(initial_value.axes) != 0:
-                raise ValueError("initial_value has axes %s, the op has axes %s,"
-                                 "they should have the same shape or "
-                                 "initial_value is a scalar" %
-                                 (initial_value.axes, self.axes))
 
             # create assign op
             self.add_initializer(assign(self, initial_value))
