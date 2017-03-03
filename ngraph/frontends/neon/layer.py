@@ -478,8 +478,10 @@ class BatchNorm(Layer):
         red_axes |= in_obj.axes.batch_axis()
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=self.init_beta).named('beta')
+        self.gamma = self.gamma or ng.variable(axes=out_axes,
+                                               initial_value=self.init_gamma).named('gamma')
+        self.beta = self.beta or ng.variable(axes=out_axes,
+                                             initial_value=self.init_beta).named('beta')
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
         self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
@@ -847,7 +849,7 @@ class LSTM(Recurrent):
             k: sum([ng.cast_role(h_ff[k], self.out_axes),
                     ng.cast_role(ng.dot(self.W_recur[k], h_state), self.out_axes),
                     self.b[k],
-            ]) for k in self.metadata['gates']
+                    ]) for k in self.metadata['gates']
         }
         ifog_act = {k: self.activation(ifog[k]) if k is 'g'
                     else self.gate_activation(ifog[k]) for k in self.metadata['gates']}

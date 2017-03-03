@@ -18,7 +18,7 @@ Test of the batchnorm layer
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh, GlorotInit
+from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
@@ -48,12 +48,15 @@ def batch_norm_reference_bprop(delta, x, gamma=1, epsilon=1e-3, axis=1):
     xhat = (x - xmean) / np.sqrt(xvar + epsilon)
 
     # Get overall size of reduction axes
-    m = x.shape[axis] if not isinstance(axis, tuple) else np.float32(np.prod([x.shape[ii] for ii in axis]))
+    if not isinstance(axis, tuple):
+        m = x.shape[axis]
+    else:
+        m = np.prod([x.shape[ii] for ii in axis])
 
     # Compute derivatives
     dgamma = np.sum(delta * xhat, axis=axis, keepdims=True)
     dbeta = np.sum(delta, axis=axis, keepdims=True)
-    dx = gamma / np.sqrt(xvar + epsilon) * (delta - (xhat * dgamma + dbeta) / m)  # Possibly gamma only on delta
+    dx = gamma / np.sqrt(xvar + epsilon) * (delta - (xhat * dgamma + dbeta) / m)
 
     return dx, dgamma.squeeze(), dbeta.squeeze()
 
@@ -199,7 +202,8 @@ def test_recurrent_batchnorm_fprop(RNN, batch_size, input_size, hidden_size, seq
             weighted_input = np.dot(input_weights, input_value.transpose([1, 0, 2]))
 
             # Get reference batch normed input
-            normed_input, gmean_ref, gvar_ref = batch_norm_reference_fprop(weighted_input, gmean_ref,
+            normed_input, gmean_ref, gvar_ref = batch_norm_reference_fprop(weighted_input,
+                                                                           gmean_ref,
                                                                            gvar_ref, axis=(1, 2))
 
             # Get reference RNN output
@@ -357,8 +361,6 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
     bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
 
     # Get reference graphs
-
-
     def filter_ancestors(op, func):
         filtered_ops = list()
         for anc_op in ng.Op.ordered_ops([op]):
@@ -366,7 +368,6 @@ def test_gated_recurrent_batchnorm_bprop(batch_size, input_size, hidden_size, se
                 filtered_ops.append(anc_op)
 
         return filtered_ops
-
 
     filter_func = lambda op: (isinstance(op, ng.DotOp) and
                               any(arg.tensor == reference_rnn.W_input[k] for arg in op.args))
