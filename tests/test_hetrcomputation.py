@@ -206,6 +206,31 @@ def test_simple_graph():
                         result_expected=[(11, 21, 31)],
                         placeholder=x, ops=OrderedSet([x_plus_one]))
 
+    # Build the graph
+    x = ng.placeholder(())
+    with ng.metadata(device_id='1'):
+        x_plus_one = x + 1
+
+    check_result_values(input_vector=[10, 20, 30],
+                        result_expected=[(11, 21, 31)],
+                        placeholder=x, ops=OrderedSet([x_plus_one]))
+
+    # Build the graph
+    x = ng.placeholder(())
+    with ng.metadata(device_id='1'):
+        x_plus_one = x + 1
+    x_plus_two = x_plus_one + 1
+
+    check_result_values(input_vector=[10, 20, 30],
+                        result_expected=[(12, 22, 32)],
+                        placeholder=x, ops=OrderedSet([x_plus_two]))
+
+
+def test_multiple_computations():
+    # Build the graph
+    with ng.metadata(device_id='1'):
+        x = ng.placeholder(())
+
     x_plus_one = x + 1
     x_plus_two = x + 2
     x_mul_three = x * 3
