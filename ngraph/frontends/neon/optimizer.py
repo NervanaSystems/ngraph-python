@@ -238,7 +238,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
     def __call__(self, cost_func):
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axes()[0].length
+        batch_size = cost_func.axes.batch_axis().length
         grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
         scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
         for variable, grad in zip(batch_cost.variables(), grads):
@@ -311,7 +311,7 @@ class RMSProp(LearningRateOptimizer):
     def __call__(self, cost_func):
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axes()[0].length
+        batch_size = cost_func.axes.batch_axis().length
 
         grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
         scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)

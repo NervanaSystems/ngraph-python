@@ -319,23 +319,29 @@ def slice_axis(axis, s):
     return new_axis
 
 
-def no_duplicates(arr):
+def duplicates(arr):
     """
-    Returns whether there are duplicates in a list. The elements in the array
-    should be hashable.
+    Returns a list of Axis objects which have duplicate names in arr
 
     Arguments:
-        arr: The list to check.
+        arr: The iterable of Axis objects to check for duplicates in.
 
     Returns:
-        bool: True if there are no duplicates, False if there are.
+        list of Axis: duplicate Axis found in arr
     """
-    s = set()
+    # group axes by name
+    axes_by_name = collections.defaultdict(list)
     for x in arr:
-        if x in s:
-            return False
-        s.add(x)
-    return True
+        axes_by_name[x.name].append(x)
+
+    # find all names which are used by more than 1 axis, and add those axes to
+    # the list of duplicates
+    duplicates = []
+    for name, axes in axes_by_name.items():
+        if len(axes) > 1:
+            duplicates.extend(axes)
+
+    return duplicates
 
 
 def with_args_as_axes(f):
@@ -411,9 +417,10 @@ class Axes(object):
                     found_type=type(x),
                 ))
 
-        if not no_duplicates(axes):
+        if duplicates(axes):
             raise ValueError(
-                'The axes labels of a tensor cannot contain duplicates.'
+                'The axes labels of a tensor cannot contain duplicates.  Found: {}'
+                .format(str(duplicates(axes)))
             )
         self._axes = tuple(axes)
 
@@ -450,9 +457,23 @@ class Axes(object):
     def batch_axes(self):
         """
         Returns:
-            The Axes subset that are batch axes.
+            The tensor's batch Axis wrapped in an Axes object if there is one
+            on this tensor, otherwise returns None
         """
-        return Axes(axis for axis in self if axis.is_batch)
+        batch_axis = self.batch_axis()
+        if batch_axis:
+            return Axes([batch_axis])
+        else:
+            return None
+
+    def batch_axis(self):
+        """
+        Returns:
+            The tensor's batch Axis or None if there isn't one.
+        """
+        for axis in self:
+            if axis.is_batch:
+                return axis
 
     def sample_axes(self):
         """
@@ -461,12 +482,14 @@ class Axes(object):
         """
         return Axes(axis for axis in self if not axis.is_batch)
 
-    def recurrent_axes(self):
+    def recurrent_axis(self):
         """
         Returns:
-            The Axes subset that are recurrent axes.
+            The tensor's recurrent Axis or None if there isn't one.
         """
-        return Axes(axis for axis in self if axis.is_recurrent)
+        for axis in self:
+            if axis.is_recurrent:
+                return axis
 
     def role_axes(self, role):
         """

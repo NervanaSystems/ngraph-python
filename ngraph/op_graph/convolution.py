@@ -68,19 +68,6 @@ class ConvolutionOp(TensorOp):
                     'Expected parameter {key} not present in convparams dict.'
                 ).format(key=k))
 
-        batch_axes = inputs.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Input must have one batch axis.  "
-                "Found {n_batch_axes} batch axes: {batch_axes} "
-                "Found {n_sample_axes} sample axes: {sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(inputs.axes.sample_axes()),
-                sample_axes=inputs.axes.sample_axes(),
-            ))
-
         self.conv_params = conv_params
         self.index = ConvolutionOp._index
         ConvolutionOp._index += 1
