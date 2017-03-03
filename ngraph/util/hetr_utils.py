@@ -1,6 +1,6 @@
 from __future__ import division
 from ngraph.op_graph.op_graph import make_axes, make_axis
-from ngraph.op_graph.communication import Receiver
+from ngraph.factory.comm_nodes import ReceiverOp
 from ngraph.util.ordered import OrderedSet
 
 
@@ -108,7 +108,7 @@ def comm_path_exists(fro, to):
         v = visit.pop()
         if v == to:
             return True
-        if isinstance(v, Receiver):
+        if isinstance(v, ReceiverOp):
             visit.add(v.send_node())
         else:
             visit.update(v.args)
@@ -123,7 +123,7 @@ def find_recvs(fro):
     visit.add(fro)
     while visit:
         v = visit.pop()
-        if isinstance(v, Receiver):
+        if isinstance(v, ReceiverOp):
             recvs.add(v)
             visit.add(v.send_node())
         else:
