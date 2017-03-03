@@ -1972,9 +1972,26 @@ class AssignableTensorOp(TensorOp):
         super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
-        if callable(initial_value):
-            self.add_initializer(assign(self, initial_value(self.axes)))
-        elif initial_value is not None:
+        if initial_value is not None:
+            # convert callable initial value
+            if callable(initial_value):
+                initial_value = initial_value(self.axes)
+
+            # convert initial_value to op
+            initial_value = as_op(initial_value)
+
+            # only valid if initial value be scalar or has the same shape
+            if len(initial_value.axes) == len(self.axes):
+                # cast intitial_value's axes to match
+                if initial_value.axes != self.axes:
+                    initial_value = cast_axes(initial_value, self.axes)
+            elif len(initial_value.axes) != 0:
+                raise ValueError("initial_value has axes %s, the op has axes %s,"
+                                 "they should have the same shape or "
+                                 "initial_value is a scalar" %
+                                 (initial_value.axes, self.axes))
+
+            # create assign op
             self.add_initializer(assign(self, initial_value))
 
     @property
@@ -2050,7 +2067,7 @@ def constant(const, axes=None, dtype=None):
     if axes and len(axes) == len(nptensor.shape):
         nptensor_axes = axes
     else:
-        nptensor_axes = make_axes([make_axis(l, match_on_length=True) for l in nptensor.shape])
+        nptensor_axes = make_axes([make_axis(l) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
                              trainable=False, graph_label_type=graph_label_type,
