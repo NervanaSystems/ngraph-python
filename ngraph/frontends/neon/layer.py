@@ -734,11 +734,16 @@ class BiRNN(Layer):
         self.sum_out = sum_out
         self.concat_out = concat_out
         self.nout = nout
+        if batch_norm is not None:
+            fwd_batch_norm = copy.deepcopy(batch_norm)
+            bwd_batch_norm = copy.deepcopy(batch_norm)
+        else:
+            fwd_batch_norm = bwd_batch_norm = None
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
-                                 batch_norm=batch_norm, reset_cells=reset_cells,
+                                 batch_norm=fwd_batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence)
         self.bwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
-                                 batch_norm=batch_norm, reset_cells=reset_cells,
+                                 batch_norm=bwd_batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
     @ng.with_op_metadata
