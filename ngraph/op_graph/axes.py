@@ -148,7 +148,7 @@ class Axis(object):
 
         if name is None:
             # generate name for axis if None was provided
-            name = 'Axis_' + str(type(self).__name_counter)
+            name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
             type(self).__name_counter += 1
 
         self.name = name
@@ -871,14 +871,26 @@ class FlattenedAxis(Axis):
     A FlattenedAxis has length which is the product of the lengths of all
     Axis in the axes.  The original Axes object is stored so that we can later
     unflatten this Axis back to its original component Axis.
+
+    Notes: since we allows Axis to have duplicated names globally, NameableValue
+    is not used here.
     """
 
+    __name_counter = 0
+
     def __init__(self, axes, **kwargs):
+        # get length
         axes = Axes(axes)
         if len(axes) == 1 and axes[0].is_flattened:
             pass
         length = reduce(operator.mul, axes.lengths, 1)
-        super(FlattenedAxis, self).__init__(length=length, **kwargs)
+
+        # set name
+        name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
+        type(self).__name_counter += 1
+
+        # parent constructor
+        super(FlattenedAxis, self).__init__(length=length, name=name, **kwargs)
         self.__axes = axes
 
     @property
