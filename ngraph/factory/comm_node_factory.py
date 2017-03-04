@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, NumpyQueueSendOp, \
+from .comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, NumpyQueueSendOp, \
     NumpyQueueRecvOp, NumpyQueueGatherSendOp, NumpyQueueGatherRecvOp, \
     NumpyQueueScatterSendOp, NumpyQueueScatterRecvOp
 from collections import defaultdict
