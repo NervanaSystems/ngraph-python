@@ -2082,69 +2082,6 @@ def constant(const, axes=None, dtype=None):
     return val
 
 
-def is_constant(value):
-    """
-    Test an Op to see if it is a constant.
-
-    Args:
-        value: An Op
-
-    Returns: True if value is a constant.
-
-    """
-    return isinstance(value, AssignableTensorOp) and value.is_constant
-
-
-def is_constant_scalar(value):
-    """
-    Tests an Op to see if it is a constant scalar.
-
-    Args:
-        value: An Op.
-
-    Returns: True if value is a constant scalar.
-
-    """
-    return value.is_constant and value.is_scalar
-
-
-def constant_value(value):
-    """
-    Returns the constant value of an Op.
-
-    Args:
-        value (TensorOp): A constant op.
-
-    Returns: The constant value.
-
-    """
-    if not is_constant(value):
-        raise ValueError()
-    return value.const
-
-
-def constant_storage(axes, dtype=None, initial_value=None):
-    """
-    A tensor that is supposed to remain constant.
-
-    Args:
-        axes (Axes): The axes of the constant storage.
-        dtype (optional): The dtype of the storage.
-        name (String, optional): A name for the storage.
-        initial_value: A host constant or callable. If a callable, will be called
-            to produce the value.
-
-
-    Returns:
-        AssignableTensorOp: The constant storage.
-    """
-
-    return AssignableTensorOp(graph_label_type="constant",
-                              constant=True, persistent=True, trainable=False,
-                              axes=axes, dtype=dtype,
-                              initial_value=initial_value)
-
-
 def placeholder(axes, dtype=None, initial_value=None):
     """
     A persistent tensor to be initialized from the CPU.
