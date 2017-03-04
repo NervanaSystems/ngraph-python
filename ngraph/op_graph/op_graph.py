@@ -706,17 +706,6 @@ class AssignOneDOp(Op):
         return self.args[0].states_read
 
 
-class AssignTwoDOp(AssignOneDOp):
-    """
-    Assign a value to a 2d tensor
-
-    Arguments:
-        tensor (AssignableTensorOp): The value to assign to.
-        value (TensorOp): The value.
-    """
-    pass
-
-
 def assign(lvalue, rvalue):
     """
     Assignment; lvalue <= rvalue
