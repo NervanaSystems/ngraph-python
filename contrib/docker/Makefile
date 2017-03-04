@@ -13,6 +13,7 @@ NGRAPH_BASE_CPU_IMG := $(shell docker images ngraph_base_cpu)
 NGRAPH_TEST_CPU_IMG := $(shell docker images ngraph_test_cpu)
 NGRAPH_MKLDNN_IMG := $(shell docker images ngraph_mkldnn_test)
 NGRAPH_CAFFE2_IMG := $(shell docker images ngraph_caffe2)
+NGRAPH_MXNET_IMG := $(shell docker images ngraph_mxnet)
 
 TEST_OPTS := --timeout=300
 UNIT_TEST_DIRS := tests/
@@ -57,6 +58,7 @@ expand_dockerfile_templates:
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.test_cpu > ${BUILD_DIR}/Dockerfile.test_cpu
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.caffe2 > ${BUILD_DIR}/Dockerfile.caffe2
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mxnet > ${BUILD_DIR}/Dockerfile.mxnet
 
 fallback_cuda_version: expand_dockerfile_templates
 # if has cuda && v8.0 cuda toolkit -> use nvidia 7.5 base image
@@ -66,6 +68,7 @@ endif
 
 clean:
 	rm -rf ${DIR}/contrib/docker/autoflex
+	rm -rf ${DIR}/contrib/docker/ngraph-mxnet
 	rm -f ${DIR}/contrib/docker/.build-*/Dockerfile.* || echo "keep going if files are not present"
 	rmdir ${DIR}/contrib/docker/.build-* || echo "keep going if directory is not present"
 	rm -f ${DIR}/*.xml
@@ -147,6 +150,20 @@ build_caffe2: build_test_base
 	@docker rmi ngraph_caffe2:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
 
+build_mxnet: build_test_base
+	# clone ngraph-mxnet here in this working directory so it can be
+	# ADDed to the docker container. The same as autoflex. We must be
+	# careful to avoid publishing this docker container since it
+	# contains private code in it.
+	rm -rf ${DIR}/contrib/docker/ngraph-mxnet
+	cd ${DIR}/contrib/docker
+	git clone git@github.com:NervanaSystems/ngraph-mxnet.git --recursive
+
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mxnet -t=ngraph_mxnet:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_mxnet:latest || echo "keep going if docker rmi command fails"
+	@docker tag `docker images -q ngraph_mxnet:${BUILD_VERSION}` ngraph_mxnet:latest
+
 build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2
 
 test_all: test test_gpu test_mkldnn test_caffe2
@@ -167,6 +184,12 @@ test_caffe2: build_caffe2
 
 test_caffe2_shell: build_caffe2
 	docker run --rm ${VOLUME} -it ngraph_caffe2:${BUILD_VERSION} /bin/bash
+
+test_mxnet: build_mxnet
+	docker run --privileged=true --rm ${VOLUME} -t ngraph_mxnet:${BUILD_VERSION} make test_mxnet
+
+test_mxnet_shell: build_mxnet
+	docker run --privileged=true --rm ${VOLUME} -it ngraph_mxnet:${BUILD_VERSION} /bin/bash
 
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
@@ -192,4 +215,4 @@ shell: build_dev
 combined_coverage:
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
-all: doc style test test_gpu test_mkldnn test_caffe2
+all: doc style test test_gpu test_mkldnn test_caffe2 test_mxnet

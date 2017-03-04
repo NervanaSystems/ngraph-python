@@ -1,0 +1,49 @@
+FROM ngraph_test_base
+
+# MXNet dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    libatlas-base-dev \
+    libopencv-dev
+
+# Required Python packages
+RUN pip install --upgrade pip && pip install \
+    numpy
+
+# Supported revision of MXNet
+# need to switch to the private git repository to modify codes
+ENV MXNET_CLONE_TAG=master
+ENV MXNET_REV=1fd940e944b88249f0b3ae926df4d1061a89ec9b
+
+# Proxy setting
+ENV http_proxy=http://proxy-chain.intel.com:911
+ENV https_proxy=http://proxy-chain.intel.com:911
+
+# Copy MXNet
+# RUN git clone -b ${MXNET_CLONE_TAG} https://github.com/dmlc/mxnet.git /opt/mxnet --recursive
+WORKDIR /root/ngraph-test
+ADD contrib/docker/ngraph-mxnet /root/ngraph-mxnet
+
+WORKDIR /root/ngraph-mxnet/
+
+# Checkout supported revision
+# RUN git reset --hard ${MXNET_REV}
+
+# Build MXNet core (C++)
+RUN cd /root/ngraph-mxnet && cp ./make/config.mk . && \
+    echo "USE_BLAS=atlas" >>config.mk && \
+    echo "ADD_LDFLAGS += -lopencv_core -lopencv_imgproc" >>config.mk && \
+    make -j$(nproc)
+
+# Install python package for MXNet
+RUN cd python && \
+    sudo python setup.py install
+
+# Go into the ngraph directory
+WORKDIR /root/ngraph-test
+
+# necessary for tests/test_walkthrough.py which requires that ngraph is
+# importable from an entrypoint not local to ngraph.
+ADD . /root/ngraph-test
+RUN pip install -e .
