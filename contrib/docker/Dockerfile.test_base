@@ -19,6 +19,3 @@ ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
 
 ADD tests/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
-
-# make ngraph Makefile happy :-(
-ENV VIRTUAL_ENV='making ngraph makefile happy'
