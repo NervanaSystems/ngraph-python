@@ -16,12 +16,15 @@ import pytest
 import ngraph.transformers as ngt
 from ngraph.flex.names import flex_gpu_transformer_name
 
-from ngraph.testing.error_check import transformer_name
-
 
 def pytest_addoption(parser):
     parser.addoption("--enable_flex", action="store_true",
                      help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
+    parser.addoption("--enable_mkl", action="store_true",
+                     help="Enable and *only* enable CPU MKL transformer.")
+
+def pytest_xdist_node_collection_finished(node, ids):
+    ids.sort()
 
 @pytest.fixture(scope="module",
                 params=ngt.transformer_choices())
@@ -42,6 +45,11 @@ def transformer_factory(request):
                                  "flag for py.test.")
         else:
             pytest.skip('Skip all other transformers since --enable_flex is set.')
+    elif pytest.config.getoption("--enable_mkl"):
+        if transformer_name == "cpu":
+            yield set_and_get_factory(transformer_name)
+        else:
+            pytest.skip('Skip non cpu transformers since --enable_mkl is set.')
     else:
         if transformer_name == flex_gpu_transformer_name:
             pytest.skip('Skip flex test since --enable_flex is not set.')

@@ -81,7 +81,7 @@ def test_lut(transformer_factory, lut_args):
         lut = ng.placeholder(ax_lut)
         idx = ng.placeholder(ax_idx)
         idx_flat = ng.flatten(idx)
-        ax_out = idx_flat.axes + ng.make_axes([F])
+        ax_out = idx_flat.axes | ng.make_axes([F])
 
         # fprop
         lut_out_ng = ng.lookuptable(lut, idx_flat, ax_out, pad_idx=pad_idx)

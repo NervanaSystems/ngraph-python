@@ -1,0 +1,2 @@
+pycuda==2016.1.2
+pynvrtc==7.5

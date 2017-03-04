@@ -429,7 +429,7 @@ class NumPyCodeGenerator(PyGen):
             raise ValueError("Op %s must be an instance of ReductionOp" % op)
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
-        np_axis = tuple([input_axes.index_unique(axis) for axis in reduction_axes])
+        np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @generic_method(Op)
@@ -805,7 +805,6 @@ class NumPyTransformer(Transformer):
 
             # with open("code_{}.py".format(self.name), "w") as f:
             #     f.write(self.code.code)
-            # print(self.code.filename)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']
@@ -841,6 +840,7 @@ class NumPyTransformer(Transformer):
             gather_recv_op = self.gather_recv_nodes[gather_recv_id]
             x_devicetensor = gather_recv_op.value
             x_nparr = x_devicetensor.get(None)
+
             for i in range(len(gather_recv_op.from_id)):
                 q = gather_recv_op.shared_queue_list[i]
                 x = q.get()
@@ -907,6 +907,7 @@ class NumPyTransformer(Transformer):
         if devlist[buf_index] is None:
             devlist[buf_index] = np.empty_like(hb)
         devlist[buf_index][:] = hb
+
 
 set_transformer_factory(
     make_transformer_factory(NumPyTransformer.transformer_name))

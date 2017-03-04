@@ -53,7 +53,7 @@ class ConvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if inputs.axes[0] != filters.axes[0]:
+        if not inputs.axes[0] == filters.axes[0]:
             raise ValueError((
                 'the first axis in input {inputs} and filter {filters} are not the same.'
             ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
@@ -67,19 +67,6 @@ class ConvolutionOp(TensorOp):
                 raise ValueError((
                     'Expected parameter {key} not present in convparams dict.'
                 ).format(key=k))
-
-        batch_axes = inputs.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Input must have one batch axis.  "
-                "Found {n_batch_axes} batch axes: {batch_axes} "
-                "Found {n_sample_axes} sample axes: {sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(inputs.axes.sample_axes()),
-                sample_axes=inputs.axes.sample_axes(),
-            ))
 
         self.conv_params = conv_params
         self.index = ConvolutionOp._index

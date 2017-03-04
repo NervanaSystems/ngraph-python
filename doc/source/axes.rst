@@ -92,37 +92,6 @@ For example, convolution kernels need to know which axes correspond to the chann
 
 The neon frontend relies on several axis roles, specified by its name: ``Height``, ``Width``, ``Depth``, ``Channel``, ``Channelout``, and ``Time``. These roles are primarily used for automatic axes inference. For example, a convolution kernel can examine the input feature maps'``AxisRole`` to determine whether a dimshuffle shall be applied prior to convolution.
 
-DualAxis
-~~~~~~~~
-
-When two tensors are provided to a multi-axis operation, such as ``ng.dot()``, we need to indicate the corresponding axes that should be paired together. We use
-"dual offsets" of +/- 1 to mark which axes should be matched during a multi-axis operation.
-
-For example, if you have two tensors to dot together, other approaches may rely on the user to make sure the right-most axis of the first tensor matches the left-most of the second tensor. (e.g. ``(N x M) dot (M x K) = (N x K)``). Instead we have semantic axis, so we can create two tensors::
-
-  A = ng.placeholder([ax.C, ax.H, ax.W, ax.N])
-  B = ng.placeholder([ax.K, ax.C-1, ax.H-1, ax.W-1])
-
-The ``-1`` offset signifies that during a ``ng.dot(A, B)`` operation, the ``ax.C``, ``ax.H``, ``ax.W`` axes should be matched and cancelled out, leaving the unmatched axes in the result -- a tensor with axes ``[ax.K, ax.N]``.
-
-Here are some more examples of using ``DualAxis`` in dot products that illustrate its properties
-
-  ::
-
-    # 2d dot
-    (H, W - 1) • (W, N) -> (H, N)
-    (H, W) • (W + 1, N) -> (H, N)
-
-    # 4d dot
-    (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
-    (M, C, H, W)  • (C + 1, H + 1, W + 1, N) -> (M, N)
-
-    # swapping the order of the axes is allowed
-    (M, C - 1, H - 1, W - 1)  • (C, H, W, N) -> (M, N)
-    (M, W - 1, H - 1, C - 1)  • (C, H, W, N) -> (M, N)
-
-We can also use ``ng.cast_axis`` to recast the axes of an already defined tensor into the same dimensions, but using different offsets, to specify which dimensions should be reduced.
-
 Properties
 ----------
 
@@ -221,6 +190,26 @@ Properties
     ax.Y = ng.make_axis(docstring="target")
 
 
+Axes Operations
+---------------
+``Axes`` has ``list`` and ``set`` behaviors at the same time. ``Axes`` are
+internally stored and can be used as ``list``, while we also have use cases of
+``Axes`` as ``set``. Here's a list of supported operations by ``Axes`` and their
+expected behavors.
+
+- ``__add__``: list operation, concatenated axes, throws exception when there
+  are Axis duplications
+- ``__sub__``: set operation, returns the ordered set difference of axes
+- ``__or__``: set operation, returns ordered set union of axes
+- ``__and__``: set operation, returns ordered set intersection of axes
+- ``__eq__``: list operation, true if each ``Axis`` are matching and in same
+  order
+- ``__ne__``: list operation, true if not all ``Axis`` are matching or in
+  different order
+- ``is_sub_set``, ``is_super_set``, ``is_equal_set`` and ``is_not_equal_set``:
+  set operations
+
+
 Elementwise Binary Ops
 ----------------------
 
@@ -263,7 +252,7 @@ Elementwise Binary Ops
     -----------------------------------------------------------------------------
     Output:                                  | Output:
     [[ 2.  2.  2.]                           | [[ 2.  2.]
-      [ 2.  2.  2.]]                         |  [ 2.  2.]
+     [ 2.  2.  2.]]                          |  [ 2.  2.]
     (2, 3)                                   |  [ 2.  2.]]
                                              | (3, 2)
 
@@ -276,6 +265,27 @@ Elementwise Binary Ops
 
   (H,) * ((W,) + (N,)) = (H,) * (W, N) = (H, W, N)
   (H,) * (W,) + (H,) * (N,) = (H, W) * (H, N) = (H, W, N)
+
+
+Dot Operation
+~~~~~~~~~~~~~
+
+When two tensors are provided to a multi-axis operation, such as ``ng.dot()``,
+we need to indicate the corresponding axes that should be paired together.
+
+For example
+
+  ::
+
+    # 2d dot
+    (H, W) • (W, N) -> (H, N)
+
+    # 4d dot
+    (M, C, H, W) • (C, H, W, N) -> (M, N)
+
+    # swapping the order of the axes is allowed
+    (M, C, H, W) • (C, H, W, N) -> (M, N)
+    (M, W, H, C) • (C, H, W, N) -> (M, N)
 
 
 Axes Reduction

@@ -46,7 +46,7 @@ RUN git submodule init && \
 RUN mkdir build && cd build && \
     cmake .. -DUSE_ROCKSDB=OFF -DUSE_MPI=OFF -DUSE_OPENMP=OFF -DUSE_CUDA=OFF \
              -DCMAKE_INSTALL_PREFIX=`pwd`/install  && \
-    make -j && make install
+    make -j$(nproc) && make install
 
 # Set path to the Python modules required by Caffe2 Frontend
 ENV PYTHONPATH=/opt/caffe2/build/:$PYTHONPATH

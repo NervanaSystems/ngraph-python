@@ -31,7 +31,9 @@ def clone(
         node.metadata['device_id'] = node.metadata['device_id'][0]
 
     elif node.__class__.__name__ is 'TensorValueOp':
-        new_node = node.__class__(node)
+        new_node = node.__class__(node.states_read[0])
+        new_node.metadata['device'] = node.metadata['device']
+        new_node.metadata['device_id'] = device_id
 
     elif node.__class__.__name__ is 'Scatter_Recv':
         new_node = node.__class__(
@@ -60,7 +62,7 @@ def clone(
     elif 'marker' in node.metadata and node.metadata['marker'] is 'scatter':
         pass  # This node is marked to be scattered, so there is no need to clone it.
 
-    else:
+    elif node.__class__.__name__ is 'AssignableTensorOp' and node.is_constant:
         new_node = node.__class__()
         if node.initializers is not None:
             for initializer in node.initializers:
@@ -68,10 +70,11 @@ def clone(
                     tensor=new_node, valfun=initializer.valfun)
                 new_node.add_initializer(new_initializer)
         new_node._TensorOp__axes = new_axes
-        new_node.args = node.args
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+    else:
+        raise RuntimeError("Unsupported op type {} for clone.".format(node.__class__.__name__))
 
     return new_node
 
@@ -173,4 +176,4 @@ def sort_ops_by_comm_deps(ops):
             for r in recvs:
                 if comm_path_exists(fro=r.send_node(), to=op):
                     if r.metadata['transformer'] == op.metadata['transformer']:
-                        r.control_deps.add(op)
+                        r.add_control_dep(op)

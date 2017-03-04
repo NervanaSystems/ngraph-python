@@ -74,8 +74,8 @@ def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
 
     input_axes = ng.make_axes([input_axis, recurrent_axis, batch_axis])
     input_axes.set_shape((input_size, sequence_length, batch_size))
-    input_axes = ng.make_axes([ng.make_axis(length=1, name='features_' + str(_))
-                               for _ in range(extra_axes)]) + input_axes
+    input_axes = ng.make_axes([ng.make_axis(length=1, name='features_' + str(i))
+                               for i in range(extra_axes)]) + input_axes
 
     input_placeholder = ng.placeholder(input_axes)
     input_value = rng.uniform(-0.01, 0.01, input_axes)
@@ -87,7 +87,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
                  init_state=False):
     in_feature_axes = tuple(input_placeholder.axes)[:-2]  # input axis + any extra axes of length 1
     out_feature_axes = ng.make_axes([ng.make_axis(hidden_size)])
-    batch_axis = input_placeholder.axes.batch_axes()[0]
+    batch_axis = input_placeholder.axes.batch_axis()
     hidden_axis = ng.make_axis(hidden_size)
 
     w_in_axes = ng.make_axes(hidden_axis) + in_feature_axes
