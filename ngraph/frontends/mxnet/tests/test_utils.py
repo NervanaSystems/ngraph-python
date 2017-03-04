@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function
-import pytest
 
 
 def test_dummy():
