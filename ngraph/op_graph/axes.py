@@ -1030,8 +1030,8 @@ class TensorDescription(NameableValue):
 
     """
 
-    def __init__(self, axes,
-                 base=None,
+    def __init__(self, axes, base=None,
+                 layout=None,
                  dtype=None,
                  full_strides=None, full_sizes=None, offset=0,
                  next_tensor_description=None,
@@ -1044,6 +1044,7 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
+        self.__layout = layout
         self.__value = None
         self.__buffer = None
         self.__register = None
@@ -1508,6 +1509,23 @@ class TensorDescription(NameableValue):
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self
+
+    @property
+    def layout(self):
+        """The layout of the underlying storage."""
+        return self.__layout
+
+    @layout.setter
+    def layout(self, value):
+        """
+        Sets the backend-specific memory layout to be used by the tensor.
+
+        Arguments:
+          value: the layout to use
+
+        Returns:
+        """
+        self.__layout = value
 
     @property
     def buffer(self):

@@ -23,6 +23,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
     UnaryLayoutConstraint
@@ -131,9 +132,23 @@ class GPULayoutAssignment(LayoutAssignment):
             self.axes = order
         else:
             self.axes = list(range(len(axes)))
+        self.shape = None
+        self.strides = None
 
     def __str__(self):
         return str(self.axes)
+
+    def set_shape_strides(self):
+        shape = []
+        strides = [1]
+        for axis in reversed(self.axes):
+            if len(shape) == len(strides):
+                strides.insert(0, strides[0] * shape[0])
+            ax_lens = [self.ng_axes[a].length for a in axis]
+            shape.insert(0, np.prod(ax_lens))
+
+        self.shape = tuple(shape)
+        self.strides = tuple(strides)
 
     @staticmethod
     def generate_ew_layouts(axes, max_out_axes):
@@ -145,7 +160,7 @@ class GPULayoutAssignment(LayoutAssignment):
             groups = get_split_groups(len(axes_list), max_out_axes)
             num_groups = max_out_axes
         else:
-            groups = [[i] for i in range(len(axes_list))]
+            groups = [[[i] for i in range(len(axes_list))]]
             num_groups = len(axes_list)
 
         # Find all permutations of these axis groups
@@ -154,11 +169,12 @@ class GPULayoutAssignment(LayoutAssignment):
         if permutations:
             # Create EW layouts
             layouts = []
-            for order in permutations:
-                layout_spec = [groups[i] for i in order]
-                layouts.append(GPULayoutAssignment(axes, layout_spec))
+            for group in groups:
+                for order in permutations:
+                    layout_spec = [group[i] for i in order]
+                    layouts.append(GPULayoutAssignment(axes_list, layout_spec))
         else:
-            layouts = [GPULayoutAssignment(axes, [])]
+            layouts = [GPULayoutAssignment(axes_list, [])]
 
         return layouts
 
@@ -175,7 +191,7 @@ class GPULayoutAssignment(LayoutAssignment):
             layout = [[i] for i in range(len(axes_list))]
             num_groups = len(axes_list)
 
-        return [GPULayoutAssignment(axes, layout)]
+        return [GPULayoutAssignment(axes_list, layout)]
 
     @staticmethod
     def factory(op):
@@ -187,12 +203,22 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
         elif isinstance(op, ReductionOp):
             # TODO: make sure reduction axes taken care of
-            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+            return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
         elif isinstance(op, OneHotOp):
             return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
         elif isinstance(op, TensorSizeOp):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, Fill):
+            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
+        elif isinstance(op, SetItemOp):
+            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
         elif isinstance(op, DotOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, ConvolutionOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, bprop_conv):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, update_conv):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
@@ -210,8 +236,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return 0.0
 
     def broadcast_axes(self, arg_layout, op_layout):
-        arg_axis_list = get_axes_list(arg_layout.ng_axes)
-        op_axis_list = get_axes_list(op_layout.ng_axes)
+        arg_axis_list = arg_layout.ng_axes
+        op_axis_list = op_layout.ng_axes
         broadcast_axis_list = [op_axis_list.index(a) for a in op_axis_list if a not in arg_axis_list]
         return broadcast_axis_list
 
@@ -228,6 +254,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
     def factory(op, arg):
         if isinstance(op, AssignOp):
             return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, SetItemOp):
+            return GPUStridedLayoutConstraint(op, arg)
         elif isinstance(op, UnaryElementWiseOp):
             return GPUStridedLayoutConstraint(op, arg)
         elif isinstance(op, BinaryElementWiseOp):
@@ -239,8 +267,16 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             return GPUStridedLayoutConstraint(op, arg)
         elif isinstance(op, TensorSizeOp):
             return GPUBinaryLayoutConstraint(op, arg)
+        elif isinstance(op, Fill):
+            return GPUBinaryLayoutConstraint(op, arg)
         elif isinstance(op, DotOp):
             return GPUDotLayoutConstraint(op, arg)
+        elif isinstance(op, ConvolutionOp):
+            return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, bprop_conv):
+            return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, update_conv):
+            return GPUConvLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
 
@@ -284,7 +320,7 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
                 # Dimshuffle to 3d with out axis groups plus reduction group
                 reduction_group = [self.arg.axes.index(a) for a in self.op.reduction_axes]
                 out_group = [self.arg.axes.index(a) for a in self.op.axes]
-                required_layout = GPULayoutAssignment(arg.axes, out_group + reduction_axes)
+                required_layout = GPULayoutAssignment(arg.axes, out_group + reduction_group)
                 return DimshuffleOp(arg, arg_layout, required_layout, axes=arg.axes)
             else:
                 # Dimshuffle to 3d with out axis groups

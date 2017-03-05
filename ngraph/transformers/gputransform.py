@@ -47,7 +47,7 @@ from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
-    AssignLayouts, AddLayoutConversions
+    AssignLayouts, AddLayoutConversions, PruneContiguousPass
 from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
@@ -566,12 +566,13 @@ class GPUTensorAllocator():
                 allocator
         """
         tensor_description = self.tensor_description
+        layout = tensor_description.layout
 
         gpudata = int(buffer_alloc) + tensor_description.offset
-        new_tensor = GPUArray(tensor_description.shape,
+        new_tensor = GPUArray(layout.shape,
                               self.transformer.storage_dtype(tensor_description.dtype),
                               gpudata=gpudata,
-                              strides=tensor_description.strides)
+                              strides=layout.strides)
 
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
@@ -1004,7 +1005,7 @@ class GPUTransformer(Transformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
-        self.graph_passes = [SimplePrune(),
+        self.graph_passes = [SimplePrune(), PruneContiguousPass(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass, VizPass(show_metadata="layout")]
 

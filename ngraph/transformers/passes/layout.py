@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.op_graph import Op, ContiguousOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -83,6 +83,20 @@ class UnaryLayoutConstraint(with_metaclass(abc.ABCMeta, object)):
         Returns a cost for using this layout for the given op.
         """
         pass
+
+
+class PruneContiguousPass(PeepholeGraphPass):
+    """
+    Temporary pass to remove contiguous ops from the graph before doing layout.
+    TODO: stop inserting contiguous ops? Need to handle other transformer reqs though
+    """
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op):
+        pass
+
+    @visit.on_type(ContiguousOp)
+    def visit(self, op):
+        self.replace_op(op, op.args[0])
 
 
 class GenerateLayoutDomains(PeepholeGraphPass):
@@ -250,6 +264,7 @@ class AssignLayouts(GraphPass):
 
         # Assign layouts to each tensor
         for op in self.min_assignment:
+            self.min_assignment[op].set_shape_strides()
             op.metadata["layout"] = self.min_assignment[op]
 
 
