@@ -13,8 +13,46 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp
+from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
 import multiprocessing
+
+
+def calculate_new_axes(axes, parallel_axis, num_devices, is_last):
+    new_axes = list()
+    for a in axes:
+        if parallel_axis == a:
+            remainder = a.length % num_devices
+            new_length = a.length // num_devices
+            if remainder > 0:
+                if is_last:
+                    new_length += remainder
+            new_axis = make_axis(new_length, a.name)
+            new_axes.append(new_axis)
+        else:
+            new_axes.append(a)
+    new_axes = make_axes(new_axes)
+    return new_axes
+
+
+def get_slices(axes, parallel_axis, num_devices):
+    new_slices = list()
+    for i in range(num_devices):
+        slices = list()
+        for a in axes:
+            s = slice(None)
+            if parallel_axis == a:
+                remainder = a.length % num_devices
+                new_length = a.length // num_devices
+                start = i * new_length
+                stop = (i + 1) * new_length
+                step = 1
+                if remainder > 0:
+                    if i == (num_devices - 1):
+                        stop += remainder
+                s = slice(start, stop, step)
+            slices.append(s)
+        new_slices.append(slices)
+    return new_slices
 
 
 class CommunicationOp(TensorOp):
@@ -25,8 +63,11 @@ class CommunicationOp(TensorOp):
         None
     """
 
-    def __init__(self):
-        super(CommunicationOp, self).__init__()
+    def __init__(self, node, args=None, axes=None, dtype=None):
+        super(CommunicationOp, self).__init__(args=args, axes=axes, dtype=dtype)
+        self.metadata['device'] = node.metadata['device']
+        self.metadata['device_id'] = node.metadata['device_id']
+        self.metadata['host_transformer'] = node.metadata['host_transformer']
 
     @property
     def is_communication_op(self):
@@ -42,48 +83,32 @@ class SendOp(CommunicationOp):
     """
 
     def __init__(self, from_node):
-        super(SendOp, self).__init__()
-        self._TensorOp__args = tuple([from_node])
-        self._TensorOp__axes = from_node.axes
-        self.dtype = from_node.dtype
-        self.metadata['device'] = from_node.metadata['device']
-        self.metadata['device_id'] = from_node.metadata['device_id']
-        self.metadata['host_transformer'] = from_node.metadata['host_transformer']
+        super(SendOp, self).__init__(
+            node=from_node,
+            args=tuple([from_node]),
+            axes=from_node.axes,
+            dtype=from_node.dtype)
 
 
-class ReceiverOp(CommunicationOp):
-    """
-    Represents a receiver op. Associates a receiver with a sender.
-
-    Arguments:
-        send_node: The node associated with the receiver.
-    """
-
-    def __init__(self, send_node):
-        super(ReceiverOp, self).__init__()
-        self._send_node = send_node
-
-    def send_node(self):
-        return self._send_node
-
-
-class RecvOp(ReceiverOp):
+class RecvOp(CommunicationOp):
     """
     Represents a recv op. Sets args, axes, dtype, and metadata.
 
     Arguments:
         to_node: The destination node.
-        send_node: The send node associated with this node.
+        send_node: The send node associated with this recv node.
     """
 
     def __init__(self, to_node, send_node):
-        super(RecvOp, self).__init__(send_node)
-        self._TensorOp__args = ()
-        self._TensorOp__axes = to_node.axes
-        self.dtype = to_node.dtype
-        self.metadata['device'] = to_node.metadata['device']
-        self.metadata['device_id'] = to_node.metadata['device_id']
-        self.metadata['host_transformer'] = to_node.metadata['host_transformer']
+        super(RecvOp, self).__init__(
+            node=to_node,
+            args=(),
+            axes=to_node.axes,
+            dtype=to_node.dtype)
+        self._send_node = send_node
+
+    def send_node(self):
+        return self._send_node
 
 
 class ScatterSendOp(SendOp):
@@ -97,25 +122,10 @@ class ScatterSendOp(SendOp):
 
     def __init__(self, from_node, to_node):
         super(ScatterSendOp, self).__init__(from_node)
-        parallel_axis = to_node.metadata['parallel']
         self.to_id = to_node.metadata['device_id']
-        self.slices = list()
-        for i in range(len(self.to_id)):
-            slices = list()
-            for a in self.axes:
-                s = slice(None)
-                if parallel_axis == a:
-                    remainder = a.length % len(self.to_id)
-                    new_length = a.length // len(self.to_id)
-                    start = i * new_length
-                    stop = (i + 1) * new_length
-                    step = 1
-                    if remainder > 0:
-                        if i == (len(self.to_id) - 1):
-                            stop += remainder
-                    s = slice(start, stop, step)
-                slices.append(s)
-            self.slices.append(slices)
+        self.slices = get_slices(self.axes,
+                                 to_node.metadata['parallel'],
+                                 len(self.to_id))
 
 
 class ScatterRecvOp(RecvOp):
@@ -159,23 +169,9 @@ class GatherRecvOp(RecvOp):
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
-        self.slices = list()
-        for i in range(len(self.from_id)):
-            slices = list()
-            for a in self.axes:
-                s = slice(None)
-                if self.metadata['parallel'] == a:
-                    remainder = a.length % len(self.from_id)
-                    new_length = a.length // len(self.from_id)
-                    start = i * new_length
-                    stop = (i + 1) * new_length
-                    step = 1
-                    if remainder > 0:
-                        if i == (len(self.from_id) - 1):
-                            stop += remainder
-                    s = slice(start, stop, step)
-                slices.append(s)
-            self.slices.append(slices)
+        self.slices = get_slices(self.axes,
+                                 self.metadata['parallel'],
+                                 len(self.from_id))
 
 
 class GpuQueueSendOp(SendOp):

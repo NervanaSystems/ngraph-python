@@ -1,9 +1,8 @@
 from __future__ import division
-from ngraph.op_graph.op_graph import make_axes, make_axis
 from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
     TensorValueOp
 from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
-    ReceiverOp, ScatterSendOp, ScatterRecvOp
+    RecvOp, ScatterSendOp, ScatterRecvOp
 from ngraph.util.ordered import OrderedSet
 
 
@@ -78,23 +77,6 @@ def clone(
     return new_node
 
 
-def calculate_new_axes(axes, parallel_axis, num_devices, is_last):
-    new_axes = list()
-    for a in axes:
-        if parallel_axis == a:
-            remainder = a.length % num_devices
-            new_length = a.length // num_devices
-            if remainder > 0:
-                if is_last:
-                    new_length += remainder
-            new_axis = make_axis(new_length, a.name)
-            new_axes.append(new_axis)
-        else:
-            new_axes.append(a)
-    new_axes = make_axes(new_axes)
-    return new_axes
-
-
 def comm_path_exists(fro, to):
     """
     Find a path from fro to to, including paths non-explicit edges from
@@ -111,7 +93,7 @@ def comm_path_exists(fro, to):
         v = visit.pop()
         if v == to:
             return True
-        if isinstance(v, ReceiverOp):
+        if isinstance(v, RecvOp):
             visit.add(v.send_node())
         else:
             visit.update(v.args)
@@ -126,7 +108,7 @@ def find_recvs(fro):
     visit.add(fro)
     while visit:
         v = visit.pop()
-        if isinstance(v, ReceiverOp):
+        if isinstance(v, RecvOp):
             recvs.add(v)
             visit.add(v.send_node())
         else:
