@@ -215,7 +215,7 @@ class CPUTensorShaping(PeepholeGraphPass):
         tensor, val = op.args
         assert not isinstance(tensor, ReshapeOp)
         tensor, val = flatten(tensor), flatten(val)
-        self.replace_op(op, AssignOneDOp(tensor, val, force=op.force))
+        self.replace_op(op, AssignOneDOp(tensor, val))
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):

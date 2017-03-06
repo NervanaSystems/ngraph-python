@@ -659,14 +659,10 @@ class AssignOp(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         val: The value to assign.
-        force (bool): Override constant check on tensor.
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
-
+    def __init__(self, tensor, val, **kwargs):
         # convert val to op
         # TODO: requires explicit broadcast in future
         if not isinstance(val, Op):
@@ -685,7 +681,6 @@ class AssignOp(Op):
         val = broadcast(val, tensor.axes)
 
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
@@ -701,11 +696,10 @@ class AssignOneDOp(Op):
         value (TensorOp): The value.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
+    def __init__(self, tensor, val, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
         super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
@@ -864,13 +858,10 @@ class Fill(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         scalar: A scalar value.
-        force (bool): Disable constant check on tensor.
     """
 
-    def __init__(self, tensor, scalar, force=False, **kwargs):
+    def __init__(self, tensor, scalar, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
             if scalar.is_constant:
                 scalar = scalar.const
@@ -2050,7 +2041,7 @@ def value_of(tensor):
         return tensor
     temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
     return sequential([
-        AssignOp(temp, tensor, force=True),
+        AssignOp(temp, tensor),
         temp
     ])
 
