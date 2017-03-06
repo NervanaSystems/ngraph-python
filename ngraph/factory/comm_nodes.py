@@ -18,6 +18,12 @@ import multiprocessing
 
 
 class CommunicationOp(TensorOp):
+    """
+    Represents a communication op.
+
+    Arguments:
+        None
+    """
 
     def __init__(self):
         super(CommunicationOp, self).__init__()
@@ -28,11 +34,17 @@ class CommunicationOp(TensorOp):
 
 
 class SendOp(CommunicationOp):
+    """
+    Represents a send op. Sets args, axes, dtype, and metadata.
+
+    Arguments:
+        from_node: The source node.
+    """
 
     def __init__(self, from_node):
         super(SendOp, self).__init__()
-        self._Op__args = tuple([from_node])
-        self.axes = from_node.axes
+        self._TensorOp__args = tuple([from_node])
+        self._TensorOp__axes = from_node.axes
         self.dtype = from_node.dtype
         self.metadata['device'] = from_node.metadata['device']
         self.metadata['device_id'] = from_node.metadata['device_id']
@@ -40,6 +52,12 @@ class SendOp(CommunicationOp):
 
 
 class ReceiverOp(CommunicationOp):
+    """
+    Represents a receiver op. Associates a receiver with a sender.
+
+    Arguments:
+        send_node: The node associated with the receiver.
+    """
 
     def __init__(self, send_node):
         super(ReceiverOp, self).__init__()
@@ -50,6 +68,13 @@ class ReceiverOp(CommunicationOp):
 
 
 class RecvOp(ReceiverOp):
+    """
+    Represents a recv op. Sets args, axes, dtype, and metadata.
+
+    Arguments:
+        to_node: The destination node.
+        send_node: The send node associated with this node.
+    """
 
     def __init__(self, to_node, send_node):
         super(RecvOp, self).__init__(send_node)
@@ -62,6 +87,13 @@ class RecvOp(ReceiverOp):
 
 
 class ScatterSendOp(SendOp):
+    """
+    Represents a scatter send op. Sets destination device ids and slices.
+
+    Arguments:
+        from_node: The source node.
+        to_node: The destination node.
+    """
 
     def __init__(self, from_node, to_node):
         super(ScatterSendOp, self).__init__(from_node)
@@ -87,18 +119,40 @@ class ScatterSendOp(SendOp):
 
 
 class ScatterRecvOp(RecvOp):
+    """
+    Represents a scatter recv op.
+
+    Arguments:
+        to_node: The destination node.
+        send_node: The scatter send node associated with this node.
+    """
 
     def __init__(self, to_node, send_node):
         super(ScatterRecvOp, self).__init__(to_node, send_node)
 
 
 class GatherSendOp(SendOp):
+    """
+    Represents a gather send op.
+
+    Arguments:
+        from_node: The source node.
+    """
 
     def __init__(self, from_node):
         super(GatherSendOp, self).__init__(from_node)
 
 
 class GatherRecvOp(RecvOp):
+    """
+    Represents a gather recv op. Sets metadata, source device ids and
+    slices.
+
+    Arguments:
+        from_node: The source node.
+        to_node: The destination node.
+        send_node: The gather send node associated with this node.
+    """
 
     def __init__(self, from_node, to_node, send_node):
         super(GatherRecvOp, self).__init__(to_node, send_node)

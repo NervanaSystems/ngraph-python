@@ -1,6 +1,9 @@
 from __future__ import division
 from ngraph.op_graph.op_graph import make_axes, make_axis
-from ngraph.factory.comm_nodes import ReceiverOp
+from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
+    TensorValueOp
+from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
+    ReceiverOp, ScatterSendOp, ScatterRecvOp
 from ngraph.util.ordered import OrderedSet
 
 
@@ -21,7 +24,7 @@ def clone(
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif node.__class__.__name__ is 'BroadcastOp':
+    elif isinstance(node, BroadcastOp):
         new_arg = clone(node.args[0], new_axes, device_id)
         new_node = node.__class__(new_arg, new_axes)
         new_node.dtype = node.dtype
@@ -30,35 +33,35 @@ def clone(
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif node.__class__.__name__ is 'TensorValueOp':
+    elif isinstance(node, TensorValueOp):
         new_node = node.__class__(node.states_read[0])
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif 'ScatterRecv' in node.__class__.__name__:
+    elif isinstance(node, ScatterRecvOp):
         new_node = node.__class__(
             to_node=node,
             send_node=node.send_node(),
             device_idx=device_idx)
 
-    elif 'ScatterSend' in node.__class__.__name__:
+    elif isinstance(node, ScatterSendOp):
         pass
 
-    elif 'GatherSend' in node.__class__.__name__:
+    elif isinstance(node, GatherSendOp):
         new_node = node.__class__(
             from_node=arg1,
             clone_node=node,
             device_idx=device_idx)
         send_nodes.add(new_node)
 
-    elif 'GatherRecv' in node.__class__.__name__:
+    elif isinstance(node, GatherRecvOp):
         pass
 
     elif 'marker' in node.metadata and node.metadata['marker'] is 'scatter':
         pass  # This node is marked to be scattered, so there is no need to clone it.
 
-    elif node.__class__.__name__ is 'AssignableTensorOp' and node.is_constant:
+    elif isinstance(node, AssignableTensorOp) and node.is_constant:
         new_node = node.__class__()
         if node.initializers is not None:
             for initializer in node.initializers:

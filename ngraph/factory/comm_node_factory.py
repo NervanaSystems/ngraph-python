@@ -15,10 +15,19 @@
 from .comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, NumpyQueueSendOp, \
     NumpyQueueRecvOp, NumpyQueueGatherSendOp, NumpyQueueGatherRecvOp, \
     NumpyQueueScatterSendOp, NumpyQueueScatterRecvOp
+from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
 
 class CommNodePair(object):
+    """
+    Represents a communication pair (sender, receiver).
+
+    Arguments:
+        from_node: The source node.
+        to_node: The destination node.
+        node_type: The type of node (direct/scatter/gather).
+    """
 
     def __init__(self, from_node, to_node, node_type):
 
@@ -99,6 +108,12 @@ class CommNodePair(object):
 
 
 class CommNodeFactory(object):
+    """
+    Represents a communication node factory.
+
+    Arguments:
+        None
+    """
 
     def __init__(self):
         pass
@@ -111,6 +126,12 @@ class CommNodeFactory(object):
 
 
 class GpuCommNodeFactory(CommNodeFactory):
+    """
+    Represents a GPU communication node factory.
+
+    Arguments:
+        None
+    """
 
     def send_recv_types(self, location):
         types = [
@@ -140,6 +161,12 @@ class GpuCommNodeFactory(CommNodeFactory):
 
 
 class NumpyCommNodeFactory(CommNodeFactory):
+    """
+    Represents a NumPy communication node factory.
+
+    Arguments:
+        None
+    """
 
     def send_recv_types(self, location):
         types = [
@@ -189,7 +216,7 @@ class NumpyCommNodeFactory(CommNodeFactory):
 
 def get_node_type(from_node, to_node):
     if isinstance(to_node.metadata['device_id'], (list, tuple)):
-        if from_node.__class__.__name__ is 'BroadcastOp':
+        if isinstance(from_node, BroadcastOp):
             if from_node.args[0].is_constant:
                 return None
         elif not from_node.is_constant:
