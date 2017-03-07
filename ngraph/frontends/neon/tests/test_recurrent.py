@@ -68,13 +68,14 @@ def bias_initializer(request):
 
 def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
 
-    input_axis = ng.make_axis()
+    input_axis = ng.make_axis(name='features')
     recurrent_axis = ng.make_axis(name='R')
     batch_axis = ng.make_axis(name='N')
 
     input_axes = ng.make_axes([input_axis, recurrent_axis, batch_axis])
     input_axes.set_shape((input_size, sequence_length, batch_size))
-    input_axes = ng.make_axes([ng.make_axis(length=1) for _ in range(extra_axes)]) + input_axes
+    input_axes = ng.make_axes([ng.make_axis(length=1, name='features_' + str(i))
+                               for i in range(extra_axes)]) + input_axes
 
     input_placeholder = ng.placeholder(input_axes)
     input_value = rng.uniform(-0.01, 0.01, input_axes)
@@ -84,13 +85,13 @@ def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
 
 def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initializer,
                  init_state=False):
-
-    full_input_axes = tuple(input_placeholder.axes)[:-2]  # input axis + any extra axes of length 1
-    batch_axis = input_placeholder.axes.batch_axes()[0]
+    in_feature_axes = tuple(input_placeholder.axes)[:-2]  # input axis + any extra axes of length 1
+    out_feature_axes = ng.make_axes([ng.make_axis(hidden_size)])
+    batch_axis = input_placeholder.axes.batch_axis()
     hidden_axis = ng.make_axis(hidden_size)
 
-    w_in_axes = ng.make_axes([hidden_axis] + [ax - 1 for ax in full_input_axes])
-    w_rec_axes = ng.make_axes([hidden_axis, hidden_axis - 1])
+    w_in_axes = ng.make_axes(hidden_axis) + in_feature_axes
+    w_rec_axes = ng.make_axes(hidden_axis) + out_feature_axes
 
     W_in = weight_initializer(w_in_axes)
     W_rec = weight_initializer(w_rec_axes)
@@ -146,7 +147,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                        backward=backward)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
+    out_ng = rnn_ng(input_placeholder, init_state=init_state)
 
     with ExecutorFactory() as ex:
         # Create computation and execute
@@ -206,7 +207,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                        reset_cells=True, return_sequence=return_sequence)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     deltas_constant = ng.constant(deltas, axes=out_ng.axes)
     params = [(rnn_ng.W_input, W_in),
@@ -250,7 +251,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
                        backward=backward)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     params = [(rnn_ng.W_input, W_in),
               (rnn_ng.W_recur, W_rec),
@@ -307,7 +308,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                    sum_out=sum_out, concat_out=concat_out)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder, init_state=init_state)
+    out_ng = rnn_ng(input_placeholder, init_state=init_state)
 
     with ExecutorFactory() as ex:
         # Create computation and execute
@@ -355,7 +356,7 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                    sum_out=sum_out, concat_out=concat_out)
 
     # fprop ngraph RNN
-    out_ng = rnn_ng.train_outputs(input_placeholder)
+    out_ng = rnn_ng(input_placeholder)
 
     w_in_f = rnn_ng.fwd_rnn.W_input
     w_rec_f = rnn_ng.fwd_rnn.W_recur

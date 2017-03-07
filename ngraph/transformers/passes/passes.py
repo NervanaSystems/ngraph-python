@@ -22,8 +22,8 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     ContiguousOp, AssignOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, AssignOneDOp, ReshapeOp, flatten, constant, \
-    Multiply, Add, Divide, Op, Sum, Prod, negative, power, DerivOp, \
-    ParallelOp, SequentialOp
+    Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
+    ParallelOp
 from ngraph.util.generics import generic_method
 
 
@@ -123,8 +123,6 @@ class PeepholeGraphPass(GraphBuildingPass):
                         op.remove_control_dep(cop)
                         for dep in cop.control_deps:
                             op.add_control_dep(dep)
-                if isinstance(op, SequentialOp) and not op.control_dependencies_computed:
-                    op.compute_control_dependencies()
 
             # pass through the ops in an execution order collecting things to do
             ops = Op.ordered_ops(op.forwarded
@@ -158,8 +156,8 @@ class RequiredTensorShaping(PeepholeGraphPass):
             d = make_axis(1)
             x_reduction_axes = make_axes((d,))
             y_reduction_axes = x_reduction_axes
-            x = broadcast(x, x.axes + x_reduction_axes)
-            y = broadcast(y, y_reduction_axes + y.axes)
+            x = broadcast(x, x.axes | x_reduction_axes)
+            y = broadcast(y, y_reduction_axes | y.axes)
 
         if x.is_scalar:
             x, y = y, x
@@ -176,10 +174,10 @@ class RequiredTensorShaping(PeepholeGraphPass):
             out = broadcast(out, op.axes)
         else:
             x_rem_axes = x.axes - x_reduction_axes
-            x = axes_with_order(x, x_rem_axes + x_reduction_axes)
+            x = axes_with_order(x, x_rem_axes | x_reduction_axes)
 
             y_rem_axes = y.axes - y_reduction_axes
-            y = axes_with_order(y, y_reduction_axes + y_rem_axes)
+            y = axes_with_order(y, y_reduction_axes | y_rem_axes)
 
             x = flatten_at(x, len(x.axes) - len(x_reduction_axes))
             y = flatten_at(y, len(y_reduction_axes))
@@ -232,49 +230,7 @@ class CPUTensorShaping(PeepholeGraphPass):
             self.replace_op(op, x)
 
 
-class DerivPass(GraphBuildingPass):
-    """
-    The pass that computes derivatives, i.e. expanding DerivOp to actual
-    derivatives.
-    """
-
-    @staticmethod
-    def _deriv(dependent, independent, error=constant(1)):
-        """
-        Computes the operation for [dDependent/dIndependent](error=1).
-        The derivative is a multi-linear function.
-        Args:
-            dependent (TensorOp): Dependent op.
-            independent(TensorOp): Independent op.
-            error (TensorOp, optional): The tensor holding the error where the
-                derivative will be computed at. Must have the same axes as dependent.
-        Returns:
-            TensorOp: Derivative applied to error. Has axes of independent.
-        """
-        if not error.axes.has_same_axes(dependent.axes):
-            raise ValueError(
-                "Dependent and error must have the same set of axes")
-
-        adjoints = dependent.forwarded.adjoints(error)
-
-        if independent.forwarded.tensor not in adjoints:
-            return constant(0, independent.axes)
-
-        adjoint = adjoints[independent.forwarded.tensor]
-        return broadcast(adjoint.forwarded, axes=independent.axes)
-
-    @generic_method()
-    def visit(self, op):
-        pass
-
-    @visit.on_type(DerivOp)
-    def visit(self, op):
-        # redundant names to keep consistent for now
-        deriv = DerivPass._deriv(op.dependent, op.independent, op.error)
-        self.replace_op(op, deriv)
-
-
-class SimplePrune(GraphBuildingPass):
+class SimplePrune(PeepholeGraphPass):
     """TODO."""
     @generic_method()
     def visit(self, op):

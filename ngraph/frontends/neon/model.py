@@ -21,14 +21,9 @@ class Sequential(object):
     def __init__(self, layers):
         self.layers = layers
 
-    def train_outputs(self, in_obj):
+    def __call__(self, in_obj):
         for l in self.layers:
-            in_obj = l.train_outputs(in_obj)
-        return in_obj
-
-    def inference_outputs(self, in_obj):
-        for l in self.layers:
-            in_obj = l.inference_outputs(in_obj)
+            in_obj = l(in_obj)
         return in_obj
 
     def copy(self):

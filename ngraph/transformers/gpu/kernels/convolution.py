@@ -26,7 +26,7 @@ import shelve
 
 import pycuda.driver as drv
 from pycuda.tools import context_dependent_memoize
-from pycuda.compiler import SourceModule
+from ngraph.transformers.gpu.float_ew2 import NvrtcSourceModule as SourceModule
 
 from ngraph.transformers.gpu.kernels import kernel_specs
 from ngraph.transformers.gpu.kernels.cuda.cuda_templates import (_common_round,

@@ -18,7 +18,6 @@ from builtins import range
 import numpy as np
 import pytest
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
@@ -115,8 +114,6 @@ def test_placeholder(transformer_factory):
     d2 = ng.squared_L2(x, out_axes=None)
 
     with ExecutorFactory() as ex:
-        if ex.transformer.transformer_name == 'hetr':
-            pytest.xfail("hetr tolerance issue, need to investigate")
         # Return placeholder, param is placeholder
         placeholder_fun = ex.executor(x, x)
         prod_fun = ex.executor([d, d2], x)
@@ -332,6 +329,7 @@ def test_reciprocal_derivative(transformer_factory):
     rec_u = ng.reciprocal(p_u)
 
     check_derivative(rec_u, p_u, delta, u, atol=1e-2, rtol=1e-2)
+
 
 ELEMENTWISE_BINARY_OPS = [
     (np.add, ng.add),
@@ -792,7 +790,7 @@ def test_cross_entropy_softmax_deriv(transformer_factory):
     )
 
 
-def test_cross_enropy_rec(transformer_factory):
+def test_cross_entropy_rec(transformer_factory):
     W = ng.make_axis(length=3)
     T = ng.make_axis(length=4, name='R')
     N = ng.make_axis(length=10, name='N')
@@ -977,9 +975,8 @@ def test_elementwise_fp16_out(transformer_factory):
 
 def test_empty_finalize():
     """Evaluating an empty NumPyTransformer shouldn't raise any exceptions."""
-    t = ngt.make_transformer()
-    t.initialize()
-    t.close()
+    with ExecutorFactory() as ex:
+        ex.transformer.initialize()
 
 
 def test_tensor_derivative():

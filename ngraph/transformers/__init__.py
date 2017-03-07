@@ -41,3 +41,8 @@ try:
     import ngraph.transformers.hetrtransform  # noqa
 except ImportError as e:
     pass
+
+try:
+    import artransformer.artransformer  # noqa
+except ImportError:
+    pass

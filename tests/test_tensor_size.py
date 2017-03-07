@@ -12,25 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+Test tensor size
+On GPU, ng.tensor_size uses FillKernel
+"""
 
-from __future__ import print_function
-import tensorflow as tf
-from ngraph.testing import ExecutorFactory
-from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
+import numpy as np
+import ngraph as ng
+from ngraph.testing import executor
 
-# tensorflow ops
-x = tf.constant(1.)
-y = tf.constant(2.)
-f = x + y
 
-# import
-importer = TFImporter()
-importer.import_graph_def(tf.get_default_graph().as_graph_def())
+def test_tensor_size(transformer_factory):
+    n, m = 3, 4
 
-# get handle
-f_ng = importer.get_op_handle(f)
+    N = ng.make_axis(length=n)
+    M = ng.make_axis(length=m)
 
-# execute
-with ExecutorFactory() as ex:
-    f_result = ex.executor(f_ng)()
-print(f_result)
+    aaxes = ng.make_axes([N, M])
+    x = ng.placeholder(aaxes)
+
+    size_fun = ng.tensor_size(x)
+    nptensor = np.arange(n * m).reshape(n, m)
+
+    with executor(size_fun, x) as ex:
+        assert ex(nptensor) == n * m

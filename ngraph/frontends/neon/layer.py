@@ -16,7 +16,8 @@ from __future__ import division, print_function
 from builtins import object
 
 import collections
-
+from contextlib import contextmanager
+from cachetools import cached, keys
 import ngraph as ng
 from ngraph.frontends.neon.axis import ar
 
@@ -43,20 +44,44 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-class Layer(object):
+def inference_mode(*args, **kwargs):
+    """
+    cachetools.cached key function to ensure that caching takes into account the current value of
+    Layer.inference_mode.
+    """
 
-    def __init__(self, name=None, inputs=None, outputs=None, axes=None, scope=None):
+    # If the value is provided, just use that instead of the global flag.
+    if "inference_mode" not in kwargs:
+        kwargs["inference_mode"] = Layer.inference_mode
+
+    return keys.hashkey(*args, **kwargs)
+
+
+class Layer(object):
+    inference_mode = False
+
+    def __init__(self, scope=None, name=None):
         self.name = name
-        self.inputs = inputs
-        self.outputs = outputs
-        self.axes = axes
         self.scope = scope
 
-    def train_outputs(self, in_obj):
+    def __call__(self, in_obj, inference):
         raise NotImplementedError()
 
-    def inference_outputs(self, in_obj):
-        return self.train_outputs(in_obj)
+    @staticmethod
+    @contextmanager
+    def inference_mode_on():
+        Layer.inference_mode = True
+        yield Layer.inference_mode
+        Layer.inference_mode = False
+
+    @staticmethod
+    def inference_mode_key(*args, **kwargs):
+        """
+        cachetools.cached key function to ensure that caching takes into account the current value
+        of Layer.inference_mode.
+        """
+
+        return keys.hashkey(inference_mode=Layer.inference_mode, *args, **kwargs)
 
 
 class Preprocess(Layer):
@@ -65,33 +90,38 @@ class Preprocess(Layer):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         return self.functor(in_obj)
 
 
 class Linear(Layer):
     metadata = {'layer_type': 'linear'}
 
-    def __init__(self, init, nout=None, **kwargs):
+    def __init__(self, init, nout=None, axes=None, **kwargs):
         super(Linear, self).__init__(**kwargs)
-        if self.axes is None:
-            assert(nout is not None), "Must provide either axes or nout to Linear"
-
+        self.axes = axes
         self.nout = nout
         self.init = init
+        if self.axes is None:
+            assert(self.nout is not None), "Must provide either axes or nout to Linear"
         self.W = None
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
-        out_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout).named('Hidden')])
-        in_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axes()
-        out_axes -= out_axes.recurrent_axes()
+    @cached({})
+    def __call__(self, in_obj):
+        # interpret axes
+        in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axis()
+        out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
+        temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
+                                      for axis in out_feature_axes])
+        out_axes = out_feature_axes + (in_obj.axes - in_feature_axes)
+        w_axes = temp_out_axes + in_feature_axes
 
-        w_axes = out_axes + [axis - 1 for axis in in_axes]
-        if self.W is None:
-            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
+        # init weights
+        self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope).named('LinW')
 
-        return ng.dot(self.W, in_obj)
+        return ng.cast_role(ng.dot(self.W, in_obj), out_axes)
 
 
 class LookupTable(Layer):
@@ -119,6 +149,7 @@ class LookupTable(Layer):
         self.update = update
         self.pad_idx = pad_idx
         self.role_order = (ar.time, ar.batch)
+        self.W = None
 
     def lut_init(self, axes, pad_word_axis, pad_idx):
         """
@@ -134,13 +165,14 @@ class LookupTable(Layer):
         return init_w
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         """
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
         """
-        in_obj.axes.find_by_short_name('time')[0].add_role(ar.time)
-        in_obj.axes.find_by_short_name('time')[0].is_recurrent = True
+        in_obj.axes.find_by_name('time')[0].add_role(ar.time)
+        in_obj.axes.find_by_name('time')[0].is_recurrent = True
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
@@ -149,14 +181,15 @@ class LookupTable(Layer):
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
-        self.lut_o_axes = in_axes + ng.make_axes([self.lut_f_axis])
-        self.o_axes = ng.make_axes([self.lut_f_axis]) + in_axes[0].axes
+        self.lut_o_axes = in_axes | ng.make_axes([self.lut_f_axis])
+        self.o_axes = ng.make_axes([self.lut_f_axis]) | in_axes[0].axes
 
-        self.W = ng.variable(axes=self.w_axes,
-                             initial_value=self.lut_init(
-                                 self.w_axes, self.lut_v_axis, self.pad_idx),
-                             scope=self.scope
-                             ).named('W')
+        if self.W is None:
+            self.W = ng.variable(axes=self.w_axes,
+                                 initial_value=self.lut_init(
+                                     self.w_axes, self.lut_v_axis, self.pad_idx),
+                                 scope=self.scope,
+                                 ).named('LutW')
 
         lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
                                     pad_idx=self.pad_idx)
@@ -201,7 +234,8 @@ class ConvBase(Layer):
         self.W = None
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         cpm = self.convparams.copy()
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_axes = in_obj.axes
@@ -209,12 +243,12 @@ class ConvBase(Layer):
         if self.f_axes is None:
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
-                self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init, scope=self.scope)
+                self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init, scope=self.scope).named('convwt')
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
+                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -227,7 +261,7 @@ class ConvBase(Layer):
                            cpm['dil_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
 
         return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
 
@@ -259,7 +293,8 @@ class Activation(Layer):
         super(Activation, self).__init__(**kwargs)
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
             return self.transform(in_obj)
@@ -299,14 +334,15 @@ class PoolBase(Layer):
         self.o_axes = None
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_axes = in_obj.axes
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles).named(a.short_name) for a in in_axes if not a.is_batch
+                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -316,7 +352,7 @@ class PoolBase(Layer):
                 output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
-            self.o_axes += in_axes.batch_axes()
+            self.o_axes |= in_axes.batch_axis()
 
         return ng.pooling(ppm, in_obj, axes=self.o_axes)
 
@@ -358,7 +394,8 @@ class Bias(Layer):
         self.shared = shared
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({})
+    def __call__(self, in_obj):
         if self.init:
             w_axes = in_obj.axes.sample_axes()
             if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
@@ -385,19 +422,11 @@ class Affine(Layer):
         self.activation_layer = Activation(transform=self.activation)
         self.scope = scope
 
-    def train_outputs(self, in_obj):
-        l_out = self.linear.train_outputs(in_obj)
-        b_out = self.bias.train_outputs(l_out)
-        bn_out = self.batch_norm_layer.train_outputs(b_out) if self.batch_norm_layer else b_out
-        a_out = self.activation_layer.train_outputs(bn_out)
-        return a_out
-
-    def inference_outputs(self, in_obj):
-        l_out = self.linear.inference_outputs(in_obj)
-        b_out = self.bias.inference_outputs(l_out)
-        bn_out = self.batch_norm_layer.inference_outputs(b_out) if self.batch_norm_layer else b_out
-        a_out = self.activation_layer.inference_outputs(bn_out)
-        return a_out
+    def __call__(self, in_obj):
+        l_out = self.linear(in_obj)
+        b_out = self.bias(l_out)
+        bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
+        return self.activation(bn_out)
 
 
 class Convolution(Layer):
@@ -409,19 +438,11 @@ class Convolution(Layer):
         self.batch_norm = BatchNorm(scope=scope) if batch_norm else None
         self.activation = Activation(transform=activation)
 
-    def train_outputs(self, in_obj):
-        l_out = self.conv.train_outputs(in_obj)
-        b_out = self.bias.train_outputs(l_out)
-        bn_out = self.batch_norm.train_outputs(b_out) if self.batch_norm else b_out
-        a_out = self.activation.train_outputs(bn_out)
-        return a_out
-
-    def inference_outputs(self, in_obj):
-        l_out = self.conv.inference_outputs(in_obj)
-        b_out = self.bias.inference_outputs(l_out)
-        bn_out = self.batch_norm.inference_outputs(b_out) if self.batch_norm else b_out
-        a_out = self.activation.inference_outputs(bn_out)
-        return a_out
+    def __call__(self, in_obj):
+        l_out = self.conv(in_obj)
+        b_out = self.bias(l_out)
+        bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
+        return self.activation(bn_out)
 
 
 class BatchNorm(Layer):
@@ -449,12 +470,14 @@ class BatchNorm(Layer):
         self.scope = scope
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
+    @cached({}, key=Layer.inference_mode_key)
+    def __call__(self, in_obj):
+
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
-            red_axes += in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
-        red_axes += in_obj.axes.batch_axes()
+            red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+        red_axes |= in_obj.axes.batch_axis()
         out_axes = in_axes - red_axes
 
         if self.gamma is None:
@@ -470,18 +493,18 @@ class BatchNorm(Layer):
 
         xmean = ng.mean(in_obj, reduction_axes=red_axes)
         xvar = ng.variance(in_obj, reduction_axes=red_axes)
-        return ng.sequential([
-            ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
-            ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
-            self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
-        ])
+        if Layer.inference_mode:
+            return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
+        else:
+            return ng.sequential([
+                ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
+                ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
+                self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+            ])
 
     def set_tuning_iteration(self, batch_index):
         # Following tuning, one must divide self.gvar by rho in order to debias
         self.rho.value[()] = float(batch_index) / (batch_index + 1.0)
-
-    def inference_outputs(self, in_obj):
-        return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
 
 
 class Dropout(Layer):
@@ -499,14 +522,16 @@ class Dropout(Layer):
         self.mask = None
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj):
-        in_axes = in_obj.axes.sample_axes()
-        self.mask = self.mask or ng.persistent_tensor(axes=in_axes).named('mask')
-        self.mask = ng.uniform(self.mask, low=0.0, high=1.0) <= self.keep
-        return self.mask * in_obj
-
-    def inference_outputs(self, in_obj):
-        return self.keep * in_obj
+    @cached({}, key=Layer.inference_mode_key)
+    def __call__(self, in_obj):
+        if Layer.inference_mode:
+            return self.keep * in_obj
+        else:
+            if self.mask is None:
+                in_axes = in_obj.axes.sample_axes()
+                self.mask = ng.persistent_tensor(axes=in_axes).named('mask')
+            self.mask = ng.uniform(self.mask, low=0.0, high=1.0) <= self.keep
+            return self.mask * in_obj
 
 
 def get_steps(x, time_axis, backward=False):
@@ -556,37 +581,50 @@ class Recurrent(Layer):
         self.backward = backward
 
     def interpret_axes(self, in_obj, init_state):
-        in_axes = in_obj.axes
+        self.in_axes = in_obj.axes
 
-        self.recurrent_axis = in_axes.recurrent_axes()[0]
+        self.recurrent_axis = self.in_axes.recurrent_axis()
+        self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
 
         # if init state is given, use that as hidden axes
         if init_state:
-            self.hidden_axes = init_state.axes.sample_axes() - init_state.axes.recurrent_axes()
-            if sum(self.hidden_axes.full_lengths) != self.nout:
+            self.out_feature_axes = (init_state.axes.sample_axes() -
+                                     init_state.axes.recurrent_axis())
+            if sum(self.out_feature_axes.full_lengths) != self.nout:
                 raise ValueError("Length of init_state must be the same as nout: " +
-                                 "{} != {}".format(sum(self.hidden_axes.full_lengths),
+                                 "{} != {}".format(sum(self.out_feature_axes.full_lengths),
                                                    self.nout))
         else:
-            self.hidden_axes = ng.make_axes([ng.make_axis(self.nout).named('Hidden')])
+            self.out_feature_axes = ng.make_axes([ng.make_axis(self.nout)])
+            if len(self.in_feature_axes) == 1:
+                self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        self.hidden_state_axes = self.hidden_axes + in_axes.batch_axes()
-        self.recurrent_axis_idx = len(self.hidden_axes)
+        self.out_axes = self.out_feature_axes | self.in_axes.batch_axis()
+        self.recurrent_axis_idx = len(self.out_feature_axes)
 
-        # using the axes to create weight matrices
-        self.w_in_axes = self.hidden_axes + [axis - 1 for axis in (in_axes.sample_axes()
-                                                                   - self.recurrent_axis)]
+        # create temporary out axes which the dot ops will output.  These
+        # temporary axes will be immediately cast to self.out_axes
+        # afterwards.  We can't go directly to self.out_axes from the DotOp
+        # because sometimes the self.out_axes intersect with the self.in_axes
+        # and so the weight matrix would have a duplicate Axis which isn't
+        # allowed.
+        temp_out_axes = ng.make_axes([
+            ng.make_axis(axis.length, name=axis.name + '_out')
+            for axis in self.out_feature_axes
+        ])
 
-        self.w_re_axes = self.hidden_axes + [axis - 1 for axis in self.hidden_axes]
+        # determine the shape of the weight matrices
+        self.w_in_axes = temp_out_axes + self.in_feature_axes
+        self.w_re_axes = temp_out_axes + self.out_feature_axes
 
     def _step(self, inp, states):
-        h_ff = ng.dot(self.W_input, inp)
-        h_rec = ng.dot(self.W_recur, states)
-        h = self.activation(h_rec + h_ff + self.b)
-        return h
+        h_ff = ng.cast_role(ng.dot(self.W_input, inp), self.out_axes)
+        h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
+        return self.activation(h_rec + h_ff + self.b)
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj, init_state=None):
+    @cached({}, key=Layer.inference_mode_key)
+    def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -601,7 +639,6 @@ class Recurrent(Layer):
 
         """
         # try to understand the axes from the input
-
         self.interpret_axes(in_obj, init_state)
 
         # initialize the hidden states
@@ -610,10 +647,10 @@ class Recurrent(Layer):
         else:
             if self.reset_cells:
                 self.h_init = ng.constant(
-                    const=0, axes=self.hidden_state_axes).named('h_init')
+                    const=0, axes=self.out_axes).named('h_init')
             else:
                 self.h_init = ng.variable(
-                    initial_value=0, axes=self.hidden_state_axes).named('h_init')
+                    initial_value=0, axes=self.out_axes).named('h_init')
 
         self.W_input = ng.variable(axes=self.w_in_axes,
                                    initial_value=self.init,
@@ -621,9 +658,7 @@ class Recurrent(Layer):
         self.W_recur = ng.variable(axes=self.w_re_axes,
                                    initial_value=self.init_inner,
                                    scope=self.scope).named("W_re")
-        self.b = ng.variable(axes=self.hidden_axes,
-                             initial_value=0,
-                             scope=self.scope).named("bias")
+        self.b = ng.variable(axes=self.out_feature_axes, initial_value=0, scope=self.scope).named("bias")
 
         h = self.h_init
         h_list = []
@@ -689,7 +724,8 @@ class BiRNN(Layer):
                                  backward=True, scope=scope)
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj, init_state=None):
+    @cached({})
+    def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -728,18 +764,16 @@ class BiRNN(Layer):
             bwd_init = init_state
 
         with ng.metadata(direction="fwd"):
-            fwd_out = self.fwd_rnn.train_outputs(fwd_in, fwd_init)
-            self.fwd_out = fwd_out
+            fwd_out = self.fwd_rnn(fwd_in, fwd_init)
         with ng.metadata(direction="bwd"):
-            bwd_out = self.bwd_rnn.train_outputs(bwd_in, bwd_init)
-            self.bwd_out = bwd_out
+            bwd_out = self.bwd_rnn(bwd_in, bwd_init)
 
         if self.sum_out:
             return fwd_out + bwd_out
         elif self.concat_out:
             ax_list = list()
             for out in [fwd_out, bwd_out]:
-                axes = out.axes.sample_axes() - out.axes.recurrent_axes()
+                axes = out.axes.sample_axes() - out.axes.recurrent_axis()
                 if len(axes) == 1:
                     ax_list.append(axes[0])
                 else:
@@ -793,8 +827,13 @@ class LSTM(Recurrent):
         h_state = states[0]
         c_state = states[1]
 
-        ifog = {k: ng.dot(self.W_input[k], inp) + ng.dot(self.W_recur[k], h_state)
-                + self.b[k] for k in self.metadata['gates']}
+        ifog = {
+            k: sum([
+                ng.cast_role(ng.dot(self.W_input[k], inp), self.out_axes),
+                ng.cast_role(ng.dot(self.W_recur[k], h_state), self.out_axes),
+                self.b[k],
+            ]) for k in self.metadata['gates']
+        }
 
         ifog_act = {k: self.activation(ifog[k]) if k is 'g'
                     else self.gate_activation(ifog[k]) for k in self.metadata['gates']}
@@ -802,10 +841,12 @@ class LSTM(Recurrent):
         c = ifog_act['f'] * c_state + ifog_act['i'] * ifog_act['g']
         # c_prev is the state before applying activation
         h = ifog_act['o'] * self.activation(c)
+        h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
     @ng.with_op_metadata
-    def train_outputs(self, in_obj, init_state=None):
+    @cached({})
+    def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -834,14 +875,14 @@ class LSTM(Recurrent):
         else:
             if self.reset_cells:
                 self.h_init = ng.temporary(initial_value=0,
-                                           axes=self.hidden_state_axes).named('h_init')
+                                           axes=self.out_axes).named('h_init')
                 self.c_init = ng.temporary(initial_value=0,
-                                           axes=self.hidden_state_axes).named('c_init')
+                                           axes=self.out_axes).named('c_init')
             else:
                 self.h_init = ng.variable(initial_value=0,
-                                          axes=self.hidden_state_axes).named('h_init')
+                                          axes=self.out_axes).named('h_init')
                 self.c_init = ng.variable(initial_value=0,
-                                          axes=self.hidden_state_axes).named('c_init')
+                                          axes=self.out_axes).named('c_init')
 
         # params are dictionary for i, f, o, g
         self.W_input = {k: ng.variable(axes=self.w_in_axes,
@@ -854,7 +895,7 @@ class LSTM(Recurrent):
                                        scope=self.scope).
                         named("W_re_{}".format(k)) for k in self.metadata['gates']}
 
-        self.b = {k: ng.variable(axes=self.hidden_axes,
+        self.b = {k: ng.variable(axes=self.out_feature_axes,
                                  initial_value=0,
                                  scope=self.scope).
                   named("bias_{}".format(k)) for k in self.metadata['gates']}

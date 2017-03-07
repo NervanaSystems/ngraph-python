@@ -16,7 +16,7 @@
 from __future__ import print_function
 import numpy as np
 import ngraph as ng
-import ngraph.transformers as ngt
+from ngraph.testing import ExecutorFactory
 
 
 class NumpyLogreg(object):
@@ -55,7 +55,7 @@ def test_logreg(transformer_factory):
     xs_v = ng.placeholder((C, N))
     ys_v = ng.placeholder([N])
     alpha_v = ng.placeholder(())
-    thetas_var = ng.variable([C - 1], initial_value=thetas)
+    thetas_var = ng.variable([C], initial_value=thetas)
 
     # define ops
     ys_pred = ng.sigmoid(ng.dot(thetas_var, xs_v))
@@ -69,16 +69,14 @@ def test_logreg(transformer_factory):
     ])
 
     # transformer
-    transformer = ngt.make_transformer()
-    train_eval_func = transformer.computation([grad, loss, thetas_var],
-                                              xs_v, ys_v, alpha_v)
+    with ExecutorFactory() as ex:
+        train_eval_func = ex.executor([grad, loss, thetas_var],
+                                      xs_v, ys_v, alpha_v)
 
-    # evaluate
-    for i in range(max_iter):
-        grad_np, loss_np, thetas_np = np_logreg.optimize(alpha)
-        grad_ng, loss_ng, thetas_ng = train_eval_func(xs, ys, alpha)
-        assert ng.testing.allclose(loss_np, loss_ng)
-        assert ng.testing.allclose(grad_np, grad_ng)
-        assert ng.testing.allclose(thetas_np, thetas_ng)
-
-    transformer.close()
+        # evaluate
+        for i in range(max_iter):
+            grad_np, loss_np, thetas_np = np_logreg.optimize(alpha)
+            grad_ng, loss_ng, thetas_ng = train_eval_func(xs, ys, alpha)
+            assert ng.testing.allclose(loss_np, loss_ng)
+            assert ng.testing.allclose(grad_np, grad_ng)
+            assert ng.testing.allclose(thetas_np, thetas_ng)

@@ -70,3 +70,25 @@ def test_rng_repetition(transformer_factory):
     val2 = rand_comp().copy()
     assert val1 != val2
     trans.close()
+
+
+def test_normal_negative_mean(transformer_factory):
+    """TODO."""
+    M = ng.make_axis(100).named('M')
+    N = ng.make_axis(100).named('N')
+
+    mean = -0.5
+    std = 1.0
+
+    ng_a = ng.persistent_tensor([M, N], initial_value=10.0)
+    ng_a = ng.normal(ng_a, loc=mean, scale=std)
+
+    with executor(ng_a) as ex:
+        result = ex()
+    print(np.mean(result))
+    print(np.std(result))
+
+    assert np.allclose(np.mean(result), mean, rtol=0, atol=0.025)
+    assert np.allclose(np.std(result), std, rtol=0, atol=0.025)
+    assert not np.all(result >= 0.0)
+    assert not np.all(result < 0.0)

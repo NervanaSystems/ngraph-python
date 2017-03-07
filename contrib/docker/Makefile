@@ -27,13 +27,13 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/ngraph-test/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;pwd;ldd /tmp/mkldnn_engine.so;py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;pwd;ldd /tmp/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;ldd /tmp/mkldnn_engine.so;py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
 
-COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;coverage combine;coverage xml -i;coverage report"
+COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;ls -l .coverage*;coverage combine;coverage xml -i;coverage report"
 
-.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test shell test_shell test_mkldnn_shell
+.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_all
 
 DOCKER_BUILD=docker build --rm=true
 
@@ -73,25 +73,24 @@ clean:
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make clean
 
 build_base: expand_dockerfile_templates fallback_cuda_version
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_BASE_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_base:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_base:${BUILD_VERSION}` ngraph_base:latest
-endif
 
 build_base_cpu: expand_dockerfile_templates
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_BASE_CPU_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base_cpu --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_cpu:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_base_cpu:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_base_cpu:${BUILD_VERSION}` ngraph_base_cpu:latest
-endif
 
 build_dev: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DEV_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_dev:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
-endif
 
 build_test_base: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_BASE_IMG)), ${BUILD_VERSION})
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -103,18 +102,18 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_BASE_IMG)), ${BUILD_VERSION})
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_test_base:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_test_base:${BUILD_VERSION}` ngraph_test_base:latest
-endif
 
 build_test: build_test_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_IMG)), ${BUILD_VERSION})
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_test:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
-endif
 
 build_test_cpu: build_base_cpu
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_CPU_IMG)), ${BUILD_VERSION})
 	# hack to clone autoflex here in this working directory so it can be
 	# ADDed to the docker container.  We will most likely want a more
 	# organized way to set this up, but here it is for now.  We must be
@@ -126,39 +125,49 @@ ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_TEST_CPU_IMG)), ${BUILD_VERSION})
 
 	# now build the docker container
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_test_cpu:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_test_cpu:${BUILD_VERSION}` ngraph_test_cpu:latest
-endif
 
 build_mkldnn_test: build_test_cpu
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_MKLDNN_TEST_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_mkldnn_test:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
-endif
 
 build_doc: build_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_DOC_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_doc:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
-endif
 
 build_caffe2: build_test_base
-ifneq ($(findstring ${BUILD_VERSION},$(NGRAPH_CAFFE2_IMG)), ${BUILD_VERSION})
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_caffe2:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
-endif
 
 build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2
+
+test_all: test test_gpu test_mkldnn test_caffe2
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
 
-test_parallel: build_test_run
-	docker run --rm ${VOLUME} -t ngraph_test_run:${BUILD_VERSION} make test_parallel
+test_parallel: build_test
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
+
+test_mkldnn_unit: build_mkldnn_test
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
+
+test_mkldnn_neon: build_mkldnn_test
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
+
+test_mkldnn_tf: build_mkldnn_test
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
 
 test_mkldnn: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} make test_mkl
 
 test_caffe2: build_caffe2
 	docker run --rm ${VOLUME} -t ngraph_caffe2:${BUILD_VERSION} make test_caffe2

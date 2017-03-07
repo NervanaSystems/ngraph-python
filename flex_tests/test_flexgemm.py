@@ -33,7 +33,7 @@ def test_gemm(transformer_factory):
     X = ng.placeholder(axes=[C, N])
     Y = ng.placeholder(axes=[N])
 
-    W = ng.variable(axes=[C - 1], initial_value=0.1)
+    W = ng.variable(axes=[C], initial_value=0.1)
 
     Y_hat = ng.dot(W, X)
 

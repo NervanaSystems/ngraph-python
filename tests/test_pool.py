@@ -15,160 +15,173 @@
 
 import numpy as np
 import pytest
-from neon import NervanaObject
-from neon.backends import gen_backend
-from neon.layers.layer import Pooling
 
 import ngraph as ng
-import ngraph.transformers as ngt
-from ngraph.testing import RandomTensorGenerator, executor
-from ngraph.frontends.neon import ax, ar
+from ngraph.op_graph.pooling import BpropPoolOp
+from ngraph.testing import executor
 from ngraph.frontends.neon.layer import output_dim
 
-rng = RandomTensorGenerator(0, np.float32)
 
-NervanaObject.be = gen_backend()
+class PoolParams(object):
+    def __init__(self, C=1, N=1, D=1, H=1, W=1, J=1, T=1, R=1, S=1,
+                 pad_c=0, pad_d=0, pad_h=0, pad_w=0,
+                 str_c=1, str_d=1, str_h=1, str_w=1,
+                 op='max'):
 
+        K = output_dim(C, J, pad_c, str_c)
+        M = output_dim(D, T, pad_d, str_d)
+        P = output_dim(H, R, pad_h, str_h)
+        Q = output_dim(W, S, pad_w, str_w)
 
-class DummyDeltaBuffers(object):
-    """
-    Dummy class for delta buffers needed by neon
-    """
-    def __init__(self):
-        self.buffers = [None]
+        self.dimO = (K, M, P, Q, N)
+        self.dimI = (C, D, H, W, N)
+        self.dimF = (J, T, R, S, K)
+
+        self.pool_params = dict(
+            pad_c=pad_c, pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
+            str_c=str_c, str_d=str_d, str_h=str_h, str_w=str_w,
+            J=J, T=T, R=R, S=S,
+            op=op
+        )
+
+        batch_axis = ng.make_axis(name='N', length=N)
+
+        self.ax_i = ng.make_axes([
+            ng.make_axis(name='C', length=C),
+            ng.make_axis(name='D', length=D),
+            ng.make_axis(name='H', length=H),
+            ng.make_axis(name='W', length=W),
+            batch_axis
+        ])
+
+        self.ax_o = ng.make_axes([
+            ng.make_axis(name='C', length=K),
+            ng.make_axis(name='D', length=M),
+            ng.make_axis(name='H', length=P),
+            ng.make_axis(name='W', length=Q),
+            batch_axis
+        ])
+
+    def get_fprop_bprop(self, input_value):
+        ip = ng.placeholder(axes=self.ax_i)
+        ep = ng.placeholder(axes=self.ax_o)
+
+        iv = np.array(input_value).astype(np.float32).reshape(self.dimI)
+        ev = np.ones(self.dimO) * 4
+
+        output = ng.pooling(self.pool_params, ip, axes=self.ax_o)
+        delta = BpropPoolOp(ep, ip, output)
+
+        with executor([output, delta], ip, ep) as pool_executor:
+            output_value, delta_value = pool_executor(iv, ev)
+
+        return output_value, delta_value
 
 
 def test_wrong_input_shape_length():
     """
     test wrong input shape length
     """
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
+    pf = PoolParams()
+
+    ax_i = pf.ax_i[:-1]
     inputs = ng.placeholder(axes=ax_i)
-    pool_params = dict(op='max')
 
     with pytest.raises(ValueError) as exinfo:
-        ng.pooling(pool_params, inputs, {})
+        ng.pooling(pf.pool_params, inputs, {})
 
     assert str(exinfo.value) == 'pooling input shape must be length 5, found {}' \
         .format(len(ax_i))
-
-
-def test_wrong_number_of_batch_axes_at_input():
-    """
-    test wrong number of batch axes at input
-    """
-    C = 3
-    D = 1
-    ax_C = ng.make_axis(name='N', length=C)
-    ax_D = ng.make_axis(name='N', length=D)
-    pool_params = dict(op='max')
-
-    ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
-    inputs = ng.placeholder(axes=ax_i)
-
-    with pytest.raises(ValueError) as exinfo:
-        ng.pooling(pool_params, inputs, {})
-
-    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} batch" \
-        " axes: {batch_axes} and {n_sample_axes} sample axes: {sample_axes}.".format(
-            n_batch_axes=len(inputs.axes.batch_axes()),
-            batch_axes=inputs.axes.batch_axes(),
-            n_sample_axes=len(inputs.axes.sample_axes()),
-            sample_axes=inputs.axes.sample_axes())
 
 
 def test_wrong_op_name():
     """
     test wrong number of batch axes at input
     """
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    inputs = ng.placeholder(axes=ax_i)
-    pooltype = 'min'
-    pool_params = dict(op=pooltype)
+    pf = PoolParams(op='min')
+    inputs = ng.placeholder(axes=pf.ax_i)
 
     with pytest.raises(ValueError) as exinfo:
-        ng.pooling(pool_params, inputs, {})
+        ng.pooling(pf.pool_params, inputs, {})
 
     assert str(exinfo.value) == "Unsupported pooling type: {pooltype}.  Only max and avg " \
-        "pooling currently supported. ".format(pooltype=pooltype)
+        "pooling currently supported. ".format(pooltype=pf.pool_params['op'])
 
 
-def test_pooling():
-    """
-    test pooling forward and backward path
-    """
-    N = 128
-    C = 3
-    D = 1
-    H = W = 32
+n4_c1_hw4_2x2_max = dict(
+    input=[
+        11, 65, 44, 28, 31, 33, 21, 66, 40, 49, 69, 57, 47, 30, 24, 27,
+        13, 56, 46, 60, 61, 41, 25, 42, 48, 53, 51, 43, 59, 58, 29, 71,
+        17, 22, 72, 18, 39, 35, 15, 38, 64, 52, 73, 67, 62, 50, 10, 68,
+        45, 63, 16, 14, 55, 54, 37, 20, 36, 12, 70, 34, 19, 26, 32, 23
+    ],
+    output=[
+        61, 65, 46, 66, 61, 53, 69, 66, 59, 58, 69, 71,
+        61, 56, 72, 60, 64, 53, 73, 67, 64, 58, 73, 71,
+        55, 63, 72, 38, 64, 54, 73, 67, 64, 52, 73, 68
+    ],
+    delta=[
+        0, 4, 0, 0, 0, 0, 0, 8, 0, 0, 8, 0, 0, 0, 0, 0,
+        0, 4, 4, 4, 12, 0, 0, 0, 0, 8, 0, 0, 4, 8, 0, 8,
+        0, 0, 8, 0, 0, 0, 0, 4, 16, 4, 16, 8, 0, 0, 0, 4,
+        0, 4, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    settings=dict(N=4, C=1, H=4, W=4, R=2, S=2)
+)
 
-    J = T = 1
-    R = S = 2
-    ngt.make_transformer()
 
-    padding = dict(pad_d=0, pad_h=0, pad_w=0, pad_c=0)
-    strides = dict(str_d=1, str_h=1, str_w=1, str_c=1)
-    fshape = dict(J=J, T=T, R=R, S=S)
+n2_c1_hw5_3x3_str2_max = dict(
+    input=[
+        58, 15, 51, 35, 18, 47, 31, 32, 52, 21,
+        36, 38, 57, 54, 25, 45, 23, 30, 16, 27,
+        48, 20, 41, 37, 43, 39, 22, 28, 33, 29,
+        12, 17, 44, 42, 19, 40, 10, 46, 34, 53,
+        26, 55, 50, 13, 24, 14, 49, 56, 59, 11
+    ],
+    output=[
+        58, 54, 52, 47, 50, 55, 59, 56
+    ],
+    delta=[
+        4, 0, 0, 0, 0, 4, 0, 0, 4, 0,
+        0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 4, 4, 0, 0, 0, 0, 4, 4, 0
+    ],
+    settings=dict(N=2, C=1, H=5, W=5, R=3, S=3, str_h=2, str_w=2)
+)
 
-    pool_params = dict(op='max')
-    pool_params.update(padding)
-    pool_params.update(strides)
-    pool_params.update(fshape)
 
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_i.set_shape((C, D, H, W, N))
-    inputs = ng.placeholder(axes=ax_i)
+n2_c1_hw4_2x2_str2_avg = dict(
+    input=[
+        1, 1, 2, 2, 1, 1, 2, 2,
+        -1, -1, 4, 4, 1, 1, 2, 2
+    ],
+    output=[
+        1, 2, 0, 3
+    ],
+    delta=[
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1
+    ],
+    settings=dict(N=1, C=1, H=4, W=4, R=2, S=2, str_h=2, str_w=2, op='avg')
+)
 
-    ax_o = ng.make_axes([
-        ng.make_axis(roles=[ar.features_input]).named('C'),
-        ng.make_axis(roles=[ar.features_0]).named('D'),
-        ng.make_axis(roles=[ar.features_1]).named('H'),
-        ng.make_axis(roles=[ar.features_2]).named('W'),
-        ax.N
-    ])
 
-    ax_o[:-1].set_shape((
-        output_dim(C, J, padding['pad_c'], strides['str_c']),
-        output_dim(D, T, padding['pad_d'], strides['str_d']),
-        output_dim(H, R, padding['pad_h'], strides['str_h']),
-        output_dim(W, S, padding['pad_w'], strides['str_w']))
-    )
-    # randomly initialize
-    input_value = rng.uniform(-1, 1, ax_i)
+@pytest.mark.parametrize("pool_args",
+                         [n4_c1_hw4_2x2_max,
+                          n2_c1_hw5_3x3_str2_max,
+                          n2_c1_hw4_2x2_str2_avg],
+                         ids=['n4_c1_hw4_2x2_max',
+                              'n2_c1_hw5_3x3_str2_max',
+                              'n2_c1_hw4_2x2_str2_avg'])
+def test_gen_reference(transformer_factory, pool_args):
+    pf = PoolParams(**pool_args['settings'])
 
-    assert input_value.shape == ax_i.lengths
+    output_ref = np.array(pool_args['output']).astype(np.float32).reshape(pf.dimO)
+    delta_ref = np.array(pool_args['delta']).astype(np.float32).reshape(pf.dimI)
 
-    # compute convolution with graph
-    output = ng.pooling(pool_params, inputs, axes=ax_o)
-    targets = ng.placeholder(axes=ax_o)
+    output_value, delta_value = pf.get_fprop_bprop(pool_args['input'])
 
-    costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
-    error = ng.sum(costs, out_axes=()) / ng.batch_size(costs)
-    d_inputs = ng.deriv(error, inputs)
-
-    targets_value = rng.uniform(.1, 0.9, output.axes)
-
-    with executor([output, error, d_inputs], inputs, targets) as conv_executor:
-        result_ng, err_ng, gradI_ng = conv_executor(input_value, targets_value)
-
-    # Now compute reference values via NEON
-    NervanaObject.be.bsz = N
-    neon_layer = Pooling(fshape=fshape, padding=padding, strides=strides, op="max")
-
-    inp = neon_layer.be.array(input_value.reshape(C * H * W * D, N))
-    neon_layer.configure((C, H, W))
-    neon_layer.prev_layer = True
-    neon_layer.allocate()
-    neon_layer.set_deltas(DummyDeltaBuffers())
-
-    result_ne = neon_layer.fprop(inp).get().reshape(output.axes.lengths)
-
-    act_result_ne = 1. / (1.0 + np.exp(-result_ne))
-    err = neon_layer.be.array((act_result_ne - targets_value).reshape(-1, N) / float(N))
-    gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
-
-    # Compare fprop
-    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
-
-    # Compare bprop
-    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
+    ng.testing.assert_allclose(output_ref, output_value)
+    ng.testing.assert_allclose(delta_ref, delta_value)

@@ -21,8 +21,7 @@ from functools import reduce, wraps
 
 import numpy as np
 import types
-from weakref import WeakValueDictionary
-from builtins import object, map, range, zip
+from builtins import object, map, zip
 
 from ngraph.util.names import NameableValue
 
@@ -55,7 +54,6 @@ def make_axis_role(name=None, docstring=None):
 
 
 def make_axis(length=None, name=None,
-              match_on_length=False,
               roles=None, docstring=None):
     """
     Returns a new Axis.
@@ -65,8 +63,6 @@ def make_axis(length=None, name=None,
         name (String, optional): Name of the axis.
         batch (bool, optional): This is a batch axis. Defaults to False.
         recurrent (bool, optional): This is a recurrent axis. Defaults to False.
-        match_on_length (bool, optional): This axis will match an axis with
-            the same length. Defaults to False.
         roles (set, optional): A set of axis roles for the axis.
         docstring (String, optional): A docstring for the axis.
 
@@ -74,9 +70,7 @@ def make_axis(length=None, name=None,
         Axis: A new Axis.
 
     """
-    return Axis(length=length, name=name,
-                match_on_length=match_on_length,
-                roles=roles, docstring=docstring)
+    return Axis(length=length, name=name, roles=roles, docstring=docstring)
 
 
 def make_axes(axes=()):
@@ -132,15 +126,11 @@ class Axis(object):
         length: The length of the axis.
         batch: Whether the axis is a batch axis.
         recurrent: Whether the axis is a recurrent axis.
-        match_on_length: Whether to only use length (and not identity) when comparing
-            equality against other Axis values. This is useful for anonymous Axis of
-            constant tensors.
     """
     __name_counter = 0
 
     def __init__(self,
                  length=None,
-                 match_on_length=False,
                  roles=None,
                  name=None,
                  **kwargs):
@@ -149,14 +139,12 @@ class Axis(object):
 
         if name is None:
             # generate name for axis if None was provided
-            name = 'Axis_' + str(type(self).__name_counter)
+            name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
             type(self).__name_counter += 1
 
         self.name = name
         self.__length = length
 
-        self.__match_on_length = match_on_length
-        self.__duals = WeakValueDictionary()
         self.__roles = set()
         if roles is not None:
             self.roles.update(roles)
@@ -196,14 +184,6 @@ class Axis(object):
         return self.name == 'R'
 
     @property
-    def match_on_length(self):
-        """
-        Returns:
-            bool: True if this axis matches axes with the same length.
-        """
-        return self.__match_on_length
-
-    @property
     def length(self):
         """
         Returns:
@@ -218,59 +198,6 @@ class Axis(object):
     @property
     def axes(self):
         return Axes([self])
-
-    @property
-    def dual_level(self):
-        """
-
-        Returns:
-            Axis displacement for dot.
-
-            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
-            the dual space of level n.
-
-        """
-        return 0
-
-    def __add__(self, offset):
-        return self.get_dual(offset)
-
-    def __sub__(self, offset):
-        return self.get_dual(-offset)
-
-    def get_dual(self, offset=-1):
-        """
-        Returns a dual for an axis.
-
-        The dual of an axis in the left side of a dot product matches the axis in the right side.
-
-        Args:
-            axis (Axis):
-            offset (int, optional): The dual offset from axis. Defaults to -1.
-
-        Returns:
-            (Axis): The dual of the axis.
-
-        """
-        if offset == 0:
-            return self
-        dual = self.__duals.get(offset, None)
-        if dual is None:
-            dual = DualAxis(self, offset)
-            self.__duals[offset] = dual
-        return dual
-
-    @property
-    def T(self):
-        return self.primary_axis.get_dual(-1 - self.dual_level)
-
-    @property
-    def primary_axis(self):
-        """
-        Returns:
-            The origin axis for a dual axis.
-        """
-        return self
 
     @property
     def roles(self):
@@ -305,278 +232,14 @@ class Axis(object):
         self.roles.add(axis_role)
         return self
 
-    @property
-    def annotated_axis(self):
-        """
-        Returns:
-            The actual axis.
-        """
-        return self
-
-    @property
-    def is_casting_axis(self):
-        return False
-
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
     def __eq__(self, other):
-        if not isinstance(other, Axis):
-            return False
-        elif self.match_on_length or other.match_on_length:
-            return self.length == other.length
-        elif self.name == other.name:
-            return True
-        return self.annotated_axis is other.annotated_axis
+        return isinstance(other, Axis) and self.name == other.name
 
     def __hash__(self):
-        return id(self)
-
-
-def casting_axis(annotated_axis, aliased_axis):
-    """
-    When an op casts an axis, we need to be able to determine the original axis.
-    We cannot associate this with the axis, since it is dependent on where the
-    axis was cast. For example, in one tensor A might be cast to X and in another
-    A might be cast to Y.
-
-    Arguments:
-        annotated_axis: The new axis in the cast.
-        aliased_axis: The previous axis.
-
-    Returns:
-        A CastingAxis.
-
-    """
-    if annotated_axis == aliased_axis:
-        return annotated_axis
-    else:
-        return CastingAxis(annotated_axis, aliased_axis)
-
-
-class CastingAxis(Axis):
-    """
-    Associates the original axis with a cast axis.
-
-    Arguments:
-        annotated_axis: The new axis in the cast.
-        aliased_axis: The previous axis.
-    """
-    def __init__(self, annotated_axis, cast_axis):
-        self.__annotated_axis = annotated_axis.annotated_axis
-        super(CastingAxis, self).__init__(annotated_axis)
-        self.named(annotated_axis.name)
-        self.__cast_axis = cast_axis
-
-    @property
-    def cast_axis(self):
-        """
-
-        Returns:
-            The axis this axis renames.
-        """
-        return self.__cast_axis
-
-    @property
-    def is_casting_axis(self):
-        """
-
-        Returns:
-            True if this is a casting axis.
-        """
-        return True
-
-    @property
-    def annotated_axis(self):
-        return self.__annotated_axis
-
-    @property
-    def is_flattened(self):
-        return self.annotated_axis.is_flattened
-
-    @property
-    def name(self):
-        return self.annotated_axis.name
-
-    @name.setter
-    def name(self, name):
-        pass
-
-    @property
-    def is_batch(self):
-        """
-        Tests if an axis is a batch axis.
-
-        Returns:
-            bool: True if the axis is a batch axis.
-
-        """
-        return self.annotated_axis.is_batch
-
-    @property
-    def is_recurrent(self):
-        """
-        Tests if an axis is a recurrent axis.
-
-        Returns:
-            bool: True if the axis is a recurrent axis.
-
-        """
-        return self.annotated_axis.is_recurrent
-
-    @property
-    def match_on_length(self):
-        """
-
-        Returns:
-            bool: True if this axis matches axes with the same length.
-        """
-        return self.annotated_axis.match_on_length
-
-    @property
-    def length(self):
-        """
-        Returns:
-            The length of the axis.
-        """
-        return self.annotated_axis.length
-
-    @length.setter
-    def length(self, value):
-        self.annotated_axis.length = value
-
-    @property
-    def axes(self):
-        return self.annotated_axis.axes
-
-    @property
-    def dual_level(self):
-        """
-
-        Returns:
-            Axis displacement for dot.
-
-            In dot, left axis of level n matches right axis of level n+1. Level n-1 is
-            the dual space of level n.
-
-        """
-        return self.annotated_axis.dual_level
-
-    def __add__(self, offset):
-        return CastingAxis(self.annotated_axis.get_dual(offset),
-                           self.cast_axis.get_dual(offset))
-
-    def __sub__(self, offset):
-        return CastingAxis(self.annotated_axis.get_dual(-offset),
-                           self.cast_axis.get_dual(-offset))
-
-    def get_dual(self, offset=-1):
-        """
-        Returns a dual for an axis.
-
-        The dual of an axis in the left side of a dot product matches the axis in the right side.
-
-        Args:
-            axis (Axis):
-            offset (int, optional): The dual offset from axis. Defaults to -1.
-
-        Returns:
-            (Axis): The dual of the axis.
-
-        """
-        return CastingAxis(self.annotated_axis.get_dual(offset),
-                           self.cast_axis.get_dual(offset))
-
-    @property
-    def T(self):
-        return CastingAxis(self.annotated_axis.T, self.casting_axis.T)
-
-    @property
-    def primary_axis(self):
-        return CastingAxis(self.annotated_axis.primary_axis,
-                           self.cast_axis.primary_axis)
-
-    @property
-    def roles(self):
-        """
-
-        Returns: The AxisRoles of this axis.
-
-        """
-        return self.annotated_axis.roles
-
-    def has_role(self, axis_role):
-        """
-
-        Args:
-            axis_role: A role to test.
-
-        Returns:
-            True if this axis has the role.
-
-        """
-        return self.annotated_axis.has_role(axis_role)
-
-    def add_role(self, axis_role):
-        """
-
-        Args:
-            axis_role:
-
-        Returns:
-
-        """
-        self.annotated_axis.add(axis_role)
-
-    def __repr__(self):
-        return 'CastingAxis({name}={cname}: {length})'.format(name=self.annotated_axis.name,
-                                                              cname=self.cast_axis.name,
-                                                              length=self.length)
-
-
-class DualAxis(Axis):
-    """
-    A DualAxis is returned from Axis.get_dual. It shares length with the primary axis.
-
-    This class should only be constructed by Axis.get_dual.
-    """
-    def __init__(self, primary_axis, dual_level):
-        super(DualAxis, self).__init__()
-        self.__primary_axis = primary_axis
-        self.__dual_level = dual_level
-        if dual_level > 0:
-            dual_level_str = '+' + str(dual_level)
-        else:
-            dual_level_str = str(dual_level)
-        self.name = primary_axis.name + dual_level_str
-
-    @property
-    def length(self):
-        return self.__primary_axis.length
-
-    @property
-    def primary_axis(self):
-        return self.__primary_axis
-
-    @property
-    def dual_level(self):
-        return self.__dual_level
-
-    def get_dual(self, offset=-1):
-        """
-        Get the dual of this axis.
-
-        Args:
-            offset: How many duals, default is -1.
-
-        Returns:
-            A dual axis.
-
-        """
-        return self.primary_axis.get_dual(self.dual_level + offset)
-
-    def __repr__(self):
-        return 'DualAxis({axis}:{level})'.format(axis=self.primary_axis, level=self.dual_level)
+        return hash((self.name, self.length))
 
 
 def _sliced_length(s, incoming_length):
@@ -629,23 +292,29 @@ def slice_axis(axis, s):
     return new_axis
 
 
-def no_duplicates(arr):
+def duplicates(arr):
     """
-    Returns whether there are duplicates in a list. The elements in the array
-    should be hashable.
+    Returns a list of Axis objects which have duplicate names in arr
 
     Arguments:
-        arr: The list to check.
+        arr: The iterable of Axis objects to check for duplicates in.
 
     Returns:
-        bool: True if there are no duplicates, False if there are.
+        list of Axis: duplicate Axis found in arr
     """
-    s = set()
+    # group axes by name
+    axes_by_name = collections.defaultdict(list)
     for x in arr:
-        if x in s:
-            return False
-        s.add(x)
-    return True
+        axes_by_name[x.name].append(x)
+
+    # find all names which are used by more than 1 axis, and add those axes to
+    # the list of duplicates
+    duplicates = []
+    for name, axes in axes_by_name.items():
+        if len(axes) > 1:
+            duplicates.extend(axes)
+
+    return duplicates
 
 
 def with_args_as_axes(f):
@@ -721,9 +390,10 @@ class Axes(object):
                     found_type=type(x),
                 ))
 
-        if not no_duplicates(axes):
+        if duplicates(axes):
             raise ValueError(
-                'The axes labels of a tensor cannot contain duplicates.'
+                'The axes labels of a tensor cannot contain duplicates.  Found: {}'
+                .format(str(duplicates(axes)))
             )
         self._axes = tuple(axes)
 
@@ -750,14 +420,6 @@ class Axes(object):
         return tuple(x.name for x in self)
 
     @property
-    def short_names(self):
-        """
-        Returns:
-            tuple: The names without indices of the outer axes.
-        """
-        return tuple(x.short_name for x in self)
-
-    @property
     def lengths(self):
         """
         Returns:
@@ -768,9 +430,23 @@ class Axes(object):
     def batch_axes(self):
         """
         Returns:
-            The Axes subset that are batch axes.
+            The tensor's batch Axis wrapped in an Axes object if there is one
+            on this tensor, otherwise returns None
         """
-        return Axes(axis for axis in self if axis.is_batch)
+        batch_axis = self.batch_axis()
+        if batch_axis:
+            return Axes([batch_axis])
+        else:
+            return None
+
+    def batch_axis(self):
+        """
+        Returns:
+            The tensor's batch Axis or None if there isn't one.
+        """
+        for axis in self:
+            if axis.is_batch:
+                return axis
 
     def sample_axes(self):
         """
@@ -779,12 +455,14 @@ class Axes(object):
         """
         return Axes(axis for axis in self if not axis.is_batch)
 
-    def recurrent_axes(self):
+    def recurrent_axis(self):
         """
         Returns:
-            The Axes subset that are recurrent axes.
+            The tensor's recurrent Axis or None if there isn't one.
         """
-        return Axes(axis for axis in self if axis.is_recurrent)
+        for axis in self:
+            if axis.is_recurrent:
+                return axis
 
     def role_axes(self, role):
         """
@@ -810,30 +488,20 @@ class Axes(object):
         return FlattenedAxis(self)
 
     def set_shape(self, shape):
-        axes = self._axes
-        diff = len(axes) - len(shape)
-        if diff == 0:
-            for axis, length in zip(axes, shape):
-                axis.length = length
-            return
+        """
+        Set shape of Axes
 
-        if diff > 0:
-            axes[0].length = shape[0]
-            for i in range(1, diff + 1):
-                # Pad missing dimensions with 1.
-                axes[i].length = 1
-            for length in shape[diff:]:
-                i += 1
-                axes[i].length = length
-            return
-        raise ValueError('Number of axes %d too low for shape %s' % (
-                         len(axes), shape))
+        Args:
+            shape: tuple or list of shapes, must be the same length as the axes
+        """
+        if len(shape) != len(self._axes):
+            raise ValueError("shape's length %s must be euqal to axes' length"
+                             "%s" % (len(shape), len(self)))
+        for axis, length in zip(self._axes, shape):
+            axis.length = length
 
     def find_by_name(self, name):
         return Axes(axis for axis in self if axis.name == name)
-
-    def find_by_short_name(self, short_name):
-        return Axes(axis for axis in self if axis.short_name == short_name)
 
     def add_role(self, role):
         for axis in self:
@@ -856,16 +524,75 @@ class Axes(object):
         return self.__getitem__(slice(i, j))
 
     def __add__(self, other):
-        return Axes(
-            tuple(self) +
-            tuple(axis for axis in Axes(other) if axis not in self)
-        )
+        """
+        Returns list concatenated axes. Throws exception when there are Axis
+        duplication.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            current axes concatenated with the other axes
+        """
+        # self and other could not have common element
+        other = make_axes(other)
+        common_axes = self & other
+        if len(common_axes) != 0:
+            raise ValueError("Trying to concatenate %s with %s, but they have"
+                             "common axes %s, which is not allowed."
+                             % (self, other, common_axes))
+        return make_axes(tuple(self) + tuple(other))
 
     def __sub__(self, other):
-        other = Axes(other)
-        return Axes((axis for axis in self if axis not in other))
+        """
+        Returns ordered set difference of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set difference of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self if axis not in other))
+
+    def __or__(self, other):
+        """
+        Returns ordered set union of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set union of axes
+        """
+        other = make_axes(other)
+        return make_axes(tuple(self) +
+                         tuple(axis for axis in Axes(other) if axis not in self))
+
+    def __and__(self, other):
+        """
+        Returns ordered set intersection of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set intersection of axes
+        """
+        other = make_axes(other)
+        return make_axes((axis for axis in self._axes if axis in other))
 
     def __eq__(self, other):
+        """
+        True if each ``Axis`` are matching and in same order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if each ``Axis`` are matching and in same order
+        """
         if not isinstance(other, Axes):
             raise ValueError((
                 'other must be of type Axes, found type {}'
@@ -874,6 +601,16 @@ class Axes(object):
         return self._axes.__eq__(other._axes)
 
     def __ne__(self, other):
+        """
+        The opposite of __eq__, True if not all ``Axis`` are matching or in
+        different order (list comparison)
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, True if not all ``Axis`` are matching or in different order
+        """
         return not self == other
 
     def __nonzero__(self):
@@ -883,83 +620,61 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def get_dual(self, dual_offset=-1):
-        return Axes((axis.get_dual(dual_offset) for axis in self))
+    def is_sub_set(self, other):
+        """
+        Returns true if other is subset of self, i.e. <=
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other is subset of self
+        """
+        return set(self.names).issubset(set(make_axes(other).names))
+
+    def is_super_set(self, other):
+        """
+        Returns true if other is superset of self, i.e. >=
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other is superset of self
+        """
+        return not self.is_sub_set(other)
+
+    def is_equal_set(self, other):
+        """
+        Returns true if other has the same set of Axis names as self
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            bool, true if other has the same set of Axis names as self
+        """
+        return set(self.names) == set(make_axes(other).names)
+
+    def is_not_equal_set(self, other):
+        """
+        Returns true if other does not the same set of Axis names as self
+
+        Arguments:
+           other: the right-hand side operator axes
+
+        Returns:
+           bool, true if other does not has the same set of Axis names as self
+        """
+        return not self.is_equal_set(other)
 
     @property
     def T(self):
         return Axes(axis.T for axis in self)
 
-    def intersect(self, axes):
-        """
-        Returns the intersection of the elements, leaving out duplicate Axes.
-
-        Arguments:
-            axes: second axes to intersect
-
-        Returns:
-            The ordered intersection
-        """
-        axes = make_axes(axes)
-        return make_axes((axis for axis in self._axes if axis in axes))
-
-    @staticmethod
-    @with_args_as_axes
-    def linear_map_axes(in_axes, out_axes):
-        """
-        For tensors ``out = dot(T, in)`` used in linear transformations
-        determines the axes ``T`` must have.
-
-        Arguments:
-            in_axes: The axes of ``in``.
-            out_axes: The axes of ``out``.
-
-        Returns:
-            Axes of the weights used in the transformation.
-        """
-        return (
-            out_axes + in_axes.get_dual()
-        )
-
-    @staticmethod
-    @with_args_as_axes
-    def find(axes, sub_axes):
-        """
-        Attempts to locate a subsequence of Axes (sub_axes) in axes.
-
-        Arguments:
-            axes: The superset of Axes.
-            sub_axes: Axes to search for.
-
-        Returns:
-            int: The index at which the subsequence sub_axes occurs in
-            axes.
-        """
-        assert isinstance(axes, Axes) and isinstance(sub_axes, Axes)
-        for i in range(len(axes) - len(sub_axes) + 1):
-            if axes[i:i + len(sub_axes)] == sub_axes:
-                return i
-        raise ValueError('Could not find sub_axes')
-
-    @staticmethod
-    def find_axis(axes, axis):
-        """
-        Attempts to locate an axis in Axes.
-
-        Arguments:
-            axes: The superset of Axes.
-            axis: Axis to search for.
-
-        Returns:
-            int: The index at which the axis occurs in axes.
-        """
-        axes = Axes(axes)
-        assert isinstance(axis, Axis)
-        return axes._axes.index(axis)
-
     def index(self, axis):
         """
-        Returns the index of an axis.
+        Returns the index of an axis
 
         Arguments:
             axis: The axis to search for.
@@ -968,42 +683,6 @@ class Axes(object):
             The index.
         """
         return self._axes.index(axis)
-
-    def index_unique(self, axis):
-        """
-        Returns the index of an axis and ignores match_on_length behavior
-
-        Arguments:
-            axis: The axis to search for.
-
-        Returns:
-            The index.
-        """
-        for i in range(len(self._axes)):
-            if self._axes[i].annotated_axis.primary_axis is axis.annotated_axis.primary_axis:
-                return i
-        raise ValueError("Axis not in axes")
-
-    def has_same_axes(self, axes):
-        """
-        Checks whether axes have the same set of axes as self.
-
-        Arguments:
-            axes (Axes): axes.
-
-        Returns:
-            True if axes has the same elements,
-            False otherwise.
-        """
-        axes = make_axes(axes)
-
-        for x in self:
-            if x not in axes:
-                return False
-        for x in axes:
-            if x not in self:
-                return False
-        return True
 
     @staticmethod
     @with_args_as_axes
@@ -1019,20 +698,7 @@ class Axes(object):
         Returns:
             True if axes can be broadcasted to new_axes, False otherwise.
         """
-        def base_annotated_axis(axis):
-            """
-            Find the base annotated axis.
-
-            If ax_a gets casted to ax_b and then casted to ax_c,
-            base_annotated_axis(ax_c) == ax_a.
-            """
-            if axis != axis.annotated_axis:
-                return base_annotated_axis(axis.annotated_axis)
-            else:
-                return axis
-
-        removed_axes = (set(map(base_annotated_axis, axes)) -
-                        set(map(base_annotated_axis, axes)))
+        removed_axes = axes - new_axes
 
         if removed_axes:
             raise ValueError(("The new_axes of a broadcast operation must "
@@ -1127,39 +793,17 @@ class Axes(object):
                              "layouts are different"
                              % (unflattend_axes, flattened_axes))
 
-    # TODO: delete this method, the size should come from the tensor
     @property
     def size(self):
-        """TODO."""
-        size = 1
-        for x in self:
-            size *= x.length
-        return size
+        """
+        TODO: delete this method, the size should come from the tensor
+        """
+        return int(np.prod(self.lengths))
 
     def __repr__(self):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
-
-    def append(self, axis):
-        """
-        Appends an axis
-
-        Arguments:
-            other: The Axis object to append.
-        """
-        self._axes = Axes(tuple(self) + (axis,))
-
-    def insert(self, index, axis):
-        """
-        Inserts an axis
-        Arguments:
-            index   : Index to insert at
-            axis    : The Axis object to insert
-        """
-        axes = self._axes
-        axes.insert(index, axis)
-        self._axes = Axes(axes)
 
 
 def _reduce_nested(elem, agg, func):
@@ -1191,14 +835,26 @@ class FlattenedAxis(Axis):
     A FlattenedAxis has length which is the product of the lengths of all
     Axis in the axes.  The original Axes object is stored so that we can later
     unflatten this Axis back to its original component Axis.
+
+    Notes: since we allows Axis to have duplicated names globally, NameableValue
+    is not used here.
     """
 
+    __name_counter = 0
+
     def __init__(self, axes, **kwargs):
+        # get length
         axes = Axes(axes)
         if len(axes) == 1 and axes[0].is_flattened:
             pass
         length = reduce(operator.mul, axes.lengths, 1)
-        super(FlattenedAxis, self).__init__(length=length, **kwargs)
+
+        # set name
+        name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
+        type(self).__name_counter += 1
+
+        # parent constructor
+        super(FlattenedAxis, self).__init__(length=length, name=name, **kwargs)
         self.__axes = axes
 
     @property
@@ -1216,14 +872,6 @@ class FlattenedAxis(Axis):
             Whether this axes contains no collapsed axes.
         """
         return len(self.__axes) == 0
-
-    @property
-    def single(self):
-        """
-        Returns:
-            Whether this axes contains exactly one collapsed axes.
-        """
-        return len(self.__axes) == 1
 
     @property
     def axes(self):
@@ -1257,31 +905,6 @@ def reduce_strides(strides):
     """
     return tuple(int(_reduce_nested(elem, float('inf'), min))
                  for elem in strides)
-
-
-def _check_sliced_axis_length(s, axis, new_axis):
-    """
-    Ensure that the length of the axis resulting from slicing axis with
-    slice s matches the length of new_axis
-    """
-
-    expected_length = _sliced_length(s, axis.length)
-    if expected_length != new_axis.length:
-        raise ValueError((
-            "A slice operation ({slice}) was attempted on axis "
-            "{axis} with length {axis_length}.  The result of "
-            "which is a new sliced axis of length "
-            "{expected_length}.  The new_axis passed in "
-            "{new_axis} has a different length which does not "
-            "match: {new_axis_length}."
-        ).format(
-            slice=s,
-            axis=axis,
-            axis_length=axis.length,
-            expected_length=expected_length,
-            new_axis=new_axis,
-            new_axis_length=new_axis.length,
-        ))
 
 
 def _make_stride(inner_size, axis, fsz):
@@ -1370,7 +993,6 @@ class TensorDescription(NameableValue):
         self.dtype = default_dtype(dtype)
         self.offset = offset
         self.ndim = len(self.axes)
-        self.__read_only = False
         self.full_sizes = tuple(full_sizes) if full_sizes is not None \
             else self.axes.full_lengths
         self.next_tensor_description = next_tensor_description
@@ -1501,14 +1123,6 @@ class TensorDescription(NameableValue):
                             if b == axis:
                                 return full_strides[sub_idx], full_sizes[sub_idx]
 
-                    if a.is_casting_axis:
-                        # The axis is a cast of some other axis pulled in through some
-                        # operation like dot. Try to work down through what it was
-                        # casting.
-                        cast_axis = a.cast_axis
-                        if cast_axis == axis:
-                            return full_strides, full_sizes
-
                 # Move on to the next tensor description in the reshaping chain
                 td = td.next_tensor_description
 
@@ -1581,7 +1195,7 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The reordered tensor description.
         """
-        self.axes.has_same_axes(new_axes)
+        self.axes.is_equal_set(new_axes)
         return self.reorder_and_broadcast(new_axes)
 
     def reorder_and_broadcast(self, new_axes):
@@ -1609,7 +1223,7 @@ class TensorDescription(NameableValue):
         new_sizes = []
         for axis in new_axes:
             if axis in self.axes:
-                idx = Axes.find_axis(self.axes, axis)
+                idx = self.axes.index(axis)
                 new_strides.append(self.full_strides[idx])
                 new_sizes.append(self.full_sizes[idx])
             elif axis.is_flattened:
@@ -1765,6 +1379,30 @@ class TensorDescription(NameableValue):
         for _ in reversed(self.shape):
             cstrides.insert(0, s)
             s = s * _
+        return tuple(cstrides) == self.strides
+
+    @property
+    def broadcast_contiguous(self):
+        """
+        Returns:
+            True if tensor's strides are contiguous or broadcasted
+        """
+        if self.shape == ():
+            return True
+
+        broadcast_axes = np.where(np.equal(self.strides, 0))[0]
+        aug_shape = list(self.shape)
+        for bcast_axis in broadcast_axes:
+            aug_shape[bcast_axis] = 1
+
+        s = self.dtype.itemsize
+        cstrides = []
+        for _ in reversed(aug_shape):
+            cstrides.insert(0, s)
+            s = s * _
+
+        for bcast_axis in broadcast_axes:
+            cstrides[bcast_axis] = 0
         return tuple(cstrides) == self.strides
 
     @property

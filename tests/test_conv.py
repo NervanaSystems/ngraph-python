@@ -13,51 +13,241 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+# import numpy as np
+# import pytest
+# from neon import NervanaObject
+# from neon.backends import gen_backend
+# from neon.layers.layer import Convolution
+
+# import ngraph as ng
+# from ngraph.frontends.neon import ax, ar
+# from ngraph.frontends.neon.layer import output_dim
+# from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
+
+# rng = RandomTensorGenerator(0, np.float32)
+
+
+# NervanaObject.be = gen_backend()
+
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 import numpy as np
 import pytest
-from neon import NervanaObject
-from neon.backends import gen_backend
-from neon.layers.layer import Convolution
 
 import ngraph as ng
-from ngraph.frontends.neon import ax, ar
-from ngraph.frontends.neon.layer import output_dim
+import itertools as itt
+from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
+from ngraph.frontends.neon.layer import output_dim
+
 
 rng = RandomTensorGenerator(0, np.float32)
 
 
-NervanaObject.be = gen_backend()
-
-
-class DummyDeltaBuffers(object):
+def slicable(dim, pad=0):
     """
-    Dummy class for delta buffers needed by neon
-    """
+    colapse outer dimensions into one and preserve inner dimension
+    this allows for easy cpu convolution in numpy
 
-    def __init__(self):
-        self.buffers = [None]
+    Arguments:
+        dim (tuple): dimensions list in a tuple
+        pad (int):  how many pixel paddings
+    """
+    dim0 = np.prod(dim[:-1]) + pad
+    return (dim0, dim[-1])
+
+
+def pixel_indices(T, R, S, D, H, W, C, mt, pr, qs):
+    HW = H * W
+    DHW = D * H * W
+    imax = C * DHW
+
+    idx = []
+    for c, t, r, s in itt.product(range(C), range(T), range(R), range(S)):
+
+        ci = c * DHW
+
+        z = mt + t
+        zi = ci + z * HW
+        zb = z >= 0 and z < D
+
+        y = pr + r
+        yi = zi + y * W
+        yb = zb and y >= 0 and y < H
+
+        x = qs + s
+
+        if yb and x >= 0 and x < W:
+            xi = yi + x
+        else:
+            xi = imax  # out of bounds
+
+        idx.append(xi)
+
+    return idx
+
+
+def reference_conv(dimI, dimF, dimO, conv_params, valI, valF, valE):
+    (K, M, P, Q, N) = dimO
+    (C, D, H, W, N) = dimI
+    (C, T, R, S, K) = dimF
+    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
+    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
+    dtype = np.float32
+
+    no_pad_I = slicable(dimI)
+    cpuI = np.zeros(slicable(dimI, 1), dtype=dtype)
+    cpuI[:no_pad_I[0], :] = valI.reshape(no_pad_I)
+
+    cpuF = valF.reshape(slicable(dimF))
+    cpuE = valE
+
+    # ======numpy===========
+    # cpu output arrays
+    cpuO = np.zeros(dimO, dtype=dtype)
+    cpuB = np.zeros(slicable(dimI, 1), dtype=dtype)
+    cpuU = np.zeros(slicable(dimF), dtype=dtype)
+
+    for m, p, q in itt.product(range(M), range(P), range(Q)):
+        mt = m * str_d - pad_d
+        pr = p * str_h - pad_h
+        qs = q * str_w - pad_w
+
+        idx = pixel_indices(T, R, S, D, H, W, C, mt, pr, qs)
+
+        cpuO[:, m, p, q, :] = np.dot(cpuF.T, cpuI[idx, :])
+
+        cpuB[idx, :] += np.dot(cpuF, cpuE[:, m, p, q, :])
+
+        cpuU += np.dot(cpuI[idx, :], cpuE[:, m, p, q, :].T)
+
+    outB = cpuB[:-1, :].reshape(dimI)
+    outU = cpuU.reshape(dimF)
+    return (cpuO, outB, outU)
+
+
+class ConvParams(object):
+    def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
+                 pad_d=0, pad_h=0, pad_w=0,
+                 str_d=1, str_h=1, str_w=1):
+
+        M = output_dim(D, T, pad_d, str_d)
+        P = output_dim(H, R, pad_h, str_h)
+        Q = output_dim(W, S, pad_w, str_w)
+
+        self.dimO = (K, M, P, Q, N)
+        self.dimI = (C, D, H, W, N)
+        self.dimF = (C, T, R, S, K)
+
+        self.conv_params = dict(
+            pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
+            str_d=str_d, str_h=str_h, str_w=str_w,
+            dil_d=1, dil_h=1, dil_w=1
+        )
+
+        batch_axis = ng.make_axis(name='N', length=N)
+
+        self.ax_i = ng.make_axes([
+            ng.make_axis(name='C', length=C),
+            ng.make_axis(name='D', length=D),
+            ng.make_axis(name='H', length=H),
+            ng.make_axis(name='W', length=W),
+            batch_axis
+        ])
+
+        self.ax_f = ng.make_axes([
+            ng.make_axis(name='C', length=C),
+            ng.make_axis(name='D', length=T),
+            ng.make_axis(name='H', length=R),
+            ng.make_axis(name='W', length=S),
+            ng.make_axis(name='K', length=K),
+        ])
+
+        self.ax_o = ng.make_axes([
+            ng.make_axis(name='C', length=K),
+            ng.make_axis(name='D', length=M),
+            ng.make_axis(name='H', length=P),
+            ng.make_axis(name='W', length=Q),
+            batch_axis
+        ])
+
+
+@pytest.fixture()
+def n64_hw32_c32_3x3():
+    return dict(C=32, N=64, K=32, H=32, W=32, R=3, S=3)
+
+
+@pytest.fixture()
+def n128_hw32_c3_2x2():
+    return dict(C=3, N=128, K=2, H=32, W=32, R=2, S=2)
+
+
+@pytest.fixture()
+def n4_hw16_c3_5x5():
+    return dict(C=3, N=4, K=8, H=16, W=16, R=5, S=5)
+
+
+def test_conv(transformer_factory, n64_hw32_c32_3x3):
+    cf = ConvParams(**n64_hw32_c32_3x3)
+
+    inputs = ng.placeholder(axes=cf.ax_i)
+    filters = ng.placeholder(axes=cf.ax_f)
+
+    # randomly initialize
+    input_value = rng.uniform(-0.5, 0.5, cf.ax_i)
+    filter_value = rng.uniform(-0.5, 0.5, cf.ax_f)
+    error_value = rng.uniform(-0.5, 0.5, cf.ax_o)
+
+    inputs = ng.placeholder(cf.ax_i)
+    filters = ng.placeholder(cf.ax_f)
+    errors = ng.placeholder(cf.ax_o)
+
+    output = ng.convolution(cf.conv_params, inputs, filters, axes=cf.ax_o)
+    bprop_out = bprop_conv(errors, inputs, filters, output)
+    updat_out = update_conv(errors, inputs, filters, output)
+
+    with executor([output, bprop_out, updat_out], inputs, filters, errors) as conv_executor:
+        result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
+
+    # Compute reference with NumPy
+    result_np, gradI_np, gradF_np = reference_conv(cf.dimI, cf.dimF, cf.dimO,
+                                                   cf.conv_params,
+                                                   input_value, filter_value, error_value)
+
+    # Compare fprop
+    assert np.allclose(result_ng, result_np, rtol=0, atol=0.5)
+
+    # Compare bprop
+    assert np.allclose(gradI_ng, gradI_np, rtol=0, atol=0.5)
+
+    # Compare update
+    assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
 
 
 def test_wrong_filters_shape_length():
     """
     test wrong filters shape length
     """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
+    cf = ConvParams()
+    ax_f = cf.ax_f[:-1]
 
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S])
-
-    inputs = ng.placeholder(ax_i)
+    inputs = ng.placeholder(cf.ax_i)
     filters = ng.placeholder(ax_f)
 
     with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
+        ng.convolution(cf.conv_params, inputs, filters, {})
     assert str(exinfo.value) == 'convolution filter shape must be length 5, found {}'\
         .format(len(ax_f))
 
@@ -66,21 +256,14 @@ def test_wrong_input_shape_length():
     """
     test wrong input shape length
     """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+    cf = ConvParams()
+    ax_i = cf.ax_i[:-1]
 
     inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
+    filters = ng.placeholder(cf.ax_f)
 
     with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
+        ng.convolution(cf.conv_params, inputs, filters, {})
     assert str(exinfo.value) == 'convolution input shape must be length 5, found {}'\
         .format(len(ax_i))
 
@@ -89,107 +272,33 @@ def test_first_axes_not_same():
     """
     test first axes are not the same
     """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([ax.D, ax.C, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
+    cf = ConvParams()
+    ax_i = cf.ax_i[1:2] + cf.ax_i[0:1] + cf.ax_i[2:]  # D, C, H, W, N
 
     inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
+    filters = ng.placeholder(cf.ax_f)
 
     with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
+        ng.convolution(cf.conv_params, inputs, filters, {})
     assert str(exinfo.value) == 'the first axis in input {inputs} and filter {filters} ' \
         'are not the same.'.format(
             inputs=inputs.axes[0],
             filters=filters.axes[0])
 
 
-def test_wrong_number_of_batch_axes_at_input():
-    """
-    test wrong number of batch axes at input
-    """
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    C = 3
-    D = 1
-    ax_C = ng.make_axis(name='N', length=C)
-    ax_D = ng.make_axis(name='N', length=D)
-
-    ax_i = ng.make_axes([ax_C, ax_D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax_C, ax.T, ax.R, ax.S, ax.K])
-
-    inputs = ng.placeholder(axes=ax_i)
-    filters = ng.placeholder(ax_f)
-
-    with pytest.raises(ValueError) as exinfo:
-        ng.convolution(conv_params, inputs, filters, {})
-
-    assert str(exinfo.value) == "Input must have one batch axis.  Found {n_batch_axes} " \
-        "batch axes: {batch_axes} Found {n_sample_axes} sample axes: {sample_axes}.".format(
-            n_batch_axes=len(inputs.axes.batch_axes()),
-            batch_axes=inputs.axes.batch_axes(),
-            n_sample_axes=len(inputs.axes.sample_axes()),
-            sample_axes=inputs.axes.sample_axes())
-
-
-def test_convolution_backprop(transformer_factory):
+def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
     test convolution backprop path
     """
-    N = 128
-    C, K = 3, 2
-    D, T = 1, 1
-    H = W = 32
-    R = S = 2
-
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_i.set_shape((C, D, H, W, N))
-    ax_f.set_shape((C, T, R, S, K))
-    ax_o = ng.make_axes([
-        ng.make_axis(roles=[ar.features_input]).named('C'),
-        ng.make_axis(roles=[ar.features_0]).named('D'),
-        ng.make_axis(roles=[ar.features_1]).named('H'),
-        ng.make_axis(roles=[ar.features_2]).named('W'),
-        ax.N
-    ])
-
-    ax_o[:-1].set_shape((
-        K,
-        output_dim(D, T, padding['pad_d'], strides['str_d']),
-        output_dim(H, R, padding['pad_h'], strides['str_h']),
-        output_dim(W, S, padding['pad_w'], strides['str_w']))
-    )
-
-    inputs = ng.placeholder(axes=ax_i)
-    filters = ng.placeholder(axes=ax_f)
+    cf = ConvParams(**n128_hw32_c3_2x2)
+    inputs = ng.placeholder(axes=cf.ax_i)
+    filters = ng.placeholder(axes=cf.ax_f)
 
     # randomly initialize
-    input_value = rng.uniform(-1, 1, ax_i)
-    filter_value = rng.uniform(-1, 1, ax_f)
+    input_value = rng.uniform(-1, 1, cf.ax_i)
+    filter_value = rng.uniform(-1, 1, cf.ax_f)
 
-    assert input_value.shape == ax_i.lengths
-    assert filter_value.shape == ax_f.lengths
-
-    output = ng.sum(ng.convolution(conv_params, inputs, filters, ax_o), out_axes=())
+    output = ng.sum(ng.convolution(cf.conv_params, inputs, filters, cf.ax_o), out_axes=())
 
     with ExecutorFactory() as factory:
         dcdf_sym_fun = factory.derivative(output, filters, inputs)
@@ -200,145 +309,30 @@ def test_convolution_backprop(transformer_factory):
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
-def test_convolution(transformer_factory):
-    """
-    test convolution forward path
-    """
-    N = 128
-    C, K = 3, 8
-    D, T = 1, 1
-    H = W = 32
-    R = S = 2
-
-    padding = dict(pad_d=0, pad_h=0, pad_w=0)
-    strides = dict(str_d=1, str_h=1, str_w=1)
-    dilation = dict(dil_d=1, dil_h=1, dil_w=1)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_i.set_shape((C, D, H, W, N))
-    ax_f.set_shape((C, T, R, S, K))
-
-    ax_o = ng.make_axes([
-        ng.make_axis(roles=[ar.features_input]).named('C'),
-        ng.make_axis(roles=[ar.features_0]).named('D'),
-        ng.make_axis(roles=[ar.features_1]).named('H'),
-        ng.make_axis(roles=[ar.features_2]).named('W'),
-        ax.N
-    ])
-
-    ax_o[:-1].set_shape((
-        K,
-        output_dim(D, T, padding['pad_d'], strides['str_d']),
-        output_dim(H, R, padding['pad_h'], strides['str_h']),
-        output_dim(W, S, padding['pad_w'], strides['str_w']))
-    )
-
-    inputs = ng.placeholder(axes=ax_i)
-    filters = ng.placeholder(axes=ax_f)
-
-    # randomly initialize
-    input_value = rng.uniform(-1, 1, ax_i)
-    filter_value = rng.uniform(-1, 1, ax_f)
-
-    assert input_value.shape == ax_i.lengths
-    assert filter_value.shape == ax_f.lengths
-
-    inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
-
-    output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
-    targets = ng.placeholder(axes=output.axes)
-
-    costs = ng.cross_entropy_binary(ng.sigmoid(output), targets)
-    error = ng.sum(costs, out_axes=()) / ng.batch_size(costs)
-    d_inputs = ng.deriv(error, inputs)
-    d_filters = ng.deriv(error, filters)
-
-    targets_value = rng.uniform(.1, 0.9, output.axes)
-
-    with executor([output, error, d_inputs, d_filters], inputs, filters, targets) as conv_executor:
-        result_ng, err_ng, gradI_ng, gradF_ng = \
-            conv_executor(input_value, filter_value, targets_value)
-
-    # Now compute reference values via NEON
-    NervanaObject.be.bsz = N
-    neon_layer = Convolution(fshape=(R, S, K), padding=padding, strides=strides)
-
-    inp = neon_layer.be.array(input_value.reshape(C * H * W * D, N))
-    neon_layer.W = neon_layer.be.array(filter_value.reshape(C * R * S * T, K))
-    neon_layer.dW = neon_layer.be.empty_like(neon_layer.W)
-    neon_layer.configure((C, H, W))
-    neon_layer.prev_layer = True
-    neon_layer.allocate()
-    neon_layer.set_deltas(DummyDeltaBuffers())
-
-    result_ne = neon_layer.fprop(inp).get().reshape(output.axes.lengths)
-
-    act_result_ne = 1. / (1.0 + np.exp(-result_ne))
-    err = neon_layer.be.array((act_result_ne - targets_value).reshape(-1, N) / float(N))
-    gradI_ne = neon_layer.bprop(err).get().reshape(ax_i.lengths)
-    gradF_ne = neon_layer.dW.get().reshape(ax_f.lengths)
-
-    # Compare fprop
-    ng.testing.assert_allclose(result_ng, result_ne, rtol=0, atol=1e-6)
-
-    # Compare bprop
-    ng.testing.assert_allclose(gradI_ng, gradI_ne, rtol=0, atol=1e-6)
-
-    # Compare update
-    ng.testing.assert_allclose(gradF_ng, gradF_ne, rtol=0, atol=1e-4)
-
-
-def test_conv_flatten_deriv(transformer_factory):
+def test_conv_flatten_deriv(transformer_factory, n4_hw16_c3_5x5):
     """
     Test deriv of conv followed by flatten
     """
+    cf = ConvParams(**n4_hw16_c3_5x5)
 
-    # set shape
-    # NOTE: N must be >= 4 for GPU, but for CPU this could be decreased to
-    # speed up the test
-    N = 4
-    C, D, H, W = (3, 1, 28, 28)
-    T, R, S, K = (1, 5, 5, 8)
-
-    params = dict(pad_d=0, pad_h=0, pad_w=0, str_d=1, str_h=1, str_w=1, dil_d=1, dil_h=1, dil_w=1)
-
-    # i, f, o axes
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_o = ng.make_axes([
-        ng.make_axis(roles=[ar.features_input]).named('C'),
-        ng.make_axis(roles=[ar.features_0]).named('D'),
-        ng.make_axis(roles=[ar.features_1]).named('H'),
-        ng.make_axis(roles=[ar.features_2]).named('W'),
-        ax.N
-    ])
-
-    ax_i.set_shape((C, D, H, W, N))
-    ax_f.set_shape((C, T, R, S, K))
-    ax_o.set_shape((K, D - T + 1, H - R + 1, W - S + 1, N))
-    axes_rsck = ng.make_axes([ax.R, ax.S, ax.C, ax.K])
-    axes_rsck_prime = ng.make_axes([ng.make_axis(axis.length).named(axis.name + 'p')
-                                    for axis in axes_rsck])
-    axes_nmpqk = ng.make_axes([ax_o[-1], ax_o[1], ax_o[2], ax_o[3], ax_o[0]])
+    axes_rsck = ng.make_axes([cf.ax_f[2], cf.ax_f[3], cf.ax_f[0], cf.ax_f[-1]])
+    axes_rsck_prime = ng.make_axes([ng.make_axis(name=ax.name + 'p', length=ax.length)
+                                    for ax in axes_rsck])
+    axes_nmpqk = ng.make_axes([cf.ax_o[-1], cf.ax_o[1], cf.ax_o[2], cf.ax_o[3], cf.ax_o[0]])
 
     # broadcast input / filter axes
-    input_var = ng.variable(ax_i).named('input')
+    input_var = ng.variable(cf.ax_i)
     input_var.input = True
     input_val = np.ones(input_var.axes.lengths)
 
     filter_rsck_prime = ng.variable(axes_rsck_prime)
     filter_var = filter_rsck_prime
     filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
-    filter_trsck = ng.expand_dims(filter_rsck, ax.T, 0)
-    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=ax_f)
+    filter_trsck = ng.expand_dims(filter_rsck, cf.ax_f[1], 0)
+    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=cf.ax_f)
 
     # convolution
-    output_kmpqn = ng.convolution(params, input_var, filter_ctrsk, axes=ax_o)
+    output_kmpqn = ng.convolution(cf.conv_params, input_var, filter_ctrsk, axes=cf.ax_o)
     output_nmpqk = ng.axes_with_order(output_kmpqn, axes=axes_nmpqk)
 
     # slice away the oD
@@ -351,7 +345,6 @@ def test_conv_flatten_deriv(transformer_factory):
     cost = ng.sum(output, out_axes=())
 
     filter_var.input = True
-    filter_var.named('filter')
     filter_val = np.ones(filter_var.axes.lengths)
 
     with ExecutorFactory() as factory:
@@ -365,7 +358,7 @@ def test_conv_flatten_deriv(transformer_factory):
 
         conv_val = conv_comp(filter_val, input_val)
         conv_val_num = np.empty_like(conv_val)
-        conv_val_num.fill(C * T * R * S)
+        conv_val_num.fill(np.prod(cf.ax_f.lengths[:-1]))
         assert ng.testing.allclose(conv_val, conv_val_num)
 
         grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)

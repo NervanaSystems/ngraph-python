@@ -30,7 +30,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, DerivPass, RequiredTensorShaping
+from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
     GPUContiguousPrune
 
@@ -90,7 +90,7 @@ class ElementWiseKernel(GPUKernel):
         if len(op.reduction_axes) == 0:
             self._buffer_op("assign", x=x, out=out)
         else:
-            axis = op.args[0].axes.index_unique(op.reduction_axes[0])
+            axis = op.args[0].axes.index(op.reduction_axes[0])
             self._buffer_op(string, x=x, axis=axis, out=out)
 
     @generic_method(Op)
@@ -976,7 +976,7 @@ class GPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [DerivPass(), SimplePrune(),
+        self.graph_passes = [SimplePrune(),
                              RequiredTensorShaping(), GPUTensorShaping(),
                              GPUTensorLayout(), GPUContiguousPrune()]
 

@@ -90,7 +90,7 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
 
     # params to be updated using GDM
     np_W = np.random.rand(C.length)
-    W = ng.variable([C - 1], initial_value=np_W)
+    W = ng.variable([C], initial_value=np_W)
 
     # Set up op graph
     cost = ng.sum(target - ng.dot(W, data), out_axis=())
