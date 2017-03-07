@@ -81,7 +81,11 @@ class RNNHelper(object):
         self.reference_rnn = RNN(init=self.W_id, **self.rnn_args)
         self.rnn = RNN(init=self.W_in, batch_norm=True, **self.rnn_args)
 
-        self.batch_norm_dict = self.rnn.batch_norm if self.has_gates else {'gate': self.rnn.batch_norm}
+        if self.has_gates:
+            self.batch_norm_dict = self.rnn.batch_norm
+        else:
+            self.batch_norm_dict = {'gate': self.rnn.batch_norm}
+
         self.default_gate = list(self.batch_norm_dict.keys())[0]
 
         for bn in self.batch_norm_dict.values():
