@@ -81,17 +81,17 @@ class RNNHelper(object):
         self.reference_rnn = RNN(init=self.W_id, **self.rnn_args)
         self.rnn = RNN(init=self.W_in, batch_norm=True, **self.rnn_args)
 
-        if isinstance(self.rnn.batch_norm, dict):
-            self.batch_norm_list = list(self.rnn.batch_norm.values())
-        else:
-            self.batch_norm_list = [self.rnn.batch_norm]
+        self.batch_norm_dict = self.rnn.batch_norm if self.has_gates else {'gate': self.rnn.batch_norm}
+        self.default_gate = list(self.batch_norm_dict.keys())[0]
 
-        for bn in self.batch_norm_list:
+        for bn in self.batch_norm_dict.values():
             bn.__dict__.update(bn_params)
 
     def __getattr__(self, attr):
         if attr in ('gmean', 'gvar', 'gamma', 'beta'):
-            return getattr(self.batch_norm_list[0], attr)
+            return getattr(self.batch_norm_dict[self.default_gate], attr)
+        elif attr == 'reference_W_input':
+            return self.reference_rnn.W_input[self.default_gate]
         else:
             return super(RNNHelper, self).__getattr__(attr)
 
@@ -102,14 +102,9 @@ class RNNHelper(object):
     # Since we only want to look at the delta back to a single gate, rather than summed over all
     # gates, we can find the dot op between the input and the chosen gate's identity weight matrix
     def get_ancestor_op(self, op):
-        gates = self.reference_rnn.metadata.get('gates')
-        if gates is None:
-            return None
-        k = gates[0]  # pick the first gate by default
-
         for anc_op in ng.Op.ordered_ops([op]):
             if (isinstance(anc_op, ng.DotOp) and
-               any(arg.tensor == self.reference_rnn.W_input[k] for arg in anc_op.args)):
+               any(arg.tensor == self.reference_W_input for arg in anc_op.args)):
                 return anc_op
 
 
