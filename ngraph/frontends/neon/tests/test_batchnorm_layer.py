@@ -28,42 +28,33 @@ atol = 1e-6
 recurrent_atol = 1e-5
 
 
-def batch_norm_reference_fprop(x, gmean_ref=0.0, gvar_ref=1.0, rho=0.9, epsilon=1e-3,
-                               gamma=1, beta=0, axis=1):
+class BatchNormReference(object):
+    def __init__(self, x,
+                 init_gamma=1.0, init_beta=0.0,
+                 gmean=0.0, gvar=1.0, rho=0.9, eps=1e-3, axis=(1,)):
+        self.red_args = {'axis': axis, 'keepdims': True}
+        self.m = np.prod([x.shape[ii] for ii in axis])
 
-    xmean = x.mean(axis=axis, keepdims=True)
-    xvar = x.var(axis=axis, keepdims=True)
-    out_ref = gamma * (x - xmean) / np.sqrt(xvar + epsilon) + beta
-    gmean_ref = xmean.squeeze() * (1.0 - rho) + gmean_ref * rho
-    gvar_ref = xvar.squeeze() * (1.0 - rho) + gvar_ref * rho
+        xmean = x.mean(**self.red_args)
+        xvar = x.var(**self.red_args)
+        self.gamma_scale = init_gamma / np.sqrt(xvar + eps)
+        self.xhat = (x - xmean) / np.sqrt(xvar + eps)
 
-    return out_ref, gmean_ref, gvar_ref
+        fprop_ref = init_gamma * self.xhat + init_beta
+        gmean_ref = xmean.squeeze() * (1.0 - rho) + gmean * rho
+        gvar_ref = xvar.squeeze() * (1.0 - rho) + gvar * rho
+        self.fprop = (fprop_ref, gmean_ref, gvar_ref)
 
-
-def batch_norm_reference_bprop(delta, x, gamma=1, epsilon=1e-3, axis=1):
-
-    # Compute x_hat = (x - mu) / std
-    xmean = x.mean(axis=axis, keepdims=True)
-    xvar = x.var(axis=axis, keepdims=True)
-    xhat = (x - xmean) / np.sqrt(xvar + epsilon)
-
-    # Get overall size of reduction axes
-    if not isinstance(axis, tuple):
-        m = x.shape[axis]
-    else:
-        m = np.prod([x.shape[ii] for ii in axis])
-
-    # Compute derivatives
-    dgamma = np.sum(delta * xhat, axis=axis, keepdims=True)
-    dbeta = np.sum(delta, axis=axis, keepdims=True)
-    dx = gamma / np.sqrt(xvar + epsilon) * (delta - (xhat * dgamma + dbeta) / m)
-
-    return dx, dgamma.squeeze(), dbeta.squeeze()
+    def bprop(self, delta):
+        dgamma = np.sum(delta * self.xhat, **self.red_args)
+        dbeta = np.sum(delta, **self.red_args)
+        dx = self.gamma_scale * (delta - (self.xhat * dgamma + dbeta) / self.m)
+        return (dx, dgamma.squeeze(), dbeta.squeeze())
 
 
 class RNNHelper(object):
 
-    def __init__(self, input_placeholder, output_size):
+    def __init__(self, input_placeholder, output_size, RNN, bn_params):
 
         # Set up axes
         F, T, N = tuple(input_placeholder.axes)
@@ -82,25 +73,44 @@ class RNNHelper(object):
         self.W_in = rng.uniform(-1, 1, w_in_axes)
         self.W_id = np.eye(output_size).astype("float32")
 
-    @staticmethod
-    def set_batch_norm_params(rnn, **kwargs):
-        for key, value in kwargs.items():
-            if isinstance(rnn.batch_norm, dict):
-                for bn in rnn.batch_norm.values():
-                    setattr(bn, key, value)
-            else:
-                setattr(rnn.batch_norm, key, value)
+        self.rnn_args = dict(nout=output_size,
+                             init_inner=self.W_rec,
+                             return_sequence=True,
+                             activation=Tanh())
 
-    @staticmethod
-    def get_batch_norm_params(rnn):
-        if isinstance(rnn.batch_norm, dict):  # e.g. LSTM
-            # rnn has multiple gates, so just look at one of them.
-            k = list(rnn.batch_norm.keys())[0]
-            bn = rnn.batch_norm[k]
+        self.reference_rnn = RNN(init=self.W_id, **self.rnn_args)
+        self.rnn = RNN(init=self.W_in, batch_norm=True, **self.rnn_args)
+
+        if isinstance(self.rnn.batch_norm, dict):
+            self.batch_norm_list = list(self.rnn.batch_norm.values())
         else:
-            bn = rnn.batch_norm
+            self.batch_norm_list = [self.rnn.batch_norm]
 
-        return bn.gmean, bn.gvar
+        for bn in self.batch_norm_list:
+            bn.__dict__.update(bn_params)
+
+    def __getattr__(self, attr):
+        if attr in ('gmean', 'gvar', 'gamma', 'beta'):
+            return getattr(self.batch_norm_list[0], attr)
+        else:
+            return super(RNNHelper, self).__getattr__(attr)
+
+    @property
+    def has_gates(self):
+        return self.reference_rnn.metadata.get('gates') is not None
+
+    # Since we only want to look at the delta back to a single gate, rather than summed over all
+    # gates, we can find the dot op between the input and the chosen gate's identity weight matrix
+    def get_ancestor_op(self, op):
+        gates = self.reference_rnn.metadata.get('gates')
+        if gates is None:
+            return None
+        k = gates[0]  # pick the first gate by default
+
+        for anc_op in ng.Op.ordered_ops([op]):
+            if (isinstance(anc_op, ng.DotOp) and
+                any(arg.tensor == self.reference_rnn.W_input[k] for arg in anc_op.args)):
+                return anc_op
 
 
 # TODO: Move the following *_size fixtures to conftest.py and refactor other tests to use them
@@ -124,11 +134,12 @@ def output_size(request):
     return request.param
 
 
-@pytest.fixture(scope='module', params=[(.2, .1, 1, 0),
-                                        (.2, .1, .6, .3)])
+@pytest.fixture(params=[(1.0, 0.0), (0.6, 0.3)])
 def bn_params(request):
-    return dict(zip(["rho", "eps", "init_gamma", "init_beta"],
-                    request.param))
+    return dict(rho=0.9,
+                eps=0.001,
+                init_gamma=request.param[0],
+                init_beta=request.param[1])
 
 
 def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
@@ -146,7 +157,8 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
                                       ng.value_of(layer.gvar)])
 
         # Initial conditions for tracked variables
-        gmean_ref, gvar_ref = 0.0, 1.0
+        bn_params['gmean'] = 0.0
+        bn_params['gvar'] = 1.0
 
         # Test over 2 iterations to make sure values update properly
         for i in range(2):
@@ -154,19 +166,16 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
             x = rng.uniform(0, 1, input_placeholder.axes)
 
             # Compute reference fprop and stats
-            out_ref, gmean_ref, gvar_ref = batch_norm_reference_fprop(x, gmean_ref, gvar_ref,
-                                                                      bn_params["rho"],
-                                                                      bn_params["eps"],
-                                                                      bn_params["init_gamma"],
-                                                                      bn_params["init_beta"])
+            batch_norm_reference = BatchNormReference(x, **bn_params)
+            out_ref, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
 
             # Compute ngraph fprop and stats
             out = fprop_function(x)
             gm, gv = stats_function()
 
             assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gm, gmean_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gv, gvar_ref, rtol=rtol, atol=atol)
+            assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
+            assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
@@ -175,9 +184,8 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
     fprop = layer(input_placeholder)
 
     # Derivatives to check
-    bprop_vars = [input_placeholder,
-                  layer.gamma,
-                  layer.beta]
+    bprop_vars = [input_placeholder, layer.gamma, layer.beta]
+
     delta_placeholder = ng.placeholder(fprop.axes)
     bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
 
@@ -190,9 +198,8 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         delta = rng.uniform(-.1, .1, delta_placeholder.axes)
 
         # Compute reference bprop
-        dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference_bprop(delta, x,
-                                                                   gamma=bn_params["init_gamma"],
-                                                                   epsilon=bn_params["eps"])
+        dx_ref, dgamma_ref, dbeta_ref = BatchNormReference(x, **bn_params).bprop(delta)
+
         # Compute ngraph bprop
         dx, dgamma, dbeta = bprop_function(x, delta)
 
@@ -208,35 +215,29 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
                                    bn_params, transformer_factory):
     """Compare fprop RNN with batch norm to numpy batch norm followed by rnn without"""
 
-    helper = RNNHelper(recurrent_input, output_size)
-
-    rnn = RNN(output_size, init=helper.W_in, init_inner=helper.W_rec,
-              batch_norm=True, return_sequence=True, activation=Tanh())
-    reference_rnn = RNN(output_size, init=helper.W_id, init_inner=helper.W_rec,
-                        return_sequence=True, activation=Tanh())
-
-    # Set batch norm parameters
-    helper.set_batch_norm_params(rnn, **bn_params)
+    helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
 
     # Get batch norm rnn graph
-    fprop = rnn(recurrent_input)
+    fprop = helper.rnn(recurrent_input)
 
     # Get batch norm side effects
-    gmean, gvar = helper.get_batch_norm_params(rnn)
-    stats = [ng.value_of(gmean), ng.value_of(gvar)]
+    stats = [ng.value_of(helper.gmean), ng.value_of(helper.gvar)]
 
     # Get reference graph
-    normed_recurrent_input = helper.reference_input
-    reference_fprop = reference_rnn(normed_recurrent_input)
+    reference_fprop = helper.reference_rnn(helper.reference_input)
 
     with ExecutorFactory() as ex:
         # Compute executors
         fprop_function = ex.executor(fprop, recurrent_input)
         stats_function = ex.executor(stats)
-        reference_function = ex.executor(reference_fprop, normed_recurrent_input)
+        reference_function = ex.executor(reference_fprop, helper.reference_input)
 
         # Initial conditions for tracked variables
-        gmean_ref, gvar_ref = 0.0, 1.0
+        bn_params['gmean'] = 0.0
+        bn_params['gvar'] = 1.0
+
+        # Need to reduce over two positional axes in reference
+        bn_params['axis'] = (1, 2)
 
         # Test over 2 iterations to make sure values update properly
         for _ in range(2):
@@ -248,16 +249,8 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
 
             # Compute reference batch norm
-            (normed_input,
-             gmean_ref,
-             gvar_ref) = batch_norm_reference_fprop(weighted_input,
-                                                    gmean_ref,
-                                                    gvar_ref,
-                                                    bn_params["rho"],
-                                                    bn_params["eps"],
-                                                    bn_params["init_gamma"],
-                                                    bn_params["init_beta"],
-                                                    axis=(1, 2))
+            batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
+            normed_input, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
 
             # Finally, get reference RNN output
             ref = reference_function(normed_input)
@@ -267,137 +260,35 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             gmean, gvar = stats_function()
 
             assert ng.testing.allclose(out, ref, rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gmean, gmean_ref, rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gvar, gvar_ref, rtol=rtol, atol=recurrent_atol)
+            assert ng.testing.allclose(gmean, bn_params['gmean'], rtol=rtol, atol=recurrent_atol)
+            assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
-@pytest.mark.parametrize("RNN", [Recurrent])
+@pytest.mark.parametrize("RNN", [Recurrent, LSTM])
 def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
-                                   bn_params, transformer_factory):
-    """Compare bprop RNN with batch norm to numpy batch norm followed by rnn without"""
-
-    helper = RNNHelper(recurrent_input, output_size)
-
-    # Generate an RNN with batch norm turned on
-    rnn = RNN(output_size, init=helper.W_in, init_inner=helper.W_rec,
-              return_sequence=True, batch_norm=True, activation=Tanh())
-
-    # Set batch norm params
-    helper.set_batch_norm_params(rnn, **bn_params)
-
-    # Generate an RNN with no batch norm
-    reference_rnn = RNN(output_size, init=helper.W_id, init_inner=helper.W_rec,
-                        return_sequence=True, activation=Tanh())
-
-    # Get rnn + batch norm bprop graph
-    fprop = rnn(recurrent_input)
-    bprop_vars = [recurrent_input,
-                  rnn.batch_norm.gamma,
-                  rnn.batch_norm.beta]
-    delta_placeholder = ng.placeholder(fprop.axes)
-    bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
-
-    # Get reference bprop graph
-    reference_fprop = reference_rnn(helper.reference_input)
-    reference_delta_placeholder = ng.placeholder(reference_fprop.axes)
-    reference_bprop = ng.deriv(reference_fprop, helper.reference_input,
-                               reference_delta_placeholder)
-
-    # Begin execution
-    with ExecutorFactory() as ex:
-        bprop_function = ex.executor(bprops, recurrent_input, delta_placeholder)
-        reference_function = ex.executor(reference_bprop, helper.reference_input,
-                                         reference_delta_placeholder)
-
-        input_value = rng.uniform(0, 1, recurrent_input.axes)
-        delta = rng.uniform(-.1, .1, fprop.axes)
-
-        # Compute reference bprop
-        # Compute reference weighted input
-        weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
-
-        # Get reference batch normed input
-        normed_input = batch_norm_reference_fprop(weighted_input,
-                                                  0.0,
-                                                  1.0,
-                                                  bn_params["rho"],
-                                                  bn_params["eps"],
-                                                  bn_params["init_gamma"],
-                                                  bn_params["init_beta"],
-                                                  axis=(1, 2))[0]
-
-        # Reference backprop through RNN
-        rnn_delta = reference_function(normed_input, delta)
-
-        # Backprop through reference BN
-        dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference_bprop(rnn_delta, weighted_input,
-                                                                   epsilon=bn_params["eps"],
-                                                                   gamma=bn_params["init_gamma"],
-                                                                   axis=(1, 2))
-
-        # Backprop through weighted input
-        dx_ref = np.dot(helper.W_in.T, dx_ref.swapaxes(0, 1))
-
-        # Compute ngraph bprop
-        dx, dgamma, dbeta = bprop_function(input_value, delta)
-
-        assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dgamma, dgamma_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=recurrent_atol)
-
-
-@pytest.mark.parametrize("input_size", [4])
-@pytest.mark.parametrize("sequence_length", [2])
-@pytest.mark.parametrize("RNN", [LSTM])
-def test_gated_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size, bn_params,
-                                         transformer_factory):
+                                         bn_params, transformer_factory):
     """Compare bprop gated RNN with batch norm to numpy batch norm followed by rnn without"""
 
-    helper = RNNHelper(recurrent_input, output_size)
+    helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
 
-    # Generate an RNN with batch norm turned on
-    rnn = RNN(output_size, init=helper.W_in, init_inner=helper.W_rec,
-              return_sequence=True, batch_norm=True, activation=Tanh())
-
-    # Set batch norm params
-    helper.set_batch_norm_params(rnn, **bn_params)
-
-    # Generate an RNN with no batch norm
-    reference_rnn = RNN(output_size, init=helper.W_id, init_inner=helper.W_rec,
-                        return_sequence=True, activation=Tanh())
-
-    # Get rnn + batch norm graph
-    fprop = rnn(recurrent_input)
-    # rnn has multiple gates, so just look at one of them.
-    k = list(rnn.batch_norm.keys())[0]
-    bprop_vars = [recurrent_input,
-                  rnn.batch_norm[k].gamma,
-                  rnn.batch_norm[k].beta]
+    # Get rnn + batch norm bprop graph
+    fprop = helper.rnn(recurrent_input)
+    bprop_vars = [recurrent_input, helper.gamma, helper.beta]
 
     # Get bprop graph
     delta_placeholder = ng.placeholder(fprop.axes)
     bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
 
     # Get reference graphs
-    # Since we only want to look at the delta back to a single gate, rather than summed over all
-    # gates, we can find the dot op between the input and the chosen gate's identity weight matrix
-    def filter_ancestors(op, func):
-        """ Filter ancestors of an op according to func"""
-        filtered_ops = list()
-        for anc_op in ng.Op.ordered_ops([op]):
-            if func(anc_op) is True:
-                filtered_ops.append(anc_op)
+    reference_fprop = helper.reference_rnn(helper.reference_input)
 
-        return filtered_ops
+    # Handle the case where we have gates in the RNN object
+    bprop_vars = [helper.reference_input]
+    if helper.has_gates:
+        bprop_vars.append(helper.get_ancestor_op(reference_fprop))
 
-    filter_func = lambda op: (isinstance(op, ng.DotOp) and
-                              any(arg.tensor == reference_rnn.W_input[k] for arg in op.args))
-
-    reference_fprop = reference_rnn(helper.reference_input)
-    bprop_vars = [helper.reference_input,
-                  filter_ancestors(reference_fprop, filter_func)[0]]
     reference_delta_placeholder = ng.placeholder(reference_fprop.axes)
     reference_bprop = [ng.deriv(reference_fprop, var,
                                 reference_delta_placeholder) for var in bprop_vars]
@@ -415,30 +306,28 @@ def test_gated_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size, bn_p
         # Compute reference weighted input
         weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
 
+        # Set the reduction axes used for reference
+        bn_params['axis'] = (1, 2)
+
         # Get reference batch normed input
-        normed_input = batch_norm_reference_fprop(weighted_input,
-                                                  0.0,
-                                                  1.0,
-                                                  bn_params["rho"],
-                                                  bn_params["eps"],
-                                                  bn_params["init_gamma"],
-                                                  bn_params["init_beta"],
-                                                  axis=(1, 2))[0]
+        batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
+        normed_input = batch_norm_reference.fprop[0]
 
         # Reference backprop through RNN
-        rnn_delta, rnn_gate_delta = reference_function(normed_input, delta)
+        reference_result = reference_function(normed_input, delta)
+        # This is because of a HETR bug where return collections aren't handled properly
+        if isinstance(reference_result, tuple):
+            rnn_delta = reference_result[0]
+        else:
+            rnn_delta = reference_result
 
         # Reference backprop through BN
-        dx_ref = batch_norm_reference_bprop(rnn_delta, weighted_input,
-                                            epsilon=bn_params["eps"],
-                                            gamma=bn_params["init_gamma"],
-                                            axis=(1, 2))[0]
+        dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_delta)
 
         # Backprop through reference batch norm for a single gate
-        _, dgamma_ref, dbeta_ref = batch_norm_reference_bprop(rnn_gate_delta, weighted_input,
-                                                              epsilon=bn_params["eps"],
-                                                              gamma=bn_params["init_gamma"],
-                                                              axis=(1, 2))
+        if helper.has_gates:
+            rnn_gate_delta = reference_result[1]
+            _, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_gate_delta)
 
         # Backprop through weighted input
         dx_ref = np.dot(helper.W_in.T, dx_ref.swapaxes(0, 1))
