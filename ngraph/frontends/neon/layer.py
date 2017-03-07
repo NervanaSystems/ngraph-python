@@ -93,13 +93,6 @@ class Linear(Layer):
 
         return ng.dot(self.W, in_obj)
 
-    def copy(self):
-        # not sure this is the right way to copy. if the copy is called before
-        # train_output(), the variables are not created and will not be copied.
-        new_linear = self.__class__(init=self.init, nout=self.nout)
-        if self.W is not None:
-            new_linear.W = self.W
-        return new_linear
 
 class LookupTable(Layer):
     """
@@ -374,12 +367,6 @@ class Bias(Layer):
         else:
             return in_obj
 
-    def copy(self):
-        new_layer = self.__class__(init=self.init, shared=self.shared)
-        if self.W is not None:
-            new_layer.W = self.W
-        return new_layer
-
 
 class Affine(Layer):
 
@@ -410,17 +397,6 @@ class Affine(Layer):
         a_out = self.activation_layer.inference_outputs(bn_out)
         return a_out
 
-    # GAN TODO: check scope gets copied by copy()
-    def copy(self):
-        new_layer = self.__class__(weight_init=self.weight_init,
-                        nout=self.nout,
-                        bias_init=self.bias_init,
-                        activation=self.activation,
-                        batch_norm=self.batch_norm)
-        new_layer.linear = self.linear.copy()
-        new_layer.bias = self.bias.copy()
-        new_layer.batch_norm_layer = self.batch_norm_layer.copy() if self.batch_norm else None
-        return new_layer
 
 class Convolution(Layer):
 
@@ -497,15 +473,6 @@ class BatchNorm(Layer):
 
     def inference_outputs(self, in_obj):
         return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
-
-    def copy(self):
-        new_layer = self.__class__(rho=self.rho, eps=self.eps)
-        new_layer.gamma = self.gamma
-        new_layer.beta = self.beta
-        new_layer.gmean = self.gmean
-        new_layer.gvar = self.gvar
-
-        return new_layer
 
 
 class Dropout(Layer):
