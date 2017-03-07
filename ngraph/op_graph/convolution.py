@@ -53,7 +53,7 @@ class ConvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if inputs.axes[0] != filters.axes[0]:
+        if not inputs.axes[0] == filters.axes[0]:
             raise ValueError((
                 'the first axis in input {inputs} and filter {filters} are not the same.'
             ).format(inputs=inputs.axes[0], filters=filters.axes[0]))

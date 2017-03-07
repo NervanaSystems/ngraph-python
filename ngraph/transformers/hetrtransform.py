@@ -1,5 +1,3 @@
-from neon import NervanaObject  # noqa
-
 import signal
 import pytest
 import sys
@@ -174,10 +172,8 @@ class ResultOp(TensorOp):
     def __init__(self, device_id, args, **kwargs):
         super(ResultOp, self).__init__(self, args=args)
         self.metadata['device_id'] = device_id
-
-# TODO
-# revisit making HetrComputation a Computation;
-# update it to not take results, *parameters, but instead a computation_op
+        self.axes = args[0].axes
+        self.dtype = args[0].dtype
 
 
 class HetrComputation(object):
@@ -185,8 +181,7 @@ class HetrComputation(object):
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
 
-    def __init__(self, hetr, results, *parameters, **kwargs):
-        # super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
+    def __init__(self, hetr, comp_op):
         self.child_computations = dict()
         self.child_results_map = dict()
         self.transformer = hetr
@@ -195,80 +190,80 @@ class HetrComputation(object):
         self.hetr_passes = hetr.hetr_passes
         self.num_results = 0
         self.num_send_nodes = dict()
-        self.is_distributed = False
-        self.parameters = parameters
+        self.parameters = comp_op.parameters
 
-        orig_results = results
-        if not isinstance(results, OrderedSet):
-            if not isinstance(results, list):
-                results = [results] if results else []
-            results = OrderedSet(results)
-        for op in results:
+        if isinstance(comp_op.returns, (OrderedSet, list)):
+            self.num_results = len(comp_op.returns)
+        else:
+            self.num_results = 1
+
+        # if one of the requested results is marked as distributed across devices,
+        # wrap it in a ResultOp to facilitate DistributedPass inserting a gather operation
+        new_control_deps = OrderedSet()
+        for op in comp_op.control_deps:
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
                 op.metadata['is_split_op'] = True
-                new_op = ResultOp(device_id=0, args=tuple([op]))
-                results.remove(op)
-                results.add(new_op)
+                new_result = ResultOp(device_id=0, args=tuple([op]))
+                new_control_deps.add(new_result)
+            else:
+                new_control_deps.add(op)
 
-        all_results = OrderedSet(results)
-        all_results.update(parameters)
-        # all res empty; hetr as no computations. where do these get assigned?
-        # previously, we used t.all_results, which went away.  when was that created?
-        #   - computation object used to update all_results of transformer
-        #   - transformer transform_ops used to use all_results but not update it,
-        #     and return a new copy
+        # The following line get rids of computation_op, add newly
+        # created control_deps (which could have Result_Op for dist_hetr)
+        all_results = new_control_deps
 
-        if orig_results is not None:
+        if comp_op.returns is not None:
             # Do Hetr passes
             for graph_pass in self.hetr_passes:
                 all_results = all_results + hetr.send_nodes
                 graph_pass.do_pass(all_results, self.transformer)
 
-            # TODO replicate placeholders for nodes which got replicated;
-            # update the placeholder mapping below, so at __call__ time we know
-            # which transformers to pass copies of the provided placeholder value to
-
             if hetr.vizpass:
                 vis_results = all_results + hetr.send_nodes
                 hetr.vizpass.do_pass(vis_results, self)
 
-        self.transformer_to_node = {t: list() for t in self.transformer_name_list}
+            # self.transformer_name_list is updated during graph passes
+            self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
-        self.is_distributed = any(
-            'Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes)
+            # update the transformer to send node mappings
+            for s in self.send_nodes:
+                tname = s.metadata['transformer']
+                self.transformer_to_node[tname].append(s)
+                self.num_send_nodes[tname] = self.num_send_nodes.get(tname, 0) + 1
 
-        # update the transformer to send node mappings
-        for s in self.send_nodes:
-            tname = s.metadata['transformer']
-            self.transformer_to_node[tname].append(s)
-            self.num_send_nodes[tname] = self.num_send_nodes.get(tname, 0) + 1
+            # getting the original return results from all_results
+            # all_results, after several passes, may contain updated ops
+            # these new/updated ops (e.g. ResultOps) are holding results
+            orig_returns = OrderedSet()
+            for i in range(self.num_results):
+                orig_returns.update([all_results[i]])
 
-        self.num_results = len(results)
-
-        if orig_results is not None:
-            for pos, op in enumerate(results):
+            for pos, op in enumerate(orig_returns):
                 tname = op.metadata['transformer']
-                if self.is_distributed is True:
-                    if tname in self.num_send_nodes:
-                        for i in range(self.num_send_nodes[tname]):
-                            self.child_results_map.setdefault(tname, []).append(None)
+                # skip send nodes to avoid returning what a send node returns
+                if tname in self.num_send_nodes:
+                    for i in range(self.num_send_nodes[tname]):
+                        self.child_results_map.setdefault(tname, []).append(None)
+
                 if 'ResultOp' in op.name:
                     self.transformer_to_node[tname].append(op.args[0])
                 else:
                     self.transformer_to_node[tname].append(op)
+
                 self.child_results_map.setdefault(tname, []).append(pos)
+        else:  # comp_op.returns is None (uncommon branch)
+            self.transformer_to_node = {t: list() for t in self.transformer_name_list}
 
         self.placeholders = {t: list() for t in self.transformer_name_list}
         self.placeholders_pos = {t: list() for t in self.transformer_name_list}
-        for i, p in enumerate(parameters):
+        for i, p in enumerate(self.parameters):
             tname = p.metadata['transformer']
             assert isinstance(
                 tname, list) is False, "Fatal: multiple transformers cannot be handled!"
             self.placeholders[tname].append(p)
             self.placeholders_pos[tname].append(i)
 
-        self.child_computations = dict()
         for tname in self.transformer_name_list:
             # request asynctransformer from HT
             # use it to build AsyncComputation
@@ -308,10 +303,7 @@ class HetrComputation(object):
         for tname, result_map in self.child_results_map.items():
             child_results = self.child_computations[tname].get_results()
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
-                if self.is_distributed is True:
-                    if parent_idx is not None:
-                        return_list[parent_idx] = child_results[child_idx]
-                else:
+                if parent_idx is not None:
                     return_list[parent_idx] = child_results[child_idx]
 
         if isinstance(return_list, collections.Sequence):
@@ -348,17 +340,11 @@ class HetrTransformer(Transformer):
         self.transformer_list = list()
         self.transformers = set()
         self.send_nodes = OrderedSet()
-        self.scatter_shared_queues = list()
-        self.gather_shared_queues = list()
         self.hetr_passes = [DeviceAssignPass(default_device='numpy',
                                              default_device_id=0,
                                              transformers=self.transformers),
-                            CommunicationPass(self.send_nodes,
-                                              self.scatter_shared_queues,
-                                              self.gather_shared_queues),
-                            DistributedPass(self.send_nodes,
-                                            self.scatter_shared_queues,
-                                            self.gather_shared_queues),
+                            CommunicationPass(self.send_nodes),
+                            DistributedPass(self.send_nodes),
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None
 
@@ -389,25 +375,20 @@ class HetrTransformer(Transformer):
 
         return self.child_transformers[tname]
 
-    def computation(self, results, *parameters, **kwargs):
+    def add_computation(self, computation):
         """
         Build a heterogeneous computation object that implements
         communication and synchronization between subgraphs run
         on child transformers.
 
-        :param results: list of required result nodes
-        :param parameters: list of placeholder nodes
+        Arguments:
+            computation: A computation Op.
 
-        TODO
-        :param kwargs: - pass these on to child transformers or what?
-
-        :return: a HetrComputation object
+        Returns:
+            Callable.
         """
-
-        # Initialize computation
-        hc = HetrComputation(self, results, *parameters, **kwargs)
-
-        return hc
+        hetr_comp = HetrComputation(self, computation)
+        return hetr_comp
 
     def initialize(self):
         # print("Dummy Initialize, skipping")

@@ -54,6 +54,7 @@ def tdcache():
     """
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
+
 tdcache.tensor_description_cache = {}
 
 
@@ -663,10 +664,26 @@ class AssignOp(Op):
     """
 
     def __init__(self, tensor, val, force=False, **kwargs):
-        tensor, val = as_ops((tensor, val))
         if not force and tensor.is_constant:
             raise ValueError("{} is not assignable.".format(tensor))
+
+        # convert val to op
+        # TODO: requires explicit broadcast in future
+        if not isinstance(val, Op):
+            val = as_op(val)
+            if len(val.axes) == len(tensor.axes):
+                val = cast_axes(val, tensor.axes)
+
+        # automatic broadcast
+        # currently requires val's axes to be a subset of tensor's axes
+        # TODO: requires explicit broadcast in future
+        if len(val.axes - tensor.axes) > 0:
+            raise ValueError(
+                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "val's axes should be subset of tensor's axes" %
+                (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)
+
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
         self.force = force
 
@@ -1375,7 +1392,12 @@ def sequential(ops=None):
         ops: Sequence of ops to compute.
 
     """
-    return SequentialOp(ops)
+    sequential_op = SequentialOp(ops)
+    sequential_op.deriv_handler = sequential_op.value_tensor
+    # Note: Can't return value_tensor here because we may need some ops to execute
+    # after it. For example,
+    # op_1, op_2, op_3, op_1 has value of op_1, but op_1 won't force op_2 and op_3 to run.
+    return sequential_op
 
 
 class TensorValueOp(ValueOp):
@@ -1971,9 +1993,12 @@ class AssignableTensorOp(TensorOp):
         super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
 
-        if callable(initial_value):
-            self.add_initializer(assign(self, initial_value(self.axes)))
-        elif initial_value is not None:
+        if initial_value is not None:
+            # convert callable initial value
+            if callable(initial_value):
+                initial_value = initial_value(self.axes)
+
+            # create assign op
             self.add_initializer(assign(self, initial_value))
 
     @property
@@ -2049,7 +2074,7 @@ def constant(const, axes=None, dtype=None):
     if axes and len(axes) == len(nptensor.shape):
         nptensor_axes = axes
     else:
-        nptensor_axes = make_axes([make_axis(l, match_on_length=True) for l in nptensor.shape])
+        nptensor_axes = make_axes([make_axis(l) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
                              trainable=False, graph_label_type=graph_label_type,

@@ -1,6 +1,8 @@
 from __future__ import division
-from ngraph.op_graph.op_graph import make_axes, make_axis
-from ngraph.op_graph.communication import Receiver
+from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
+    TensorValueOp
+from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
+    RecvOp, ScatterSendOp, ScatterRecvOp
 from ngraph.util.ordered import OrderedSet
 
 
@@ -8,8 +10,7 @@ def clone(
         node,
         new_axes,
         device_id,
-        scatter_shared_queue=None,
-        gather_shared_queue=None,
+        device_idx=None,
         send_nodes=None,
         arg1=None,
         arg2=None):
@@ -20,49 +21,46 @@ def clone(
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         node.metadata['device_id'] = node.metadata['device_id'][0]
+        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif node.__class__.__name__ is 'BroadcastOp':
+    elif isinstance(node, BroadcastOp):
         new_arg = clone(node.args[0], new_axes, device_id)
         new_node = node.__class__(new_arg, new_axes)
-        # new_node.args = (new_arg,)
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         node.metadata['device_id'] = node.metadata['device_id'][0]
+        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif node.__class__.__name__ is 'TensorValueOp':
+    elif isinstance(node, TensorValueOp):
         new_node = node.__class__(node.states_read[0])
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
-    elif node.__class__.__name__ is 'Scatter_Recv':
+    elif isinstance(node, ScatterRecvOp):
         new_node = node.__class__(
-            axes=new_axes,
-            dtype=node.dtype,
-            queue=scatter_shared_queue,
+            to_node=node,
             send_node=node.send_node(),
-            device=node.metadata['device'],
-            device_id=device_id)
+            device_idx=device_idx)
 
-    elif node.__class__.__name__ is 'Scatter_Send':
+    elif isinstance(node, ScatterSendOp):
         pass
 
-    elif node.__class__.__name__ is 'Gather_Send':
+    elif isinstance(node, GatherSendOp):
         new_node = node.__class__(
             from_node=arg1,
-            axes=new_axes,
-            queue=gather_shared_queue,
-            device=node.metadata['device'],
-            device_id=device_id)
+            clone_node=node,
+            device_idx=device_idx)
         send_nodes.add(new_node)
 
-    elif node.__class__.__name__ is 'Gather_Recv':
+    elif isinstance(node, GatherRecvOp):
         pass
 
     elif 'marker' in node.metadata and node.metadata['marker'] is 'scatter':
         pass  # This node is marked to be scattered, so there is no need to clone it.
 
-    elif node.__class__.__name__ is 'AssignableTensorOp' and node.is_constant:
+    elif isinstance(node, AssignableTensorOp) and node.is_constant:
         new_node = node.__class__()
         if node.initializers is not None:
             for initializer in node.initializers:
@@ -77,23 +75,6 @@ def clone(
         raise RuntimeError("Unsupported op type {} for clone.".format(node.__class__.__name__))
 
     return new_node
-
-
-def calculate_new_axes(axes, parallel_axis, num_devices, is_last):
-    new_axes = list()
-    for a in axes:
-        if parallel_axis == a:
-            remainder = a.length % num_devices
-            new_length = a.length // num_devices
-            if remainder > 0:
-                if is_last:
-                    new_length += remainder
-            new_axis = make_axis(new_length, a.name)
-            new_axes.append(new_axis)
-        else:
-            new_axes.append(a)
-    new_axes = make_axes(new_axes)
-    return new_axes
 
 
 def comm_path_exists(fro, to):
@@ -112,7 +93,7 @@ def comm_path_exists(fro, to):
         v = visit.pop()
         if v == to:
             return True
-        if isinstance(v, Receiver):
+        if isinstance(v, RecvOp):
             visit.add(v.send_node())
         else:
             visit.update(v.args)
@@ -127,7 +108,7 @@ def find_recvs(fro):
     visit.add(fro)
     while visit:
         v = visit.pop()
-        if isinstance(v, Receiver):
+        if isinstance(v, RecvOp):
             recvs.add(v)
             visit.add(v.send_node())
         else:

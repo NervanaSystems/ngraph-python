@@ -134,7 +134,7 @@ class FillKernel(GPUKernel):
 class SendKernel(GPUKernel):
     def __init__(self, transformer, send_op):
         super(SendKernel, self).__init__(transformer)
-        self.q = send_op.shared_q
+        self.q = send_op.queue
         self.tensor = send_op.args[0].tensor_description()
 
     def bind_buffers(self):
@@ -177,7 +177,7 @@ class RecvKernel(GPUKernel):
         """
         Receive tensor
         """
-        q = self.recv_op.shared_q
+        q = self.recv_op.queue
         x = q.get()
 
         if self.tensor.shape == ():

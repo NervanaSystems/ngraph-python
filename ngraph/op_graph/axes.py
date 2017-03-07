@@ -54,7 +54,6 @@ def make_axis_role(name=None, docstring=None):
 
 
 def make_axis(length=None, name=None,
-              match_on_length=False,
               roles=None, docstring=None):
     """
     Returns a new Axis.
@@ -64,8 +63,6 @@ def make_axis(length=None, name=None,
         name (String, optional): Name of the axis.
         batch (bool, optional): This is a batch axis. Defaults to False.
         recurrent (bool, optional): This is a recurrent axis. Defaults to False.
-        match_on_length (bool, optional): This axis will match an axis with
-            the same length. Defaults to False.
         roles (set, optional): A set of axis roles for the axis.
         docstring (String, optional): A docstring for the axis.
 
@@ -73,9 +70,7 @@ def make_axis(length=None, name=None,
         Axis: A new Axis.
 
     """
-    return Axis(length=length, name=name,
-                match_on_length=match_on_length,
-                roles=roles, docstring=docstring)
+    return Axis(length=length, name=name, roles=roles, docstring=docstring)
 
 
 def make_axes(axes=()):
@@ -131,15 +126,11 @@ class Axis(object):
         length: The length of the axis.
         batch: Whether the axis is a batch axis.
         recurrent: Whether the axis is a recurrent axis.
-        match_on_length: Whether to only use length (and not identity) when comparing
-            equality against other Axis values. This is useful for anonymous Axis of
-            constant tensors.
     """
     __name_counter = 0
 
     def __init__(self,
                  length=None,
-                 match_on_length=False,
                  roles=None,
                  name=None,
                  **kwargs):
@@ -148,13 +139,12 @@ class Axis(object):
 
         if name is None:
             # generate name for axis if None was provided
-            name = 'Axis_' + str(type(self).__name_counter)
+            name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
             type(self).__name_counter += 1
 
         self.name = name
         self.__length = length
 
-        self.__match_on_length = match_on_length
         self.__roles = set()
         if roles is not None:
             self.roles.update(roles)
@@ -192,14 +182,6 @@ class Axis(object):
 
         """
         return self.name == 'R'
-
-    @property
-    def match_on_length(self):
-        """
-        Returns:
-            bool: True if this axis matches axes with the same length.
-        """
-        return self.__match_on_length
 
     @property
     def length(self):
@@ -254,16 +236,7 @@ class Axis(object):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
 
     def __eq__(self, other):
-        # other is not Axis
-        if not isinstance(other, Axis):
-            return False
-
-        # handle match_on_length
-        if self.match_on_length or other.match_on_length:
-            return self.length == other.length
-
-        # normal case, check name
-        return self.name == other.name
+        return isinstance(other, Axis) and self.name == other.name
 
     def __hash__(self):
         return hash((self.name, self.length))
@@ -647,15 +620,6 @@ class Axes(object):
     def __hash__(self):
         return hash(self._axes)
 
-    def _to_name_set(self):
-        """
-        Get set of Axis names for all Axis in Axes
-
-        Returns:
-            A set of Axis names
-        """
-        return set([axis.name for axis in self])
-
     def is_sub_set(self, other):
         """
         Returns true if other is subset of self, i.e. <=
@@ -666,7 +630,7 @@ class Axes(object):
         Returns:
             bool, true if other is subset of self
         """
-        return self._to_name_set().issubset(make_axes(other)._to_name_set())
+        return set(self.names).issubset(set(make_axes(other).names))
 
     def is_super_set(self, other):
         """
@@ -690,7 +654,7 @@ class Axes(object):
         Returns:
             bool, true if other has the same set of Axis names as self
         """
-        return self._to_name_set() == make_axes(other)._to_name_set()
+        return set(self.names) == set(make_axes(other).names)
 
     def is_not_equal_set(self, other):
         """
@@ -871,14 +835,26 @@ class FlattenedAxis(Axis):
     A FlattenedAxis has length which is the product of the lengths of all
     Axis in the axes.  The original Axes object is stored so that we can later
     unflatten this Axis back to its original component Axis.
+
+    Notes: since we allows Axis to have duplicated names globally, NameableValue
+    is not used here.
     """
 
+    __name_counter = 0
+
     def __init__(self, axes, **kwargs):
+        # get length
         axes = Axes(axes)
         if len(axes) == 1 and axes[0].is_flattened:
             pass
         length = reduce(operator.mul, axes.lengths, 1)
-        super(FlattenedAxis, self).__init__(length=length, **kwargs)
+
+        # set name
+        name = '%s_%s' % (type(self).__name__, type(self).__name_counter)
+        type(self).__name_counter += 1
+
+        # parent constructor
+        super(FlattenedAxis, self).__init__(length=length, name=name, **kwargs)
         self.__axes = axes
 
     @property
