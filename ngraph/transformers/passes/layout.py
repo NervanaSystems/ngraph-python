@@ -275,6 +275,7 @@ class AddLayoutConversions(PeepholeGraphPass):
     def __init__(self, assign_pass):
         self.assign_pass = assign_pass
         self.binary_constraints = None
+        self.visited = []
 
     def do_pass(self, ops, transformer):
         self.binary_constraints = self.assign_pass.binary_constraints
@@ -293,7 +294,8 @@ class AddLayoutConversions(PeepholeGraphPass):
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
-        if "layout" in op.metadata:
+        if "layout" in op.metadata and op not in self.visited:
+            self.visited.append(op)
             new_args = []
             for arg in op.args:
                 b_constraint = None
@@ -312,9 +314,12 @@ class AddLayoutConversions(PeepholeGraphPass):
 
                 # Get layout conversion ops for this arg
                 if b_constraint is not None:
-                    new_args.append(b_constraint.get_layout_transform(orig_arg_op.metadata["layout"],
-                                                                      op.metadata["layout"],
-                                                                      arg))
+                    new_arg = b_constraint.get_layout_transform(orig_arg_op.metadata["layout"],
+                                                                op.metadata["layout"],
+                                                                arg)
+                    new_args.append(new_arg)
+                    if new_arg is not arg:
+                        self.visited.append(new_arg)
                 else:
                     new_args.append(arg)
 
@@ -324,4 +329,5 @@ class AddLayoutConversions(PeepholeGraphPass):
                 new_op = op_type(*new_args)
 
                 self.replace_op(op, new_op)
+                self.visited.append(new_op)
                 self.binary_constraints[new_op] = self.binary_constraints[op]

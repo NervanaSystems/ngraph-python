@@ -121,6 +121,8 @@ class VizPass(GraphPass):
                 op_label += "\n{}={}".format(k, v)
         if self.show_metadata and self.show_metadata in op.metadata:
             op_label += "\n{}".format(op.metadata[self.show_metadata])
+        if op.tensor_description() and op.tensor_description().layout:
+            op_label += "\n{}".format(op.tensor_description().layout)
         graph.node(op.name, op_label)
 
     def add_edge_to_graph(self, edge, graph):

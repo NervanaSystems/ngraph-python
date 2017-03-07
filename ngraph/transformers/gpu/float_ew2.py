@@ -285,8 +285,8 @@ class TensorDescriptionWrapper:
     """
     def __init__(self, tensor_description, kernel_axes, gemm=False, take_axis=False):
         self.dtype = tensor_description.dtype
-        self.strides = tensor_description.strides
-        self.shape = tensor_description.shape
+        self.strides = tensor_description.layout.strides
+        self.shape = tensor_description.layout.shape
         self.td = tensor_description
 
         if type(kernel_axes) == int:
