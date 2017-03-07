@@ -15,7 +15,7 @@
 # set empty to prevent any implicit rules from firing.
 .SUFFIXES:
 
-# Extract virtualenv Python version
+# Extract Python version
 PY := $(shell python --version 2>&1  | cut -c8)
 ifeq ($(PY), 2)
 	PYLINT3K_ARGS := --disable=no-absolute-import,setslice-method,getslice-method,nonzero-method
@@ -36,10 +36,6 @@ TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
 DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
-
-ifndef VIRTUAL_ENV
-   $(error You must activate the neon virtual environment before continuing)
-endif
 
 .PHONY: env default install uninstall clean test testflex style lint lint3k check doc viz_install
 
