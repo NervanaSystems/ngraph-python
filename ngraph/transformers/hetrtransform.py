@@ -172,6 +172,8 @@ class ResultOp(TensorOp):
     def __init__(self, device_id, args, **kwargs):
         super(ResultOp, self).__init__(self, args=args)
         self.metadata['device_id'] = device_id
+        self.axes = args[0].axes
+        self.dtype = args[0].dtype
 
 
 class HetrComputation(object):
@@ -302,7 +304,7 @@ class HetrComputation(object):
             child_results = self.child_computations[tname].get_results()
             for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
                 if parent_idx is not None:
-                        return_list[parent_idx] = child_results[child_idx]
+                    return_list[parent_idx] = child_results[child_idx]
 
         if isinstance(return_list, collections.Sequence):
             if len(return_list) > 1:
@@ -338,17 +340,11 @@ class HetrTransformer(Transformer):
         self.transformer_list = list()
         self.transformers = set()
         self.send_nodes = OrderedSet()
-        self.scatter_shared_queues = list()
-        self.gather_shared_queues = list()
         self.hetr_passes = [DeviceAssignPass(default_device='numpy',
                                              default_device_id=0,
                                              transformers=self.transformers),
-                            CommunicationPass(self.send_nodes,
-                                              self.scatter_shared_queues,
-                                              self.gather_shared_queues),
-                            DistributedPass(self.send_nodes,
-                                            self.scatter_shared_queues,
-                                            self.gather_shared_queues),
+                            CommunicationPass(self.send_nodes),
+                            DistributedPass(self.send_nodes),
                             ChildTransformerPass(self.transformer_list)]
         self.vizpass = None
 
