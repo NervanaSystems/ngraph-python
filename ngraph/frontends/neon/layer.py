@@ -934,8 +934,8 @@ class LSTM(Recurrent):
         # Batch norm is computed only on the weighted inputs
         # as in https://arxiv.org/abs/1510.01378
         h_ff = dict()
-        for k, W in self.W_input.items():
-            h_ff[k] = ng.dot(W, in_obj)
+        for k in self.metadata["gates"]:
+            h_ff[k] = ng.dot(self.W_input[k], in_obj)
             if self.batch_norm is not None:
                 h_ff[k] = self.batch_norm[k](h_ff[k])
 
