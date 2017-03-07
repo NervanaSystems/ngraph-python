@@ -101,16 +101,16 @@ np.random.seed(s2)
 inputs = train_set.make_placeholders()
 
 z = inputs['noise_sample']
-G = generator.train_outputs(z)  # generated sample
+G = generator(z)  # generated sample
 
 x = inputs['data_sample']
-D1 = discriminator.train_outputs(x)  # discriminator output on real data sample
+D1 = discriminator(x)  # discriminator output on real data sample
 
 # cast G axes into x
 G_t = ng.axes_with_order(G, reversed(G.axes))
 G_cast = ng.cast_axes(G_t, x.axes)
 
-D2 = discriminator.train_outputs(G_cast)  # discriminator output on generated sample
+D2 = discriminator(G_cast)  # discriminator output on generated sample
 
 loss_d = -ng.log(D1) - ng.log(1 - D2)
 mean_cost_d = ng.mean(loss_d, out_axes=[])
@@ -136,8 +136,7 @@ train_computation_d = make_bound_computation(transformer,
                                              discriminator_train_outputs,
                                              inputs)
 
-generator_inference_output = generator.inference_outputs(z)
-generator_inference = transformer.computation(generator_inference_output, z)
+generator_inference = transformer.computation(G, z)
 
 # train loop
 k = 1  # variable rate training of discriminator, if k > 1
