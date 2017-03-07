@@ -109,7 +109,7 @@ class RNNHelper(object):
 
         for anc_op in ng.Op.ordered_ops([op]):
             if (isinstance(anc_op, ng.DotOp) and
-                any(arg.tensor == self.reference_rnn.W_input[k] for arg in anc_op.args)):
+               any(arg.tensor == self.reference_rnn.W_input[k] for arg in anc_op.args)):
                 return anc_op
 
 
@@ -268,7 +268,7 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
 def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
-                                         bn_params, transformer_factory):
+                                   bn_params, transformer_factory):
     """Compare bprop gated RNN with batch norm to numpy batch norm followed by rnn without"""
 
     helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
