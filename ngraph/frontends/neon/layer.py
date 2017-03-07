@@ -50,7 +50,7 @@ class Layer(object):
         self.inputs = inputs
         self.outputs = outputs
         self.axes = axes
-        self.scope = scope  # TODO: implement for all layers, currently just Linear and Bias
+        self.scope = scope
 
     def train_outputs(self, in_obj):
         raise NotImplementedError()
@@ -109,8 +109,9 @@ class LookupTable(Layer):
     """
     metadata = {'layer_type': 'lookuptable'}
 
-    def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None, **kwargs):
-        super(LookupTable, self).__init__(**kwargs)
+    def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None,
+                 scope=None, **kwargs):
+        super(LookupTable, self).__init__(scope=scope, **kwargs)
 
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
@@ -153,7 +154,8 @@ class LookupTable(Layer):
 
         self.W = ng.variable(axes=self.w_axes,
                              initial_value=self.lut_init(
-                                 self.w_axes, self.lut_v_axis, self.pad_idx)
+                                 self.w_axes, self.lut_v_axis, self.pad_idx),
+                             scope=self.scope
                              ).named('W')
 
         lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
@@ -175,8 +177,8 @@ class ConvBase(Layer):
     """
     metadata = {'layer_type': 'convolution'}
 
-    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
-        super(ConvBase, self).__init__(**kwargs)
+    def __init__(self, fshape, init, strides, padding, dilation, scope=None, **kwargs):
+        super(ConvBase, self).__init__(scope=scope, **kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
                                str_h=None, str_w=None, str_d=None,
@@ -208,7 +210,7 @@ class ConvBase(Layer):
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
                 self.f_axes += ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init)
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init, scope=self.scope)
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
@@ -232,7 +234,7 @@ class ConvBase(Layer):
 
 class Conv2D(ConvBase):
 
-    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, scope=None, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
                 fshape = (1, fshape[0], fshape[0], fshape[1])
@@ -246,7 +248,7 @@ class Conv2D(ConvBase):
         if isinstance(dilation, int):
             dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, scope=scope, **kwargs)
 
 
 class Activation(Layer):
@@ -379,7 +381,7 @@ class Affine(Layer):
         self.batch_norm = batch_norm
         self.linear = Linear(init=weight_init, nout=nout, scope=scope, **kwargs)
         self.bias = Bias(init=bias_init, scope=scope)
-        self.batch_norm_layer = BatchNorm() if batch_norm else None
+        self.batch_norm_layer = BatchNorm(scope=scope) if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
         self.scope = scope
 
@@ -401,10 +403,10 @@ class Affine(Layer):
 class Convolution(Layer):
 
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
-                 activation=None, batch_norm=False, **kwargs):
-        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, **kwargs)
-        self.bias = Bias(init=bias_init)
-        self.batch_norm = BatchNorm() if batch_norm else None
+                 activation=None, batch_norm=False, scope=None, **kwargs):
+        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, scope=scope, **kwargs)
+        self.bias = Bias(init=bias_init, scope=scope)
+        self.batch_norm = BatchNorm(scope=scope) if batch_norm else None
         self.activation = Activation(transform=activation)
 
     def train_outputs(self, in_obj):
@@ -436,7 +438,7 @@ class BatchNorm(Layer):
     """
     metadata = {'layer_type': 'batch_norm'}
 
-    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
+    def __init__(self, rho=0.9, eps=1e-3, scope=None, **kwargs):
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
@@ -444,6 +446,7 @@ class BatchNorm(Layer):
         self.beta = None
         self.gmean = None
         self.gvar = None
+        self.scope = scope
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj):
@@ -454,8 +457,14 @@ class BatchNorm(Layer):
         red_axes += in_obj.axes.batch_axes()
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=0.0).named('beta')
+        if self.gamma is None:
+            self.gamma = ng.variable(axes=out_axes,
+                                     initial_value=1.0,
+                                     scope=self.scope).named('gamma')
+        if self.beta is None:
+            self.beta = ng.variable(axes=out_axes,
+                                    initial_value=0.0,
+                                    scope=self.scope).named('beta')
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
         self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
@@ -535,8 +544,8 @@ class Recurrent(Layer):
     metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
-        super(Recurrent, self).__init__(**kwargs)
+                 reset_cells=True, return_sequence=True, backward=False, scope=None, **kwargs):
+        super(Recurrent, self).__init__(scope=scope, **kwargs)
 
         self.nout = nout
         self.activation = activation
@@ -607,10 +616,14 @@ class Recurrent(Layer):
                     initial_value=0, axes=self.hidden_state_axes).named('h_init')
 
         self.W_input = ng.variable(axes=self.w_in_axes,
-                                   initial_value=self.init).named("W_in")
+                                   initial_value=self.init,
+                                   scope=self.scope).named("W_in")
         self.W_recur = ng.variable(axes=self.w_re_axes,
-                                   initial_value=self.init_inner).named("W_re")
-        self.b = ng.variable(axes=self.hidden_axes, initial_value=0).named("bias")
+                                   initial_value=self.init_inner,
+                                   scope=self.scope).named("W_re")
+        self.b = ng.variable(axes=self.hidden_axes,
+                             initial_value=0,
+                             scope=self.scope).named("bias")
 
         h = self.h_init
         h_list = []
@@ -660,7 +673,7 @@ class BiRNN(Layer):
 
     def __init__(self, nout, init, init_inner=None, activation=None,
                  reset_cells=False, return_sequence=True, sum_out=False,
-                 concat_out=False, **kwargs):
+                 concat_out=False, scope=None, **kwargs):
         if sum_out and concat_out:
             raise ValueError("sum_out and concat_out cannot both be True")
 
@@ -669,10 +682,11 @@ class BiRNN(Layer):
         self.concat_out = concat_out
         self.nout = nout
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
-                                 reset_cells=reset_cells, return_sequence=return_sequence)
+                                 reset_cells=reset_cells, return_sequence=return_sequence,
+                                 scope=scope)
         self.bwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
                                  reset_cells=reset_cells, return_sequence=return_sequence,
-                                 backward=True)
+                                 backward=True, scope=scope)
 
     @ng.with_op_metadata
     def train_outputs(self, in_obj, init_state=None):
@@ -769,9 +783,9 @@ class LSTM(Recurrent):
                 'gates': ['i', 'f', 'o', 'g']}
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
-                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
+                 reset_cells=True, return_sequence=True, backward=False, scope=None, **kwargs):
         super(LSTM, self).__init__(nout, init, init_inner, activation, reset_cells,
-                                   return_sequence, backward, **kwargs)
+                                   return_sequence, backward, scope=scope, **kwargs)
 
         self.gate_activation = gate_activation
 
@@ -831,15 +845,18 @@ class LSTM(Recurrent):
 
         # params are dictionary for i, f, o, g
         self.W_input = {k: ng.variable(axes=self.w_in_axes,
-                                       initial_value=self.init).
+                                       initial_value=self.init,
+                                       scope=self.scope).
                         named("W_in_{}".format(k)) for k in self.metadata['gates']}
 
         self.W_recur = {k: ng.variable(axes=self.w_re_axes,
-                                       initial_value=self.init_inner).
+                                       initial_value=self.init_inner,
+                                       scope=self.scope).
                         named("W_re_{}".format(k)) for k in self.metadata['gates']}
 
         self.b = {k: ng.variable(axes=self.hidden_axes,
-                                 initial_value=0).
+                                 initial_value=0,
+                                 scope=self.scope).
                   named("bias_{}".format(k)) for k in self.metadata['gates']}
 
         h = self.h_init

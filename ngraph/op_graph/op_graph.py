@@ -1922,7 +1922,7 @@ class AssignableTensorOp(TensorOp):
         elif initial_value is not None:
             self.add_initializer(assign(self, initial_value))
 
-        self.scope = scope  # added for GAN, discriminator and generator networks
+        self.scope = scope
 
     @property
     def defs(self):
