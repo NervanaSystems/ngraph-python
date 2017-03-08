@@ -58,6 +58,7 @@ _none_slice = slice(None, None, None)
 
 PYCUDA_LOGIC_ERROR_CODE = 4
 
+
 class ElementWiseKernel(GPUKernel):
     """
     Kernel type used to execute one or more simple elementwise ops. This can
@@ -848,7 +849,7 @@ class GPURuntime(object):
 
         try:
             drv.init()
-        except drv.LogicError as e:
+        except drv.LogicError:
             sys.exit(PYCUDA_LOGIC_ERROR_CODE)
 
         self.device_id = device_id if device_id is not None else 0
