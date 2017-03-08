@@ -59,44 +59,6 @@ class DistributedPass(GraphBuildingPass):
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def do_traversal(self, root):
-        # Note: This is almost identical to Op's visit_input_closure.
-        available = OrderedSet()
-        counts = dict()
-        parents = collections.defaultdict(list)
-        ready = OrderedSet()
-        nodes = list()
-
-        available.add(root)
-        while available:
-            node = available.pop()
-            node.update_forwards()
-
-            if node in counts:
-                continue
-
-            children = [child.forwarded for child in node.control_deps]
-            if children:
-                counts[node] = len(children)
-                for child in children:
-                    parents[child].append(node)
-                available.update(children)
-            else:
-                ready.add(node)
-
-        while ready:
-            node = ready.pop()
-            nodes.append(node)
-            for p in parents.get(node, []):
-                count = counts[p] - 1
-                if count == 0:
-                    ready.add(p)
-                    del counts[p]
-                else:
-                    counts[p] = count
-
-        return nodes
-
     def clone_nodes(self, nodes, device_id, device_idx, new_axes):
         subgraph = list()
         elem = 0
@@ -138,7 +100,7 @@ class DistributedPass(GraphBuildingPass):
         ops = OrderedSet(op.forwarded for op in ops)
 
         def set_new_axes(root, num_devices):
-            visit = self.do_traversal(root)
+            visit = Op.ordered_ops([root])
             self.new_axes = calculate_new_axes(root.axes, self.parallel_axis,
                                                num_devices, False)
 
@@ -161,7 +123,8 @@ class DistributedPass(GraphBuildingPass):
                                 self.new_axes = calculate_new_axes(arg.axes, self.parallel_axis,
                                                                    len(arg.from_id), True)
 
-                            nodes = self.do_traversal(arg.send_node())
+                            nodes = Op.ordered_ops([arg.send_node()])
+
                             self.clone_nodes(nodes=nodes, device_id=arg.from_id[d],
                                              device_idx=d, new_axes=self.new_axes)
 
