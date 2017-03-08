@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -109,7 +109,7 @@ class GenerateLayoutDomains(PeepholeGraphPass):
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
-        if op.is_device_op:
+        if op.is_device_op or isinstance(op, TensorValueOp):
             self.domains[op] = self.transformer.get_layouts(op)
 
 
@@ -125,7 +125,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
         self.users = dict()
 
     def get_device_op(self, op):
-        if op.is_device_op:
+        if op.is_device_op or isinstance(op, TensorValueOp):
             return op
 
         for arg in op.args:
@@ -137,7 +137,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
-        if op.is_device_op:
+        if op.is_device_op or isinstance(op, TensorValueOp):
             # Generate unary constraint by getting the cost function for this op
             self.unary_constraints[op] = self.transformer.get_layout_cost_function(op)
 
@@ -282,7 +282,7 @@ class AddLayoutConversions(PeepholeGraphPass):
         super(AddLayoutConversions, self).do_pass(ops, transformer)
 
     def get_device_op(self, op):
-        if op.is_device_op:
+        if op.is_device_op or isinstance(op, TensorValueOp):
             return op
 
         for arg in op.args:
@@ -291,6 +291,19 @@ class AddLayoutConversions(PeepholeGraphPass):
                 return dev_op
 
         return None
+
+    @generic_method(dispatch_base_type=Op)
+    def op_from_args(self, op, args):
+        op_type = type(op)
+        try:
+            new_op = op_type(*args)
+        except:
+            import pdb; pdb.set_trace()
+        return new_op
+
+    @op_from_args.on_type(OneHotOp)
+    def op_from_args(self, op, args):
+        return OneHotOp(*args, axis=op.axis)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
@@ -325,9 +338,7 @@ class AddLayoutConversions(PeepholeGraphPass):
 
             # Replace op if any inputs need to be transformed
             if any(a is not b for a,b in zip(new_args, list(op.args))):
-                op_type = type(op)
-                new_op = op_type(*new_args)
-
+                new_op = self.op_from_args(op, new_args)
                 self.replace_op(op, new_op)
                 self.visited.append(new_op)
                 self.binary_constraints[new_op] = self.binary_constraints[op]
