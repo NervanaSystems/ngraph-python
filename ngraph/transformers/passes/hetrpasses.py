@@ -97,36 +97,32 @@ class DistributedPass(GraphBuildingPass):
         return subgraph
 
     def do_pass(self, ops, transformer):
+
+        def set_new_axes(node):
+            if hasattr(node, 'axes'):
+                node._TensorOp__axes = self.new_axes
+
         ops = OrderedSet(op.forwarded for op in ops)
-
-        def set_new_axes(root, num_devices):
-            visit = Op.ordered_ops([root])
-            self.new_axes = calculate_new_axes(root.axes, self.parallel_axis,
-                                               num_devices, False)
-
-            while visit:
-                node = visit.pop()
-                if hasattr(node, 'axes'):
-                    node._TensorOp__axes = self.new_axes
-
         # Start traversal from the top to the bottom
         for op in reversed(Op.ordered_ops(ops)):
             args = list()
             for arg in op.args:
-                if 'marker' in arg.metadata:
-                    if 'gather' is arg.metadata['marker']:
-                        self.parallel_axis = arg.metadata['parallel']
-                        set_new_axes(arg.send_node(), len(arg.from_id))
+                if arg.metadata.get('marker') == 'gather':
+                    self.parallel_axis = arg.metadata['parallel']
+                    send_node = arg.send_node()
+                    self.new_axes = calculate_new_axes(send_node.axes, self.parallel_axis,
+                                                       len(arg.from_id), False)
+                    Op.visit_input_closure([send_node], set_new_axes)
 
-                        for d in range(1, len(arg.from_id)):
-                            if d == (len(arg.from_id) - 1):
-                                self.new_axes = calculate_new_axes(arg.axes, self.parallel_axis,
-                                                                   len(arg.from_id), True)
+                    for d in range(1, len(arg.from_id)):
+                        if d == (len(arg.from_id) - 1):
+                            self.new_axes = calculate_new_axes(arg.axes, self.parallel_axis,
+                                                               len(arg.from_id), True)
 
-                            nodes = Op.ordered_ops([arg.send_node()])
+                        nodes = Op.ordered_ops([arg.send_node()])
 
-                            self.clone_nodes(nodes=nodes, device_id=arg.from_id[d],
-                                             device_idx=d, new_axes=self.new_axes)
+                        self.clone_nodes(nodes=nodes, device_id=arg.from_id[d],
+                                         device_idx=d, new_axes=self.new_axes)
 
                 args.append(arg)
 
