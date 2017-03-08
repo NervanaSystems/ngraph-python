@@ -46,6 +46,9 @@ install:
 	@pip install -r requirements.txt
 	@pip install -e .
 
+test_install:
+	@pip install -r test_requirements.txt
+
 uninstall:
 	@pip uninstall -y ngraph
 	@pip uninstall -r requirements.txt
@@ -73,7 +76,7 @@ test_mkl: clean
 	@py.test --enable_mkl --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test: clean testflex
+test: test_install clean testflex
 	@echo Running unit tests...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
