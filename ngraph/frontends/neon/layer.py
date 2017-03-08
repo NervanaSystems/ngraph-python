@@ -19,7 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar
+from ngraph.frontends.neon.axis import ar, shadow_axes_map
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -158,7 +158,7 @@ class Linear(Layer):
             ).format(axes.recurrent_axis()))
 
         self.axes = infer_axes(nout, axes)
-        self.axes_map = ar.shadow_axes_map(self.axes)
+        self.axes_map = shadow_axes_map(self.axes)
 
         self.init = init
         self.W = None
@@ -675,7 +675,7 @@ class Recurrent(Layer):
         # because sometimes the self.out_axes intersect with the self.in_axes
         # and so the weight matrix would have a duplicate Axis which isn't
         # allowed.
-        temp_out_axes = ar.shadow_axes_map(self.out_feature_axes).keys()
+        temp_out_axes = shadow_axes_map(self.out_feature_axes).keys()
 
         # determine the shape of the weight matrices
         self.w_in_axes = temp_out_axes + self.in_feature_axes
