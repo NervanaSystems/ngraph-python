@@ -49,12 +49,14 @@ from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_
 import cachetools
 import numpy as np
 import pycuda.driver as drv
+import sys
 from pycuda.gpuarray import GPUArray
 from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
 
 _none_slice = slice(None, None, None)
 
+PYCUDA_LOGIC_ERROR_CODE = 4
 
 class ElementWiseKernel(GPUKernel):
     """
@@ -843,7 +845,12 @@ class GPUDeviceTensor(DeviceTensor):
 class GPURuntime(object):
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
-        drv.init()
+
+        try:
+            drv.init()
+        except drv.LogicError as e:
+            sys.exit(PYCUDA_LOGIC_ERROR_CODE)
+
         self.device_id = device_id if device_id is not None else 0
 
         # check compute capability

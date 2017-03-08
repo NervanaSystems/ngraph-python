@@ -92,11 +92,14 @@ class AsyncTransformer(Process):
                         q = self.async_transformer.results_qs[self.comp_id]
                         return q.get(timeout=AsyncTransformer.SLEEP_S)
                     except Exception as e:
+                        from ngraph.transformers.gputransform import PYCUDA_LOGIC_ERROR_CODE
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
+                                elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)
                         else:
