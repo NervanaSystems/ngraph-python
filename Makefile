@@ -33,6 +33,7 @@ TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tes
 TEST_DIRS_FLEX := flex_tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
+TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -86,6 +87,11 @@ test_caffe2: clean
 test_mxnet: clean
 	@echo Running unit tests for mxnet frontend...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
+	@coverage xml -i
+
+test_integration: clean
+	@echo Running integration tests...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
 
 style:

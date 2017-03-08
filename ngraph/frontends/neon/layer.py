@@ -442,18 +442,31 @@ class BatchNorm(Layer):
 
     Normalizes a batch worth of inputs by subtracting batch mean and
     dividing by batch variance.  Then scales by learned factor gamma and
-    shifts by learned bias beta.
+    shifts by learned bias beta. The layer handles recurrent inputs as
+    described in [Laurent2016]_.
 
+    Args:
+        rho (float): smoothing coefficient for global updating global statistics
+        eps (float): constant added to batch variance to prevent instability
+        init_gamma (float): initial value for gamma, the scaling coefficient
+        init_beta (float): initial value for beta, the constant offset
+        reduce_recurrent (bool): whether statistics should be calculated over recurrent axis
+                                 as well.
     Notes:
 
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
+    .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
     metadata = {'layer_type': 'batch_norm'}
 
-    def __init__(self, rho=0.9, eps=1e-3, **kwargs):
+    def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
+                 **kwargs):
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
+        self.init_gamma = init_gamma
+        self.init_beta = init_beta
+
         self.gamma = None
         self.beta = None
         self.gmean = None
@@ -467,11 +480,15 @@ class BatchNorm(Layer):
         red_axes = ng.make_axes()
         if len(in_axes.role_axes(ar.features_input)) != 0:
             red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+        if in_axes.recurrent_axis() is not None:
+            red_axes |= in_axes.recurrent_axis()
         red_axes |= in_obj.axes.batch_axis()
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes, initial_value=1.0).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes, initial_value=0.0).named('beta')
+        self.gamma = self.gamma or ng.variable(axes=out_axes,
+                                               initial_value=self.init_gamma).named('gamma')
+        self.beta = self.beta or ng.variable(axes=out_axes,
+                                             initial_value=self.init_beta).named('beta')
         self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
         self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
 
@@ -522,7 +539,10 @@ def get_steps(x, time_axis, backward=False):
     time_iter = list(range(time_axis.length))
     if backward:
         time_iter = reversed(time_iter)
-    return [ng.slice_along_axis(x, time_axis, i) for i in time_iter]
+    if isinstance(x, dict):
+        return [{k: ng.slice_along_axis(x[k], time_axis, i) for k in x.keys()} for i in time_iter]
+    else:
+        return [ng.slice_along_axis(x, time_axis, i) for i in time_iter]
 
 
 class Recurrent(Layer):
@@ -538,11 +558,15 @@ class Recurrent(Layer):
                                             parameters.  If absent, will default to using same
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
+        batch_norm (bool, optional): defaults to False to not perform batch norm. If True,
+                                     batch normalization is applied in each direction after
+                                     multiplying the input by its W_input.
         reset_cells (bool): default to be True to make the layer stateless,
                             set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
         backward (bool): default to be False to process the sequence left to right
         name (str, optional): name to refer to this layer as.
+
     Attributes:
         W_input (Tensor): weights from inputs to output units
             (input_size, output_size)
@@ -552,8 +576,9 @@ class Recurrent(Layer):
     """
     metadata = {'layer_type': 'recurrent'}
 
-    def __init__(self, nout, init, init_inner=None, activation=None,
-                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
+    def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
+                 reset_cells=True, return_sequence=True, backward=False,
+                 **kwargs):
         super(Recurrent, self).__init__(**kwargs)
 
         self.nout = nout
@@ -563,6 +588,7 @@ class Recurrent(Layer):
         self.reset_cells = reset_cells
         self.return_sequence = return_sequence
         self.backward = backward
+        self.batch_norm = BatchNorm() if batch_norm is True else None
 
     def interpret_axes(self, in_obj, init_state):
         self.in_axes = in_obj.axes
@@ -601,8 +627,8 @@ class Recurrent(Layer):
         self.w_in_axes = temp_out_axes + self.in_feature_axes
         self.w_re_axes = temp_out_axes + self.out_feature_axes
 
-    def _step(self, inp, states):
-        h_ff = ng.cast_role(ng.dot(self.W_input, inp), self.out_axes)
+    def _step(self, h_ff, states):
+        h_ff = ng.cast_role(h_ff, self.out_axes)
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
@@ -645,8 +671,14 @@ class Recurrent(Layer):
         h = self.h_init
         h_list = []
 
-        # slice the inputs into time slices
-        in_s = get_steps(in_obj, self.recurrent_axis, self.backward)
+        h_ff = ng.dot(self.W_input, in_obj)
+        # Batch norm is computed only on the weighted inputs
+        # as in https://arxiv.org/abs/1510.01378
+        if self.batch_norm is not None:
+            h_ff = self.batch_norm(h_ff)
+
+        # slice the weighted inputs into time slices
+        in_s = get_steps(h_ff, self.recurrent_axis, self.backward)
 
         # unrolling computations
         for i in range(self.recurrent_axis.length):
@@ -677,6 +709,9 @@ class BiRNN(Layer):
                                             parameters.  If absent, will default to using same
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
+        batch_norm (bool, optional): defaults to False to not perform batch norm. If True,
+                                     batch normalization is applied in each direction after
+                                     multiplying the input by its W_input.
         reset_cells (bool): default to be True to make the layer stateless,
                             set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
@@ -688,7 +723,7 @@ class BiRNN(Layer):
     """
     metadata = {'layer_type': 'birnn'}
 
-    def __init__(self, nout, init, init_inner=None, activation=None,
+    def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=False, return_sequence=True, sum_out=False,
                  concat_out=False, **kwargs):
         if sum_out and concat_out:
@@ -699,10 +734,11 @@ class BiRNN(Layer):
         self.concat_out = concat_out
         self.nout = nout
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
-                                 reset_cells=reset_cells, return_sequence=return_sequence)
+                                 batch_norm=batch_norm, reset_cells=reset_cells,
+                                 return_sequence=return_sequence)
         self.bwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
-                                 reset_cells=reset_cells, return_sequence=return_sequence,
-                                 backward=True)
+                                 batch_norm=batch_norm, reset_cells=reset_cells,
+                                 return_sequence=return_sequence, backward=True)
 
     @ng.with_op_metadata
     @cached({})
@@ -779,6 +815,9 @@ class LSTM(Recurrent):
                                             parameters.  If absent, will default to using same
                                             initializer provided to init.
         activation (Transform): Activation function for the input modulation
+        batch_norm (bool, optional): defaults to False to not perform batch norm. If True,
+                                     batch normalization is applied to each gate after
+                                     multiplying the input by W_input.
         reset_cells (bool): default to be True to make the layer stateless,
                             set to False to be stateful.
         return_sequence (bool): default to be True to return the whole sequence output.
@@ -798,24 +837,27 @@ class LSTM(Recurrent):
                 'gates': ['i', 'f', 'o', 'g']}
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
-                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
-        super(LSTM, self).__init__(nout, init, init_inner, activation, reset_cells,
-                                   return_sequence, backward, **kwargs)
+                 batch_norm=False, reset_cells=True, return_sequence=True, backward=False,
+                 **kwargs):
+        super(LSTM, self).__init__(nout, init, init_inner=init_inner, activation=activation,
+                                   reset_cells=reset_cells, return_sequence=return_sequence,
+                                   backward=backward, **kwargs)
 
-        self.gate_activation = gate_activation
+        if batch_norm is True:
+            self.batch_norm = {k: BatchNorm() for k in self.metadata["gates"]}
+        else:
+            self.batch_norm = None
+        self.gate_activation = gate_activation if gate_activation is not None else self.activation
 
-    def _step(self, inp, states):
+    def _step(self, h_ff, states):
         h_state = states[0]
         c_state = states[1]
-
         ifog = {
-            k: sum([
-                ng.cast_role(ng.dot(self.W_input[k], inp), self.out_axes),
-                ng.cast_role(ng.dot(self.W_recur[k], h_state), self.out_axes),
-                self.b[k],
-            ]) for k in self.metadata['gates']
+            k: sum([ng.cast_role(h_ff[k], self.out_axes),
+                    ng.cast_role(ng.dot(self.W_recur[k], h_state), self.out_axes),
+                    self.b[k],
+                    ]) for k in self.metadata['gates']
         }
-
         ifog_act = {k: self.activation(ifog[k]) if k is 'g'
                     else self.gate_activation(ifog[k]) for k in self.metadata['gates']}
 
@@ -884,13 +926,22 @@ class LSTM(Recurrent):
         h_list = []
         c_list = []
 
-        # feedforward computation
-        in_s = get_steps(in_obj, self.recurrent_axis, self.backward)
+        # Compute feed forward weighted inputs
+        # Batch norm is computed only on the weighted inputs
+        # as in https://arxiv.org/abs/1510.01378
+        h_ff = dict()
+        for k in self.metadata["gates"]:
+            h_ff[k] = ng.dot(self.W_input[k], in_obj)
+            if self.batch_norm is not None:
+                h_ff[k] = self.batch_norm[k](h_ff[k])
+
+            # slice the weighted inputs into time slices
+        h_ff = get_steps(h_ff, self.recurrent_axis, self.backward)
 
         # recurrent computation
         for i in range(self.recurrent_axis.length):
             with ng.metadata(recurrent_step=str(i)):
-                [h, c] = self._step(in_s[i], [h, c])
+                [h, c] = self._step(h_ff[i], [h, c])
                 h_list.append(h)
                 c_list.append(c)
 
