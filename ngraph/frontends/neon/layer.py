@@ -94,33 +94,90 @@ class Preprocess(Layer):
         return self.functor(in_obj)
 
 
+def cast_tuple(x):
+    # cast x to a tuple
+    if isinstance(x, collections.Iterable):
+        return tuple(x)
+    else:
+        return (x,)
+
+
+def infer_axes(nout=None, axes=None):
+    """
+    Args:
+        nout: int or iterable of ints specifying the lengths of the axes to be returned
+        axes: Axes object that describe the output axes that should be returned
+    """
+    # if out_axes are provided, just return those
+    if axes is not None:
+        if nout is not None:
+            raise ValueError(
+                'if out_axes are provided, nout must be None.  Found {}'.format(nout)
+            )
+
+        if None in axes.lengths:
+            raise ValueError((
+                'if out_axes are provided, all lengths must be '
+                'specified (not None).  Found {}'
+            ).format(axes.lengths))
+
+        return axes
+    elif nout is not None:
+        return ng.make_axes([ng.make_axis(length) for length in cast_tuple(nout)])
+    else:
+        raise ValueError(
+            'nout and axes were both None, one of them must have a value'
+        )
+
+
 class Linear(Layer):
     metadata = {'layer_type': 'linear'}
 
     def __init__(self, init, nout=None, axes=None, **kwargs):
+        """
+        Args:
+            nout (int or iterable of ints, optional): length or lengths of
+                feature axes the Linear layer should output.  Must not be
+                provided in combination with axes.
+            axes (Axes, optional): axes of feature axes the Linear layer
+                should output.  Must not be provided in combination with nout.
+                Axes should not include recurrent or batch axes.
+        """
         super(Linear, self).__init__(**kwargs)
-        self.axes = axes
-        self.nout = nout
+
+        # axes should not include recurrent or batch axes
+        if axes.batch_axis() is not None:
+            raise ValueError((
+                'Axes passed to Linear layer should only be the output feature'
+                'axis.  A batch axis {} was included.'
+            ).format(axes.batch_axis()))
+        if axes.recurrent_axis() is not None:
+            raise ValueError((
+                'Axes passed to Linear layer should only be the output feature'
+                'axis.  A recurrent axis {} was included.'
+            ).format(axes.recurrent_axis()))
+
+        self.axes = infer_axes(nout, axes)
+        self.axes_map = ar.shadow_axes_map(self.axes)
+
         self.init = init
-        if self.axes is None:
-            assert(self.nout is not None), "Must provide either axes or nout to Linear"
         self.W = None
 
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
-        # interpret axes
-        in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axis()
-        out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
-        temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
-                                      for axis in out_feature_axes])
-        out_axes = out_feature_axes + (in_obj.axes - in_feature_axes)
-        w_axes = temp_out_axes + in_feature_axes
+        if self.W is None:
+            self.W = ng.variable(
+                axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
+                initial_value=self.init,
+            ).named('LinW')
 
-        # init weights
-        self.W = ng.variable(axes=w_axes, initial_value=self.init).named('LinW')
-
-        return ng.cast_role(ng.dot(self.W, in_obj), out_axes)
+        # in the event that the in_obj feature axes and the output feature axes
+        # share axis names, self.W will have duplicate axes, which are not
+        # allowed.  To get around this, we rename the output feature axes to
+        # something unique that we can undo after the dot.  This map_roles is
+        # undoing this temporary axes name change.
+        return ng.map_roles(ng.dot(self.W, in_obj), self.axes_map)
 
 
 class LookupTable(Layer):
@@ -609,7 +666,7 @@ class Recurrent(Layer):
             if len(self.in_feature_axes) == 1:
                 self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        self.out_axes = self.out_feature_axes | self.in_axes.batch_axis()
+        self.out_axes = self.out_feature_axes + self.in_axes.batch_axis()
         self.recurrent_axis_idx = len(self.out_feature_axes)
 
         # create temporary out axes which the dot ops will output.  These
@@ -618,10 +675,7 @@ class Recurrent(Layer):
         # because sometimes the self.out_axes intersect with the self.in_axes
         # and so the weight matrix would have a duplicate Axis which isn't
         # allowed.
-        temp_out_axes = ng.make_axes([
-            ng.make_axis(axis.length, name=axis.name + '_out')
-            for axis in self.out_feature_axes
-        ])
+        temp_out_axes = ar.shadow_axes_map(self.out_feature_axes).keys()
 
         # determine the shape of the weight matrices
         self.w_in_axes = temp_out_axes + self.in_feature_axes
