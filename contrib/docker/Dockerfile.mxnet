@@ -5,8 +5,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     libatlas-base-dev \
-    libopencv-dev
-RUN apt-get clean autoclean && apt-get autoremove -y
+    libopencv-dev && \
+	apt-get clean autoclean && apt-get autoremove -y
 
 # Required Python packages
 RUN pip install --upgrade pip && pip install \
