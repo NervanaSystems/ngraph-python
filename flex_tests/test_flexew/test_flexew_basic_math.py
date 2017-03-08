@@ -2,221 +2,98 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing import executor, template_one_placeholder, template_one_placeholder_equality
+from ngraph.testing import executor, template_one_placeholder
 
 
+MINIMUM_FLEX_VALUE = -2**15
+MAXIMUM_FLEX_VALUE = 2**15 - 1
 
-
-MINIMUM_FLEX_VALUE = -128  # 128.0
-MAXIMUM_FLEX_VALUE = 127.99609375  # 127.99609375/
-# =======
-# MINIMUM_FLEX_VALUE = - 128.0
-# MAXIMUM_FLEX_VALUE = 127.99609375
-# >>>>>>> 34f5311cf66da29482b1c07217d9d06856bc182a
 EPSILON = 0.2
 x = ng.placeholder(())
 z = ng.placeholder(())
 
 
 # Assignment
-# @pytest.mark.xfail(reason="Known issue")
-
-testdata_assign = \
-    [
-     (MINIMUM_FLEX_VALUE - 1, MINIMUM_FLEX_VALUE, "Assign function - underflow expected"),
-     (MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE, "Assign function - overflow expected"),
-     (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE, "Assign function of negative boundary value inside of flex range"),
-     (MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, "Assign function of positive boundary value inside of flex range")
+test_data = {
+    "test_assign": [
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE,
+                           "Assign function - underflow expected"), strict=True),
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE,
+                           "Assign function - overflow expected"), strict=True),
+        (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE, "Assign function of negative boundary value inside of flex range"),
+        (MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, "Assign function of positive boundary value inside of flex range")
+    ],
+    "test_negate": [
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE,
+                           "Negate function - overflow expected"), strict=True),
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE,
+                           "Assign function of negative boundary value inside of flex range"), strict=True),
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE + 1,
+                           "Assign function of positive boundary value inside of flex range"), strict=True)
+    ],
+    "test_absolute": [
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE,
+                           "Absolute value from the flex range - overflow expected"), strict=True),
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE,
+                           "Absolute value outside of the flex range"), strict=True)
+     ],
+    "test_addition": [
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE,
+                           "Positive boundary value plus one - overflow expected"), strict=True),
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE + 1,
+                           "Negative boundary value plus one"), strict=True)
+    ],
+    "test_subtraction": [
+        # template:(minuend, subtrahend, expected_difference, description)
+        (MINIMUM_FLEX_VALUE, 1,  MINIMUM_FLEX_VALUE, "Negative boundary value minus one - underflow expected"),
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE, 2,  MINIMUM_FLEX_VALUE,
+                           "Negative boundary value minus two - underflow expected"), strict=True),
+        (MAXIMUM_FLEX_VALUE, 1,  MAXIMUM_FLEX_VALUE - 1, "Positive boundary value minus one"),
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE, 2,  MAXIMUM_FLEX_VALUE - 2,
+                           "Positive boundary value minus two"), strict=True)
+    ],
+    "test_multiplication": [
+        # template:(multiplier_1, multiplier_2, expected_product, description)
+        pytest.mark.xfail((MINIMUM_FLEX_VALUE, 2, MINIMUM_FLEX_VALUE,
+                           "Negative boundary value by two - underflow expected"), strict=True),
+        pytest.mark.xfail((MAXIMUM_FLEX_VALUE, 2, MAXIMUM_FLEX_VALUE,
+                           "Positive boundary value by two - overflow expected"), strict=True),
+        (MINIMUM_FLEX_VALUE, 0, 0, "Negative boundary value by zero equals zero"),
+        (MAXIMUM_FLEX_VALUE, 1, MAXIMUM_FLEX_VALUE, "Positive boundary value by one is the same")
     ]
+}
 
 
-
-@pytest.mark.parametrize("test_input, expected, description", testdata_assign)
+@pytest.mark.parametrize("test_input, expected, description", test_data["test_assign"])
 def test_assign(transformer_factory, test_input, expected, description):
-    # pytest.skip('Not for flex')
-    template_one_placeholder(test_input, x, x, expected)
+    template_one_placeholder(test_input, x, x, expected, description)
 
-# else:
-#     pytest.skip('Not for flex')
-#
-# def test_assign_const_below_minimum_flex_value(transformer_factory):
-#     """
-#     Assign constant with a value below the flex range.
-#     Negative case.
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE +1], x, x, lambda y: y, expect_error=True)
-#
-#
-# def test_assign_const_minimum_flex_value(transformer_factory):
-#     """
-#     Assign constant with the minimum value of the flex range.
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE - 1], x, x, lambda y: y, expect_error=True)
-#
-#
-# def test_assign_const_maximum_flex_value(transformer_factory):
-#     """
-#     Assign constant with the maximum value of the flex range.
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE], x, x, lambda y: y)
-#
-#
-#
-# # @pytest.mark.xfail(reason="Known issue")
-# def test_assign_const_above_maximum_flex_value(transformer_factory):
-#     """
-#     Assign constant with a value above the flex range.
-#     Negative case.
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE + 1], x, x, lambda y: y, expect_error=True)
-#
-#
-# # Negate.
-# def test_neg_const_below_minimum_flex_value(transformer_factory):
-#     """
-#     Negate constant with a value below the flex range.
-#     Negative case.
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE - 1], x, -x, lambda y: -y, expect_error=True)
-#
-#
-# def test_neg_const_minimum_flex_value(transformer_factory):
-#     """
-#     Negate constant with the minimum value from the flex range.
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE], x, -x, lambda y: -y)
-#
-# def test_neg_const_maximum_flex_value(transformer_factory):
-#     """
-#     Negate constant with the maximum value from the flex range.
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE], x, -x, lambda y: -y)
-#
-#
-# def test_neg_const_above_maximum_flex_value(transformer_factory):
-#     """
-#     Negate constant of a value above the flex range.
-#     Negative case.
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE + 1], x, -x, lambda y: -y, expect_error=True)
-#
-#
-# # Absolute value.
-# def test_abs_matrix(transformer_factory):
-#     """
-#     absolute value of matrix
-#     """
-#     n, m = 2, 3
-#     N = ng.make_axis(length=n)
-#     M = ng.make_axis(length=m)
-#     Zin = ng.placeholder((N, M))
-#     Zout = abs(Zin)
-#
-#     with executor(Zout, Zin) as ex:
-#         abs_executor = ex
-#
-#         Xval = np.array([5, 1, 0, -2, 3, 4]).reshape(n, m).astype(np.float32)
-#         Xval[0, 1] = -Xval[0, 1]
-#         assert np.allclose(abs_executor(Xval), abs(Xval))
-#
-#
-# def test_abs_const_minimum_flex_value(transformer_factory):
-#     """
-#     Absolute value from the flex range.
-#     """
-#     template_one_placeholder(np.arange(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, 0.3), x, ng.absolute(x),
-#                              lambda y: abs(y))
-#
-#
-# def test_abs_const_below_flex_value(transformer_factory):
-#     """
-#     Absolute value with the value below the flex range.
-#     Negative case
-#     """
-#     template_one_placeholder(np.arange(MINIMUM_FLEX_VALUE - 1, MINIMUM_FLEX_VALUE - 3, 0.3), x, ng.absolute(x),
-#                              lambda y: abs(y), expect_error=True)
-#
-#
-# def test_abs_const_above_flex_value(transformer_factory):
-#     """
-#     Absolute value with the value above the flex range.
-#     Negative case
-#     """
-#     template_one_placeholder(np.arange(MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE + 3, 0.3), x, ng.absolute(x),
-#                              lambda y: abs(y), expect_error=True)
-#
-#
-# # Addition.
-# def test_addition_const_below_minimum_flex_value(transformer_factory):
-#     """
-#     Add constants to achieve a number below the flex range
-#     Negative case
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE - 2], x, x + 1.4, lambda y: y + 1.4, expect_error=True)
-#
-#
-# def test_addition_const_from_flex_value(transformer_factory):
-#     """
-#     Add constants to achieve a number within the flex range
-#     Number is the boundary value of minimum flex range
-#     """
-#     template_one_placeholder(np.arange(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE - 1.4), x, x + 1.4, lambda y: y + 1.4)
-#
-#
-# def test_addition_const_over_maximum_flex_value(transformer_factory):
-#     """
-#     Add constants to achieve a number over the flex range
-#     Negative case
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE], x, x + 1.4, lambda y: y + 1.4, expect_error=True)
-#
-#
-# def test_plusconst(transformer_factory):
-#     """
-#     x + 1.5
-#     """
-#     x = ng.placeholder(())
-#     x_plus_const = x + 1.5
-#
-#     with executor(x_plus_const, x) as ex:
-#         plusconst_executor = ex
-#
-#         for i in range(5):
-#             # 8.8 fixed point test
-#             assert plusconst_executor(i) == i + 1.5
-#
-#
-# # Subtraction.
-# def test_subtraction_const_below_minimum_flex_value(transformer_factory):
-#     """
-#     Subtract constants to achieve a number below the flex range
-#     Negative case
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE], x, x - 1, lambda y: y - 1, expect_error=True)
-#
-#
-# def test_subtraction_const_minimum_flex_value(transformer_factory):
-#     """
-#     Subtract constants to achieve the minimum value of the flex range
-#     """
-#     template_one_placeholder([MINIMUM_FLEX_VALUE + 1], x, x - 1, lambda y: y - 1)
-#
-#
-# def test_subtraction_const_maximum_flex_value(transformer_factory):
-#     """
-#     Subtract constants with maximum value of the flex range
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE], x, x - 1, lambda y: y - 1)
-#
-#
-# def test_subtraction_const_above_maximum_flex_value(transformer_factory):
-#     """
-#     Subtract constants to achieve a number above the flex range
-#     Negative case
-#     """
-#     template_one_placeholder([MAXIMUM_FLEX_VALUE + 2], x, x - 1, lambda y: y - 1, expect_error=True)
-#
-#
+
+@pytest.mark.parametrize("test_input, expected, description", test_data["test_negate"])
+def test_negate(transformer_factory, test_input, expected, description):
+    template_one_placeholder(test_input, -x, x, expected, description)
+
+
+@pytest.mark.parametrize("test_input, expected, description", test_data["test_absolute"])
+def test_absolute(transformer_factory, test_input, expected, description):
+    template_one_placeholder(test_input, ng.absolute(x), x, expected, description)
+
+
+@pytest.mark.parametrize("test_input, expected, description", test_data["test_addition"])
+def test_addition(transformer_factory, test_input, expected, description):
+    template_one_placeholder(test_input, x + 1, x, expected, description)
+
+
+@pytest.mark.parametrize("minuend, subtrahend, expected_difference, description", test_data["test_subtraction"])
+def test_subtraction(transformer_factory, minuend, subtrahend, expected_difference, description):
+    template_one_placeholder(minuend, x - subtrahend, x, expected_difference, description)
+
+
+@pytest.mark.parametrize("multiplier_1, multiplier_2, expected_product, description", test_data["test_multiplication"])
+def test_multiplication(transformer_factory, multiplier_1, multiplier_2, expected_product, description):
+    template_one_placeholder(multiplier_1, x * multiplier_2, x, expected_product, description)
+
+
 # # Multiplication.
 # def test_multiplication_const_minimum_flex_range_value(transformer_factory):
 #     """
