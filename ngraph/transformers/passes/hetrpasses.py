@@ -103,33 +103,29 @@ class DistributedPass(GraphBuildingPass):
                 node._TensorOp__axes = self.new_axes
 
         ops = OrderedSet(op.forwarded for op in ops)
-        # Start traversal from the top to the bottom
+
         for op in reversed(Op.ordered_ops(ops)):
-            args = list()
-            for arg in op.args:
-                if arg.metadata.get('marker') == 'gather':
-                    self.parallel_axis = arg.metadata['parallel']
-                    send_node = arg.send_node()
-                    self.new_axes = calculate_new_axes(send_node.axes, self.parallel_axis,
-                                                       len(arg.from_id), False)
-                    Op.visit_input_closure([send_node], set_new_axes)
+            if op.metadata.get('marker') == 'gather':
+                self.parallel_axes = op.metadata['parallel']
 
-                    for d in range(1, len(arg.from_id)):
-                        if d == (len(arg.from_id) - 1):
-                            self.new_axes = calculate_new_axes(arg.axes, self.parallel_axis,
-                                                               len(arg.from_id), True)
+                self.new_axes = calculate_new_axes(
+                    op.send_node().axes, self.parallel_axes, len(op.from_id), False)
 
-                        nodes = Op.ordered_ops([arg.send_node()])
+                nodes_to_clone = Op.ordered_ops([op.send_node()])
+                map(set_new_axes, nodes_to_clone)
 
-                        self.clone_nodes(nodes=nodes, device_id=arg.from_id[d],
-                                         device_idx=d, new_axes=self.new_axes)
+                # clone nodes for other device_id
+                for i, id in enumerate(op.from_id[1:], start=1):
+                    # compute the axes for last device
+                    if i == (len(op.from_id) - 1):
+                        self.new_axes = calculate_new_axes(
+                            op.axes, self.parallel_axes, len(op.from_id), True)
 
-                args.append(arg)
-
-            if isinstance(op.args, tuple):
-                op._Op__args = tuple(args)
-            else:
-                op.args(args)
+                    # print('device_id={}, device_idx={}'.format(id, i))
+                    # print('nodes to clone: {}\n'.format(nodes_to_clone))
+                    cloned_nodes = self.clone_nodes(nodes=nodes_to_clone, device_id=id,
+                                     device_idx=i, new_axes=self.new_axes)
+                    # print('cloned nodes: {}\n'.format(cloned_nodes))
 
 
 class ChildTransformerPass(GraphBuildingPass):
