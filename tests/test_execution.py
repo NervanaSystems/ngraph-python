@@ -136,7 +136,6 @@ def test_placeholder(transformer_factory):
         ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-
 @pytest.mark.parametrize("reduction",
                          [(np.sum, ng.sum, 'sum'),
                           (np.prod, ng.prod, 'prod'),
