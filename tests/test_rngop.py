@@ -88,7 +88,7 @@ def test_normal_negative_mean(transformer_factory):
     print(np.mean(result))
     print(np.std(result))
 
-    assert np.allclose(np.mean(result), mean, rtol=0, atol=0.025)
-    assert np.allclose(np.std(result), std, rtol=0, atol=0.025)
+    assert np.allclose(np.mean(result), mean, rtol=0.1, atol=0.02)
+    assert np.allclose(np.std(result), std, rtol=0.1, atol=0.02)
     assert not np.all(result >= 0.0)
     assert not np.all(result < 0.0)

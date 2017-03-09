@@ -30,7 +30,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
     Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
-    ReciprocalOp, Power, AssignOneDOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
+    ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
@@ -45,8 +45,9 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory
 
-from ngraph.op_graph.communication import Send, Recv, Gather_Send, Gather_Recv, Scatter_Send, \
-    Scatter_Recv
+from ngraph.factory.comm_nodes import NumpyQueueSendOp, NumpyQueueRecvOp, \
+    NumpyQueueGatherSendOp, NumpyQueueGatherRecvOp, NumpyQueueScatterSendOp, \
+    NumpyQueueScatterRecvOp
 
 
 class NumPyConvEngine(object):
@@ -617,7 +618,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
-    @generate_op.on_type(AssignOneDOp)
+    @generate_op.on_type(AssignOp)
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__((), {})", tensor, value)
 
@@ -661,41 +662,41 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
-    @generate_op.on_type(Send)
+    @generate_op.on_type(NumpyQueueSendOp)
     def generate_op(self, op, out, *args):
         send_id = len(self.send_nodes)
         self.send_nodes[send_id] = op
-        self.append("self.send({})", send_id)
+        self.append("self.queue_send({})", send_id)
 
-    @generate_op.on_type(Recv)
+    @generate_op.on_type(NumpyQueueRecvOp)
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
         self.recv_nodes[recv_id] = op
-        self.append("{} = self.recv_from_send({})", out, recv_id)
+        self.append("{} = self.recv_from_queue_send({})", out, recv_id)
 
-    @generate_op.on_type(Gather_Send)
+    @generate_op.on_type(NumpyQueueGatherSendOp)
     def generate_op(self, op, out, *args):
         gather_send_id = len(self.gather_send_nodes)
         self.gather_send_nodes[gather_send_id] = op
-        self.append("self.gather_send({})", gather_send_id)
+        self.append("self.queue_gather_send({})", gather_send_id)
 
-    @generate_op.on_type(Gather_Recv)
+    @generate_op.on_type(NumpyQueueGatherRecvOp)
     def generate_op(self, op, out, *args):
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes[gather_recv_id] = op
-        self.append("{}[:] = self.gather_recv_from_gather_send({})", out, gather_recv_id)
+        self.append("{}[:] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
 
-    @generate_op.on_type(Scatter_Send)
+    @generate_op.on_type(NumpyQueueScatterSendOp)
     def generate_op(self, op, out, *args):
         scatter_send_id = len(self.scatter_send_nodes)
         self.scatter_send_nodes[scatter_send_id] = op
-        self.append("self.scatter_send({})", scatter_send_id)
+        self.append("self.queue_scatter_send({})", scatter_send_id)
 
-    @generate_op.on_type(Scatter_Recv)
+    @generate_op.on_type(NumpyQueueScatterRecvOp)
     def generate_op(self, op, out, *args):
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes[scatter_recv_id] = op
-        self.append("{}[:] = self.scatter_recv_from_scatter_send({})", out, scatter_recv_id)
+        self.append("{}[:] = self.scatter_recv_from_queue_scatter_send({})", out, scatter_recv_id)
 
 
 class NumPyTransformer(Transformer):
@@ -804,14 +805,14 @@ class NumPyTransformer(Transformer):
             self.code.append(self.compute_code.code)
 
             # with open("code_{}.py".format(self.name), "w") as f:
-            #     f.write(self.code.code)
+            #    f.write(self.code.code)
 
         r = self.code.compile("op", globals())
         self.model = r['Model']
 
-        def send(self, send_id):
+        def queue_send(self, send_id):
             send_op = self.send_nodes[send_id]
-            q = send_op.shared_q
+            q = send_op.queue
 
             # TODO
             # below converts DeviceTensor to numpy array
@@ -820,15 +821,15 @@ class NumPyTransformer(Transformer):
             x_nparr = x_devicetensor.get(None)
             q.put(x_nparr)
 
-        def recv(self, recv_id):
+        def queue_recv(self, recv_id):
             recv_op = self.recv_nodes[recv_id]
-            q = recv_op.shared_q
+            q = recv_op.queue
             x = q.get()
             return x
 
-        def gather_send(self, gather_send_id):
+        def queue_gather_send(self, gather_send_id):
             gather_send_op = self.gather_send_nodes[gather_send_id]
-            q = gather_send_op.shared_queue
+            q = gather_send_op.shared_queues[gather_send_op.idx]
             # TODO
             # below converts DeviceTensor to numpy array
             # should we instead serialize DeviceTensor?
@@ -836,43 +837,41 @@ class NumPyTransformer(Transformer):
             x_nparr = x_devicetensor.get(None)
             q.put(x_nparr)
 
-        def gather_recv(self, gather_recv_id):
+        def queue_gather_recv(self, gather_recv_id):
             gather_recv_op = self.gather_recv_nodes[gather_recv_id]
             x_devicetensor = gather_recv_op.value
             x_nparr = x_devicetensor.get(None)
-
             for i in range(len(gather_recv_op.from_id)):
-                q = gather_recv_op.shared_queue_list[i]
+                q = gather_recv_op.shared_queues[i]
                 x = q.get()
                 x_nparr[gather_recv_op.slices[i]] = x
             return x_nparr
 
-        def scatter_send(self, scatter_send_id):
+        def queue_scatter_send(self, scatter_send_id):
             scatter_send_op = self.scatter_send_nodes[scatter_send_id]
-
             # TODO
             # below converts DeviceTensor to numpy array
             # should we instead serialize DeviceTensor?
             x_devicetensor = scatter_send_op.args[0].value
             x_nparr = x_devicetensor.get(None)
             for i in range(len(scatter_send_op.to_id)):
-                q = scatter_send_op.shared_queue_list[i]
+                q = scatter_send_op.shared_queues[i]
                 q.put(x_nparr[scatter_send_op.slices[i]])
 
-        def scatter_recv(self, scatter_recv_id):
+        def queue_scatter_recv(self, scatter_recv_id):
             scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
-            q = scatter_recv_op.shared_queue
+            q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
             x = q.get()
             return x
 
-        self.model.recv_from_send = recv
-        self.model.send = send
+        self.model.recv_from_queue_send = queue_recv
+        self.model.queue_send = queue_send
 
-        self.model.gather_recv_from_gather_send = gather_recv
-        self.model.gather_send = gather_send
+        self.model.gather_recv_from_queue_gather_send = queue_gather_recv
+        self.model.queue_gather_send = queue_gather_send
 
-        self.model.scatter_recv_from_scatter_send = scatter_recv
-        self.model.scatter_send = scatter_send
+        self.model.scatter_recv_from_queue_scatter_send = queue_scatter_recv
+        self.model.queue_scatter_send = queue_scatter_send
 
         self.model = self.model()
 
