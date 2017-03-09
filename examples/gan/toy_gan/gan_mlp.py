@@ -58,7 +58,7 @@ args = parser.parse_args()
 #  model parameters
 h_dim = 4
 minibatch_discrimination = False
-num_iterations = 600  # 1000 # 600
+num_iterations = 600
 batch_size = 12
 num_examples = num_iterations * batch_size
 
@@ -83,14 +83,12 @@ discriminator = Sequential(discriminator_layers)
 # TODO discriminator pre-training
 
 # dataloader
-s1 = 1  # 0
-np.random.seed(s1)
+np.random.seed(1)
 toy_gan_data = ToyGAN(batch_size, num_iterations)
 train_data = toy_gan_data.load_data()
 train_set = ArrayIterator(train_data, batch_size, num_iterations)
 # reset seed for weights
-s2 = 2  # 1
-np.random.seed(s2)
+np.random.seed(2)
 
 # build network graph
 inputs = train_set.make_placeholders()
