@@ -2049,7 +2049,7 @@ def constant(const, axes=None, dtype=None):
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
                              trainable=False, graph_label_type=graph_label_type,
-                             initial_value = nptensor,
+                             initial_value=nptensor,
                              dtype=dtype)
     val.const = nptensor
 

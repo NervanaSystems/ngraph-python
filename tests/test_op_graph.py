@@ -241,7 +241,6 @@ def test_setting(M):
         np_x = np.array([1, 2, 3], dtype=np.float32)
         np_y = np.array([1, 3, 5], dtype=np.float32)
 
-        x = ng.constant(np_x, axes)
         y = ng.constant(np_y, axes)
 
         v = ng.variable(axes, initial_value=np_x)

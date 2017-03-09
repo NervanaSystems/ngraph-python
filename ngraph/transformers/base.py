@@ -21,9 +21,7 @@ import abc
 from builtins import object
 from future.utils import with_metaclass
 
-from ngraph.op_graph.op_graph import Op, InitTensorOp, \
-    doall, computation
-from ngraph.util.generics import generic_method
+from ngraph.op_graph.op_graph import Op, computation
 from ngraph.util.names import NameableValue
 from ngraph.util.ordered import OrderedSet
 
