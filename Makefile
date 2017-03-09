@@ -32,6 +32,7 @@ TEST_OPTS := --timeout=300
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
 TEST_DIRS_FLEX := flex_tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
+TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -44,6 +45,9 @@ default: install
 install:
 	@pip install -r requirements.txt
 	@pip install -e .
+
+test_install:
+	@pip install -r test_requirements.txt
 
 uninstall:
 	@pip uninstall -y ngraph
@@ -72,14 +76,19 @@ test_mkl: clean
 	@py.test --enable_mkl --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test: clean testflex
+test: test_install clean testflex
 	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test -n auto --boxed --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 test_caffe2: clean
 	@echo Running unit tests for caffe2 frontend...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
+	@coverage xml -i
+
+test_integration: clean
+	@echo Running integration tests...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
 
 style:

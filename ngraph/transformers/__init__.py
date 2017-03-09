@@ -27,6 +27,8 @@ __all__ = [
     'Transformer'
 ]
 
+PYCUDA_LOGIC_ERROR_CODE = 4
+
 try:
     import ngraph.transformers.nptransform  # noqa
 except ImportError:
