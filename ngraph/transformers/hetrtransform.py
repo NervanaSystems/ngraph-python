@@ -15,6 +15,7 @@ from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
+from ngraph.transformers.gputransform import PYCUDA_LOGIC_ERROR_CODE
 
 
 def build_transformer(name):
@@ -92,7 +93,6 @@ class AsyncTransformer(Process):
                         q = self.async_transformer.results_qs[self.comp_id]
                         return q.get(timeout=AsyncTransformer.SLEEP_S)
                     except Exception as e:
-                        from ngraph.transformers.gputransform import PYCUDA_LOGIC_ERROR_CODE
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode

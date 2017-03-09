@@ -21,8 +21,8 @@ from ngraph.transformers.gpu.util import _get_sm_count
 from ngraph.flex.base import Flex
 
 from pycuda.compiler import SourceModule
-from cStringIO import StringIO
-
+from pynvrtc.compiler import Program
+from six import StringIO
 import numpy as np
 import cachetools
 import os
@@ -1551,8 +1551,9 @@ class NvrtcSourceModule(SourceModule):
 
     @cachetools.cached({}, key=lambda x, y, z: cachetools.keys.hashkey(y))
     def get_ptx(self, code, options):
-        from pynvrtc.compiler import Program
-        return Program(code).compile(options)
+        options = [o.encode('utf-8') for o in options]
+        return Program(code.encode('utf-8'),
+                       name="default".encode('utf-8')).compile(options).encode('utf-8')
 
     def _bind_module(self):
         self.get_global = self.module.get_global
