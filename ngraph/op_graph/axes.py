@@ -1264,6 +1264,23 @@ class TensorDescription(NameableValue):
             next_tensor_description=self
         )
 
+    def clone(self):
+        """
+        Creates a copy of this tensor description
+
+        Retuns:
+            A copy of this tensor description
+        """
+        return TensorDescription(
+            self.axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=self.full_strides,
+            full_sizes=self.full_sizes,
+            offset=self.offset,
+            next_tensor_description=self
+        )
+
     def broadcast(self, new_axes):
         """
         Adds axes to a tensor description to give it a new shape.

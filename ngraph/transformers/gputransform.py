@@ -402,7 +402,7 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
 
-    @add_kernel.on_type(DotLowDimension)
+    @add_kernel.on_type(DotOp)
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
@@ -568,11 +568,19 @@ class GPUTensorAllocator():
         tensor_description = self.tensor_description
         layout = tensor_description.layout
 
-        gpudata = int(buffer_alloc) + tensor_description.offset
-        new_tensor = GPUArray(layout.shape,
-                              self.transformer.storage_dtype(tensor_description.dtype),
-                              gpudata=gpudata,
-                              strides=layout.strides)
+        if layout:
+            gpudata = int(buffer_alloc) + tensor_description.offset
+            strides = tuple([s * tensor_description.dtype.itemsize for s in layout.strides])
+            new_tensor = GPUArray(layout.shape,
+                                  self.transformer.storage_dtype(tensor_description.dtype),
+                                  gpudata=gpudata,
+                                  strides=strides)
+        else:
+            gpudata = int(buffer_alloc) + tensor_description.offset
+            new_tensor = GPUArray(tensor_description.shape,
+                                  self.transformer.storage_dtype(tensor_description.dtype),
+                                  gpudata=gpudata,
+                                  strides=tensor_description.strides)
 
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor

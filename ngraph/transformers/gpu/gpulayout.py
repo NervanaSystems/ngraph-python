@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
@@ -48,6 +48,13 @@ class GPUReshapeOp(ReshapeOp):
     def __init__(self, x, view, **kwargs):
         super(GPUReshapeOp, self).__init__(x, axes=x.axes, **kwargs)
         self.layout_view = view
+
+    @tdcache()
+    def tensor_description(self):
+        td = self.args[0].tensor_description().clone()
+        if "layout" in self.metadata:
+            td.layout = self.metadata["layout"]
+        return td
 
 
 class Memoize:
@@ -153,13 +160,17 @@ class GPULayoutAssignment(LayoutAssignment):
         return out
 
     def set_shape_strides(self):
-        shape = []
-        strides = [1]
-        for axis in reversed(self.axes):
-            if len(shape) == len(strides):
-                strides.insert(0, strides[0] * shape[0])
-            ax_lens = [self.ng_axes[a].length for a in axis]
-            shape.insert(0, np.prod(ax_lens))
+        if self.axes:
+            shape = []
+            strides = [1]
+            for axis in reversed(self.axes):
+                if len(shape) == len(strides):
+                    strides.insert(0, strides[0] * shape[0])
+                ax_lens = [self.ng_axes[a].length for a in axis]
+                shape.insert(0, np.prod(ax_lens))
+        else:
+            shape = []
+            strides = []
 
         self.shape = tuple(shape)
         self.strides = tuple(strides)
