@@ -52,19 +52,13 @@ class GraphBuildingPass(GraphPass):
         assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while True:
-            ops = Op.ordered_ops(min_ops)
-
-            # Check for ops that added state that needs to be initialized, so they can
-            # be added to the initialization function.
-            has_new_inits = transformer.add_initialization_ops(ops)
-            if not has_work and not has_new_inits:
+            if not has_work:
                 return
 
             self.replacement_list = []
 
             # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded
-                                 for op in transformer.state_initialization_ops + min_ops)
+            ops = Op.ordered_ops(op.forwarded for op in min_ops)
             for op in ops:
                 op.update_forwards()
                 self.visit(op)
@@ -105,18 +99,13 @@ class PeepholeGraphPass(GraphBuildingPass):
         while True:
             ops = Op.ordered_ops(min_ops)
 
-            # Check for ops that added state that needs to be initialized, so they can
-            # be added to the initialization function.
-            has_new_inits = transformer.add_initialization_ops(ops)
-
-            if not has_work and not has_new_inits:
+            if not has_work:
                 return
 
             self.replacement_list = []
 
             # Make control dependency adjustments for any added control blocks.
-            ops = Op.ordered_ops(op.forwarded
-                                 for op in transformer.state_initialization_ops + min_ops)
+            ops = Op.ordered_ops(op.forwarded for op in min_ops)
             for op in ops:
                 for cop in op.control_deps:
                     if isinstance(cop, ParallelOp):
@@ -125,8 +114,7 @@ class PeepholeGraphPass(GraphBuildingPass):
                             op.add_control_dep(dep)
 
             # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded
-                                 for op in transformer.state_initialization_ops + min_ops)
+            ops = Op.ordered_ops(op.forwarded for op in min_ops)
             for op in ops:
                 op.update_forwards()
                 self.visit(op)

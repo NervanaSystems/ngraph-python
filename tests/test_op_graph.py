@@ -244,7 +244,7 @@ def test_setting(M):
         x = ng.constant(np_x, axes)
         y = ng.constant(np_y, axes)
 
-        v = ng.variable(axes, initial_value=x)
+        v = ng.variable(axes, initial_value=np_x)
 
         f_v = ex.executor(v)
 

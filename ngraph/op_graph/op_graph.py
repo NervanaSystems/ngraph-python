@@ -146,7 +146,6 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
         forward: If not None, the node to use instead of this node.
-        initializers: List of one-time initializations to run before the op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Default False.
         metadata: String key value dictionary for frontend metadata.
@@ -156,7 +155,6 @@ class Op(NameableValue, DebugInfo):
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
-        initializers (list): Additional Ops to run before this Op is run the first time.
         control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
@@ -177,21 +175,6 @@ class Op(NameableValue, DebugInfo):
             ops = [None]
             get_thread_state().ops = ops
         return ops
-
-    @staticmethod
-    @contextmanager
-    def captured_ops(ops=None):
-        """
-        Capture all Ops created within the context. Hides ops created in this
-        context from parent contexts.
-        """
-        if ops is None:
-            ops = []
-        try:
-            Op._get_thread_ops().append(ops)
-            yield (ops)
-        finally:
-            Op._get_thread_ops().pop()
 
     @staticmethod
     def get_all_ops():
@@ -295,9 +278,8 @@ class Op(NameableValue, DebugInfo):
                  metadata=None,
                  const=None,
                  constant=False,
-                 persistent=True,
+                 persistent=False,
                  trainable=False,
-                 initializers=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
         self.__args = tuple(as_op(arg) for arg in args)
@@ -316,12 +298,8 @@ class Op(NameableValue, DebugInfo):
         self.__is_constant = constant
         self.__is_persistent = persistent
         self.__is_trainable = trainable
-        self.initializers = OrderedSet()
-        if initializers is not None:
-            for initializer in initializers:
-                self.add_initializer(initializer)
 
-        # Add this op to both the captured op and all op accounting lists
+        # Add this op to the all op accounting lists
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
@@ -493,14 +471,11 @@ class Op(NameableValue, DebugInfo):
         self.update_forwards()
         self.__control_deps.remove(dep.forwarded)
 
-    def add_initializer(self, init):
-        self.initializers.add(init)
-
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args, control_deps, and initializers
+        Any subclass that uses ops stored outside of args and control_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
@@ -515,10 +490,6 @@ class Op(NameableValue, DebugInfo):
                 self.__control_deps = OrderedSet()
                 for op in control_deps:
                     self.add_control_dep(op.forwarded)
-                break
-        for op in self.initializers:
-            if op.forward is not None:
-                self.initializers = OrderedSet(op.forwarded for op in self.initializers)
                 break
 
     def replace_self(self, rep):
@@ -1992,14 +1963,14 @@ class AssignableTensorOp(TensorOp):
             persistent = True
         super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
         self.input = input
+        self.initial_value = None
 
         if initial_value is not None:
             # convert callable initial value
             if callable(initial_value):
                 initial_value = initial_value(self.axes)
-
-            # create assign op
-            self.add_initializer(assign(self, initial_value))
+            initial_value = np.asarray(initial_value, dtype=self.dtype)
+            self.initial_value = initial_value
 
     @property
     def defs(self):
@@ -2078,13 +2049,9 @@ def constant(const, axes=None, dtype=None):
     graph_label_type = "<Const({})>".format(const)
     val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
                              trainable=False, graph_label_type=graph_label_type,
+                             initial_value = nptensor,
                              dtype=dtype)
     val.const = nptensor
-
-    def value_fun(tensor):
-        return nptensor
-
-    val.add_initializer(init_tensor(val, value_fun))
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
@@ -3428,40 +3395,6 @@ def sigmoid(x):
         The sigmoid computation.
     """
     return SigmoidOp(x).value_tensor
-
-
-class Function(Op):
-    """TODO."""
-
-    def __init__(self, ops):
-        self.ops = ops
-        self.instructions = Op.ordered_ops(self.ops)
-        args, defs = set(), set()
-        for op in self.instructions:
-            # Kernel defines the def of each operation
-            defs.add(op)
-            # Kernel uses the args of each operation
-            # except whatever is being defined
-            args |= set(op.args) - defs
-        super(Function, self).__init__(args=args)
-        self.__defs = defs
-        self.initializers = [x for x in op.initializers
-                             for op in self.instructions]
-
-    @property
-    def defs(self):
-        """
-
-        Returns:
-            The cumulative invalidated storage for the op sequence.
-
-        """
-        return self.__defs
-
-    @property
-    def inputs(self):
-        """TODO."""
-        return self.use
 
 
 def mean(x, reduction_axes=None, out_axes=None):
