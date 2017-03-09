@@ -60,6 +60,7 @@ class DistributedPass(GraphBuildingPass):
         self.num_devices = 0
 
     def clone_nodes(self, nodes, device_id, device_idx, new_axes):
+        # TODO (wenzhe)implement with serde (serialization)
         subgraph = list()
         elem = 0
 
@@ -98,33 +99,29 @@ class DistributedPass(GraphBuildingPass):
 
     def do_pass(self, ops, transformer):
 
-        def set_new_axes(node):
-            if hasattr(node, 'axes'):
-                node._TensorOp__axes = self.new_axes
-
         ops = OrderedSet(op.forwarded for op in ops)
 
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
                 self.parallel_axes = op.metadata['parallel']
 
-                self.new_axes = calculate_new_axes(
+                new_axes = calculate_new_axes(
                     op.send_node().axes, self.parallel_axes, len(op.from_id), False)
 
                 nodes_to_clone = Op.ordered_ops([op.send_node()])
-                map(set_new_axes, nodes_to_clone)
+                map(lambda x: setattr(x, '_TensorOp__axes', new_axes), nodes_to_clone)
 
                 # clone nodes for other device_id
                 for i, id in enumerate(op.from_id[1:], start=1):
                     # compute the axes for last device
                     if i == (len(op.from_id) - 1):
-                        self.new_axes = calculate_new_axes(
+                        new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
                     # print('device_id={}, device_idx={}'.format(id, i))
                     # print('nodes to clone: {}\n'.format(nodes_to_clone))
                     cloned_nodes = self.clone_nodes(nodes=nodes_to_clone, device_id=id,
-                                     device_idx=i, new_axes=self.new_axes)
+                                     device_idx=i, new_axes=new_axes)
                     # print('cloned nodes: {}\n'.format(cloned_nodes))
 
 
