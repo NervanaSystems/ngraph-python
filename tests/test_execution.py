@@ -136,33 +136,37 @@ def test_placeholder(transformer_factory):
         ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-def test_reduction(transformer_factory):
-    C = ng.make_axis(length=4)
-    W = ng.make_axis(length=4)
-    H = ng.make_axis(length=4)
 
-    axes = ng.make_axes([C, W, H])
+@pytest.mark.parametrize("reduction",
+                         [(np.sum, ng.sum, 'sum'),
+                          (np.prod, ng.prod, 'prod'),
+                          (np.max, ng.max, 'max'),
+                          (np.min, ng.min, 'min')])
+@pytest.mark.parametrize("axis_index",
+                         [slice(0, 1, None),
+                          slice(1, 2, None),
+                          slice(2, None, None),
+                          slice(0, 2, None),
+                          slice(1, None, None)])
+def test_reduction(transformer_factory, reduction, axis_index):
+    axes = ng.make_axes([ng.make_axis(length=4),
+                         ng.make_axis(length=4),
+                         ng.make_axis(length=4)])
 
     u = rng.uniform(-1.0, 1.0, axes)
 
-    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
-                              (np.prod, ng.prod, 'prod'),
-                              (np.max, ng.max, 'max'),
-                              (np.min, ng.min, 'min')]:
-        for reduction_axes in [[C],
-                               [W],
-                               [H],
-                               [C, W],
-                               [W, H]]:
-            p_u = ng.placeholder(axes)
-            dims = tuple(axes.index(axis) for axis in reduction_axes)
-            npval = npred(u, dims)
-            graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-            with executor(graph_reduce, p_u) as ex:
-                graph_val = ex(u)
-                ng.testing.assert_allclose(
-                    npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
-                    red=red, axes=reduction_axes)
+    npred, bered, red = reduction
+    reduction_axes = axes[axis_index]
+
+    p_u = ng.placeholder(axes)
+    dims = tuple(axes.index(axis) for axis in reduction_axes)
+    npval = npred(u, dims)
+    graph_reduce = bered(p_u, reduction_axes=reduction_axes)
+    with executor(graph_reduce, p_u) as ex:
+        graph_val = ex(u)
+        ng.testing.assert_allclose(
+            npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
+            red=red, axes=reduction_axes)
 
 
 def test_prod_constant(transformer_factory):
