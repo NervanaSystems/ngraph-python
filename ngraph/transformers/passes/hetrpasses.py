@@ -121,7 +121,7 @@ class DistributedPass(GraphBuildingPass):
                     # print('device_id={}, device_idx={}'.format(id, i))
                     # print('nodes to clone: {}\n'.format(nodes_to_clone))
                     cloned_nodes = self.clone_nodes(nodes=nodes_to_clone, device_id=id,
-                                     device_idx=i, new_axes=new_axes)
+                                                    device_idx=i, new_axes=new_axes)
                     # print('cloned nodes: {}\n'.format(cloned_nodes))
 
 
