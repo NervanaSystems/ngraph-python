@@ -31,6 +31,7 @@ class Sequential(object):
         new_seq.layers = [l.copy() for l in self.layers]
         return new_seq
 
+
 class Container(object):
     """
     POC code only

@@ -118,14 +118,16 @@ class Linear(Layer):
                                           for axis in out_feature_axes])
         else:
             temp_out_axes = self.W.axes - in_feature_axes
-            out_feature_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name[:-len('_out')])
+            out_feature_axes = ng.make_axes([ng.make_axis(axis.length,
+                                                          name=axis.name[:-len('_out')])
                                              for axis in temp_out_axes])
         out_axes = out_feature_axes + (in_obj.axes - in_feature_axes)
         w_axes = temp_out_axes + in_feature_axes
 
         # init weights
         if self.W is None:
-            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope).named('LinW')
+            self.W = ng.variable(axes=w_axes, initial_value=self.init,
+                                 scope=self.scope).named('LinW')
 
         return ng.cast_role(ng.dot(self.W, in_obj), out_axes)
 
@@ -250,7 +252,8 @@ class ConvBase(Layer):
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
                 self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init, scope=self.scope).named('convwt')
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
+                                 scope=self.scope).named('convwt')
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
@@ -288,7 +291,8 @@ class Conv2D(ConvBase):
         if isinstance(dilation, int):
             dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, scope=scope, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation,
+                                     scope=scope, **kwargs)
 
 
 class Activation(Layer):
@@ -686,7 +690,8 @@ class Recurrent(Layer):
         self.W_recur = ng.variable(axes=self.w_re_axes,
                                    initial_value=self.init_inner,
                                    scope=self.scope).named("W_re")
-        self.b = ng.variable(axes=self.out_feature_axes, initial_value=0, scope=self.scope).named("bias")
+        self.b = ng.variable(axes=self.out_feature_axes, initial_value=0,
+                             scope=self.scope).named("bias")
 
         h = self.h_init
         h_list = []

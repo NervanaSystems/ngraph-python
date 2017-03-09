@@ -46,14 +46,9 @@ def affine_layer(h_dim, activation, name, scope=None):
 def make_optimizer(name=None):
     learning_rate = 0.005 if minibatch_discrimination else 0.03
     schedule = Schedule()
-    optimizer = GradientDescentMomentum(learning_rate,
-                momentum_coef=0.0,
-                stochastic_round=False,
-                wdecay=0.0,
-                gradient_clip_norm=None,
-                gradient_clip_value=None,
-                name=name,
-                schedule=schedule)
+    optimizer = GradientDescentMomentum(learning_rate, momentum_coef=0.0, stochastic_round=False,
+                                        wdecay=0.0, gradient_clip_norm=None,
+                                        gradient_clip_value=None, name=name, schedule=schedule)
     return optimizer
 
 
@@ -94,7 +89,7 @@ toy_gan_data = ToyGAN(batch_size, num_iterations)
 train_data = toy_gan_data.load_data()
 train_set = ArrayIterator(train_data, batch_size, num_iterations)
 # reset seed for weights
-s2 = 2 # 1
+s2 = 2  # 1
 np.random.seed(s2)
 
 # build network graph
@@ -122,10 +117,8 @@ optimizer_g = make_optimizer(name='generator_optimizer')
 updates_d = optimizer_d(loss_d, variable_scope=d_scope)
 updates_g = optimizer_g(loss_g, variable_scope=g_scope)
 
-discriminator_train_outputs = {'batch_cost': mean_cost_d,
-		 	                   'updates': updates_d}
-generator_train_outputs = {'batch_cost': mean_cost_g,
- 	         	           'updates': updates_g}
+discriminator_train_outputs = {'batch_cost': mean_cost_d, 'updates': updates_d}
+generator_train_outputs = {'batch_cost': mean_cost_g, 'updates': updates_g}
 
 transformer = ngt.make_transformer()
 
@@ -167,7 +160,7 @@ pd, i_pd = np.histogram(d, bins=bins, density=True)
 zs = np.linspace(-nrange, nrange, num_points)
 g = np.zeros((num_points, 1))
 for i in range(num_points // batch_size):
-    sl = slice(i*batch_size, (i+1)*batch_size)
+    sl = slice(i * batch_size, (i + 1) * batch_size)
     g[sl] = generator_inference(zs[sl].reshape(batch_size, 1)).reshape(batch_size, 1)
 pg, i_pg = np.histogram(g, bins=bins, density=True)
 
