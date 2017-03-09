@@ -136,7 +136,6 @@ def test_placeholder(transformer_factory):
         ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-
 @pytest.fixture(params=['sum', 'prod', 'max', 'min'])
 def reduction(request):
     return request.param
@@ -186,7 +185,6 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
 
     u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
 
-    npred = getattr(np, reduction)
     bered = getattr(ng, reduction)
     reduction_axes = axes[sub_axes]
 
@@ -407,7 +405,6 @@ def test_elementwise_binary_ops_matched_args_deriv_lhs(
     symmetric_tensor
 ):
     """TODO."""
-    np_op = getattr(np, elementwise_binary_op)
     be_op = getattr(ng, elementwise_binary_op)
     p_u = symmetric_tensor
     p_v = ng.placeholder(p_u.axes)
@@ -429,7 +426,6 @@ def test_elementwise_binary_ops_matched_args_deriv_rhs(
     symmetric_tensor
 ):
     """TODO."""
-    np_op = getattr(np, elementwise_binary_op)
     be_op = getattr(ng, elementwise_binary_op)
     p_u = symmetric_tensor
     p_v = ng.placeholder(p_u.axes)
@@ -801,8 +797,6 @@ def test_cross_entropy_softmax_deriv(transformer_factory, input_tensor):
     p_x = input_tensor
     p_t = ng.placeholder(p_x.axes)
 
-    cross_entropy_sm_x_t = ng.cross_entropy_multi(ng.softmax(p_x), p_t)
-
     x = rng.uniform(0, 1, p_x.axes)
     t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
 
@@ -833,8 +827,6 @@ def test_cross_entropy_rec(transformer_factory, recurrent_input_tensor):
 def test_cross_entropy_softmax_rec_deriv(transformer_factory, recurrent_input_tensor):
     p_x = recurrent_input_tensor
     p_t = ng.placeholder(p_x.axes)
-
-    cross_entropy_sm_x_t = ng.cross_entropy_multi(ng.softmax(p_x), p_t)
 
     x = rng.uniform(0, 1, p_x.axes)
     t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
