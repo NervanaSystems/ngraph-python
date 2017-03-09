@@ -56,8 +56,6 @@ from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
 _none_slice = slice(None, None, None)
 
-PYCUDA_LOGIC_ERROR_CODE = 4
-
 
 class ElementWiseKernel(GPUKernel):
     """

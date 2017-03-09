@@ -15,7 +15,6 @@ from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
-from ngraph.transformers.gputransform import PYCUDA_LOGIC_ERROR_CODE
 
 
 def build_transformer(name):
