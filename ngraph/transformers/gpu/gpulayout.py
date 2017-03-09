@@ -18,7 +18,7 @@ import numpy as np
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
@@ -38,10 +38,12 @@ class DimshuffleOp(TensorOp):
         x (TensorOp): A tensor.
     """
 
-    def __init__(self, x, in_layout, out_layout, **kwargs):
+    def __init__(self, x, in_view, out_view, axis_order, **kwargs):
         super(DimshuffleOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
-        self.in_layout = in_layout
-        self.out_layout = out_layout
+        #TODO: dtype?
+        self.in_view = in_view
+        self.out_view = out_view
+        self.axis_order = tuple(axis_order)
 
 
 class GPUReshapeOp(ReshapeOp):
@@ -157,6 +159,7 @@ class GPULayoutAssignment(LayoutAssignment):
                 out = out + str(self.ng_axes[idx].name) + ", "
             out = out + "] "
         out = out + ")"
+        out = out + "\nshape: {}, strides {}".format(self.shape, self.strides)
         return out
 
     def set_shape_strides(self):
@@ -375,6 +378,15 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                 break
         return compatible
 
+    def contiguous_layout_view(self, axes):
+        shape = []
+        strides = [1]
+        for a in reversed(axes[1:]):
+            shape.insert(0, a.length)
+            strides.insert(0, shape[0] * strides[0])
+        shape.insert(0, axes[0].length)
+        return GPULayoutView(shape, strides)
+
     def layout_view(self, arg_mem_order, arg_axes, out_groups):
         # Convert op axis groups to arg axis index groups
         shape = []
@@ -405,10 +417,19 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return GPULayoutView(shape, strides)
 
     def get_dimshuffle(self, arg_mem_order, arg_axes, out_groups, arg):
-        import pdb; pdb.set_trace()
-        flattened_groups = [[a] for a in flatten(out_groups)]
-        dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, flattened_groups)
+        # Get contiguous un-flattened view of input tensor
+        in_groups = [[arg_axes[a]] for a in arg_mem_order]
+        dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, in_groups)
 
+        # Determine shuffle order
+        in_ordered_axes = flatten(in_groups)
+        flattened_out_groups = flatten(out_groups)
+        axis_order = [in_ordered_axes.index(a) for a in flattened_out_groups]
+
+        # Get contiguous un-flattened view of output tensor
+        dimshuffle_out_view = self.contiguous_layout_view(flattened_out_groups)
+
+        # Compute view for the output tensor
         out_shape = []
         out_strides = []
         for group in reversed(out_groups):
@@ -418,10 +439,10 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             else:
                 out_strides.insert(0, out_shape[0] * out_strides[0])
             out_shape.insert(0, length)
-        out_view = GPULayoutView(out_shape, out_strides)
+        op_view = GPULayoutView(out_shape, out_strides)
 
-        out = DimshuffleOp(arg, dimshuffle_in_view, out_view)
-        out.metadata["layout"] = out_view
+        out = DimshuffleOp(arg, dimshuffle_in_view, dimshuffle_out_view, axis_order)
+        out.metadata["layout"] = op_view
         return out
 
     def get_reshape(self, arg_mem_order, arg_axes, out_groups, arg):

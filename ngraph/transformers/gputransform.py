@@ -62,7 +62,7 @@ from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transp
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
 from ngraph.transformers.gpu.gpulayout import GPULayoutAssignment, GPUUnaryLayoutConstraint, \
-    GPUBinaryLayoutConstraint
+    GPUBinaryLayoutConstraint, DimshuffleOp
 
 import cachetools
 import numpy as np
@@ -378,17 +378,17 @@ class GPUKernelGroup(object):
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
-    @add_kernel.on_type(Function)
-    def add_kernel(self, op):
-        # Iterate over compounded operations and build kernel for them
-        kernel = ElementWiseKernel(self.transformer)
-        for sub_op in op.instructions:
-            out = sub_op.tensor_description()
-            call_info = (_ for _ in sub_op.call_info())
-            kernel.add_op(sub_op, out, *call_info)
+    #@add_kernel.on_type(Function)
+    #def add_kernel(self, op):
+    #    # Iterate over compounded operations and build kernel for them
+    #    kernel = ElementWiseKernel(self.transformer)
+    #    for sub_op in op.instructions:
+    #        out = sub_op.tensor_description()
+    #        call_info = (_ for _ in sub_op.call_info())
+    #        kernel.add_op(sub_op, out, *call_info)
 
-        if kernel.generate_source(self.sourcefile):
-            self.kernels.append(kernel)
+    #    if kernel.generate_source(self.sourcefile):
+    #        self.kernels.append(kernel)
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
@@ -406,7 +406,7 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
-    @add_kernel.on_type(ContiguousOp)
+    @add_kernel.on_type(DimshuffleOp)
     def add_kernel(self, op):
         self.kernels.append(DimShuffleKernel(self.transformer, op))
 
@@ -768,6 +768,9 @@ class GPUDeviceTensor(DeviceTensor):
     def __setitem__(self, key, value):
         sliced = self.__getitem__(key)
 
+        if isinstance(value, np.ndarray) and value.shape == ():
+            value = value.item()
+
         # Use fill for scalar values
         # convert value to numpy
         if type(value) == float:
@@ -798,6 +801,7 @@ class GPUDeviceTensor(DeviceTensor):
 
             # Reshape to satisfy pycuda if necessary
             if sliced.shape != value.shape:
+                import pdb; pdb.set_trace()
                 sliced = self.tensor.reshape(value.shape)
 
             if self.is_contiguous and self.strides_contiguous(value):
