@@ -22,6 +22,9 @@ def pytest_addoption(parser):
                      help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
     parser.addoption("--enable_mkl", action="store_true",
                      help="Enable and *only* enable CPU MKL transformer.")
+    parser.addoption("--batch_size", type=int, default=8,
+                     help="Enable and *only* enable CPU MKL transformer.")
+
 
 def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
