@@ -67,7 +67,7 @@ class FlexGPUTransformer(GPUTransformer):
     default_rtol = 2e-05
     default_atol = 0.20
 
-    def __init__(self, fixed_point=False, flex_verbose=True, **kwargs):
+    def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
 
         super(FlexGPUTransformer, self).__init__()
         self.fixed_point = fixed_point
