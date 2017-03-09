@@ -22,18 +22,22 @@ def pytest_addoption(parser):
                      help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
     parser.addoption("--enable_mkl", action="store_true",
                      help="Enable and *only* enable CPU MKL transformer.")
+    parser.addoption("--batch_size", type=int, default=8,
+                     help="Enable and *only* enable CPU MKL transformer.")
+
 
 def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
 
+
+def set_and_get_factory(transformer_name):
+    factory = ngt.make_transformer_factory(transformer_name)
+    ngt.set_transformer_factory(factory)
+    return factory
+
 @pytest.fixture(scope="module",
                 params=ngt.transformer_choices())
 def transformer_factory(request):
-    def set_and_get_factory(transformer_name):
-        factory = ngt.make_transformer_factory(transformer_name)
-        ngt.set_transformer_factory(factory)
-        return factory
-
     transformer_name = request.param
 
     if pytest.config.getoption("--enable_flex"):
@@ -55,6 +59,14 @@ def transformer_factory(request):
             pytest.skip('Skip flex test since --enable_flex is not set.')
         else:
             yield set_and_get_factory(transformer_name)
+
+    # Reset transformer factory to default
+    ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))
+
+
+@pytest.fixture(scope="module")
+def hetr_factory(request):
+    yield set_and_get_factory('hetr')
 
     # Reset transformer factory to default
     ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))

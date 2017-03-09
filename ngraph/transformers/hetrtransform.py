@@ -1,21 +1,35 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 import signal
 import pytest
 import sys
 import os
 import time
+from six import itervalues, iteritems
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
 from ngraph.util.ordered import OrderedSet
-from ngraph.util.hetr_utils import sort_ops_by_comm_deps
-from ngraph.op_graph.op_graph import TensorOp
+from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
+from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
-from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
 
 
 def build_transformer(name):
@@ -59,7 +73,6 @@ class AsyncTransformer(Process):
         self.started = False
         self.exit = Event()
         self.daemon = True
-        self.is_closed = False
         self.my_pid = os.getpid()
 
     def new_comp_id(self):
@@ -91,7 +104,12 @@ class AsyncTransformer(Process):
                 while True:
                     try:
                         q = self.async_transformer.results_qs[self.comp_id]
-                        return q.get(timeout=AsyncTransformer.SLEEP_S)
+                        return_list = q.get(timeout=AsyncTransformer.SLEEP_S)
+                        # TODO set self.returns somewhere cleaner
+                        return_dict = {op: return_list[mypos]
+                                       for (op, mypos) in iteritems(self.returns)}
+                        return return_dict
+
                     except Exception as e:
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
@@ -105,11 +123,7 @@ class AsyncTransformer(Process):
                         else:
                             raise
 
-        self.child_ops = returns
-        self.child_args = placeholders
-
-        sort_ops_by_comm_deps(self.child_ops)
-
+        update_comm_deps(returns)
         c = AsyncComputation(self)
 
         self.results_qs[c.comp_id] = self.manager.Queue()
@@ -118,12 +132,12 @@ class AsyncTransformer(Process):
         return c
 
     def close(self):
-        if self.is_closed:
+        if not self.started:
             return
         if self.my_pid != os.getpid():
             # Forked into another process
             return
-        self.is_closed = True
+        self.started = False
         self.exit.set()
         self.join()
         self.manager.shutdown()
@@ -159,6 +173,7 @@ class AsyncTransformer(Process):
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
+
                 # individual results q makes it easy for caller to find results
                 self.results_qs[comp_id].put(outputs)
 
@@ -186,94 +201,64 @@ class HetrComputation(object):
 
     def __init__(self, hetr, comp_op):
         self.child_computations = dict()
-        self.child_results_map = dict()
         self.transformer = hetr
-        self.transformer_name_list = hetr.transformer_list
         self.send_nodes = hetr.send_nodes
-        self.hetr_passes = hetr.hetr_passes
-        self.num_results = 0
-        self.num_send_nodes = dict()
-        self.parameters = comp_op.parameters
+        self.computation = comp_op
 
-        if isinstance(comp_op.returns, (OrderedSet, list)):
-            self.num_results = len(comp_op.returns)
-        else:
-            self.num_results = 1
+        # self.returns could be replaced by comp_op.returns if it were expressed as a set
+        self.returns = OrderedSet()
+        if isinstance(comp_op.returns, collections.Container):
+            self.returns.update(list(comp_op.returns))
+        elif isinstance(comp_op.returns, Op):
+            self.returns.update(list([comp_op.returns]))
 
         # if one of the requested results is marked as distributed across devices,
         # wrap it in a ResultOp to facilitate DistributedPass inserting a gather operation
-        new_control_deps = OrderedSet()
-        for op in comp_op.control_deps:
+        new_returns = OrderedSet()
+        for op in self.returns:
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
                 op.metadata['is_split_op'] = True
                 new_result = ResultOp(device_id=0, args=tuple([op]))
-                new_control_deps.add(new_result)
+                op.metadata['hetr_replaced_by'] = new_result
+                new_result.metadata['replaces_op'] = op
+                new_returns.add(new_result)
             else:
-                new_control_deps.add(op)
+                new_returns.add(op)
 
-        # The following line get rids of computation_op, add newly
-        # created control_deps (which could have Result_Op for dist_hetr)
-        all_results = new_control_deps
+        # Do Hetr passes
+        pass_ops = OrderedSet(new_returns + self.computation.parameters)
+        for graph_pass in self.transformer.passes:
+            pass_ops = pass_ops + hetr.send_nodes
+            graph_pass.do_pass(pass_ops, self.transformer)
 
-        if comp_op.returns is not None:
-            # Do Hetr passes
-            for graph_pass in self.hetr_passes:
-                all_results = all_results + hetr.send_nodes
-                graph_pass.do_pass(all_results, self.transformer)
+        # hack around new TensorValueOp that wraps AssignableTensorOp
+        # autogenerated by creating a ComputationOp:
+        for p in self.computation.parameters:
+            if isinstance(p, TensorValueOp):
+                p.metadata.update(p.states_read[0].metadata)
 
-            if hetr.vizpass:
-                vis_results = all_results + hetr.send_nodes
-                hetr.vizpass.do_pass(vis_results, self)
+        # simplify by already having asynctrans made by passes
+        for t_name, async_trans in iteritems(self.transformer.child_transformers):
+            my_params = [(g_pos, p)
+                         for g_pos, p in enumerate(self.computation.parameters)
+                         if p.metadata['transformer'] == t_name]
+            my_ops = [op for op in self.send_nodes + new_returns
+                      if op.metadata['transformer'] == t_name]
+            transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
-            # self.transformer_name_list is updated during graph passes
-            self.transformer_to_node = {t: list() for t in self.transformer_name_list}
+            async_comp = async_trans.computation(transform_ops, tuple([p for pos, p in my_params]))
+            async_comp.param_idx = [g_pos for g_pos, p in my_params]
 
-            # update the transformer to send node mappings
-            for s in self.send_nodes:
-                tname = s.metadata['transformer']
-                self.transformer_to_node[tname].append(s)
-                self.num_send_nodes[tname] = self.num_send_nodes.get(tname, 0) + 1
+            # when there is a ResultOp, hack around it
+            async_comp.returns = dict()
+            for i, op in enumerate(my_ops):
+                if op in self.returns and 'hetr_replaced_by' not in op.metadata:
+                    async_comp.returns[op] = i
+                elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
+                    async_comp.returns[op.metadata['replaces_op']] = i
 
-            # getting the original return results from all_results
-            # all_results, after several passes, may contain updated ops
-            # these new/updated ops (e.g. ResultOps) are holding results
-            orig_returns = OrderedSet()
-            for i in range(self.num_results):
-                orig_returns.update([all_results[i]])
-
-            for pos, op in enumerate(orig_returns):
-                tname = op.metadata['transformer']
-                # skip send nodes to avoid returning what a send node returns
-                if tname in self.num_send_nodes:
-                    for i in range(self.num_send_nodes[tname]):
-                        self.child_results_map.setdefault(tname, []).append(None)
-
-                if 'ResultOp' in op.name:
-                    self.transformer_to_node[tname].append(op.args[0])
-                else:
-                    self.transformer_to_node[tname].append(op)
-
-                self.child_results_map.setdefault(tname, []).append(pos)
-        else:  # comp_op.returns is None (uncommon branch)
-            self.transformer_to_node = {t: list() for t in self.transformer_name_list}
-
-        self.placeholders = {t: list() for t in self.transformer_name_list}
-        self.placeholders_pos = {t: list() for t in self.transformer_name_list}
-        for i, p in enumerate(self.parameters):
-            tname = p.metadata['transformer']
-            assert isinstance(
-                tname, list) is False, "Fatal: multiple transformers cannot be handled!"
-            self.placeholders[tname].append(p)
-            self.placeholders_pos[tname].append(i)
-
-        for tname in self.transformer_name_list:
-            # request asynctransformer from HT
-            # use it to build AsyncComputation
-            async_trans = hetr.transformer(tname)
-            async_comp = async_trans.computation(self.transformer_to_node[tname],
-                                                 tuple(self.placeholders[tname]))
-            self.child_computations[tname] = async_comp
+            self.child_computations[t_name] = async_comp
 
     def __call__(self, *params, **kwargs):
         """
@@ -283,39 +268,28 @@ class HetrComputation(object):
 
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
-        return_list = [None for i in range(self.num_results)]
+        if 'feed_dict' in kwargs:
+            assert len(params) == 0, "Can only supply feed_dict OR positional params, not both."
+            params = tuple(kwargs['feed_dict'][param.tensor]
+                           for param in self.computation.parameters)
 
-        feed_dict = kwargs.pop('feed_dict', None)
-        if feed_dict is not None:
-            if len(params) != 0:
-                raise ValueError((
-                    'Can not supply both positional and mapped input arguments '
-                    'to Computation'
-                ))
-            params = tuple(feed_dict[param.tensor] for param in self.parameters)
+        assert len(params) == len(self.computation.parameters), "placeholder:value count mismatch"
 
-        # Map params to each child transformer
-        # Run each child in a separate process in process_helper
-        # Collect child results from multiprocess queue mapped by out_dict
-        for tname in self.transformer_name_list:
-            targs = [params[i] for i in self.placeholders_pos[tname]]
-            self.child_computations[tname].feed_input(targs)
+        for child in itervalues(self.child_computations):
+            child.feed_input([params[i] for i in child.param_idx])
 
-        # Reverse map child results to flattend list of results
-        # in order expected by parent caller.
-        for tname, result_map in self.child_results_map.items():
-            child_results = self.child_computations[tname].get_results()
-            for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
-                if parent_idx is not None:
-                    return_list[parent_idx] = child_results[child_idx]
+        return_vals = dict()
+        for child in itervalues(self.child_computations):
+            return_vals.update(child.get_results())
 
-        if isinstance(return_list, collections.Sequence):
-            if len(return_list) > 1:
-                return tuple(return_list)
-            elif len(return_list) == 1:
-                return return_list[0]
-            else:
-                return None
+        if isinstance(self.computation.returns, Op):
+            return return_vals[self.computation.returns]
+        elif isinstance(self.computation.returns, collections.Set):
+            return return_vals
+        elif isinstance(self.computation.returns, collections.Sequence):
+            return tuple(return_vals[op] for op in self.computation.returns)
+        else:
+            return None
 
 
 class HetrTransformer(Transformer):
@@ -340,18 +314,10 @@ class HetrTransformer(Transformer):
         self.my_pid = os.getpid()
         self.is_closed = False
         self.child_transformers = dict()
-        self.transformer_list = list()
-        self.transformers = set()
         self.send_nodes = OrderedSet()
-        self.hetr_passes = [DeviceAssignPass(default_device='numpy',
-                                             default_device_id=0,
-                                             transformers=self.transformers),
-                            CommunicationPass(self.send_nodes),
-                            DistributedPass(self.send_nodes),
-                            ChildTransformerPass(self.transformer_list)]
-        self.vizpass = None
-
-        self.inits = OrderedSet()
+        self.passes = [DeviceAssignPass(hetr=self, default_device='numpy', default_device_id=0),
+                       CommunicationPass(self.send_nodes),
+                       DistributedPass(self.send_nodes)]
 
         HetrTransformer.hetr_counter += 1
         assert HetrTransformer.hetr_counter <= 1
@@ -370,12 +336,14 @@ class HetrTransformer(Transformer):
         super(HetrTransformer, self).close()
         self.is_closed = True
 
-    def transformer(self, tname):
+    def register_transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
             at = AsyncTransformer(tname)
             self.child_transformers[tname] = at
 
+    def transformer(self, tname):
+        assert tname in self.child_transformers, "register transformer {} before use".format(tname)
         return self.child_transformers[tname]
 
     def add_computation(self, computation):
@@ -400,12 +368,9 @@ class HetrTransformer(Transformer):
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            # print("Ignoring vizpass")
-            # self.vizpass = graph_pass
-            pass
+            self.hetr_passes.append(graph_pass)
         else:
-            # print("Ignoring unsupported graph pass in hetr", graph_pass)
-            pass
+            raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"
@@ -434,7 +399,3 @@ class HetrTransformer(Transformer):
 
     def state_initializations(self, states):
         pass
-
-# from ngraph.transformers.base import set_transformer_factory
-# set_transformer_factory(
-#    make_transformer_factory(HetrTransformer.transformer_name))

@@ -20,7 +20,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
+    Function, AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod
@@ -210,10 +210,6 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(ReciprocalOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
-
-    @add_op.on_type(AssignOneDOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
 
     @add_op.on_type(AssignOp)
     def add_op(self, op, out, tensor, value):

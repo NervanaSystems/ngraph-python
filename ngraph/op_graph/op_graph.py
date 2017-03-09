@@ -630,14 +630,10 @@ class AssignOp(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         val: The value to assign.
-        force (bool): Override constant check on tensor.
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
-
+    def __init__(self, tensor, val, **kwargs):
         # convert val to op
         # TODO: requires explicit broadcast in future
         if not isinstance(val, Op):
@@ -656,7 +652,6 @@ class AssignOp(Op):
         val = broadcast(val, tensor.axes)
 
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
@@ -672,26 +667,14 @@ class AssignOneDOp(Op):
         value (TensorOp): The value.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
+    def __init__(self, tensor, val, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
         super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
         return self.args[0].states_read
-
-
-class AssignTwoDOp(AssignOneDOp):
-    """
-    Assign a value to a 2d tensor
-
-    Arguments:
-        tensor (AssignableTensorOp): The value to assign to.
-        value (TensorOp): The value.
-    """
-    pass
 
 
 def assign(lvalue, rvalue):
@@ -835,13 +818,10 @@ class Fill(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         scalar: A scalar value.
-        force (bool): Disable constant check on tensor.
     """
 
-    def __init__(self, tensor, scalar, force=False, **kwargs):
+    def __init__(self, tensor, scalar, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
             if scalar.is_constant:
                 scalar = scalar.const
@@ -2021,7 +2001,7 @@ def value_of(tensor):
         return tensor
     temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
     return sequential([
-        AssignOp(temp, tensor, force=True),
+        AssignOp(temp, tensor),
         temp
     ])
 
@@ -2056,69 +2036,6 @@ def constant(const, axes=None, dtype=None):
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
     return val
-
-
-def is_constant(value):
-    """
-    Test an Op to see if it is a constant.
-
-    Args:
-        value: An Op
-
-    Returns: True if value is a constant.
-
-    """
-    return isinstance(value, AssignableTensorOp) and value.is_constant
-
-
-def is_constant_scalar(value):
-    """
-    Tests an Op to see if it is a constant scalar.
-
-    Args:
-        value: An Op.
-
-    Returns: True if value is a constant scalar.
-
-    """
-    return value.is_constant and value.is_scalar
-
-
-def constant_value(value):
-    """
-    Returns the constant value of an Op.
-
-    Args:
-        value (TensorOp): A constant op.
-
-    Returns: The constant value.
-
-    """
-    if not is_constant(value):
-        raise ValueError()
-    return value.const
-
-
-def constant_storage(axes, dtype=None, initial_value=None):
-    """
-    A tensor that is supposed to remain constant.
-
-    Args:
-        axes (Axes): The axes of the constant storage.
-        dtype (optional): The dtype of the storage.
-        name (String, optional): A name for the storage.
-        initial_value: A host constant or callable. If a callable, will be called
-            to produce the value.
-
-
-    Returns:
-        AssignableTensorOp: The constant storage.
-    """
-
-    return AssignableTensorOp(graph_label_type="constant",
-                              constant=True, persistent=True, trainable=False,
-                              axes=axes, dtype=dtype,
-                              initial_value=initial_value)
 
 
 def placeholder(axes, dtype=None, initial_value=None):
