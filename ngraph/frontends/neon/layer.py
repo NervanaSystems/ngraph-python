@@ -112,14 +112,20 @@ class Linear(Layer):
     def __call__(self, in_obj):
         # interpret axes
         in_feature_axes = in_obj.axes.sample_axes() - in_obj.axes.recurrent_axis()
-        out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
-        temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
-                                      for axis in out_feature_axes])
+        if self.W is None:
+            out_feature_axes = ng.make_axes(self.axes or [ng.make_axis(self.nout)])
+            temp_out_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name + '_out')
+                                          for axis in out_feature_axes])
+        else:
+            temp_out_axes = self.W.axes - in_feature_axes
+            out_feature_axes = ng.make_axes([ng.make_axis(axis.length, name=axis.name[:-len('_out')])
+                                             for axis in temp_out_axes])
         out_axes = out_feature_axes + (in_obj.axes - in_feature_axes)
         w_axes = temp_out_axes + in_feature_axes
 
         # init weights
-        self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope).named('LinW')
+        if self.W is None:
+            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope).named('LinW')
 
         return ng.cast_role(ng.dot(self.W, in_obj), out_axes)
 
