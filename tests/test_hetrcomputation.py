@@ -262,6 +262,37 @@ def test_multiple_computations():
                         ops=OrderedSet([x_plus_one, x_plus_two, x_mul_three]))
 
 
+def test_scatter_gather_graph():
+    # Build the graph
+    W = ng.make_axis(length=6, name='width')
+
+    with ng.metadata(device_id='0'):
+        x = ng.placeholder(())
+        z = ng.placeholder(())
+
+    with ng.metadata(device_id=('1', '2'), parallel=W):
+        y = ng.placeholder(())
+
+    x_plus_z = x + z  # Does not create a recv node
+    x_plus_y = x + y  # creates a gather recv node
+
+    # Build the graph metadata
+    graph_ops = OrderedSet([x, y, z, x_plus_z, x_plus_y])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = ["numpy", '0']
+    graph_op_metadata[z] = ["numpy", '0']
+    graph_op_metadata[y] = ["numpy", ('1', '2')]
+    graph_op_metadata[x_plus_z] = ["numpy", ('0')]
+    graph_op_metadata[x_plus_y] = ["numpy", ('0')]
+
+    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
+
+    check_communication_pass(
+        ops_to_transform=graph_ops,
+        expected_recv_nodes=[x_plus_y])
+
+
 def test_gpu_send_and_recv():
     # First check whether do we have gputransformer available, if not, xfail
     if 'gpu' not in transformer_choices():
