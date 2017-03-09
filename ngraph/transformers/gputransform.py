@@ -16,7 +16,7 @@ from builtins import range
 import atexit
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor
+    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
