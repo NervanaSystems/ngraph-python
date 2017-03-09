@@ -2,5 +2,5 @@
 
 # https://github.com/NVIDIA/nvidia-docker/releases
 mkdir ${HOME}/nvidia-docker-pkg
-wget -P ${HOME}/nvidia-docker-pkg https://github.com/NVIDIA/nvidia-docker/releases/download/v1.0.0/nvidia-docker_1.0.0-1_amd64.deb
-sudo dpkg -i ${HOME}/nvidia-docker-pkg/nvidia-docker_1.0.0-1_amd64.deb && rm -r ${HOME}/nvidia-docker-pkg
+wget -P ${HOME}/nvidia-docker-pkg https://github.com/NVIDIA/nvidia-docker/releases/download/v1.0.1/nvidia-docker_1.0.1-1_amd64.deb
+sudo dpkg -i ${HOME}/nvidia-docker-pkg/nvidia-docker_1.0.1-1_amd64.deb && rm -r ${HOME}/nvidia-docker-pkg

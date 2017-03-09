@@ -15,6 +15,7 @@
 
 from __future__ import print_function
 from __future__ import division
+import numpy as np
 from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
@@ -131,12 +132,30 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
 
     def __setitem__(self, key, value):
 
-        # initialize flex entry (only happens if not already initialized)
-        # required by InitTensorOp
-        self.flex_entry.initialize(value)
+        # flex management
+        # though not a kernel, setitem modifies tensor values
+        self.flex_entry.manage_before_computation(value)
 
+        # store integer representation
         value = value / self.scale
+
+        # check for overflow and clip
+        bits = self.flex_entry.dtype.storage_bits - 1
+        maxval = 2**bits - 1
+        minval = -2**bits
+        if isinstance(value, (int, float)):
+            value = min(value, maxval) if value >= 0 else max(value, minval)
+        else:
+            value[value > maxval] = maxval
+            value[value < minval] = minval
+
+        # set modified values
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
+
+        # flex management
+        maxabs = int(np.amax(np.absolute(value)))
+        self.flex_entry.manage_after_computation(maxabs,
+                                                 self.transformer.flex_manager.autoflex_count)
 
 
 class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):

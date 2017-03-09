@@ -11,6 +11,7 @@ from ngraph.util.hetr_utils import sort_ops_by_comm_deps
 from ngraph.op_graph.op_graph import TensorOp
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
@@ -97,6 +98,8 @@ class AsyncTransformer(Process):
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
+                                elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)
                         else:
