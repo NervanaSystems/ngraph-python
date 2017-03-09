@@ -30,7 +30,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
     Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
-    ReciprocalOp, Power, AssignOneDOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
+    ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
@@ -618,7 +618,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("np.reciprocal({}, out={})", x, out)
 
-    @generate_op.on_type(AssignOneDOp)
+    @generate_op.on_type(AssignOp)
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__((), {})", tensor, value)
 
