@@ -219,6 +219,13 @@ class GPULayoutAssignment(LayoutAssignment):
         return [GPULayoutAssignment(axes_list, layout)]
 
     @staticmethod
+    def generate_dot_layout(op):
+        axes_list = flatten(get_axes_list(op.axes))
+        rows_axis = [axes_list.index(a) for a in op.x_out_axes]
+        cols_axis = [axes_list.index(a) for a in op.y_out_axes]
+        return [GPULayoutAssignment(axes_list, [rows_axis, cols_axis])]
+
+    @staticmethod
     def factory(op):
         if isinstance(op, AssignOp):
             return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
@@ -238,7 +245,7 @@ class GPULayoutAssignment(LayoutAssignment):
         elif isinstance(op, SetItemOp):
             return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
         elif isinstance(op, DotOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+            return GPULayoutAssignment.generate_dot_layout(op)
         elif isinstance(op, ConvolutionOp):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, bprop_conv):
@@ -322,7 +329,10 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return 0.0
 
     def map(self, axis):
-        axis_position = self.arg_axes_list.index(axis)
+        axis_position = -1
+        for index, arg_axis in enumerate(self.arg_axes_list):
+            if axis == arg_axis:
+                axis_position = index
         return self.mappings[axis_position]
 
     def group_axis_contig(self, arg_mem_order, op_group):
@@ -395,6 +405,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return GPULayoutView(shape, strides)
 
     def get_dimshuffle(self, arg_mem_order, arg_axes, out_groups, arg):
+        import pdb; pdb.set_trace()
         flattened_groups = [[a] for a in flatten(out_groups)]
         dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, flattened_groups)
 
@@ -430,7 +441,6 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         elif isinstance(op, BinaryElementWiseOp):
             return GPUStridedLayoutConstraint(op, arg)
         elif isinstance(op, ReductionOp):
-            # TODO: make sure reduction axes taken care of
             return GPUStridedLayoutConstraint(op, arg)
         elif isinstance(op, OneHotOp):
             return GPUStridedLayoutConstraint(op, arg)
