@@ -737,7 +737,7 @@ class ComputationOp(ParallelOp):
 
     Arguments:
         returns: Values returned by the computation. A list, set, or op.
-        *args: Inputs to the computation.
+        *args: Inputs to the computation. Must be placeholders or variables.
 
     Parameters:
         returns: Ops returned.
@@ -760,16 +760,22 @@ class ComputationOp(ParallelOp):
         def is_input(arg):
             return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
 
+        all_args = self.variables(filter=is_input)
         if len(args) == 1 and args[0] == 'all':
-            args = self.variables(filter=is_input)
+            args = all_args
 
         args = tuple(as_op(arg) for arg in args)
+        arg_tensors = set(arg.tensor for arg in args)
+        missing_tensors = [t for t in arg_tensors.difference(args) if not t.is_persistent]
+        if len(missing_tensors) > 0:
+            raise ValueError("All used placeholders must be supplied to a computation.")
 
         for arg in args:
-            if not is_input(arg):
+            if not (is_input(arg) or arg.tensor.is_persistent):
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
+                    'input=True, or persistent=True, but the op passed had input=False'
+                    'and persistent=False.  In most '
                     'cases you want to pass placeholder ops in as arguments.  '
                     '{op} was passed in, of type {op_type}.'
                 ).format(
@@ -2040,7 +2046,7 @@ def temporary(axes, dtype=None, initial_value=None, constant=False):
 
     """
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=constant, persistent=True, trainable=False,
+                              constant=constant, persistent=False, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
