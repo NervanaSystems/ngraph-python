@@ -242,8 +242,7 @@ class GPULayoutAssignment(LayoutAssignment):
         elif isinstance(op, BinaryElementWiseOp):
             return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
         elif isinstance(op, ReductionOp):
-            # TODO: make sure reduction axes taken care of
-            return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
+            return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
         elif isinstance(op, OneHotOp):
             return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
         elif isinstance(op, TensorSizeOp):
