@@ -1030,15 +1030,15 @@ class TensorDescription(NameableValue):
 
     @property
     def is_persistent(self):
-        if self.base is not None:
-            return self.base.is_persistent
-        return self.__is_persistent
+        if self.base is self:
+            return self.__is_persistent
+        return self.base.is_persistent
 
     @property
     def is_input(self):
-        if self.base is not None:
-            return self.base.is_input
-        return self.__is_input
+        if self.base is self:
+            return self.__is_input
+        return self.base.is_input
 
     @property
     def parameter_key(self):
