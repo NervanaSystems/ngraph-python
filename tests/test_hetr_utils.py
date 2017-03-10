@@ -16,7 +16,6 @@ from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recv
 from ngraph.factory.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
 from ngraph.factory.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
-import pytest
 
 ax_A = ng.make_axis(length=10, name='A')
 ax_B = ng.make_axis(length=15, name='B')
@@ -25,19 +24,19 @@ axes = ng.make_axes([ax_A, ax_B, ax_C])
 
 
 def create_graph():
-    with ng.metadata(device=None, device_id=None, host_transformer=None):
+    with ng.metadata(device=None, device_id=None, transformer=None, host_transformer=None):
         from_node = ng.placeholder(axes)
         to_node = ng.placeholder(axes)
     send_x = SendOp(from_node=from_node)
     recv_x = RecvOp(to_node=to_node, send_node=send_x)
 
-    with ng.metadata(device=None, device_id=None, host_transformer=None):
+    with ng.metadata(device=None, device_id=None, transformer=None, host_transformer=None):
         x_plus_one = recv_x + 1
 
     send_x_plus_one = SendOp(from_node=x_plus_one)
     recv_x_plus_one = RecvOp(to_node=to_node, send_node=send_x_plus_one)
 
-    with ng.metadata(device=None, device_id=None, host_transformer=None):
+    with ng.metadata(device=None, device_id=None, transformer=None, host_transformer=None):
         z = recv_x_plus_one + 2
     return z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one
 
@@ -107,9 +106,6 @@ def test_comm_path_exists_scatter_gather():
 
 
 def test_update_comm_deps():
-    with pytest.raises(KeyError):
-        z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = create_graph()
-        update_comm_deps((z, send_x))
     with ng.metadata(transformer='numpy0'):
         z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = create_graph()
     update_comm_deps((z, send_x))
@@ -117,26 +113,28 @@ def test_update_comm_deps():
 
 
 def test_update_comm_deps_scatter_gather():
+    parallel_metadata = dict(parallel=ax_B, device_id=(0, 1),
+                             transformer=None, host_transformer=None, device=None)
     with ng.metadata(transformer='numpy0'):
-        with ng.metadata(parallel=ax_B, device_id=(0, 1), host_transformer=None, device=(0, 1)):
+        with ng.metadata(**parallel_metadata):
             from_node_a = ng.placeholder(axes)
             to_node_a = ng.placeholder(axes)
         scatter_send_x = ScatterSendOp(from_node=from_node_a, to_node=to_node_a)
         scatter_recv_a = ScatterRecvOp(to_node=to_node_a, send_node=scatter_send_x)
-        with ng.metadata(parallel=ax_B, device_id=(0, 1), host_transformer=None, device=(0, 1)):
+        with ng.metadata(**parallel_metadata):
             x_plus_one_a = scatter_recv_a + 1
         gather_send_x_plus_one_a = GatherSendOp(from_node=x_plus_one_a)
 
     with ng.metadata(transformer='numpy1'):
-        with ng.metadata(parallel=ax_B, device_id=(0, 1), host_transformer=None, device=(0, 1)):
+        with ng.metadata(**parallel_metadata):
             to_node_b = ng.placeholder(axes)
         scatter_recv_b = ScatterRecvOp(to_node=to_node_b, send_node=scatter_send_x)
-        with ng.metadata(parallel=ax_B, device_id=(0, 1), host_transformer=None, device=(0, 1)):
+        with ng.metadata(**parallel_metadata):
             x_plus_one_b = scatter_recv_b + 1
         gather_send_x_plus_one_b = GatherSendOp(from_node=x_plus_one_b)
 
     with ng.metadata(transformer='numpy0'):
-        with ng.metadata(parallel=ax_B, device_id=(0, 1), host_transformer=None, device=(0, 1)):
+        with ng.metadata(**parallel_metadata):
             gather_recv_x_plus_one_a = GatherRecvOp(from_node=from_node_a, to_node=to_node_a,
                                                     send_node=gather_send_x_plus_one_a)
             z_a = gather_recv_x_plus_one_a + 1

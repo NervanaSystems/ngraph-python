@@ -15,7 +15,7 @@
 from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.factory.comm_nodes import calculate_new_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
-from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone
 from ngraph.util.ordered import OrderedSet
 import collections
@@ -24,21 +24,29 @@ import socket
 
 class DeviceAssignPass(GraphBuildingPass):
 
-    def __init__(self, default_device, default_device_id, transformers):
+    def __init__(self, hetr, default_device, default_device_id):
         super(DeviceAssignPass, self).__init__()
-
+        self.hetr = hetr
         self.default_device = default_device
         self.default_device_id = default_device_id
-        self.transformers = transformers
 
     def visit(self, op):
         device = op.metadata.setdefault('device', self.default_device)
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
-        op.metadata['transformer'] = transformer
-        self.transformers.add(transformer)
         host_transformer = (socket.gethostname(), device_id)
         op.metadata['host_transformer'] = host_transformer
+        if isinstance(op.metadata['device_id'], (list, tuple)):
+            op.metadata['transformer'] = op.metadata['device'] + op.metadata['device_id'][0]
+            for id in op.metadata['device_id']:
+                transformer = op.metadata['device'] + str(id)
+                self.hetr.register_transformer(transformer)
+        else:
+            op.metadata['transformer'] = transformer
+            self.hetr.register_transformer(transformer)
+
+        if isinstance(op, TensorValueOp):
+            op.states_read[0].metadata.update(op.metadata)
 
 
 class CommunicationPass(GraphBuildingPass):
@@ -185,26 +193,3 @@ class DistributedPass(GraphBuildingPass):
                 op._Op__args = tuple(args)
             else:
                 op.args(args)
-
-
-class ChildTransformerPass(GraphBuildingPass):
-
-    def __init__(self, transformer_list):
-        super(ChildTransformerPass, self).__init__()
-
-        self.transformer_list = transformer_list
-
-    def visit(self, op):
-        if 'device_id' not in op.metadata:
-            return
-        if isinstance(op.metadata['device_id'], (list, tuple)):
-            op.metadata['transformer'] = op.metadata['device'] + op.metadata['device_id'][0]
-            for i in range(len(op.metadata['device_id'])):
-                transformer = op.metadata['device'] + op.metadata['device_id'][i]
-                if transformer not in self.transformer_list:
-                    self.transformer_list.append(transformer)
-        else:
-            transformer = op.metadata['device'] + str(op.metadata['device_id'])
-            op.metadata['transformer'] = transformer
-            if transformer not in self.transformer_list:
-                self.transformer_list.append(transformer)

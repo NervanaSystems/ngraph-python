@@ -67,6 +67,7 @@ class CommunicationOp(TensorOp):
         super(CommunicationOp, self).__init__(args=args, axes=axes, dtype=dtype)
         self.metadata['device'] = node.metadata['device']
         self.metadata['device_id'] = node.metadata['device_id']
+        self.metadata['transformer'] = node.metadata['transformer']
         self.metadata['host_transformer'] = node.metadata['host_transformer']
 
     @property

@@ -33,7 +33,7 @@ hetr = ngt.make_transformer_factory('hetr')()
 
 # Visualize the graph
 if args.visualize:
-    hetr.vizpass = ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True)
+    hetr.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
 
 # Define a computation
 plus_one = hetr.computation(x_plus_one, x)
