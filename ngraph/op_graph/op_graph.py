@@ -1918,6 +1918,13 @@ class AssignableTensorOp(TensorOp):
             # convert callable initial value
             if callable(initial_value):
                 initial_value = initial_value(self.axes)
+            if isinstance(initial_value, TensorOp):
+                # Caffe2 currently wraps the initial value in a constant (Issue #1138)
+                tensor = initial_value.tensor
+                if tensor.is_constant:
+                    initial_value = tensor.const
+                else:
+                    raise ValueError("initial_value must be convertible to a NumPy tensor")
             initial_value = np.asarray(initial_value, dtype=self.dtype)
             self.initial_value = initial_value
 
