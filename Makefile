@@ -79,7 +79,7 @@ test_mkl: clean
 
 test: test_install clean testflex
 	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test -n 4 --boxed --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
 test_caffe2: clean
