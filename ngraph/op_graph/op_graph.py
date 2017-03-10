@@ -146,10 +146,7 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
         forward: If not None, the node to use instead of this node.
-        persistent (bool): The value will be retained from computation to computation and
-            not shared.  Default False.
         metadata: String key value dictionary for frontend metadata.
-        trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
     Attributes:
@@ -349,32 +346,67 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def is_constant(self):
-        return self.__is_constant
+        """
+
+        Returns: True if this op is a constant tensor.
+
+        """
+        return False
 
     @property
     def const(self):
-        return self.__const
+        """
 
-    @const.setter
-    def const(self, value):
-        if self.__const is not None:
-            raise ValueError("Cannot change const value")
-        self.__const = value
+        Returns: For a constant, returns the constant value.
+
+        """
+        return None
+
+    @property
+    def is_input(self):
+        """
+
+        Returns: True if this op is a tensor that the host can write to.
+
+        """
+        return False
 
     @property
     def is_persistent(self):
-        return self.__is_persistent
+        """
+
+        Returns: True if this op is a tensor whose value is preserved from computation
+            to computation.
+
+        """
+        return False
 
     @property
     def is_trainable(self):
-        return self.__is_trainable
+        """
+
+        Returns: True if this op is a tensor that is trainable, i.e. is Op.variables
+            will return it.
+
+        """
+        return False
 
     @property
     def is_tensor_op(self):
+        """
+
+        Returns: True if this op is a tensor.
+
+        """
         return False
 
     @property
     def is_scalar(self):
+        """
+
+        Returns: True if this op is a scalar.
+
+        """
         return 0 == len(self.axes)
 
     @property
@@ -389,7 +421,7 @@ class Op(NameableValue, DebugInfo):
     @property
     def scalar_op(self):
         """
-        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        Returns the scalar op version of this op.  Will be overridden by subclasses
         """
         if not self.is_scalar:
             raise ValueError()
@@ -758,7 +790,7 @@ class ComputationOp(ParallelOp):
         super(ComputationOp, self).__init__(all=all, **kwargs)
 
         def is_input(arg):
-            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+            return arg.tensor.is_input
 
         all_args = self.variables(filter=is_input)
         if len(args) == 1 and args[0] == 'all':
@@ -774,7 +806,7 @@ class ComputationOp(ParallelOp):
             if not (is_input(arg) or arg.tensor.is_persistent):
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
-                    'input=True, or persistent=True, but the op passed had input=False'
+                    'is_input=True, or persistent=True, but the op passed had is_input=False'
                     'and persistent=False.  In most '
                     'cases you want to pass placeholder ops in as arguments.  '
                     '{op} was passed in, of type {op_type}.'
@@ -1038,7 +1070,9 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype).named(self.name)
+        return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                 is_persistent=self.is_persistent,
+                                 is_input=self.is_input)
 
     @property
     def axes(self):
@@ -1893,7 +1927,10 @@ class AssignableTensorOp(TensorOp):
     Value comes directly from storage.
 
     Arguments:
-        input: The storage is used as an input from the CPU. Implies persistent.
+        is_input: The storage is used as an input from the CPU. Implies persistent.
+        is_persistent: The storage value persists form computation to computation.
+        is_constant: The storage value does not change once initialized.
+        const: The host value of the constant for constant storage.
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
             value.
@@ -1905,13 +1942,18 @@ class AssignableTensorOp(TensorOp):
     def __init__(
             self,
             initial_value=None,
-            input=False,
-            persistent=False,
+            is_constant=False,
+            is_input=False,
+            is_persistent=False,
+            is_trainable=False,
+            const=None,
             **kwargs):
-        if input:
-            persistent = True
-        super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
-        self.input = input
+        super(AssignableTensorOp, self).__init__(**kwargs)
+        self.__is_input = is_input
+        self.__is_persistent = is_persistent
+        self.__is_trainable = is_trainable
+        self.__is_constant = is_constant
+        self.__const = const
         self.initial_value = None
 
         if initial_value is not None:
@@ -1927,6 +1969,33 @@ class AssignableTensorOp(TensorOp):
                     raise ValueError("initial_value must be convertible to a NumPy tensor")
             initial_value = np.asarray(initial_value, dtype=self.dtype)
             self.initial_value = initial_value
+
+
+    @property
+    def is_constant(self):
+        return self.__is_constant
+
+    @property
+    def const(self):
+        return self.__const
+
+    @const.setter
+    def const(self, value):
+        if self.__const is not None:
+            raise ValueError("Cannot change const value")
+        self.__const = value
+
+    @property
+    def is_input(self):
+        return self.__is_input
+
+    @property
+    def is_persistent(self):
+        return self.__is_persistent
+
+    @property
+    def is_trainable(self):
+        return self.__is_trainable
 
     @property
     def defs(self):
@@ -1975,7 +2044,7 @@ def value_of(tensor):
     """
     if tensor.is_constant:
         return tensor
-    temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
+    temp = temporary(axes=tensor.axes, dtype=tensor.dtype)
     return sequential([
         AssignOp(temp, tensor),
         temp
@@ -2003,11 +2072,13 @@ def constant(const, axes=None, dtype=None):
     else:
         nptensor_axes = make_axes([make_axis(l) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
-                             trainable=False, graph_label_type=graph_label_type,
+    val = AssignableTensorOp(axes=nptensor_axes,
+                             is_constant=True,
+                             is_persistent=True,
+                             graph_label_type=graph_label_type,
                              initial_value=nptensor,
+                             const=nptensor,
                              dtype=dtype)
-    val.const = nptensor
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
@@ -2016,12 +2087,12 @@ def constant(const, axes=None, dtype=None):
 
 def placeholder(axes, dtype=None, initial_value=None):
     """
-    A persistent tensor to be initialized from the CPU.
+    A place for a tensor to be supplied; typically used for computation arguments.
 
     Args:
         axes (Axes): The axes of the placeholder.
         dtype (optional): The dtype of the placeholder.
-        initial_value (optional): A host constant or callable. If callable, will
+        initial_value (optional): Deprecated. A host constant or callable. If callable, will
             be called to generate an initial value.
 
     Returns:
@@ -2029,13 +2100,13 @@ def placeholder(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="placeholder",
-                              constant=False, persistent=True, trainable=False,
-                              input=True,
+                              is_persistent=True,
+                              is_input=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, initial_value=None, constant=False):
+def temporary(axes, dtype=None, initial_value=None):
     """
     Temporary storage.
 
@@ -2053,7 +2124,6 @@ def temporary(axes, dtype=None, initial_value=None, constant=False):
 
     """
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=constant, persistent=False, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2075,7 +2145,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Persistent",
-                              constant=False, persistent=True, trainable=False,
+                              is_persistent=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2095,7 +2165,7 @@ def variable(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Variable",
-                              constant=False, persistent=True, trainable=True,
+                              is_constant=False, is_persistent=True, is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2133,7 +2203,7 @@ class StackOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes((axis,) + tuple(arg_axes))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
         slices = [slice(None)] * len(arg_axes)
         self.ops = [
             doall([SetItemOp(self.storage, [i] + slices, arg)
@@ -2206,7 +2276,7 @@ class ConcatOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes([concat_axis] + list(axes_0) + list(axes_1))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
