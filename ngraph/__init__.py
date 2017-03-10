@@ -25,7 +25,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import axes_with_order, axes_with_role_order, \
     broadcast, cast_axes, \
-    persistent_tensor, placeholder, init_tensor, \
+    persistent_tensor, placeholder, \
     slice_along_axis, temporary, \
     add, as_op, as_ops, constant, variable, persistent_tensor, placeholder, \
     temporary, variance, squared_L2, \

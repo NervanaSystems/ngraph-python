@@ -608,21 +608,6 @@ def as_ops(xs):
     return tuple(as_op(x) for x in xs)
 
 
-def init_tensor(tensor, valfun):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-
-    Returns:
-        InitTensorOp: The tensor initialization.
-
-    """
-    return InitTensorOp(tensor, valfun)
-
-
 class AssignOp(Op):
     """
     tensor[...] = val.
@@ -768,6 +753,7 @@ class ComputationOp(ParallelOp):
         else:
             all = []
 
+        self.values = all
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
 
@@ -1237,29 +1223,6 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     def generate_add_delta(self, adjoints, delta):
         self.tensor.generate_add_delta(adjoints, delta)
-
-
-class InitTensorOp(ValueOp):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-        kwargs: Other op args.
-
-    Attributes:
-        valfun: A CPU function that produces the initial value for the tensor.
-
-    """
-
-    def __init__(self, tensor, valfun, **kwargs):
-        super(InitTensorOp, self).__init__(tensor=tensor, **kwargs)
-        self.valfun = valfun
-
-    @property
-    def states_written(self):
-        return OrderedSet([self.tensor])
 
 
 class SequentialOp(ValueOp):
