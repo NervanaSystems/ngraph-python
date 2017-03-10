@@ -101,7 +101,7 @@ def test_linear_W_axes_nout():
 
     x = ng.placeholder([feature_axis, batch_axis])
     linear = Linear(nout=3, init=UniformInit(1.0, 1.0))
-    out = linear(x)
+    linear(x)
 
     assert linear.W.axes.batch_axis() is None
     assert feature_axis in linear.W.axes
