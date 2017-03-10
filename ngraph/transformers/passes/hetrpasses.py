@@ -129,7 +129,8 @@ class DistributedPass(GraphBuildingPass):
                     op.send_node().axes, self.parallel_axes, len(op.from_id), False)
 
                 nodes_to_clone = Op.ordered_ops([op.send_node()])
-                map(lambda x: setattr(x, '_TensorOp__axes', new_axes), nodes_to_clone)
+                Op.visit_input_closure([op.send_node()],
+                                       lambda x: setattr(x, '_TensorOp__axes', new_axes))
 
                 # clone nodes for other device_id
                 for i, id in enumerate(op.from_id[1:], start=1):
