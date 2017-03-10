@@ -291,10 +291,10 @@ class Op(NameableValue, DebugInfo):
         # List to keep generation deterministic
         self.__control_deps = OrderedSet()
         self.__deriv_handler = None
-        self.__const = const
-        self.__is_constant = constant
-        self.__is_persistent = persistent
-        self.__is_trainable = trainable
+        self._const = const
+        self._is_constant = constant
+        self._is_persistent = persistent
+        self._is_trainable = trainable
 
         # Add this op to the all op accounting lists
         ops = Op._get_thread_ops()[-1]
@@ -387,6 +387,15 @@ class Op(NameableValue, DebugInfo):
 
         Returns: True if this op is a tensor that is trainable, i.e. is Op.variables
             will return it.
+
+        """
+        return False
+
+    @property
+    def is_placeholder(self):
+        """
+
+        Returns: True if this op is a placeholder, i.e. a place to attach a tensor.
 
         """
         return False
@@ -558,20 +567,14 @@ class Op(NameableValue, DebugInfo):
         """
         return [self]
 
-    def variables(self, filter=None):
+    def variables(self):
         """
         Return all trainable Ops used in computing this node.
-
-        Arguments:
-            filter: Boolean filter of op, defaults to trainable.
 
         Returns:
             Set of trainable Ops.
         """
         params = OrderedSet()
-
-        if filter is None:
-            filter = lambda op: op.is_trainable
 
         def visitor(node):
             """
@@ -580,7 +583,30 @@ class Op(NameableValue, DebugInfo):
             Arguments:
               node: TODO
             """
-            if filter(node.tensor):
+            if node.tensor.is_trainable:
+                params.add(node.tensor)
+
+        Op.visit_input_closure([self], visitor)
+
+        return params
+
+    def placeholders(self):
+        """
+        Return all placeholder Ops used in computing this node.
+
+        Returns:
+            Set of placeholder Ops.
+        """
+        params = OrderedSet()
+
+        def visitor(node):
+            """
+            TODO.
+
+            Arguments:
+              node: TODO
+            """
+            if node.tensor.is_placeholder:
                 params.add(node.tensor)
 
         Op.visit_input_closure([self], visitor)
@@ -792,23 +818,22 @@ class ComputationOp(ParallelOp):
         def is_input(arg):
             return arg.tensor.is_input
 
-        all_args = self.variables(filter=is_input)
+        placeholders = self.placeholders()
         if len(args) == 1 and args[0] == 'all':
-            args = all_args
+            args = placeholders
 
         args = tuple(as_op(arg) for arg in args)
         arg_tensors = set(arg.tensor for arg in args)
-        missing_tensors = [t for t in arg_tensors.difference(args) if not t.is_persistent]
+        missing_tensors = [t for t in placeholders.difference(arg_tensors)]
         if len(missing_tensors) > 0:
             raise ValueError("All used placeholders must be supplied to a computation.")
 
         for arg in args:
-            if not (is_input(arg) or arg.tensor.is_persistent):
+            if not (arg.tensor.is_input):
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
-                    'is_input=True, or persistent=True, but the op passed had is_input=False'
-                    'and persistent=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
+                    'is_input=True, but the op passed had is_input=False.'
+                    'In most cases you want to pass placeholder ops in as arguments.  '
                     '{op} was passed in, of type {op_type}.'
                 ).format(
                     op=arg,
@@ -1072,7 +1097,8 @@ class TensorOp(Op):
         """
         return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
                                  is_persistent=self.is_persistent,
-                                 is_input=self.is_input)
+                                 is_input=self.is_input,
+                                 is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1244,10 +1270,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def const(self):
         return self.tensor.const
-
-    @const.setter
-    def const(self, value):
-        self.tensor.const = value
 
     @property
     def scale(self):
@@ -1930,6 +1952,7 @@ class AssignableTensorOp(TensorOp):
         is_input: The storage is used as an input from the CPU. Implies persistent.
         is_persistent: The storage value persists form computation to computation.
         is_constant: The storage value does not change once initialized.
+        is_placeholder: This is a placeholder.
         const: The host value of the constant for constant storage.
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
@@ -1946,14 +1969,16 @@ class AssignableTensorOp(TensorOp):
             is_input=False,
             is_persistent=False,
             is_trainable=False,
+            is_placeholder=False,
             const=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
-        self.__is_input = is_input
-        self.__is_persistent = is_persistent
-        self.__is_trainable = is_trainable
-        self.__is_constant = is_constant
-        self.__const = const
+        self._is_input = is_input
+        self._is_persistent = is_persistent
+        self._is_trainable = is_trainable
+        self._is_constant = is_constant
+        self._is_placeholder = is_placeholder
+        self._const = const
         self.initial_value = None
 
         if initial_value is not None:
@@ -1970,32 +1995,35 @@ class AssignableTensorOp(TensorOp):
             initial_value = np.asarray(initial_value, dtype=self.dtype)
             self.initial_value = initial_value
 
-
     @property
     def is_constant(self):
-        return self.__is_constant
+        return self._is_constant
 
     @property
     def const(self):
-        return self.__const
+        return self._const
 
     @const.setter
     def const(self, value):
-        if self.__const is not None:
+        if self._const is not None:
             raise ValueError("Cannot change const value")
-        self.__const = value
+        self._const = value
 
     @property
     def is_input(self):
-        return self.__is_input
+        return self._is_input
 
     @property
     def is_persistent(self):
-        return self.__is_persistent
+        return self._is_persistent
 
     @property
     def is_trainable(self):
-        return self.__is_trainable
+        return self._is_trainable
+
+    @property
+    def is_placeholder(self):
+        return self._is_placeholder
 
     @property
     def defs(self):
@@ -2102,6 +2130,7 @@ def placeholder(axes, dtype=None, initial_value=None):
     return AssignableTensorOp(graph_label_type="placeholder",
                               is_persistent=True,
                               is_input=True,
+                              is_placeholder=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2165,7 +2194,9 @@ def variable(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Variable",
-                              is_constant=False, is_persistent=True, is_trainable=True,
+                              is_input=True,
+                              is_persistent=True,
+                              is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 

@@ -972,9 +972,9 @@ class TensorDescription(NameableValue):
         full_sizes: The allocated size of each axis (may be larger than the axis).
         offset: An offset into the viewed tensor.
         next_tensor_decription: In a reshape, tensor description of reshaped tensor.
-        persistent: The tensor should be persistent, i.e. survive from computation to
+        is_persistent: The tensor should be persistent, i.e. survive from computation to
             computation.
-        input: The device tensor can be written from the host.
+        is_input: The device tensor can be written from the host.
         **kwargs: Additional args for related classes.
 
     """
@@ -986,6 +986,7 @@ class TensorDescription(NameableValue):
                  next_tensor_description=None,
                  is_persistent=False,
                  is_input=False,
+                 is_placeholder=False,
                  **kwargs):
         super(TensorDescription, self).__init__(**kwargs)
         # TODO: get the default type from the backend. May not always be numpy.
@@ -1004,6 +1005,7 @@ class TensorDescription(NameableValue):
         self.next_tensor_description = next_tensor_description
         self.__is_persistent = is_persistent
         self.__is_input = is_input
+        self.__is_placeholder = is_placeholder
 
         for axis in axes:
             if axis.length is None:
@@ -1030,15 +1032,36 @@ class TensorDescription(NameableValue):
 
     @property
     def is_persistent(self):
+        """
+
+        Returns: True if persists from computation to computation.
+
+        """
         if self.base is self:
             return self.__is_persistent
         return self.base.is_persistent
 
     @property
     def is_input(self):
+        """
+
+        Returns: True if writable from host.
+
+        """
         if self.base is self:
             return self.__is_input
         return self.base.is_input
+
+    @property
+    def is_placeholder(self):
+        """
+
+        Returns: True if a placeholder; a place to attach a tensor.
+
+        """
+        if self.base is self:
+            return self.__is_placeholder
+        return self.base.is_placeholder
 
     @property
     def parameter_key(self):
