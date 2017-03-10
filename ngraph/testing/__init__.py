@@ -32,4 +32,5 @@ __all__ = [
     'ExecutorFactory',
     'numeric_derivative',
     'check_derivative',
+    'template_one_placeholder'
 ]
