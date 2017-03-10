@@ -21,8 +21,10 @@ import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
     def test_matmul(self):
         # computation

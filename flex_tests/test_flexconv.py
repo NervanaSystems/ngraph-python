@@ -21,6 +21,7 @@ from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
 from ngraph.frontends.neon import ax, ar
 
+pytestmark = pytest.mark.transformer_dependent("module")
 
 rng = RandomTensorGenerator(0, np.float32)
 

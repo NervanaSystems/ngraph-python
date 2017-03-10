@@ -154,7 +154,7 @@ def test_axes_ops(test_cases):
 
 def random(tensor_description):
     """
-    return a ranom numpy array with dimension and dtype specified by
+    return a random numpy array with dimension and dtype specified by
     tensor_description.
 
     Arguments:

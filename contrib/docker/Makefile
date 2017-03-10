@@ -135,7 +135,7 @@ build_mkldnn_test: build_test_cpu
 	@docker rmi ngraph_mkldnn_test:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
 
-build_doc: build_base
+build_doc: build_base_cpu
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
 	@docker rmi ngraph_doc:latest || echo "keep going if docker rmi command fails"
@@ -152,7 +152,10 @@ build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build
 test_all: test test_gpu test_mkldnn test_caffe2
 
 test: build_test
-	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
+	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_cpu
+
+test_cpu: build_test_cpu
+	docker run --rm ${VOLUME} -t ngraph_test_cpu:${BUILD_VERSION} make test_cpu
 
 test_parallel: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
@@ -176,13 +179,16 @@ test_caffe2_shell: build_caffe2
 	docker run --rm ${VOLUME} -it ngraph_caffe2:${BUILD_VERSION} /bin/bash
 
 test_gpu: build_test
-	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test
+	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_gpu
+
+test_hetr: build_test
+	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_hetr
 
 doc: build_doc
 	docker run --rm ${VOLUME} -t ngraph_doc:${BUILD_VERSION} make doc
 
-style: build_test
-	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make style
+style: build_test_cpu
+	docker run --rm ${VOLUME} -t ngraph_test_cpu:${BUILD_VERSION} make style
 
 test_shell: build_test
 	docker run --rm ${VOLUME} -it ngraph_test:${BUILD_VERSION} /bin/bash

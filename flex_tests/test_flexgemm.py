@@ -18,9 +18,10 @@ import pytest
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
 
+pytestmark = pytest.mark.transformer_dependent("module")
+
 
 # matrix multiply
-
 def test_gemm(transformer_factory):
     """
     TODO: make this more interesting

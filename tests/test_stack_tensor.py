@@ -16,17 +16,16 @@ import numpy as np
 
 import ngraph as ng
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator
-from ngraph.flex.names import flex_gpu_transformer_name
 import pytest
+
 
 delta = 1e-3
 rtol = atol = 1e-2
 
 
+@pytest.mark.flex_disabled  # Allowed to fail until PR2
+@pytest.mark.transformer_dependent
 def test_stack(transformer_factory):
-    if transformer_factory.name == flex_gpu_transformer_name:
-        pytest.skip("Allowed to fail until PR2")
-
     W = ng.make_axis(length=4)
     H = ng.make_axis(length=5)
     I = ng.make_axis(length=3)

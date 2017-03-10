@@ -20,6 +20,11 @@ from ngraph.op_graph.lookuptable import lookuptable_update
 import ngraph.transformers as ngt
 from ngraph.testing import RandomTensorGenerator, ExecutorFactory
 from ngraph.frontends.neon import ax
+import pytest
+
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 rng = RandomTensorGenerator(0, np.float32)
 
