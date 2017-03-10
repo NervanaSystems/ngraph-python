@@ -146,16 +146,19 @@ class Linear(Layer):
         super(Linear, self).__init__(**kwargs)
 
         # axes should not include recurrent or batch axes
-        if axes.batch_axis() is not None:
-            raise ValueError((
-                'Axes passed to Linear layer should only be the output feature'
-                'axis.  A batch axis {} was included.'
-            ).format(axes.batch_axis()))
-        if axes.recurrent_axis() is not None:
-            raise ValueError((
-                'Axes passed to Linear layer should only be the output feature'
-                'axis.  A recurrent axis {} was included.'
-            ).format(axes.recurrent_axis()))
+        if axes is not None:
+            axes = ng.make_axes(axes)
+
+            if axes.batch_axis() is not None:
+                raise ValueError((
+                    'Axes passed to Linear layer should only be the output feature'
+                    'axis.  A batch axis {} was included.'
+                ).format(axes.batch_axis()))
+            if axes.recurrent_axis() is not None:
+                raise ValueError((
+                    'Axes passed to Linear layer should only be the output feature'
+                    'axis.  A recurrent axis {} was included.'
+                ).format(axes.recurrent_axis()))
 
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
@@ -675,7 +678,7 @@ class Recurrent(Layer):
         # because sometimes the self.out_axes intersect with the self.in_axes
         # and so the weight matrix would have a duplicate Axis which isn't
         # allowed.
-        temp_out_axes = shadow_axes_map(self.out_feature_axes).keys()
+        temp_out_axes = ng.make_axes(shadow_axes_map(self.out_feature_axes).keys())
 
         # determine the shape of the weight matrices
         self.w_in_axes = temp_out_axes + self.in_feature_axes

@@ -600,6 +600,8 @@ class Axes(object):
 
         Returns:
             bool, True if each ``Axis`` are matching and in same order
+
+        See Also ``is_equal_set`` if you want the comparison to ignore the Axes order
         """
         if not isinstance(other, Axes):
             raise ValueError((
@@ -1278,7 +1280,12 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The reordered tensor description.
         """
-        self.axes.is_equal_set(new_axes)
+        if not self.axes.is_equal_set(new_axes):
+            raise ValueError((
+                "Reorder can't change which axes are available, only the "
+                "order.  {} and {} are different sets, not just order."
+            ).format(self, new_axes))
+
         return self.reorder_and_broadcast(new_axes)
 
     def reorder_and_broadcast(self, new_axes):

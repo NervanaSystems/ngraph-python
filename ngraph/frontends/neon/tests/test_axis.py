@@ -13,5 +13,5 @@ def test_axis_is_not_shadow(axis_a):
     assert not axis.is_shadow_axis(axis_a)
 
 
-def test_shadow_axis_is_shadow_axis():
+def test_shadow_axis_is_shadow_axis(axis_a):
     assert axis.is_shadow_axis(axis.make_shadow_axis(axis_a))
