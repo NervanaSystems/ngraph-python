@@ -22,7 +22,6 @@ import socket
 
 
 class DeviceAssignPass(GraphBuildingPass):
-
     def __init__(self, hetr, default_device, default_device_id):
         super(DeviceAssignPass, self).__init__()
         self.hetr = hetr
@@ -49,7 +48,6 @@ class DeviceAssignPass(GraphBuildingPass):
 
 
 class CommunicationPass(GraphBuildingPass):
-
     def __init__(self, send_nodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = send_nodes
@@ -74,7 +72,6 @@ class CommunicationPass(GraphBuildingPass):
 
 
 class DistributedPass(GraphBuildingPass):
-
     def __init__(self, send_nodes):
         super(DistributedPass, self).__init__()
         self.send_nodes = send_nodes
@@ -98,21 +95,25 @@ class DistributedPass(GraphBuildingPass):
                 for i in add_op_list:
                     v = visit[i]
                     for arg in v.args:
-                        new_node = clone(node=arg, new_axes=new_axes, device_id=device_id,
+                        new_node = clone(node=arg, new_axes=new_axes,
+                                         device_id=device_id,
                                          device_idx=device_idx)
                         subgraph.append(new_node)
                         visit.remove(arg)
                         elem = elem + 1
-                    new_node = clone(node=v, new_axes=new_axes, device_id=device_id,
-                                     arg1=subgraph[elem - 1], arg2=subgraph[elem - 2])
+                    new_node = clone(node=v, new_axes=new_axes,
+                                     device_id=device_id,
+                                     arg1=subgraph[elem - 1],
+                                     arg2=subgraph[elem - 2])
                     subgraph.append(new_node)
                     visit.remove(v)
                     add_op_list.pop(0)
             else:
                 node = visit.pop()
-                subgraph.append(clone(node=node, new_axes=new_axes, device_id=device_id,
-                                      device_idx=device_idx, send_nodes=self.send_nodes,
-                                      arg1=subgraph[-1]))
+                subgraph.append(
+                    clone(node=node, new_axes=new_axes, device_id=device_id,
+                          device_idx=device_idx, send_nodes=self.send_nodes,
+                          arg1=subgraph[-1]))
                 elem = elem + 1
 
         return subgraph
@@ -126,16 +127,18 @@ class DistributedPass(GraphBuildingPass):
                 self.parallel_axes = op.metadata['parallel']
 
                 new_axes = calculate_new_axes(
-                    op.send_node().axes, self.parallel_axes, len(op.from_id), False)
+                    op.send_node().axes, self.parallel_axes,
+                    len(op.from_id), False)
+                Op.visit_input_closure(
+                    [op.send_node()],
+                    lambda x: setattr(x, '_TensorOp__axes', new_axes))
 
                 nodes_to_clone = Op.ordered_ops([op.send_node()])
-                Op.visit_input_closure([op.send_node()],
-                                       lambda x: setattr(x, '_TensorOp__axes', new_axes))
-
                 # clone nodes for other device_id
                 for i, id in enumerate(op.from_id[1:], start=1):
-                    # compute the axes for last device
-                    if i == (len(op.from_id) - 1):
+                    # get axes for last device if it's different
+                    if i == (len(op.from_id) - 1) \
+                            and self.parallel_axes.length % len(op.from_id) > 0:
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
