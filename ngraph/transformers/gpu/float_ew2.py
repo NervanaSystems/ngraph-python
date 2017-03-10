@@ -283,11 +283,16 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes=None, gemm=False, missing_axis=None):
+    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False, missing_axis=None):
         self.dtype = tensor_description.dtype
-        self.strides = list(tensor_description.layout.strides)
-        self.shape = list(tensor_description.layout.shape)
         self.td = tensor_description
+
+        if ignore_layout:
+            self.shape = [None]
+            self.strides = [None]
+        else:
+            self.strides = list(tensor_description.layout.strides)
+            self.shape = list(tensor_description.layout.shape)
 
         if missing_axis is not None:
             self.shape.insert(missing_axis, 1)

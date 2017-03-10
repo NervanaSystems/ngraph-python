@@ -62,8 +62,8 @@ class GEMMKernel(GPUKernel):
             size (str): Optional preselected tile size
         """
         # Get inputs to gemm
-        C = TensorDescriptionWrapper(op.tensor_description(), 2, gemm=True)
-        A, B = (TensorDescriptionWrapper(_, 2, gemm=True) for _ in op.call_info())
+        C = TensorDescriptionWrapper(op.tensor_description(), 2)
+        A, B = (TensorDescriptionWrapper(_, 2) for _ in op.call_info())
 
         # If both inputs are 1d, need to transpose one of them
         if min(A.strides) == 0 and min(B.strides) == 0:
@@ -259,4 +259,5 @@ class GEMMKernel(GPUKernel):
         if self.use_cublas:
             raise NotImplementedError("Not yet supported")
         else:
+            #import pdb; pdb.set_trace()
             self.kernel.prepared_async_call(*self.params)

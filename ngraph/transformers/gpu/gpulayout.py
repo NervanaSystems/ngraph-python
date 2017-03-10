@@ -169,8 +169,11 @@ class GPULayoutAssignment(LayoutAssignment):
             for axis in reversed(self.axes):
                 if len(shape) == len(strides):
                     strides.insert(0, strides[0] * shape[0])
-                ax_lens = [self.ng_axes[a].length for a in axis]
-                shape.insert(0, np.prod(ax_lens))
+                if axis:
+                    ax_lens = [self.ng_axes[a].length for a in axis]
+                    shape.insert(0, np.prod(ax_lens))
+                else:
+                    shape.insert(0, 1)
         else:
             shape = []
             strides = []
@@ -343,7 +346,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         arg_group = [self.map(a) for a in op_group]
         
         # If broadcasts included, not contiguous
-        if any(a == "bcast" for a in arg_group):
+        if any(a == "bcast" for a in arg_group) or len(op_group) == 0:
             return False
 
         # If slices included, not contiguous
@@ -378,13 +381,20 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                 break
         return compatible
 
-    def contiguous_layout_view(self, axes):
+    def contiguous_layout_view(self, out_groups):
+        lengths = []
+        for group in out_groups:
+            if group:
+                lengths.append(np.prod([a.length for a in group]))
+            else:
+                lengths.append(1)
+
         shape = []
         strides = [1]
-        for a in reversed(axes[1:]):
-            shape.insert(0, a.length)
+        for l in reversed(lengths[1:]):
+            shape.insert(0, l)
             strides.insert(0, shape[0] * strides[0])
-        shape.insert(0, axes[0].length)
+        shape.insert(0, lengths[0])
         return GPULayoutView(shape, strides)
 
     def layout_view(self, arg_mem_order, arg_axes, out_groups):
@@ -392,8 +402,12 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         shape = []
         axis_groups = []
         for group in out_groups:
-            shape.append(np.prod([a.length for a in group]))
-            axis_groups.append([self.map(a) for a in group])
+            if group:
+                shape.append(np.prod([a.length for a in group]))
+                axis_groups.append([self.map(a) for a in group])
+            else:
+                shape.append(1)
+                axis_groups.append(["extra"])
 
         # Compute axis strides for arg
         base_strides = [1]
@@ -409,6 +423,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         for group in axis_groups:
             if group[-1] == "bcast":
                 strides.append(0)
+            elif group[-1] == "extra":
+                strides.append(1)
             elif isinstance(group[0], tuple):
                 strides.append(arg_axis_strides[group[0][1]])
             else:
@@ -418,13 +434,17 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
 
     def get_dimshuffle(self, arg_mem_order, arg_axes, out_groups, arg):
         # Get contiguous un-flattened view of input tensor
-        in_groups = [[arg_axes[a]] for a in arg_mem_order]
-        dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, in_groups)
+        flattened_out_groups = []
+        for group in out_groups:
+            if group:
+                new_groups = [[a] for a in group]
+                flattened_out_groups = flattened_out_groups + new_groups
+            else:
+                flattened_out_groups.append([])
+        dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, flattened_out_groups)
 
         # Determine shuffle order
-        in_ordered_axes = flatten(in_groups)
-        flattened_out_groups = flatten(out_groups)
-        axis_order = [in_ordered_axes.index(a) for a in flattened_out_groups]
+        axis_order = tuple(range(len(flattened_out_groups)))
 
         # Get contiguous un-flattened view of output tensor
         dimshuffle_out_view = self.contiguous_layout_view(flattened_out_groups)
@@ -433,7 +453,10 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         out_shape = []
         out_strides = []
         for group in reversed(out_groups):
-            length = np.prod([a.length for a in group])
+            if group:
+                length = np.prod([a.length for a in group])
+            else:
+                length = 1
             if len(out_strides) == 0:
                 out_strides.insert(0, 1)
             else:
@@ -646,7 +669,7 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 
         # Each arg must have two contiguous axes where one matches
         # reduction axes and the other matches one of the output axes
-        if self.group_axis_contig(arg_mem_order, reduction_group):
+        if len(reduction_group) == 0 or self.group_axis_contig(arg_mem_order, reduction_group):
             if self.group_axis_contig(arg_mem_order, out_group):
                 return False
         

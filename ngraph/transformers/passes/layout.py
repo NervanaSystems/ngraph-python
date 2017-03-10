@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -304,6 +304,12 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(OneHotOp)
     def op_from_args(self, op, args):
         return OneHotOp(*args, axis=op.axis)
+
+    @op_from_args.on_type(ReductionOp)
+    def op_from_args(self, op, args):
+        op_type = type(op)
+        new_op = op_type(*args, reduction_axes=op.reduction_axes)
+        return new_op
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):

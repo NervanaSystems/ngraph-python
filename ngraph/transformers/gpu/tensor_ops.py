@@ -63,7 +63,7 @@ class DimShuffleKernel(GPUKernel):
 
         out = TensorDescriptionWrapper(op.tensor_description())
         (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(arg)
+        in_tensor = TensorDescriptionWrapper(arg, ignore_layout=True)
 
         # Reshape the tensors in place with dimshuffle views
         in_tensor.shape = tuple(op.in_view.shape)

@@ -1120,7 +1120,7 @@ class TensorDescription(NameableValue):
         """
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
         """
-        return (self.shape, self.dtype, self.offset, self.strides)
+        return (self.shape, self.dtype, self.offset, self.strides, self.layout)
 
     def flatten(self, new_axes):
         """

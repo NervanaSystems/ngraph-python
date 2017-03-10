@@ -619,7 +619,10 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
+        if tensor_description.layout:
+            shape_str = "_".join((str(_) for _ in tensor_description.layout.shape))
+        else:
+            shape_str = "_".join((str(_) for _ in tensor_description.shape))
         return GPUDeviceTensor(self.transformer, self, tensor_description,
                                name="v_" + tensor_description.name + "_" + shape_str)
 
@@ -680,7 +683,6 @@ class GPUDeviceTensor(DeviceTensor):
         Returns:
             Numpy array containing tensor data
         """
-
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
@@ -689,7 +691,10 @@ class GPUDeviceTensor(DeviceTensor):
                 contig_tensor = self.as_contiguous()
 
             if tensor is None:
-                return contig_tensor.get()
+                if contig_tensor.shape != self.tensor_description.shape:
+                    return contig_tensor.get().reshape(self.tensor_description.shape)
+                else:
+                    return contig_tensor.get()
             tensor[:] = contig_tensor.get()
         else:
             # Tensor is just a broadcasted scalar, get scalar value and fill output array
@@ -801,7 +806,6 @@ class GPUDeviceTensor(DeviceTensor):
 
             # Reshape to satisfy pycuda if necessary
             if sliced.shape != value.shape:
-                import pdb; pdb.set_trace()
                 sliced = self.tensor.reshape(value.shape)
 
             if self.is_contiguous and self.strides_contiguous(value):
