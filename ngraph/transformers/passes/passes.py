@@ -20,8 +20,8 @@ from collections import Iterable
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
-    ContiguousOp, AssignOp, DotLowDimension, \
-    ExpOp, LogOp, NegativeOp, AssignOneDOp, ReshapeOp, flatten, constant, \
+    ContiguousOp, DotLowDimension, \
+    ExpOp, LogOp, NegativeOp, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
     ParallelOp
 from ngraph.util.generics import generic_method
@@ -209,13 +209,6 @@ class CPUTensorShaping(PeepholeGraphPass):
     def visit(self, op):
         if op.args[0].tensor_description().c_contiguous:
             self.replace_op(op, op.args[0])
-
-    @visit.on_type(AssignOp)
-    def visit(self, op):
-        tensor, val = op.args
-        assert not isinstance(tensor, ReshapeOp)
-        tensor, val = flatten(tensor), flatten(val)
-        self.replace_op(op, AssignOneDOp(tensor, val, force=op.force))
 
     @visit.on_type(ReorderAxes)
     def visit(self, op):
