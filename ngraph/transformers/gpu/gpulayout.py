@@ -225,11 +225,13 @@ class GPULayoutAssignment(LayoutAssignment):
         return [GPULayoutAssignment(axes_list, layout)]
 
     @staticmethod
-    def generate_dot_layout(op):
+    def generate_default_dot_layout(op):
         axes_list = flatten(get_axes_list(op.axes))
-        rows_axis = [axes_list.index(a) for a in op.x_out_axes]
-        cols_axis = [axes_list.index(a) for a in op.y_out_axes]
-        return [GPULayoutAssignment(axes_list, [rows_axis, cols_axis])]
+        rows_axis = [axes_list.index(a) for a in flatten(get_axes_list(op.x_out_axes))]
+        cols_axis = [axes_list.index(a) for a in flatten(get_axes_list(op.y_out_axes))]
+        # By default allow first argument to be transposed, but not second
+        # TODO: this could be bad for perf some heuristic?
+        return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
 
     @staticmethod
     def factory(op):
@@ -251,7 +253,7 @@ class GPULayoutAssignment(LayoutAssignment):
         elif isinstance(op, SetItemOp):
             return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
         elif isinstance(op, DotOp):
-            return GPULayoutAssignment.generate_dot_layout(op)
+            return GPULayoutAssignment.generate_default_dot_layout(op)
         elif isinstance(op, ConvolutionOp):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, bprop_conv):
@@ -264,6 +266,15 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
+
+
+class GPUDotLayoutAssignment(GPULayoutAssignment):
+    def __init__(self, A_trans, B_trans, axes, order=None):
+        super(GPUDotLayoutAssignment, self).__init__(axes, order)
+        self.A_trans = A_trans
+        self.B_trans = B_trans
+        if A_trans and B_trans:
+            raise NotImplementedError("Can't support Dot op tt")
 
 
 class GPULayoutView(object):
@@ -652,26 +663,48 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPUDotLayoutConstraint, self).__init__(op, arg)
 
-    def needs_transform(self, arg_layout, op_layout):
-        arg_mem_order = flatten(arg_layout.axes)
-        out_mem_order = flatten(op_layout.axes)
         args = list(self.op.args)
-
+        self.op_axes = flatten(get_axes_list(self.op.axes))
         if self.arg.forwarded is args[0].forwarded:
-            reduction_group = [a for a in self.op.x_reduction_axes]
-            out_group = [self.op.axes[i] for i in out_mem_order if self.op.axes[i] in self.op.x_out_axes]
+            self.operand = 'A'
+            self.reduction_axes = flatten(get_axes_list(self.op.x_reduction_axes))
+            self.out_axes = flatten(get_axes_list(self.op.x_out_axes))
         elif self.arg.forwarded is args[1].forwarded:
-            reduction_group = [a for a in self.op.y_reduction_axes]
-            out_group = [self.op.axes[i] for i in out_mem_order if self.op.axes[i] in self.op.y_out_axes]
+            self.operand = 'B'
+            self.reduction_axes = flatten(get_axes_list(self.op.y_reduction_axes))
+            self.out_axes = flatten(get_axes_list(self.op.y_out_axes))
         else:
             import pdb; pdb.set_trace()
             raise ValueError("Invalid argument for constraint")
 
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        out_mem_order = flatten(op_layout.axes)
+
+        reduction_group = [a for a in self.reduction_axes]
+        out_group = [self.op_axes[i] for i in out_mem_order if self.op_axes[i] in self.out_axes]
+
+        # Check if this argument can be transposed
+        if self.operand == 'A':
+            can_trans = op_layout.A_trans
+        elif self.operand == 'B':
+            can_trans = op_layout.B_trans
+
         # Each arg must have two contiguous axes where one matches
         # reduction axes and the other matches one of the output axes
         if len(reduction_group) == 0 or self.group_axis_contig(arg_mem_order, reduction_group):
-            if self.group_axis_contig(arg_mem_order, out_group):
-                return False
+            if can_trans:
+                if self.group_axis_contig(arg_mem_order, out_group):
+                    return False
+            else:
+                # Make sure operand is not transposed
+                if self.operand == 'A':
+                    required_layout = out_group + reduction_group
+                elif self.operand == 'B':
+                    required_layout = reduction_group + out_group
+
+                if self.group_axis_contig(arg_mem_order, required_layout):
+                    return False
         
         return True
 
@@ -686,26 +719,21 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
         arg_axes = arg_layout.ng_axes
         args = list(self.op.args)
 
+        reduction_group = [a for a in self.reduction_axes]
+        out_group = [a for a in self.out_axes]
+
         if self.needs_transform(arg_layout, op_layout):
             if self.arg.forwarded is args[0].forwarded:
-                reduction_group = [a for a in self.op.x_reduction_axes]
-                out_group = [a for a in self.op.x_out_axes]
                 out_groups = [out_group, reduction_group]
                 return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
             else:
-                reduction_group = [a for a in self.op.y_reduction_axes]
-                out_group = [a for a in self.op.y_out_axes]
                 out_groups = [reduction_group, out_group]
                 return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
         else:
             if self.arg.forwarded is args[0].forwarded:
-                reduction_group = [a for a in self.op.x_reduction_axes]
-                out_group = [a for a in self.op.x_out_axes]
                 out_groups = [out_group, reduction_group]
                 return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
             else:
-                reduction_group = [a for a in self.op.y_reduction_axes]
-                out_group = [a for a in self.op.y_out_axes]
                 out_groups = [reduction_group, out_group]
                 return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
 
