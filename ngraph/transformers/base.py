@@ -102,9 +102,8 @@ class Computation(NameableValue):
         elif isinstance(self.computation.returns, collections.Set):
             result = dict()
             for op in self.computation.returns:
-                dict[op] = value(op)
+                result[op] = value(op)
             return result
-
         elif isinstance(self.computation.returns, collections.Sequence):
             return tuple(value(op) for op in self.computation.returns)
 

@@ -34,6 +34,7 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
@@ -43,6 +44,8 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
+
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
@@ -51,12 +54,14 @@ def clone(
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
 
     elif isinstance(node, ScatterRecvOp):
         new_node = node.__class__(
             to_node=node,
             send_node=node.send_node(),
             device_idx=device_idx)
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
 
     elif isinstance(node, ScatterSendOp):
         pass
@@ -66,6 +71,7 @@ def clone(
             from_node=arg1,
             clone_node=node,
             device_idx=device_idx)
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
         send_nodes.add(new_node)
 
     elif isinstance(node, GatherRecvOp):
@@ -85,6 +91,8 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
+
     else:
         raise RuntimeError("Unsupported op type {} for clone.".format(node.__class__.__name__))
 
