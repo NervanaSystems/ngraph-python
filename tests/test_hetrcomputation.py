@@ -13,60 +13,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-
+import collections
+import pytest
 from ngraph.testing import ExecutorFactory
 from ngraph.util.ordered import OrderedSet
 import ngraph as ng
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
-    CommunicationPass, ChildTransformerPass
+    CommunicationPass
 from ngraph.transformers.base import transformer_choices
 from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, ScatterSendOp, ScatterRecvOp
 from ngraph.transformers import (set_transformer_factory,
                                  make_transformer_factory)
-import pytest
-
-
-def check_result_values(input_vector, result_expected, placeholder, ops=OrderedSet(), *args):
-    """
-    This function checks the result values return by the hetr computation object
-    against the expected result values
-    it also checks if the value returned by the hetr object matches the order in
-    the expected result list
-
-    :param: input_vector: list specifying the differnt values to be passed to
-            the placeholder
-    :param: result_expected: list of tuples specifying the expected result
-            values from the hetr computation object
-    :param: placeholder: list of placeholder to be passed for hetrcomputation
-    :param: ops: list of result handlers to be paased for hetrcomputation
-
-    """
-    # Select the transformer
-    set_transformer_factory(make_transformer_factory('hetr'))
-
-    with ExecutorFactory() as ex:
-        # Build the hetr computation object
-        if isinstance(placeholder, tuple):
-            computation = ex.executor(ops, *placeholder)
-        else:
-            computation = ex.executor(ops, placeholder)
-        result_obtained = []
-
-        # Check for the return result list
-        for i in input_vector:
-            if isinstance(i, tuple):
-                result_obtained.append(computation(*i))
-            else:
-                result_obtained.append(computation(i))
-
-        # if return result is tuple
-        if len(result_expected) > 1:
-            np.testing.assert_array_equal(result_expected, result_obtained)
-
-        # if return result is  scalar
-        else:
-            assert (np.array(tuple(result_obtained)) ==
-                    np.array(result_expected[0])).all()
 
 
 def check_device_assign_pass(default_device, default_device_id,
@@ -89,9 +46,17 @@ def check_device_assign_pass(default_device, default_device_id,
     set_transformer_factory(make_transformer_factory('hetr'))
 
     with ExecutorFactory() as ex:
-        transformers = set()
         expected_transformers = set()
-        obj = DeviceAssignPass(default_device, default_device_id, transformers)
+
+        class MockHetr(object):
+            def __init__(self):
+                self.transformers = set()
+
+            def register_transformer(self, transformer):
+                self.transformers.add(transformer)
+
+        hetr = MockHetr()
+        obj = DeviceAssignPass(hetr, default_device, default_device_id)
 
         obj.do_pass(graph_op, ex.transformer)
 
@@ -102,7 +67,7 @@ def check_device_assign_pass(default_device, default_device_id,
                 str(graph_op_metadata[op][1])
 
             expected_transformers.add(op.metadata['transformer'])
-        assert transformers == expected_transformers
+        assert hetr.transformers == expected_transformers
 
 
 def check_communication_pass(ops_to_transform, expected_recv_nodes):
@@ -160,110 +125,90 @@ def test_hetr_graph_passes():
     graph_op_metadata[y] = ["numpy", '0']
     graph_op_metadata[x_plus_y] = ["numpy", '0']
 
-    transformer_list = ["numpy1", "numpy0"]
-
     # Run the hetr passes one by one, and verify they did the expected things to the graph
     check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
     check_communication_pass(ops_to_transform=graph_ops,
                              expected_recv_nodes=[x_plus_y])
 
-    # Check if the hetr pass (childTransfromer pass) generates the expected transformer list
-    obj = ChildTransformerPass([])
-    set_transformer_factory(make_transformer_factory('hetr'))
-    with ExecutorFactory() as ex:
-        obj.do_pass(graph_ops, ex.transformer)
-    assert set(transformer_list) == set(obj.transformer_list)
 
-
-def test_distributed_graph_plus_one():
-
-    # Build the graph
+def test_distributed_graph_plus_one(hetr_factory):
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
-
     x = ng.placeholder(axes=[H, W])
     with ng.metadata(device_id=('1', '2'), parallel=W):
         x_plus_one = x + 1
 
     np_x = np.random.randint(100, size=[H.length, W.length])
-    np_result = np.add(np_x, 1)
-    check_result_values(input_vector=[np_x],
-                        result_expected=[np_result],
-                        placeholder=x,
-                        ops=OrderedSet([x_plus_one]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_one, x)
+        res = computation(np_x)
+        np.testing.assert_array_equal(res, np_x + 1)
 
 
-def test_distributed_graph_plus_two():
-
-    # Build the graph
+def test_distributed_graph_plus_two(hetr_factory):
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
-
     x = ng.placeholder(axes=[H, W])
     with ng.metadata(device_id=('1', '2'), parallel=W):
         x_plus_one = x + 1
-
     x_plus_two = x_plus_one + 1
 
     np_x = np.random.randint(100, size=[H.length, W.length])
-    np_result = np.add(np_x, 2)
-    check_result_values(input_vector=[np_x],
-                        result_expected=[np_result],
-                        placeholder=x,
-                        ops=OrderedSet([x_plus_two]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_two, x)
+        res = computation(np_x)
+        np.testing.assert_array_equal(res, np_x + 2)
 
 
-def test_simple_graph():
-
-    # Build the graph
+def test_from_device(hetr_factory):
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
-
     x_plus_one = x + 1
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(11, 21, 31)],
-                        placeholder=x, ops=OrderedSet([x_plus_one]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_one, x)
+        for i in [10, 20, 30]:
+            assert computation(i) == i + 1
 
-    # Build the graph
+
+def test_to_device(hetr_factory):
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(11, 21, 31)],
-                        placeholder=x, ops=OrderedSet([x_plus_one]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_one, x)
+        for i in [10, 20, 30]:
+            assert computation(i) == i + 1
 
-    # Build the graph
+
+def test_to_and_from_device(hetr_factory):
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
     x_plus_two = x_plus_one + 1
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(12, 22, 32)],
-                        placeholder=x, ops=OrderedSet([x_plus_two]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_two, x)
+        for i in [10, 20, 30]:
+            assert computation(i) == i + 2
 
 
-def test_multiple_computations():
-    # Build the graph
+def test_computation_return_list(hetr_factory):
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
-
     x_plus_one = x + 1
     x_plus_two = x + 2
     x_mul_three = x * 3
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(11, 12, 30),
-                                         (21, 22, 60),
-                                         (31, 32, 90)],
-                        placeholder=x,
-                        ops=OrderedSet([x_plus_one, x_plus_two, x_mul_three]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor([x_plus_one, x_plus_two, x_mul_three], x)
+        for i in [10, 20, 30]:
+            assert computation(i) == (i + 1, i + 2, i * 3)
 
 
-def test_gpu_send_and_recv():
-    # First check whether do we have gputransformer available, if not, xfail
+def test_gpu_send_and_recv(hetr_factory):
+    # skip if gpu unavailable
     if 'gpu' not in transformer_choices():
         pytest.skip("GPUTransformer not available")
 
@@ -275,9 +220,10 @@ def test_gpu_send_and_recv():
     with ng.metadata(device='gpu'):
         x_plus_two = x_plus_one + 1
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(12), (22), (32)],
-                        placeholder=x, ops=OrderedSet([x_plus_two]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_two, x)
+        for i in [10, 20, 30]:
+            assert computation(i) == i + 2
 
     # put x+1 on gpu numpy
     with ng.metadata(device='gpu'):
@@ -287,17 +233,45 @@ def test_gpu_send_and_recv():
     with ng.metadata(device='numpy'):
         x_plus_two = x_plus_one + 1
 
-    check_result_values(input_vector=[10, 20, 30],
-                        result_expected=[(12), (22), (32)],
-                        placeholder=x, ops=OrderedSet([x_plus_two]))
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_two, x)
+        for i in [10, 20, 30]:
+            assert computation(i) == i + 2
 
 
-def test_empty_computation():
-    set_transformer_factory(make_transformer_factory('hetr'))
+def test_return_type(hetr_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c0 = ex.executor(x, x)
+        c1 = ex.executor([x], x)
+
+        r0 = c0(1)
+        assert r0 == 1
+
+        r1 = c1(1)
+        assert isinstance(r1, collections.Sequence)
+        assert r1[0] == 1
+
+
+def test_empty_computation(hetr_factory):
     with ExecutorFactory() as ex:
         computation = ex.executor(None)
         res = computation()
         assert not res
+
+
+def test_wrong_placeholders(hetr_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c = ex.executor(x, x)
+
+        with pytest.raises(AssertionError):
+            c()
+
+        with pytest.raises(AssertionError):
+            c(1, 2)
+
+        assert c(1) == 1
 
 
 def test_scatter_gather_node_axes():
@@ -343,12 +317,14 @@ def test_scatter_gather_node_axes():
         from_node = ng.placeholder(axes=t['axes'])
         from_node.metadata['device'] = None
         from_node.metadata['device_id'] = t['device_id']
+        from_node.metadata['transformer'] = None
         from_node.metadata['parallel'] = t['parallel_axis']
         from_node.metadata['host_transformer'] = None
 
         to_node = ng.placeholder(axes=t['axes'])
         to_node.metadata['device'] = None
         to_node.metadata['device_id'] = t['device_id']
+        to_node.metadata['transformer'] = None
         to_node.metadata['parallel'] = t['parallel_axis']
         to_node.metadata['host_transformer'] = None
 

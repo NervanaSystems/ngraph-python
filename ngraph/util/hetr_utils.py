@@ -1,3 +1,17 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
     TensorValueOp
@@ -20,6 +34,7 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
@@ -29,6 +44,8 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
+
         node.metadata['device_id'] = node.metadata['device_id'][0]
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
 
@@ -37,12 +54,14 @@ def clone(
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
         new_node.metadata['host_transformer'] = node.metadata['host_transformer']
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
 
     elif isinstance(node, ScatterRecvOp):
         new_node = node.__class__(
             to_node=node,
             send_node=node.send_node(),
             device_idx=device_idx)
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
 
     elif isinstance(node, ScatterSendOp):
         pass
@@ -52,6 +71,7 @@ def clone(
             from_node=arg1,
             clone_node=node,
             device_idx=device_idx)
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
         send_nodes.add(new_node)
 
     elif isinstance(node, GatherRecvOp):
@@ -71,6 +91,8 @@ def clone(
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
+        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
+
     else:
         raise RuntimeError("Unsupported op type {} for clone.".format(node.__class__.__name__))
 
@@ -89,6 +111,7 @@ def comm_path_exists(fro, to):
     # from fro to to?
 
     visit = OrderedSet(fro.args)
+    visit.add(fro)
     while visit:
         v = visit.pop()
         if v == to:
@@ -118,7 +141,7 @@ def find_recvs(fro):
     return recvs
 
 
-def sort_ops_by_comm_deps(ops):
+def update_comm_deps(ops):
     """
     Sort the subgraphs identified by ops using communication dependencies.
 

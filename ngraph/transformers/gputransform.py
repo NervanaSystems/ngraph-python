@@ -16,11 +16,11 @@ from builtins import range
 import atexit
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor
+    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
+    Function, AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod
@@ -49,6 +49,7 @@ from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_
 import cachetools
 import numpy as np
 import pycuda.driver as drv
+import sys
 from pycuda.gpuarray import GPUArray
 from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
@@ -209,10 +210,6 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(ReciprocalOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
-
-    @add_op.on_type(AssignOneDOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
 
     @add_op.on_type(AssignOp)
     def add_op(self, op, out, tensor, value):
@@ -843,7 +840,12 @@ class GPUDeviceTensor(DeviceTensor):
 class GPURuntime(object):
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
-        drv.init()
+
+        try:
+            drv.init()
+        except drv.LogicError:
+            sys.exit(PYCUDA_LOGIC_ERROR_CODE)
+
         self.device_id = device_id if device_id is not None else 0
 
         # check compute capability

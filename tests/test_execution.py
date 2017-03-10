@@ -136,33 +136,64 @@ def test_placeholder(transformer_factory):
         ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-def test_reduction(transformer_factory):
-    C = ng.make_axis(length=4)
-    W = ng.make_axis(length=4)
-    H = ng.make_axis(length=4)
+@pytest.fixture(params=['sum', 'prod', 'max', 'min'])
+def reduction(request):
+    return request.param
 
-    axes = ng.make_axes([C, W, H])
+
+@pytest.fixture(params=[
+    slice(0, 1, None),
+    slice(1, 2, None),
+    slice(2, None, None),
+    slice(0, 2, None),
+    slice(1, None, None)
+])
+def sub_axes(request):
+    return request.param
+
+
+def test_reduction(transformer_factory, reduction, sub_axes):
+    axes = ng.make_axes([ng.make_axis(length=4),
+                         ng.make_axis(length=4),
+                         ng.make_axis(length=4)])
 
     u = rng.uniform(-1.0, 1.0, axes)
 
-    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
-                              (np.prod, ng.prod, 'prod'),
-                              (np.max, ng.max, 'max'),
-                              (np.min, ng.min, 'min')]:
-        for reduction_axes in [[C],
-                               [W],
-                               [H],
-                               [C, W],
-                               [W, H]]:
-            p_u = ng.placeholder(axes)
-            dims = tuple(axes.index(axis) for axis in reduction_axes)
-            npval = npred(u, dims)
-            graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-            with executor(graph_reduce, p_u) as ex:
-                graph_val = ex(u)
-                ng.testing.assert_allclose(
-                    npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
-                    red=red, axes=reduction_axes)
+    npred = getattr(np, reduction)
+    bered = getattr(ng, reduction)
+    reduction_axes = axes[sub_axes]
+
+    p_u = ng.placeholder(axes)
+    dims = tuple(axes.index(axis) for axis in reduction_axes)
+    npval = npred(u, dims)
+    graph_reduce = bered(p_u, reduction_axes=reduction_axes)
+    with executor(graph_reduce, p_u) as ex:
+        graph_val = ex(u)
+        ng.testing.assert_allclose(
+            npval, graph_val, rtol=1e-5), 'red:{red}, axes:{axes}'.format(
+            red=reduction, axes=reduction_axes)
+
+
+def test_reduction_deriv(transformer_factory, reduction, sub_axes):
+    if reduction in ('max', 'min'):
+        pytest.skip("max/min needed to be tested differently")
+    axes = ng.make_axes([ng.make_axis(length=4),
+                         ng.make_axis(length=10),
+                         ng.make_axis(length=10)])
+
+    delta = .001
+
+    u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
+
+    bered = getattr(ng, reduction)
+    reduction_axes = axes[sub_axes]
+
+    # Need to test max/min differently since if two elements are extremums
+    # and we modify one, the derivative will change.
+    p_u = ng.placeholder(axes)
+    graph_reduce = bered(p_u, reduction_axes=reduction_axes)
+
+    check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
 def test_prod_constant(transformer_factory):
@@ -273,38 +304,9 @@ def test_prod_deriv(transformer_factory):
             check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
 
 
-def test_reduction_deriv(transformer_factory):
-    C = ng.make_axis(length=4)
-    W = ng.make_axis(length=10)
-    H = ng.make_axis(length=10)
-    axes = ng.make_axes([C, W, H])
-
-    delta = .001
-
-    u = rng.discrete_uniform(1.0, 2.0, 2 * delta, axes)
-
-    # Need to test max/min differently since if two elements are extremums
-    # and we modify one, the derivative will change.
-    for npred, bered, red in [(np.sum, ng.sum, 'sum'),
-                              (np.prod, ng.prod, 'prod')]:
-        for reduction_axes in [[C],
-                               [W],
-                               [H],
-                               [C, W],
-                               [W, H]]:
-            p_u = ng.placeholder(axes)
-            graph_reduce = bered(p_u, reduction_axes=reduction_axes)
-
-            check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
-
-
-def test_reciprocal(transformer_factory):
+def test_reciprocal(transformer_factory, input_tensor):
     """TODO."""
-    W = ng.make_axis(20)
-    N = ng.make_axis(128)
-    axes = ng.make_axes([W, N])
-
-    p_u = ng.placeholder(axes)
+    p_u = input_tensor
     u = rng.uniform(.1, 5.0, p_u.axes)
 
     rec_u_np = np.reciprocal(u)
@@ -315,15 +317,12 @@ def test_reciprocal(transformer_factory):
     ng.testing.assert_allclose(rec_u_np, rec_u_graph)
 
 
-def test_reciprocal_derivative(transformer_factory):
+def test_reciprocal_derivative(transformer_factory, input_tensor):
     """TODO."""
-    W = ng.make_axis(20)
-    N = ng.make_axis(128)
-    axes = ng.make_axes([W, N])
+    p_u = input_tensor
 
     delta = .001
 
-    p_u = ng.placeholder(axes)
     u = rng.uniform(.1, 5.0, p_u.axes)
 
     rec_u = ng.reciprocal(p_u)
@@ -331,160 +330,210 @@ def test_reciprocal_derivative(transformer_factory):
     check_derivative(rec_u, p_u, delta, u, atol=1e-2, rtol=1e-2)
 
 
-ELEMENTWISE_BINARY_OPS = [
-    (np.add, ng.add),
-    (np.subtract, ng.subtract),
-    (np.multiply, ng.multiply),
-    (np.divide, ng.divide),
-]
+@pytest.fixture
+def symmetric_tensor():
+    axes = ng.make_axes([ng.make_axis(length=10), ng.make_axis(length=10)])
+    return ng.placeholder(axes)
 
 
-ELEMENTWISE_UNARY_OPS = [
-    (np.exp, ng.exp),
-    (np.log, ng.log),
-    (np.tanh, ng.tanh),
-]
+@pytest.fixture(scope="module")
+def batch_axis(request):
+    return ng.make_axis(length=request.config.getoption("--batch_size"),
+                        name='N')
 
 
-def test_elementwise_binary_ops_matched_args(transformer_factory):
+@pytest.fixture(scope="module")
+def feature_axis():
+    return ng.make_axis(length=3)
+
+
+@pytest.fixture(scope="module")
+def recurrent_axis():
+    return ng.make_axis(length=4, name='R')
+
+
+@pytest.fixture(scope="module")
+def input_axes(feature_axis, batch_axis):
+    return ng.make_axes([feature_axis, batch_axis])
+
+
+@pytest.fixture
+def input_tensor(input_axes):
+    return ng.placeholder(input_axes)
+
+
+@pytest.fixture
+def recurrent_input_tensor(feature_axis, recurrent_axis, batch_axis):
+    axes = ng.make_axes([feature_axis, batch_axis, recurrent_axis])
+    return ng.placeholder(axes)
+
+
+@pytest.fixture(params=['add', 'subtract', 'multiply', 'divide'])
+def elementwise_binary_op(request):
+    return request.param
+
+
+@pytest.fixture(params=['exp', 'log', 'tanh'])
+def elementwise_unary_op(request):
+    return request.param
+
+
+def test_elementwise_binary_ops_matched_args(
+    transformer_factory,
+    elementwise_binary_op,
+    symmetric_tensor
+):
     """TODO."""
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=20)])
+    np_op = getattr(np, elementwise_binary_op)
+    be_op = getattr(ng, elementwise_binary_op)
+    p_u = symmetric_tensor
+    p_v = ng.placeholder(p_u.axes)
 
-    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        # Matched sizes
-        p_u = ng.placeholder(axes)
-        p_v = ng.placeholder(axes)
-        u = rng.uniform(-1.0, 1.0, p_u.axes)
-        v = rng.uniform(1.0, 2.0, p_v.axes)
+    u = rng.uniform(-1.0, 1.0, p_u.axes)
+    v = rng.uniform(1.0, 2.0, p_v.axes)
 
-        compare_f_at_x(
-            be_op(p_u, p_v), [p_u, p_v],
-            np_op, [u, v],
-            atol=1e-4, rtol=1e-4
-        )
+    compare_f_at_x(
+        be_op(p_u, p_v), [p_u, p_v],
+        np_op, [u, v],
+        atol=1e-4, rtol=1e-4
+    )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_lhs(transformer_factory):
+def test_elementwise_binary_ops_matched_args_deriv_lhs(
+    transformer_factory,
+    elementwise_binary_op,
+    symmetric_tensor
+):
     """TODO."""
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=20)])
+    be_op = getattr(ng, elementwise_binary_op)
+    p_u = symmetric_tensor
+    p_v = ng.placeholder(p_u.axes)
 
-    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        # Matched sizes
-        p_u = ng.placeholder(axes)
-        p_v = ng.placeholder(axes)
-        u = rng.uniform(-1.0, 1.0, p_u.axes)
-        v = rng.uniform(1.0, 2.0, p_v.axes)
+    u = rng.uniform(-1.0, 1.0, p_u.axes)
+    v = rng.uniform(1.0, 2.0, p_v.axes)
 
-        check_derivative(
-            be_op(p_u, p_v), p_u, 0.001, u,
-            parameters=[p_v],
-            parameter_values=[v],
-            atol=1e-4, rtol=1e-4,
-        )
+    check_derivative(
+        be_op(p_u, p_v), p_u, 0.001, u,
+        parameters=[p_v],
+        parameter_values=[v],
+        atol=1e-4, rtol=1e-4,
+    )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_rhs(transformer_factory):
+def test_elementwise_binary_ops_matched_args_deriv_rhs(
+    transformer_factory,
+    elementwise_binary_op,
+    symmetric_tensor
+):
     """TODO."""
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=20)])
+    be_op = getattr(ng, elementwise_binary_op)
+    p_u = symmetric_tensor
+    p_v = ng.placeholder(p_u.axes)
 
-    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        # Matched sizes
-        p_u = ng.placeholder(axes)
-        p_v = ng.placeholder(axes)
-        u = rng.uniform(-1.0, 1.0, p_u.axes)
-        v = rng.uniform(1.0, 2.0, p_v.axes)
+    u = rng.uniform(-1.0, 1.0, p_u.axes)
+    v = rng.uniform(1.0, 2.0, p_v.axes)
 
-        check_derivative(
-            be_op(p_u, p_v), p_v, 0.001, v,
-            parameters=[p_u],
-            parameter_values=[u],
-            atol=1e-3, rtol=1e-3,
-        )
+    check_derivative(
+        be_op(p_u, p_v), p_v, 0.001, v,
+        parameters=[p_u],
+        parameter_values=[u],
+        atol=1e-3, rtol=1e-3,
+    )
 
 
-def test_elementwise_unary_ops_matched_args(transformer_factory):
+def test_elementwise_unary_ops_matched_args(
+    transformer_factory,
+    elementwise_unary_op,
+    symmetric_tensor
+):
     """TODO."""
     delta = .001
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=20)])
+    np_op = getattr(np, elementwise_unary_op)
+    be_op = getattr(ng, elementwise_unary_op)
 
-    for np_op, be_op in ELEMENTWISE_UNARY_OPS:
-        p_u = ng.placeholder(axes)
-        u = rng.uniform(1.0, 2.0, p_u.axes)
-        u_np = np_op(u)
-        result_op = be_op(p_u)
+    p_u = symmetric_tensor
+    u = rng.uniform(1.0, 2.0, p_u.axes)
+    u_np = np_op(u)
+    result_op = be_op(p_u)
 
-        with ExecutorFactory() as ex:
-            fun = ex.executor(result_op, p_u)
-            dudunum_fun = ex.numeric_derivative(result_op, p_u, delta)
-            dudut_fun = ex.derivative(result_op, p_u)
+    with ExecutorFactory() as ex:
+        fun = ex.executor(result_op, p_u)
+        dudunum_fun = ex.numeric_derivative(result_op, p_u, delta)
+        dudut_fun = ex.derivative(result_op, p_u)
 
-            u_t = fun(u)
-            ng.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
-            dudunum = dudunum_fun(u)
-            dudut = dudut_fun(u)
-            ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
+        u_t = fun(u)
+        ng.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
+        dudunum = dudunum_fun(u)
+        dudut = dudut_fun(u)
+        ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
-def test_elementwise_ops_unmatched_args(transformer_factory):
+def test_elementwise_ops_unmatched_args(
+    transformer_factory,
+    elementwise_binary_op,
+    batch_axis
+):
     """TODO."""
     W = ng.make_axis(length=5)
     H = ng.make_axis(length=5)
-    N = ng.make_axis(length=32)
+    N = batch_axis
 
     broadcast_dims = (W.length, H.length, 1)
 
-    for np_op, be_op in ELEMENTWISE_BINARY_OPS:
-        # Matched sizes
-        p_u = ng.placeholder([W, H])
-        p_v = ng.placeholder([W, H, N])
-        u = rng.uniform(1.0, 2.0, p_u.axes)
-        v = rng.uniform(1.0, 2.0, p_v.axes)
+    np_op = getattr(np, elementwise_binary_op)
+    be_op = getattr(ng, elementwise_binary_op)
+
+    # Matched sizes
+    p_u = ng.placeholder([W, H])
+    p_v = ng.placeholder([W, H, N])
+    u = rng.uniform(1.0, 2.0, p_u.axes)
+    v = rng.uniform(1.0, 2.0, p_v.axes)
+
+    # u op v
+    uv_np = np_op(u.reshape(broadcast_dims), v)
+    uv_op = be_op(p_u, p_v)
+
+    with ExecutorFactory() as ex:
+
+        # fun(u, v)
+        uv_fun = ex.executor(uv_op, p_u, p_v)
+        duvdunum_fun = ex.numeric_derivative(uv_op, p_u, .001, p_v)
+        duvdut_fun = ex.derivative(uv_op, p_u, p_v)
+        duvdvnum_fun = ex.numeric_derivative(uv_op, p_v, .001, p_u)
+        duvdvt_fun = ex.derivative(uv_op, p_v, p_u)
+
+        # fun(v, u)
+        vu_np = np_op(v, u.reshape(broadcast_dims))
+        vu_op = be_op(p_v, p_u)
+
+        vu_fun = ex.executor(vu_op, p_u, p_v)
+        dvudunum_fun = ex.numeric_derivative(vu_op, p_u, .001, p_v)
+        dvudut_fun = ex.derivative(vu_op, p_u, p_v)
+        dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, .001, p_u)
+        dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
 
         # u op v
-        uv_np = np_op(u.reshape(broadcast_dims), v)
-        uv_op = be_op(p_u, p_v)
+        result_be = uv_fun(u, v)
+        ng.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
+        duvdunum = duvdunum_fun(u, v)
+        duvdut = duvdut_fun(u, v)
+        ng.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
 
-        with ExecutorFactory() as ex:
+        duvdvnum = duvdvnum_fun(v, u)
+        duvdvt = duvdvt_fun(v, u)
+        ng.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
 
-            # fun(u, v)
-            uv_fun = ex.executor(uv_op, p_u, p_v)
-            duvdunum_fun = ex.numeric_derivative(uv_op, p_u, .001, p_v)
-            duvdut_fun = ex.derivative(uv_op, p_u, p_v)
-            duvdvnum_fun = ex.numeric_derivative(uv_op, p_v, .001, p_u)
-            duvdvt_fun = ex.derivative(uv_op, p_v, p_u)
+        # v op u
 
-            # fun(v, u)
-            vu_np = np_op(v, u.reshape(broadcast_dims))
-            vu_op = be_op(p_v, p_u)
+        result_be = vu_fun(u, v)
+        ng.testing.assert_allclose(vu_np, result_be, atol=1e-4, rtol=1e-4)
+        dvudunum = dvudunum_fun(u, v)
+        dvudut = dvudut_fun(u, v)
+        ng.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
 
-            vu_fun = ex.executor(vu_op, p_u, p_v)
-            dvudunum_fun = ex.numeric_derivative(vu_op, p_u, .001, p_v)
-            dvudut_fun = ex.derivative(vu_op, p_u, p_v)
-            dvudvnum_fun = ex.numeric_derivative(vu_op, p_v, .001, p_u)
-            dvudvt_fun = ex.derivative(vu_op, p_v, p_u)
-
-            # u op v
-            result_be = uv_fun(u, v)
-            ng.testing.assert_allclose(uv_np, result_be, atol=1e-4, rtol=1e-4)
-            duvdunum = duvdunum_fun(u, v)
-            duvdut = duvdut_fun(u, v)
-            ng.testing.assert_allclose(duvdunum, duvdut, atol=1e-3, rtol=1e-3)
-
-            duvdvnum = duvdvnum_fun(v, u)
-            duvdvt = duvdvt_fun(v, u)
-            ng.testing.assert_allclose(duvdvnum, duvdvt, atol=1e-3, rtol=1e-3)
-
-            # v op u
-
-            result_be = vu_fun(u, v)
-            ng.testing.assert_allclose(vu_np, result_be, atol=1e-4, rtol=1e-4)
-            dvudunum = dvudunum_fun(u, v)
-            dvudut = dvudut_fun(u, v)
-            ng.testing.assert_allclose(dvudunum, dvudut, atol=1e-3, rtol=1e-3)
-
-            dvudvnum = dvudvnum_fun(v, u)
-            dvudvt = dvudvt_fun(v, u)
-            ng.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
+        dvudvnum = dvudvnum_fun(v, u)
+        dvudvt = dvudvt_fun(v, u)
+        ng.testing.assert_allclose(dvudvnum, dvudvt, atol=1e-3, rtol=1e-3)
 
 
 def np_softmax(x, axis):
@@ -536,15 +585,14 @@ def cross_entropy_binary_logistic_shortcut(x, t):
     return (1.0 - t) * x - np.log(y)
 
 
-def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
+def test_cross_entropy_binary_logistic_shortcut(
+    transformer_factory,
+    input_tensor,
+):
     """TODO."""
-    W = ng.make_axis(length=20)
-    N = ng.make_axis(length=128, name='N')
-    axes = ng.make_axes([W, N])
-
-    p_u = ng.placeholder(axes)
+    p_u = input_tensor
+    p_v = ng.placeholder(p_u.axes)
     u = rng.uniform(-3.0, 3.0, p_u.axes)
-    p_v = ng.placeholder(axes)
     v = np_softmax(rng.uniform(-3.0, 3.0, p_u.axes), 0)
 
     cel = cross_entropy_binary_logistic(u, v)
@@ -556,18 +604,18 @@ def test_cross_entropy_binary_logistic_shortcut(transformer_factory):
     ng.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
-def test_cross_entropy_binary(transformer_factory):
+def test_cross_entropy_binary(
+    transformer_factory,
+    input_tensor
+):
     """TODO."""
-    W = ng.make_axis(length=20)
-    N = ng.make_axis(length=128, name='N')
-    axes = ng.make_axes([W, N])
+    p_u = input_tensor
+    p_v = ng.placeholder(p_u.axes)
+
+    u = rng.uniform(-3.0, 3.0, p_u.axes)
+    v = rng.uniform(-3.0, 3.0, p_u.axes)
 
     delta = .001
-
-    p_u = ng.placeholder(axes)
-    u = rng.uniform(-3.0, 3.0, p_u.axes)
-    p_v = ng.placeholder(axes)
-    v = rng.uniform(-3.0, 3.0, p_u.axes)
 
     y = ng.sigmoid(p_u)
     t = ng.softmax(p_v)
@@ -620,9 +668,9 @@ def adiff_softmax(x):
     return result
 
 
-def test_np_softmax(transformer_factory):
+def test_np_softmax(batch_axis):
     """TODO."""
-    N = ng.make_axis(length=128, name='N')
+    N = batch_axis
     C = ng.make_axis(length=20)
 
     # set up some distributions
@@ -672,23 +720,18 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
-def test_softmax(transformer_factory):
+def test_softmax(transformer_factory, input_tensor):
     """TODO."""
-    N = ng.make_axis(name='N')
-    W = ng.make_axis().named('W')
-
-    W.length = 128
-    N.length = 10
-    axes = ng.make_axes([W, N])
-
+    p_x = input_tensor
+    N = p_x.axes.batch_axes()[0]
+    W = p_x.axes.sample_axes()[0]
     # set up some distributions
-    u = rng.uniform(0, 1, ng.make_axes([W, N]))
+    u = rng.uniform(0, 1, p_x.axes)
     u = u / sum(u, 0).reshape(1, N.length)
 
     # Put them in pre-softmax form
     x = np.log(u) + rng.uniform(-5000, 5000,
                                 ng.make_axes([N])).reshape(1, N.length)
-    p_x = ng.placeholder(axes)
 
     with ExecutorFactory() as ex:
         smax_w_fun = ex.executor(ng.softmax(p_x, normalization_axes=ng.make_axes([W])), p_x)
@@ -697,7 +740,7 @@ def test_softmax(transformer_factory):
         s = smax_w_fun(x)
         ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
-        x = rng.uniform(-5000, 5000, ng.make_axes([W, N]))
+        x = rng.uniform(-5000, 5000, p_x.axes)
         u = np_softmax(x, 0)
         s = smax_w_fun(x)
         ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
@@ -707,62 +750,42 @@ def test_softmax(transformer_factory):
         ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
-def test_softmax2(transformer_factory):
-    W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N])
-
-    x = rng.uniform(0, 1, axes)
-    p_x = ng.placeholder(axes)
+def test_softmax2(transformer_factory, input_tensor):
+    p_x = input_tensor
+    x = rng.uniform(0, 1, p_x.axes)
 
     compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_deriv(transformer_factory):
-    W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N])
-
-    x = rng.uniform(0, 1, axes)
-    p_x = ng.placeholder(axes)
+def test_softmax_deriv(transformer_factory, input_tensor):
+    p_x = input_tensor
+    x = rng.uniform(0, 1, p_x.axes)
 
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_softmax_rec(transformer_factory):
-    W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, name='R')
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N, T])
+def test_softmax_rec(transformer_factory, recurrent_input_tensor):
+    p_x = recurrent_input_tensor
+    x = rng.uniform(0, 1, p_x.axes)
 
-    x = rng.uniform(0, 1, axes)
-    p_x = ng.placeholder(axes)
     compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_rec_deriv(transformer_factory):
-    W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, name='R')
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N, T])
+def test_softmax_rec_deriv(transformer_factory, recurrent_input_tensor):
+    p_x = recurrent_input_tensor
+    x = rng.uniform(0, 1, p_x.axes)
 
-    x = rng.uniform(0, 1, axes)
-    p_x = ng.placeholder(axes)
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_cross_entropy_softmax(transformer_factory):
-    W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N])
-
-    p_x = ng.placeholder(axes)
-    p_t = ng.placeholder(axes)
+def test_cross_entropy_softmax(transformer_factory, input_tensor):
+    p_x = input_tensor
+    p_t = ng.placeholder(p_x.axes)
 
     cross_entropy_sm_x_t = ng.cross_entropy_multi(ng.softmax(p_x), p_t)
 
-    x = rng.uniform(0, 1, axes)
-    t = np_softmax(rng.uniform(0, 1, axes), 0)
+    x = rng.uniform(0, 1, p_x.axes)
+    t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
 
     def f_np(x, t):
         return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
@@ -770,16 +793,12 @@ def test_cross_entropy_softmax(transformer_factory):
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_deriv(transformer_factory):
-    W = ng.make_axis(length=3)
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N])
+def test_cross_entropy_softmax_deriv(transformer_factory, input_tensor):
+    p_x = input_tensor
+    p_t = ng.placeholder(p_x.axes)
 
-    p_x = ng.placeholder(axes)
-    p_t = ng.placeholder(axes)
-
-    x = rng.uniform(0, 1, axes)
-    t = np_softmax(rng.uniform(0, 1, axes), 0)
+    x = rng.uniform(0, 1, p_x.axes)
+    t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
 
     check_derivative(
         ng.cross_entropy_multi(ng.softmax(p_x), p_t),
@@ -790,19 +809,14 @@ def test_cross_entropy_softmax_deriv(transformer_factory):
     )
 
 
-def test_cross_entropy_rec(transformer_factory):
-    W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, name='R')
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N, T])
-
-    p_x = ng.placeholder(axes)
-    p_t = ng.placeholder(axes)
+def test_cross_entropy_rec(transformer_factory, recurrent_input_tensor):
+    p_x = recurrent_input_tensor
+    p_t = ng.placeholder(p_x.axes)
 
     cross_entropy_sm_x_t = ng.cross_entropy_multi(ng.softmax(p_x), p_t)
 
-    x = rng.uniform(0, 1, axes)
-    t = np_softmax(rng.uniform(0, 1, axes), 0)
+    x = rng.uniform(0, 1, p_x.axes)
+    t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
 
     def f_np(x, t):
         return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
@@ -810,17 +824,12 @@ def test_cross_entropy_rec(transformer_factory):
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_rec_deriv(transformer_factory):
-    W = ng.make_axis(length=3)
-    T = ng.make_axis(length=4, name='R')
-    N = ng.make_axis(length=10, name='N')
-    axes = ng.make_axes([W, N, T])
+def test_cross_entropy_softmax_rec_deriv(transformer_factory, recurrent_input_tensor):
+    p_x = recurrent_input_tensor
+    p_t = ng.placeholder(p_x.axes)
 
-    p_x = ng.placeholder(axes)
-    p_t = ng.placeholder(axes)
-
-    x = rng.uniform(0, 1, axes)
-    t = np_softmax(rng.uniform(0, 1, axes), 0)
+    x = rng.uniform(0, 1, p_x.axes)
+    t = np_softmax(rng.uniform(0, 1, p_t.axes), 0)
 
     check_derivative(
         ng.cross_entropy_multi(ng.softmax(p_x), p_t),
@@ -831,10 +840,9 @@ def test_cross_entropy_softmax_rec_deriv(transformer_factory):
     )
 
 
-def test_sigmoid_deriv(transformer_factory):
+def test_sigmoid_deriv(transformer_factory, input_tensor):
     """TODO."""
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=128)])
-    p_u = ng.placeholder(axes)
+    p_u = input_tensor
     u = rng.uniform(-3.0, 3.0, p_u.axes)
 
     val_u = ng.sigmoid(p_u)
@@ -842,10 +850,9 @@ def test_sigmoid_deriv(transformer_factory):
     check_derivative(val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
 
 
-def test_log_sigmoid_deriv(transformer_factory):
+def test_log_sigmoid_deriv(transformer_factory, input_tensor):
     """TODO."""
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=128)])
-    p_u = ng.placeholder(axes)
+    p_u = input_tensor
     u = rng.uniform(-3.0, 3.0, p_u.axes)
 
     log_val_u = ng.log(ng.sigmoid(p_u))
@@ -883,10 +890,9 @@ def compare_f_at_x(f_be, x_be, f_np, x, **kwargs):
         ng.testing.assert_allclose(val_np, val_be, **kwargs)
 
 
-def test_sigmoid_value(transformer_factory):
+def test_sigmoid_value(transformer_factory, input_tensor):
     """ check the output of sigmoid is the same as np """
-    axes = ng.make_axes([ng.make_axis(length=20), ng.make_axis(length=128)])
-    p_x = ng.placeholder(axes)
+    p_x = input_tensor
     x = rng.uniform(-3.0, 3.0, p_x.axes)
 
     compare_f_at_x(ng.sigmoid(p_x), p_x, lambda x: 1.0 / (1 + np.exp(-x)), x, rtol=1e-5)
@@ -988,11 +994,9 @@ def test_tensor_derivative():
         ng.deriv(p, p)
 
 
-def test_mean(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
-
-    inputs = ng.placeholder(axes)
-    targets = ng.placeholder(axes)
+def test_mean(transformer_factory, input_tensor):
+    inputs = input_tensor
+    targets = ng.placeholder(inputs.axes)
 
     inp_stat = ng.mean(inputs, reduction_axes=inputs.axes.batch_axes())
     err = ng.sum(inp_stat - targets, out_axes=())
@@ -1007,11 +1011,9 @@ def test_mean(transformer_factory):
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
-def test_variance_wgrad(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
-
-    inputs = ng.placeholder(axes)
-    targets = ng.placeholder(axes)
+def test_variance_wgrad(transformer_factory, input_tensor):
+    inputs = input_tensor
+    targets = ng.placeholder(inputs.axes)
 
     inp_stat = ng.variance(inputs, reduction_axes=inputs.axes.batch_axes())
     err = ng.sum(inp_stat - targets, out_axes=())
@@ -1031,11 +1033,9 @@ def test_variance_wgrad(transformer_factory):
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
-def test_variance_sqrt_inverse(transformer_factory):
-    axes = ng.make_axes([ng.make_axis(length=100), ng.make_axis(length=128, name='N')])
-
-    inputs = ng.placeholder(axes)
-    targets = ng.placeholder(axes)
+def test_variance_sqrt_inverse(transformer_factory, input_tensor):
+    inputs = input_tensor
+    targets = ng.placeholder(inputs.axes)
 
     epsilon = 1e-3
 
