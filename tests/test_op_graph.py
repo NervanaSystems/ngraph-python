@@ -49,6 +49,16 @@ def test_variable_init(transformer_factory, C):
     ng.testing.assert_allclose(result, w_init)
 
 
+def test_initial_value(transformer_factory):
+    # Test work-around for issue #1138
+    w = [3, 4, 5]
+    x = ng.constant(w)
+    y = ng.variable([ng.make_axis(length=len(w))], initial_value=x)
+    with ExecutorFactory() as ex:
+        result = ex.executor(y)()
+    ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
+
+
 def test_deriv_missing_connection(N):
     """
     Taking the derivative of an expression with respect to a variable not
