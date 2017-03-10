@@ -13,9 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.testing import executor
-import ngraph as ng
-# from ngraph.transformers.flexgputransform import FixGPUTransformer
-import pytest
 
 
 def template_one_placeholder(value, ng_fun, ng_placeholder, expected_value, description, epsilon=0.2):
@@ -27,3 +24,4 @@ def template_one_placeholder(value, ng_fun, ng_placeholder, expected_value, desc
         print ("expected_value: ", expected_value)
         print (flex - expected_value)
         assert (abs(flex - expected_value) <= epsilon)
+

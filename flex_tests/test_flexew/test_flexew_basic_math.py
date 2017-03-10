@@ -82,7 +82,7 @@ test_data_double_operand = (
 )
 
 
-@pytest.mark.parametrize("operation, operand, expected_result, ,  description", test_data_single_operand)
+@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand)
 def test_single_operand(transformer_factory, operation, operand, expected_result, description):
     template_one_placeholder(operand, operation(x), x, expected_result, description)
 
@@ -90,3 +90,5 @@ def test_single_operand(transformer_factory, operation, operand, expected_result
 @pytest.mark.parametrize("operation, operand_1, operand_2, expected_result, description", test_data_double_operand)
 def test_double_operand(transformer_factory, operation, operand_1, operand_2, expected_result, description):
     template_one_placeholder(operand_1, operation(x, operand_2), x, expected_result, description)
+
+
