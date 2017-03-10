@@ -18,7 +18,6 @@ from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone
 from ngraph.util.ordered import OrderedSet
-import collections
 import socket
 
 
@@ -88,7 +87,6 @@ class DistributedPass(GraphBuildingPass):
 
         # First find AddOp and then clone its args. This is needed to
         # make sure AddOp has the correct arguments at init/clone time.
-        # TODO this might be needed for other ops as well.
         visit = nodes
         add_op_list = list()
         for v in visit:
@@ -140,8 +138,5 @@ class DistributedPass(GraphBuildingPass):
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
-                    # print('device_id={}, device_idx={}'.format(id, i))
-                    # print('nodes to clone: {}\n'.format(nodes_to_clone))
-                    cloned_nodes = self.clone_nodes(nodes=nodes_to_clone, device_id=id,
-                                                    device_idx=i, new_axes=new_axes)
-                    # print('cloned nodes: {}\n'.format(cloned_nodes))
+                    self.clone_nodes(nodes=nodes_to_clone, device_id=id,
+                                     device_idx=i, new_axes=new_axes)
