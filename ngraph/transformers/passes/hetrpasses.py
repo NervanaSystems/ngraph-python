@@ -72,6 +72,15 @@ class CommunicationPass(GraphBuildingPass):
 
 
 class DistributedPass(GraphBuildingPass):
+    """
+    DistributedPass clones subgraphs of which root is a GatherSendOp to finish
+    implementing scatter/gather. It assigns new parallel axes and device_id
+
+    Assumes
+        CommunicationPass ran already, to insert incomplete Scatter/Gather nodes
+        metadata['parallel', 'device_id', ] are present on nodes
+    """
+
     def __init__(self, send_nodes):
         super(DistributedPass, self).__init__()
         self.send_nodes = send_nodes
@@ -124,6 +133,7 @@ class DistributedPass(GraphBuildingPass):
 
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
+                # op is GatherSendOp
                 self.parallel_axes = op.metadata['parallel']
 
                 new_axes = calculate_new_axes(
