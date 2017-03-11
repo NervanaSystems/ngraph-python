@@ -71,8 +71,6 @@ class ExecutorFactory(object):
         #     print '------'
         # print "============="
 
-        px.input = True
-
         if len(fshape) is 0:
             return self.transformer.computation(ng.deriv(f, px), px, *parameters)
         else:

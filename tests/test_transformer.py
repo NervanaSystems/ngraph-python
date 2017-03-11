@@ -70,7 +70,7 @@ def test_execute_non_placeholder():
     """
     N = ng.make_axis(length=1)
 
-    x = ng.variable([N])
+    x = ng.temporary([N])
     y = ng.variable([N])
 
     with pytest.raises(ValueError):
