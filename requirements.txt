@@ -2,6 +2,7 @@ pyOpenSSL==0.14
 cryptography==1.3.4
 idna==2.0.0
 requests==2.13.0
+frozendict==1.2
 
 # These come over from neon
 numpy==1.11.1

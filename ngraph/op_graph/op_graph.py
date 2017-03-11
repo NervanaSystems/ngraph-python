@@ -25,7 +25,7 @@ from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, AxesMap
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -1487,11 +1487,9 @@ class AxesCastOp(ReshapeOp):
 class RoleCastOp(AxesCastOp):
     """
     Used to set the names of the axes of a tensor, without altering its value.
-
     If the names of the new axes are the same as the incoming tensor's axes,
     leave the original axis alone.  Otherwise, create a new axis with the
     length of the original and the name of the new.
-
     Arguments:
         x: A tensor.
         axes: The new axes.
@@ -1517,6 +1515,30 @@ class RoleCastOp(AxesCastOp):
         x.generate_add_delta(adjoints, cast_role(delta, x.axes))
 
 
+class MapRolesOp(AxesCastOp):
+    """
+    Used to set the names of the axes of a tensor, without altering its value.
+
+    If the names of the new axes are the same as the incoming tensor's axes,
+    leave the original axis alone.  Otherwise, create a new axis with the
+    length of the original and the name of the new.
+
+    Arguments:
+        x: A tensor.
+        axes_map: An AxesMap object describing the mapping from axis_name ->
+        axis_name that should be performed.  Axis whose names don't appear in
+        the axes_map won't be changed.
+    """
+
+    def __init__(self, x, axes_map, **kwargs):
+        self.axes_map = AxesMap(axes_map)
+
+        super(MapRolesOp, self).__init__(x, axes=self.axes_map.map_axes(x.axes), **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, MapRolesOp(delta, self.axes_map.invert()))
+
+
 def cast_axes(tensor, axes):
     """
     Cast the axes of a tensor to new axes.
@@ -1536,6 +1558,20 @@ def cast_axes(tensor, axes):
         return tensor
 
     return AxesCastOp(tensor, axes)
+
+
+def map_roles(tensor, axes_map):
+    """
+    Cast the axes' roles of a tensor to new roles.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes_map ({name: name}:  AxesMap from name to name
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    return MapRolesOp(tensor, axes_map)
 
 
 def cast_role(tensor, axes):
