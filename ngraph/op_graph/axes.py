@@ -18,6 +18,7 @@ import collections
 import operator
 import itertools
 from functools import reduce, wraps
+from frozendict import frozendict
 
 import numpy as np
 import types
@@ -455,6 +456,13 @@ class Axes(object):
         """
         return Axes(axis for axis in self if not axis.is_batch)
 
+    def feature_axes(self):
+        """
+        Returns:
+            The Axes subset that are not batch or recurrent axes.
+        """
+        return Axes(axis for axis in self if not axis.is_batch and not axis.is_recurrent)
+
     def recurrent_axis(self):
         """
         Returns:
@@ -592,6 +600,8 @@ class Axes(object):
 
         Returns:
             bool, True if each ``Axis`` are matching and in same order
+
+        See Also ``is_equal_set`` if you want the comparison to ignore the Axes order
         """
         if not isinstance(other, Axes):
             raise ValueError((
@@ -804,6 +814,81 @@ class Axes(object):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
+
+
+class DuplicateAxisNames(ValueError):
+    def __init__(self, message, duplicate_axis_names):
+        super(DuplicateAxisNames, self).__init__(message)
+
+        self.duplicate_axis_names = duplicate_axis_names
+
+
+class AxesMap(frozendict):
+    """
+    AxesMap provides a way to define a axis name mapping: {Axis.name: Axis.name} and
+    then apply this mapping to an Axes and get new Axes out.
+
+    Right now AxesMap is implemented as immutible because I didn't want to deal with
+    enforcing _assert_valid_axes_map on every method which mutates a dict and I didn't
+    need a mutable datastructure anyway.  Feel free to make it mutable and add in
+    invariant enforcement.
+    """
+    def __init__(self, *args, **kwargs):
+        super(AxesMap, self).__init__(*args, **kwargs)
+
+        self._assert_valid_axes_map()
+
+    def map_axes(self, axes):
+        """
+        Returns:
+            Axes with lengths from axes and names which have been passed through axes_map
+        """
+        return make_axes([self._map_axis(old_axis) for old_axis in axes])
+
+    def _map_axis(self, old_axis):
+        """
+        Given a map from {old_axes_name: new_axes_name} and an old_axis map the
+        old_axis into the new_axes.
+        """
+        if old_axis.name in self:
+            return make_axis(old_axis.length, self[old_axis.name])
+        else:
+            return old_axis
+
+    def _duplicate_axis_names(self):
+        """
+        Returns:
+            a dictionary mapping to duplicate target names and the source names
+            that map to it: {target: set([source, ...])}
+        """
+        # invert axes_map to see if there are any target axis names that are
+        # duplicated
+        counts = collections.defaultdict(set)
+        for key, value in self.items():
+            counts[value].add(key)
+
+        # filter counts to include only duplicate axis
+        return {x: y for x, y in counts.items() if len(y) > 1}
+
+    def _assert_valid_axes_map(self):
+        """
+        Ensure that there are no axis which map to the same axis and raise a
+        helpful error message.
+        """
+        duplicate_axis_names = self._duplicate_axis_names()
+
+        # if there are duplicate_axis_names throw an exception
+        if duplicate_axis_names:
+            message = 'AxesMap was can not have duplicate names, but found:'
+            for target_axis, source_axes in duplicate_axis_names.items():
+                message += '\n    {} maps to {}'.format(
+                    target_axis, ', '.join(source_axes)
+                )
+
+            raise DuplicateAxisNames(message, duplicate_axis_names)
+
+    def invert(self):
+        return {v: k for k, v in self.items()}
 
 
 def _reduce_nested(elem, agg, func):
@@ -1195,7 +1280,12 @@ class TensorDescription(NameableValue):
         Returns:
             TensorDescription: The reordered tensor description.
         """
-        self.axes.is_equal_set(new_axes)
+        if not self.axes.is_equal_set(new_axes):
+            raise ValueError((
+                "Reorder can't change which axes are available, only the "
+                "order.  {} and {} are different sets, not just order."
+            ).format(self, new_axes))
+
         return self.reorder_and_broadcast(new_axes)
 
     def reorder_and_broadcast(self, new_axes):
