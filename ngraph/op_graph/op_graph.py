@@ -2195,7 +2195,7 @@ def temporary(axes, dtype=None, initial_value=None):
 
 def persistent_tensor(axes, dtype=None, initial_value=None):
     """
-    Persistent storage.
+    Persistent storage, not trainable.
 
     Storage that will retain its value from computation to computation.
 
@@ -2211,6 +2211,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
     """
     return AssignableTensorOp(graph_label_type="Persistent",
                               is_persistent=True,
+                              is_input=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
