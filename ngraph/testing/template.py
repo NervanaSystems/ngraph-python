@@ -18,9 +18,21 @@ from ngraph.testing import executor
 def template_one_placeholder(value, ng_fun, ng_placeholder, expected_value, description,
                              epsilon=0.2):
     with executor(ng_fun, ng_placeholder) as const_executor:
-        # print(description)
+        print(description)
         flex = const_executor(value)
-        # print("flex_value: ", flex)
-        # print("expected_value: ", expected_value)
-        # print(flex - expected_value)
+        print("flex_value: ", flex)
+        print("expected_value: ", expected_value)
+        print(flex - expected_value)
         assert (abs(flex - expected_value) <= epsilon)
+
+
+def template_one_placeholder(value, ng_fun, ng_placeholder, expected_value, description, epsilon=0.2):
+    with executor(ng_fun, ng_placeholder) as const_executor:
+        print(description)
+        if isinstance(value, list):
+            for val, expected_val in zip(value, expected_value):
+                flex = const_executor(val)
+                print("flex_value: ", flex)
+                print("expected_value: ", expected_val)
+                print(flex - expected_val)
+                assert (abs(flex - expected_val) <= epsilon)

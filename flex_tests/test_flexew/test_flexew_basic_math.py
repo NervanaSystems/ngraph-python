@@ -60,6 +60,7 @@ test_data_double_operand = (
     bug((op.add, MAXIMUM_FLEX_VALUE, 1,  MAXIMUM_FLEX_VALUE, "Positive boundary value plus one - overflow expected")),
     bug((op.add, MINIMUM_FLEX_VALUE, 1, MINIMUM_FLEX_VALUE + 1, "Negative boundary value plus one")),
 
+
     # test_subtraction
     (op.sub, MINIMUM_FLEX_VALUE, 1,  MINIMUM_FLEX_VALUE, "Negative boundary value minus one - underflow expected"),
     bug((op.sub, MINIMUM_FLEX_VALUE, 2,  MINIMUM_FLEX_VALUE, "Negative boundary value minus two - underflow expected")),
