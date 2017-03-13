@@ -29,6 +29,10 @@ from ngraph.util.ordered import OrderedSet
 PYCUDA_LOGIC_ERROR_CODE = 4
 
 
+class UnsupportedTransformerException(Exception):
+    pass
+
+
 class Computation(NameableValue):
     """
     A handle for a computation function.
