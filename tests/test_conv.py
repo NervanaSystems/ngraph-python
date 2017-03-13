@@ -322,7 +322,6 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
 
     # broadcast input / filter axes
     input_var = ng.variable(cf.ax_i)
-    input_var.input = True
     input_val = np.ones(input_var.axes.lengths)
 
     filter_rsck_prime = ng.variable(axes_rsck_prime)
@@ -344,7 +343,6 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     # cost and grad
     cost = ng.sum(output, out_axes=())
 
-    filter_var.input = True
     filter_val = np.ones(filter_var.axes.lengths)
 
     with ExecutorFactory() as factory:

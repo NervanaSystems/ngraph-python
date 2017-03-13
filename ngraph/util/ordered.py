@@ -100,6 +100,67 @@ class OrderedSet(set, collections.MutableSequence):
         result.update(values)
         return result
 
+    def intersection(self, values):
+        return self & values
+
+    def difference(self, values):
+        return self - values
+
+    def __sub__(self, values):
+        values = set(values)
+        result = OrderedSet()
+        for value in self:
+            if value not in values:
+                result.add(value)
+        return result
+
+    def __rsub__(self, values):
+        result = OrderedSet()
+        for value in values:
+            if value not in self:
+                result.add(value)
+        return result
+
+    def __isub__(self, values):
+        for value in values:
+            if value in self:
+                self.remove(value)
+        return self
+
+    def __or__(self, values):
+        return self.union(values)
+
+    def __ror__(self, values):
+        result = OrderedSet(values)
+        result.update(self)
+        return result
+
+    def __ior__(self, values):
+        self.update(values)
+        return self
+
+    def __and__(self, values):
+        result = OrderedSet()
+        values = set(values)
+        for value in self:
+            if value in values:
+                result.add(value)
+        return result
+
+    def __rand__(self, values):
+        result = OrderedSet()
+        for value in values:
+            if value in self:
+                result.add(value)
+        return result
+
+    def __iand__(self, values):
+        values = set(values)
+        for value in list(self):
+            if value not in values:
+                self.remove(value)
+        return self
+
     def pop(self):
         """
         Removes the last element added from the set.
