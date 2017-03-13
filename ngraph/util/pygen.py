@@ -43,6 +43,10 @@ class PyGen(object):
     def get_arg_name(self, x):
         return x
 
+    def name(self, x):
+
+        raise NotImplementedError("Must be implemented by a subclass")
+
     def append(self, code, *args, **kwargs):
         """
         Add code formatted with args and kwargs to generated code.
