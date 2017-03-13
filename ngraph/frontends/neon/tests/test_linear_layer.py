@@ -19,6 +19,7 @@ import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Linear, UniformInit
+from ngraph.frontends.neon.axis import make_shadow_axis
 from ngraph.testing import ExecutorFactory
 
 
@@ -126,3 +127,18 @@ def test_linear_axes():
     assert batch_axis in linear.axes
     assert linear.axes.batch_axis().length == 2
     assert linear.axes.sample_axes().lengths == (3,)
+
+
+def test_linear_invalid_shadow_axes():
+    with pytest.raises(ValueError):
+        Linear(axes=make_shadow_axis(ng.make_axis(1, name='A')), init=UniformInit(1.0, 1.0))
+
+
+def test_linear_invalid_recurrent_axes():
+    with pytest.raises(ValueError):
+        Linear(axes=ng.make_axis(1, name='R'), init=UniformInit(1.0, 1.0))
+
+
+def test_linear_invalid_batch_axes():
+    with pytest.raises(ValueError):
+        Linear(axes=ng.make_axis(1, name='N'), init=UniformInit(1.0, 1.0))
