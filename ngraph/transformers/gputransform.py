@@ -757,6 +757,8 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
+        elif isinstance(value, np.ndarray) and value.shape == ():
+            value = value[()]
         # flex: added astype to deal with GPUArray dtype int16
         # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
