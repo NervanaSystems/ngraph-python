@@ -36,7 +36,6 @@ try:
     from pycuda.gpuarray import GPUArray
     from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 except ImportError:
-    print "DEATH"
     raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
