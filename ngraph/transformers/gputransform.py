@@ -16,19 +16,28 @@ from builtins import range
 import atexit
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
+    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE, UnsupportedTransformerException
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod
+    Subtract, TanhOp, SetItemOp, Prod, TensorOp
 from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
+
+try:
+    import pycuda.driver as drv
+    import sys
+    from pycuda.gpuarray import GPUArray
+    from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
+except ImportError:
+    print "DEATH"
+    raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
@@ -48,13 +57,15 @@ from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_
 
 import cachetools
 import numpy as np
-import pycuda.driver as drv
-import sys
-from pycuda.gpuarray import GPUArray
-from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
 
 _none_slice = slice(None, None, None)
+
+
+class Function(TensorOp):
+    def __init__(self, **kwargs):
+        super(TensorOp, self).__init__(**kwargs)
+        self.instructions = []
 
 
 class ElementWiseKernel(GPUKernel):

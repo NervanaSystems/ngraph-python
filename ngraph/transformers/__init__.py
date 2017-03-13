@@ -16,7 +16,8 @@ from __future__ import print_function
 
 from ngraph.transformers.base import make_transformer, set_transformer_factory, \
     transformer_choices,  \
-    allocate_transformer, make_transformer_factory, Transformer
+    allocate_transformer, make_transformer_factory, Transformer, \
+    UnsupportedTransformerException
 
 __all__ = [
     'allocate_transformer',
@@ -31,17 +32,17 @@ PYCUDA_LOGIC_ERROR_CODE = 4
 
 try:
     import ngraph.transformers.nptransform  # noqa
-except ImportError:
+except UnsupportedTransformerException:
     pass
 
 try:
     import ngraph.transformers.gputransform  # noqa
-except ImportError:
+except UnsupportedTransformerException:
     pass
 
 try:
     import ngraph.transformers.hetrtransform  # noqa
-except ImportError as e:
+except UnsupportedTransformerException as e:
     pass
 
 try:
