@@ -34,7 +34,7 @@ class PyGen(object):
     def __init__(self, indentation=0, **kwargs):
         super(PyGen, self).__init__(**kwargs)
         self.indentation = indentation
-        self.__code = ""
+        self.__code = list()
         self.filename = None
 
     def indent(self, indentation):
@@ -88,14 +88,14 @@ class PyGen(object):
 
     def append_raw(self, code, lines=1):
         self.endl(lines)
-        self.__code += code
+        self.__code.append(code)
 
     def endl(self, n=1):
-        self.__code += "\n" * n
+        self.__code.extend(["\n"] * n)
 
     @property
     def code(self):
-        return self.__code
+        return ''.join(self.__code)
 
     def compile(self, prefix, globs):
         file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=prefix, delete=False)
