@@ -14,9 +14,19 @@
 # ----------------------------------------------------------------------------
 from builtins import range
 import atexit
+import sys
+
+from ngraph.transformers.base import UnsupportedTransformerException
+
+try:
+    import pycuda.driver as drv
+    from pycuda.gpuarray import GPUArray
+    from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
+except ImportError:
+    raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE, UnsupportedTransformerException
+    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
@@ -29,14 +39,6 @@ from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.util.generics import generic_method
-
-try:
-    import pycuda.driver as drv
-    import sys
-    from pycuda.gpuarray import GPUArray
-    from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
-except ImportError:
-    raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
 from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
