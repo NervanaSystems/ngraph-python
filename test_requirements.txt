@@ -4,5 +4,6 @@ pytest-xdist==1.15.0
 pytest-timeout==1.2.0
 autopep8==1.2.4
 flake8==3.3.0
+flake8-junit-report==1.0.0
 pylint==1.6.4
 frozendict==1.2.0
