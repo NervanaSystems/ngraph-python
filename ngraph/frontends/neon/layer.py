@@ -235,7 +235,13 @@ class LookupTable(Layer):
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
 
+        # label lut_v_axis as shadow axis for initializers ... once #1158 is
+        # in, shadow axis will do more than just determine fan in/out for
+        # initializers.
         self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
+        self.axes_map = shadow_axes_map([self.lut_v_axis])
+        self.lut_v_axis = self.axes_map.values()[0]
+
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
         self.w_axes = ng.make_axes([self.lut_v_axis, self.lut_f_axis])
@@ -250,7 +256,9 @@ class LookupTable(Layer):
 
         lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
                                     pad_idx=self.pad_idx)
-        return ng.axes_with_order(ng.unflatten(lut_result), self.o_axes)
+        return ng.axes_with_order(
+            ng.map_roles(ng.unflatten(lut_result), self.axes_map), self.o_axes
+        )
 
 
 class ConvBase(Layer):
@@ -301,6 +309,15 @@ class ConvBase(Layer):
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm, role in zip('TRSK', self.filter_roles[1:]):
                 self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
+            # mark 'K' as a shadow axis for the initializers.  with #1158
+            # shadows will also be important for axis name matching and roles
+            # can be removed.
+            self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
+            self.f_axes = ng.make_axes([
+                axis if axis.name != 'K' else self.axes_map.keys()[0]
+                for axis in self.f_axes
+            ])
+
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init).named('convwt')
 
         if self.o_axes is None:
@@ -320,7 +337,7 @@ class ConvBase(Layer):
             self.o_axes.set_shape(out_shape)
             self.o_axes |= in_axes.batch_axis()
 
-        return ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
+        return ng.map_roles(ng.convolution(cpm, in_obj, self.W, axes=self.o_axes), self.axes_map)
 
 
 class Conv2D(ConvBase):
