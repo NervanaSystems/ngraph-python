@@ -38,14 +38,15 @@ test_data_single_operand = (
     # test_neg
     bug((op.neg, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, "Negate function - overflow expected")),
     bug((op.neg, MINIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE,
-        "Assign function of negative boundary value inside of flex range")),
+        "Negate function of negative boundary value inside of flex range")),
     bug((op.neg, MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE + 1,
-        "Assign function of positive boundary value inside of flex range")),
+        "Negate function of positive boundary value inside of flex range")),
 
     # test_sqrt
     (ng.sqrt, 0, 0, "Square root of zero i zero"),
     (ng.sqrt, MAXIMUM_FLEX_VALUE, np.sqrt(MAXIMUM_FLEX_VALUE), "Square root of positive boundary value"),
-    bug((ng.sqrt, MINIMUM_FLEX_VALUE, np.sqrt(MINIMUM_FLEX_VALUE), "Square of negative boundary value - NaN expected")),
+    bug((ng.sqrt, MINIMUM_FLEX_VALUE, np.sqrt(MINIMUM_FLEX_VALUE),
+         "Square root of negative boundary value - NaN expected")),
 
     # test_abs
     bug((ng.absolute, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE,
