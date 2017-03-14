@@ -22,6 +22,9 @@ from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 rng = RandomTensorGenerator()
 rtol = 0
 atol = 1e-6

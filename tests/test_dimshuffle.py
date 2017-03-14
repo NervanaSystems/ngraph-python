@@ -42,53 +42,53 @@ def x(A, B):
     return ng.placeholder(ng.make_axes([A, B]))
 
 
-def test_dimshuffle_fprop(transformer_factory, x, A, B):
-    """
-    dimshuffle a 2d array and make sure fprop works
-    """
-    # compute convolution with graph
-    output = ng.axes_with_order(x, [B, A])
+@pytest.mark.transformer_dependent
+class TestDimShuffleFpropBprop:
 
-    assert output.axes == ng.make_axes([B, A])
+    def test_dimshuffle_fprop(self, transformer_factory, x, A, B):
+        """
+        dimshuffle a 2d array and make sure fprop works
+        """
+        # compute convolution with graph
+        output = ng.axes_with_order(x, [B, A])
 
-    # randomly initialize
-    x_value = rng.uniform(-1, 1, x.axes)
+        assert output.axes == ng.make_axes([B, A])
 
-    with executor(output, x) as ex:
-        result = ex(x_value)
+        # randomly initialize
+        x_value = rng.uniform(-1, 1, x.axes)
 
-    ng.testing.assert_allclose(result, x_value.T)
+        with executor(output, x) as ex:
+            result = ex(x_value)
 
+        ng.testing.assert_allclose(result, x_value.T)
 
-def test_dimshuffle_bprop(transformer_factory, x, A, B):
-    """
-    dimshuffle a 2d array and make sure bprop works
-    """
-    # randomly initialize
-    x_value = rng.uniform(-1, 1, x.axes)
+    def test_dimshuffle_bprop(self, transformer_factory, x, A, B):
+        """
+        dimshuffle a 2d array and make sure bprop works
+        """
+        # randomly initialize
+        x_value = rng.uniform(-1, 1, x.axes)
 
-    check_derivative(
-        ng.axes_with_order(x, [B, A]),
-        x, 0.001, x_value,
-        atol=1e-3, rtol=1e-3
-    )
-
-
-def test_fail_on_missing(transformer_factory, x, B):
-    with pytest.raises(ValueError):
-        ng.axes_with_order(x, [B, B])
+        check_derivative(
+            ng.axes_with_order(x, [B, A]),
+            x, 0.001, x_value,
+            atol=1e-3, rtol=1e-3
+        )
 
 
-def test_fail_on_extra_axis(transformer_factory, x, A, B, C):
-    with pytest.raises(ValueError):
-        ng.axes_with_order(x, [A, B, C])
+class TestDimShuffleFail:
+    def test_fail_on_missing(self, x, B):
+        with pytest.raises(ValueError):
+            ng.axes_with_order(x, [B, B])
 
+    def test_fail_on_extra_axis(self, x, A, B, C):
+        with pytest.raises(ValueError):
+            ng.axes_with_order(x, [A, B, C])
 
-def test_fail_on_missing_and_extra_axis(transformer_factory, x, A, C):
-    with pytest.raises(ValueError):
-        ng.axes_with_order(x, [A, C])
+    def test_fail_on_missing_and_extra_axis(self, x, A, C):
+        with pytest.raises(ValueError):
+            ng.axes_with_order(x, [A, C])
 
-
-def test_fail_on_axis_reuse(transformer_factory, x, A, B):
-    with pytest.raises(ValueError):
-        ng.axes_with_order(x, [A, B, B])
+    def test_fail_on_axis_reuse(self, x, A, B):
+        with pytest.raises(ValueError):
+            ng.axes_with_order(x, [A, B, B])

@@ -1,35 +1,4 @@
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ----------------------------------------------------------------------------
-
-# import numpy as np
-# import pytest
-# from neon import NervanaObject
-# from neon.backends import gen_backend
-# from neon.layers.layer import Convolution
-
-# import ngraph as ng
-# from ngraph.frontends.neon import ax, ar
-# from ngraph.frontends.neon.layer import output_dim
-# from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
-
-# rng = RandomTensorGenerator(0, np.float32)
-
-
-# NervanaObject.be = gen_backend()
-
-# ----------------------------------------------------------------------------
 # Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,6 +20,9 @@ import itertools as itt
 from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
+
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
 
 
 rng = RandomTensorGenerator(0, np.float32)

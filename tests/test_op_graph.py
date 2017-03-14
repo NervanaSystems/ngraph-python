@@ -17,7 +17,6 @@ import pytest
 
 import ngraph as ng
 from ngraph.testing import ExecutorFactory
-from ngraph.flex.names import flex_gpu_transformer_name
 
 
 @pytest.fixture()
@@ -38,25 +37,6 @@ def P():
 @pytest.fixture()
 def M():
     return ng.make_axis(length=3)
-
-
-def test_variable_init(transformer_factory, C):
-    w_init = np.random.rand(C.length)
-    W = ng.variable(ng.make_axes([C]), initial_value=w_init)
-
-    with ExecutorFactory() as ex:
-        result = ex.executor(W)()
-    ng.testing.assert_allclose(result, w_init)
-
-
-def test_initial_value(transformer_factory):
-    # Test work-around for issue #1138
-    w = [3, 4, 5]
-    x = ng.constant(w)
-    y = ng.variable([ng.make_axis(length=len(w))], initial_value=x)
-    with ExecutorFactory() as ex:
-        result = ex.executor(y)()
-    ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
 
 
 def test_deriv_missing_connection(N):
@@ -292,9 +272,9 @@ def concatenate_variables(request):
     return x_list, np_list, concat_role, concat_pos
 
 
+@pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 def test_concatenate(transformer_factory, concatenate_variables):
-    if transformer_factory.name == flex_gpu_transformer_name:
-        pytest.skip("Allowed to fail until PR2")
     x_list, np_list, role, pos = concatenate_variables
 
     with ExecutorFactory() as ex:
@@ -308,3 +288,26 @@ def test_concatenate(transformer_factory, concatenate_variables):
         assert ng.testing.allclose(e_v.copy(), np_v)
         assert ng.testing.allclose(e_v2.copy(), np_v)
         assert ng.testing.allclose(e_d.copy(), np.ones(x_list[0].axes.lengths))
+
+
+@pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
+def test_variable_init(transformer_factory, C):
+    w_init = np.random.rand(C.length)
+    W = ng.variable(ng.make_axes([C]), initial_value=w_init)
+
+    with ExecutorFactory() as ex:
+        result = ex.executor(W)()
+    ng.testing.assert_allclose(result, w_init)
+
+
+@pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
+def test_initial_value(transformer_factory):
+    # Test work-around for issue #1138
+    w = [3, 4, 5]
+    x = ng.constant(w)
+    y = ng.variable([ng.make_axis(length=len(w))], initial_value=x)
+    with ExecutorFactory() as ex:
+        result = ex.executor(y)()
+    ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))

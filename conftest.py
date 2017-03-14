@@ -18,55 +18,25 @@ from ngraph.flex.names import flex_gpu_transformer_name
 
 
 def pytest_addoption(parser):
-    parser.addoption("--enable_flex", action="store_true",
-                     help="Enable and *only* enable {} transformer.".format(flex_gpu_transformer_name))
-    parser.addoption("--enable_mkl", action="store_true",
-                     help="Enable and *only* enable CPU MKL transformer.")
     parser.addoption("--batch_size", type=int, default=8,
-                     help="Enable and *only* enable CPU MKL transformer.")
-
+                     help="Batch size for tests using input_tensor fixture.")
+    parser.addoption("--transformer", default="numpy", choices=ngt.transformer_choices(),
+                     help="Select from available transformers")
 
 def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
 
 
-def set_and_get_factory(transformer_name):
-    factory = ngt.make_transformer_factory(transformer_name)
-    ngt.set_transformer_factory(factory)
-    return factory
-
-@pytest.fixture(scope="module",
-                params=ngt.transformer_choices())
-def transformer_factory(request):
-    transformer_name = request.param
-
-    if pytest.config.getoption("--enable_flex"):
-        if transformer_name == flex_gpu_transformer_name:
-            if flex_gpu_transformer_name in ngt.transformer_choices():
-                yield set_and_get_factory(transformer_name)
-            else:
-                raise ValueError("GPU not found, should not set --enable_flex"
-                                 "flag for py.test.")
-        else:
-            pytest.skip('Skip all other transformers since --enable_flex is set.')
-    elif pytest.config.getoption("--enable_mkl"):
-        if transformer_name == "cpu":
-            yield set_and_get_factory(transformer_name)
-        else:
-            pytest.skip('Skip non cpu transformers since --enable_mkl is set.')
-    else:
-        if transformer_name == flex_gpu_transformer_name:
-            pytest.skip('Skip flex test since --enable_flex is not set.')
-        else:
-            yield set_and_get_factory(transformer_name)
-
-    # Reset transformer factory to default
-    ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))
-
-
 @pytest.fixture(scope="module")
-def hetr_factory(request):
-    yield set_and_get_factory('hetr')
+def transformer_factory(request):
+    def set_and_get_factory(transformer_name):
+        factory = ngt.make_transformer_factory(transformer_name)
+        ngt.set_transformer_factory(factory)
+        return factory
+
+    name = request.config.getoption("--transformer")
+
+    yield set_and_get_factory(name)
 
     # Reset transformer factory to default
     ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))

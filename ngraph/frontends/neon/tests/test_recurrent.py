@@ -38,6 +38,9 @@ from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 rng = RandomTensorGenerator()
 
 delta = 1e-3

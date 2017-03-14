@@ -20,6 +20,11 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import ExecutorFactory, executor
 from ngraph.testing import raise_all_numpy_errors
+import pytest
+
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 """
 Test ngraph's implementation of the dot product.

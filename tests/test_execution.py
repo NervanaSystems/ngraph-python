@@ -21,6 +21,9 @@ import ngraph as ng
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 rng = RandomTensorGenerator(0, np.float32)
 

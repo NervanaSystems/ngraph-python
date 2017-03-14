@@ -15,19 +15,19 @@
 import ngraph as ng
 
 
-def test_metadata():
-    n = ng.Op(metadata=dict(something=3))
-    m = ng.Op()
-    assert len(m.metadata) == 0
-    assert n.metadata['something'] == 3
-
-
 class Dummy(ng.NameableValue):
     metadata = {"layer_type": "convolution"}
 
     @ng.with_op_metadata
     def configure(self, input_op):
         return ng.exp(input_op)
+
+
+def test_metadata():
+    n = ng.Op(metadata=dict(something=3))
+    m = ng.Op()
+    assert len(m.metadata) == 0
+    assert n.metadata['something'] == 3
 
 
 def test_metadata_capture():

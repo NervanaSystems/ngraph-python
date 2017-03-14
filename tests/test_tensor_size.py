@@ -20,8 +20,10 @@ On GPU, ng.tensor_size uses FillKernel
 import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
+import pytest
 
 
+@pytest.mark.transformer_dependent
 def test_tensor_size(transformer_factory):
     n, m = 3, 4
 

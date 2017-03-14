@@ -17,8 +17,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import glob
-import os
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
@@ -28,10 +26,9 @@ import argparse
 import pytest
 from ngraph.frontends.tensorflow.examples.logistic_regression import logistic_regression
 from ngraph.frontends.tensorflow.examples.mnist_mlp import mnist_mlp
-from ngraph.frontends.tensorflow.examples.mnist_mlp_save_load import train_mnist, \
-    ng_retrain_mnist, tf_retrain_mnist
 
 
+@pytest.mark.transformer_dependent
 @pytest.mark.usefixtures("transformer_factory")
 class TestExamples(ImporterTester):
     def test_logistic_regression(self):
@@ -68,42 +65,3 @@ class TestExamples(ImporterTester):
         assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
-
-    def test_mnist_mlp_save_load(self):
-        # args
-        parser = argparse.ArgumentParser()
-        parser.add_argument('-d', '--data_dir', default=None)
-        parser.add_argument('-i', '--max_iter', type=int, default=10)
-        parser.add_argument('-l', '--lrate', type=float, default=0.1,
-                            help="Learning rate")
-        parser.add_argument('-b', '--batch_size', type=int, default=128)
-        parser.add_argument('-s', '--checkpoint_path', default='model.ckpt')
-        parser.add_argument('--random_data', default=FakeMNIST())
-        args = parser.parse_args("")
-
-        # compute
-        train_mnist(args)
-        ng_cost_vals = ng_retrain_mnist(args)
-        tf_cost_vals = tf_retrain_mnist(args)
-
-        # check
-        assert ng.testing.allclose(
-            np.asarray(ng_cost_vals).astype(np.float32),
-            np.asarray(tf_cost_vals).astype(np.float32))
-
-        # cleanups
-        # dir/checkpoint
-        try:
-            dir_name = os.path.dirname(
-                os.path.abspath(args.checkpoint_path))
-            checkpoint_file_path = os.path.join(dir_name, "checkpoint")
-            os.remove(checkpoint_file_path)
-        except:
-            print("[clean up] checkpoint does not exist")
-
-        # dir/model.ckpt, model.ckpt.index, model.ckpt.meta, model.ckpt.data*
-        for file in glob.glob(args.checkpoint_path + "*"):
-            try:
-                os.remove(file)
-            except:
-                print("[clean up] removal of %s not successful" % file)

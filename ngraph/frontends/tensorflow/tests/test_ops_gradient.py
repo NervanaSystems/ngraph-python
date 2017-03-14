@@ -20,8 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
     def test_relu_grad(self):
         # random number

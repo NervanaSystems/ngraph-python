@@ -105,6 +105,7 @@ def gen_pool_testcase():
     return filter(args_filter, all_args)
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
 
     @pytest.mark.parametrize("all_args", gen_conv_testcase())
