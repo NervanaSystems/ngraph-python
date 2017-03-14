@@ -32,6 +32,7 @@ TEST_OPTS := --timeout=300 --cov=ngraph --junit-xml=testout.xml
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
+TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
@@ -85,6 +86,11 @@ test_gpu: clean
 test_hetr: test_install clean
 	@echo Running unit tests for hetr dependent transformer tests...
 	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+test_mxnet: clean
+	@echo Running unit tests for mxnet frontend...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i
 
 test_integration: clean
