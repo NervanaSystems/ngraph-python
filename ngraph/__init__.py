@@ -17,6 +17,7 @@ from __future__ import print_function
 
 import ngraph.transformers as transformers
 from ngraph.op_graph.axes import make_axis_role, make_axis, make_axes
+from ngraph.transformers.base import UnsupportedTransformerException
 
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
@@ -86,5 +87,5 @@ try:
     # import flex transformer if autoflex package is installed
     from ngraph.flex import GPUFlexManager
     from ngraph.transformers.flexgputransform import FlexGPUTransformer
-except ImportError:
+except UnsupportedTransformerException:
     pass

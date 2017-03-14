@@ -775,7 +775,7 @@ class NumPyTransformer(Transformer):
                 out = tensor_description_value(op.tensor_description())
                 call_info = (tensor_description_value(_) for _ in op.call_info())
                 self.compute_code.generate_op(op, out, *call_info)
-            if code is self.compute_code.code:
+            if code == self.compute_code.code:
                 self.compute_code.append("pass")
         self.compute_code.endl()
         self.name = name
