@@ -18,6 +18,7 @@ from builtins import range
 import numpy as np
 import pytest
 import ngraph as ng
+import collections
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
@@ -1066,3 +1067,38 @@ def test_variance_sqrt_inverse(transformer_factory, input_tensor):
 
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
+
+
+def test_return_type(transformer_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c0 = ex.executor(x, x)
+        c1 = ex.executor([x], x)
+
+        r0 = c0(1)
+        assert r0 == 1
+
+        r1 = c1(1)
+        assert isinstance(r1, collections.Sequence)
+        assert r1[0] == 1
+
+
+def test_empty_computation(transformer_factory):
+    with ExecutorFactory() as ex:
+        computation = ex.executor(None)
+        res = computation()
+        assert not res
+
+
+def test_wrong_placeholders(transformer_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c = ex.executor(x, x)
+
+        with pytest.raises(ValueError):
+            c()
+
+        with pytest.raises(ValueError):
+            c(1, 2)
+
+        assert c(1) == 1

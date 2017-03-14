@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-import collections
 import pytest
 from ngraph.testing import ExecutorFactory
 from ngraph.util.ordered import OrderedSet
@@ -234,38 +233,3 @@ def test_gpu_send_and_recv(transformer_factory):
         computation = ex.executor(x_plus_two, x)
         for i in [10, 20, 30]:
             assert computation(i) == i + 2
-
-
-def test_return_type(transformer_factory):
-    x = ng.placeholder(())
-    with ExecutorFactory() as ex:
-        c0 = ex.executor(x, x)
-        c1 = ex.executor([x], x)
-
-        r0 = c0(1)
-        assert r0 == 1
-
-        r1 = c1(1)
-        assert isinstance(r1, collections.Sequence)
-        assert r1[0] == 1
-
-
-def test_empty_computation(transformer_factory):
-    with ExecutorFactory() as ex:
-        computation = ex.executor(None)
-        res = computation()
-        assert not res
-
-
-def test_wrong_placeholders(transformer_factory):
-    x = ng.placeholder(())
-    with ExecutorFactory() as ex:
-        c = ex.executor(x, x)
-
-        with pytest.raises(AssertionError):
-            c()
-
-        with pytest.raises(AssertionError):
-            c(1, 2)
-
-        assert c(1) == 1
