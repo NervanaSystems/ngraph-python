@@ -486,3 +486,9 @@ def test_axes_map_immutable():
 
     with pytest.raises(TypeError):
         axes_map['x'] = 'y'
+
+
+def test_axes_map_init_from_axes():
+    axes_map = AxesMap({ng.make_axis(1, name='aaa'): ng.make_axis(1, name='zzz')})
+
+    assert axes_map['aaa'] == 'zzz'

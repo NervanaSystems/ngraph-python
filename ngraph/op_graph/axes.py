@@ -834,7 +834,16 @@ class AxesMap(frozendict):
     invariant enforcement.
     """
     def __init__(self, *args, **kwargs):
-        super(AxesMap, self).__init__(*args, **kwargs)
+        def replace_axis_with_name(x):
+            if isinstance(x, Axis):
+                return x.name
+            return x
+
+        # strip axis objects into just names
+        super(AxesMap, self).__init__({
+            replace_axis_with_name(k): replace_axis_with_name(v)
+            for k, v in dict(*args, **kwargs).items()
+        })
 
         self._assert_valid_axes_map()
 

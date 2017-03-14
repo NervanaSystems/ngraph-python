@@ -1529,6 +1529,12 @@ class MapRolesOp(AxesCastOp):
     def __init__(self, x, axes_map, **kwargs):
         self.axes_map = AxesMap(axes_map)
 
+        if 'axes' in kwargs:
+            raise ValueError(
+                'MapRolesOp can not have axes specified.  They will '
+                'be infered from x and axes_map'
+            )
+
         super(MapRolesOp, self).__init__(x, axes=self.axes_map.map_axes(x.axes), **kwargs)
 
     def generate_adjoints(self, adjoints, delta, x):
