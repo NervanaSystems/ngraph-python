@@ -19,6 +19,10 @@ import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.testing import ExecutorFactory
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
+
 delta = 1e-3
 rtol = atol = 1e-2
 
@@ -282,7 +286,7 @@ def test_cast_axes(transformer_factory):
         )
 
 
-def test_shuffled_deriv():
+def test_shuffled_deriv(transformer_factory):
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
     C = ng.make_axis(length=3)

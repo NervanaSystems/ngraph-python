@@ -25,7 +25,7 @@ from collections import defaultdict
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, AxesMap
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from ngraph.util.ordered import OrderedSet
@@ -146,17 +146,12 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
         forward: If not None, the node to use instead of this node.
-        initializers: List of one-time initializations to run before the op.
-        persistent (bool): The value will be retained from computation to computation and
-            not shared.  Default False.
         metadata: String key value dictionary for frontend metadata.
-        trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
-        initializers (list): Additional Ops to run before this Op is run the first time.
         control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
@@ -177,21 +172,6 @@ class Op(NameableValue, DebugInfo):
             ops = [None]
             get_thread_state().ops = ops
         return ops
-
-    @staticmethod
-    @contextmanager
-    def captured_ops(ops=None):
-        """
-        Capture all Ops created within the context. Hides ops created in this
-        context from parent contexts.
-        """
-        if ops is None:
-            ops = []
-        try:
-            Op._get_thread_ops().append(ops)
-            yield (ops)
-        finally:
-            Op._get_thread_ops().pop()
 
     @staticmethod
     def get_all_ops():
@@ -295,9 +275,8 @@ class Op(NameableValue, DebugInfo):
                  metadata=None,
                  const=None,
                  constant=False,
-                 persistent=True,
+                 persistent=False,
                  trainable=False,
-                 initializers=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
         self.__args = tuple(as_op(arg) for arg in args)
@@ -312,16 +291,12 @@ class Op(NameableValue, DebugInfo):
         # List to keep generation deterministic
         self.__control_deps = OrderedSet()
         self.__deriv_handler = None
-        self.__const = const
-        self.__is_constant = constant
-        self.__is_persistent = persistent
-        self.__is_trainable = trainable
-        self.initializers = OrderedSet()
-        if initializers is not None:
-            for initializer in initializers:
-                self.add_initializer(initializer)
+        self._const = const
+        self._is_constant = constant
+        self._is_persistent = persistent
+        self._is_trainable = trainable
 
-        # Add this op to both the captured op and all op accounting lists
+        # Add this op to the all op accounting lists
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
@@ -371,32 +346,76 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def is_constant(self):
-        return self.__is_constant
+        """
+
+        Returns: True if this op is a constant tensor.
+
+        """
+        return False
 
     @property
     def const(self):
-        return self.__const
+        """
 
-    @const.setter
-    def const(self, value):
-        if self.__const is not None:
-            raise ValueError("Cannot change const value")
-        self.__const = value
+        Returns: For a constant, returns the constant value.
+
+        """
+        return None
+
+    @property
+    def is_input(self):
+        """
+
+        Returns: True if this op is a tensor that the host can write to.
+
+        """
+        return False
 
     @property
     def is_persistent(self):
-        return self.__is_persistent
+        """
+
+        Returns: True if this op is a tensor whose value is preserved from computation
+            to computation.
+
+        """
+        return False
 
     @property
     def is_trainable(self):
-        return self.__is_trainable
+        """
+
+        Returns: True if this op is a tensor that is trainable, i.e. is Op.variables
+            will return it.
+
+        """
+        return False
+
+    @property
+    def is_placeholder(self):
+        """
+
+        Returns: True if this op is a placeholder, i.e. a place to attach a tensor.
+
+        """
+        return False
 
     @property
     def is_tensor_op(self):
+        """
+
+        Returns: True if this op is a tensor.
+
+        """
         return False
 
     @property
     def is_scalar(self):
+        """
+
+        Returns: True if this op is a scalar.
+
+        """
         return 0 == len(self.axes)
 
     @property
@@ -411,7 +430,7 @@ class Op(NameableValue, DebugInfo):
     @property
     def scalar_op(self):
         """
-        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        Returns the scalar op version of this op.  Will be overridden by subclasses
         """
         if not self.is_scalar:
             raise ValueError()
@@ -493,14 +512,11 @@ class Op(NameableValue, DebugInfo):
         self.update_forwards()
         self.__control_deps.remove(dep.forwarded)
 
-    def add_initializer(self, init):
-        self.initializers.add(init)
-
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args, control_deps, and initializers
+        Any subclass that uses ops stored outside of args and control_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
@@ -515,10 +531,6 @@ class Op(NameableValue, DebugInfo):
                 self.__control_deps = OrderedSet()
                 for op in control_deps:
                     self.add_control_dep(op.forwarded)
-                break
-        for op in self.initializers:
-            if op.forward is not None:
-                self.initializers = OrderedSet(op.forwarded for op in self.initializers)
                 break
 
     def replace_self(self, rep):
@@ -555,20 +567,14 @@ class Op(NameableValue, DebugInfo):
         """
         return [self]
 
-    def variables(self, filter=None):
+    def variables(self):
         """
         Return all trainable Ops used in computing this node.
-
-        Arguments:
-            filter: Boolean filter of op, defaults to trainable.
 
         Returns:
             Set of trainable Ops.
         """
         params = OrderedSet()
-
-        if filter is None:
-            filter = lambda op: op.is_trainable
 
         def visitor(node):
             """
@@ -577,7 +583,30 @@ class Op(NameableValue, DebugInfo):
             Arguments:
               node: TODO
             """
-            if filter(node.tensor):
+            if node.tensor.is_trainable:
+                params.add(node.tensor)
+
+        Op.visit_input_closure([self], visitor)
+
+        return params
+
+    def placeholders(self):
+        """
+        Return all placeholder Ops used in computing this node.
+
+        Returns:
+            Set of placeholder Ops.
+        """
+        params = OrderedSet()
+
+        def visitor(node):
+            """
+            TODO.
+
+            Arguments:
+              node: TODO
+            """
+            if node.tensor.is_placeholder:
                 params.add(node.tensor)
 
         Op.visit_input_closure([self], visitor)
@@ -635,21 +664,6 @@ def as_ops(xs):
         A tuple of Ops.
     """
     return tuple(as_op(x) for x in xs)
-
-
-def init_tensor(tensor, valfun):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-
-    Returns:
-        InitTensorOp: The tensor initialization.
-
-    """
-    return InitTensorOp(tensor, valfun)
 
 
 class AssignOp(Op):
@@ -781,7 +795,7 @@ class ComputationOp(ParallelOp):
 
     Arguments:
         returns: Values returned by the computation. A list, set, or op.
-        *args: Inputs to the computation.
+        *args: Inputs to the computation. Must be placeholders or variables.
 
     Parameters:
         returns: Ops returned.
@@ -797,23 +811,29 @@ class ComputationOp(ParallelOp):
         else:
             all = []
 
+        self.values = all
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
 
         def is_input(arg):
-            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+            return arg.tensor.is_input
 
+        placeholders = self.placeholders()
         if len(args) == 1 and args[0] == 'all':
-            args = self.variables(filter=is_input)
+            args = placeholders
 
         args = tuple(as_op(arg) for arg in args)
+        arg_tensors = set(arg.tensor for arg in args)
+        missing_tensors = [t for t in placeholders.difference(arg_tensors)]
+        if len(missing_tensors) > 0:
+            raise ValueError("All used placeholders must be supplied to a computation.")
 
         for arg in args:
-            if not is_input(arg):
+            if not (arg.tensor.is_input):
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
+                    'is_input=True, but the op passed had is_input=False.'
+                    'In most cases you want to pass placeholder ops in as arguments.  '
                     '{op} was passed in, of type {op_type}.'
                 ).format(
                     op=arg,
@@ -1075,7 +1095,10 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype).named(self.name)
+        return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                 is_persistent=self.is_persistent,
+                                 is_input=self.is_input,
+                                 is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1248,10 +1271,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     def const(self):
         return self.tensor.const
 
-    @const.setter
-    def const(self, value):
-        self.tensor.const = value
-
     @property
     def scale(self):
         return self.tensor.scale
@@ -1266,29 +1285,6 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     def generate_add_delta(self, adjoints, delta):
         self.tensor.generate_add_delta(adjoints, delta)
-
-
-class InitTensorOp(ValueOp):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-        kwargs: Other op args.
-
-    Attributes:
-        valfun: A CPU function that produces the initial value for the tensor.
-
-    """
-
-    def __init__(self, tensor, valfun, **kwargs):
-        super(InitTensorOp, self).__init__(tensor=tensor, **kwargs)
-        self.valfun = valfun
-
-    @property
-    def states_written(self):
-        return OrderedSet([self.tensor])
 
 
 class SequentialOp(ValueOp):
@@ -1487,11 +1483,9 @@ class AxesCastOp(ReshapeOp):
 class RoleCastOp(AxesCastOp):
     """
     Used to set the names of the axes of a tensor, without altering its value.
-
     If the names of the new axes are the same as the incoming tensor's axes,
     leave the original axis alone.  Otherwise, create a new axis with the
     length of the original and the name of the new.
-
     Arguments:
         x: A tensor.
         axes: The new axes.
@@ -1517,6 +1511,36 @@ class RoleCastOp(AxesCastOp):
         x.generate_add_delta(adjoints, cast_role(delta, x.axes))
 
 
+class MapRolesOp(AxesCastOp):
+    """
+    Used to set the names of the axes of a tensor, without altering its value.
+
+    If the names of the new axes are the same as the incoming tensor's axes,
+    leave the original axis alone.  Otherwise, create a new axis with the
+    length of the original and the name of the new.
+
+    Arguments:
+        x: A tensor.
+        axes_map: An AxesMap object describing the mapping from axis_name ->
+        axis_name that should be performed.  Axis whose names don't appear in
+        the axes_map won't be changed.
+    """
+
+    def __init__(self, x, axes_map, **kwargs):
+        self.axes_map = AxesMap(axes_map)
+
+        if 'axes' in kwargs:
+            raise ValueError(
+                'MapRolesOp can not have axes specified.  They will '
+                'be infered from x and axes_map'
+            )
+
+        super(MapRolesOp, self).__init__(x, axes=self.axes_map.map_axes(x.axes), **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, MapRolesOp(delta, self.axes_map.invert()))
+
+
 def cast_axes(tensor, axes):
     """
     Cast the axes of a tensor to new axes.
@@ -1536,6 +1560,20 @@ def cast_axes(tensor, axes):
         return tensor
 
     return AxesCastOp(tensor, axes)
+
+
+def map_roles(tensor, axes_map):
+    """
+    Cast the axes' roles of a tensor to new roles.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes_map ({name: name}:  AxesMap from name to name
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    return MapRolesOp(tensor, axes_map)
 
 
 def cast_role(tensor, axes):
@@ -1953,7 +1991,11 @@ class AssignableTensorOp(TensorOp):
     Value comes directly from storage.
 
     Arguments:
-        input: The storage is used as an input from the CPU. Implies persistent.
+        is_input: The storage is used as an input from the CPU. Implies persistent.
+        is_persistent: The storage value persists form computation to computation.
+        is_constant: The storage value does not change once initialized.
+        is_placeholder: This is a placeholder.
+        const: The host value of the constant for constant storage.
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
             value.
@@ -1965,21 +2007,65 @@ class AssignableTensorOp(TensorOp):
     def __init__(
             self,
             initial_value=None,
-            input=False,
-            persistent=False,
+            is_constant=False,
+            is_input=False,
+            is_persistent=False,
+            is_trainable=False,
+            is_placeholder=False,
+            const=None,
             **kwargs):
-        if input:
-            persistent = True
-        super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
-        self.input = input
+        super(AssignableTensorOp, self).__init__(**kwargs)
+        self._is_input = is_input
+        self._is_persistent = is_persistent
+        self._is_trainable = is_trainable
+        self._is_constant = is_constant
+        self._is_placeholder = is_placeholder
+        self._const = const
+        self.initial_value = None
 
         if initial_value is not None:
             # convert callable initial value
             if callable(initial_value):
                 initial_value = initial_value(self.axes)
+            if isinstance(initial_value, TensorOp):
+                # Caffe2 currently wraps the initial value in a constant (Issue #1138)
+                tensor = initial_value.tensor
+                if tensor.is_constant:
+                    initial_value = tensor.const
+                else:
+                    raise ValueError("initial_value must be convertible to a NumPy tensor")
+            initial_value = np.asarray(initial_value, dtype=self.dtype)
+            self.initial_value = initial_value
 
-            # create assign op
-            self.add_initializer(assign(self, initial_value))
+    @property
+    def is_constant(self):
+        return self._is_constant
+
+    @property
+    def const(self):
+        return self._const
+
+    @const.setter
+    def const(self, value):
+        if self._const is not None:
+            raise ValueError("Cannot change const value")
+        self._const = value
+
+    @property
+    def is_input(self):
+        return self._is_input
+
+    @property
+    def is_persistent(self):
+        return self._is_persistent
+
+    @property
+    def is_trainable(self):
+        return self._is_trainable
+
+    @property
+    def is_placeholder(self):
+        return self._is_placeholder
 
     @property
     def defs(self):
@@ -2028,7 +2114,7 @@ def value_of(tensor):
     """
     if tensor.is_constant:
         return tensor
-    temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
+    temp = temporary(axes=tensor.axes, dtype=tensor.dtype)
     return sequential([
         AssignOp(temp, tensor),
         temp
@@ -2056,15 +2142,13 @@ def constant(const, axes=None, dtype=None):
     else:
         nptensor_axes = make_axes([make_axis(l) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
-                             trainable=False, graph_label_type=graph_label_type,
+    val = AssignableTensorOp(axes=nptensor_axes,
+                             is_constant=True,
+                             is_persistent=True,
+                             graph_label_type=graph_label_type,
+                             initial_value=nptensor,
+                             const=nptensor,
                              dtype=dtype)
-    val.const = nptensor
-
-    def value_fun(tensor):
-        return nptensor
-
-    val.add_initializer(init_tensor(val, value_fun))
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
@@ -2073,12 +2157,12 @@ def constant(const, axes=None, dtype=None):
 
 def placeholder(axes, dtype=None, initial_value=None):
     """
-    A persistent tensor to be initialized from the CPU.
+    A place for a tensor to be supplied; typically used for computation arguments.
 
     Args:
         axes (Axes): The axes of the placeholder.
         dtype (optional): The dtype of the placeholder.
-        initial_value (optional): A host constant or callable. If callable, will
+        initial_value (optional): Deprecated. A host constant or callable. If callable, will
             be called to generate an initial value.
 
     Returns:
@@ -2086,13 +2170,14 @@ def placeholder(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="placeholder",
-                              constant=False, persistent=True, trainable=False,
-                              input=True,
+                              is_persistent=True,
+                              is_input=True,
+                              is_placeholder=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
-def temporary(axes, dtype=None, initial_value=None, constant=False):
+def temporary(axes, dtype=None, initial_value=None):
     """
     Temporary storage.
 
@@ -2110,14 +2195,13 @@ def temporary(axes, dtype=None, initial_value=None, constant=False):
 
     """
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=constant, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
 
 def persistent_tensor(axes, dtype=None, initial_value=None):
     """
-    Persistent storage.
+    Persistent storage, not trainable.
 
     Storage that will retain its value from computation to computation.
 
@@ -2132,7 +2216,8 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Persistent",
-                              constant=False, persistent=True, trainable=False,
+                              is_persistent=True,
+                              is_input=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2152,7 +2237,9 @@ def variable(axes, dtype=None, initial_value=None):
 
     """
     return AssignableTensorOp(graph_label_type="Variable",
-                              constant=False, persistent=True, trainable=True,
+                              is_input=True,
+                              is_persistent=True,
+                              is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
 
@@ -2190,7 +2277,7 @@ class StackOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes((axis,) + tuple(arg_axes))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
         slices = [slice(None)] * len(arg_axes)
         self.ops = [
             doall([SetItemOp(self.storage, [i] + slices, arg)
@@ -2263,7 +2350,7 @@ class ConcatOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes([concat_axis] + list(axes_0) + list(axes_1))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
@@ -3345,40 +3432,6 @@ def sigmoid(x):
         The sigmoid computation.
     """
     return SigmoidOp(x).value_tensor
-
-
-class Function(Op):
-    """TODO."""
-
-    def __init__(self, ops):
-        self.ops = ops
-        self.instructions = Op.ordered_ops(self.ops)
-        args, defs = set(), set()
-        for op in self.instructions:
-            # Kernel defines the def of each operation
-            defs.add(op)
-            # Kernel uses the args of each operation
-            # except whatever is being defined
-            args |= set(op.args) - defs
-        super(Function, self).__init__(args=args)
-        self.__defs = defs
-        self.initializers = [x for x in op.initializers
-                             for op in self.instructions]
-
-    @property
-    def defs(self):
-        """
-
-        Returns:
-            The cumulative invalidated storage for the op sequence.
-
-        """
-        return self.__defs
-
-    @property
-    def inputs(self):
-        """TODO."""
-        return self.use
 
 
 def mean(x, reduction_axes=None, out_axes=None):

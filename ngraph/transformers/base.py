@@ -21,14 +21,16 @@ import abc
 from builtins import object
 from future.utils import with_metaclass
 
-from ngraph.op_graph.op_graph import Op, InitTensorOp, \
-    doall, computation
-from ngraph.util.generics import generic_method
+from ngraph.op_graph.op_graph import Op, computation
 from ngraph.util.names import NameableValue
 from ngraph.util.ordered import OrderedSet
 
 
 PYCUDA_LOGIC_ERROR_CODE = 4
+
+
+class UnsupportedTransformerException(Exception):
+    pass
 
 
 class Computation(NameableValue):
@@ -51,10 +53,7 @@ class Computation(NameableValue):
         self.computation_name = None
         self.executor = None
 
-    def __call__(self, *args, **kwargs):
-        """
-        Executes the computation passing args in to the function.
-        """
+    def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
         if feed_dict is not None:
             if len(args) != 0:
@@ -73,6 +72,13 @@ class Computation(NameableValue):
                 expected=len(self.computation.parameters),
                 called=len(args),
             ))
+        return args
+
+    def __call__(self, *args, **kwargs):
+        """
+        Executes the computation passing args in to the function.
+        """
+        args = self.unpack_args_or_feed_dict(args, kwargs)
 
         # TODO Should this be automatic?
         self.transformer.initialize()
@@ -303,13 +309,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         initialized (bool): True when variables have been initialized/restored.
         fusion (bool): True when fusion was enabled.
         device_buffers (set): Set of handles for storage allocations.
-        cpu_initializations (list): Initializations to be performed from the CPU after
-            allocation.
-        init_computation (Computation): The computation that performs initialization
-            after allocation.  This happens once per training session, not once per-minibatch.
-        init_checked_ops: All ops processed.
-        init_states: All states seen.
-        state_initialization_ops: Initializations
 
     """
     def __init__(self, **kwargs):
@@ -319,56 +318,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.allocated = False
         self.initialized = False
         self.device_buffers = OrderedSet()
-        self.cpu_initializations = []
-        self.init_computation = None
         self.graph_passes = None
-        self.init_checked_ops = OrderedSet()
-        self.init_states = OrderedSet()
-        self.state_initialization_ops = OrderedSet()
-
-    def add_initialization_ops(self, ops):
-        """
-        Ensure initializations have been captured for state in ops.
-
-        Args:
-            ops: Collection of ops.
-
-        Returns:
-            True if new initializations were added.
-
-        """
-        did_work = False
-        for op in ops:
-            if op in self.init_checked_ops:
-                continue
-            self.init_checked_ops.add(op)
-            new_inits = self.state_initializations(op.states_read)
-            new_inits.update(self.state_initializations(op.states_written))
-            if len(new_inits) > 0:
-                did_work = True
-                self.state_initialization_ops.update(new_inits)
-                self.add_initialization_ops(Op.ordered_ops(new_inits))
-        self.state_initialization_ops = \
-            OrderedSet(op.forwarded for op in self.state_initialization_ops)
-        return did_work
-
-    def state_initializations(self, states):
-        """
-        Find new initializations associated with states.
-
-        Args:
-            states: A collection of states.
-
-        Returns:
-            New initializations.
-
-        """
-        new_inits = OrderedSet()
-        for state in states:
-            if state not in self.init_states:
-                self.init_states.add(state)
-                new_inits.update(state.initializers)
-        return new_inits
 
     def register_graph_pass(self, graph_pass):
         self.graph_passes.append(graph_pass)
@@ -389,9 +339,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             all_results.append(comp.computation)
 
         all_ops = self.run_registered_graph_passes(all_results)
-        self.init_computation = \
-            self.add_computation(computation(doall(self.state_initialization_ops)).named('init'))
-        all_ops.append(self.init_computation.computation)
 
         # Collect up all ops from the graph and obtain the init graph
         all_ops = OrderedSet(Op.ordered_ops(all_ops))
@@ -407,8 +354,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             tensor_description.value = \
                 tensor_description.buffer.device_tensor(tensor_description)
 
-        for state in self.init_states:
-            init_tensor_description(state.tensor_description())
         self.ops = Op.ordered_ops(all_ops)
         for op in self.ops:
             if op.is_tensor_op:
@@ -461,16 +406,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         Allocate storage on the device.
         """
-
-    @generic_method(Op)
-    def initialize_constant(self, op):
-        pass
-
-    @initialize_constant.on_type(InitTensorOp)
-    def initialize_constant(self, op):
-        tensor_description = op.tensor.tensor_description()
-        value = op.valfun(tensor_description)
-        tensor_description.value[()] = value
 
     @abc.abstractmethod
     def device_buffer_storage(self, bytes, dtype, name):
@@ -541,7 +476,11 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.allocate_storage()
 
         for op in OrderedSet(self.ops):
-            self.initialize_constant(op)
+            states = op.states_read | op.states_written
+            for state in states:
+                if state.initial_value is not None:
+                    tensor_description = state.tensor.tensor_description()
+                    tensor_description.value[()] = state.initial_value
 
         self.allocated = True
 
@@ -556,7 +495,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # Need to set initialized before we are done because the init computation will
         # try to initialize.
         self.initialized = True
-        self.init_computation()
 
     def close(self):
         pass

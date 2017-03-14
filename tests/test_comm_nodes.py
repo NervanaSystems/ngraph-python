@@ -16,6 +16,7 @@ from ngraph.factory.comm_nodes import calculate_new_axes
 import ngraph as ng
 import pytest
 
+
 ax_A = ng.make_axis(length=10, name='A')
 ax_B = ng.make_axis(length=15, name='B')
 ax_C = ng.make_axis(length=20, name='C')

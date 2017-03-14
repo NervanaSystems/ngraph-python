@@ -19,6 +19,7 @@ import pytest
 
 import ngraph as ng
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, slice_axis
+from ngraph.op_graph.axes import AxesMap, DuplicateAxisNames
 from ngraph.testing import ExecutorFactory
 
 
@@ -153,7 +154,7 @@ def test_axes_ops(test_cases):
 
 def random(tensor_description):
     """
-    return a ranom numpy array with dimension and dtype specified by
+    return a random numpy array with dimension and dtype specified by
     tensor_description.
 
     Arguments:
@@ -437,3 +438,57 @@ def test_scalar_broadcast():
         z = ng.broadcast(x, axes=broadcast_axes)
         z_comp = ex.executor(z)
         assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
+
+
+def test_duplicate_axis_names():
+    with pytest.raises(DuplicateAxisNames) as e:
+        AxesMap({'aaa': 'zzz', 'bbb': 'zzz', 'ccc': 'yyy'})
+
+    assert e.value.duplicate_axis_names == {
+        'zzz': set(['aaa', 'bbb']),
+    }
+
+
+def test_invalid_axes_map_message():
+    with pytest.raises(ValueError) as exc_info:
+        AxesMap({'aaa': 'zzz', 'bbb': 'zzz', 'ccc': 'yyy'})
+
+    e = exc_info.value
+
+    # check that offending names are listed in the error message
+    assert 'aaa' in str(e)
+    assert 'bbb' in str(e)
+    assert 'zzz' in str(e)
+
+    # check that non-offending names are not listed in the error message
+    assert 'ccc' not in str(e)
+    assert 'yyy' not in str(e)
+
+
+def test_axes_map():
+    """
+    map from Axes([aaa, bbb]) to Axes([zzz, bbb]) via AxesMap {aaa: zzz}
+    """
+    a = ng.make_axis(1, name='aaa')
+    b = ng.make_axis(2, name='bbb')
+    z = ng.make_axis(1, name='zzz')
+
+    axes_before = ng.make_axes([a, b])
+    axes_after = ng.make_axes([z, b])
+
+    axes_map = AxesMap({a.name: z.name})
+
+    assert axes_after == axes_map.map_axes(axes_before)
+
+
+def test_axes_map_immutable():
+    axes_map = AxesMap({})
+
+    with pytest.raises(TypeError):
+        axes_map['x'] = 'y'
+
+
+def test_axes_map_init_from_axes():
+    axes_map = AxesMap({ng.make_axis(1, name='aaa'): ng.make_axis(1, name='zzz')})
+
+    assert axes_map['aaa'] == 'zzz'
