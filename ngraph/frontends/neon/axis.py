@@ -15,6 +15,9 @@
 import ngraph as ng
 
 
+_SHADOW_AXIS_POSTFIX = '__NG_SHADOW'
+
+
 class Namespace():
     pass
 
@@ -55,3 +58,25 @@ ax.J = ng.make_axis(roles=[ar.features_input],
 ax.K = ng.make_axis(roles=[ar.features_output], docstring="number of output feature maps")
 
 ax.Y = ng.make_axis(docstring="target")
+
+
+def shadow_axes_map(axes):
+    """
+    Args:
+        iterable of Axis objects
+
+    Returns:
+        A map from axes to shadow axes to prevent axes from matching in
+        subsequent Ops.
+    """
+    return {
+        make_shadow_axis(axis): axis for axis in axes
+    }
+
+
+def make_shadow_axis(axis):
+    return ng.make_axis(axis.length, name=axis.name + _SHADOW_AXIS_POSTFIX)
+
+
+def is_shadow_axis(axis):
+    return axis.name.endswith(_SHADOW_AXIS_POSTFIX)

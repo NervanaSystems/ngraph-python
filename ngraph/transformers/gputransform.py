@@ -14,16 +14,26 @@
 # ----------------------------------------------------------------------------
 from builtins import range
 import atexit
+import sys
+
+from ngraph.transformers.base import UnsupportedTransformerException
+
+try:
+    import pycuda.driver as drv
+    from pycuda.gpuarray import GPUArray
+    from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
+except ImportError:
+    raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     DotLowDimension, Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod
+    Subtract, TanhOp, SetItemOp, Prod, TensorOp
 from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -48,13 +58,15 @@ from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_
 
 import cachetools
 import numpy as np
-import pycuda.driver as drv
-import sys
-from pycuda.gpuarray import GPUArray
-from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
 
 
 _none_slice = slice(None, None, None)
+
+
+class Function(TensorOp):
+    def __init__(self, **kwargs):
+        super(TensorOp, self).__init__(**kwargs)
+        self.instructions = []
 
 
 class ElementWiseKernel(GPUKernel):
@@ -210,10 +222,6 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(ReciprocalOp)
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
-
-    @add_op.on_type(AssignOneDOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
 
     @add_op.on_type(AssignOp)
     def add_op(self, op, out, tensor, value):
@@ -749,6 +757,8 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
+        elif isinstance(value, np.ndarray) and value.shape == ():
+            value = value[()]
         # flex: added astype to deal with GPUArray dtype int16
         # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \

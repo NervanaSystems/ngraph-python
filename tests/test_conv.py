@@ -195,8 +195,8 @@ def n128_hw32_c3_2x2():
 
 
 @pytest.fixture()
-def n4_hw16_c3_5x5():
-    return dict(C=3, N=4, K=8, H=16, W=16, R=5, S=5)
+def n4_hw12_c3_5x5():
+    return dict(C=3, N=4, K=8, H=12, W=12, R=5, S=5)
 
 
 def test_conv(transformer_factory, n64_hw32_c32_3x3):
@@ -309,11 +309,11 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
-def test_conv_flatten_deriv(transformer_factory, n4_hw16_c3_5x5):
+def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten
     """
-    cf = ConvParams(**n4_hw16_c3_5x5)
+    cf = ConvParams(**n4_hw12_c3_5x5)
 
     axes_rsck = ng.make_axes([cf.ax_f[2], cf.ax_f[3], cf.ax_f[0], cf.ax_f[-1]])
     axes_rsck_prime = ng.make_axes([ng.make_axis(name=ax.name + 'p', length=ax.length)
@@ -322,7 +322,6 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw16_c3_5x5):
 
     # broadcast input / filter axes
     input_var = ng.variable(cf.ax_i)
-    input_var.input = True
     input_val = np.ones(input_var.axes.lengths)
 
     filter_rsck_prime = ng.variable(axes_rsck_prime)
@@ -344,7 +343,6 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw16_c3_5x5):
     # cost and grad
     cost = ng.sum(output, out_axes=())
 
-    filter_var.input = True
     filter_val = np.ones(filter_var.axes.lengths)
 
     with ExecutorFactory() as factory:
