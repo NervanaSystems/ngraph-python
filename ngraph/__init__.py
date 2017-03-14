@@ -82,10 +82,8 @@ __all__ = [
 ]
 
 
+from ngraph.transformers.gputransform import GPUTransformer
 try:
-    from ngraph.transformers.gputransform import GPUTransformer
-    # import flex transformer if autoflex package is installed
-    from ngraph.flex import GPUFlexManager
     from ngraph.transformers.flexgputransform import FlexGPUTransformer
 except UnsupportedTransformerException:
     pass
