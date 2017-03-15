@@ -82,8 +82,11 @@ __all__ = [
 ]
 
 
-from ngraph.transformers.gputransform import GPUTransformer
 try:
-    from ngraph.transformers.flexgputransform import FlexGPUTransformer
+    from ngraph.transformers.gputransform import GPUTransformer
+    try:
+        from ngraph.transformers.flexgputransform import FlexGPUTransformer
+    except UnsupportedTransformerException:
+        pass
 except UnsupportedTransformerException:
     pass
