@@ -75,13 +75,13 @@ def axis_to_protobuf(axis):
     if isinstance(axis, FlattenedAxis):
         pb_axis.flattened_axes.CopyFrom(axes_to_protobuf(axis._axes))
         pb_axis.length = axis.length
-        pb_axis.uuid.uuid = axis.uuid.get_bytes()
+        pb_axis.uuid.uuid = axis.uuid.bytes
         return pb_axis
 
     pb_axis.length = axis.length
     pb_axis.batch = axis.is_batch
     pb_axis.recurrent = axis.is_recurrent
-    pb_axis.uuid.uuid = axis.uuid.get_bytes()
+    pb_axis.uuid.uuid = axis.uuid.bytes
 
     for role in axis.roles:
         tmp = pb_axis.roles.add()
@@ -94,7 +94,7 @@ def axes_to_protobuf(axes):
     for axis in axes:
         pb_axis = pb_axes.axes.add()
         pb_axis.CopyFrom(axis_to_protobuf(axis))
-    pb_axes.uuid.uuid = axes.uuid.get_bytes()
+    pb_axes.uuid.uuid = axes.uuid.bytes
     return pb_axes
 
 
@@ -212,7 +212,7 @@ def op_to_protobuf(op):
     pb_op = ops_pb.Op(name=op.name, op_type=op.__class__.__name__)
     if hasattr(op, 'dtype'):
         pb_op.dtype = dtype_to_protobuf(op.dtype)
-    pb_op.uuid.uuid = op.uuid.get_bytes()
+    pb_op.uuid.uuid = op.uuid.bytes
 
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
@@ -253,9 +253,9 @@ def add_edges(pb_edges, pb_ops, op):
 
     def add_edge(from_op, to_op, edge_type):
         edge = ops_pb.Edge()
-        edge.uuid.uuid = uuid.uuid4().get_bytes()
-        edge.from_uuid.uuid = from_op.uuid.get_bytes()
-        edge.to_uuid.uuid = to_op.uuid.get_bytes()
+        edge.uuid.uuid = uuid.uuid4().bytes
+        edge.from_uuid.uuid = from_op.uuid.bytes
+        edge.to_uuid.uuid = to_op.uuid.bytes
         edge.edge_type = edge_type
         pb_edges.append(edge)
         return edge
@@ -419,7 +419,7 @@ def pb_to_axis(msg):
                     roles=roles)
 
     axis.uuid = uuid.UUID(bytes=msg.uuid.uuid)
-    GLOBAL_AXIS_REGISTRY[axis.uuid.get_bytes()] = axis
+    GLOBAL_AXIS_REGISTRY[axis.uuid.bytes] = axis
     return axis
 
 
@@ -484,7 +484,7 @@ def _deserialize_graph(graph_pb):
     GLOBAL_AXIS_REGISTRY.clear()
 
     ops = list(map(protobuf_to_op, graph_pb.ops))
-    uuid_lookup = {op.uuid.get_bytes(): op for op in ops}
+    uuid_lookup = {op.uuid.bytes: op for op in ops}
     for edge in graph_pb.edges:
         head_op = uuid_lookup[edge.from_uuid.uuid]
         tail_op = uuid_lookup[edge.to_uuid.uuid]
