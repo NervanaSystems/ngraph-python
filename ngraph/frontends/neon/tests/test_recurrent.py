@@ -54,6 +54,7 @@ num_atol = num_rtol = 1e-2
 
 # TODO: Update tests to use conftest.py fixtures
 
+
 @pytest.fixture(params=["random"])
 def weight_initializer(request):
     if request.param == "random":
