@@ -47,6 +47,9 @@ install:
 	@pip install -r requirements.txt
 	@pip install -e .
 
+gpu_install:
+	@pip install -r gpu_requirements.txt > /dev/null 2>&1
+
 test_install:
 	@pip install -r test_requirements.txt > /dev/null 2>&1
 
@@ -77,7 +80,7 @@ test_cpu: test_install clean
 	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_gpu: clean
+test_gpu: gpu_install clean
 	@echo Running unit tests for gpu dependent transformer tests...
 	@py.test --transformer hetr -m "hetr_gpu_only" $(TEST_OPTS) $(TEST_DIRS)
 	@py.test --transformer gpu -m "transformer_dependent" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
