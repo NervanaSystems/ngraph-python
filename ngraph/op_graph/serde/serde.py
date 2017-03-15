@@ -130,8 +130,8 @@ def unhandled_scalar_value(value):
 
 def is_scalar_type(value):
     return value is None or \
-        isinstance(value, (str, six.text_type, float, bool, dict, slice,
-            np.generic) + six.integer_types)
+        isinstance(value, (str, six.text_type, float, bool, dict, slice, np.generic)
+                   + six.integer_types)
 
 
 def assign_scalar(message, value):
@@ -142,7 +142,7 @@ def assign_scalar(message, value):
         message.null_val = True
     elif isinstance(value, np.generic):
         assign_scalar(message, np.asscalar(value))
-    elif isinstance(value, (str, unicode)):
+    elif isinstance(value, (str, six.text_type)):
         message.string_val = value
     elif isinstance(value, np.dtype):
         message.dtype_val = dtype_to_protobuf(value)
@@ -150,7 +150,7 @@ def assign_scalar(message, value):
         message.double_val = value
     elif isinstance(value, bool):
         message.bool_val = value
-    elif isinstance(value, (int, long)):
+    elif isinstance(value, six.integer_types):
         message.int_val = value
     elif isinstance(value, slice):
         slice_val = ops_pb.Slice()
