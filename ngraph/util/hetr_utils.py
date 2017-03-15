@@ -28,9 +28,9 @@ def clone(
         send_nodes=None,
         arg1=None,
         arg2=None):
-    if node.__class__.__name__ is 'AddOp':
+    if node.__class__.__name__ is 'Add':
         new_node = node.__class__(arg1, arg2)
-        new_node._TensorOp__axes = new_axes
+        new_node._axes = new_axes
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id
@@ -83,7 +83,7 @@ def clone(
     elif isinstance(node, AssignableTensorOp) and node.is_constant:
         new_node = node.__class__()
         new_node.initial_value = node.initial_value
-        new_node._TensorOp__axes = new_axes
+        new_node._axes = new_axes
         new_node.dtype = node.dtype
         new_node.metadata['device'] = node.metadata['device']
         new_node.metadata['device_id'] = device_id

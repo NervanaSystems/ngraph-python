@@ -15,10 +15,15 @@
 import json
 import random
 import tempfile
+import logging
 
 import six
 
 from ngraph.transformers.passes.passes import GraphPass
+
+from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.serde import serde as ser
+from ngraph.op_graph.serde import ops_pb2 as ops_pb
 
 
 class JSONPass(GraphPass):
@@ -69,12 +74,23 @@ class JSONPass(GraphPass):
 class VizPass(GraphPass):
     """
     A graph pass that visualizes nervana graphs and displays them to the user
+
+    Parameters:
+        subgraph_attr <string or None, default None>: A metadata attribute (eg: 'layer_type')
+            that you wish to group ops by.
+        show_axes <bool default False>: Whether to render axes information on nodes.
+        show_all_metadata <bool, default False>: Whether to render all Op metadata on the nodes.
+        view <bool, default True>: Whether to open the rendered PDF, if False, prints PDF location
+            to stdout.
+
     """
-    def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False):
+    def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False, view=True):
         super(VizPass, self).__init__()
         self.show_axes = show_axes
         self.show_all_metadata = show_all_metadata
         self.subgraph_attr = subgraph_attr
+        self.uuid_lookup_table = dict()
+        self.view = view
 
     def get_subgraphs(self, ops):
         clusters = set()
@@ -93,6 +109,8 @@ class VizPass(GraphPass):
         return HEX[0]
 
     def add_op_to_graph(self, op, graph):
+        # Register op in lookup table by uuid for later edge creation
+        self.uuid_lookup_table[op.uuid.get_bytes()] = op
         op_label = op.name
         if hasattr(op, 'axes') and self.show_axes:
             op_label += "\n{}".format(op.axes)
@@ -100,12 +118,25 @@ class VizPass(GraphPass):
             for k, v in six.iteritems(op.metadata):
                 op_label += "\n{}={}".format(k, v)
         graph.node(op.name, op_label)
-        for arg in op.args:
-            graph.edge(op.name, arg.name)
-        for arg in op.control_deps:
-            graph.edge(op.name, arg.name, color='blue')
-        if op.forwarded and op.forwarded is not op:
-            graph.edge(op.name, op.forwarded.name, color='red')
+
+    def add_edge_to_graph(self, edge, graph):
+        head_op = self.uuid_lookup_table[edge.from_uuid.uuid]
+        tail_op = self.uuid_lookup_table[edge.to_uuid.uuid]
+        if edge.edge_type == ops_pb.Edge.DATA:
+            graph.edge(head_op.name, tail_op.name)
+        elif edge.edge_type == ops_pb.Edge.CONTROL:
+            graph.edge(head_op.name, tail_op.name, color='blue')
+        elif edge.edge_type == ops_pb.Edge.CONTAINER:
+            if '_ngraph_forward' in edge.attrs and head_op is not tail_op:
+                graph.edge(head_op.name, tail_op.name, color='red', label='forward')
+            else:  # ops
+                graph.edge(head_op.name, tail_op.name, label='_ops', color='red', style='dotted')
+        else:
+            if '_ngraph_attribute' in edge.attrs:
+                label = edge.attrs['_ngraph_attribute'].scalar.string_val
+            else:
+                label = edge.attrs['_ngraph_list_attribute'].scalar.string_val
+            graph.edge(head_op.name, tail_op.name, label=label, color='red', style='dotted')
 
     def do_pass(self, ops, inits):
         try:
@@ -113,39 +144,23 @@ class VizPass(GraphPass):
         except ImportError:
             raise ImportError("You tried to use the ShowGraph transformer pass but did "
                               "not have the python graphviz library installed")
-        # Get all ops from this set
-        frontier = set(ops)
-        visited = set()
-        while len(frontier) > 0:
-            op = frontier.pop()
-            visited.add(op)
-            for arg in op.args:
-                if arg not in visited:
-                    frontier.add(arg)
-            for arg in op.control_deps:
-                if arg not in visited:
-                    frontier.add(arg)
-            if hasattr(op, 'user_deps'):
-                for arg in op.user_deps:
-                    if arg not in visited:
-                        frontier.add(arg)
-            if op.forwarded is not op:
-                frontier.add(op.forwarded)
+        # Get all ops and edges from this set
+        all_ops = Op.all_op_references(ops)
+        all_edges = ser._serialize_graph(ops).edges
 
-        visited_ops = list(visited)
         vg = graphviz.Digraph(node_attr={'shape': 'box'},
                               graph_attr={'nodesep': '.5',
                                           'ranksep': '.5'})
         if self.subgraph_attr is not None:
             subgraphs = {}
-            for subgraph_name in self.get_subgraphs(visited_ops):
+            for subgraph_name in self.get_subgraphs(all_ops):
                 if subgraph_name not in subgraphs and subgraph_name is not None:
                     sg = graphviz.Digraph(name='cluster_{}'.format(subgraph_name))
                     sg.body.append('color="{}"'.format(self.random_color()))
                     sg.body.append('style=filled')
                     sg.body.append('label="{}"'.format(subgraph_name))
                     subgraphs[subgraph_name] = sg
-            for op in visited_ops:
+            for op in all_ops:
                 subgraph_name = op.metadata.get(self.subgraph_attr, '')
                 if subgraph_name in subgraphs:
                     graph = subgraphs[subgraph_name]
@@ -157,10 +172,17 @@ class VizPass(GraphPass):
                 vg.subgraph(sg)
 
         else:
-            for op in visited_ops:
+            for op in all_ops:
                 self.add_op_to_graph(op, vg)
 
+        for edge in all_edges:
+            self.add_edge_to_graph(edge, vg)
+
         tmp_dir = tempfile.mkdtemp()
-        vg.render(directory=tmp_dir, view=True, cleanup=True)
+        vg.render(directory=tmp_dir, view=self.view, cleanup=True)
+        if not self.view:
+            logging.info("VizPass graph rendered to {}", tmp_dir)
+        # Cleanup
+        self.uuid_lookup_table.clear()
 
         return ops, inits
