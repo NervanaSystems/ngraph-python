@@ -116,6 +116,9 @@ class AxisRole(object):
     def __eq__(self, rhs):
         return self.name == rhs.name
 
+    def __hash__(self):
+        return hash(self.name)
+
 
 class Axis(object):
     """
