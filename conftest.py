@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 import pytest
 import ngraph.transformers as ngt
-from ngraph.flex.names import flex_gpu_transformer_name
+import ngraph.op_graph.serde.serde as serde
 
 
 def pytest_addoption(parser):
@@ -22,6 +22,10 @@ def pytest_addoption(parser):
                      help="Batch size for tests using input_tensor fixture.")
     parser.addoption("--transformer", default="numpy", choices=ngt.transformer_choices(),
                      help="Select from available transformers")
+    parser.addoption("--serialization_integration_test", action="store_true",
+                     help="Force all unit tests to serialize and deserialize the graph before \
+                     transformer compilation.")
+
 
 def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
@@ -40,3 +44,24 @@ def transformer_factory(request):
 
     # Reset transformer factory to default
     ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))
+
+
+@pytest.fixture(autouse=True)
+def force_serialization_computations(monkeypatch):
+    """
+    This integration test fixture breaks a few tests as false positives (whenever there are
+    interactions between multiple computations in a single transformer), so it is designed to be an
+    aid for widely testing serialization and not a true integration test that must pass on every
+    merge.
+    """
+    if pytest.config.getoption("--serialization_integration_test"):
+        original_computation = ngt.Transformer.add_computation
+
+        def monkey_add_computation(self, comp):
+            if comp.name.startswith('init'):
+                return original_computation(self, comp)
+            ser_comp = serde.serialize_graph([comp], only_return_handle_ops=True)
+            deser_comp = serde.deserialize_graph(ser_comp)
+            assert len(deser_comp) == 1
+            return original_computation(self, deser_comp[0])
+        monkeypatch.setattr(ngt.Transformer, 'add_computation', monkey_add_computation)

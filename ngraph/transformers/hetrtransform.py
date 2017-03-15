@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import signal
-import pytest
 import sys
 import os
 import time
@@ -116,8 +115,10 @@ class AsyncTransformer(Process):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
+                                    import pytest
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
                                 elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    import pytest
                                     pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)

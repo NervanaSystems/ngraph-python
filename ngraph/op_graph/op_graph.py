@@ -15,6 +15,7 @@ from __future__ import division
 
 from contextlib import contextmanager
 import collections
+import uuid
 
 import inspect
 import cachetools
@@ -204,6 +205,36 @@ class Op(NameableValue, DebugInfo):
                 parent.extend(ops)
 
     @staticmethod
+    def all_op_references(ops):
+        """
+        Currently ops can have references to other ops anywhere in their __dict__, (not just args,
+        but the other typical places handled in serialization's `add_edges`). This function
+        iterates through an ops __dict__ attributes and finds all other ops recursively.
+
+        This is more powerful than the ordered_ops method which only considers args and
+        control_deps.
+        """
+        op_set = OrderedSet(ops)
+
+        def add_op(op):
+            op_set.insert(0, op)
+            for key in op.__dict__:
+                val = getattr(op, key)
+                if isinstance(val, Op) and val not in op_set:
+                    add_op(val)
+                elif isinstance(val, dict):
+                    for subkey in val:
+                        if isinstance(val[subkey], Op) and val[subkey] not in op_set:
+                            add_op(val[subkey])
+                elif isinstance(val, (list, tuple, set, OrderedSet)):
+                    for item in val:
+                        if isinstance(item, Op) and item not in op_set:
+                            add_op(item)
+        for op in ops:
+            add_op(op)
+        return op_set
+
+    @staticmethod
     def ordered_ops(results):
         """
         depth-first, post-order "Bottom Up" traversal of Ops in results.
@@ -279,7 +310,7 @@ class Op(NameableValue, DebugInfo):
                  trainable=False,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
-        self.__args = tuple(as_op(arg) for arg in args)
+        self._args = tuple(as_op(arg) for arg in args)
         self.metadata = dict()
 
         if metadata is not None:
@@ -289,9 +320,10 @@ class Op(NameableValue, DebugInfo):
             self.metadata.update(metadata)
 
         # List to keep generation deterministic
-        self.__control_deps = OrderedSet()
-        self.__deriv_handler = None
+        self._control_deps = OrderedSet()
+        self._deriv_handler = None
         self._const = const
+        self.uuid = uuid.uuid4()
         self._is_constant = constant
         self._is_persistent = persistent
         self._is_trainable = trainable
@@ -305,7 +337,7 @@ class Op(NameableValue, DebugInfo):
             all_ops.append(self)
 
         self.style = {}
-        self.__forward = None
+        self._forward = None
 
     @property
     def tensor(self):
@@ -439,7 +471,7 @@ class Op(NameableValue, DebugInfo):
     @property
     def args(self):
         """All the inputs to this node."""
-        return self.__args
+        return self._args
 
     @property
     def forward(self):
@@ -451,7 +483,7 @@ class Op(NameableValue, DebugInfo):
         Returns:
              None or the replacement.
         """
-        return self.__forward
+        return self._forward
 
     @forward.setter
     def forward(self, value):
@@ -460,9 +492,9 @@ class Op(NameableValue, DebugInfo):
 
         # Make sure everything that is supposed to happen
         # before this op still happens
-        for dep in self.__control_deps:
+        for dep in self._control_deps:
             value.add_control_dep(dep)
-        self.__forward = value
+        self._forward = value
         tdcache.tensor_description_cache.clear()
         value.metadata.update(self.metadata)
 
@@ -476,9 +508,9 @@ class Op(NameableValue, DebugInfo):
         """
         result = self
         while True:
-            if result.__forward is None:
+            if result._forward is None:
                 return result
-            result = result.__forward
+            result = result._forward
 
     @property
     def control_deps(self):
@@ -487,7 +519,7 @@ class Op(NameableValue, DebugInfo):
         Returns:
             Ops that must execute before this one can.
         """
-        return self.__control_deps + self.args
+        return self._control_deps + self.args
 
     def add_control_dep(self, dep):
         """
@@ -499,7 +531,7 @@ class Op(NameableValue, DebugInfo):
         """
         dep = dep.forwarded
         if dep is not self and dep not in self.control_deps:
-            self.__control_deps.add(dep)
+            self._control_deps.add(dep)
 
     def remove_control_dep(self, dep):
         """
@@ -510,7 +542,7 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
-        self.__control_deps.remove(dep.forwarded)
+        self._control_deps.remove(dep.forwarded)
 
     def update_forwards(self):
         """
@@ -526,9 +558,9 @@ class Op(NameableValue, DebugInfo):
 
         for op in self.control_deps:
             if op.forward is not None:
-                self.__args = tuple(arg.forwarded for arg in self.__args)
-                control_deps = self.__control_deps
-                self.__control_deps = OrderedSet()
+                self._args = tuple(arg.forwarded for arg in self._args)
+                control_deps = self._control_deps
+                self._control_deps = OrderedSet()
                 for op in control_deps:
                     self.add_control_dep(op.forwarded)
                 break
@@ -546,16 +578,16 @@ class Op(NameableValue, DebugInfo):
             self is returned.
 
         """
-        if self.__deriv_handler is None:
+        if self._deriv_handler is None:
             return self
         else:
-            return self.__deriv_handler
+            return self._deriv_handler
 
     @deriv_handler.setter
     def deriv_handler(self, deriv_handler):
         if deriv_handler is self:
             deriv_handler = None
-        self.__deriv_handler = deriv_handler
+        self._deriv_handler = deriv_handler
 
     @property
     def defs(self):
@@ -908,7 +940,7 @@ class TensorOp(Op):
             self.dtype = default_dtype(dtype)
             if axes is not None:
                 axes = make_axes(axes)
-            self.__axes = axes
+            self._axes = axes
             self.scale = scale
 
     @property
@@ -1107,16 +1139,16 @@ class TensorOp(Op):
         Returns: The axes of the tensor.
 
         """
-        if self.__axes is not None:
-            return self.__axes
+        if self._axes is not None:
+            return self._axes
         else:
             raise NotImplementedError
 
     @axes.setter
     def axes(self, value):
-        if self.__axes is not None:
+        if self._axes is not None:
             raise ValueError()
-        self.__axes = value
+        self._axes = value
 
     @property
     def has_axes(self):
@@ -1125,7 +1157,7 @@ class TensorOp(Op):
         Returns: True if axes have been set.
 
         """
-        return self.__axes is not None
+        return self._axes is not None
 
     def insert_axis(self, index, axis):
         """
@@ -1134,14 +1166,14 @@ class TensorOp(Op):
             index   : Index to insert at
             axis    : The Axis object to insert
         """
-        if self.__axes is None:
+        if self._axes is None:
             raise ValueError()
-        self.__axes.insert(index, axis)
+        self._axes.insert(index, axis)
 
     def append_axis(self, axis):
-        if self.__axes is None:
+        if self._axes is None:
             raise ValueError()
-        self.__axes.append(axis)
+        self._axes.append(axis)
 
     def generate_adjoints(self, adjoints, delta, *args):
         """
@@ -1203,7 +1235,7 @@ class ValueOp(TensorOp, ControlBlockOp):
     """
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
-        self.__tensor = tensor
+        self._tensor = tensor
 
     def tensor_description(self):
         return self.tensor.tensor_description()
@@ -1217,7 +1249,7 @@ class ValueOp(TensorOp, ControlBlockOp):
             The op that supplies the value.
 
         """
-        return self.__tensor.tensor
+        return self._tensor.tensor
 
     @property
     def value_tensor(self):
@@ -1228,11 +1260,11 @@ class ValueOp(TensorOp, ControlBlockOp):
             The immediate value returned by this op; see tensor for the closure.
 
         """
-        return self.__tensor
+        return self._tensor
 
     @value_tensor.setter
     def value_tensor(self, tensor):
-        self.__tensor = tensor
+        self._tensor = tensor
 
     @property
     def control_deps(self):
@@ -1308,21 +1340,21 @@ class SequentialOp(ValueOp):
     def __init__(self, ops=None, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
         self.value_tensor = None
-        self.__ops = None
+        self._ops = None
         if ops is not None:
             self.ops = ops
 
     @property
     def ops(self):
-        return self.__ops
+        return self._ops
 
     @ops.setter
     def ops(self, ops):
-        self.__ops = list(as_op(op).forwarded for op in ops)
+        self._ops = list(as_op(op).forwarded for op in ops)
 
-        for op in self.__ops:
+        for op in self._ops:
             self.add_control_dep(op)
-        self.value_tensor = self.__ops[-1]
+        self.value_tensor = self._ops[-1]
 
         # Ops that have already executed.
         done_ops = set()
@@ -1331,7 +1363,7 @@ class SequentialOp(ValueOp):
         writers = defaultdict(OrderedSet)
         # State => op_tops that have read state
         readers = defaultdict(OrderedSet)
-        for op_top in self.__ops:
+        for op_top in self._ops:
             ordered_ops = Op.ordered_ops([op_top])
             # Make ops that read/write state execute after the op_tops that last read/wrote
             # the state.
@@ -2902,7 +2934,7 @@ def add_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta)
 
 
-Add, add = create_binary_elementwise('AddOp', 'add', add_adjoints)
+Add, add = create_binary_elementwise('Add', 'add', add_adjoints)
 
 
 def subtract_adjoints(self, adjoints, delta, x, y):
