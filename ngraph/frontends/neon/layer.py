@@ -862,7 +862,7 @@ class BiRNN(Layer):
         with ng.metadata(direction="fwd"):
             fwd_out = self.fwd_rnn(fwd_in, fwd_init)
         with ng.metadata(direction="bwd"):
-            bwd_out = self.bwd_rnn(bwd_in, bwd_init)
+            bwd_out = ng.cast_role(self.bwd_rnn(bwd_in, bwd_init), fwd_out.axes)
 
         if self.sum_out:
             return fwd_out + bwd_out
@@ -876,7 +876,7 @@ class BiRNN(Layer):
                     raise ValueError("Multiple hidden axes. Unable to concatenate automatically")
             return ng.ConcatOp([fwd_out, bwd_out], ax_list)
         else:
-            return [fwd_out, bwd_out]
+            return fwd_out, bwd_out
 
 
 class LSTM(Recurrent):

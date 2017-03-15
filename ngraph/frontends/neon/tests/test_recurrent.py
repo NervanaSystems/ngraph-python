@@ -52,6 +52,7 @@ bprop_atol = 1e-5
 # numerical derivative is useful but shows large errors. Give high tolerance
 num_atol = num_rtol = 1e-2
 
+# TODO: Update tests to use conftest.py fixtures
 
 @pytest.fixture(params=["random"])
 def weight_initializer(request):
@@ -399,3 +400,60 @@ def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_s
                                        deriv_n(val, input_value),
                                        rtol=num_rtol,
                                        atol=num_atol)
+
+
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("batch_size", [4])
+@pytest.mark.parametrize("output_size", [10])
+@pytest.mark.parametrize("sum_outputs,concatenate_outputs", [(False, False),
+                                                             (True, False),
+                                                             (False, True)])
+def test_birnn_output_types(recurrent_input, output_size, weight_initializer,
+                            sum_outputs, concatenate_outputs):
+    """
+    Tests that birnns output ops of the right type
+    """
+
+    # Generate ngraph RNN
+    rnn1 = BiRNN(output_size, init=weight_initializer, activation=Tanh(),
+                 reset_cells=True, return_sequence=True,
+                 sum_out=sum_outputs, concat_out=concatenate_outputs)
+    out = rnn1(recurrent_input)
+
+    if concatenate_outputs:
+        assert isinstance(out, ng.ConcatOp), \
+            "Output is of type {} instead of {}".format(type(out), ng.ConcatOp)
+    elif sum_outputs:
+        assert isinstance(out, ng.Add), \
+            "Output is of type {} instead of {}".format(type(out), ng.Add)
+    else:
+        assert isinstance(out, tuple), \
+            "Output is of type {} instead of {}".format(type(out), tuple)
+
+
+@pytest.mark.parametrize("sequence_length", [3])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("batch_size", [4])
+@pytest.mark.parametrize("output_size", [10])
+@pytest.mark.parametrize("sum_outputs,concatenate_outputs", [(False, False),
+                                                             (True, False),
+                                                             (False, True)])
+@pytest.mark.parametrize("extra_feature_axes", [0, 2], indirect=True)
+def test_stacked_birnn_construction(recurrent_input, output_size, weight_initializer,
+                                    sum_outputs, concatenate_outputs):
+    """
+    Tests that birnns can be stacked in all of their configurations. If they cannot, an error will
+    be thrown, so no assertions are needed.
+    """
+
+    # Generate ngraph RNN
+    rnn1 = BiRNN(output_size, init=weight_initializer, activation=Tanh(),
+                 reset_cells=True, return_sequence=True,
+                 sum_out=sum_outputs, concat_out=concatenate_outputs)
+    rnn2 = BiRNN(output_size, init=weight_initializer, activation=Tanh(),
+                 reset_cells=True, return_sequence=True,
+                 sum_out=sum_outputs, concat_out=concatenate_outputs)
+
+    out = rnn1(recurrent_input)
+    rnn2(out)
