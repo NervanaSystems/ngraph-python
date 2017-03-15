@@ -567,18 +567,19 @@ class GPUTensorAllocator():
         """
         tensor_description = self.tensor_description
         layout = tensor_description.layout
+        dtype = self.transformer.storage_dtype(tensor_description.dtype)
 
         if layout:
-            gpudata = int(buffer_alloc) + tensor_description.offset
-            strides = tuple([s * tensor_description.dtype.itemsize for s in layout.strides])
+            gpudata = int(buffer_alloc) + (layout.offset * dtype.itemsize)
+            strides = tuple([s * dtype.itemsize for s in layout.strides])
             new_tensor = GPUArray(layout.shape,
-                                  self.transformer.storage_dtype(tensor_description.dtype),
+                                  dtype,
                                   gpudata=gpudata,
                                   strides=strides)
         else:
             gpudata = int(buffer_alloc) + tensor_description.offset
             new_tensor = GPUArray(tensor_description.shape,
-                                  self.transformer.storage_dtype(tensor_description.dtype),
+                                  dtype,
                                   gpudata=gpudata,
                                   strides=tensor_description.strides)
 

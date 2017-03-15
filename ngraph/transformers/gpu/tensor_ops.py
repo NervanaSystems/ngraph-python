@@ -294,6 +294,7 @@ class SetItemKernel(GPUKernel):
         elif self.tensor.shape == ():
             self.tensor.tensor.fill(self.value)
         else:
+            #import pdb; pdb.set_trace()
             self.tensor.__setitem__(self.item, self.value)
 
 

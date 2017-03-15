@@ -128,7 +128,7 @@ class update_conv(ConvDerivOp):
             filters : filter/kernel tensor.
         """
         super(update_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(inputs)),
+            args=(delta, inputs),
             fprop=fprop,
             axes=filters.axes, **kwargs
         )
@@ -142,7 +142,7 @@ class bprop_conv(ConvDerivOp):
             filters : filter/kernel tensor.
         """
         super(bprop_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(filters)),
+            args=(delta, filters),
             fprop=fprop,
             axes=inputs.axes, **kwargs
         )
