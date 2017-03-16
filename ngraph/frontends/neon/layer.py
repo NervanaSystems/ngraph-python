@@ -19,7 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar, shadow_axes_map, is_shadow_axis
+from ngraph.frontends.neon.axis import ar, shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -307,13 +307,13 @@ class ConvBase(Layer):
     @cached({})
     def __call__(self, in_obj):
         cpm = self.convparams.copy()
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
         if self.f_axes is None:
             self.f_axes = ng.make_axes([in_axes[0]])
-            for nm, role in zip('TRSK', self.filter_roles[1:]):
-                self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
+            for nm in 'TRSK':
+                self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
             # mark 'K' as a shadow axis for the initializers.  with #1158
             # shadows will also be important for axis name matching and roles
             # can be removed.
@@ -327,7 +327,7 @@ class ConvBase(Layer):
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
+                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -416,12 +416,12 @@ class PoolBase(Layer):
     @cached({})
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
+                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [

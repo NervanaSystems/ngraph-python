@@ -56,13 +56,8 @@ ax.Y.length = 10
 
 
 def cifar_mean_subtract(x):
-    # Assign roles
-    x.axes.find_by_name('channel').add_role(ar.features_input)
-    x.axes.find_by_name('height').add_role(ar.features_1)
-    x.axes.find_by_name('width').add_role(ar.features_2)
-
     bgr_mean = ng.persistent_tensor(
-        axes=x.axes.find_by_name('channel'),
+        axes=x.axes.find_by_name('C'),
         initial_value=np.array([104., 119., 127.]))
 
     return (x - bgr_mean) / 255.
