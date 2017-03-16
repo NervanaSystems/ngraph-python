@@ -30,6 +30,8 @@ def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, de
     with executor(ng_fun, ng_placeholder) as const_executor:
         for value, expected_value in zip(values, expected_values):
             flex = const_executor(value)
+            print(value)
+            print(description)
             print("flex_value: ", flex)
             print("expected_value: ", expected_value)
             print("difference: ", flex - expected_value)
