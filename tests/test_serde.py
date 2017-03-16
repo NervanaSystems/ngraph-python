@@ -54,9 +54,7 @@ def assert_object_equality(obj1, obj2):
 
 def test_flattenedaxis_serialization():
     # We do a round robin serialization run with an axis and make sure that they match
-    roles = [ng.make_axis_role(name='Channel', docstring='image channels'),
-             ng.make_axis_role(name='Width', docstring='image width')]
-    c = ng.make_axis(name='C', length=2, roles=roles)
+    c = ng.make_axis(name='C', length=2)
     h = ng.make_axis(name='H', length=3)
     orig_axis = ng.make_axes([c, h]).flatten()
 
@@ -71,18 +69,12 @@ def test_flattenedaxis_serialization():
 
 def test_axis_serialization():
     # We do a round robin serialization run with an axis and make sure that they match
-    roles = [ng.make_axis_role(name='Channel', docstring='image channels'),
-             ng.make_axis_role(name='Width', docstring='image width')]
-    axis = ng.make_axis(name='C', length=2, roles=roles)
+    axis = ng.make_axis(name='C', length=2)
     pb_axis = ser.axis_to_protobuf(axis)
     py_axis = ser.pb_to_axis(pb_axis)
     assert axis.length == py_axis.length
     assert axis.name == py_axis.name
     assert axis == py_axis
-    # Sort roles and compare
-    pb_roles = sorted(axis.roles, key=lambda x: x.name)
-    py_roles = sorted(py_axis.roles, key=lambda x: x.name)
-    assert pb_roles == py_roles
 
 
 def test_tensor_to_protobuf():
