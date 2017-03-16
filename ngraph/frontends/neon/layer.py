@@ -59,10 +59,11 @@ def inference_mode(*args, **kwargs):
 
 class Layer(object):
     inference_mode = False
+    active_scope = None
 
-    def __init__(self, scope=None, name=None):
+    def __init__(self, name=None):
         self.name = name
-        self.scope = scope
+        self.scope = Layer.active_scope
 
     def __call__(self, in_obj, inference):
         raise NotImplementedError()
@@ -82,6 +83,13 @@ class Layer(object):
         """
 
         return keys.hashkey(inference_mode=Layer.inference_mode, *args, **kwargs)
+
+    @staticmethod
+    @contextmanager
+    def variable_scope(name):
+        Layer.active_scope = name
+        yield Layer.active_scope
+        Layer.active_scope = None
 
 
 class Preprocess(Layer):
@@ -174,8 +182,7 @@ class Linear(Layer):
             self.W = ng.variable(
                 #axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
                 axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
-                initial_value=self.init, scope=self.scope,
-            ).named('LinW')
+                initial_value=self.init, scope=self.scope).named('LinW')
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -201,8 +208,8 @@ class LookupTable(Layer):
     metadata = {'layer_type': 'lookuptable'}
 
     def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None,
-                 scope=None, **kwargs):
-        super(LookupTable, self).__init__(scope=scope, **kwargs)
+                 **kwargs):
+        super(LookupTable, self).__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
@@ -279,8 +286,8 @@ class ConvBase(Layer):
     """
     metadata = {'layer_type': 'convolution'}
 
-    def __init__(self, fshape, init, strides, padding, dilation, scope=None, **kwargs):
-        super(ConvBase, self).__init__(scope=scope, **kwargs)
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
+        super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
                                str_h=None, str_w=None, str_d=None,
@@ -347,7 +354,7 @@ class ConvBase(Layer):
 
 class Conv2D(ConvBase):
 
-    def __init__(self, fshape, init, strides, padding, dilation, scope=None, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
                 fshape = (1, fshape[0], fshape[0], fshape[1])
@@ -361,8 +368,7 @@ class Conv2D(ConvBase):
         if isinstance(dilation, int):
             dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation,
-                                     scope=scope, **kwargs)
+        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
 
 
 class Activation(Layer):
@@ -490,17 +496,17 @@ class Bias(Layer):
 class Affine(Layer):
 
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
-                 batch_norm=False, scope=None, **kwargs):
+                 batch_norm=False, **kwargs):
         self.weight_init = weight_init
         self.nout = nout
         self.bias_init = bias_init
         self.activation = activation
         self.batch_norm = batch_norm
-        self.linear = Linear(init=weight_init, nout=nout, scope=scope, **kwargs)
-        self.bias = Bias(init=bias_init, scope=scope)
-        self.batch_norm_layer = BatchNorm(scope=scope) if batch_norm else None
+        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
+        self.bias = Bias(init=bias_init)
+        self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
-        self.scope = scope
+        self.scope = Layer.active_scope  # only included so all Layers have scope attribute
 
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
@@ -512,10 +518,10 @@ class Affine(Layer):
 class Convolution(Layer):
 
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
-                 activation=None, batch_norm=False, scope=None, **kwargs):
-        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, scope=scope, **kwargs)
-        self.bias = Bias(init=bias_init, scope=scope)
-        self.batch_norm = BatchNorm(scope=scope) if batch_norm else None
+                 activation=None, batch_norm=False, **kwargs):
+        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, **kwargs)
+        self.bias = Bias(init=bias_init)
+        self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
     def __call__(self, in_obj):
@@ -549,7 +555,7 @@ class BatchNorm(Layer):
     metadata = {'layer_type': 'batch_norm'}
 
     def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
-                 scope=None, **kwargs):
+                 **kwargs):
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
@@ -560,7 +566,7 @@ class BatchNorm(Layer):
         self.beta = None
         self.gmean = None
         self.gvar = None
-        self.scope = scope
+        self.scope = Layer.active_scope
 
     @ng.with_op_metadata
     @cached({}, key=Layer.inference_mode_key)
@@ -669,8 +675,7 @@ class Recurrent(Layer):
     metadata = {'layer_type': 'recurrent'}
 
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
-                 reset_cells=True, return_sequence=True, backward=False, scope=None,
-                 **kwargs):
+                 reset_cells=True, return_sequence=True, backward=False, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
 
         self.nout = nout
@@ -817,7 +822,7 @@ class BiRNN(Layer):
 
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=False, return_sequence=True, sum_out=False,
-                 concat_out=False, scope=None, **kwargs):
+                 concat_out=False, **kwargs):
         if sum_out and concat_out:
             raise ValueError("sum_out and concat_out cannot both be True")
 
@@ -827,11 +832,10 @@ class BiRNN(Layer):
         self.nout = nout
         self.fwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
                                  batch_norm=batch_norm, reset_cells=reset_cells,
-                                 return_sequence=return_sequence, scope=scope)
+                                 return_sequence=return_sequence)
         self.bwd_rnn = Recurrent(nout, init, init_inner, activation=activation,
                                  batch_norm=batch_norm, reset_cells=reset_cells,
-                                 return_sequence=return_sequence, backward=True,
-                                 scope=scope)
+                                 return_sequence=return_sequence, backward=True)
 
     @ng.with_op_metadata
     @cached({})
@@ -931,13 +935,13 @@ class LSTM(Recurrent):
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
                  batch_norm=False, reset_cells=True, return_sequence=True, backward=False,
-                 scope=None, **kwargs):
+                 **kwargs):
         super(LSTM, self).__init__(nout, init, init_inner=init_inner, activation=activation,
                                    reset_cells=reset_cells, return_sequence=return_sequence,
-                                   backward=backward, scope=scope, **kwargs)
+                                   backward=backward, **kwargs)
 
         if batch_norm is True:
-            self.batch_norm = {k: BatchNorm(scope=scope) for k in self.metadata["gates"]}
+            self.batch_norm = {k: BatchNorm() for k in self.metadata["gates"]}
         else:
             self.batch_norm = None
         self.gate_activation = gate_activation if gate_activation is not None else self.activation

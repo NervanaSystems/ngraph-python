@@ -23,7 +23,7 @@ import numpy as np
 
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Affine, Sequential
+from ngraph.frontends.neon import Layer, Affine, Sequential
 from ngraph.frontends.neon import Rectlin, Identity, Tanh, Logistic
 from ngraph.frontends.neon import GaussianInit, ConstantInit
 from ngraph.frontends.neon import GradientDescentMomentum, Schedule
@@ -33,13 +33,12 @@ from ngraph.frontends.neon import NgraphArgparser
 from toygan import ToyGAN
 
 
-def affine_layer(h_dim, activation, name, scope=None):
+def affine_layer(h_dim, activation, name):
     return Affine(nout=h_dim,
                   activation=activation,
                   weight_init=GaussianInit(var=1.0),
                   bias_init=ConstantInit(val=0.0),
-                  name=name,
-                  scope=scope)
+                  name=name)
 
 
 # TODO: LR schedule and other optimizer parameters
@@ -62,23 +61,24 @@ num_iterations = 600
 batch_size = 12
 num_examples = num_iterations * batch_size
 
-g_scope = 'generator'
-d_scope = 'discriminator'
-
 # generator
-generator_layers = [affine_layer(h_dim, Rectlin(), name='g0', scope=g_scope),
-                    affine_layer(1, Identity(), name='g1', scope=g_scope)]
-generator = Sequential(generator_layers)
+g_scope = 'generator'
+with Layer.variable_scope(g_scope):
+    generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
+                        affine_layer(1, Identity(), name='g1')]
+    generator = Sequential(generator_layers)
 
 # discriminator
-discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0', scope=d_scope),
-                        affine_layer(2 * h_dim, Tanh(), name='d1', scope=d_scope)]
-if minibatch_discrimination:
-    raise NotImplementedError
-else:
-    discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2', scope=d_scope))
-discriminator_layers.append(affine_layer(1, Logistic(), name='d3', scope=d_scope))
-discriminator = Sequential(discriminator_layers)
+d_scope = 'discriminator'
+with Layer.variable_scope(d_scope):
+    discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
+                            affine_layer(2 * h_dim, Tanh(), name='d1')]
+    if minibatch_discrimination:
+        raise NotImplementedError
+    else:
+        discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
+    discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
+    discriminator = Sequential(discriminator_layers)
 
 # TODO discriminator pre-training
 
