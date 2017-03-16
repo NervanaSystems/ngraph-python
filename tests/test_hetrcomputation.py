@@ -201,7 +201,7 @@ def test_computation_return_list(transformer_factory):
         for i in [10, 20, 30]:
             assert computation(i) == (i + 1, i + 2, i * 3)
 
-            
+
 def test_scatter_gather_graph(transformer_factory):
     # Build the graph
     W = ng.make_axis(length=6, name='width')
