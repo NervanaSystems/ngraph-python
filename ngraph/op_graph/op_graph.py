@@ -3155,7 +3155,23 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert (reduction_axes & out_axes) == make_axes(())
+
+        # reduction_axes and out_axes must not overlap
+        if not reduction_axes & out_axes == make_axes(()):
+            raise ValueError("reduction_axes {} and out_axes {} must not overlap"
+                             .format(reduction_axes, out_axes))
+
+        # union of reduction_axes and out_axes must be x.axes
+        if not (reduction_axes | out_axes).is_equal_set(x.axes):
+            raise ValueError(("union of reduction_axes {} and out_axes {} must "
+                              "be x.axes {}")
+                             .format(reduction_axes, out_axes, x.axes))
+
+        # out_axes must be the same order as x.axes
+        out_axes_index = [x.axes.index(axis) for axis in out_axes]
+        if sorted(out_axes_index) != out_axes_index:
+            raise ValueError("out_axes {} must has same order as x.axes {}"
+                             .format(out_axes, x.axes))
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
