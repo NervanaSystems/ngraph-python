@@ -17,6 +17,9 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 def safelog(x):
     return np.log(np.maximum(x, np.exp(-50)))

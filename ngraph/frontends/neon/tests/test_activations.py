@@ -24,6 +24,9 @@ from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
                                               Softmax, Tanh, Logistic)
 from ngraph.testing import ExecutorFactory
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 class ActivationPair(object):
     tolerance = 0.0

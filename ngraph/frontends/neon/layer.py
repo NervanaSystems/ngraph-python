@@ -19,7 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar, shadow_axes_map
+from ngraph.frontends.neon.axis import ar, shadow_axes_map, is_shadow_axis
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -159,6 +159,11 @@ class Linear(Layer):
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A recurrent axis {} was included.'
                 ).format(axes.recurrent_axis()))
+            if any(is_shadow_axis(axis) for axis in axes):
+                raise ValueError((
+                    "Shadow Axes are not allowed in the output axes passed to "
+                    "Linear.  Found {}."
+                ).format([is_shadow_axis(axis) for axis in axes]))
 
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
@@ -171,7 +176,7 @@ class Linear(Layer):
     def __call__(self, in_obj):
         if self.W is None:
             self.W = ng.variable(
-                axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
+                axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
                 initial_value=self.init,
             ).named('LinW')
 
@@ -314,7 +319,7 @@ class ConvBase(Layer):
             # can be removed.
             self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
             self.f_axes = ng.make_axes([
-                axis if axis.name != 'K' else self.axes_map.keys()[0]
+                axis if axis.name != 'K' else list(self.axes_map.keys())[0]
                 for axis in self.f_axes
             ])
 

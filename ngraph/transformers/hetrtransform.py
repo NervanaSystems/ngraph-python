@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import signal
-import pytest
 import sys
 import os
 import time
@@ -26,6 +25,7 @@ from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.base import Computation
 from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
@@ -115,8 +115,10 @@ class AsyncTransformer(Process):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
+                                    import pytest
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
                                 elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    import pytest
                                     pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)
@@ -194,7 +196,7 @@ class ResultOp(TensorOp):
         self.dtype = args[0].dtype
 
 
-class HetrComputation(object):
+class HetrComputation(Computation):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
@@ -260,23 +262,18 @@ class HetrComputation(object):
 
             self.child_computations[t_name] = async_comp
 
-    def __call__(self, *params, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Executes child computations in parallel.
 
-        :param params: list of values to the placeholders specified in __init__ *args
+        :arg args: list of values to the placeholders specified in __init__ *args
 
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
-        if 'feed_dict' in kwargs:
-            assert len(params) == 0, "Can only supply feed_dict OR positional params, not both."
-            params = tuple(kwargs['feed_dict'][param.tensor]
-                           for param in self.computation.parameters)
-
-        assert len(params) == len(self.computation.parameters), "placeholder:value count mismatch"
+        args = self.unpack_args_or_feed_dict(args, kwargs)
 
         for child in itervalues(self.child_computations):
-            child.feed_input([params[i] for i in child.param_idx])
+            child.feed_input([args[i] for i in child.param_idx])
 
         return_vals = dict()
         for child in itervalues(self.child_computations):

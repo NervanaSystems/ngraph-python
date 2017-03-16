@@ -53,10 +53,7 @@ class Computation(NameableValue):
         self.computation_name = None
         self.executor = None
 
-    def __call__(self, *args, **kwargs):
-        """
-        Executes the computation passing args in to the function.
-        """
+    def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
         if feed_dict is not None:
             if len(args) != 0:
@@ -75,6 +72,13 @@ class Computation(NameableValue):
                 expected=len(self.computation.parameters),
                 called=len(args),
             ))
+        return args
+
+    def __call__(self, *args, **kwargs):
+        """
+        Executes the computation passing args in to the function.
+        """
+        args = self.unpack_args_or_feed_dict(args, kwargs)
 
         # TODO Should this be automatic?
         self.transformer.initialize()
@@ -101,14 +105,13 @@ class Computation(NameableValue):
 
         if isinstance(self.computation.returns, Op):
             return value(self.computation.returns)
+        elif isinstance(self.computation.returns, (collections.Sequence, OrderedSet)):
+            return tuple(value(op) for op in self.computation.returns)
         elif isinstance(self.computation.returns, collections.Set):
             result = dict()
             for op in self.computation.returns:
                 result[op] = value(op)
             return result
-        elif isinstance(self.computation.returns, collections.Sequence):
-            return tuple(value(op) for op in self.computation.returns)
-
         else:
             return None
 

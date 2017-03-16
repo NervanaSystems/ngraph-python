@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
+import uuid
 import collections
 import operator
 import itertools
@@ -88,7 +89,7 @@ def make_axes(axes=()):
     return Axes(axes=axes)
 
 
-class AxisRole(NameableValue):
+class AxisRole(object):
     """
     An AxisRole is like a type for an Axis, such as "Height" or "Channels".
 
@@ -99,8 +100,24 @@ class AxisRole(NameableValue):
     convolution can match the axes in their arguments.
     """
 
-    def __init__(self, **kwargs):
-        super(AxisRole, self).__init__(**kwargs)
+    def __init__(self, name, docstring=None):
+        self.name = name
+        if docstring is not None:
+            self.__doc__ = docstring
+        super(AxisRole, self).__init__()
+
+    @property
+    def short_name(self):
+        sn = self.name.split('_')[0]
+        if sn.find('.') != -1:
+            sn = sn.split('.')[1]
+        return sn
+
+    def __eq__(self, rhs):
+        return self.name == rhs.name
+
+    def __hash__(self):
+        return hash(self.name)
 
 
 class Axis(object):
@@ -147,6 +164,7 @@ class Axis(object):
         self.__length = length
 
         self.__roles = set()
+        self.uuid = uuid.uuid4()
         if roles is not None:
             self.roles.update(roles)
 
@@ -397,6 +415,7 @@ class Axes(object):
                 .format(str(duplicates(axes)))
             )
         self._axes = tuple(axes)
+        self.uuid = uuid.uuid4()
 
     @property
     def full_lengths(self):
@@ -834,7 +853,16 @@ class AxesMap(frozendict):
     invariant enforcement.
     """
     def __init__(self, *args, **kwargs):
-        super(AxesMap, self).__init__(*args, **kwargs)
+        def replace_axis_with_name(x):
+            if isinstance(x, Axis):
+                return x.name
+            return x
+
+        # strip axis objects into just names
+        super(AxesMap, self).__init__({
+            replace_axis_with_name(k): replace_axis_with_name(v)
+            for k, v in dict(*args, **kwargs).items()
+        })
 
         self._assert_valid_axes_map()
 
@@ -940,7 +968,7 @@ class FlattenedAxis(Axis):
 
         # parent constructor
         super(FlattenedAxis, self).__init__(length=length, name=name, **kwargs)
-        self.__axes = axes
+        self._axes = axes
 
     @property
     def is_flattened(self):
@@ -956,7 +984,15 @@ class FlattenedAxis(Axis):
         Returns:
             Whether this axes contains no collapsed axes.
         """
-        return len(self.__axes) == 0
+        return len(self._axes) == 0
+
+    @property
+    def single(self):
+        """
+        Returns:
+            Whether this axes contains exactly one collapsed axes.
+        """
+        return len(self._axes) == 1
 
     @property
     def axes(self):
@@ -964,7 +1000,7 @@ class FlattenedAxis(Axis):
         Returns:
             The flattened axes contained in this object.
         """
-        return self.__axes
+        return self._axes
 
     def __eq__(self, other):
         return other.is_flattened\

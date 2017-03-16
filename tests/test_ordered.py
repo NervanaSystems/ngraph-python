@@ -114,3 +114,10 @@ def test_difference():
     testset = OrderedSet([1, 2, 3])
     testset -= [-1, 1, 2]
     assert testset.elt_list == [3]
+
+
+def test_insert():
+    testset = OrderedSet([1, 2, 3])
+    testset.insert(0, 4)
+    testset.insert(1, 5)
+    assert testset.elt_list == [4, 5, 1, 2, 3]
