@@ -40,8 +40,8 @@ class CommNodePair(object):
                 assert False
 
         def get_location(from_node, to_node):
-            (send_host, send_idx) = from_node.metadata['host_transformer']
-            (recv_host, recv_idx) = to_node.metadata['host_transformer']
+            send_host = from_node.metadata['host_transformer']
+            recv_host = to_node.metadata['host_transformer']
 
             if send_host == recv_host:
                 return 'local'

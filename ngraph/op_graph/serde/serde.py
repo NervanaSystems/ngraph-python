@@ -297,7 +297,9 @@ def _serialize_graph(ops):
     byte string as done by `serialize_graph`).
     """
     assert isinstance(ops, Iterable), "Ops passed into `serialize_graph` must be an iterable"
-    ops = Op.all_op_references(ops)
+    # ops = Op.all_op_references(ops)
+    ops = Op.ordered_ops(ops)
+    print('ops to serialize: {}'.format(ops))
     pb_ops = []
     pb_edges = []
     for op in ops:
@@ -484,6 +486,7 @@ def _deserialize_graph(graph_pb):
     GLOBAL_AXIS_REGISTRY.clear()
 
     ops = list(map(protobuf_to_op, graph_pb.ops))
+    print(ops)
     uuid_lookup = {op.uuid.bytes: op for op in ops}
     for edge in graph_pb.edges:
         head_op = uuid_lookup[edge.from_uuid.uuid]

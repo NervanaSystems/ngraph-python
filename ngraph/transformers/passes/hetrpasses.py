@@ -18,6 +18,9 @@ from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone
 from ngraph.util.ordered import OrderedSet
+from ngraph.factory.comm_nodes import GatherSendOp, ScatterRecvOp
+
+from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 import socket
 
 
@@ -32,7 +35,7 @@ class DeviceAssignPass(GraphBuildingPass):
         device = op.metadata.setdefault('device', self.default_device)
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
-        host_transformer = (socket.gethostname(), device_id)
+        host_transformer = socket.gethostname()
         op.metadata['host_transformer'] = host_transformer
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = op.metadata['device'] + op.metadata['device_id'][0]
@@ -127,6 +130,15 @@ class DistributedPass(GraphBuildingPass):
 
         return subgraph
 
+    def ser_clone_nodes(self, nodes, device_id, device_idx, new_axes):
+        # hacking
+        for v in nodes:
+            if isinstance(v, (ScatterRecvOp, GatherSendOp)):
+                v.shared_queues = []
+        ser_s = serialize_graph(nodes)
+        ser_cloned_nodes = deserialize_graph(ser_s)
+        return ser_cloned_nodes
+
     def do_pass(self, ops, transformer):
 
         ops = OrderedSet(op.forwarded for op in ops)
@@ -152,5 +164,12 @@ class DistributedPass(GraphBuildingPass):
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
-                    self.clone_nodes(nodes=nodes_to_clone, device_id=id,
-                                     device_idx=i, new_axes=new_axes)
+                    # test clone with serialize and deserialize
+                    # ser_string = serialize_graph(nodes_to_clone)
+                    # ser_cloned_graph = deserialize_graph(ser_string)
+
+                    # insert gather send op to results, refer clone()
+                    # or pass ser_cloned_graph to clone_nodes for testing
+
+                    cloned_graph = self.ser_clone_nodes(nodes=nodes_to_clone, device_id=id, device_idx=i, new_axes=new_axes)
+                    print(cloned_graph)
