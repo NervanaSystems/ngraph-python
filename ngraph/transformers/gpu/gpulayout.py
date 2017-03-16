@@ -458,18 +458,30 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         # Get strides
         strides = []
         offset = 0
-        for group in axis_groups:
+        for axis_index, group in enumerate(axis_groups):
             if group[-1] == "bcast":
                 strides.append(0)
             elif group[-1] == "extra":
                 strides.append(1)
             elif isinstance(group[0], tuple):
-                strides.append(arg_axis_strides[group[0][1]])
-                # Add slice to offset
+                arg_mem_axis = group[0][1]
                 if isinstance(group[0][2], slice):
-                    offset += (group[0][2].start * strides[-1])
+                    slice_stride = group[0][2].step
+                    if slice_stride is None:
+                        slice_stride = 1
+                    start = group[0][2].start
+                    if start is None:
+                        if slice_stride < 0:
+                            start = arg_axes[arg_mem_order[arg_mem_axis]].length - 1
+                        else:
+                            start = 0
                 else:
-                    offset += (group[0][2] * strides[-1])
+                    start = group[0][2]
+                    slice_stride = 1
+                    
+                strides.append(arg_axis_strides[arg_mem_axis] * slice_stride)
+                # Add slice to offset
+                offset += (start * arg_axis_strides[arg_mem_axis])
             else:
                 strides.append(arg_axis_strides[group[-1]])
 

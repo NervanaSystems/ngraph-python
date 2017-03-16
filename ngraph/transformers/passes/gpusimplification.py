@@ -18,7 +18,7 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice
 
 
-class GPUTensorLayout(PeepholeGraphPass):
+class GPUSubstitution(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
