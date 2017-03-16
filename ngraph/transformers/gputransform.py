@@ -44,8 +44,7 @@ from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
-from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
-    GPUContiguousPrune
+from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
 from ngraph.transformers.passes.nviz import VizPass
@@ -1022,7 +1021,7 @@ class GPUTransformer(Transformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
-        self.graph_passes = [SimplePrune(), PruneContiguousPass(),
+        self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass, VizPass()]
 

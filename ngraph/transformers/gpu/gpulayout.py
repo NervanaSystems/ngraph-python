@@ -25,6 +25,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
     AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
     UnaryLayoutConstraint
@@ -261,6 +262,10 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, update_conv):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, PoolingOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, BpropPoolOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, TensorValueOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         elif isinstance(op, InitTensorOp):
@@ -319,6 +324,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                                 offset += 1
                         self.mappings[a] = p - offset
             elif isinstance(predecessor_op, TensorSliceOp):
+                new_indexes = []
                 for index, axis in enumerate(pred_axes):
                     new_index = pred_arg_axes.index(axis)
                     if predecessor_op.slices[new_index] != slice(None, None, None):
@@ -326,7 +332,10 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                     if new_index != index:
                         for a, p in self.mappings.iteritems():
                             if isinstance(p, int) and p == index:
-                                self.mappings[a] = new_index
+                                new_indexes.append((a, new_index))
+
+                for a, p in new_indexes:
+                    self.mappings[a] = p
 
                 # Find any axes that are sliced out and add these to offset calculations
                 removed_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
@@ -342,7 +351,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
 
                 for i in range(len(self.sliced_out)):
                     new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
-                    self.sliced_out[i][0] = new_axis_index
+                    self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
             elif isinstance(predecessor_op, AxesCastOp):
                 pass
             elif isinstance(predecessor_op, Flatten):
@@ -461,7 +470,6 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                     offset += (group[0][2].start * strides[-1])
                 else:
                     offset += (group[0][2] * strides[-1])
-                import pdb; pdb.set_trace()
             else:
                 strides.append(arg_axis_strides[group[-1]])
 
@@ -543,6 +551,10 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             return GPUConvLayoutConstraint(op, arg)
         elif isinstance(op, update_conv):
             return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, PoolingOp):
+            return GPUPoolLayoutConstraint(op, arg)
+        elif isinstance(op, BpropPoolOp):
+            return GPUPoolLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
 
@@ -657,7 +669,7 @@ class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         arg_mem_order = flatten(arg_layout.axes)
-        arg_axes = arg.axes
+        arg_axes = arg_layout.ng_axes
 
         if self.needs_transform(arg_layout, op_layout):
             return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
