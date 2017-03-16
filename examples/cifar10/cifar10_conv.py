@@ -31,7 +31,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import ArrayIterator
 
