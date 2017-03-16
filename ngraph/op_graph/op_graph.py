@@ -1715,11 +1715,9 @@ class BroadcastOp(ReshapeOp):
         return td.broadcast(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sum(
-            delta,
-            reduction_axes=delta.axes - x.axes,
-            out_axes=x.axes
-        ))
+        dx = sum(delta, reduction_axes=delta.axes - x.axes)
+        dx_reordered = axes_with_order(dx, x.axes)
+        x.generate_add_delta(adjoints, dx_reordered)
 
 
 def broadcast(x, axes):
@@ -3167,11 +3165,6 @@ class ReductionOp(TensorOp):
             axes=out_axes,
             dtype=dtype
         )
-        assert self.valid
-
-    @property
-    def valid(self):
-        return True
 
 
 def create_reduction_op(name,
