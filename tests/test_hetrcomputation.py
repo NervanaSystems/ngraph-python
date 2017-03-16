@@ -233,3 +233,6 @@ def test_gpu_send_and_recv(transformer_factory):
         computation = ex.executor(x_plus_two, x)
         for i in [10, 20, 30]:
             assert computation(i) == i + 2
+
+def test_terminate_op(transformer_factory):
+    assert False
