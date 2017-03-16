@@ -18,6 +18,8 @@ import pytest
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
 
+pytestmark = pytest.mark.transformer_dependent("module")
+
 
 def test_abs(transformer_factory):
     """

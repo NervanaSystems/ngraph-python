@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-import collections
 import pytest
 from ngraph.testing import ExecutorFactory
 from ngraph.util.ordered import OrderedSet
@@ -21,9 +20,8 @@ import ngraph as ng
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
 from ngraph.transformers.base import transformer_choices
-from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, ScatterSendOp, ScatterRecvOp
-from ngraph.transformers import (set_transformer_factory,
-                                 make_transformer_factory)
+
+pytestmark = pytest.mark.hetr_only("module")
 
 
 def check_device_assign_pass(default_device, default_device_id,
@@ -43,8 +41,6 @@ def check_device_assign_pass(default_device, default_device_id,
     :param: graph_op: list of ops to do the graph traversal
 
     """
-    set_transformer_factory(make_transformer_factory('hetr'))
-
     with ExecutorFactory() as ex:
         expected_transformers = set()
 
@@ -83,7 +79,6 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
            be inserted after the communication pass
 
     """
-    set_transformer_factory(make_transformer_factory('hetr'))
     with ExecutorFactory() as ex:
         send_nodes = OrderedSet()
         obj = CommunicationPass(send_nodes)
@@ -108,7 +103,7 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
             del op_list_instance_type[:]
 
 
-def test_hetr_graph_passes():
+def test_hetr_graph_passes(transformer_factory):
 
     # Build the graph
     with ng.metadata(device_id='1'):
@@ -131,7 +126,7 @@ def test_hetr_graph_passes():
                              expected_recv_nodes=[x_plus_y])
 
 
-def test_distributed_graph_plus_one(hetr_factory):
+def test_distributed_graph_plus_one(transformer_factory):
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
     x = ng.placeholder(axes=[H, W])
@@ -145,7 +140,7 @@ def test_distributed_graph_plus_one(hetr_factory):
         np.testing.assert_array_equal(res, np_x + 1)
 
 
-def test_distributed_graph_plus_two(hetr_factory):
+def test_distributed_graph_plus_two(transformer_factory):
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
     x = ng.placeholder(axes=[H, W])
@@ -160,7 +155,7 @@ def test_distributed_graph_plus_two(hetr_factory):
         np.testing.assert_array_equal(res, np_x + 2)
 
 
-def test_from_device(hetr_factory):
+def test_from_device(transformer_factory):
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
     x_plus_one = x + 1
@@ -171,7 +166,7 @@ def test_from_device(hetr_factory):
             assert computation(i) == i + 1
 
 
-def test_to_device(hetr_factory):
+def test_to_device(transformer_factory):
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
@@ -182,7 +177,7 @@ def test_to_device(hetr_factory):
             assert computation(i) == i + 1
 
 
-def test_to_and_from_device(hetr_factory):
+def test_to_and_from_device(transformer_factory):
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
@@ -194,7 +189,7 @@ def test_to_and_from_device(hetr_factory):
             assert computation(i) == i + 2
 
 
-def test_computation_return_list(hetr_factory):
+def test_computation_return_list(transformer_factory):
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
     x_plus_one = x + 1
@@ -206,8 +201,8 @@ def test_computation_return_list(hetr_factory):
         for i in [10, 20, 30]:
             assert computation(i) == (i + 1, i + 2, i * 3)
 
-
-def test_scatter_gather_graph(hetr_factory):
+            
+def test_scatter_gather_graph(transformer_factory):
     # Build the graph
     W = ng.make_axis(length=6, name='width')
 
@@ -238,7 +233,8 @@ def test_scatter_gather_graph(hetr_factory):
         expected_recv_nodes=[x_plus_y])
 
     
-def test_gpu_send_and_recv(hetr_factory):
+@pytest.mark.hetr_gpu_only
+def test_gpu_send_and_recv(transformer_factory):
     # skip if gpu unavailable
     if 'gpu' not in transformer_choices():
         pytest.skip("GPUTransformer not available")
@@ -268,111 +264,3 @@ def test_gpu_send_and_recv(hetr_factory):
         computation = ex.executor(x_plus_two, x)
         for i in [10, 20, 30]:
             assert computation(i) == i + 2
-
-
-def test_return_type(hetr_factory):
-    x = ng.placeholder(())
-    with ExecutorFactory() as ex:
-        c0 = ex.executor(x, x)
-        c1 = ex.executor([x], x)
-
-        r0 = c0(1)
-        assert r0 == 1
-
-        r1 = c1(1)
-        assert isinstance(r1, collections.Sequence)
-        assert r1[0] == 1
-
-
-def test_empty_computation(hetr_factory):
-    with ExecutorFactory() as ex:
-        computation = ex.executor(None)
-        res = computation()
-        assert not res
-
-
-def test_wrong_placeholders(hetr_factory):
-    x = ng.placeholder(())
-    with ExecutorFactory() as ex:
-        c = ex.executor(x, x)
-
-        with pytest.raises(AssertionError):
-            c()
-
-        with pytest.raises(AssertionError):
-            c(1, 2)
-
-        assert c(1) == 1
-
-
-def test_scatter_gather_node_axes():
-    ax_A = ng.make_axis(64)
-    ax_B = ng.make_axis(128)
-    ax_C = ng.make_axis(255)
-
-    tests = [
-        {
-            'axes': ng.make_axes([ax_A]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 32, 1)], [slice(32, 64, 1)]],
-            'device_id': (0, 1)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 21, 1), slice(None)],
-                       [slice(21, 42, 1), slice(None)],
-                       [slice(42, 64, 1), slice(None)]],
-            'device_id': (0, 1, 2)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 12, 1), slice(None), slice(None)],
-                       [slice(12, 24, 1), slice(None), slice(None)],
-                       [slice(24, 36, 1), slice(None), slice(None)],
-                       [slice(36, 48, 1), slice(None), slice(None)],
-                       [slice(48, 64, 1), slice(None), slice(None)]],
-            'device_id': (0, 1, 2, 3, 4)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-            'parallel_axis': ax_C,
-            'slices': [[slice(None), slice(None), slice(0, 127, 1)],
-                       [slice(None), slice(None), slice(127, 255, 1)]],
-            'device_id': (0, 1)
-        }
-    ]
-
-    for t in tests:
-        from_node = ng.placeholder(axes=t['axes'])
-        from_node.metadata['device'] = None
-        from_node.metadata['device_id'] = t['device_id']
-        from_node.metadata['transformer'] = None
-        from_node.metadata['parallel'] = t['parallel_axis']
-        from_node.metadata['host_transformer'] = None
-
-        to_node = ng.placeholder(axes=t['axes'])
-        to_node.metadata['device'] = None
-        to_node.metadata['device_id'] = t['device_id']
-        to_node.metadata['transformer'] = None
-        to_node.metadata['parallel'] = t['parallel_axis']
-        to_node.metadata['host_transformer'] = None
-
-        gather_send_op = GatherSendOp(from_node=from_node)
-        assert t['axes'] == gather_send_op.axes
-
-        gather_recv_op = GatherRecvOp(from_node=from_node,
-                                      to_node=to_node,
-                                      send_node=gather_send_op)
-        assert t['axes'] == gather_recv_op.axes
-        assert t['slices'] == gather_recv_op.slices
-
-        scatter_send_op = ScatterSendOp(from_node=from_node,
-                                        to_node=to_node)
-        assert t['axes'] == scatter_send_op.axes
-        assert t['slices'] == scatter_send_op.slices
-
-        scatter_recv_op = ScatterRecvOp(to_node=to_node,
-                                        send_node=scatter_send_op)
-        assert t['axes'] == scatter_recv_op.axes

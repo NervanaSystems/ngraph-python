@@ -22,28 +22,28 @@ def test_empty_ordered_set():
     Test if initialization fails if "values" is not a sequence
     """
     with pytest.raises(ValueError):
-        OrderedSet(values=0)
+        OrderedSet(0)
 
 
 def test_empty_update_set():
     """
     Test if update fails if "values" is not a sequence
     """
-    testset = OrderedSet(values=[1, 2, 3])
+    testset = OrderedSet([1, 2, 3])
     with pytest.raises(ValueError):
         testset.update(values=0)
 
 
 def test_reversed():
     ls = [1, 2, 3]
-    testset = OrderedSet(values=ls)
+    testset = OrderedSet(ls)
     a = list(testset.__reversed__())
     b = list(reversed(ls))
     assert a == b
 
 
 def test_remove():
-    testset = OrderedSet(values=[1, 2, 3])
+    testset = OrderedSet([1, 2, 3])
     testset.remove(2)
     assert testset.elt_list == [1, 3]
 
@@ -55,10 +55,10 @@ def test_get_item():
 
 def test___add__():
     ls = [4, 5]
-    testset1 = OrderedSet(values=[1, 2, 3])
-    testset2 = OrderedSet(values=[1, 2, 3])
+    testset1 = OrderedSet([1, 2, 3])
+    testset2 = OrderedSet([1, 2, 3])
     testset1.update(ls)
-    testset2 = testset2.__add__(ls)
+    testset2 = testset2 + ls
     assert testset1 == testset2
 
 
@@ -69,6 +69,55 @@ def test_clear_set():
 
 
 def test_union():
-    testset = OrderedSet(values=[1, 2, 3])
-    testset = testset.union(values=[-1, 1, 2])
+    testset = OrderedSet([1, 2, 3])
+    result = testset.union([-1, 1, 2])
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [1, 2, 3, -1]
+
+    testset = OrderedSet([1, 2, 3])
+    result = [-1, 1, 2] | testset
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [-1, 1, 2, 3]
+
+    testset = OrderedSet([1, 2, 3])
+    testset |= [-1, 1, 2]
     assert testset.elt_list == [1, 2, 3, -1]
+
+
+def test_intersection():
+    testset = OrderedSet([1, 2, 3])
+    result = testset & [-1, 1, 2]
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [1, 2]
+
+    testset = OrderedSet([1, 2, 3])
+    result = [-1, 1, 2] & testset
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [1, 2]
+
+    testset = OrderedSet([1, 2, 3])
+    testset &= [-1, 1, 2]
+    assert testset.elt_list == [1, 2]
+
+
+def test_difference():
+    testset = OrderedSet([1, 2, 3])
+    result = testset - [-1, 1, 2]
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [3]
+
+    testset = OrderedSet([1, 2, 3])
+    result = [-1, 1, 2] - testset
+    assert testset.elt_list == [1, 2, 3]
+    assert result.elt_list == [-1]
+
+    testset = OrderedSet([1, 2, 3])
+    testset -= [-1, 1, 2]
+    assert testset.elt_list == [3]
+
+
+def test_insert():
+    testset = OrderedSet([1, 2, 3])
+    testset.insert(0, 4)
+    testset.insert(1, 5)
+    assert testset.elt_list == [4, 5, 1, 2, 3]

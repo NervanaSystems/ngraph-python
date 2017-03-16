@@ -48,6 +48,22 @@ class OrderedSet(set, collections.MutableSequence):
         result.update(other)
         return result
 
+    def insert(self, index, value):
+        """
+        Add a value to the set at the desired index.
+
+        If not already in the set, the value will be appended to the list of elements at the index
+        specified.
+
+        Args:
+            index: The index in the collection which this value should be added.
+            value: The value to be added.
+
+        """
+        if value not in self:
+            self.elt_list.insert(index, value)
+            super(OrderedSet, self).add(value)
+
     def add(self, value):
         """
         Add a value to the set.
@@ -99,6 +115,67 @@ class OrderedSet(set, collections.MutableSequence):
         result = OrderedSet(self)
         result.update(values)
         return result
+
+    def intersection(self, values):
+        return self & values
+
+    def difference(self, values):
+        return self - values
+
+    def __sub__(self, values):
+        values = set(values)
+        result = OrderedSet()
+        for value in self:
+            if value not in values:
+                result.add(value)
+        return result
+
+    def __rsub__(self, values):
+        result = OrderedSet()
+        for value in values:
+            if value not in self:
+                result.add(value)
+        return result
+
+    def __isub__(self, values):
+        for value in values:
+            if value in self:
+                self.remove(value)
+        return self
+
+    def __or__(self, values):
+        return self.union(values)
+
+    def __ror__(self, values):
+        result = OrderedSet(values)
+        result.update(self)
+        return result
+
+    def __ior__(self, values):
+        self.update(values)
+        return self
+
+    def __and__(self, values):
+        result = OrderedSet()
+        values = set(values)
+        for value in self:
+            if value in values:
+                result.add(value)
+        return result
+
+    def __rand__(self, values):
+        result = OrderedSet()
+        for value in values:
+            if value in self:
+                result.add(value)
+        return result
+
+    def __iand__(self, values):
+        values = set(values)
+        for value in list(self):
+            if value not in values:
+                self.remove(value)
+        return self
 
     def pop(self):
         """

@@ -17,6 +17,7 @@ from ngraph.factory.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
 from ngraph.factory.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
 
+
 ax_A = ng.make_axis(length=10, name='A')
 ax_B = ng.make_axis(length=15, name='B')
 ax_C = ng.make_axis(length=20, name='C')
@@ -145,3 +146,76 @@ def test_update_comm_deps_scatter_gather():
     assert set([scatter_send_x]) == scatter_recv_a.control_deps
     assert set([scatter_send_x, gather_send_x_plus_one_a]) == \
         gather_recv_x_plus_one_a.control_deps
+
+
+def test_scatter_gather_node_axes():
+    ax_A = ng.make_axis(64)
+    ax_B = ng.make_axis(128)
+    ax_C = ng.make_axis(255)
+
+    tests = [
+        {
+            'axes': ng.make_axes([ax_A]),
+            'parallel_axis': ax_A,
+            'slices': [[slice(0, 32, 1)], [slice(32, 64, 1)]],
+            'device_id': (0, 1)
+        },
+        {
+            'axes': ng.make_axes([ax_A, ax_B]),
+            'parallel_axis': ax_A,
+            'slices': [[slice(0, 21, 1), slice(None)],
+                       [slice(21, 42, 1), slice(None)],
+                       [slice(42, 64, 1), slice(None)]],
+            'device_id': (0, 1, 2)
+        },
+        {
+            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+            'parallel_axis': ax_A,
+            'slices': [[slice(0, 12, 1), slice(None), slice(None)],
+                       [slice(12, 24, 1), slice(None), slice(None)],
+                       [slice(24, 36, 1), slice(None), slice(None)],
+                       [slice(36, 48, 1), slice(None), slice(None)],
+                       [slice(48, 64, 1), slice(None), slice(None)]],
+            'device_id': (0, 1, 2, 3, 4)
+        },
+        {
+            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+            'parallel_axis': ax_C,
+            'slices': [[slice(None), slice(None), slice(0, 127, 1)],
+                       [slice(None), slice(None), slice(127, 255, 1)]],
+            'device_id': (0, 1)
+        }
+    ]
+
+    for t in tests:
+        from_node = ng.placeholder(axes=t['axes'])
+        from_node.metadata['device'] = None
+        from_node.metadata['device_id'] = t['device_id']
+        from_node.metadata['transformer'] = None
+        from_node.metadata['parallel'] = t['parallel_axis']
+        from_node.metadata['host_transformer'] = None
+
+        to_node = ng.placeholder(axes=t['axes'])
+        to_node.metadata['device'] = None
+        to_node.metadata['device_id'] = t['device_id']
+        to_node.metadata['transformer'] = None
+        to_node.metadata['parallel'] = t['parallel_axis']
+        to_node.metadata['host_transformer'] = None
+
+        gather_send_op = GatherSendOp(from_node=from_node)
+        assert t['axes'] == gather_send_op.axes
+
+        gather_recv_op = GatherRecvOp(from_node=from_node,
+                                      to_node=to_node,
+                                      send_node=gather_send_op)
+        assert t['axes'] == gather_recv_op.axes
+        assert t['slices'] == gather_recv_op.slices
+
+        scatter_send_op = ScatterSendOp(from_node=from_node,
+                                        to_node=to_node)
+        assert t['axes'] == scatter_send_op.axes
+        assert t['slices'] == scatter_send_op.slices
+
+        scatter_recv_op = ScatterRecvOp(to_node=to_node,
+                                        send_node=scatter_send_op)
+        assert t['axes'] == scatter_recv_op.axes

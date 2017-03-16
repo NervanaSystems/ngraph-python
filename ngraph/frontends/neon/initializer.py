@@ -15,7 +15,7 @@
 import numpy as np
 import ngraph as ng
 from functools import partial
-from ngraph.frontends.neon import ar
+from ngraph.frontends.neon.axis import is_shadow_axis
 
 
 class GaussianInit(object):
@@ -45,7 +45,7 @@ class ConstantInit(object):
         return self.val
 
 
-def get_input_output_axes(w_axes):
+def _input_output_axes(w_axes):
     """
     Given the axes from a tensor of weights, provides the axes corresponding to inputs
     (often called 'fan-in') and the axes corresponding to outputs (often called 'fan-out').
@@ -57,47 +57,35 @@ def get_input_output_axes(w_axes):
         axes_i (Axes): Fan-in axes
         axes_o (Axes): Fan-out axes
 
-    Raises:
-        ValueError: If dual axes are used to determine 'fan-in' but not all offsets are -1.
-
     Note:
-        Any weight axis dual offsets should be -1. Axes with dual offsets correspond to input axes,
-        but we would need the input tensor axes as well if we do not enforce this constraint.
+        Assumes that output axes are shadow axes
     """
 
-    dual_axes = ng.make_axes([a for a in w_axes if a.dual_level != 0])
-
-    if len(dual_axes) == 0:
-        axes_o = w_axes.role_axes(ar.features_output)
-        axes_i = w_axes - axes_o
-    else:
-        axes_i = dual_axes
-        axes_o = w_axes - axes_i
-        if not all([a.dual_level == -1 for a in dual_axes]):
-            raise ValueError("Expecting only duals of -1 in weight initialization")
-
-    return (axes_i, axes_o)
+    return (
+        ng.make_axes([axis for axis in w_axes if not is_shadow_axis(axis)]),
+        ng.make_axes([axis for axis in w_axes if is_shadow_axis(axis)]),
+    )
 
 
 class GlorotInit(object):
 
     def __call__(self, w_axes):
-        ax_i, ax_o = get_input_output_axes(w_axes)
-        scale = np.sqrt(6. / (np.prod(ax_i.lengths) + np.prod(ax_o.lengths)))
+        input_axes, output_axes = _input_output_axes(w_axes)
+        scale = np.sqrt(6. / (np.prod(input_axes.lengths) + np.prod(output_axes.lengths)))
         return np.random.uniform(-scale, scale, w_axes.lengths)
 
 
 class XavierInit(object):
 
     def __call__(self, w_axes):
-        ax_i, _ = get_input_output_axes(w_axes)
-        scale = np.sqrt(3. / np.prod(ax_i.lengths))
+        input_axes, _ = _input_output_axes(w_axes)
+        scale = np.sqrt(3. / np.prod(input_axes.lengths))
         return np.random.uniform(-scale, scale, w_axes.lengths)
 
 
 class KaimingInit(object):
 
     def __call__(self, w_axes):
-        ax_i, _ = get_input_output_axes(w_axes)
-        scale = np.sqrt(2. / np.prod(ax_i.lengths))
+        input_axes, _ = _input_output_axes(w_axes)
+        scale = np.sqrt(2. / np.prod(input_axes.lengths))
         return np.random.normal(0, scale, w_axes.lengths)

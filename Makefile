@@ -28,10 +28,11 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
-TEST_OPTS := --timeout=300
+TEST_OPTS := --timeout=300 --cov=ngraph --junit-xml=testout.xml
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
-TEST_DIRS_FLEX := flex_tests/
+TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
+TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
@@ -46,8 +47,11 @@ install:
 	@pip install -r requirements.txt
 	@pip install -e .
 
+gpu_install:
+	@pip install -r gpu_requirements.txt > /dev/null 2>&1
+
 test_install:
-	@pip install -r test_requirements.txt
+	@pip install -r test_requirements.txt > /dev/null 2>&1
 
 uninstall:
 	@pip uninstall -y ngraph
@@ -61,34 +65,40 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-testflex: clean
+test_flex: clean
 	@echo Running flex unit tests...
-	@py.test --enable_flex $(TEST_OPTS) `cat tests/flex_enabled_tests.cfg`
-	@py.test --enable_flex $(TEST_OPTS) $(TEST_DIRS_FLEX)
-
-test_parallel: clean testflex
-	@echo Running unit tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml -n auto --boxed $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
 test_mkl: clean
 	@echo Running unit tests...
-	@py.test --enable_mkl --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --transformer mkl -m "transformer_dependent" $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test: test_install clean testflex
-	@echo Running unit tests...
-	@py.test -n 4 --boxed --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS)
+test_cpu: test_install clean
+	@echo Running unit tests for core and numpy transformer tests...
+	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_caffe2: clean
-	@echo Running unit tests for caffe2 frontend...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
+test_gpu: gpu_install clean
+	@echo Running unit tests for gpu dependent transformer tests...
+	@py.test --transformer hetr -m "hetr_gpu_only" $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --transformer gpu -m "transformer_dependent" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+test_hetr: test_install clean
+	@echo Running unit tests for hetr dependent transformer tests...
+	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i
+
+test_mxnet: clean
+	@echo Running unit tests for mxnet frontend...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i
 
 test_integration: clean
 	@echo Running integration tests...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
+	@py.test $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
 
 style:

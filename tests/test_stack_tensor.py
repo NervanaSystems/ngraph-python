@@ -16,17 +16,16 @@ import numpy as np
 
 import ngraph as ng
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator
-from ngraph.flex.names import flex_gpu_transformer_name
 import pytest
+
 
 delta = 1e-3
 rtol = atol = 1e-2
 
 
+@pytest.mark.flex_disabled  # Allowed to fail until PR2
+@pytest.mark.transformer_dependent
 def test_stack(transformer_factory):
-    if transformer_factory.name == flex_gpu_transformer_name:
-        pytest.skip("Allowed to fail until PR2")
-
     W = ng.make_axis(length=4)
     H = ng.make_axis(length=5)
     I = ng.make_axis(length=3)
@@ -38,15 +37,18 @@ def test_stack(transformer_factory):
     a_v = [rng.uniform(0, 1, axes) for i in range(I.length)]
 
     for pos in range(len(axes) + 1):
-        a = [ng.placeholder(axes, initial_value=_) for _ in a_v]
+        a = [ng.placeholder(axes, initial_value=p) for p in a_v]
 
         s = ng.stack(a, I, pos)
 
         with ExecutorFactory() as ex:
-            num_funs = [ex.numeric_derivative(s, _, delta) for _ in a]
-            sym_funs = [ex.derivative(s, _) for _ in a]
+            num_funs = [ex.numeric_derivative(s, p, delta, *(np for np in a if np is not p))
+                        for p in a]
+            sym_funs = [ex.derivative(s, p, *(np for np in a if np is not p))
+                        for p in a]
 
             for n_fun, s_fun, a_i in zip(num_funs, sym_funs, a_v):
-                d_n = n_fun(a_i)
-                d_s = s_fun(a_i)
+                na_is = list(na_i for na_i in a_v if na_i is not a_i)
+                d_n = n_fun(a_i, *na_is)
+                d_s = s_fun(a_i, *na_is)
             ng.testing.allclose(d_n, d_s, rtol=rtol, atol=atol)
