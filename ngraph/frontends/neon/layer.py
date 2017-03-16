@@ -172,7 +172,8 @@ class Linear(Layer):
     def __call__(self, in_obj):
         if self.W is None:
             self.W = ng.variable(
-                axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
+                #axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
+                axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
                 initial_value=self.init, scope=self.scope,
             ).named('LinW')
 
