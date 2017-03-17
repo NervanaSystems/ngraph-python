@@ -29,6 +29,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
+from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
     UnaryLayoutConstraint
@@ -291,6 +292,8 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         elif isinstance(op, RngOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+        elif isinstance(op, (GpuQueueSendOp, GpuQueueRecvOp)):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
 
@@ -591,6 +594,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
             return GPULutLayoutConstraint(op, arg)
         elif isinstance(op, RngOp):
+            return GPUBinaryLayoutConstraint(op, arg)
+        elif isinstance(op, (GpuQueueSendOp, GpuQueueRecvOp)):
             return GPUBinaryLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
