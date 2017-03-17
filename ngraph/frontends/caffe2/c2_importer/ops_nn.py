@@ -14,10 +14,23 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
-from ngraph.frontends.neon.layer import output_dim
 from ngraph.frontends.common.utils import common_conv2d_pool_padding
 import ngraph as ng
 import numpy as np
+
+
+def output_dim(X, S, padding, strides):
+    """
+    Compute output dimension given input feature map, filter, padding, and stridedimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+    """
+    S = (S - 1) + 1
+    return ((X - S + 2 * padding) // strides) + 1
 
 
 def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
