@@ -30,7 +30,7 @@ STYLE_CHECK_DIRS := ngraph tests examples
 # pytest options
 TEST_OPTS := --timeout=300 --cov=ngraph --junit-xml=testout.xml
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
-TEST_DIRS_FLEX := flex_tests/ tests/ flex_tests/test_flexew/
+TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_INTEGRATION := integration_tests/
