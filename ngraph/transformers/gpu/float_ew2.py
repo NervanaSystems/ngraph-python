@@ -690,9 +690,11 @@ def _wrap_tensor_descriptions(ops):
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                if op[0] == "take" and (index == 2):
+                if op[0] == "take" and (index == 1):
+                    missing_axis = 1 if op[4] == 0 else 0
                     new_op[index] = TensorDescriptionWrapper(new_op[index],
-                                                             max_dims)
+                                                             max_dims,
+                                                             missing_axis=missing_axis)
                 else:
                     if op[0] in _redop_templates and index == 3:
                         missing_axis = op[4]

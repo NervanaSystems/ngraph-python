@@ -21,6 +21,7 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
     SetItemOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -328,6 +329,18 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(update_conv)
     def op_from_args(self, op, args):
         return update_conv(args[0], args[1], op.fprop.args[1], op.fprop)
+
+    @op_from_args.on_type(LookupTableOp)
+    def op_from_args(self, op, args):
+        return LookupTableOp(args[0], args[1], op.axes, op.update, op.pad_idx)
+
+    @op_from_args.on_type(update_lut)
+    def op_from_args(self, op, args):
+        return update_lut(args[0], op.fprop.args[0], args[1], op.fprop)
+
+    @op_from_args.on_type(bprop_lut)
+    def op_from_args(self, op, args):
+        return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):

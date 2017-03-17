@@ -23,10 +23,12 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, InitTensorOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
+
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
     UnaryLayoutConstraint
 
@@ -237,6 +239,18 @@ class GPULayoutAssignment(LayoutAssignment):
         return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
 
     @staticmethod
+    def generate_default_lut_layout(op):
+        axes_list = flatten(get_axes_list(op.axes))
+        groups = get_axes_list(op.axes)
+        layout = []
+        for group in groups:
+            if isinstance(group, list):
+                layout.append([axes_list.index(a) for a in group])
+            else:
+                layout.append([axes_list.index(group)])
+        return [GPULayoutAssignment(axes_list, layout)]
+
+    @staticmethod
     def factory(op):
         if isinstance(op, AssignOp):
             return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
@@ -268,6 +282,10 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, TensorValueOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+        elif isinstance(op, LookupTableOp):
+            return GPULayoutAssignment.generate_default_lut_layout(op)
+        elif isinstance(op, (update_lut, bprop_lut)):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, InitTensorOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         else:
@@ -567,6 +585,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             return GPUPoolLayoutConstraint(op, arg)
         elif isinstance(op, BpropPoolOp):
             return GPUPoolLayoutConstraint(op, arg)
+        elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
+            return GPULutLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
 
@@ -810,6 +830,38 @@ class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
         arg_axes = arg_layout.ng_axes
         out_groups = [[a] for a in arg_view_axes]
         return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+
+
+class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPULutLayoutConstraint, self).__init__(op, arg)
+        if len(arg.axes) == 2:
+            self.order = [flatten(get_axes_list(Axes(arg.axes[0]))), flatten(get_axes_list(Axes(arg.axes[1])))]
+        else:
+            self.order = [flatten(get_axes_list(arg.axes))]
+
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        for group in self.order:
+            if not self.group_axis_contig(arg_mem_order, group):
+                return True
+
+        return False
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+
+        if self.needs_transform(arg_layout, op_layout):
+            return self.get_dimshuffle(arg_mem_order, arg_axes, self.order, arg)
+        else:
+            return self.get_reshape(arg_mem_order, arg_axes, self.order, arg)
 
 
 class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
