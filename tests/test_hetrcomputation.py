@@ -60,7 +60,7 @@ def check_device_assign_pass(default_device, default_device_id,
             assert op.metadata['device'] == graph_op_metadata[op][0]
             assert op.metadata['device_id'] == graph_op_metadata[op][1]
             assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
-                str(graph_op_metadata[op][1])
+                str(graph_op_metadata[op][1][0])
 
             expected_transformers.add(op.metadata['transformer'])
         assert hetr.transformers == expected_transformers
@@ -223,8 +223,8 @@ def test_scatter_gather_graph(transformer_factory):
     graph_op_metadata[x] = ["numpy", '0']
     graph_op_metadata[z] = ["numpy", '0']
     graph_op_metadata[y] = ["numpy", ('1', '2')]
-    graph_op_metadata[x_plus_z] = ["numpy", ('0')]
-    graph_op_metadata[x_plus_y] = ["numpy", ('0')]
+    graph_op_metadata[x_plus_z] = ["numpy", '0']
+    graph_op_metadata[x_plus_y] = ["numpy", '0']
 
     check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
 
