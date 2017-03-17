@@ -19,7 +19,7 @@ Installation documentation can be found
 
 We recommend installing Nervana Graph inside a virtual environment.
 
-To create a Python 2.7 virtualenv:
+To create and activate a Python 2.7 virtualenv:
 ```
 virtualenv -p python2.7 .venv
 . .venv/bin/activate
