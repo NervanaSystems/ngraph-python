@@ -30,7 +30,7 @@ test_data_single_operand = (
     # template:(operation, operand, expected_result, description, is_list
 
     # test_assign
-    bug((op.pos, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
+    bug((op.pos, [63.99515752394789], [63.99921874284734], "Assign function - underflow expected")),
     bug((op.pos, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
     (op.pos, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
     (op.pos, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value"),
@@ -42,7 +42,6 @@ test_data_single_operand = (
          "Negate function of negative boundary value inside of flex range")),
     bug((op.neg, [MAXIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE + 1],
          "Negate function of positive boundary value inside of flex range")),
-
     # test_sqrt
     (ng.sqrt, [0], [0], "Square root of zero and zero"),
     (ng.sqrt, [MAXIMUM_FLEX_VALUE], [181.015625], "Square root of positive boundary value"),
@@ -53,17 +52,16 @@ test_data_single_operand = (
     bug((ng.absolute, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
          "Absolute value from the flex range - overflow expected")),
     bug((ng.absolute, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Absolute value outside of the flex range")),
-    (op.pos, [i + 0.4 for i in range(4)], [0.399993896484375, 0.4999847412109375, 1.99993896484375, 0.399993896484375],
-    "Assign function of positive values from flex range - checks whether the placeholder fits into desired value after some iterations"
-    ),
 )
 
 test_data_double_operand = (
     # template:(operation, operand_1, operand_2, expected_result, description, is_list
 
     # test_add
-    bug((op.add, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE], "Positive boundary value plus one - overflow expected")),
+    bug((op.add, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE],
+         "Positive boundary value plus one - overflow expected")),
     bug((op.add, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE + 1], "Negative boundary value plus one")),
+    (op.add,  [0, 1, 2, 3, 4], 1.5, [1.5, 1.99993896484375, 3.5, 4.5], "x + 1.5"),
 
     # test_subtraction
     (op.sub, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE], "Negative boundary value minus one - underflow expected"),
@@ -101,11 +99,10 @@ test_data_double_operand = (
          "Positive boundary value exponentiation - overflow expected")),
     bug((op.pow, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE],
          "Negative boundary value exponentiation - underflow expected")),
-    (op.pow, [MAXIMUM_FLEX_VALUE], 0.4, [MAXIMUM_FLEX_VALUE ** 0.4], "Positive boundary value exponentiation"),
+    # Not sure of this case, results should be tracked
+    (op.pow, [MAXIMUM_FLEX_VALUE], 0.4, [63.99609375], "Positive boundary value exponentiation"),
     (op.pow, [MINIMUM_FLEX_VALUE], -2, [MINIMUM_FLEX_VALUE ** (-2)], "Negative boundary value negative exponentiation")
 )
-
-
 
 
 @pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand)
@@ -116,5 +113,3 @@ def test_single_operand(transformer_factory, operation, operand, expected_result
 @pytest.mark.parametrize("operation, operand_1, operand_2, expected_result, description", test_data_double_operand)
 def test_double_operand(transformer_factory, operation, operand_1, operand_2, expected_result, description):
     template_one_placeholder(operand_1, operation(x, operand_2), x, expected_result, description)
-
-
