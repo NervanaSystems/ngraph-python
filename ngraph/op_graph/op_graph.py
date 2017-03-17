@@ -2950,13 +2950,11 @@ class ContiguousOp(TensorOp):
 class DotOp(TensorOp):
 
     def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes & y.axes
-        self.y_reduction_axes = self.x_reduction_axes
-        assert self.x_reduction_axes == self.y_reduction_axes
-        self.x_out_axes = x.axes - self.x_reduction_axes
-        self.y_out_axes = y.axes - self.y_reduction_axes
+        self.reduction_axes = x.axes & y.axes
+        self.x_out_axes = x.axes - self.reduction_axes
+        self.y_out_axes = y.axes - self.reduction_axes
 
-        axes = self.x_out_axes | self.y_out_axes
+        axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
