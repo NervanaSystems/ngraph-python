@@ -1715,11 +1715,9 @@ class BroadcastOp(ReshapeOp):
         return td.broadcast(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sum(
-            delta,
-            reduction_axes=delta.axes - x.axes,
-            out_axes=x.axes
-        ))
+        dx = sum(delta, reduction_axes=delta.axes - x.axes)
+        dx_reordered = axes_with_order(dx, x.axes)
+        x.generate_add_delta(adjoints, dx_reordered)
 
 
 def broadcast(x, axes):
@@ -3027,13 +3025,11 @@ class ContiguousOp(TensorOp):
 class DotOp(TensorOp):
 
     def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes & y.axes
-        self.y_reduction_axes = self.x_reduction_axes
-        assert self.x_reduction_axes == self.y_reduction_axes
-        self.x_out_axes = x.axes - self.x_reduction_axes
-        self.y_out_axes = y.axes - self.y_reduction_axes
+        self.reduction_axes = x.axes & y.axes
+        self.x_out_axes = x.axes - self.reduction_axes
+        self.y_out_axes = y.axes - self.reduction_axes
 
-        axes = self.x_out_axes | self.y_out_axes
+        axes = self.x_out_axes + self.y_out_axes
 
         super(DotOp, self).__init__(
             args=(x, y), axes=axes, **kwargs
@@ -3157,7 +3153,23 @@ class ReductionOp(TensorOp):
         else:
             out_axes = make_axes(out_axes)
             reduction_axes = make_axes(reduction_axes)
-        assert (reduction_axes & out_axes) == make_axes(())
+
+        # reduction_axes and out_axes must not overlap
+        if not reduction_axes & out_axes == make_axes(()):
+            raise ValueError("reduction_axes {} and out_axes {} must not overlap"
+                             .format(reduction_axes, out_axes))
+
+        # union of reduction_axes and out_axes must be x.axes
+        if not (reduction_axes | out_axes).is_equal_set(x.axes):
+            raise ValueError(("union of reduction_axes {} and out_axes {} must "
+                              "be x.axes {}")
+                             .format(reduction_axes, out_axes, x.axes))
+
+        # out_axes must be the same order as x.axes
+        out_axes_index = [x.axes.index(axis) for axis in out_axes]
+        if sorted(out_axes_index) != out_axes_index:
+            raise ValueError("out_axes {} must has same order as x.axes {}"
+                             .format(out_axes, x.axes))
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -3167,11 +3179,6 @@ class ReductionOp(TensorOp):
             axes=out_axes,
             dtype=dtype
         )
-        assert self.valid
-
-    @property
-    def valid(self):
-        return True
 
 
 def create_reduction_op(name,

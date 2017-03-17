@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, LSTM,
                                    Affine, Softmax, Tanh, Logistic)
@@ -83,16 +84,16 @@ eval_loss = ng.cross_entropy_multi(inference_prob,
 eval_outputs = dict(cross_ent_loss=eval_loss)
 
 # Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
+with closing(ngt.make_transformer()) as transformer:
+    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
-cbs = make_default_callbacks(output_file=args.output_file,
-                             frequency=args.iter_interval,
-                             train_computation=train_computation,
-                             total_iterations=args.num_iterations,
-                             eval_set=valid_set,
-                             loss_computation=loss_computation,
-                             use_progress_bar=args.progress_bar)
+    cbs = make_default_callbacks(output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
 
-loop_train(train_set, train_computation, cbs)
+    loop_train(train_set, train_computation, cbs)

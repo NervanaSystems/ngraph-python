@@ -1102,3 +1102,17 @@ def test_wrong_placeholders(transformer_factory):
             c(1, 2)
 
         assert c(1) == 1
+
+
+def test_broadcast_deriv_reorder(transformer_factory):
+    H = ng.make_axis(2)
+    W = ng.make_axis(3)
+
+    x = ng.constant(np.random.rand(2, 3), axes=[H, W])
+    x_broadcast = ng.broadcast(x, [W, H])
+    x_sum = ng.sum(x_broadcast, out_axes=())
+    dx = ng.deriv(x_sum, x)
+
+    with ExecutorFactory() as ex:
+        dx_fun = ex.executor(dx)
+        ng.testing.assert_allclose(dx_fun(), np.ones((2, 3)))

@@ -303,8 +303,6 @@ class HetrTransformer(Transformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    hetr_counter = 0
-
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
@@ -316,20 +314,14 @@ class HetrTransformer(Transformer):
                        CommunicationPass(self.send_nodes),
                        DistributedPass(self.send_nodes)]
 
-        HetrTransformer.hetr_counter += 1
-        assert HetrTransformer.hetr_counter <= 1
-        assert HetrTransformer.hetr_counter >= 0
-
     def close(self):
         if self.is_closed:
             return
         if self.my_pid != os.getpid():
             # Only close once, and don't close if this is a copy in a child process
             return
-        if HetrTransformer.hetr_counter > 0:
-            HetrTransformer.hetr_counter -= 1
-            for t in self.child_transformers.values():
-                t.close()
+        for t in self.child_transformers.values():
+            t.close()
         super(HetrTransformer, self).close()
         self.is_closed = True
 

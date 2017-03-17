@@ -203,6 +203,17 @@ class Axis(object):
         return self.name == 'R'
 
     @property
+    def is_channel(self):
+        """
+        Tests if an axis is a channel axis.
+
+        Returns:
+            bool: True if the axis is a channel axis.
+
+        """
+        return self.name == 'C'
+
+    @property
     def length(self):
         """
         Returns:
@@ -468,6 +479,22 @@ class Axes(object):
             if axis.is_batch:
                 return axis
 
+    def channel_axis(self):
+        """
+        Returns:
+            The tensor's batch Axis or None if there isn't one.
+        """
+        for axis in self:
+            if axis.is_channel:
+                return axis
+
+    def spatial_axes(self):
+        """
+        Returns:
+            The Axes subset that are not batch, recurrent, or channel axes.
+        """
+        return self.feature_axes() - self.channel_axis()
+
     def sample_axes(self):
         """
         Returns:
@@ -522,7 +549,7 @@ class Axes(object):
             shape: tuple or list of shapes, must be the same length as the axes
         """
         if len(shape) != len(self._axes):
-            raise ValueError("shape's length %s must be euqal to axes' length"
+            raise ValueError("shape's length %s must be equal to axes' length"
                              "%s" % (len(shape), len(self)))
         for axis, length in zip(self._axes, shape):
             axis.length = length

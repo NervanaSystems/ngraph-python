@@ -16,6 +16,8 @@ import ngraph as ng
 
 
 _SHADOW_AXIS_POSTFIX = '__NG_SHADOW'
+_WIDTH = '__NG_WIDTH'
+_DEPTH = '__NG_DEPTH'
 
 
 class Namespace():
@@ -80,3 +82,40 @@ def make_shadow_axis(axis):
 
 def is_shadow_axis(axis):
     return axis.name.endswith(_SHADOW_AXIS_POSTFIX)
+
+
+def reorder_spatial_axes(tensor):
+    """
+    Assumes we are getting a C, H, N, or C, H, W, N, or C, D, H, W, N
+    """
+    spatial_axes = tensor.axes.spatial_axes()
+    batch_axes = tensor.axes.batch_axes()
+
+    if len(spatial_axes) == 0 or len(spatial_axes) > 3:
+        raise ValueError(
+            'spatial ops can only operate on tensors with 1, 2, or 3 spatial axes.'
+            'Found {}'.format(spatial_axes)
+        )
+
+    if not batch_axes:
+        raise ValueError(
+            'spatial ops require a batch axis'
+        )
+
+    if not tensor.axes.channel_axis():
+        c = ng.make_axis(length=1, name='C')
+        tensor = ng.expand_dims(tensor, c, 0)
+    channel_axes = ng.make_axes(tensor.axes.channel_axis())
+
+    if len(spatial_axes) == 1:
+        w = ng.make_axis(length=1, name=_WIDTH)
+        tensor = ng.expand_dims(tensor, w, 0)
+        spatial_axes = spatial_axes + w
+
+    if len(spatial_axes) == 2:
+        d = ng.make_axis(length=1, name=_DEPTH)
+        tensor = ng.expand_dims(tensor, d, 0)
+        spatial_axes = ng.make_axes([d]) + spatial_axes
+
+    new_axes = channel_axes + spatial_axes + batch_axes
+    return ng.axes_with_order(tensor, new_axes)
