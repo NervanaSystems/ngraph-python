@@ -23,7 +23,8 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, InitTensorOp
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, InitTensorOp, \
+    RngOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
@@ -287,6 +288,8 @@ class GPULayoutAssignment(LayoutAssignment):
         elif isinstance(op, (update_lut, bprop_lut)):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, InitTensorOp):
+            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+        elif isinstance(op, RngOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
@@ -587,6 +590,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             return GPUPoolLayoutConstraint(op, arg)
         elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
             return GPULutLayoutConstraint(op, arg)
+        elif isinstance(op, RngOp):
+            return GPUBinaryLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
 
