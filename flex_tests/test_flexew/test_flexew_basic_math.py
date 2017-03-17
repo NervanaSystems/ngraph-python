@@ -30,7 +30,7 @@ test_data_single_operand = (
     # template:(operation, operand, expected_result, description, is_list
 
     # test_assign
-    bug((op.pos, [63.99515752394789], [63.99921874284734], "Assign function - underflow expected")),
+    bug((op.pos, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
     bug((op.pos, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
     (op.pos, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
     (op.pos, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value"),
