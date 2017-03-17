@@ -26,7 +26,8 @@ def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, de
             assert flex == expected_value
 
 
-def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2, expected_values, description):
+def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
+                              expected_values, description):
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
         # print(description)
         for values, expected_value in zip(tuple_values, expected_values):

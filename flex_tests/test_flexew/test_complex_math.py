@@ -17,6 +17,8 @@ import pytest
 import ngraph as ng
 from ngraph.testing import template_one_placeholder
 
+pytestmark = pytest.mark.transformer_dependent("module")
+
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 EPSILON = 0.2
