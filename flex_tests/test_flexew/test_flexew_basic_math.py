@@ -27,7 +27,7 @@ EPSILON = 0.2
 x = ng.placeholder(())
 
 test_data_single_operand = (
-    # template:(operation, operand, expected_result, description, is_list
+    # template:(operation, operand, expected_result, description)
 
     # test_assign
     bug((op.pos, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
@@ -55,7 +55,7 @@ test_data_single_operand = (
 )
 
 test_data_double_operand = (
-    # template:(operation, operand_1, operand_2, expected_result, description, is_list
+    # template:(operation, operand_1, operand_2, expected_result, description)
 
     # test_add
     bug((op.add, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE],
