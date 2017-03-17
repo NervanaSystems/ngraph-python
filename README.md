@@ -1,7 +1,7 @@
 # Nervana Graph
 
 Nervana graph is Nervana's library for developing frameworks that can efficiently run deep
-learning computations on a variety of compute platforms. it consists of three primary API
+learning computations on a variety of compute platforms. It consists of three primary API
 components:
 
 - An API for creating computational `Nervana Graphs`.
