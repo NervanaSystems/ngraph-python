@@ -149,7 +149,7 @@ class Axis(object):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.name == 'R'
+        return self.name == 'REC'
 
     @property
     def is_channel(self):

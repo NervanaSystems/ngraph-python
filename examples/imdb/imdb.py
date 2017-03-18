@@ -130,11 +130,11 @@ class IMDB(object):
         self.nclass = 1 + max(np.max(y_train), np.max(y_test))
 
         self.data_dict['train'] = {'review': {'data': X_train,
-                                              'axes': ('batch', 'R')},
+                                              'axes': ('batch', 'REC')},
                                    'label': {'data': y_train,
                                              'axes': ('batch',)}}
         self.data_dict['valid'] = {'review': {'data': X_test,
-                                              'axes': ('batch', 'R')},
+                                              'axes': ('batch', 'REC')},
                                    'label': {'data': y_test,
                                              'axes': ('batch',)}}
         return self.data_dict

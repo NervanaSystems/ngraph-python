@@ -72,7 +72,7 @@ def bias_initializer(request):
 def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
 
     input_axis = ng.make_axis(name='features')
-    recurrent_axis = ng.make_axis(name='R')
+    recurrent_axis = ng.make_axis(name='REC')
     batch_axis = ng.make_axis(name='N')
 
     input_axes = ng.make_axes([input_axis, recurrent_axis, batch_axis])

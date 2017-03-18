@@ -27,7 +27,7 @@ class Namespace():
 # Define the standard Neon axes
 ax = Namespace()
 ax.N = ng.make_axis(name='N', docstring="minibatch size")
-ax.REC = ng.make_axis(name='R', docstring="recurrent axis")
+ax.REC = ng.make_axis(name='REC', docstring="recurrent axis")
 ax.Y = ng.make_axis(docstring="target")
 
 

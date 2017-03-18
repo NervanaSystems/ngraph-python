@@ -323,7 +323,7 @@ def test_sliced_batch_axis():
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
-    a = ng.make_axis(10, name='R')
+    a = ng.make_axis(10, name='REC')
     s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
 
