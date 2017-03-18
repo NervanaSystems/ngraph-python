@@ -357,7 +357,7 @@ class HetrTransformer(Transformer):
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            self.hetr_passes.append(graph_pass)
+            self.passes.append(graph_pass)
         else:
             raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 
