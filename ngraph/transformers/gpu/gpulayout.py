@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, InitTensorOp, \
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, \
     RngOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -288,8 +288,6 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_lut_layout(op)
         elif isinstance(op, (update_lut, bprop_lut)):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, InitTensorOp):
-            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         elif isinstance(op, RngOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
         elif isinstance(op, (GpuQueueSendOp, GpuQueueRecvOp)):

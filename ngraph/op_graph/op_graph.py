@@ -1135,7 +1135,7 @@ class TensorOp(Op):
                                      dtype=self.dtype,
                                      is_persistent=self.is_persistent,
                                      is_input=self.is_input,
-                                     is_placeholder=self.is_placeholder)).named(self.name)
+                                     is_placeholder=self.is_placeholder)
         else:
             return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
                                  is_persistent=self.is_persistent,
