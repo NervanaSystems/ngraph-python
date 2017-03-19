@@ -235,7 +235,7 @@ class LookupTable(Layer):
             in_obj (Tensor): object that provides the lookup indices
         """
         in_obj.axes.find_by_name('time')[0].add_role(ar.time)
-        in_obj.axes.find_by_name('time')[0].is_recurrent = True
+        in_obj.axes.find_by_name('time')[0].named('R')
         in_obj = ng.axes_with_role_order(in_obj, self.role_order)
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
