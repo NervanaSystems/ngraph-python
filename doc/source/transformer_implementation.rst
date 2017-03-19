@@ -80,7 +80,7 @@ Passes present a major opportunity for performance optimization that we plan to 
 Intialization Computation
 -------------------------
 
-A special initialization computation is created in ``Transformer._transform_computations`` which is responsible for executing any initializers attached to graph ops. Initializers are discovered and enumerated in ``Transformer.ordered_initializers`` by tranversing the graph and checking for the ``Op.initializers`` member. This set of initializers is used to construct the initialization computation
+A special initialization computation is created in ``Transformer._transform_computations`` which is responsible for executing any initializers attached to graph ops. Initializers are discovered and enumerated in ``Transformer.ordered_initializers`` by traversing the graph and checking for the ``Op.initializers`` member. This set of initializers is used to construct the initialization computation
 
 .. code-block:: python
 

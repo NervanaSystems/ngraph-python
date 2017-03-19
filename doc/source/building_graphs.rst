@@ -188,7 +188,7 @@ An important distinction to make here is that the ``deriv`` function does not pe
 .. Note::
   The following functionality is likely to be supplanted more composable abstractions involving op graph containers.
 
-In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this The ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``deriv_handler`` to the ``DivideOp``:
+In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this, the ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``deriv_handler`` to the ``DivideOp``:
 
 More details about the mechanics of automatic differiantion and how ``deriv`` works are covered in :doc:`autodiff`.
 

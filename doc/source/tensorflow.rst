@@ -29,9 +29,9 @@ Here's a minimal example for the TensorFlow importer.
 ::
 
     from __future__ import print_function
-    from ngraph.frontends.TensorFlow.tf_importer.importer import TFImporter
+    from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
     import ngraph.transformers as ngt
-    import TensorFlow as tf
+    import tensorflow as tf
     import ngraph as ng
 
     # TensorFlow ops
