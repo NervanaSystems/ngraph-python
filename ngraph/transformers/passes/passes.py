@@ -22,8 +22,8 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     ContiguousOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, constant, \
-    Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
-    ParallelOp
+    Multiply, Add, Divide, Op, Sum, Prod, negative, power
+
 from ngraph.util.generics import generic_method
 
 
@@ -97,23 +97,11 @@ class PeepholeGraphPass(GraphBuildingPass):
         assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while True:
-            ops = Op.ordered_ops(min_ops)
-
             if not has_work:
                 return
 
-            self.replacement_list = []
-
-            # Make control dependency adjustments for any added control blocks.
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
-            for op in ops:
-                for cop in op.control_deps:
-                    if isinstance(cop, ParallelOp):
-                        op.remove_control_dep(cop)
-                        for dep in cop.control_deps:
-                            op.add_control_dep(dep)
-
             # pass through the ops in an execution order collecting things to do
+            self.replacement_list = []
             ops = Op.ordered_ops(op.forwarded for op in min_ops)
             for op in ops:
                 op.update_forwards()
