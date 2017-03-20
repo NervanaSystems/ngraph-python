@@ -353,7 +353,7 @@ def feature_axis():
 
 @pytest.fixture(scope="module")
 def recurrent_axis():
-    return ng.make_axis(length=4, name='R')
+    return ng.make_axis(length=4, name='REC')
 
 
 @pytest.fixture(scope="module")
