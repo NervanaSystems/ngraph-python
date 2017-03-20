@@ -16,6 +16,7 @@ tensorflow==0.12.1
 scipy==0.18.1
 
 # other requirements
+orderedset==2.0
 tqdm==4.11.2
 enum34==1.1.6
 future==0.16.0
