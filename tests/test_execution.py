@@ -18,8 +18,12 @@ from builtins import range
 import numpy as np
 import pytest
 import ngraph as ng
+import collections
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
+
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -349,7 +353,7 @@ def feature_axis():
 
 @pytest.fixture(scope="module")
 def recurrent_axis():
-    return ng.make_axis(length=4, name='R')
+    return ng.make_axis(length=4, name='REC')
 
 
 @pytest.fixture(scope="module")
@@ -1063,3 +1067,52 @@ def test_variance_sqrt_inverse(transformer_factory, input_tensor):
 
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
+
+
+def test_return_type(transformer_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c0 = ex.executor(x, x)
+        c1 = ex.executor([x], x)
+
+        r0 = c0(1)
+        assert r0 == 1
+
+        r1 = c1(1)
+        assert isinstance(r1, collections.Sequence)
+        assert r1[0] == 1
+
+
+def test_empty_computation(transformer_factory):
+    with ExecutorFactory() as ex:
+        computation = ex.executor(None)
+        res = computation()
+        assert not res
+
+
+def test_wrong_placeholders(transformer_factory):
+    x = ng.placeholder(())
+    with ExecutorFactory() as ex:
+        c = ex.executor(x, x)
+
+        with pytest.raises(ValueError):
+            c()
+
+        with pytest.raises(ValueError):
+            c(1, 2)
+
+        assert c(1) == 1
+
+
+def test_broadcast_deriv_reorder(transformer_factory):
+    H = ng.make_axis(2)
+    W = ng.make_axis(3)
+
+    x = ng.constant(np.random.rand(2, 3), axes=[H, W])
+    x_broadcast = ng.broadcast(x, [W, H])
+    x_sum = ng.sum(x_broadcast, out_axes=())
+    dx = ng.deriv(x_sum, x)
+
+    with ExecutorFactory() as ex:
+        dx_fun = ex.executor(dx)
+        ng.testing.assert_allclose(dx_fun(), np.ones((2, 3)))

@@ -19,8 +19,9 @@ import ngraph as ng
 from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
-from ngraph.frontends.neon import ax, ar
+from ngraph.frontends.neon import ax
 
+pytestmark = pytest.mark.transformer_dependent("module")
 
 rng = RandomTensorGenerator(0, np.float32)
 
@@ -134,19 +135,32 @@ def test_conv(transformer_factory):
     conv_params.update(strides)
     conv_params.update(dilation)
 
-    ax_i = ng.make_axes([ax.C, ax.D, ax.H, ax.W, ax.N])
-    ax_f = ng.make_axes([ax.C, ax.T, ax.R, ax.S, ax.K])
-    ax_i.set_shape((C, D, H, W, N))
-    ax_f.set_shape((C, T, R, S, K))
-
-    ax_o = ng.make_axes([
-        ng.make_axis(name='C', roles=[ar.features_input]),
-        ng.make_axis(name='D', roles=[ar.features_0]),
-        ng.make_axis(name='H', roles=[ar.features_1]),
-        ng.make_axis(name='W', roles=[ar.features_2]),
+    ax_i = ng.make_axes([
+        ng.make_axis(name='C'),
+        ng.make_axis(name='D'),
+        ng.make_axis(name='H'),
+        ng.make_axis(name='W'),
         ax.N
     ])
 
+    ax_f = ng.make_axes([
+        ng.make_axis(name='C'),
+        ng.make_axis(name='D'),
+        ng.make_axis(name='H'),
+        ng.make_axis(name='W'),
+        ng.make_axis(name='K'),
+    ])
+
+    ax_o = ng.make_axes([
+        ng.make_axis(name='C'),
+        ng.make_axis(name='D'),
+        ng.make_axis(name='H'),
+        ng.make_axis(name='W'),
+        ax.N
+    ])
+
+    ax_i.set_shape((C, D, H, W, N))
+    ax_f.set_shape((C, T, R, S, K))
     ax_o[:-1].set_shape((K, M, P, Q))
 
     inputs = ng.placeholder(axes=ax_i)

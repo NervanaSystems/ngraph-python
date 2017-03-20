@@ -20,7 +20,6 @@ tqdm==4.11.2
 enum34==1.1.6
 future==0.16.0
 configargparse==0.11.0
-h5py==2.6.0
 cachetools==2.0.0
 decorator==4.0.11
 pynvrtc==7.5
@@ -34,4 +33,4 @@ nbconvert==5.1.1
 nbformat==4.3.0
 
 # setuptools is autoflex's requirement, but it is here for now
-setuptools>=18.5
+setuptools==18.5

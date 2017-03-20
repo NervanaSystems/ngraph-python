@@ -22,6 +22,9 @@ import ngraph as ng
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.testing.execution import ExecutorFactory
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
+
 
 class GDMReference(object):
     '''

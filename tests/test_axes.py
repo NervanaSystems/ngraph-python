@@ -154,7 +154,7 @@ def test_axes_ops(test_cases):
 
 def random(tensor_description):
     """
-    return a ranom numpy array with dimension and dtype specified by
+    return a random numpy array with dimension and dtype specified by
     tensor_description.
 
     Arguments:
@@ -323,18 +323,9 @@ def test_sliced_batch_axis():
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
-    a = ng.make_axis(10, name='R')
+    a = ng.make_axis(10, name='REC')
     s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
-
-
-def test_sliced_axis_roles():
-    """ slicing an axis should result in the same roles as the parent axis """
-    role1 = ng.make_axis_role()
-    role2 = ng.make_axis_role()
-    a = ng.make_axis(10, roles=[role1, role2])
-    s = slice_axis(a, slice(0, 5))
-    assert all(r in s.roles for r in a.roles)
 
 
 def test_idempotent_axes_a():
@@ -486,3 +477,9 @@ def test_axes_map_immutable():
 
     with pytest.raises(TypeError):
         axes_map['x'] = 'y'
+
+
+def test_axes_map_init_from_axes():
+    axes_map = AxesMap({ng.make_axis(1, name='aaa'): ng.make_axis(1, name='zzz')})
+
+    assert axes_map['aaa'] == 'zzz'

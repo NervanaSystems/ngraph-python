@@ -16,6 +16,14 @@
 from __future__ import print_function
 from __future__ import division
 import numpy as np
+
+from ngraph.transformers.base import UnsupportedTransformerException
+
+try:
+    from ngraph.flex import GPUFlexManager, GPUFlex
+except ImportError:
+    raise UnsupportedTransformerException("autoflex package not installed")
+
 from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
@@ -27,7 +35,6 @@ from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
 from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
-from ngraph.flex import GPUFlexManager, GPUFlex
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
 

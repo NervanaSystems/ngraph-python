@@ -26,11 +26,12 @@ python examples/cifar10/cifar10_conv.py --data_dir /usr/local/data/CIFAR --outpu
 """
 from __future__ import division
 from __future__ import print_function
+from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Affine, Preprocess, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax, ar, loop_train
+from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import ArrayIterator
 
@@ -55,13 +56,8 @@ ax.Y.length = 10
 
 
 def cifar_mean_subtract(x):
-    # Assign roles
-    x.axes.find_by_name('channel').add_role(ar.features_input)
-    x.axes.find_by_name('height').add_role(ar.features_1)
-    x.axes.find_by_name('width').add_role(ar.features_2)
-
     bgr_mean = ng.persistent_tensor(
-        axes=x.axes.find_by_name('channel'),
+        axes=x.axes.find_by_name('C'),
         initial_value=np.array([104., 119., 127.]))
 
     return (x - bgr_mean) / 255.
@@ -90,16 +86,16 @@ eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(inputs['label'], a
 eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
+with closing(ngt.make_transformer()) as transformer:
+    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
-cbs = make_default_callbacks(output_file=args.output_file,
-                             frequency=args.iter_interval,
-                             train_computation=train_computation,
-                             total_iterations=args.num_iterations,
-                             eval_set=valid_set,
-                             loss_computation=loss_computation,
-                             use_progress_bar=args.progress_bar)
+    cbs = make_default_callbacks(output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
 
-loop_train(train_set, train_computation, cbs)
+    loop_train(train_set, train_computation, cbs)

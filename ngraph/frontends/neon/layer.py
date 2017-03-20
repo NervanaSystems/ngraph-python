@@ -19,7 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar, shadow_axes_map
+from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -168,6 +168,11 @@ class Linear(Layer):
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A recurrent axis {} was included.'
                 ).format(axes.recurrent_axis()))
+            if any(is_shadow_axis(axis) for axis in axes):
+                raise ValueError((
+                    "Shadow Axes are not allowed in the output axes passed to "
+                    "Linear.  Found {}."
+                ).format([is_shadow_axis(axis) for axis in axes]))
 
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
@@ -180,9 +185,9 @@ class Linear(Layer):
     def __call__(self, in_obj):
         if self.W is None:
             self.W = ng.variable(
-                #axes=in_obj.axes.feature_axes() + self.axes_map.keys(),
                 axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
-                initial_value=self.init, scope=self.scope).named('LinW')
+                initial_value=self.init, scope=self.scope,
+            ).named('LinW')
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -216,7 +221,6 @@ class LookupTable(Layer):
         self.init = init
         self.update = update
         self.pad_idx = pad_idx
-        self.role_order = (ar.time, ar.batch)
         self.W = None
 
     def lut_init(self, axes, pad_word_axis, pad_idx):
@@ -239,9 +243,9 @@ class LookupTable(Layer):
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
         """
-        in_obj.axes.find_by_name('time')[0].add_role(ar.time)
-        in_obj.axes.find_by_name('time')[0].is_recurrent = True
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = ng.axes_with_order(in_obj,
+                                    ng.make_axes([in_obj.axes.recurrent_axis(),
+                                                  in_obj.axes.batch_axis()]))
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
 
@@ -300,10 +304,6 @@ class ConvBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing conv keys: {}".format(missing_keys))
 
-        self.role_order = (ar.features_input, ar.features_0,
-                           ar.features_1, ar.features_2, ar.batch)
-        self.filter_roles = self.role_order[:-1] + (ar.features_output,)
-
         self.init = init
         self.f_axes = None
         self.o_axes = None
@@ -313,19 +313,17 @@ class ConvBase(Layer):
     @cached({})
     def __call__(self, in_obj):
         cpm = self.convparams.copy()
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
         if self.f_axes is None:
             self.f_axes = ng.make_axes([in_axes[0]])
-            for nm, role in zip('TRSK', self.filter_roles[1:]):
-                self.f_axes |= ng.make_axis(roles=[role], length=cpm[nm]).named(nm)
-            # mark 'K' as a shadow axis for the initializers.  with #1158
-            # shadows will also be important for axis name matching and roles
-            # can be removed.
+            for nm in 'TRSK':
+                self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
+            # mark 'K' as a shadow axis for the initializers.
             self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
             self.f_axes = ng.make_axes([
-                axis if axis.name != 'K' else self.axes_map.keys()[0]
+                axis if axis.name != 'K' else list(self.axes_map.keys())[0]
                 for axis in self.f_axes
             ])
 
@@ -334,7 +332,7 @@ class ConvBase(Layer):
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
+                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -415,20 +413,18 @@ class PoolBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing pooling keys: {}".format(missing_keys))
 
-        self.role_order = (ar.features_input, ar.features_0,
-                           ar.features_1, ar.features_2, ar.batch)
         self.o_axes = None
 
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
-                ng.make_axis(roles=a.roles, name=a.name) for a in in_axes if not a.is_batch
+                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
             out_shape = [
@@ -484,8 +480,8 @@ class Bias(Layer):
     def __call__(self, in_obj):
         if self.init:
             w_axes = in_obj.axes.sample_axes()
-            if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
-                w_axes = in_obj.axes.role_axes(ar.features_input)
+            if self.shared and in_obj.axes.channel_axis() is not None:
+                w_axes = ng.make_axes(in_obj.axes.channel_axis())
 
             self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
             return in_obj + self.W
@@ -574,8 +570,8 @@ class BatchNorm(Layer):
 
         in_axes = in_obj.axes.sample_axes()
         red_axes = ng.make_axes()
-        if len(in_axes.role_axes(ar.features_input)) != 0:
-            red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
+        if in_axes.channel_axis() is not None:
+            red_axes |= in_axes.sample_axes() - in_axes.channel_axis()
         if in_axes.recurrent_axis() is not None:
             red_axes |= in_axes.recurrent_axis()
         red_axes |= in_obj.axes.batch_axis()
