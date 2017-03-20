@@ -2063,8 +2063,6 @@ class AssignableTensorOp(TensorOp):
     def is_placeholder(self):
         return self._is_placeholder
 
-        self.scope = scope
-
     @property
     def defs(self):
         """
