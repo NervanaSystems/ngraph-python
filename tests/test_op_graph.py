@@ -258,35 +258,32 @@ def test_setting(M):
                         (15, 5, 1)])
 def concatenate_variables(request):
     num_vars, num_axes, concat_pos = request.param
-    concat_role = ng.make_axis_role("Concat")
     common_axes = [ng.make_axis(length=2) for _ in range(num_axes - 1)]
     x_list = list()
     np_list = list()
-    ax = ng.make_axis(length=np.random.randint(3, 10)).add_role(concat_role)
+    ax = ng.make_axis(length=np.random.randint(3, 10))
     axes = ng.make_axes(common_axes[:concat_pos] + [ax] + common_axes[concat_pos:])
     for _ in range(num_vars):
         var = np.random.uniform(0, 1, axes.full_lengths)
         np_list.append(var)
         x_list.append(ng.constant(var, axes=axes))
 
-    return x_list, np_list, concat_role, concat_pos
+    return x_list, np_list, concat_pos
 
 
 @pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
 def test_concatenate(transformer_factory, concatenate_variables):
-    x_list, np_list, role, pos = concatenate_variables
+    x_list, np_list, pos = concatenate_variables
 
     with ExecutorFactory() as ex:
         v = ng.concat_along_axis(x_list, x_list[0].axes[pos])
-        v2 = ng.concat_role_axis(x_list, role)
         d = ng.deriv(v, x_list[0],
                      error=ng.constant(np.ones(v.axes.lengths), axes=v.axes))
-        f = ex.executor([v, v2, d])
-        e_v, e_v2, e_d = f()
+        f = ex.executor([v, d])
+        e_v, e_d = f()
         np_v = np.concatenate(np_list, axis=pos)
         assert ng.testing.allclose(e_v.copy(), np_v)
-        assert ng.testing.allclose(e_v2.copy(), np_v)
         assert ng.testing.allclose(e_d.copy(), np.ones(x_list[0].axes.lengths))
 
 

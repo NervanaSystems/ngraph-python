@@ -73,7 +73,6 @@ seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_id
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
-
 train_prob = seq1(inputs['review'])
 train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y),
                                     usebits=True)

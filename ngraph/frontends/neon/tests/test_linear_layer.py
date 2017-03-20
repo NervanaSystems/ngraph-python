@@ -139,7 +139,7 @@ def test_linear_invalid_shadow_axes():
 
 def test_linear_invalid_recurrent_axes():
     with pytest.raises(ValueError):
-        Linear(axes=ng.make_axis(1, name='R'), init=UniformInit(1.0, 1.0))
+        Linear(axes=ng.make_axis(1, name='REC'), init=UniformInit(1.0, 1.0))
 
 
 def test_linear_invalid_batch_axes():

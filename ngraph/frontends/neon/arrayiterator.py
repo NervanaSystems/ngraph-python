@@ -153,7 +153,7 @@ class SequentialArrayIterator(object):
 
     def make_placeholders(self):
         batch_axis = ng.make_axis(length=self.batch_size, name="N")
-        time_axis = ng.make_axis(length=self.time_steps, name="R")
+        time_axis = ng.make_axis(length=self.time_steps, name="REC")
         p_axes = ng.make_axes([batch_axis, time_axis])
         return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
 
