@@ -6,6 +6,12 @@ RUN apt-get install -y python-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
+# install aeon dependency
+RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
+RUN pip install git+https://github.com/NervanaSystems/aeon.git
+
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
 RUN pip install -r test_requirements.txt
