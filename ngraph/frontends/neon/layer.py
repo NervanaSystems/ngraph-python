@@ -327,7 +327,7 @@ class ConvBase(Layer):
                 for axis in self.f_axes
             ])
 
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init, 
+            self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
                                  scope=self.scope).named('convwt')
 
         if self.o_axes is None:

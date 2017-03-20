@@ -16,7 +16,7 @@
 import pytest
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Linear, Affine, Convolution, LSTM, \
-     ConstantInit, Rectlin, Tanh
+    ConstantInit, Rectlin, Tanh
 
 
 class LayerClass(object):
@@ -64,6 +64,7 @@ class AffineLayer(LayerClass):
                 ])
 def layer_cls(request):
     return request.param
+
 
 def test_scope(layer_cls):
 

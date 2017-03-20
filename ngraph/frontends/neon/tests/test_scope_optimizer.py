@@ -25,13 +25,14 @@ from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 
 rng = RandomTensorGenerator(0, np.float32)
 
+
 # TODO: test different layer types
 # TODO: test different optimizer classes, once they support scope
 # self.W is None check - test that self.W doesn't get recreated?
 def make_optimizer():
     return GradientDescentMomentum(learning_rate=0.1, momentum_coef=0.0, stochastic_round=False,
-                                        wdecay=0.0, gradient_clip_norm=None,
-                                        gradient_clip_value=None)
+                                   wdecay=0.0, gradient_clip_norm=None,
+                                   gradient_clip_value=None)
 
 
 @pytest.fixture(scope='module',
@@ -58,7 +59,7 @@ def test_scope_2layer(scope_pair, transformer_factory):
     inputs = rng.uniform(-1.0, 1.0, axes)
     targets = np.array([0, 1, 1, 0])
 
-    # initial weight values 
+    # initial weight values
     nout1 = 16
     Wlin1 = np.random.normal(0, 1, (nout1, F.length)).astype(np.float32)
     Wbias1 = 0.0
