@@ -29,7 +29,7 @@ from ngraph.op_graph.axes import TensorDescription, \
     default_int_dtype, AxesMap
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 def tensor_descriptions(args):
@@ -217,7 +217,7 @@ class Op(NameableValue, DebugInfo):
         op_set = OrderedSet(ops)
 
         def add_op(op):
-            op_set.insert(0, op)
+            op_set.add(op)
             for key in op.__dict__:
                 val = getattr(op, key)
                 if isinstance(val, Op) and val not in op_set:
@@ -519,7 +519,7 @@ class Op(NameableValue, DebugInfo):
         Returns:
             Ops that must execute before this one can.
         """
-        return self._control_deps + self.args
+        return self._control_deps | OrderedSet(self.args)
 
     def add_control_dep(self, dep):
         """
@@ -856,9 +856,11 @@ class ComputationOp(ParallelOp):
 
         args = tuple(as_op(arg) for arg in args)
         arg_tensors = set(arg.tensor for arg in args)
-        missing_tensors = [t for t in placeholders.difference(arg_tensors)]
+        missing_tensors = [t for t in placeholders - arg_tensors]
         if len(missing_tensors) > 0:
-            raise ValueError("All used placeholders must be supplied to a computation.")
+            raise ValueError(("All used placeholders must be supplied to a "
+                              "computation. Currently missed {}."
+                              ).format(missing_tensors))
 
         for arg in args:
             if not (arg.tensor.is_input):
@@ -1271,7 +1273,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         base_deps = super(ValueOp, self).control_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
-            return base_deps + [self.value_tensor]
+            return base_deps | OrderedSet([self.value_tensor])
         else:
             return base_deps
 
