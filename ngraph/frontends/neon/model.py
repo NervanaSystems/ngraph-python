@@ -70,11 +70,14 @@ class BoundComputation(object):
         outputs = [outputs] if len(self.output_keys) == 1 else list(outputs)
 
         inputs = itemgetter(*self.input_keys)(named_inputs)
+        inputs = [inputs] if len(self.input_keys) == 1 else list(inputs)
         self.num_outputs = len(outputs)
         self.comp_func = transformer.computation(outputs, *inputs)
 
     def __call__(self, named_buffers):
-        result_tuple = self.comp_func(*itemgetter(*self.input_keys)(named_buffers))
+        inputs = itemgetter(*self.input_keys)(named_buffers)
+        inputs = [inputs] if len(self.input_keys) == 1 else list(inputs)
+        result_tuple = self.comp_func(*inputs)
         result_dict = {k: v for k, v in zip(self.output_keys, result_tuple)}
         return result_dict
 

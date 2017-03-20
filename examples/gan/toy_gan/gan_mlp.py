@@ -122,7 +122,7 @@ transformer = ngt.make_transformer()
 
 train_computation_g = make_bound_computation(transformer,
                                              generator_train_outputs,
-                                             inputs['noise_sample'])
+                                             {'noise_sample': inputs['noise_sample']})
 train_computation_d = make_bound_computation(transformer,
                                              discriminator_train_outputs,
                                              inputs)
@@ -136,7 +136,7 @@ for mb_idx, data in enumerate(train_set):
     for iter_d in range(k):
         batch_output_d = train_computation_d(data)
     # update generator
-    batch_output_g = train_computation_g(data['noise_sample'])
+    batch_output_g = train_computation_g({'noise_sample': data['noise_sample']})
     # print losses
     if mb_idx % 100 == 0:
         msg = "Iteration {} complete. Discriminator avg loss: {} Generator avg loss: {}"
