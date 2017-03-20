@@ -74,11 +74,11 @@ class CIFAR10(object):
             X_test = X_test.reshape(-1, 3, 32, 32)
 
         self.train_set = {'image': {'data': X_train,
-                                    'axes': ('batch', 'channel', 'height', 'width')},
+                                    'axes': ('batch', 'C', 'height', 'width')},
                           'label': {'data': y_train,
                                     'axes': ('batch',)}}
         self.valid_set = {'image': {'data': X_test,
-                                    'axes': ('batch', 'channel', 'height', 'width')},
+                                    'axes': ('batch', 'C', 'height', 'width')},
                           'label': {'data': np.array(y_test),
                                     'axes': ('batch',)}}
 

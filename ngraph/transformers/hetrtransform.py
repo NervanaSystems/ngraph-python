@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import signal
-import pytest
 import sys
 import os
 import time
@@ -116,8 +115,10 @@ class AsyncTransformer(Process):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
+                                    import pytest
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
                                 elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    import pytest
                                     pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)
@@ -302,8 +303,6 @@ class HetrTransformer(Transformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    hetr_counter = 0
-
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
@@ -315,20 +314,14 @@ class HetrTransformer(Transformer):
                        CommunicationPass(self.send_nodes),
                        DistributedPass(self.send_nodes)]
 
-        HetrTransformer.hetr_counter += 1
-        assert HetrTransformer.hetr_counter <= 1
-        assert HetrTransformer.hetr_counter >= 0
-
     def close(self):
         if self.is_closed:
             return
         if self.my_pid != os.getpid():
             # Only close once, and don't close if this is a copy in a child process
             return
-        if HetrTransformer.hetr_counter > 0:
-            HetrTransformer.hetr_counter -= 1
-            for t in self.child_transformers.values():
-                t.close()
+        for t in self.child_transformers.values():
+            t.close()
         super(HetrTransformer, self).close()
         self.is_closed = True
 
@@ -364,7 +357,7 @@ class HetrTransformer(Transformer):
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            self.hetr_passes.append(graph_pass)
+            self.passes.append(graph_pass)
         else:
             raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 

@@ -14,11 +14,23 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
-from ngraph.frontends.neon import ar
-from ngraph.frontends.neon.layer import output_dim
 from ngraph.frontends.common.utils import common_conv2d_pool_padding
 import ngraph as ng
 import numpy as np
+
+
+def output_dim(X, S, padding, strides):
+    """
+    Compute output dimension given input feature map, filter, padding, and stridedimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+    """
+    S = (S - 1) + 1
+    return ((X - S + 2 * padding) // strides) + 1
 
 
 def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
@@ -159,17 +171,17 @@ class OpsNN(OpsBase):
 
         # set input axes shape
         ax_N = ng.make_axis(name='N')
-        ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
-        ax_H = ng.make_axis(roles=[ar.Height])
-        ax_W = ng.make_axis(roles=[ar.Width])
+        ax_C = ng.make_axis()
+        ax_D = ng.make_axis(length=1)
+        ax_H = ng.make_axis()
+        ax_W = ng.make_axis()
         ng.make_axes([ax_N, ax_C, ax_H, ax_W]).set_shape(image.axes.lengths)
 
         # create placeholders for output axes
-        oC = ng.make_axis(roles=[ar.Channel]).named('C')
-        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
-        oH = ng.make_axis(roles=[ar.Height]).named('H')
-        oW = ng.make_axis(roles=[ar.Width]).named('W')
+        oC = ng.make_axis(name='C')
+        oD = ng.make_axis(length=1, name='D')
+        oH = ng.make_axis(name='H')
+        oW = ng.make_axis(name='W')
 
         # spatial kernel size
         kernel_size = [int(val.i) for val in c2_op.arg if val.name == "kernel"]
@@ -261,22 +273,22 @@ class OpsNN(OpsBase):
 
         # set input axes shape
         ax_N = ng.make_axis(name='N')
-        ax_C = ng.make_axis(roles=[ar.Channel])
-        ax_D = ng.make_axis(roles=[ar.Depth], length=1)
-        ax_H = ng.make_axis(roles=[ar.Height])
-        ax_W = ng.make_axis(roles=[ar.Width])
+        ax_C = ng.make_axis()
+        ax_D = ng.make_axis(length=1)
+        ax_H = ng.make_axis()
+        ax_W = ng.make_axis()
 
         # set kernel axes shape
-        ax_kernel_D = ng.make_axis(roles=[ar.Depth], length=1)
-        ax_kernel_H = ng.make_axis(roles=[ar.Height])
-        ax_kernel_W = ng.make_axis(roles=[ar.Width])
-        ax_kernel_ofm = ng.make_axis(roles=[ar.Channelout])
+        ax_kernel_D = ng.make_axis(length=1)
+        ax_kernel_H = ng.make_axis()
+        ax_kernel_W = ng.make_axis()
+        ax_kernel_ofm = ng.make_axis()
 
         # create placeholders for output axes
-        oC = ng.make_axis(roles=[ar.Channel]).named('C')
-        oD = ng.make_axis(roles=[ar.Depth], length=1).named('D')
-        oH = ng.make_axis(roles=[ar.Height]).named('H')
-        oW = ng.make_axis(roles=[ar.Width]).named('W')
+        oC = ng.make_axis(name='C')
+        oD = ng.make_axis(name='D', length=1)
+        oH = ng.make_axis(name='H')
+        oW = ng.make_axis(name='W')
 
         axes_order = {
             'NCHW': {'X': [ax_N, ax_C, ax_H, ax_W],

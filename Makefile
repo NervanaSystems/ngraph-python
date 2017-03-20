@@ -44,6 +44,10 @@ DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
 default: install
 
 install:
+	@pip install -U pip
+	@# cython added separately due to h5py dependency ordering bug.  See:
+	@# https://github.com/h5py/h5py/issues/535
+	@pip install cython==0.23.1
 	@pip install -r requirements.txt
 	@pip install -e .
 

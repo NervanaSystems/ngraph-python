@@ -64,7 +64,7 @@ class CommunicationPass(GraphBuildingPass):
             else:
                 args.append(arg)
 
-        op._Op__args = tuple(args)
+        op._args = tuple(args)
 
     def do_pass(self, ops, transformer):
         super(CommunicationPass, self).do_pass(ops, transformer)
@@ -91,12 +91,12 @@ class DistributedPass(GraphBuildingPass):
         subgraph = list()
         elem = 0
 
-        # First find AddOp and then clone its args. This is needed to
-        # make sure AddOp has the correct arguments at init/clone time.
+        # First find Add and then clone its args. This is needed to
+        # make sure Add has the correct arguments at init/clone time.
         visit = nodes
         add_op_list = list()
         for v in visit:
-            if v.__class__.__name__ is 'AddOp':
+            if v.__class__.__name__ is 'Add':
                 add_op_list.append(visit.index(v))
 
         while visit:
@@ -141,7 +141,7 @@ class DistributedPass(GraphBuildingPass):
                     len(op.from_id), False)
                 Op.visit_input_closure(
                     [op.send_node()],
-                    lambda x: setattr(x, '_TensorOp__axes', new_axes))
+                    lambda x: setattr(x, '_axes', new_axes))
 
                 nodes_to_clone = Op.ordered_ops([op.send_node()])
                 # clone nodes for other device_id

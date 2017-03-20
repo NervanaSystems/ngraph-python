@@ -48,6 +48,22 @@ class OrderedSet(set, collections.MutableSequence):
         result.update(other)
         return result
 
+    def insert(self, index, value):
+        """
+        Add a value to the set at the desired index.
+
+        If not already in the set, the value will be appended to the list of elements at the index
+        specified.
+
+        Args:
+            index: The index in the collection which this value should be added.
+            value: The value to be added.
+
+        """
+        if value not in self:
+            self.elt_list.insert(index, value)
+            super(OrderedSet, self).add(value)
+
     def add(self, value):
         """
         Add a value to the set.

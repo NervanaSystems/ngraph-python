@@ -14,7 +14,7 @@ def batch_axis(batch_size):
 
 @pytest.fixture
 def recurrent_axis(sequence_length):
-    return ng.make_axis(length=sequence_length, name='R')
+    return ng.make_axis(length=sequence_length, name='REC')
 
 
 @pytest.fixture

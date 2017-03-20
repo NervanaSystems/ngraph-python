@@ -137,38 +137,37 @@ class RequiredTensorShaping(PeepholeGraphPass):
     @visit.on_type(DotOp)
     def visit(self, op):
         x, y = op.args
-        x_reduction_axes = op.x_reduction_axes
-        y_reduction_axes = op.y_reduction_axes
+        reduction_axes = op.reduction_axes
         out_axes = op.axes
-        if len(x_reduction_axes) == 0:
+        if len(reduction_axes) == 0:
+            # TODO: this is a weird case, should we really support it?
             d = make_axis(1)
-            x_reduction_axes = make_axes((d,))
-            y_reduction_axes = x_reduction_axes
-            x = broadcast(x, x.axes | x_reduction_axes)
-            y = broadcast(y, y_reduction_axes | y.axes)
+            reduction_axes = make_axes((d,))
+            x = broadcast(x, x.axes + reduction_axes)
+            y = broadcast(y, reduction_axes + y.axes)
 
         if x.is_scalar:
             x, y = y, x
-            x_reduction_axes, y_reduction_axes = y_reduction_axes, x_reduction_axes
 
         if y.is_scalar:
             if x.is_scalar:
                 out = x.scalar_op * y.scalar_op
-                if len(x_reduction_axes) > 0:
-                    out = out * x_reduction_axes.size
+                if len(reduction_axes) > 0:
+                    out = out * reduction_axes.size
                 out = broadcast(out, op.axes)
             else:
-                out = Sum(x, x_reduction_axes) * y.scalar_op
+                out = Sum(x, reduction_axes) * y.scalar_op
             out = broadcast(out, op.axes)
         else:
-            x_rem_axes = x.axes - x_reduction_axes
-            x = axes_with_order(x, x_rem_axes | x_reduction_axes)
+            # move reduction_axes to end
+            x = axes_with_order(x, (x.axes - reduction_axes) + reduction_axes)
+            # move reduction axes to front
+            y = axes_with_order(y, reduction_axes + (y.axes - reduction_axes))
 
-            y_rem_axes = y.axes - y_reduction_axes
-            y = axes_with_order(y, y_reduction_axes | y_rem_axes)
-
-            x = flatten_at(x, len(x.axes) - len(x_reduction_axes))
-            y = flatten_at(y, len(y_reduction_axes))
+            # flatten non-reduction axes together and reduction axes together
+            x = flatten_at(x, len(x.axes) - len(reduction_axes))
+            # flatten non-reduction axes together and reduction axes together
+            y = flatten_at(y, len(reduction_axes))
 
             if len(out_axes) == 0:
                 out = DotLowDimension(x, y, axes=())

@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
+import uuid
 import collections
 import operator
 import itertools
@@ -39,23 +40,8 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
-def make_axis_role(name=None, docstring=None):
-    """
-    Returns a new AxisRole.
-
-    Args:
-        name (String, optional): The name for the role.
-        docstring (String, optional): A docstring for the role.
-
-    Returns:
-        AxisRole: A new AxisRole with the given name and docstring.
-
-    """
-    return AxisRole(name=name, docstring=docstring)
-
-
 def make_axis(length=None, name=None,
-              roles=None, docstring=None):
+              docstring=None):
     """
     Returns a new Axis.
 
@@ -64,14 +50,13 @@ def make_axis(length=None, name=None,
         name (String, optional): Name of the axis.
         batch (bool, optional): This is a batch axis. Defaults to False.
         recurrent (bool, optional): This is a recurrent axis. Defaults to False.
-        roles (set, optional): A set of axis roles for the axis.
         docstring (String, optional): A docstring for the axis.
 
     Returns:
         Axis: A new Axis.
 
     """
-    return Axis(length=length, name=name, roles=roles, docstring=docstring)
+    return Axis(length=length, name=name, docstring=docstring)
 
 
 def make_axes(axes=()):
@@ -86,21 +71,6 @@ def make_axes(axes=()):
 
     """
     return Axes(axes=axes)
-
-
-class AxisRole(NameableValue):
-    """
-    An AxisRole is like a type for an Axis, such as "Height" or "Channels".
-
-    At different parts of a computation, axes of different length may be used for a role.
-    For example, after a convolution the height axis is usually shortened, and in a
-    convolution filter, the height axis of the filter is related to the height axis of
-    the input and output, but not the height. By matching AxisRoles, operations such as
-    convolution can match the axes in their arguments.
-    """
-
-    def __init__(self, **kwargs):
-        super(AxisRole, self).__init__(**kwargs)
 
 
 class Axis(object):
@@ -132,7 +102,6 @@ class Axis(object):
 
     def __init__(self,
                  length=None,
-                 roles=None,
                  name=None,
                  **kwargs):
         assert 'batch' not in kwargs
@@ -146,9 +115,7 @@ class Axis(object):
         self.name = name
         self.__length = length
 
-        self.__roles = set()
-        if roles is not None:
-            self.roles.update(roles)
+        self.uuid = uuid.uuid4()
 
     def named(self, name):
         self.name = name
@@ -182,7 +149,18 @@ class Axis(object):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.name == 'R'
+        return self.name == 'REC'
+
+    @property
+    def is_channel(self):
+        """
+        Tests if an axis is a channel axis.
+
+        Returns:
+            bool: True if the axis is a channel axis.
+
+        """
+        return self.name == 'C'
 
     @property
     def length(self):
@@ -199,39 +177,6 @@ class Axis(object):
     @property
     def axes(self):
         return Axes([self])
-
-    @property
-    def roles(self):
-        """
-
-        Returns: The AxisRoles of this axis.
-
-        """
-        return self.__roles
-
-    def has_role(self, axis_role):
-        """
-
-        Args:
-            axis_role: A role to test.
-
-        Returns:
-            True if this axis has the role.
-
-        """
-        return axis_role in self.roles
-
-    def add_role(self, axis_role):
-        """
-
-        Args:
-            axis_role:
-
-        Returns:
-
-        """
-        self.roles.add(axis_role)
-        return self
 
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
@@ -288,8 +233,7 @@ def slice_axis(axis, s):
 
     # create sliced axis
     new_axis = make_axis(length=new_length,
-                         name=axis.name,
-                         roles=axis.roles)
+                         name=axis.name)
     return new_axis
 
 
@@ -397,6 +341,7 @@ class Axes(object):
                 .format(str(duplicates(axes)))
             )
         self._axes = tuple(axes)
+        self.uuid = uuid.uuid4()
 
     @property
     def full_lengths(self):
@@ -449,6 +394,22 @@ class Axes(object):
             if axis.is_batch:
                 return axis
 
+    def channel_axis(self):
+        """
+        Returns:
+            The tensor's batch Axis or None if there isn't one.
+        """
+        for axis in self:
+            if axis.is_channel:
+                return axis
+
+    def spatial_axes(self):
+        """
+        Returns:
+            The Axes subset that are not batch, recurrent, or channel axes.
+        """
+        return self.feature_axes() - self.channel_axis()
+
     def sample_axes(self):
         """
         Returns:
@@ -471,13 +432,6 @@ class Axes(object):
         for axis in self:
             if axis.is_recurrent:
                 return axis
-
-    def role_axes(self, role):
-        """
-        Returns:
-            The Axes subset that have the specified role
-        """
-        return Axes(axis for axis in self if axis.has_role(role))
 
     def flatten(self, force=False):
         """
@@ -503,18 +457,13 @@ class Axes(object):
             shape: tuple or list of shapes, must be the same length as the axes
         """
         if len(shape) != len(self._axes):
-            raise ValueError("shape's length %s must be euqal to axes' length"
+            raise ValueError("shape's length %s must be equal to axes' length"
                              "%s" % (len(shape), len(self)))
         for axis, length in zip(self._axes, shape):
             axis.length = length
 
     def find_by_name(self, name):
         return Axes(axis for axis in self if axis.name == name)
-
-    def add_role(self, role):
-        for axis in self:
-            axis.add_role(role)
-        return self
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -949,7 +898,7 @@ class FlattenedAxis(Axis):
 
         # parent constructor
         super(FlattenedAxis, self).__init__(length=length, name=name, **kwargs)
-        self.__axes = axes
+        self._axes = axes
 
     @property
     def is_flattened(self):
@@ -965,7 +914,15 @@ class FlattenedAxis(Axis):
         Returns:
             Whether this axes contains no collapsed axes.
         """
-        return len(self.__axes) == 0
+        return len(self._axes) == 0
+
+    @property
+    def single(self):
+        """
+        Returns:
+            Whether this axes contains exactly one collapsed axes.
+        """
+        return len(self._axes) == 1
 
     @property
     def axes(self):
@@ -973,7 +930,7 @@ class FlattenedAxis(Axis):
         Returns:
             The flattened axes contained in this object.
         """
-        return self.__axes
+        return self._axes
 
     def __eq__(self, other):
         return other.is_flattened\
