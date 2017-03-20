@@ -76,7 +76,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           metavar='SEED',
                           help='random number generator seed')
 
-    def parse_args(self, gen_be=True):
+    def parse_args(self):
         args = super(NgraphArgparser, self).parse_args()
         self.make_and_set_transformer_factory(args)
 

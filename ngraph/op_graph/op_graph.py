@@ -2819,8 +2819,9 @@ class BinaryElementWiseOp(ElementWiseOp):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
         axes = x.axes | y.axes
+        # this will have y's additional axes appended to x's axes.
         x = broadcast(x, axes)
-        y = broadcast(y, axes)
+        y = broadcast(axes_with_order(y, axes & y.axes), axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
