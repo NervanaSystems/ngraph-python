@@ -19,7 +19,7 @@ from ngraph.frontends.neon.layer import Layer, Affine
 from ngraph.frontends.neon.model import Sequential
 from ngraph.frontends.neon.activation import Rectlin, Logistic
 from ngraph.frontends.neon.initializer import ConstantInit
-from ngraph.frontends.neon.optimizer import GradientDescentMomentum
+from ngraph.frontends.neon.optimizer import GradientDescentMomentum, RMSProp
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 
 
@@ -27,24 +27,32 @@ rng = RandomTensorGenerator(0, np.float32)
 
 
 # TODO: test different layer types
-# TODO: test different optimizer classes, once they support scope
 # self.W is None check - test that self.W doesn't get recreated?
-def make_optimizer():
-    return GradientDescentMomentum(learning_rate=0.1, momentum_coef=0.0, stochastic_round=False,
-                                   wdecay=0.0, gradient_clip_norm=None,
-                                   gradient_clip_value=None)
+def gradient_descent_momentum():
+    return GradientDescentMomentum(0.1)
+
+
+def rmsprop():
+    return RMSProp()
+
+
+@pytest.fixture(scope='module',
+                params=[gradient_descent_momentum,
+                        rmsprop])
+def optimizer_factory(request):
+    return request.param
 
 
 @pytest.fixture(scope='module',
                 params=[
                     ('s1', 's2'),
-                    ('s2', 's1'),
+                    ('s2', 's1')
                 ])
 def scope_pair(request):
     return request.param
 
 
-def test_scope_2layer(scope_pair, transformer_factory):
+def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
 
     # this test peeks at values of layer weights, not hetr-compatible
     if transformer_factory.name == 'hetr':
@@ -95,13 +103,13 @@ def test_scope_2layer(scope_pair, transformer_factory):
 
         # get all updates, without scope, for ground truth
         seq_all, x_all, t_all, loss_all = make_network()
-        optimizer_all = make_optimizer()
+        optimizer_all = optimizer_factory()
         updates_all = optimizer_all(loss_all)
         network_all = ex.executor(updates_all, x_all, t_all)
 
         # update only variables in one scope, for same network
         seq_scope, x_scope, t_scope, loss_scope = make_network(scope1='s1', scope2='s2')
-        optimizer_scope = make_optimizer()
+        optimizer_scope = optimizer_factory()
         updates_scope = optimizer_scope(loss_scope, variable_scope=update_scope)
         network_scope = ex.executor(updates_scope, x_scope, t_scope)
 
