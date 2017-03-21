@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.factory.comm_nodes import calculate_new_axes
+from ngraph.op_graph.comm_nodes import calculate_new_axes
 import ngraph as ng
 import pytest
 

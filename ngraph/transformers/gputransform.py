@@ -34,7 +34,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, TensorOp
-from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
+from ngraph.op_graph.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut

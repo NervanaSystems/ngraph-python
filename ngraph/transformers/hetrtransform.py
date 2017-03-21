@@ -22,6 +22,7 @@ from queue import Empty
 import collections
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
+from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
@@ -185,15 +186,6 @@ class AsyncTransformer(Process):
                 else:
                     # TODO handle and exit gracefully
                     raise
-
-
-class ResultOp(TensorOp):
-
-    def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self, args=args)
-        self.metadata['device_id'] = device_id
-        self.axes = args[0].axes
-        self.dtype = args[0].dtype
 
 
 class HetrComputation(Computation):
@@ -365,7 +357,7 @@ class HetrTransformer(Transformer):
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            self.hetr_passes.append(graph_pass)
+            self.passes.append(graph_pass)
         else:
             raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 

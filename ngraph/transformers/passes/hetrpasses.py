@@ -13,12 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.transformers.passes.passes import GraphBuildingPass
-from ngraph.factory.comm_nodes import calculate_new_axes
+from ngraph.op_graph.comm_nodes import calculate_new_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
-from ngraph.util.hetr_utils import clone
+from ngraph.util.hetr_utils import clone, find_recvs
 from ngraph.util.ordered import OrderedSet
-from ngraph.factory.comm_nodes import GatherSendOp, ScatterRecvOp
+from ngraph.op_graph.comm_nodes import GatherSendOp, ScatterRecvOp
 
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 import socket
@@ -130,14 +130,46 @@ class DistributedPass(GraphBuildingPass):
 
         return subgraph
 
-    def ser_clone_nodes(self, nodes, device_id, device_idx, new_axes):
-        # hacking
-        for v in nodes:
-            if isinstance(v, (ScatterRecvOp, GatherSendOp)):
-                v.shared_queues = []
-        ser_s = serialize_graph(nodes)
-        ser_cloned_nodes = deserialize_graph(ser_s)
-        return ser_cloned_nodes
+    def serde_clone_nodes(self, gather_send_op, device_id, device_idx, new_axes):
+        """hacks to clone nodes with serialization"""
+
+        # clone nodes with GatherSendOp as root using serialize_graph and deserialized_graph
+        ser_str = serialize_graph([gather_send_op])
+        ser_cloned_nodes = deserialize_graph(ser_str)
+
+        # get the ops linked from ScatterRecvOp via args or control_deps
+        new_gather_send_op = [o for o in ser_cloned_nodes if isinstance(o, GatherSendOp)]
+        assert len(new_gather_send_op) == 1, 'multiple GatherSendOp after clone'
+
+        new_gather_send_op = new_gather_send_op[0]
+        self.send_nodes.add(new_gather_send_op)
+        cloned_nodes = Op.ordered_ops([new_gather_send_op])
+
+        # modify idx, axes, and other metadata eg. device_id, transformer
+        # investigate dump slices and shared_queue
+        for v in Op.ordered_ops([gather_send_op]):
+            if isinstance(v, ScatterRecvOp):
+                ScatterRecvOp_shared_queues = v.shared_queues
+                send_node = v.send_node()
+            elif isinstance(v, GatherSendOp):
+                GatherSendOp_shared_queues = v.shared_queues
+
+        assert ScatterRecvOp_shared_queues, 'ScatterRecvOp shared Qs is None'
+        assert GatherSendOp_shared_queues, 'GatherSendOp shared Qs is None'
+
+        for op in cloned_nodes:
+            op.metadata['transformer'] = op.metadata['device'] + str(device_id)
+            op.metadata['device_id'] = str(device_id)
+            if op.metadata.get('host_transformer') == gather_send_op.metadata['host_transformer']:
+                op.metadata['host_transformer'] = gather_send_op.metadata['host_transformer']
+            if isinstance(op, ScatterRecvOp):
+                op.shared_queues = ScatterRecvOp_shared_queues
+                op._send_node = send_node
+                op.idx = device_idx
+            elif isinstance(op, GatherSendOp):
+                op.shared_queues = GatherSendOp_shared_queues
+                op.idx = device_idx
+        return cloned_nodes
 
     def do_pass(self, ops, transformer):
 
@@ -145,7 +177,7 @@ class DistributedPass(GraphBuildingPass):
 
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
-                # op is GatherSendOp
+                # op is GatherGatherOp
                 self.parallel_axes = op.metadata['parallel']
 
                 new_axes = calculate_new_axes(
@@ -164,12 +196,16 @@ class DistributedPass(GraphBuildingPass):
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
-                    # test clone with serialize and deserialize
-                    # ser_string = serialize_graph(nodes_to_clone)
-                    # ser_cloned_graph = deserialize_graph(ser_string)
+                    # cloned_graph = self.clone_nodes(nodes=nodes_to_clone, device_id=id, device_idx=i, new_axes=new_axes)
+                    # def test_clone_graph():
+                    #     reg_cloned_graph = self.clone_nodes(nodes=nodes_to_clone,
+                    #                                         device_id=id,
+                    #                                         device_idx=i,
+                    #                                         new_axes=new_axes)
+                    ser_cloned_graph = self.serde_clone_nodes(gather_send_op=op.send_node(),
+                                                              device_id=id,
+                                                              device_idx=i,
+                                                              new_axes=new_axes)
+                        # print('test')
 
-                    # insert gather send op to results, refer clone()
-                    # or pass ser_cloned_graph to clone_nodes for testing
-
-                    cloned_graph = self.ser_clone_nodes(nodes=nodes_to_clone, device_id=id, device_idx=i, new_axes=new_axes)
-                    print(cloned_graph)
+                    # test_clone_graph()

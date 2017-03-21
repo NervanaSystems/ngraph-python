@@ -15,9 +15,10 @@
 from __future__ import division
 from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
     TensorValueOp
-from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
+from ngraph.op_graph.comm_nodes import GatherSendOp, GatherRecvOp, \
     RecvOp, ScatterSendOp, ScatterRecvOp
 from ngraph.util.ordered import OrderedSet
+import ngraph as ng
 
 
 def clone(
@@ -57,11 +58,11 @@ def clone(
         new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
 
     elif isinstance(node, ScatterRecvOp):
-        new_node = node.__class__(
-            to_node=node,
-            send_node=node.send_node(),
-            device_idx=device_idx)
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
+        with ng.metadata(transformer=node.metadata['device'] + str(device_id)):
+            new_node = node.__class__(
+                to_node=node,
+                send_node=node.send_node(),
+                device_idx=device_idx)
 
     elif isinstance(node, ScatterSendOp):
         pass

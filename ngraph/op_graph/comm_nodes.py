@@ -54,6 +54,14 @@ def get_slices(axes, parallel_axis, num_devices):
         new_slices.append(slices)
     return new_slices
 
+class ResultOp(TensorOp):
+
+    def __init__(self, device_id, args, **kwargs):
+        super(ResultOp, self).__init__(self, args=args)
+        self.metadata['device_id'] = device_id
+        self.axes = args[0].axes
+        self.dtype = args[0].dtype
+
 
 class CommunicationOp(TensorOp):
     """
