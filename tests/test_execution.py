@@ -984,7 +984,7 @@ def test_elementwise_fp16_out(transformer_factory):
 
 
 def test_empty_finalize():
-    """Evaluating an empty CpuTransformer shouldn't raise any exceptions."""
+    """Evaluating an empty CPUTransformer shouldn't raise any exceptions."""
     with ExecutorFactory() as ex:
         ex.transformer.initialize()
 

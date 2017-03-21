@@ -189,34 +189,34 @@ class GpuQueueRecvOp(RecvOp):
         self.queue = send_node.queue
 
 
-class CpuQueueSendOp(SendOp):
+class CPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
-        super(CpuQueueSendOp, self).__init__(from_node)
+        super(CPUQueueSendOp, self).__init__(from_node)
         self.queue = multiprocessing.Queue()
 
 
-class CpuQueueRecvOp(RecvOp):
+class CPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
-        super(CpuQueueRecvOp, self).__init__(to_node, send_node)
+        super(CPUQueueRecvOp, self).__init__(to_node, send_node)
         self.queue = send_node.queue
 
 
-class CpuQueueScatterSendOp(ScatterSendOp):
+class CPUQueueScatterSendOp(ScatterSendOp):
 
     def __init__(self, from_node, to_node):
-        super(CpuQueueScatterSendOp, self).__init__(from_node, to_node)
+        super(CPUQueueScatterSendOp, self).__init__(from_node, to_node)
         self.shared_queues = list()
         for i in range(len(to_node.metadata['device_id'])):
             self.shared_queues.append(multiprocessing.Queue())
         self.comm_type = 'queue'
 
 
-class CpuQueueScatterRecvOp(ScatterRecvOp):
+class CPUQueueScatterRecvOp(ScatterRecvOp):
 
     def __init__(self, to_node, send_node, device_idx=None):
-        super(CpuQueueScatterRecvOp, self).__init__(to_node, send_node)
+        super(CPUQueueScatterRecvOp, self).__init__(to_node, send_node)
         if device_idx:
             self.idx = device_idx
         else:
@@ -224,10 +224,10 @@ class CpuQueueScatterRecvOp(ScatterRecvOp):
         self.shared_queues = send_node.shared_queues
 
 
-class CpuQueueGatherSendOp(GatherSendOp):
+class CPUQueueGatherSendOp(GatherSendOp):
 
     def __init__(self, from_node, clone_node=None, device_idx=None):
-        super(CpuQueueGatherSendOp, self).__init__(from_node)
+        super(CPUQueueGatherSendOp, self).__init__(from_node)
         self.shared_queues = list()
         if clone_node:
             self.idx = device_idx
@@ -238,8 +238,8 @@ class CpuQueueGatherSendOp(GatherSendOp):
                 self.shared_queues.append(multiprocessing.Queue())
 
 
-class CpuQueueGatherRecvOp(GatherRecvOp):
+class CPUQueueGatherRecvOp(GatherRecvOp):
 
     def __init__(self, from_node, to_node, send_node):
-        super(CpuQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
+        super(CPUQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
         self.shared_queues = send_node.shared_queues

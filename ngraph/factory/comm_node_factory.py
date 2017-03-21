@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from .comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, CpuQueueSendOp, \
-    CpuQueueRecvOp, CpuQueueGatherSendOp, CpuQueueGatherRecvOp, \
-    CpuQueueScatterSendOp, CpuQueueScatterRecvOp
+from .comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, CPUQueueSendOp, \
+    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
+    CPUQueueScatterSendOp, CPUQueueScatterRecvOp
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -35,7 +35,7 @@ class CommNodePair(object):
             if node.metadata['device'] == 'gpu':
                 return GpuCommNodeFactory()
             elif node.metadata['device'] == 'cpu':
-                return CpuCommNodeFactory()
+                return CPUCommNodeFactory()
             else:
                 assert False
 
@@ -160,9 +160,9 @@ class GpuCommNodeFactory(CommNodeFactory):
             assert False, "Not supported!!!"
 
 
-class CpuCommNodeFactory(CommNodeFactory):
+class CPUCommNodeFactory(CommNodeFactory):
     """
-    Represents a NumPy communication node factory.
+    Represents a CPU communication node factory.
 
     Arguments:
         None
@@ -183,30 +183,30 @@ class CpuCommNodeFactory(CommNodeFactory):
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
             if comm_type == 'queue':
-                return CpuQueueSendOp(
+                return CPUQueueSendOp(
                     from_node=from_node)
         elif node_type == 'recv':
             if comm_type == 'queue':
-                return CpuQueueRecvOp(
+                return CPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'scatter_send':
             if comm_type == 'queue':
-                return CpuQueueScatterSendOp(
+                return CPUQueueScatterSendOp(
                     from_node=from_node,
                     to_node=to_node)
         elif node_type == 'scatter_recv':
             if comm_type == 'queue':
-                return CpuQueueScatterRecvOp(
+                return CPUQueueScatterRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'gather_send':
             if comm_type == 'queue':
-                return CpuQueueGatherSendOp(
+                return CPUQueueGatherSendOp(
                     from_node=from_node)
         elif node_type == 'gather_recv':
             if comm_type == 'queue':
-                return CpuQueueGatherRecvOp(
+                return CPUQueueGatherRecvOp(
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
