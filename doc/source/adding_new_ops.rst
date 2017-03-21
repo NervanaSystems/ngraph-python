@@ -214,7 +214,7 @@ instance ::
    In ``ngraph/transformers/nptransform.py``, add the following for numpy
    code generation ::
 
-        class NumPyCodeGenerator(PyGen):
+        class CpuCodeGenerator(PyGen):
             ...
 
             @generate_op.on_type(Prod)

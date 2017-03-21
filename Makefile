@@ -80,7 +80,7 @@ test_mkl: clean
 	@coverage xml -i
 
 test_cpu: test_install clean
-	@echo Running unit tests for core and numpy transformer tests...
+	@echo Running unit tests for core and cpu transformer tests...
 	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
