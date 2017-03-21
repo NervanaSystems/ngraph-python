@@ -20,7 +20,7 @@ from six import itervalues, iteritems
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
 from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.util.hetr_utils import update_comm_deps
@@ -222,9 +222,9 @@ class HetrComputation(Computation):
                 new_returns.add(op)
 
         # Do Hetr passes
-        pass_ops = OrderedSet(new_returns + self.computation.parameters)
+        pass_ops = new_returns | OrderedSet(self.computation.parameters)
         for graph_pass in self.transformer.passes:
-            pass_ops = pass_ops + hetr.send_nodes
+            pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
             graph_pass.do_pass(pass_ops, self.transformer)
 
         # hack around new TensorValueOp that wraps AssignableTensorOp
@@ -238,7 +238,7 @@ class HetrComputation(Computation):
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation.parameters)
                          if p.metadata['transformer'] == t_name]
-            my_ops = [op for op in self.send_nodes + new_returns
+            my_ops = [op for op in self.send_nodes | new_returns
                       if op.metadata['transformer'] == t_name]
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
@@ -296,8 +296,6 @@ class HetrTransformer(Transformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    hetr_counter = 0
-
     def __init__(self, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
@@ -309,20 +307,14 @@ class HetrTransformer(Transformer):
                        CommunicationPass(self.send_nodes),
                        DistributedPass(self.send_nodes)]
 
-        HetrTransformer.hetr_counter += 1
-        assert HetrTransformer.hetr_counter <= 1
-        assert HetrTransformer.hetr_counter >= 0
-
     def close(self):
         if self.is_closed:
             return
         if self.my_pid != os.getpid():
             # Only close once, and don't close if this is a copy in a child process
             return
-        if HetrTransformer.hetr_counter > 0:
-            HetrTransformer.hetr_counter -= 1
-            for t in self.child_transformers.values():
-                t.close()
+        for t in self.child_transformers.values():
+            t.close()
         super(HetrTransformer, self).close()
         self.is_closed = True
 

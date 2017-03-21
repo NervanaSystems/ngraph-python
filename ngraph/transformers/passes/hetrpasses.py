@@ -19,8 +19,8 @@ from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone, find_recvs
 from ngraph.util.ordered import OrderedSet
 from ngraph.op_graph.comm_nodes import GatherSendOp, ScatterRecvOp
-
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+
 import socket
 
 

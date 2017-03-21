@@ -110,12 +110,12 @@ message Tensor {
   UUID uuid = 1;
   DTYPE dtype = 2;
   repeated uint32 shape = 3;
-  // TODO(jknight) storing the data inline like this is currently a short term solution for 
+  // TODO(jknight) storing the data inline like this is currently a short term solution for
   // constants.
   repeated float  float_data  = 4;
   repeated double double_data = 5;
-  repeated uint64 uint_data   = 6; // int data can go in a 
-  repeated sint64 int_data    = 7; // int data can go in a 
+  repeated uint64 uint_data   = 6; // int data can go in a
+  repeated sint64 int_data    = 7; // int data can go in a
 }
 
 message TensorDescription {
@@ -127,7 +127,7 @@ message TensorDescription {
   repeated int32 full_strides = 6;
   repeated int32 full_sizes   = 7;
 }
-  
+
 message Axes {
   // axes descriptions
   // currently just a simple container for repeated Axis objects
@@ -138,12 +138,6 @@ message Axes {
   repeated Axis axes = 3;
 }
 
-message AxisRole {
-  UUID uuid = 1;
-  string name = 2;
-  string docstring = 3;
-}
-
 message Axis {
   UUID uuid = 1;
   string name = 2;
@@ -151,7 +145,6 @@ message Axis {
   bool recurrent = 4;
   bool batch = 5;
   bool match_on_length = 6;
-  repeated AxisRole roles = 7;
   string docstring = 8;
   Axes flattened_axes = 9;
 }

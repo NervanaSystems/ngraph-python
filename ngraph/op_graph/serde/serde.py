@@ -46,7 +46,7 @@ import numpy as np
 import ngraph
 import ngraph.op_graph.op_graph as op_graph
 from ngraph.op_graph.op_graph import Op
-from ngraph.op_graph.axes import Axes, Axis, AxisRole, FlattenedAxis
+from ngraph.op_graph.axes import Axes, Axis, FlattenedAxis
 from ngraph.util.ordered import OrderedSet
 
 import ngraph.op_graph.serde.ops_pb2 as ops_pb
@@ -83,9 +83,6 @@ def axis_to_protobuf(axis):
     pb_axis.recurrent = axis.is_recurrent
     pb_axis.uuid.uuid = axis.uuid.bytes
 
-    for role in axis.roles:
-        tmp = pb_axis.roles.add()
-        tmp.CopyFrom(ops_pb.AxisRole(name=role.name, docstring=role.__doc__))
     return pb_axis
 
 
@@ -409,7 +406,6 @@ def protobuf_attr_to_python(val):
         pass
 
 def pb_to_axis(msg):
-    roles = [AxisRole(name=role.name, docstring=msg.docstring) for role in msg.roles]
 
     if msg.uuid.uuid in GLOBAL_AXIS_REGISTRY:  # Already deserialized
         return GLOBAL_AXIS_REGISTRY[msg.uuid.uuid]
@@ -418,8 +414,7 @@ def pb_to_axis(msg):
         axis = FlattenedAxis(axes)
     else:
         axis = Axis(name=msg.name,
-                    length=msg.length,
-                    roles=roles)
+                    length=msg.length)
 
     axis.uuid = uuid.UUID(bytes=msg.uuid.uuid)
     GLOBAL_AXIS_REGISTRY[axis.uuid.bytes] = axis
