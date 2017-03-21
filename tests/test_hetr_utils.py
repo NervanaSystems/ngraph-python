@@ -61,23 +61,23 @@ def create_scatter_gather_graph():
 def test_find_recvs():
     z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = create_graph()
 
-    assert set([recv_x]) == find_recvs(x_plus_one)
-    assert set([recv_x]) == find_recvs(recv_x)
+    assert set([recv_x]) == set(find_recvs(x_plus_one))
+    assert set([recv_x]) == set(find_recvs(recv_x))
     assert len(find_recvs(from_node)) == 0
-    assert set([recv_x]) == find_recvs(send_x_plus_one)
-    assert set([recv_x_plus_one, recv_x]) == find_recvs(recv_x_plus_one)
-    assert set([recv_x_plus_one, recv_x]) == find_recvs(z)
+    assert set([recv_x]) == set(find_recvs(send_x_plus_one))
+    assert set([recv_x_plus_one, recv_x]) == set(find_recvs(recv_x_plus_one))
+    assert set([recv_x_plus_one, recv_x]) == set(find_recvs(z))
 
 
 def test_find_recvs_scatter_gather():
     scatter_send_x, scatter_recv_a, scatter_recv_b, gather_send_a, gather_send_b, \
         gather_recv_x_plus_one = create_scatter_gather_graph()
 
-    assert set([scatter_recv_a]) == find_recvs(gather_send_a)
-    assert set([scatter_recv_b]) == find_recvs(gather_send_b)
+    assert set([scatter_recv_a]) == set(find_recvs(gather_send_a))
+    assert set([scatter_recv_b]) == set(find_recvs(gather_send_b))
     assert len(find_recvs(scatter_send_x)) == 0
-    assert set([gather_recv_x_plus_one, scatter_recv_a]) == find_recvs(gather_recv_x_plus_one)
-    assert set([scatter_recv_a]) == find_recvs(scatter_recv_a)
+    assert set([gather_recv_x_plus_one, scatter_recv_a]) == set(find_recvs(gather_recv_x_plus_one))
+    assert set([scatter_recv_a]) == set(find_recvs(scatter_recv_a))
 
 
 def test_comm_path_exists():
@@ -143,9 +143,9 @@ def test_update_comm_deps_scatter_gather():
     update_comm_deps((scatter_send_x, gather_send_x_plus_one_a, z_a))
     update_comm_deps((gather_send_x_plus_one_b,))
 
-    assert set([scatter_send_x]) == scatter_recv_a.control_deps
+    assert set([scatter_send_x]) == set(scatter_recv_a.control_deps)
     assert set([scatter_send_x, gather_send_x_plus_one_a]) == \
-        gather_recv_x_plus_one_a.control_deps
+        set(gather_recv_x_plus_one_a.control_deps)
 
 
 def test_scatter_gather_node_axes():

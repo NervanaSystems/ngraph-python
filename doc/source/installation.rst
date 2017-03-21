@@ -17,34 +17,44 @@
 Installation
 ************
 
-To install |geon|, you must first install our neon in a virtual environment. For neon install instructions, see: http://neon.nervanasys.com/.
-
-Activate the neon virtualenv with ``. .venv/bin/activate`` and then run::
-
+To download the source code, first run::
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
+
+We recommend installing inside a virtual environment.
+
+To create and activate a Python 2.7 virtualenv::
+    virtualenv -p python2.7 .venv
+    . .venv/bin/activate
+
+To, instead, create and activate a Python 3 virtualenv::
+    python3 -m venv .venv
+    . .venv/bin/activate
+
+Finally, to build and install, run:
     make install
+
 
 Getting Started
 ===============
 
 Several jupyter notebook walk-throughs demonstrate how to use Nervana Graph:
 
-* ``ngraph/examples/walk_through/`` guides developers through implementing logistic regression with ngraph
-* ``ngraph/examples/mnist/MNIST_Direct.ipynb`` demonstrates building a deep learning model using ngraph directly.
+* ``examples/walk_through/`` guides developers through implementing logistic regression with ngraph
+* ``examples/mnist/MNIST_Direct.ipynb`` demonstrates building a deep learning model using ngraph directly.
 
 The neon frontend can also be used to define and train deep learning models:
 
-* ``ngraph/examples/mnist/mnist_mlp.py``: Multi-layer perceptron network on MNIST dataset.
-* ``ngraph/examples/cifar10/cifar10_conv.py``: Convolutional neural network on CIFAR-10.
-* ``ngraph/examples/cifar10/cifar10_mlp.py``: Multi-layer perceptron on CIFAR-10 dataset.
-* ``ngraph/examples/ptb/char_rnn.py``: Character-level RNN model on Penn Treebank data.
+* ``examples/mnist/mnist_mlp.py``: Multi-layer perceptron network on MNIST dataset.
+* ``examples/cifar10/cifar10_conv.py``: Convolutional neural network on CIFAR-10.
+* ``examples/cifar10/cifar10_mlp.py``: Multi-layer perceptron on CIFAR-10 dataset.
+* ``examples/ptb/char_rnn.py``: Character-level RNN model on Penn Treebank data.
 
 We also include examples for using tensorflow to define graphs that are then passed to ngraph for execution:
 
-* ``ngraph/frontends/tensorflow/examples/minimal.py``
-* ``ngraph/frontends/tensorflow/examples/logistic_regression.py``
-* ``ngraph/frontends/tensorflow/examples/mnist_mlp.py``
+* ``frontends/tensorflow/examples/minimal.py``
+* ``frontends/tensorflow/examples/logistic_regression.py``
+* ``frontends/tensorflow/examples/mnist_mlp.py``
 
 
 Developer Guidelines
@@ -52,7 +62,7 @@ Developer Guidelines
 
 Before checking in code, run the unit tests and check for style errors::
 
-    make test
+    make test_cpu test_gpu test_integration
     make style
 
 Documentation can be generated via::

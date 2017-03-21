@@ -29,7 +29,7 @@ from ngraph.op_graph.axes import TensorDescription, \
     default_int_dtype, AxesMap
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 def tensor_descriptions(args):
@@ -217,7 +217,7 @@ class Op(NameableValue, DebugInfo):
         op_set = OrderedSet(ops)
 
         def add_op(op):
-            op_set.insert(0, op)
+            op_set.add(op)
             for key in op.__dict__:
                 val = getattr(op, key)
                 if isinstance(val, Op) and val not in op_set:
@@ -519,7 +519,7 @@ class Op(NameableValue, DebugInfo):
         Returns:
             Ops that must execute before this one can.
         """
-        return self._control_deps + self.args
+        return self._control_deps | OrderedSet(self.args)
 
     def add_control_dep(self, dep):
         """
@@ -856,9 +856,11 @@ class ComputationOp(ParallelOp):
 
         args = tuple(as_op(arg) for arg in args)
         arg_tensors = set(arg.tensor for arg in args)
-        missing_tensors = [t for t in placeholders.difference(arg_tensors)]
+        missing_tensors = [t for t in placeholders - arg_tensors]
         if len(missing_tensors) > 0:
-            raise ValueError("All used placeholders must be supplied to a computation.")
+            raise ValueError(("All used placeholders must be supplied to a "
+                              "computation. Currently missed {}."
+                              ).format(missing_tensors))
 
         for arg in args:
             if not (arg.tensor.is_input):
@@ -1271,7 +1273,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         base_deps = super(ValueOp, self).control_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
-            return base_deps + [self.value_tensor]
+            return base_deps | OrderedSet([self.value_tensor])
         else:
             return base_deps
 
@@ -1735,44 +1737,6 @@ def broadcast(x, axes):
     if x.axes == axes:
         return x
     return BroadcastOp(x, axes)
-
-
-def axes_with_role_order(x, roles):
-    """
-    Return a tensor with a different axes order according to
-    specified roles.  Will expand dims as necessary with inferred
-    axes for missing roles
-
-    Args:
-        x (TensorOp): The tensor.
-        roles (sequence, AxisRoles): A permutation of the roles
-                                     of axes of the tensor.
-
-    Returns:
-        TensorOp: The new tensor.
-
-    """
-    reordered_axes = make_axes()
-    y = x
-    for r in roles:
-        ax_i = y.axes.role_axes(r)
-        if len(ax_i) == 0:
-            ax_i = make_axis(length=1, roles=[r])
-        elif len(ax_i) == 1:
-            ax_i = ax_i[0]
-        else:
-            raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
-        reordered_axes |= ax_i
-        # This will only add the missing axes to the front
-        y = expand_dims(y, ax_i, 0)
-
-    # Ensure that axes of x are a subset of y
-    if not (x.axes & y.axes).is_equal_set(x.axes):
-        raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
-            x.axes - (x.axes & y.axes)
-        ))
-
-    return axes_with_order(y, reordered_axes)
 
 
 def axes_with_order(x, axes):
@@ -2367,8 +2331,7 @@ class ConcatOp(SequentialOp):
         common_axes = arg_axes - ax
 
         # Create long axis for concatenated tens1or
-        concat_axis = make_axis(name=ax.name,
-                                roles=ax.roles)
+        concat_axis = make_axis(name=ax.name)
 
         # Store the axes order equivalent to the first tensor
         ind = arg_axes.index(ax)
@@ -2442,42 +2405,6 @@ def concat_along_axis(x_list, axis):
         return x_list
 
     return ConcatOp(x_list, [axis for _ in range(len(x_list))])
-
-
-def concat_role_axis(x_list, role):
-    """
-    Concatenates a list of tensors along an axis with the specified role. All other axes in each
-    tensor should be identical.
-
-    Args:
-        x_list (list of TensorOps): A list of identically-axed tensors to concatenate
-        role (AxisRole): Axis role common to every tensor in x_list
-
-    Returns:
-        The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
-
-    Examples:
-        role = ng.make_axis_role("Concat")
-        H1 = ng.make_axis(length=5, roles=[role])
-        H2 = ng.make_axis(length=8, roles=[role])
-        W = ng.make_axis(length=4)
-        x = ng.constant(np.ones((H1.length, W.length)), axes=[H1, W])
-        y = ng.constant(np.ones((H2.length, W.length)), axes=[H2, W])
-        c = ng.concat_role_axis([x, y], role)
-    """
-    if len(x_list) < 1:
-        return x_list
-
-    def get_role_axis(axes, role):
-        ax = axes.role_axes(role)
-        if len(ax) > 1:
-            raise RuntimeError("Multiple axes have role {}".format(role.name))
-        elif len(ax) == 0:
-            raise RuntimeError("No axis with role {}".format(role.name))
-        else:
-            return ax[0]
-
-    return ConcatOp(x_list, [get_role_axis(x.axes, role) for x in x_list])
 
 
 class UnsliceOp(SequentialOp):

@@ -17,7 +17,7 @@ from __future__ import division
 from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, BiRNN, Recurrent, Affine,
+from ngraph.frontends.neon import (Layer, Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
@@ -73,19 +73,23 @@ seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_id
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
-output_prob = seq1.train_outputs(inputs['review'])
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y), usebits=True)
-mean_cost = ng.mean(loss, out_axes=[])
-updates = optimizer(loss)
+train_prob = seq1(inputs['review'])
+train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y),
+                                    usebits=True)
+batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_outputs = dict(batch_cost=batch_cost)
 
-
-train_outputs = dict(batch_cost=mean_cost, updates=updates)
-loss_outputs = dict(cross_ent_loss=loss)
+with Layer.inference_mode_on():
+    inference_prob = seq1(inputs['review'])
+eval_loss = ng.cross_entropy_multi(inference_prob,
+                                   ng.one_hot(inputs['label'], axis=ax.Y),
+                                   usebits=True)
+eval_outputs = dict(cross_ent_loss=eval_loss)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
-    loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
     cbs = make_default_callbacks(output_file=args.output_file,
                                  frequency=args.iter_interval,
