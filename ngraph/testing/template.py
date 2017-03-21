@@ -12,29 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
 from ngraph.testing import executor
 
 
 def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, description):
     with executor(ng_fun, ng_placeholder) as const_executor:
-        # print(description)
+        print(description)
         for value, expected_value in zip(values, expected_values):
             flex = const_executor(value)
-            # print("flex_value: ", flex)
-            # print("expected_value: ", expected_value)
-            # print(flex - expected_value)
+            print("flex_value: ", flex)
+            print("expected_value: ", expected_value)
+            print(flex - expected_value)
             assert flex == expected_value
 
 
 def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
                               expected_values, description):
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
-        # print(description)
+        print(description)
         for values, expected_value in zip(tuple_values, expected_values):
             value1 = values[0]
             value2 = values[1]
             flex = const_executor(value1, value2)
-            # print("flex_value: ", flex)
-            # print("expected_value: ", expected_value)
-            # print(flex - expected_value)
+            print("flex_value: ", flex)
+            print("expected_value: ", expected_value)
+            print(flex - expected_value)
             assert flex == expected_value

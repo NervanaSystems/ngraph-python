@@ -24,7 +24,14 @@ pytestmark = pytest.mark.transformer_dependent("module")
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
-bug = pytest.mark.xfail(strict=True)
+# Known issues
+bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, problem with DEC")
+bug_1062 = pytest.mark.xfail(strict=True, reason="GitHub issue #1062, problem with ng.sqrt corner cases")
+bug_autoflex = pytest.mark.xfail(strict=True, reason="Problem connected to offset in autoflex, to clarify")
+bug_abs_max = pytest.mark.xfail(strict=True, reason="Problem connected to absolute max, to clarify")
+bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues")
+bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
+
 EPSILON = 0.2
 x = ng.placeholder(())
 
@@ -32,78 +39,82 @@ test_data_single_operand = (
     # template:(operation, operand, expected_result, description)
 
     # test_assign
-    bug((op.pos, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
-    bug((op.pos, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
-    (op.pos, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
-    (op.pos, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value"),
-    (op.pos, [0.4], [0.399993896484375], "Assign function of positive values from flex range - check high precision"),
+    bug_1103((ng.as_op, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
+    bug_1103((ng.as_op, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
+    (ng.as_op, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
+    (ng.as_op, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value"),
+    (ng.as_op, [0.4], [0.399993896484375], "Assign function of positive values from flex range - check high precision"),
 
     # test_neg
-    bug((op.neg, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Negate function - overflow expected")),
-    bug((op.neg, [MINIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE],
-         "Negate function of negative boundary value inside of flex range")),
-    bug((op.neg, [MAXIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE + 1],
-         "Negate function of positive boundary value inside of flex range")),
+    bug_1103((ng.negative, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Negate function - overflow expected")),
+    bug_1103((ng.negative, [MINIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE],
+              "Negate function of negative boundary value inside of flex range")),
+    bug_1103((ng.negative, [MAXIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE + 1],
+              "Negate function of positive boundary value inside of flex range")),
     # test_sqrt
     (ng.sqrt, [0], [0], "Square root of zero and zero"),
     (ng.sqrt, [MAXIMUM_FLEX_VALUE], [181.015625], "Square root of positive boundary value"),
-    bug((ng.sqrt, [MINIMUM_FLEX_VALUE], [np.nan],
-         "Square root of negative boundary value - NaN expected")),
+    bug_1062((ng.sqrt, [MINIMUM_FLEX_VALUE], [np.nan], "Square root of negative boundary value - NaN expected")),
 
     # test_abs
-    bug((ng.absolute, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-         "Absolute value from the flex range - overflow expected")),
-    bug((ng.absolute, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Absolute value outside of the flex range")),
+    bug_1103((ng.absolute, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
+              "Absolute value from the flex range - overflow expected")),
+    bug_autoflex((ng.absolute, [MAXIMUM_FLEX_VALUE-30], [MAXIMUM_FLEX_VALUE-30],
+                  "Absolute value outside of the flex range")),
 )
 
 test_data_double_operand = (
     # template:(operation, operand_1, operand_2, expected_result, description)
 
     # test_add
-    bug((op.add, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE],
-         "Positive boundary value plus one - overflow expected")),
-    bug((op.add, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE + 1], "Negative boundary value plus one")),
-    (op.add,  [0, 1, 2, 3, 4], 1.5, [1.5, 1.99993896484375, 3.5, 4.5], "x + 1.5"),
+    bug_1103((ng.add, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
+              "Positive boundary value plus one - overflow expected")),
+    bug_abs_max((ng.add, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE + 1], "Negative boundary value plus one")),
+    (ng.add,  [0, 1, 2, 3, 4], 1.5, [1.5, 1.99993896484375, 3.5, 4.5], "x + 1.5"),
 
     # test_subtraction
-    (op.sub, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE], "Negative boundary value minus one - underflow expected"),
-    bug((op.sub, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
-         "Negative boundary value minus two - underflow expected")),
-    (op.sub, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE - 1], "Positive boundary value minus one"),
-    bug((op.sub, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE - 2], "Positive boundary value minus two")),
+    (ng.subtract, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE],
+     "Negative boundary value minus one - underflow expected"),
+    bug_1103((ng.subtract, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
+              "Negative boundary value minus two - underflow expected")),
+    (ng.subtract, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE - 1], "Positive boundary value minus one"),
+    bug_autoflex((ng.subtract, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE - 2], "Positive boundary value minus two")),
 
     # test_multiplication
-    bug((op.mul, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
-         "Negative boundary value multiplied by two - underflow expected",)),
-    bug((op.mul, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
-         "Positive boundary value multiplied by two - overflow expected",)),
-    (op.mul, [MINIMUM_FLEX_VALUE], 0, [0], "Negative boundary value multiplied by zero equals zero"),
-    (op.mul, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE], "Positive boundary value multiplied by one is the same"),
-    (op.mul, [0], 0, [0], "Zero multiplied by zero equals zero"),
-    (op.mul, [MINIMUM_FLEX_VALUE], -0.5, [MINIMUM_FLEX_VALUE * (-0.5)],
+    bug_1103((ng.multiply, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
+              "Negative boundary value multiplied by two - underflow expected",)),
+    bug_1103((ng.multiply, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
+              "Positive boundary value multiplied by two - overflow expected",)),
+    (ng.multiply, [MINIMUM_FLEX_VALUE], 0, [0], "Negative boundary value multiplied by zero equals zero"),
+    (ng.multiply, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE],
+     "Positive boundary value multiplied by one is the same"),
+    (ng.multiply, [0], 0, [0], "Zero multiplied by zero equals zero"),
+    (ng.multiply, [MINIMUM_FLEX_VALUE], -0.5, [MINIMUM_FLEX_VALUE * (-0.5)],
      "Negative sign value multiplied by negative sign value equals positive sign"),
 
     # test_division
-    bug((op.div, [MAXIMUM_FLEX_VALUE], 0.5, [MAXIMUM_FLEX_VALUE],
-         "Positive boundary value division - overflow expected")),
-    bug((op.div, [MINIMUM_FLEX_VALUE], 0.5, [MINIMUM_FLEX_VALUE],
-         "Negative boundary value division - underflow expected")),
-    bug((op.div, [MAXIMUM_FLEX_VALUE], 3, [MAXIMUM_FLEX_VALUE / 3], "Positive boundary value division")),
-    bug((op.div, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE / 3], "Negative boundary value division")),
+    bug_1103((ng.divide, [MAXIMUM_FLEX_VALUE], 0.5, [MAXIMUM_FLEX_VALUE],
+              "Positive boundary value division - overflow expected")),
+    bug_1103((ng.divide, [MINIMUM_FLEX_VALUE], 0.5, [MINIMUM_FLEX_VALUE],
+              "Negative boundary value division - underflow expected")),
+    bug_1227((ng.divide, [MAXIMUM_FLEX_VALUE], 3, [10922], "Positive boundary value division")),
+    bug_1227((ng.divide, [MINIMUM_FLEX_VALUE], 3, [-10922], "Negative boundary value division")),
 
     # test_modulo
-    bug((op.mod, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE % 3], "Negative boundary value mod 3")),
-    (op.mod, [MAXIMUM_FLEX_VALUE], 3, [MAXIMUM_FLEX_VALUE % 3], "Positive boundary value mod 3"),
-    bug((op.mod, [MAXIMUM_FLEX_VALUE], -3, [MAXIMUM_FLEX_VALUE % (-3)], "Positive boundary value mod -3")),
+    bug_1064((ng.mod, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE % 3], "Negative boundary value mod 3")),
+    (ng.mod, [MAXIMUM_FLEX_VALUE], 3, [MAXIMUM_FLEX_VALUE % 3], "Positive boundary value mod 3"),
+    bug_1064((ng.mod, [MAXIMUM_FLEX_VALUE], -3, [MAXIMUM_FLEX_VALUE % (-3)], "Positive boundary value mod -3")),
+    bug_1064((ng.mod, [2.1], 2, [0.09999847412109375], "Modulo of floating point")),
 
     # test_power
-    bug((op.pow, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
-         "Positive boundary value exponentiation - overflow expected")),
-    bug((op.pow, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE],
-         "Negative boundary value exponentiation - underflow expected")),
+    bug_1103((ng.power, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
+              "Positive boundary value exponentiation - overflow expected")),
+    bug_1103((ng.power, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE],
+              "Negative boundary value exponentiation - underflow expected")),
     # Not sure of this case, results should be tracked
-    (op.pow, [MAXIMUM_FLEX_VALUE], 0.4, [63.99609375], "Positive boundary value exponentiation"),
-    (op.pow, [MINIMUM_FLEX_VALUE], -2, [MINIMUM_FLEX_VALUE ** (-2)], "Negative boundary value negative exponentiation")
+    (ng.power, [MAXIMUM_FLEX_VALUE], 0.4, [63.99609375], "Positive boundary value exponentiation"),
+    (ng.power, [MINIMUM_FLEX_VALUE], -2, [MINIMUM_FLEX_VALUE ** (-2)],
+     "Negative boundary value negative exponentiation")
 )
 
 

@@ -26,10 +26,10 @@ EPSILON = 0.2
 x = ng.placeholder(())
 z = ng.placeholder(())
 
-bug = pytest.mark.xfail(strict=True)
+bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, problem with DEC")
 
 test_data_single_operand = (
-    # template:(operation, operand, expected_result, description
+    # template:(operation, operand, expected_result, description)
 
     # test_exp
     (ng.exp, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Exponential function - overflow expected"),
@@ -64,11 +64,10 @@ test_data_single_operand = (
 
     # test_square
     (ng.square, [1], [1], "Square of 1 equals 1"),
-    bug((ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-         "Square of negative boundary value - overflow expected")),
-    bug((ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-         "Square of positive boundary value - overflow expected"))
-
+    bug_1103((ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
+              "Square of negative boundary value - overflow expected")),
+    bug_1103((ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
+              "Square of positive boundary value - overflow expected"))
 )
 
 
