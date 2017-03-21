@@ -142,11 +142,11 @@ class DistributedPass(GraphBuildingPass):
         assert len(new_gather_send_op) == 1, 'multiple GatherSendOp after clone'
 
         new_gather_send_op = new_gather_send_op[0]
+        # change self.send_nodes to reflect the clone
         self.send_nodes.add(new_gather_send_op)
         cloned_nodes = Op.ordered_ops([new_gather_send_op])
 
         # modify idx, axes, and other metadata eg. device_id, transformer
-        # investigate dump slices and shared_queue
         for v in Op.ordered_ops([gather_send_op]):
             if isinstance(v, ScatterRecvOp):
                 ScatterRecvOp_shared_queues = v.shared_queues
@@ -189,6 +189,7 @@ class DistributedPass(GraphBuildingPass):
 
                 nodes_to_clone = Op.ordered_ops([op.send_node()])
                 # clone nodes for other device_id
+                # todo: clone nodes for each device_id
                 for i, id in enumerate(op.from_id[1:], start=1):
                     # get axes for last device if it's different
                     if i == (len(op.from_id) - 1) \
@@ -197,15 +198,7 @@ class DistributedPass(GraphBuildingPass):
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
                     # cloned_graph = self.clone_nodes(nodes=nodes_to_clone, device_id=id, device_idx=i, new_axes=new_axes)
-                    # def test_clone_graph():
-                    #     reg_cloned_graph = self.clone_nodes(nodes=nodes_to_clone,
-                    #                                         device_id=id,
-                    #                                         device_idx=i,
-                    #                                         new_axes=new_axes)
                     ser_cloned_graph = self.serde_clone_nodes(gather_send_op=op.send_node(),
                                                               device_id=id,
                                                               device_idx=i,
                                                               new_axes=new_axes)
-                        # print('test')
-
-                    # test_clone_graph()

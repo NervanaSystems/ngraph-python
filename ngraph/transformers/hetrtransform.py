@@ -176,6 +176,7 @@ class AsyncTransformer(Process):
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
+                print('hetrTransformer run:\nInput: {}\nOutput: {}'.format(inputs, outputs))
 
                 # individual results q makes it easy for caller to find results
                 self.results_qs[comp_id].put(outputs)
