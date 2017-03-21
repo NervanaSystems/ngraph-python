@@ -62,7 +62,8 @@ def check_device_assign_pass(default_device, default_device_id,
             assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
                 str(graph_op_metadata[op][1][0])
 
-            expected_transformers.add(op.metadata['transformer'])
+            for device_id in graph_op_metadata[op][1]:
+                expected_transformers.add(graph_op_metadata[op][0] + device_id)
         assert hetr.transformers == expected_transformers
 
 
