@@ -2,6 +2,11 @@ import pytest
 import ngraph as ng
 
 
+@pytest.fixture(params=[0])
+def extra_feature_axes(request):
+    return [ng.make_axis(length=1, name="feature_{}".format(ii)) for ii in range(request.param)]
+
+
 @pytest.fixture
 def batch_axis(batch_size):
     return ng.make_axis(length=batch_size, name='N')
@@ -9,7 +14,7 @@ def batch_axis(batch_size):
 
 @pytest.fixture
 def recurrent_axis(sequence_length):
-    return ng.make_axis(length=sequence_length, name='R')
+    return ng.make_axis(length=sequence_length, name='REC')
 
 
 @pytest.fixture
@@ -23,10 +28,10 @@ def output_axis(output_size):
 
 
 @pytest.fixture
-def input_placeholder(input_axis, batch_axis):
-    return ng.placeholder([input_axis, batch_axis])
+def input_placeholder(input_axis, batch_axis, extra_feature_axes):
+    return ng.placeholder(extra_feature_axes + [input_axis, batch_axis])
 
 
 @pytest.fixture
-def recurrent_input(input_axis, recurrent_axis, batch_axis):
-    return ng.placeholder([input_axis, recurrent_axis, batch_axis])
+def recurrent_input(input_axis, recurrent_axis, batch_axis, extra_feature_axes):
+    return ng.placeholder(extra_feature_axes + [input_axis, recurrent_axis, batch_axis])

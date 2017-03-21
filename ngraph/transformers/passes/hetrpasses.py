@@ -17,7 +17,7 @@ from ngraph.factory.comm_nodes import calculate_new_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 import socket
 
 

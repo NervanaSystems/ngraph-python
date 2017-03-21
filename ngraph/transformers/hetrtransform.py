@@ -20,7 +20,7 @@ from six import itervalues, iteritems
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
@@ -229,9 +229,9 @@ class HetrComputation(Computation):
                 new_returns.add(op)
 
         # Do Hetr passes
-        pass_ops = OrderedSet(new_returns + self.computation.parameters)
+        pass_ops = new_returns | OrderedSet(self.computation.parameters)
         for graph_pass in self.transformer.passes:
-            pass_ops = pass_ops + hetr.send_nodes
+            pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
             graph_pass.do_pass(pass_ops, self.transformer)
 
         # hack around new TensorValueOp that wraps AssignableTensorOp
@@ -245,7 +245,7 @@ class HetrComputation(Computation):
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation.parameters)
                          if p.metadata['transformer'] == t_name]
-            my_ops = [op for op in self.send_nodes + new_returns
+            my_ops = [op for op in self.send_nodes | new_returns
                       if op.metadata['transformer'] == t_name]
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
@@ -357,7 +357,7 @@ class HetrTransformer(Transformer):
     def register_graph_pass(self, graph_pass):
         from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            self.hetr_passes.append(graph_pass)
+            self.passes.append(graph_pass)
         else:
             raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 

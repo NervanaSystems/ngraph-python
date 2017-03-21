@@ -15,7 +15,7 @@
 import numpy as np
 import pytest
 from ngraph.testing import ExecutorFactory
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 import ngraph as ng
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass

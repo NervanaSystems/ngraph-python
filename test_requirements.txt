@@ -7,3 +7,4 @@ flake8==3.3.0
 flake8-junit-report==1.0.0
 pylint==1.6.4
 frozendict==1.2.0
+pillow==3.3.1
