@@ -29,11 +29,11 @@ def check_device_assign_pass(default_device, default_device_id,
     """
     The Device assign pass should inject the metadata{device_id, device} as
     specified by the user for each op,
-    if not specified then the default {device_id:0, device:numpy} should be
+    if not specified then the default {device_id:0, device:cpu} should be
     inserted for each op.
 
     :param: default_device: string, the default device for each op,
-            if not specified by user ex: "numpy"
+            if not specified by user ex: "cpu"
     :param: default_device_id: string, the default device number for each op,
             if not specified by user ex: "0"
     :param: graph_op_metadata: dict, dictionary of list specifying  the expected
@@ -95,9 +95,9 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
             for each_arg in op.args:
                 op_list_instance_type.append(type(each_arg))
 
-            if (ng.factory.comm_nodes.NumpyQueueRecvOp in op_list_instance_type or
-                ng.factory.comm_nodes.NumpyQueueGatherRecvOp in op_list_instance_type or
-                    ng.factory.comm_nodes.NumpyQueueScatterRecvOp in
+            if (ng.factory.comm_nodes.CPUQueueRecvOp in op_list_instance_type or
+                ng.factory.comm_nodes.CPUQueueGatherRecvOp in op_list_instance_type or
+                    ng.factory.comm_nodes.CPUQueueScatterRecvOp in
                     op_list_instance_type) is False:
                 assert False
             del op_list_instance_type[:]
@@ -116,12 +116,12 @@ def test_hetr_graph_passes(transformer_factory):
     graph_ops = OrderedSet([x_plus_y, x, y])
 
     graph_op_metadata = {op: list() for op in graph_ops}
-    graph_op_metadata[x] = ["numpy", '1']
-    graph_op_metadata[y] = ["numpy", '0']
-    graph_op_metadata[x_plus_y] = ["numpy", '0']
+    graph_op_metadata[x] = ["cpu", '1']
+    graph_op_metadata[y] = ["cpu", '0']
+    graph_op_metadata[x_plus_y] = ["cpu", '0']
 
     # Run the hetr passes one by one, and verify they did the expected things to the graph
-    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
+    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
     check_communication_pass(ops_to_transform=graph_ops,
                              expected_recv_nodes=[x_plus_y])
 
@@ -209,7 +209,7 @@ def test_gpu_send_and_recv(transformer_factory):
         pytest.skip("GPUTransformer not available")
 
     # put x+1 on cpu numpy
-    with ng.metadata(device='numpy'):
+    with ng.metadata(device='cpu'):
         x = ng.placeholder(())
         x_plus_one = x + 1
     # put x+2 on gpu numpy
@@ -226,7 +226,7 @@ def test_gpu_send_and_recv(transformer_factory):
         x = ng.placeholder(())
         x_plus_one = x + 1
     # put x+2 on cpu numpy
-    with ng.metadata(device='numpy'):
+    with ng.metadata(device='cpu'):
         x_plus_two = x_plus_one + 1
 
     with ExecutorFactory() as ex:

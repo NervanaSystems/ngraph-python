@@ -33,7 +33,7 @@ Transformers should be created using the factory interface in ngraph.transformer
     from ngraph.transformers import make_transformer
     transformer = make_transformer()
 
-This will create a transformer using the default factory (NumPy). It is possible to set the transformer factory manually to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this
+This will create a transformer using the default factory (cpu). It is possible to set the transformer factory manually to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this
 
 .. code-block:: python
 
@@ -45,12 +45,12 @@ This will create a transformer using the default factory (NumPy). It is possible
 
     transformer = ngt.make_transformer()
 
-The above example first checks if the GPU transformer is available (this will depend on whether CUDA and PyCuda are installed). If the GPU transformer is available, the example sets the transformer factory to generate GPU transformers. The call to ``make_transformer`` will then return a GPU transformer if available, and a NumPy transformer otherwise.
+The above example first checks if the GPU transformer is available (this will depend on whether CUDA and PyCuda are installed). If the GPU transformer is available, the example sets the transformer factory to generate GPU transformers. The call to ``make_transformer`` will then return a GPU transformer if available, and a CPU transformer otherwise.
 
 Computations
 ============
 
-Computation objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on the transformer that created the computation. For example the NumPy transformer generates python NumPy code which is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels which can be called to evaluate the computation.
+Computation objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on the transformer that created the computation. For example the CPU transformer generates python NumPy code which is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels which can be called to evaluate the computation.
 
 Computation Creation
 --------------------
