@@ -58,6 +58,7 @@ make fixstyle
 
 To generate the documentation as html files:
 ```
+sudo apt-get install pandoc
 make doc
 ```
 

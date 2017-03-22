@@ -14,6 +14,3 @@ RUN pip install -r test_requirements.txt
 # importable from an entrypoint not local to ngraph.
 ADD . /root/ngraph-test
 RUN pip install -e .
-
-# make ngraph Makefile happy :-(
-ENV VIRTUAL_ENV='making ngraph makefile happy'

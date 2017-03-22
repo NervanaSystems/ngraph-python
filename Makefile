@@ -57,6 +57,12 @@ gpu_install:
 test_install:
 	@pip install -r test_requirements.txt > /dev/null 2>&1
 
+examples_install:
+	@pip install -r examples_requirements.txt > /dev/null 2>&1
+
+doc_install:
+	@pip install -r doc_requirements.txt > /dev/null 2>&1
+
 uninstall:
 	@pip uninstall -y ngraph
 	@pip uninstall -r requirements.txt
@@ -105,6 +111,12 @@ test_integration: clean
 	@py.test $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
 
+examples: examples_install
+	@for file in `find examples -type f -executable`; do echo Running $$file... ; ./$$file ; done
+
+gpu_examples: examples_install gpu_install
+	@for file in `find examples -type f -executable | grep -v hetr`; do echo Running $$file... ; ./$$file -b gpu; done
+
 style:
 	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
@@ -134,7 +146,7 @@ autopep8:
 	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
 	@echo run "git diff" to see what may need to be checked in and "make style" to see what work remains
 
-doc:
+doc: doc_install
 	$(MAKE) -C $(DOC_DIR) clean
 	$(MAKE) -C $(DOC_DIR) html
 	@echo "Documentation built in $(DOC_DIR)/build/html"

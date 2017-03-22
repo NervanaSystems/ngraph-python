@@ -67,6 +67,7 @@ Before checking in code, run the unit tests and check for style errors::
 
 Documentation can be generated via::
 
+    sudo apt-get install pandoc
     make doc
 
 And viewed at ``doc/build/html/index.html``.
