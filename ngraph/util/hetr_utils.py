@@ -17,7 +17,7 @@ from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
     TensorValueOp
 from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
     RecvOp, ScatterSendOp, ScatterRecvOp
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 def clone(

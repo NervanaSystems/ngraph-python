@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.op_graph.op_graph import Op, computation
 from ngraph.util.names import NameableValue
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 PYCUDA_LOGIC_ERROR_CODE = 4
@@ -508,7 +508,7 @@ __transformer_factory = None
 def make_transformer():
     """
     Generates a Transformer using the factory in this module which defaults
-    to NumPy
+    to CPU
 
     Returns: Transformer
     """

@@ -80,18 +80,6 @@ Semantics
 
 In the nervana graph, our axis design is very flexible. Axes can be given arbitrary names and the ordering of the axes does not matter. Sometimes, however, axes need to have additional semantic information provided to operations.
 
-AxisRole
-~~~~~~~~
-
-For example, convolution kernels need to know which axes correspond to the channel, height, width, and/or depth, in order to assemble the feature map. For this reason, we can attach ``AxisRole`` types to any ``axis`` by using ``ng.make_axis_role()``. For example, to create an axis with the ``Channel`` role:
-
-  ::
-
-    role_channel = ng.make_axis_role(name="Channel")
-    axis_channel = ng.make_axis(length=3, roles=[role_channel], name="my_axis")
-
-The neon frontend relies on several axis roles, specified by its name: ``Height``, ``Width``, ``Depth``, ``Channel``, ``Channelout``, and ``Time``. These roles are primarily used for automatic axes inference. For example, a convolution kernel can examine the input feature maps'``AxisRole`` to determine whether a dimshuffle shall be applied prior to convolution.
-
 Properties
 ----------
 

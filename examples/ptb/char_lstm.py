@@ -29,7 +29,7 @@ from ptb import PTB
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='lstm', choices=['lstm'],
                     help='type of recurrent layer to use (lstm)')
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper

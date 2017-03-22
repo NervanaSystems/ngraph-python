@@ -15,7 +15,7 @@
 import ngraph as ng
 from ngraph.op_graph.op_graph import as_op
 from ngraph.transformers.passes.passes import SimplePrune
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 def get_simple_graph():
