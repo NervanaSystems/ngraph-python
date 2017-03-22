@@ -484,6 +484,8 @@ class GPUKernelGroup(object):
                 k.bind_buffers()
 
             self.setup_kernel_execute(k)
+            #if isinstance(k, ElementWiseKernel) and k.ops_buffer[0][0] == "onehot":
+            #    import pdb; pdb.set_trace()
             k.execute()
             self.after_kernel_execute(k)
 
