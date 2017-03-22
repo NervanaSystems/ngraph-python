@@ -62,7 +62,7 @@ class JSONPass(GraphPass):
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg)})
-            for arg in op.control_deps:
+            for arg in op.all_deps:
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg), 'color': 'blue'})

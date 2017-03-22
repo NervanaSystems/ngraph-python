@@ -30,6 +30,7 @@ from ngraph.op_graph.axes import TensorDescription, \
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
+from cached_property import cached_property
 
 
 def tensor_descriptions(args):
@@ -279,7 +280,7 @@ class Op(NameableValue, DebugInfo):
             if node in counts:
                 continue
 
-            children = OrderedSet((child.forwarded for child in node.control_deps))
+            children = OrderedSet((child.forwarded for child in node.all_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -469,11 +470,6 @@ class Op(NameableValue, DebugInfo):
         return self
 
     @property
-    def args(self):
-        """All the inputs to this node."""
-        return self._args
-
-    @property
     def forward(self):
         """
         If not None, self has been replaced with forward.
@@ -504,7 +500,7 @@ class Op(NameableValue, DebugInfo):
         Finds the op that handles this op.
 
         Returns:
-             Follows forwarding to the op that shoud handle this op.
+             Follows forwarding to the op that should handle this op.
         """
         result = self
         while True:
@@ -512,14 +508,37 @@ class Op(NameableValue, DebugInfo):
                 return result
             result = result._forward
 
+    @cached_property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies of the op, including args and control_deps.
+            `x.all_deps == OrderedSet(x.args) | x.control_deps`, setter
+            functions are used to maintain this invariant. However, user
+            outside of the Op class should still avoid changing x._all_deps,
+            x._control_deps and x._args directly.
+        """
+        return OrderedSet(self.args) | self.control_deps
+
+    def invalidate_property_cache(self, property_name):
+        """
+        Invalidates self.all_deps cache
+        """
+        if property_name in self.__dict__:
+            del self.__dict__[property_name]
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self._args
+
     @property
     def control_deps(self):
         """
-
         Returns:
-            Ops that must execute before this one can.
+            Control dependency of the op.
         """
-        return self._control_deps | OrderedSet(self.args)
+        return self._control_deps
 
     def add_control_dep(self, dep):
         """
@@ -527,11 +546,13 @@ class Op(NameableValue, DebugInfo):
 
         Args:
             dep: The op.
-
         """
         dep = dep.forwarded
-        if dep is not self and dep not in self.control_deps:
+        if dep is not self and dep not in self.all_deps:
+            # update control_deps
             self._control_deps.add(dep)
+        # invalidate deps cache as self._control_deps is updated
+        self.invalidate_property_cache('all_deps')
 
     def remove_control_dep(self, dep):
         """
@@ -542,23 +563,29 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
+        # update control_deps
         self._control_deps.remove(dep.forwarded)
+        # invalidate deps cache as self._control_deps is updated
+        self.invalidate_property_cache('all_deps')
 
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args and control_deps
+        Any subclass that uses ops stored outside of args and all_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
         for forwarding.
 
         """
-
-        for op in self.control_deps:
+        for op in self.all_deps:
             if op.forward is not None:
+                # update self._args
                 self._args = tuple(arg.forwarded for arg in self._args)
+                self.invalidate_property_cache('all_deps')
+
+                # update self._control_deps
                 control_deps = self._control_deps
                 self._control_deps = OrderedSet()
                 for op in control_deps:
@@ -1230,10 +1257,8 @@ class TensorOp(Op):
 class ValueOp(TensorOp, ControlBlockOp):
     """
     Mixin class for ops whose value is another op.
-
     Arguments:
         tensor: The tensor supplying the value for this op.
-
     """
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
@@ -1246,10 +1271,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def tensor(self):
         """
         The op that ultimately supplies the value. See value_tensor.
-
         Returns:
             The op that supplies the value.
-
         """
         return self._tensor.tensor
 
@@ -1257,10 +1280,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def value_tensor(self):
         """
         The op whose value is returned by this op.
-
         Returns:
             The immediate value returned by this op; see tensor for the closure.
-
         """
         return self._tensor
 
@@ -1269,8 +1290,11 @@ class ValueOp(TensorOp, ControlBlockOp):
         self._tensor = tensor
 
     @property
-    def control_deps(self):
-        base_deps = super(ValueOp, self).control_deps
+    def all_deps(self):
+        """
+        TODO: use cached property as other Op
+        """
+        base_deps = super(ValueOp, self).all_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
             return base_deps | OrderedSet([self.value_tensor])
@@ -2084,7 +2108,7 @@ class AssignableTensorOp(TensorOp):
 
     def add_control_dep(self, op):
         """
-        Allocations happen before executed ops, so control_deps are ignored.
+        Allocations happen before executed ops, so all_deps are ignored.
 
         Args:
             op:
