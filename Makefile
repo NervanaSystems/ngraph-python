@@ -72,7 +72,6 @@ clean:
 	@find . -name "__pycache__" -type d -delete
 	@rm -f .coverage coverage.xml .coverage.*
 	@rm -rf ngraph.egg-info
-	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
 test_flex: clean
