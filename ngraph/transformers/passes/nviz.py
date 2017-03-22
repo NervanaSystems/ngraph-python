@@ -82,7 +82,6 @@ class VizPass(GraphPass):
         show_all_metadata <bool, default False>: Whether to render all Op metadata on the nodes.
         view <bool, default True>: Whether to open the rendered PDF, if False, prints PDF location
             to stdout.
-
     """
     def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False, view=True):
         super(VizPass, self).__init__()

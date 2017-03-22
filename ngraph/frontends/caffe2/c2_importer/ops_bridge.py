@@ -36,7 +36,6 @@ class OpsBridge(OpsConstant, OpsNN, OpsBinary, OpsUnary):
         |
         |
     OpsBridge (contains mix-ins from OpsBinary, OpsUnary, ...)
-
     """
 
     def __init__(self):

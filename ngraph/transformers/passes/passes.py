@@ -38,7 +38,6 @@ class GraphBuildingPass(GraphPass):
     """
     Base class for passes that build new graph, primarily derivatives
     and other macro-like things.
-
     """
     def do_pass(self, min_ops, transformer):
         """

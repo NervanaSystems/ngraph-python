@@ -52,7 +52,6 @@ def tdcache():
 
     Returns:
         Cache decorator set to use a particular cache.
-
     """
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
@@ -798,7 +797,6 @@ class SetItemOp(Op):
         tensor (AssignableTensorOp): An assignable tensor.
         item: An index into the tensor.
         val (TensorOp): A value to assign.
-
     """
 
     def __init__(self, tensor, item, val, **kwargs):
@@ -1421,7 +1419,6 @@ def sequential(ops=None):
 
     Arguments:
         ops: Sequence of ops to compute.
-
     """
     sequential_op = SequentialOp(ops)
     sequential_op.deriv_handler = sequential_op.value_tensor
@@ -1437,7 +1434,6 @@ class TensorValueOp(ValueOp):
 
     This provides a way to maintain different control information on different
     versions of state.
-
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
@@ -1514,7 +1510,6 @@ class AxesCastOp(ReshapeOp):
     Arguments:
         x: A tensor.
         axes: The new axes.
-
     """
 
     def __init__(self, x, axes, **kwargs):
@@ -1770,7 +1765,6 @@ def axes_with_order(x, axes):
 
     Returns:
         TensorOp: The new tensor.
-
     """
     axes = make_axes(axes)
     if x.axes == axes:
@@ -2125,7 +2119,6 @@ def value_of(tensor):
 
     Returns:
         A copy of the value.
-
     """
     if tensor.is_constant:
         return tensor
@@ -2182,7 +2175,6 @@ def placeholder(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="placeholder",
                               is_persistent=True,
@@ -2207,7 +2199,6 @@ def temporary(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
@@ -2228,7 +2219,6 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The persistent storage.
-
     """
     return AssignableTensorOp(graph_label_type="Persistent",
                               is_persistent=True,
@@ -2249,7 +2239,6 @@ def variable(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The variable.
-
     """
     return AssignableTensorOp(graph_label_type="Variable",
                               is_input=True,
@@ -2324,7 +2313,6 @@ def stack(x_list, axis, pos=0):
 
     Returns:
         TensorOp: The joined tensors.
-
     """
     return StackOp(x_list, axis, pos)
 
@@ -2502,7 +2490,6 @@ def uniform(x, low=0.0, high=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='uniform', params=dict(low=low, high=high), x=x)
 
@@ -2518,7 +2505,6 @@ def normal(x, loc=0.0, scale=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
 
@@ -2586,7 +2572,6 @@ def negative(x):
 
     Returns:
         (TensorOp): The negative of x.
-
     """
     return NegativeOp(x)
 
@@ -2609,7 +2594,6 @@ def absolute(x):
 
     Returns:
         TensorOp: The absolute value of x.
-
     """
     return AbsoluteOp(x)
 
@@ -2632,7 +2616,6 @@ def sin(x):
 
     Returns:
         TensorOp: sin of x.
-
     """
     return SinOp(x)
 
@@ -2655,7 +2638,6 @@ def cos(x):
 
     Returns:
         TensorOp: The cos of x.
-
     """
     return CosOp(x)
 
@@ -2678,7 +2660,6 @@ def tanh(x):
 
     Returns:
         TensorOp: The tanh of x.
-
     """
     return TanhOp(x)
 
@@ -2701,7 +2682,6 @@ def exp(x):
 
     Returns:
         TensorOp: The exp of x.
-
     """
     return ExpOp(x)
 
@@ -2734,7 +2714,6 @@ def log(x):
 
     Returns:
         TensorOp: The log of x.
-
     """
     return LogOp(x)
 
@@ -2764,7 +2743,6 @@ def reciprocal(x):
 
     Returns:
         TensorOp: The reciprocal of x.
-
     """
     return ReciprocalOp(x)
 
@@ -2783,7 +2761,6 @@ def sign(x):
 
     Returns:
         TensorOp: The sign of x.
-
     """
     return SignOp(x)
 
@@ -2806,7 +2783,6 @@ def square(x):
 
     Returns:
         TensorOp: The square of x.
-
     """
     return SquareOp(x)
 
@@ -2829,7 +2805,6 @@ def sqrt(x):
 
     Returns:
         TensorOp: The square root of x.
-
     """
     return SqrtOp(x)
 
@@ -3024,7 +2999,6 @@ def dot(x, y):
 
     Returns:
         TensorOp: The dot product.
-
     """
     return DotOp(x, y)
 
@@ -3037,7 +3011,6 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
     Returns:
         TensorOp: The result.
-
     """
     if reduction_axes is None:
         if out_axes is None:
@@ -3259,7 +3232,6 @@ def batch_size(x):
 
     Returns:
         The size of the batch axis in x.
-
     """
     return tensor_size(x, reduction_axes=x.axes.batch_axes())
 
@@ -3366,7 +3338,6 @@ def one_hot(x, axis):
 
     Returns:
         OneHotOp: The op.
-
     """
     return OneHotOp(x, axis)
 
@@ -3477,7 +3448,6 @@ def deriv(dependent, independent, error=None):
 
     Returns:
         TensorOp: Derivative applied to error. Has axes of independent.
-
     """
     return DerivOp(dependent, independent, error).value_tensor
 
