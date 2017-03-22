@@ -579,18 +579,15 @@ class Op(NameableValue, DebugInfo):
         for forwarding.
 
         """
-        for op in self.all_deps:
-            if op.forward is not None:
-                # update self._args
-                self._args = tuple(arg.forwarded for arg in self._args)
-                self.invalidate_property_cache('all_deps')
+        all_deps_forward = [op.forward for op in self.all_deps]
+        if any(forward is not None for forward in all_deps_forward):
+            # replace self._args with self._args's forwarded op
+            self._args = tuple([op.forwarded for op in self.args])
+            self.invalidate_property_cache('all_deps')
 
-                # update self._control_deps
-                control_deps = self._control_deps
-                self._control_deps = OrderedSet()
-                for op in control_deps:
-                    self.add_control_dep(op.forwarded)
-                break
+            # replace self._control_deps with self._control_deps's forwarded op
+            self._control_deps = OrderedSet([op.forwarded for op in self.control_deps])
+            self.invalidate_property_cache('all_deps')
 
     def replace_self(self, rep):
         self.forward = as_op(rep)
