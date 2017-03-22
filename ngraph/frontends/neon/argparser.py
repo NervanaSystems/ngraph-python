@@ -67,7 +67,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.add_argument('-z', '--batch_size', type=int, default=128)
         self.add_argument('-b', '--backend',
                           choices=self.backend_names(),
-                          default='numpy',
+                          default='cpu',
                           help='backend type')
         self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)
