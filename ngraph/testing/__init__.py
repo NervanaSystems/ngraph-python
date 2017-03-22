@@ -20,7 +20,6 @@ from ngraph.testing.error_check import assert_allclose, allclose
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import executor, ExecutorFactory, \
     numeric_derivative, check_derivative
-from ngraph.testing.template import template_one_placeholder, template_two_placeholders
 
 __all__ = [
     'with_error_settings',
@@ -32,6 +31,4 @@ __all__ = [
     'ExecutorFactory',
     'numeric_derivative',
     'check_derivative',
-    'template_one_placeholder',
-    'template_two_placeholders'
 ]

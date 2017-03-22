@@ -32,9 +32,7 @@ def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placehol
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
         print(description)
         for values, expected_value in zip(tuple_values, expected_values):
-            value1 = values[0]
-            value2 = values[1]
-            flex = const_executor(value1, value2)
+            flex = const_executor(values[0], values[1])
             print("flex_value: ", flex)
             print("expected_value: ", expected_value)
             print(flex - expected_value)

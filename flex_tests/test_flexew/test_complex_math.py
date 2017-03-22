@@ -15,7 +15,7 @@
 import numpy as np
 import pytest
 import ngraph as ng
-from ngraph.testing import template_one_placeholder
+from ngraph.testing.flexutil import template_one_placeholder
 
 pytestmark = pytest.mark.transformer_dependent("module")
 
@@ -26,7 +26,8 @@ EPSILON = 0.2
 x = ng.placeholder(())
 z = ng.placeholder(())
 
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, problem with DEC")
+bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
+                                                 "DEC initialization not constrained to allowed range")
 
 test_data_single_operand = (
     # template:(operation, operand, expected_result, description)

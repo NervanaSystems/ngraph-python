@@ -14,10 +14,9 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import pytest
-import operator as op
 
 import ngraph as ng
-from ngraph.testing import template_one_placeholder
+from ngraph.testing.flexutil import template_one_placeholder
 
 pytestmark = pytest.mark.transformer_dependent("module")
 
@@ -25,11 +24,13 @@ MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 # Known issues
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, problem with DEC")
+bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
+                                                 "DEC initialization not constrained to allowed range")
 bug_1062 = pytest.mark.xfail(strict=True, reason="GitHub issue #1062, problem with ng.sqrt corner cases")
 bug_autoflex = pytest.mark.xfail(strict=True, reason="Problem connected to offset in autoflex, to clarify")
 bug_abs_max = pytest.mark.xfail(strict=True, reason="Problem connected to absolute max, to clarify")
-bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues")
+bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
+                                                 "modulus and ZeroDivisionError clarification")
 bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
 
 EPSILON = 0.2
@@ -59,7 +60,7 @@ test_data_single_operand = (
     # test_abs
     bug_1103((ng.absolute, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
               "Absolute value from the flex range - overflow expected")),
-    bug_autoflex((ng.absolute, [MAXIMUM_FLEX_VALUE-30], [MAXIMUM_FLEX_VALUE-30],
+    bug_autoflex((ng.absolute, [MAXIMUM_FLEX_VALUE-2], [MAXIMUM_FLEX_VALUE-2],
                   "Absolute value outside of the flex range")),
 )
 
