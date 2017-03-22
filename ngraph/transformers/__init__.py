@@ -31,7 +31,7 @@ __all__ = [
 PYCUDA_LOGIC_ERROR_CODE = 4
 
 try:
-    import ngraph.transformers.nptransform  # noqa
+    import ngraph.transformers.cputransform  # noqa
 except UnsupportedTransformerException:
     pass
 

@@ -508,7 +508,7 @@ __transformer_factory = None
 def make_transformer():
     """
     Generates a Transformer using the factory in this module which defaults
-    to NumPy
+    to CPU
 
     Returns: Transformer
     """

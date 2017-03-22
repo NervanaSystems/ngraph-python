@@ -106,7 +106,7 @@ ngraph.transformers
 
     :meth:`ngraph.transformers.allocate_transformer` | Allocate a transformer.
     :meth:`ngraph.transformers.make_transformer` | Generates a transformer using the factory.
-    :meth:`ngraph.transformers.make_transformer_factory` | Creates a new factory with numpy default.
+    :meth:`ngraph.transformers.make_transformer_factory` | Creates a new factory with cpu default.
     :meth:`ngraph.transformers.set_transformer_factory` | Sets the Transformer factory used by make_transformer.
     :meth:`ngraph.transformers.transformer_choices` | Return the list of available transformers.
     :meth:`ngraph.transformers.Transformer` | Produce an executable version of op-graphs.

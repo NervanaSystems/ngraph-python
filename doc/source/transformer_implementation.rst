@@ -16,14 +16,14 @@
 Transformer Implementation
 **************************
 
-This document gives an overview of how the base transformer and computation is implemented, using the NumPy and GPU transformers as examples.
+This document gives an overview of how the base transformer and computation is implemented, using the CPU and GPU transformers as examples.
 
 Transformer Creation
 ====================
 
 The base transformer constructor initializes a set of all computations and results associated with the transformer. As computation objects are created, these sets are populated. Additionally the transformer constructor can build a list of passes to run on the op graph when initialization and transformation is executed.
 
-Specific transformer implementations may use the constructor to initialize code generators (as in the NumPy transformer) or initialize the target device and determine device capabilities (as for the GPU transformer).
+Specific transformer implementations may use the constructor to initialize code generators (as in the CPU transformer) or initialize the target device and determine device capabilities (as for the GPU transformer).
 
 Computation Creation
 ====================
@@ -103,7 +103,7 @@ Tensor descriptions for all ops are initialized in ``Transformer.initialize_tens
 
 The ``DeviceBufferStorage`` class represents a memory allocation on the transformer's device (for example this will be allocated with PyCUDA for the GPU transformer). This buffer can be used a storage by one or more tensors. When a ``DeviceBufferStorage`` object is created, the buffer is not allocated yet, but the object is added to the ``Transformer.device_buffers`` member for later allocation.
 
-The ``DeviceTensor`` class represents a tensor view on top of a device memory allocation including a base address offset, shape, strides, and data type. A ``DeviceTensor`` object is created for every ``TensorDescription`` in the graph during ``Transformer.initialize_tensor_descriptions``. When a ``DeviceTensor`` object is created, the individual transformer can handle it in multiple ways. The NumPy and GPU transformers both tag ``DeviceTensor`` objects to their underlying ``DeviceBufferStorage`` objects so that they can be allocated at the same time as the device allocation. Each transformer's ``DeviceTensor`` implementation must support some simple operations including copying to and from NumPy arrays. This is used to set argument values in the graph and get result values from the graph.
+The ``DeviceTensor`` class represents a tensor view on top of a device memory allocation including a base address offset, shape, strides, and data type. A ``DeviceTensor`` object is created for every ``TensorDescription`` in the graph during ``Transformer.initialize_tensor_descriptions``. When a ``DeviceTensor`` object is created, the individual transformer can handle it in multiple ways. The CPU and GPU transformers both tag ``DeviceTensor`` objects to their underlying ``DeviceBufferStorage`` objects so that they can be allocated at the same time as the device allocation. Each transformer's ``DeviceTensor`` implementation must support some simple operations including copying to and from NumPy arrays. This is used to set argument values in the graph and get result values from the graph.
 
 After all tensor descriptions are initialized and have created their device buffers and tensors, their allocation is transformed:
 
@@ -128,11 +128,11 @@ Computation objects are finally transformed into an executable format after allo
 
 The ``Computation.transform`` method first gets the set of all ops needed to evaluation the computation. Since graph passes may have replaced ops by updating their forward pointers, this method will get the fully forwarded set of ops. Then the ops are ordered in such a way that all execution dependencies are met using ``Digraph.can_reach``.
 
-Each transformer implements a ``Transformer.transform_ordered_ops`` which accepts a list of ordered ops and transforms them into an executable format. The NumPy transformer implements this by generating a python function containing one or more NumPy calls for each op. Individual ops are handled in the NumPy transformer with the corresponding ``NumPyCodeGenerator.generate_op`` implementation. The GPU transformer implements this by generating a ``GPUKernelGroup`` containing a set of ``GPUKernel`` objects which can be executed to evaluate each op. Individual ops are handled in the GPU transformer with the corresponding ``GPUKernelGroup.add_kernel`` implementation or ``ElementWiseKernel.add_op`` implementation. The ElementWiseKernel generates CUDA C code to evaluate most op types. Other more complex ops have hand-written GPU kernels such as convolution and GEMM. These are handled in different ``GPUKernel`` implementations.
+Each transformer implements a ``Transformer.transform_ordered_ops`` which accepts a list of ordered ops and transforms them into an executable format. The CPU transformer implements this by generating a python function containing one or more NumPy calls for each op. Individual ops are handled in the CPU transformer with the corresponding ``CPUCodeGenerator.generate_op`` implementation. The GPU transformer implements this by generating a ``GPUKernelGroup`` containing a set of ``GPUKernel`` objects which can be executed to evaluate each op. Individual ops are handled in the GPU transformer with the corresponding ``GPUKernelGroup.add_kernel`` implementation or ``ElementWiseKernel.add_op`` implementation. The ElementWiseKernel generates CUDA C code to evaluate most op types. Other more complex ops have hand-written GPU kernels such as convolution and GEMM. These are handled in different ``GPUKernel`` implementations.
 
 When transformation of computations has finished, the transformer implementation must set the ``Computation.executor`` member to either a function or callable object which will serve as the entry point for computation evaluation.
 
 Computation Execution
 =====================
 
-Computations are executed by calling the ``Computation.executor`` member. For the NumPy transformer this is a function pointer to the corresponding function in the generated python NumPy code. For the GPU transformer this is the corresponding ``GPUKernelGroup`` object which implements the ``__call__`` method.
+Computations are executed by calling the ``Computation.executor`` member. For the CPU transformer this is a function pointer to the corresponding function in the generated python NumPy code. For the GPU transformer this is the corresponding ``GPUKernelGroup`` object which implements the ``__call__`` method.
