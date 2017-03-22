@@ -19,21 +19,26 @@ Installation documentation can be found
 
 We recommend installing Nervana Graph inside a virtual environment.
 
-To create and activate a Python 2.7 virtualenv:
+To create and activate a Python 3 virtualenv:
 ```
-virtualenv -p python2.7 .venv
+python3 -m venv .venv
 . .venv/bin/activate
 ```
 
-To, instead, create and activate a Python 3 virtualenv:
+To, instead, create and activate a Python 2.7 virtualenv:
 ```
-python3 -m venv .venv
+virtualenv -p python2.7 .venv
 . .venv/bin/activate
 ```
 
 To install Nervana Graph:
 ```
 make install
+```
+
+To add GPU support:
+```
+make gpu_prepare
 ```
 
 To uninstall Nervana Graph:

@@ -23,17 +23,19 @@ To download the source code, first run::
 
 We recommend installing inside a virtual environment.
 
-To create and activate a Python 2.7 virtualenv::
-    virtualenv -p python2.7 .venv
-    . .venv/bin/activate
-
-To, instead, create and activate a Python 3 virtualenv::
+To create and activate a Python 3 virtualenv::
     python3 -m venv .venv
     . .venv/bin/activate
 
-Finally, to build and install, run:
+To, instead, create and activate a Python 2.7 virtualenv::
+    virtualenv -p python2.7 .venv
+    . .venv/bin/activate
+
+To build and install, run::
     make install
 
+To add GPU support::
+    make gpu_prepare
 
 Getting Started
 ===============
