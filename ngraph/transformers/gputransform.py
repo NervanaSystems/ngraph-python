@@ -586,7 +586,7 @@ class GPURegister():
 
 class GPUDeviceBufferReference(DeviceBufferReference):
     """
-    Analogous to NumPyDeviceBufferReference.
+    Analogous to CPUDeviceBufferReference.
     """
     def __init__(self, transformer, **kwargs):
         super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
@@ -594,7 +594,7 @@ class GPUDeviceBufferReference(DeviceBufferReference):
 
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
-    Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
+    Used to transform device allocations. Analogous to CPUDeviceBufferStorage.
     """
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
@@ -625,7 +625,7 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
 
 class GPUDeviceTensor(DeviceTensor):
     """
-    Used to transform device tensor allocations. Analogous to NumPyDeviceTensor.
+    Used to transform device tensor allocations. Analogous to CPUDeviceTensor.
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,

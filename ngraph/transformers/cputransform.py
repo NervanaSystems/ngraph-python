@@ -45,12 +45,12 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory
 
-from ngraph.op_graph.comm_nodes import NumpyQueueSendOp, NumpyQueueRecvOp, \
-    NumpyQueueGatherSendOp, NumpyQueueGatherRecvOp, NumpyQueueScatterSendOp, \
-    NumpyQueueScatterRecvOp
+from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
+    CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
+    CPUQueueScatterRecvOp
 
 
-class NumPyConvEngine(object):
+class CPUConvEngine(object):
 
     @staticmethod
     def all_conv_code():
@@ -161,12 +161,12 @@ class NumPyConvEngine(object):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(conv_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(conv_params)
         dil_d, dil_h, dil_w = itemgetter(*('dil_' + s for s in ('d', 'h', 'w')))(conv_params)
-        mSlice = [NumPyConvEngine.fprop_slice(m, T, D, pad_d, str_d, dil_d) for m in range(M)]
-        pSlice = [NumPyConvEngine.fprop_slice(p, R, H, pad_h, str_h, dil_h) for p in range(P)]
-        qSlice = [NumPyConvEngine.fprop_slice(q, S, W, pad_w, str_w, dil_w) for q in range(Q)]
-        dSlice = [NumPyConvEngine.bprop_slice(d, T, M, pad_d, str_d, dil_d) for d in range(D)]
-        hSlice = [NumPyConvEngine.bprop_slice(h, R, P, pad_h, str_h, dil_h) for h in range(H)]
-        wSlice = [NumPyConvEngine.bprop_slice(w, S, Q, pad_w, str_w, dil_w) for w in range(W)]
+        mSlice = [CPUConvEngine.fprop_slice(m, T, D, pad_d, str_d, dil_d) for m in range(M)]
+        pSlice = [CPUConvEngine.fprop_slice(p, R, H, pad_h, str_h, dil_h) for p in range(P)]
+        qSlice = [CPUConvEngine.fprop_slice(q, S, W, pad_w, str_w, dil_w) for q in range(Q)]
+        dSlice = [CPUConvEngine.bprop_slice(d, T, M, pad_d, str_d, dil_d) for d in range(D)]
+        hSlice = [CPUConvEngine.bprop_slice(h, R, P, pad_h, str_h, dil_h) for h in range(H)]
+        wSlice = [CPUConvEngine.bprop_slice(w, S, Q, pad_w, str_w, dil_w) for w in range(W)]
 
         return (mSlice, pSlice, qSlice, dSlice, hSlice, wSlice)
 
@@ -210,7 +210,7 @@ class NumPyConvEngine(object):
         return (slice(f1, f2 + 1, f_step), slice(x1, x2 + 1, x_step), 0)
 
 
-class NumPyPoolEngine(object):
+class CPUPoolEngine(object):
 
     @staticmethod
     def get_slices(I, O, pool_params):
@@ -221,10 +221,10 @@ class NumPyPoolEngine(object):
         p_c, p_d, p_h, p_w = itemgetter(*('pad_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
         s_c, s_d, s_h, s_w = itemgetter(*('str_' + s for s in ('c', 'd', 'h', 'w')))(pool_params)
 
-        kSlice = [NumPyPoolEngine.pool_slice(k, J, C, p_c, s_c) for k in range(K)]
-        mSlice = [NumPyPoolEngine.pool_slice(m, T, D, p_d, s_d) for m in range(M)]
-        pSlice = [NumPyPoolEngine.pool_slice(p, R, H, p_h, s_h) for p in range(P)]
-        qSlice = [NumPyPoolEngine.pool_slice(q, S, W, p_w, s_w) for q in range(Q)]
+        kSlice = [CPUPoolEngine.pool_slice(k, J, C, p_c, s_c) for k in range(K)]
+        mSlice = [CPUPoolEngine.pool_slice(m, T, D, p_d, s_d) for m in range(M)]
+        pSlice = [CPUPoolEngine.pool_slice(p, R, H, p_h, s_h) for p in range(P)]
+        qSlice = [CPUPoolEngine.pool_slice(q, S, W, p_w, s_w) for q in range(Q)]
         array_argmax = np.empty((K, M, P, Q, N), dtype=np.uint32) if op == "max" else None
 
         return (kSlice, mSlice, pSlice, qSlice, op, array_argmax)
@@ -242,7 +242,7 @@ class NumPyPoolEngine(object):
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
-class NumPyCodeEngine(object):
+class CPUCodeEngine(object):
 
     @staticmethod
     def lut_code():
@@ -266,18 +266,18 @@ class NumPyCodeEngine(object):
         return pycode
 
 
-class NumPyDeviceBufferStorage(DeviceBufferStorage):
+class CPUDeviceBufferStorage(DeviceBufferStorage):
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
-        super(NumPyDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
+        super(CPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return NumPyDeviceTensor(self.transformer, self, tensor_description,
-                                 name="{}_v_{}_{}".format(self.name,
-                                                          tensor_description.name,
-                                                          shape_str))
+        return CPUDeviceTensor(self.transformer, self, tensor_description,
+                               name="{}_v_{}_{}".format(self.name,
+                                                        tensor_description.name,
+                                                        shape_str))
 
     @property
     def alloc_name(self):
@@ -322,17 +322,17 @@ class NumPyDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.allocate_code.append("self.{}()", self.alloc_name)
 
 
-class NumPyDeviceBufferReference(DeviceBufferReference):
+class CPUDeviceBufferReference(DeviceBufferReference):
 
     def __init__(self, transformer, **kwargs):
-        super(NumPyDeviceBufferReference, self).__init__(transformer, **kwargs)
+        super(CPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
-class NumPyDeviceTensor(DeviceTensor):
+class CPUDeviceTensor(DeviceTensor):
 
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
-        super(NumPyDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
-                                                **kwargs)
+        super(CPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
+                                              **kwargs)
         self.__tensor = None
 
     @property
@@ -383,7 +383,7 @@ class NumPyDeviceTensor(DeviceTensor):
 
 def get_tensors(f):
     def tensor(x):
-        if isinstance(x, NumPyDeviceTensor):
+        if isinstance(x, CPUDeviceTensor):
             return x.tensor
         return x
 
@@ -394,10 +394,10 @@ def get_tensors(f):
     return helper
 
 
-class NumPyCodeGenerator(PyGen):
+class CPUCodeGenerator(PyGen):
 
     def __init__(self, **kwargs):
-        super(NumPyCodeGenerator, self).__init__(**kwargs)
+        super(CPUCodeGenerator, self).__init__(**kwargs)
         self.conv_params = dict()
         self.conv_slices = dict()
         self.pool_params = dict()
@@ -410,9 +410,9 @@ class NumPyCodeGenerator(PyGen):
         self.gather_recv_nodes = dict()
 
     def name(self, x):
-        if isinstance(x, NumPyDeviceBufferStorage):
+        if isinstance(x, CPUDeviceBufferStorage):
             return x.ref_str
-        if isinstance(x, NumPyDeviceTensor):
+        if isinstance(x, CPUDeviceTensor):
             return x.ref_str
         return x
 
@@ -465,7 +465,7 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, outputs, inputs, filters):
         self.conv_params[op.index] = op.conv_params
         self.conv_slices[op.index] = \
-            NumPyConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
+            CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
         self.append("self.fprop_conv(self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, inputs, filters, outputs)
 
@@ -482,7 +482,7 @@ class NumPyCodeGenerator(PyGen):
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.pool_params[op.index] = op.pool_params
-        self.pool_slices[op.index] = NumPyPoolEngine.get_slices(inputs, outputs, op.pool_params)
+        self.pool_slices[op.index] = CPUPoolEngine.get_slices(inputs, outputs, op.pool_params)
         self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
                     op.index, inputs, outputs)
 
@@ -662,44 +662,44 @@ class NumPyCodeGenerator(PyGen):
     def generate_op(self, op, out):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
-    @generate_op.on_type(NumpyQueueSendOp)
+    @generate_op.on_type(CPUQueueSendOp)
     def generate_op(self, op, out, *args):
         send_id = len(self.send_nodes)
         self.send_nodes[send_id] = op
         self.append("self.queue_send({})", send_id)
 
-    @generate_op.on_type(NumpyQueueRecvOp)
+    @generate_op.on_type(CPUQueueRecvOp)
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
         self.recv_nodes[recv_id] = op
         self.append("{} = self.recv_from_queue_send({})", out, recv_id)
 
-    @generate_op.on_type(NumpyQueueGatherSendOp)
+    @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
         gather_send_id = len(self.gather_send_nodes)
         self.gather_send_nodes[gather_send_id] = op
         self.append("self.queue_gather_send({})", gather_send_id)
 
-    @generate_op.on_type(NumpyQueueGatherRecvOp)
+    @generate_op.on_type(CPUQueueGatherRecvOp)
     def generate_op(self, op, out, *args):
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes[gather_recv_id] = op
         self.append("{}[:] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
 
-    @generate_op.on_type(NumpyQueueScatterSendOp)
+    @generate_op.on_type(CPUQueueScatterSendOp)
     def generate_op(self, op, out, *args):
         scatter_send_id = len(self.scatter_send_nodes)
         self.scatter_send_nodes[scatter_send_id] = op
         self.append("self.queue_scatter_send({})", scatter_send_id)
 
-    @generate_op.on_type(NumpyQueueScatterRecvOp)
+    @generate_op.on_type(CPUQueueScatterRecvOp)
     def generate_op(self, op, out, *args):
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes[scatter_recv_id] = op
         self.append("{}[:] = self.scatter_recv_from_queue_scatter_send({})", out, scatter_recv_id)
 
 
-class NumPyTransformer(Transformer):
+class CPUTransformer(Transformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -708,18 +708,18 @@ class NumPyTransformer(Transformer):
     evaluate method to execute the compiled graph.
     """
 
-    transformer_name = "numpy"
+    transformer_name = "cpu"
     default_rtol = 1e-05
     default_atol = 1e-08
 
     def __init__(self, **kwargs):
-        super(NumPyTransformer, self).__init__(**kwargs)
-        self.conv_engine = NumPyConvEngine()
-        self.init_code = NumPyCodeGenerator()
-        self.allocate_storage_code = NumPyCodeGenerator()
-        self.allocate_code = NumPyCodeGenerator()
-        self.compute_code = NumPyCodeGenerator()
-        self.code = NumPyCodeGenerator()
+        super(CPUTransformer, self).__init__(**kwargs)
+        self.conv_engine = CPUConvEngine()
+        self.init_code = CPUCodeGenerator()
+        self.allocate_storage_code = CPUCodeGenerator()
+        self.allocate_code = CPUCodeGenerator()
+        self.compute_code = CPUCodeGenerator()
+        self.code = CPUCodeGenerator()
         self.model = None
         self.n_computations = 0
         self.use_pinned_mem = False
@@ -739,7 +739,7 @@ class NumPyTransformer(Transformer):
 
         Returns: A DeviceBuffer.
         """
-        return NumPyDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+        return CPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
 
     def device_buffer_reference(self):
         """
@@ -747,7 +747,7 @@ class NumPyTransformer(Transformer):
 
         Returns: A DeviceBufferReference.
         """
-        return NumPyDeviceBufferReference(self)
+        return CPUDeviceBufferReference(self)
 
     def start_transform_allocate(self):
         self.init_code.append("""def __init__(self):""")
@@ -792,8 +792,8 @@ class NumPyTransformer(Transformer):
             self.code.append(self.init_code.code)
             self.code.endl()
 
-            self.code.append(NumPyConvEngine.all_conv_code())
-            self.code.append(NumPyCodeEngine.lut_code())
+            self.code.append(CPUConvEngine.all_conv_code())
+            self.code.append(CPUCodeEngine.lut_code())
             self.code.endl()
 
             self.code.append(self.allocate_storage_code.code)
@@ -913,4 +913,4 @@ class NumPyTransformer(Transformer):
 
 
 set_transformer_factory(
-    make_transformer_factory(NumPyTransformer.transformer_name))
+    make_transformer_factory(CPUTransformer.transformer_name))

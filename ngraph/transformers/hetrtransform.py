@@ -39,8 +39,8 @@ def build_transformer(name):
     :param results: the graph nodes that we care about, for the computation
     :return: the dictionary of transformers, with names matching the graph node hints
     """
-    if 'numpy' in name:
-        transformer = make_transformer_factory('numpy')()
+    if 'cpu' in name:
+        transformer = make_transformer_factory('cpu')()
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
@@ -303,7 +303,7 @@ class HetrTransformer(Transformer):
         self.is_closed = False
         self.child_transformers = dict()
         self.send_nodes = OrderedSet()
-        self.passes = [DeviceAssignPass(hetr=self, default_device='numpy', default_device_id=0),
+        self.passes = [DeviceAssignPass(hetr=self, default_device='cpu', default_device_id=0),
                        CommunicationPass(self.send_nodes),
                        DistributedPass(self.send_nodes)]
 

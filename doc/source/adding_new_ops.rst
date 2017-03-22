@@ -23,7 +23,7 @@ To add a new op in ngraph, you'll need to :
 - Register the new op in ``op_graph``
 - Add adjoint function for computing gradients of the op (optional)
 - Register op in transformer passes
-- Add implementation in transformers (such as numpy and gpu)
+- Add implementation in transformers (such as cpu and gpu)
 - Add corresponding tests
 
 Example
@@ -208,13 +208,13 @@ instance ::
 4. Next, we need to add implementations of the op in transformers. Note that
    in the previous steps, we still haven't specified how the op shall be executed
    (forward computation). In current ngraph, the ops are implemented in
-   ``NumpyTransformer`` and ``GPUTransformer`` are done by code generation for
+   ``CPUTransformer`` and ``GPUTransformer`` are done by code generation for
    optimized performance.
 
-   In ``ngraph/transformers/nptransform.py``, add the following for numpy
+   In ``ngraph/transformers/cputransform.py``, add the following for cpu
    code generation ::
 
-        class NumPyCodeGenerator(PyGen):
+        class CPUCodeGenerator(PyGen):
             ...
 
             @generate_op.on_type(Prod)
