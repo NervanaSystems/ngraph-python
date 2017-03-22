@@ -22,4 +22,9 @@ RUN pip install -r /tmp/requirements.txt
 ADD gpu_requirements.txt /tmp/gpu_requirements.txt
 RUN pip install -r /tmp/gpu_requirements.txt
 
+# add chown_files script
+ADD . /root/ngraph-test
+WORKDIR /root/ngraph-test/contrib/docker
+RUN cp ./chown_files.sh /tmp
+
 WORKDIR /root/ngraph-test
