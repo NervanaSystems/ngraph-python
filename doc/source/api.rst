@@ -121,7 +121,6 @@ ngraph.types
 
     :meth:`ngraph.types.AssignableTensorOp` | Assign a tensor. Used by `ng.placeholder`, and more.
     :meth:`ngraph.types.Axis` | An Axis labels a dimension of a tensor.
-    :meth:`ngraph.types.AxisRole` | Labels axis with roles.
     :meth:`ngraph.types.Axes` | Axes represent multiple axis dimensions.
     :meth:`ngraph.types.Computation` | Computations to attach to transformers.
     :meth:`ngraph.types.NameableValue` | Objects that can derive name from the name scope.
