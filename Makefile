@@ -71,12 +71,12 @@ clean:
 
 test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
-test_flex: clean
+test_flex: test_install clean
 	@echo Running flex unit tests...
 	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
-test_mkl: clean
+test_mkl: test_install clean
 	@echo Running unit tests...
 	@py.test --transformer mkl -m "transformer_dependent" $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
@@ -97,12 +97,12 @@ test_hetr: test_install clean
 	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_mxnet: clean
+test_mxnet: test_install clean
 	@echo Running unit tests for mxnet frontend...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i
 
-test_integration: clean
+test_integration: test_install clean
 	@echo Running integration tests...
 	@py.test $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
