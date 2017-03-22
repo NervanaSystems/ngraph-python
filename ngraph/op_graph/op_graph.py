@@ -2818,11 +2818,9 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        # this will append y's additional axes to x's axes.
         axes = x.axes | y.axes
         x = broadcast(x, axes)
-        # this will broadcast y after rearranging its axes in the order they appear in "axes"
-        y = broadcast(axes_with_order(y, axes & y.axes), axes)
+        y = broadcast(y, axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
