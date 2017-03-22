@@ -34,7 +34,7 @@ from ptb import PTB
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper

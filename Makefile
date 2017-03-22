@@ -74,6 +74,8 @@ clean:
 	@rm -rf ngraph.egg-info
 	@echo
 
+test_all_transformers: test_cpu test_hetr test_gpu test_flex
+
 test_flex: test_prepare clean
 	@echo Running flex unit tests...
 	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
@@ -85,7 +87,7 @@ test_mkl: test_prepare clean
 	@coverage xml -i
 
 test_cpu: test_prepare clean
-	@echo Running unit tests for core and numpy transformer tests...
+	@echo Running unit tests for core and cpu transformer tests...
 	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 

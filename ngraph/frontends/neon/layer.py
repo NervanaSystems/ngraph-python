@@ -549,31 +549,33 @@ class BatchNorm(Layer):
     @cached({}, key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
-        in_axes = in_obj.axes.sample_axes()
-        red_axes = ng.make_axes()
-        if in_axes.channel_axis() is not None:
-            red_axes |= in_axes.sample_axes() - in_axes.channel_axis()
-        if in_axes.recurrent_axis() is not None:
-            red_axes |= in_axes.recurrent_axis()
-        red_axes |= in_obj.axes.batch_axis()
+        in_axes = in_obj.axes
+        if in_axes.channel_axis() is None:
+            red_axes = ng.make_axes(in_axes.recurrent_axis()) + in_axes.batch_axes()
+        else:
+            red_axes = in_axes - in_axes.channel_axis()
+
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes,
-                                               initial_value=self.init_gamma).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes,
-                                             initial_value=self.init_beta).named('beta')
-        self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-        self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+        in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
+        if self.gamma is None:
+            self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+            self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+            self.gamma = ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
+            self.beta = ng.variable(axes=out_axes, initial_value=self.init_beta).named('beta')
 
-        xmean = ng.mean(in_obj, reduction_axes=red_axes)
-        xvar = ng.variance(in_obj, reduction_axes=red_axes)
+        xmean = ng.mean(in_obj, out_axes=out_axes)
+        xvar = ng.variance(in_obj, out_axes=out_axes)
+
         if Layer.inference_mode:
-            return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
+            return ng.unflatten(self.gamma * ((in_obj - self.gmean) *
+                                ng.reciprocal(ng.sqrt(self.gvar + self.eps))) + self.beta)
         else:
             return ng.sequential([
                 ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
                 ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
-                self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+                ng.unflatten(self.gamma * ((in_obj - xmean) *
+                             ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             ])
 
     def set_tuning_iteration(self, batch_index):

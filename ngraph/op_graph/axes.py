@@ -1013,7 +1013,7 @@ class TensorDescription(NameableValue):
 
     Names the tensor's dimensions with axes and holds pointers to the
     buffer allocated by the analysis and the backend tensor value
-    (e.g. a numpy or gpu tensor).
+    (e.g. a cpu or gpu tensor).
 
     Arguments:
         axes: Axes of the tensor.
