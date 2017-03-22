@@ -32,7 +32,7 @@ parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
 parser.add_argument('--use_lut', action='store_true',
                     help='choose to use lut as first layer')
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper

@@ -69,6 +69,8 @@ clean:
 	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
+test_all_transformers: test_cpu test_hetr test_gpu test_flex
+
 test_flex: test_install clean
 	@echo Running flex unit tests...
 	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
