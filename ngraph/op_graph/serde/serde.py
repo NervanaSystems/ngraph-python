@@ -213,7 +213,8 @@ def op_to_protobuf(op):
 
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
-        assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
+        if key != 'layout':
+            assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
 
     if hasattr(op, '_ngraph_ser_handle'):
         pb_op.attrs['_ngraph_ser_handle'].scalar.bool_val = True
@@ -228,7 +229,7 @@ def op_to_protobuf(op):
             tensor_to_protobuf(op.valfun(op.tensor_description())))
 
     # These are handled above
-    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata'}
+    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata', 'layout_view', 'in_view', 'out_view'}
     remaining_keys = set(op.__dict__.keys()).difference(ignored_keys)
 
     for key in remaining_keys:

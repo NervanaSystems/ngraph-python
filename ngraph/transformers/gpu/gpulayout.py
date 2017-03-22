@@ -644,7 +644,7 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
         if self.needs_transform(arg_layout, op_layout):
             if isinstance(self.op, ReductionOp):
                 # Dimshuffle to 3d with out axis groups plus reduction group
-                out_groups = [[a for a in self.red_axes]]
+                out_groups = [[a for a in self.red_axes]] if self.red_axes else []
                 for op_axis in op_layout.axes:
                     out_groups.append([op_layout.ng_axes[i] for i in op_axis])
                 return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
@@ -667,7 +667,7 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
         else:
             # Compute derived layout for arg
             if isinstance(self.op, ReductionOp):
-                out_groups = [[a for a in self.red_axes]]
+                out_groups = [[a for a in self.red_axes]] if self.red_axes else []
                 for op_axis in op_layout.axes:
                     out_groups.append([op_layout.ng_axes[i] for i in op_axis])
                 return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
@@ -753,11 +753,11 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
         self.op_axes = flatten(get_axes_list(self.op.axes))
         if self.arg.forwarded is args[0].forwarded:
             self.operand = 'A'
-            self.reduction_axes = flatten(get_axes_list(self.op.x_reduction_axes))
+            self.reduction_axes = flatten(get_axes_list(self.op.reduction_axes))
             self.out_axes = flatten(get_axes_list(self.op.x_out_axes))
         elif self.arg.forwarded is args[1].forwarded:
             self.operand = 'B'
-            self.reduction_axes = flatten(get_axes_list(self.op.y_reduction_axes))
+            self.reduction_axes = flatten(get_axes_list(self.op.reduction_axes))
             self.out_axes = flatten(get_axes_list(self.op.y_out_axes))
         else:
             import pdb; pdb.set_trace()

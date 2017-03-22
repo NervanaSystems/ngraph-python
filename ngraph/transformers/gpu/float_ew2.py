@@ -700,6 +700,8 @@ def _wrap_tensor_descriptions(ops):
                         missing_axis = op[4]
                     elif op[0] == "onehot" and index == 1:
                         missing_axis = op[4]
+                    elif op[0] == "assign" and op[4] is not None:
+                        missing_axis = op[4]
                     else:
                         missing_axis = None
                     new_op[index] = TensorDescriptionWrapper(new_op[index],
