@@ -19,6 +19,7 @@ from ngraph.op_graph.op_graph import Op, TensorValueOp
 from orderedset import OrderedSet
 from ngraph.op_graph.comm_nodes import GatherSendOp, ScatterRecvOp
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+import uuid
 
 import socket
 
@@ -88,56 +89,37 @@ class DistributedPass(GraphBuildingPass):
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def serde_clone_nodes(self, gather_send_op, device_id, device_idx, new_axes):
+    def clone_distributed_subgraph(self, root, device_id, device_idx, axes):
         """
         clone nodes with serde (serialization) module
         """
 
-        # clone nodes with GatherSendOp as root using serialize_graph and deserialized_graph
-        ser_str = serialize_graph([gather_send_op])
-        ser_cloned_nodes = deserialize_graph(ser_str)
+        # clone nodes with GatherSendOp as root using serde
+        ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
+        cloned_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
-        # get the ops linked from ScatterRecvOp via args or control_deps
-        new_gather_send_op = [o for o in ser_cloned_nodes if isinstance(o, GatherSendOp)]
-        assert len(new_gather_send_op) == 1, 'multiple GatherSendOp after clone'
+        orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
 
-        new_gather_send_op = new_gather_send_op[0]
-        # update self.send_nodes to reflect the clone
-        # todo: how about return new_gather_send_op as root,
-        #       move 'self.send_nodes.add()' to DistributedPass.do_pass()
-        #       then maybe move this function to hetr_util.py
-        self.send_nodes.add(new_gather_send_op)
         # Prune ops that are not control_deps of new_gather_send_op
         # deserialize includes extra referenced nodes
-        cloned_nodes = Op.ordered_ops([new_gather_send_op])
-
-        # modify idx, axes, and other metadata eg. device_id, transformer
-        for v in Op.ordered_ops([gather_send_op]):
-            if isinstance(v, ScatterRecvOp):
-                ScatterRecvOp_shared_queues = v.shared_queues
-                send_node = v.send_node()
-            elif isinstance(v, GatherSendOp):
-                GatherSendOp_shared_queues = v.shared_queues
-
-        assert ScatterRecvOp_shared_queues, 'ScatterRecvOp shared Qs is None'
-        assert GatherSendOp_shared_queues, 'GatherSendOp shared Qs is None'
-
-        # todo: update new_axes if needed for last device
-        # todo: add tests for non-evenly distributed hetr (last device has a different axes)
+        cloned_graph = Op.ordered_ops([cloned_root])
         # update newly cloned op metadata, generate new UUIDs
-        for op in cloned_nodes:
+        for op in cloned_graph:
             op.metadata['transformer'] = op.metadata['device'] + str(device_id)
             op.metadata['device_id'] = str(device_id)
-            if op.metadata.get('host_transformer') == gather_send_op.metadata['host_transformer']:
-                op.metadata['host_transformer'] = gather_send_op.metadata['host_transformer']
-            if isinstance(op, ScatterRecvOp):
-                op.shared_queues = ScatterRecvOp_shared_queues
-                op._send_node = send_node
+            if isinstance(op, (ScatterRecvOp, GatherSendOp)):
+                op.shared_queues = orig_ops[op.uuid].shared_queues
                 op.idx = device_idx
-            elif isinstance(op, GatherSendOp):
-                op.shared_queues = GatherSendOp_shared_queues
-                op.idx = device_idx
-        return cloned_nodes
+                if isinstance(op, ScatterRecvOp):
+                    op._send_node = orig_ops[op.uuid].send_node()
+
+            # todo add distributed hetr tests where axes of last device is different
+            if op._axes != axes:
+                op._axes = axes
+
+            op.uuid = uuid.uuid4()
+
+        return cloned_root
 
     def do_pass(self, ops, transformer):
 
@@ -164,7 +146,10 @@ class DistributedPass(GraphBuildingPass):
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
-                    self.serde_clone_nodes(gather_send_op=op.send_node(),
-                                           device_id=id,
-                                           device_idx=i,
-                                           new_axes=new_axes)
+                    gather_send_op = op.send_node()
+                    new_gather_send_op = self.clone_distributed_subgraph(
+                        root=gather_send_op,
+                        device_id=id,
+                        device_idx=i,
+                        axes=new_axes)
+                    self.send_nodes.add(new_gather_send_op)

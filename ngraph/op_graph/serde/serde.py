@@ -192,14 +192,14 @@ def assign_op_attr(message, value):
                     assign_scalar(message.repeated_scalar.val.add(), item)
                 else:
                     # raise unhandled_scalar_value(item)
-                    print('skipped {} in serde.'.format(value))
+                    print('skipped unhandled_scalar_value {} in serde.'.format(item))
         else:
             assign_scalar(message.repeated_scalar.val.add(), '_ngraph_iter_sentinel_')
     elif value is None:
         message.scalar.null_val = True
     else:
         # raise unhandled_scalar_value(value)
-        print('skipped {} in serde.'.format(value))
+        print('skipped unhandled_scalar_value {} in serde.'.format(value))
 
 
 def op_to_protobuf(op):
@@ -297,7 +297,6 @@ def _serialize_graph(ops):
     """
     assert isinstance(ops, Iterable), "Ops passed into `serialize_graph` must be an iterable"
     ops = Op.all_op_references(ops)
-    print('ops to serialize: {}'.format(ops))
     pb_ops = []
     pb_edges = []
     for op in ops:
@@ -401,9 +400,12 @@ def protobuf_attr_to_python(val):
         return protobuf_to_axes(val.axes)
     elif val.HasField('axis'):
         return pb_to_axis(val.axis)
-    else:
-        # raise ValueError("Cannot convert {} to python attribute value".format(val))
+    elif str(val) == '':
+        # hetr only, for shared queues
+        # shared queues skipped serialization, so val.__str__ will be '' here
         pass
+    else:
+        raise ValueError("Cannot convert {} to python attribute value".format(val))
 
 def pb_to_axis(msg):
 
@@ -482,7 +484,6 @@ def _deserialize_graph(graph_pb):
     GLOBAL_AXIS_REGISTRY.clear()
 
     ops = list(map(protobuf_to_op, graph_pb.ops))
-    print('deserialize ops: {}'.format(ops))
     uuid_lookup = {op.uuid.bytes: op for op in ops}
     for edge in graph_pb.edges:
         head_op = uuid_lookup[edge.from_uuid.uuid]
