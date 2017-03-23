@@ -196,17 +196,17 @@ class GatherRecvOp(RecvOp):
         return self._slices
 
 
-class GpuQueueSendOp(SendOp):
+class GPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
-        super(GpuQueueSendOp, self).__init__(from_node)
+        super(GPUQueueSendOp, self).__init__(from_node)
         self.queue = multiprocessing.Queue()
 
 
-class GpuQueueRecvOp(RecvOp):
+class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
-        super(GpuQueueRecvOp, self).__init__(to_node, send_node)
+        super(GPUQueueRecvOp, self).__init__(to_node, send_node)
         self.queue = send_node.queue
 
 
