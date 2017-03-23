@@ -21,7 +21,7 @@ from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
 from orderedset import OrderedSet
-from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
+from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
@@ -176,7 +176,6 @@ class AsyncTransformer(Process):
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
                 outputs = computation(*inputs)
-                print('hetrTransformer run:\nInput: {}\nOutput: {}'.format(inputs, outputs))
 
                 # individual results q makes it easy for caller to find results
                 self.results_qs[comp_id].put(outputs)

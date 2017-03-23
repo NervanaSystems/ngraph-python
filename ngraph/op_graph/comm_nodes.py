@@ -54,6 +54,7 @@ def get_slices(axes, parallel_axis, num_devices):
         new_slices.append(slices)
     return new_slices
 
+
 class ResultOp(TensorOp):
     """
     special op for Hetr distributed case, not supported by other transformers

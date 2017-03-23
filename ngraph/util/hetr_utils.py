@@ -13,12 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
-    TensorValueOp
-from ngraph.op_graph.comm_nodes import GatherSendOp, GatherRecvOp, \
-    RecvOp, ScatterSendOp, ScatterRecvOp
+from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
 from ngraph.util.ordered import OrderedSet
-import ngraph as ng
+from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+import uuid
 
 
 def comm_path_exists(fro, to):
@@ -103,3 +102,38 @@ def update_comm_deps(ops):
                 if comm_path_exists(fro=r.send_node(), to=op):
                     if r.metadata['transformer'] == op.metadata['transformer']:
                         r.add_control_dep(op)
+
+
+def clone_graph(root, device_id, device_idx, axes):
+    """
+    clone graph with serde (serialization)
+    input:
+    output: new_root of the cloned graph
+    """
+
+    # clone nodes with GatherSendOp as root using serde
+    ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
+    new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
+
+    orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
+
+    # Prune ops that are not control_deps of new_gather_send_op
+    # deserialize includes extra referenced nodes
+    cloned_graph = Op.ordered_ops([new_root])
+    # update newly cloned op metadata, generate new UUIDs
+    for op in cloned_graph:
+        op.metadata['transformer'] = op.metadata['device'] + str(device_id)
+        op.metadata['device_id'] = str(device_id)
+        if isinstance(op, (ScatterRecvOp, GatherSendOp)):
+            op.shared_queues = orig_ops[op.uuid].shared_queues
+            op.idx = device_idx
+            if isinstance(op, ScatterRecvOp):
+                op._send_node = orig_ops[op.uuid].send_node()
+
+        # todo add distributed hetr tests where axes of last device is different
+        if axes.lengths != op.axes.lengths:
+            op._axes = axes
+
+        op.uuid = uuid.uuid4()
+
+    return new_root

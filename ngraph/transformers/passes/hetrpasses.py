@@ -16,11 +16,8 @@ from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.op_graph.comm_nodes import calculate_new_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
+from ngraph.util.hetr_utils import clone_graph
 from orderedset import OrderedSet
-from ngraph.op_graph.comm_nodes import GatherSendOp, ScatterRecvOp
-from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
-import uuid
-
 import socket
 
 
@@ -89,38 +86,6 @@ class DistributedPass(GraphBuildingPass):
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def clone_distributed_subgraph(self, root, device_id, device_idx, axes):
-        """
-        clone nodes with serde (serialization) module
-        """
-
-        # clone nodes with GatherSendOp as root using serde
-        ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
-        cloned_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
-
-        orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
-
-        # Prune ops that are not control_deps of new_gather_send_op
-        # deserialize includes extra referenced nodes
-        cloned_graph = Op.ordered_ops([cloned_root])
-        # update newly cloned op metadata, generate new UUIDs
-        for op in cloned_graph:
-            op.metadata['transformer'] = op.metadata['device'] + str(device_id)
-            op.metadata['device_id'] = str(device_id)
-            if isinstance(op, (ScatterRecvOp, GatherSendOp)):
-                op.shared_queues = orig_ops[op.uuid].shared_queues
-                op.idx = device_idx
-                if isinstance(op, ScatterRecvOp):
-                    op._send_node = orig_ops[op.uuid].send_node()
-
-            # todo add distributed hetr tests where axes of last device is different
-            if op._axes != axes:
-                op._axes = axes
-
-            op.uuid = uuid.uuid4()
-
-        return cloned_root
-
     def do_pass(self, ops, transformer):
 
         ops = OrderedSet(op.forwarded for op in ops)
@@ -130,26 +95,27 @@ class DistributedPass(GraphBuildingPass):
                 # op is GatherRecvOp
                 self.parallel_axes = op.metadata['parallel']
 
+                gather_send_op = op.send_node()
                 new_axes = calculate_new_axes(
-                    op.send_node().axes, self.parallel_axes,
+                    gather_send_op.axes, self.parallel_axes,
                     len(op.from_id), False)
-                Op.visit_input_closure(
-                    [op.send_node()],
-                    lambda x: setattr(x, '_axes', new_axes))
 
-                # clone nodes for other device_id
-                # todo: clone nodes for each device_id
-                for i, id in enumerate(op.from_id[1:], start=1):
+                # clone nodes for each device_id
+                for i, id in enumerate(op.from_id):
                     # get axes for last device if it's different
                     if i == (len(op.from_id) - 1) \
                             and self.parallel_axes.length % len(op.from_id) > 0:
                         new_axes = calculate_new_axes(
                             op.axes, self.parallel_axes, len(op.from_id), True)
 
-                    gather_send_op = op.send_node()
-                    new_gather_send_op = self.clone_distributed_subgraph(
+                    new_gather_send_op = clone_graph(
                         root=gather_send_op,
                         device_id=id,
                         device_idx=i,
                         axes=new_axes)
                     self.send_nodes.add(new_gather_send_op)
+
+                self.send_nodes.remove(gather_send_op)
+                # how to make sure this part of the graph is not working?
+                for o in Op.ordered_ops([gather_send_op]):
+                    o.metadata['transformer'] = None
