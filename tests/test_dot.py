@@ -264,7 +264,6 @@ def test_flat_tensor_dot_tensor(transformer_factory):
         transformer_factory:
 
     Returns:
-
     """
     H = ng.make_axis(2)
     W = ng.make_axis(7)
