@@ -238,13 +238,10 @@ class CPUQueueScatterSendOp(ScatterSendOp):
 
 class CPUQueueScatterRecvOp(ScatterRecvOp):
 
-    def __init__(self, to_node, send_node, device_idx=None):
+    def __init__(self, to_node, send_node):
         super(CPUQueueScatterRecvOp, self).__init__(to_node, send_node)
-        if device_idx:
-            self.idx = device_idx
-        else:
-            self.idx = 0
-        self._shared_queues = send_node._shared_queues
+        self.idx = 0
+        self._shared_queues = send_node.shared_queues
 
     @property
     def shared_queues(self):
