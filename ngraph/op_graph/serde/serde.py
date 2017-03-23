@@ -194,9 +194,6 @@ def assign_op_attr(message, value):
                     raise unhandled_scalar_value(item)
         else:
             assign_scalar(message.repeated_scalar.val.add(), '_ngraph_iter_sentinel_')
-    elif isinstance(value, Op):
-        # hetr only, skip if the metadata value is an Op
-        pass
     elif value is None:
         message.scalar.null_val = True
     else:
@@ -216,6 +213,9 @@ def op_to_protobuf(op):
 
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
+        # hetr only
+        if key in ('hetr_replaced_by', 'replaces_op'):
+            continue
         assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
 
     if hasattr(op, '_ngraph_ser_handle'):
@@ -231,7 +231,7 @@ def op_to_protobuf(op):
             tensor_to_protobuf(op.valfun(op.tensor_description())))
 
     # These are handled above
-    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata'}
+    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata', 'all_deps'}
     remaining_keys = set(op.__dict__.keys()).difference(ignored_keys)
 
     for key in remaining_keys:
@@ -275,7 +275,7 @@ def add_edges(pb_edges, pb_ops, op):
 
     # Now iterate through remaining keys of this op's __dict__ and any that reference
     # other Ops we make edges that we can deserialize as Op attributes later
-    remaining_keys = set(op.__dict__.keys())
+    remaining_keys = set(op.__dict__.keys()).difference({'all_deps'})
     for key in remaining_keys:
         if not key.startswith('_is_') and key not in EXCEPTION_ATTRIBUTES and key.startswith('_'):
             continue
@@ -401,10 +401,6 @@ def protobuf_attr_to_python(val):
         return protobuf_to_axes(val.axes)
     elif val.HasField('axis'):
         return pb_to_axis(val.axis)
-    elif str(val) == '':
-        # hetr only, for skipped attrs, so val.__str__ will be ''
-        # now only for metadata['hetr_replaced_by', 'replaces_op']
-        pass
     else:
         raise ValueError("Cannot convert {} to python attribute value".format(val))
 
