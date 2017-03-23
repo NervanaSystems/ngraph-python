@@ -221,13 +221,13 @@ def test_scatter_gather_graph(transformer_factory):
     graph_ops = OrderedSet([x, y, z, x_plus_z, x_plus_y])
 
     graph_op_metadata = {op: list() for op in graph_ops}
-    graph_op_metadata[x] = ["numpy", '0']
-    graph_op_metadata[z] = ["numpy", '0']
-    graph_op_metadata[y] = ["numpy", ('1', '2')]
-    graph_op_metadata[x_plus_z] = ["numpy", '0']
-    graph_op_metadata[x_plus_y] = ["numpy", '0']
+    graph_op_metadata[x] = ["cpu", '0']
+    graph_op_metadata[z] = ["cpu", '0']
+    graph_op_metadata[y] = ["cpu", ('1', '2')]
+    graph_op_metadata[x_plus_z] = ["cpu", '0']
+    graph_op_metadata[x_plus_y] = ["cpu", '0']
 
-    check_device_assign_pass("numpy", "0", graph_op_metadata, graph_ops)
+    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
 
     check_communication_pass(
         ops_to_transform=graph_ops,
