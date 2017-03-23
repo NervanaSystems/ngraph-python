@@ -550,8 +550,8 @@ class Op(NameableValue, DebugInfo):
         if dep is not self and dep not in self.all_deps:
             # update control_deps
             self._control_deps.add(dep)
-        # invalidate deps cache as self._control_deps is updated
-        self.invalidate_property_cache('all_deps')
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def remove_control_dep(self, dep):
         """
@@ -562,10 +562,11 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
-        # update control_deps
-        self._control_deps.remove(dep.forwarded)
-        # invalidate deps cache as self._control_deps is updated
-        self.invalidate_property_cache('all_deps')
+        if dep.forwarded in self.control_deps:
+            # update control_deps
+            self._control_deps.remove(dep.forwarded)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def update_forwards(self):
         """
@@ -578,15 +579,21 @@ class Op(NameableValue, DebugInfo):
         for forwarding.
 
         """
-        all_deps_forward = [op.forward for op in self.all_deps]
-        if any(forward is not None for forward in all_deps_forward):
-            # replace self._args with self._args's forwarded op
-            self._args = tuple([op.forwarded for op in self.args])
-            self.invalidate_property_cache('all_deps')
+        # replace self._args with self._args's forwarded op
+        args_forward = [op.forward for op in self.args]
+        if any(forward is not None for forward in args_forward):
+            new_args = tuple([op.forwarded for op in self.args])
+            if self._args != new_args:
+                self._args = new_args
+                self.invalidate_property_cache('all_deps')
 
-            # replace self._control_deps with self._control_deps's forwarded op
-            self._control_deps = OrderedSet([op.forwarded for op in self.control_deps])
-            self.invalidate_property_cache('all_deps')
+        # replace self._control_deps with self._control_deps's forwarded op
+        control_deps_forward = [op.forward for op in self.control_deps]
+        if any(forward is not None for forward in control_deps_forward):
+            new_control_deps = OrderedSet([op.forwarded for op in self.control_deps])
+            if self._control_deps != new_control_deps:
+                self._control_deps = new_control_deps
+                self.invalidate_property_cache('all_deps')
 
     def replace_self(self, rep):
         self.forward = as_op(rep)
