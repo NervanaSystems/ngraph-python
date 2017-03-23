@@ -407,6 +407,7 @@ def protobuf_attr_to_python(val):
     else:
         raise ValueError("Cannot convert {} to python attribute value".format(val))
 
+
 def pb_to_axis(msg):
 
     if msg.uuid.uuid in GLOBAL_AXIS_REGISTRY:  # Already deserialized

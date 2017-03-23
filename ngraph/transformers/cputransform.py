@@ -835,7 +835,6 @@ class CPUTransformer(Transformer):
             # should we instead serialize DeviceTensor?
             x_devicetensor = gather_send_op.args[0].value
             x_nparr = x_devicetensor.get(None)
-            print('gather_send({}): {}'.format(gather_send_op.idx, x_nparr))
             q.put(x_nparr)
 
         def queue_gather_recv(self, gather_recv_id):
@@ -846,7 +845,6 @@ class CPUTransformer(Transformer):
                 q = gather_recv_op.shared_queues[i]
                 x = q.get()
                 x_nparr[gather_recv_op.slices[i]] = x
-            print('gather_recv: {}'.format(x_nparr))
             return x_nparr
 
         def queue_scatter_send(self, scatter_send_id):
@@ -856,7 +854,6 @@ class CPUTransformer(Transformer):
             # should we instead serialize DeviceTensor?
             x_devicetensor = scatter_send_op.args[0].value
             x_nparr = x_devicetensor.get(None)
-            print('scatter_send: {}'.format(x_nparr))
             for i in range(len(scatter_send_op.to_id)):
                 q = scatter_send_op.shared_queues[i]
                 q.put(x_nparr[scatter_send_op.slices[i]])
@@ -865,7 +862,6 @@ class CPUTransformer(Transformer):
             scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
             q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
             x = q.get()
-            print('scatter_recv({}): {}'.format(scatter_recv_op.idx, x))
             return x
 
         self.model.recv_from_queue_send = queue_recv
