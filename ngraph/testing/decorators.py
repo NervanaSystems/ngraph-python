@@ -25,7 +25,6 @@ def with_error_settings(**new_settings):
       **new_settings: TODO
 
     Returns:
-
     """
     @decorator.decorator
     def dec(f, *args, **kwargs):
@@ -49,7 +48,6 @@ def raise_all_numpy_errors(f):
       f: TODO
 
     Returns:
-
     """
     settings = {k: 'raise' for k in ['divide', 'over', 'under', 'invalid']}
     return with_error_settings(**settings)(f)

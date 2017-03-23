@@ -39,7 +39,6 @@ def check_device_assign_pass(default_device, default_device_id,
     :param: graph_op_metadata: dict, dictionary of list specifying  the expected
             metadata {device_id, device} for each op
     :param: graph_op: list of ops to do the graph traversal
-
     """
     with ExecutorFactory() as ex:
         expected_transformers = set()
@@ -78,7 +77,6 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
     :param ops_to_transform: list of ops to do the garph traversal
     :param expected_recv_nodes: lits of ops where receive nodes are expected to
            be inserted after the communication pass
-
     """
     with ExecutorFactory() as ex:
         send_nodes = OrderedSet()
