@@ -235,21 +235,23 @@ def test_gpu_send_and_recv(transformer_factory):
         for i in [10, 20, 30]:
             assert computation(i) == i + 2
 
+
 def test_terminate_op(transformer_factory):
     termOp = TerminateOp()
     with ExecutorFactory() as ex:
         computation = ex.executor(termOp)
 
+
 def test_process_leak(transformer_factory):
-    baseline = active_children() # probably 0 but not sure that's a gaurantee
+    baseline = active_children()
     with ng.metadata(device_id=('2')):
         x = ng.constant(2)
     assert len(baseline) == 0
     with ExecutorFactory() as ex:
         computation = ex.executor(x)
         assert len(active_children()) == 1
-        # raise ValueError()
     assert active_children() == baseline
+
 
 class TerminateOp(ng.Op):
     def __init__(self, **kwargs):
