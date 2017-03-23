@@ -18,7 +18,7 @@ import numpy as np
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
@@ -398,6 +398,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             else:
                 raise RuntimeError("Confused")
             predecessor_op = predecessor_op.args[0]
+            if isinstance(predecessor_op, SequentialOp):
+                predecessor_op = predecessor_op.ops[-1]
 
         return
 

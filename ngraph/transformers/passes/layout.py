@@ -19,7 +19,7 @@ from future.utils import with_metaclass
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SetItemOp
+    SetItemOp, SequentialOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 
@@ -103,6 +103,25 @@ class PruneContiguousPass(PeepholeGraphPass):
         self.replace_op(op, op.args[0])
 
 
+def get_device_op(op):
+    """
+    Helper function that traverses through any reshape ops or value ops
+    to return the tensor op
+    """
+    if op.is_device_op or isinstance(op, TensorValueOp):
+        return op
+
+    if isinstance(op, SequentialOp):
+        op = op.ops[-1]
+
+    for arg in op.args:
+        dev_op = get_device_op(arg)
+        if dev_op:
+            return dev_op
+
+    return None
+
+
 class GenerateLayoutDomains(PeepholeGraphPass):
     """
     This pass generates possible layouts (domain) for each op in the graph
@@ -129,17 +148,6 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
         self.binary_constraints = dict()
         self.users = dict()
 
-    def get_device_op(self, op):
-        if op.is_device_op or isinstance(op, TensorValueOp):
-            return op
-
-        for arg in op.args:
-            dev_op = self.get_device_op(arg)
-            if dev_op:
-                return dev_op
-
-        return None
-
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         if op.is_device_op or isinstance(op, TensorValueOp):
@@ -150,7 +158,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
             self.binary_constraints[op] = []
             for arg in op.args:
-                arg_op = self.get_device_op(arg)
+                arg_op = get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
                         (arg_op, self.transformer.get_layout_change_cost_function(op, arg)))
@@ -291,17 +299,6 @@ class AddLayoutConversions(PeepholeGraphPass):
         self.binary_constraints = self.assign_pass.binary_constraints
         super(AddLayoutConversions, self).do_pass(ops, transformer)
 
-    def get_device_op(self, op):
-        if op.is_device_op or isinstance(op, TensorValueOp):
-            return op
-
-        for arg in op.args:
-            dev_op = self.get_device_op(arg)
-            if dev_op:
-                return dev_op
-
-        return None
-
     @generic_method(dispatch_base_type=Op)
     def op_from_args(self, op, args):
         """
@@ -364,7 +361,7 @@ class AddLayoutConversions(PeepholeGraphPass):
             new_args = []
             for arg in op.args:
                 b_constraint = None
-                dev_op = self.get_device_op(arg)
+                dev_op = get_device_op(arg)
                 orig_arg_op = None
                 if dev_op is None:
                     new_args.append(arg)
