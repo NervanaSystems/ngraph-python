@@ -39,6 +39,7 @@ import pkgutil
 import importlib
 from collections import Iterable
 from builtins import map
+from multiprocessing.queues import Queue
 
 import six
 import numpy as np
@@ -190,16 +191,21 @@ def assign_op_attr(message, value):
             for item in value:
                 if is_scalar_type(item):
                     assign_scalar(message.repeated_scalar.val.add(), item)
+                elif isinstance(item, Queue):
+                    # hetr only, skip shared queues
+                    continue
                 else:
-                    # raise unhandled_scalar_value(item)
-                    print('skipped unhandled_scalar_value {} in serde.'.format(item))
+                    raise unhandled_scalar_value(item)
+
         else:
             assign_scalar(message.repeated_scalar.val.add(), '_ngraph_iter_sentinel_')
+    elif isinstance(value, Op):
+        # hetr only, skip if the metadata value is an Op
+        pass
     elif value is None:
         message.scalar.null_val = True
     else:
-        # raise unhandled_scalar_value(value)
-        print('skipped unhandled_scalar_value {} in serde.'.format(value))
+        raise unhandled_scalar_value(value)
 
 
 def op_to_protobuf(op):
