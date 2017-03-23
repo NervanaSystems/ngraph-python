@@ -34,8 +34,8 @@ def strip_dict(d):
     For equality testing we need to remove attributes of dicts that are either unique to each
     instance or need more complex equality handling
     """
-    keys = ('_NameableValue__name', '_axes', '_args', 'valfun', 'dtype', 'scale',
-            '_tensor')
+    keys = ('_NameableValue__name', '_axes', '_args', 'valfun', 'dtype',
+            'scale', '_tensor')
     for key in keys:
         if key in d:
             del d[key]

@@ -37,7 +37,8 @@ class CommNodePair(object):
             elif node.metadata['device'] == 'cpu':
                 return CPUCommNodeFactory()
             else:
-                assert False
+                raise NotImplementedError("device must be either 'gpu' or 'cpu',"
+                                          "currently it's {}".format(node.metadata['device']))
 
         def get_location(from_node, to_node):
             (send_host, send_idx) = from_node.metadata['host_transformer']
