@@ -199,7 +199,6 @@ class LookupTable(Layer):
         update (bool): if the word vectors get updated through training
         pad_idx (int): by knowing the pad value, the update will make sure always
                        have the vector representing pad value to be 0s.
-
     """
     metadata = {'layer_type': 'lookuptable'}
 
@@ -275,7 +274,6 @@ class ConvBase(Layer):
         strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
         dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
-
     """
     metadata = {'layer_type': 'convolution'}
 
@@ -383,7 +381,6 @@ class PoolBase(Layer):
         init (function): function for later initializing filters
         strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
-
     """
     metadata = {'layer_type': 'pooling'}
 
@@ -903,7 +900,6 @@ class LSTM(Recurrent):
         b (Tensor): Biases on output units (output_size, 1)
 
     Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
-
     """
     metadata = {'layer_type': 'LSTM',
                 'gates': ['i', 'f', 'o', 'g']}
