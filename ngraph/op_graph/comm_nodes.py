@@ -253,7 +253,7 @@ class CPUQueueScatterRecvOp(ScatterRecvOp):
 
 class CPUQueueGatherSendOp(GatherSendOp):
 
-    def __init__(self, from_node, clone_node=None, device_idx=None):
+    def __init__(self, from_node):
         super(CPUQueueGatherSendOp, self).__init__(from_node)
         self.idx = 0
         self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
@@ -267,7 +267,7 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
 
     def __init__(self, from_node, to_node, send_node):
         super(CPUQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
-        self._shared_queues = send_node._shared_queues
+        self._shared_queues = send_node.shared_queues
 
     @property
     def shared_queues(self):
