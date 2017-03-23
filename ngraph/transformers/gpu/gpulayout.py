@@ -339,6 +339,9 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         # Arg axes may be re-ordered, cast, broadcast, sliced between the original
         # buffer and the op being used for this constraint
         predecessor_op = arg
+        while isinstance(predecessor_op, SequentialOp):
+            predecessor_op = predecessor_op.value_tensor
+
         self.arg_axes_list = flatten(get_axes_list(arg.axes))
         self.mappings = {}
         self.sliced_out = []
@@ -398,8 +401,8 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             else:
                 raise RuntimeError("Confused")
             predecessor_op = predecessor_op.args[0]
-            if isinstance(predecessor_op, SequentialOp):
-                predecessor_op = predecessor_op.ops[-1]
+            while isinstance(predecessor_op, SequentialOp):
+                predecessor_op = predecessor_op.value_tensor
 
         return
 

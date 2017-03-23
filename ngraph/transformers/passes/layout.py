@@ -111,8 +111,8 @@ def get_device_op(op):
     if op.is_device_op or isinstance(op, TensorValueOp):
         return op
 
-    if isinstance(op, SequentialOp):
-        op = op.ops[-1]
+    while isinstance(op, SequentialOp):
+        op = op.value_tensor
 
     for arg in op.args:
         dev_op = get_device_op(arg)
