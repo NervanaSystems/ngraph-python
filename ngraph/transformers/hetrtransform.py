@@ -370,6 +370,9 @@ class HetrTransformer(Transformer):
     def start_transform_allocate(self):
         assert False, "Should not be used, TODO cleanup"
 
+    def transform_allocate_ops(self, all_ops):
+        assert False, "Should not be used, TODO cleanup"
+
     def finish_transform_allocate(self):
         assert False, "Should not be used, TODO cleanup"
 

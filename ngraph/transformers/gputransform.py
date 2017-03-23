@@ -1042,6 +1042,9 @@ class GPUTransformer(Transformer):
     def start_transform_allocate(self):
         pass
 
+    def transform_allocate_ops(self, all_ops):
+        pass
+
     def finish_transform_allocate(self):
         pass
 
