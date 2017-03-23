@@ -104,7 +104,7 @@ def update_comm_deps(ops):
                         r.add_control_dep(op)
 
 
-def clone_graph(root, device_id, device_idx, axes):
+def clone_graph(root, device_id, shared_queues_idx, axes):
     """
     clone graph with serde (serialization)
     input:
@@ -126,14 +126,11 @@ def clone_graph(root, device_id, device_idx, axes):
         op.metadata['device_id'] = str(device_id)
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
             op.shared_queues = orig_ops[op.uuid].shared_queues
-            op.idx = device_idx
+            op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()
 
-        # todo add distributed hetr tests where axes of last device is different
-        if axes.lengths != op.axes.lengths:
-            op._axes = axes
-
+        op._axes = axes
         op.uuid = uuid.uuid4()
 
     return new_root
