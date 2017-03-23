@@ -24,34 +24,35 @@
 #define MKLDNN_NETLIST_MAX_SIZE 10
 
 struct mkldnn_netlist {
-    mkldnn_stream_t         stream;
-    int                     net_size;
-    mkldnn_primitive_t      net[MKLDNN_NETLIST_MAX_SIZE];
-    int                     prim_desc_count;
-    int                     prim_count;
-    int                     buffer_count;
-    mkldnn_primitive_desc_t prim_desc_list[3*MKLDNN_NETLIST_MAX_SIZE];
-    mkldnn_primitive_t      prim_list[3*MKLDNN_NETLIST_MAX_SIZE];
-    float*                  buffer_list[MKLDNN_NETLIST_MAX_SIZE];
+  mkldnn_stream_t stream;
+  int net_size;
+  mkldnn_primitive_t net[MKLDNN_NETLIST_MAX_SIZE];
+  int prim_desc_count;
+  int prim_count;
+  int buffer_count;
+  mkldnn_primitive_desc_t prim_desc_list[3 * MKLDNN_NETLIST_MAX_SIZE];
+  mkldnn_primitive_t prim_list[3 * MKLDNN_NETLIST_MAX_SIZE];
+  float* buffer_list[MKLDNN_NETLIST_MAX_SIZE];
 };
 
-typedef struct mkldnn_netlist *mkldnn_netlist_t;
+typedef struct mkldnn_netlist* mkldnn_netlist_t;
 
+#define MKL_CHECK(f)                                                       \
+  do {                                                                     \
+    mkldnn_status_t s = f;                                                 \
+    if (s != mkldnn_success) {                                             \
+      printf("[%s:%d] error: %s returns %d\n", __FILE__, __LINE__, #f, s); \
+      exit(2);                                                             \
+    }                                                                      \
+  } while (0)
 
-#define MKL_CHECK(f) do { \
-    mkldnn_status_t s = f; \
-    if (s != mkldnn_success) { \
-        printf("[%s:%d] error: %s returns %d\n", __FILE__, __LINE__, #f, s); \
-        exit(2); \
-    } \
-} while(0)
+#define MKL_CHECK_TRUE(expr)                                    \
+  do {                                                          \
+    int e_ = expr;                                              \
+    if (!e_) {                                                  \
+      printf("[%s:%d] %s failed\n", __FILE__, __LINE__, #expr); \
+      exit(2);                                                  \
+    }                                                           \
+  } while (0)
 
-#define MKL_CHECK_TRUE(expr) do { \
-    int e_ = expr; \
-    if (!e_) { \
-        printf("[%s:%d] %s failed\n", __FILE__, __LINE__, #expr); \
-        exit(2); \
-    } \
-} while(0)
-
-#endif // MKLDNN_UTIL_H_
+#endif  // MKLDNN_UTIL_H_

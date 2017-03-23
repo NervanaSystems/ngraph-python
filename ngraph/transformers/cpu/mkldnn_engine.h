@@ -21,24 +21,30 @@
 
 size_t product(int *arr, size_t size);
 
-void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes, int *primitive_dst_sizes, int *primitive_weights_sizes, int *primitive_strides, int *primitive_padding, \
-                                    int *mkl_src_sizes, int *mkl_dst_sizes, int *mkl_weights_sizes, int *mkl_strides , int *mkl_padding);
+void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes,
+                        int *primitive_dst_sizes, int *primitive_weights_sizes,
+                        int *primitive_strides, int *primitive_padding,
+                        int *mkl_src_sizes, int *mkl_dst_sizes,
+                        int *mkl_weights_sizes, int *mkl_strides,
+                        int *mkl_padding);
 
-void print_mkl_shape(int *mkl_src_sizes, int *mkl_dst_sizes, int *mkl_weights_sizes, \
-                     int mkl_src_dims, int mkl_weights_dims, int mkl_dst_dims);
+void print_mkl_shape(int *mkl_src_sizes, int *mkl_dst_sizes,
+                     int *mkl_weights_sizes, int mkl_src_dims,
+                     int mkl_weights_dims, int mkl_dst_dims);
 
 void create_mkldnn_memory_primitive(uint32_t n_dim, const int *dims,
-        mkldnn_memory_format_t user_fmt, mkldnn_data_type_t data_type,
-        mkldnn_engine_t engine, float *data, 
-        mkldnn_primitive_t *memory);
+                                    mkldnn_memory_format_t user_fmt,
+                                    mkldnn_data_type_t data_type,
+                                    mkldnn_engine_t engine, float *data,
+                                    mkldnn_primitive_t *memory);
 
 void create_mkldnn_reorder_primitive(
-        mkldnn_primitive_t *user_memory, /** in */
-        const_mkldnn_primitive_desc_t *prim_memory_pd, /** in */
-        int dir_is_user_to_prim, /** in: user -> prim or prim -> user */
-        mkldnn_primitive_t *prim_memory, /** out: memory primitive created */
-        mkldnn_primitive_t *reorder /** out: reorder primitive created */
-        );
+    mkldnn_primitive_t *user_memory,               /** in */
+    const_mkldnn_primitive_desc_t *prim_memory_pd, /** in */
+    int dir_is_user_to_prim,         /** in: user -> prim or prim -> user */
+    mkldnn_primitive_t *prim_memory, /** out: memory primitive created */
+    mkldnn_primitive_t *reorder      /** out: reorder primitive created */
+    );
 
 mkldnn_netlist_t create_mkldnn_netlist(void);
 
