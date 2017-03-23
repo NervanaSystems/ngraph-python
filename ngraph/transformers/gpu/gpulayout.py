@@ -18,7 +18,8 @@ import numpy as np
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp, \
+    Transpose
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
@@ -381,7 +382,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                 rem_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
                 for rm_axis in rem_axes:
                     self.sliced_out.append((rm_axis, predecessor_op.slices[rm_axis]))
-            elif isinstance(predecessor_op, ReorderAxes):
+            elif isinstance(predecessor_op, (ReorderAxes, Transpose)):
                 new_indexes = []
                 for a, p in self.mappings.items():
                     if isinstance(p, int):
@@ -528,11 +529,12 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
 
         # Add any offset from axes that are sliced out of the view
         for axis, s in self.sliced_out:
-            stride = arg_axis_strides[axis]
-            if isinstance(s, slice):
-                offset += (s.start * stride)
-            else:
-                offset += (s * stride)
+            if self.mappings[axis] != "bcast":
+                stride = arg_axis_strides[axis]
+                if isinstance(s, slice):
+                    offset += (s.start * stride)
+                else:
+                    offset += (s * stride)
 
         return GPULayoutView(shape, strides, offset=offset)
 

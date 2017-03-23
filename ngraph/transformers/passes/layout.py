@@ -22,6 +22,7 @@ from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, 
     SetItemOp, SequentialOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -335,6 +336,14 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(update_conv)
     def op_from_args(self, op, args):
         return update_conv(args[0], args[1], op.fprop.args[1], op.fprop)
+
+    @op_from_args.on_type(PoolingOp)
+    def op_from_args(self, op, args):
+        return PoolingOp(op.pool_params, args[0], axes=op.axes)
+
+    @op_from_args.on_type(BpropPoolOp)
+    def op_from_args(self, op, args):
+        return BpropPoolOp(args[0], op.fprop.args[0], op.fprop)
 
     @op_from_args.on_type(LookupTableOp)
     def op_from_args(self, op, args):
