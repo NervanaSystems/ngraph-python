@@ -20,6 +20,7 @@ import ngraph as ng
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
 from ngraph.transformers.base import transformer_choices
+from multiprocessing import active_children
 
 pytestmark = pytest.mark.hetr_only("module")
 
@@ -235,4 +236,21 @@ def test_gpu_send_and_recv(transformer_factory):
             assert computation(i) == i + 2
 
 def test_terminate_op(transformer_factory):
-    assert False
+    termOp = TerminateOp()
+    with ExecutorFactory() as ex:
+        computation = ex.executor(termOp)
+
+def test_process_leak(transformer_factory):
+    baseline = active_children() # probably 0 but not sure that's a gaurantee
+    with ng.metadata(device_id=('2')):
+        x = ng.constant(2)
+    assert len(baseline) == 0
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x)
+        assert len(active_children()) == 1
+        # raise ValueError()
+    assert active_children() == baseline
+
+class TerminateOp(ng.Op):
+    def __init__(self, **kwargs):
+        super(TerminateOp, self).__init__(**kwargs)
