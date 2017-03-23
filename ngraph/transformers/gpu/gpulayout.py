@@ -364,6 +364,13 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                             if p > bcast_axis:
                                 offset += 1
                         self.mappings[a] = p - offset
+
+                for i in range(len(self.sliced_out)):
+                    if self.sliced_out[i][0] in bcast_axes:
+                        self.sliced_out[i] = (self.sliced_out[i][0], "bcast")
+                    else:
+                        new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
+                        self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
             elif isinstance(predecessor_op, TensorSliceOp):
                 new_indexes = []
                 for index, axis in enumerate(pred_axes):
@@ -529,7 +536,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
 
         # Add any offset from axes that are sliced out of the view
         for axis, s in self.sliced_out:
-            if self.mappings[axis] != "bcast":
+            if s != "bcast":
                 stride = arg_axis_strides[axis]
                 if isinstance(s, slice):
                     offset += (s.start * stride)
