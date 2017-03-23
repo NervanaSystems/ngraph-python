@@ -31,7 +31,7 @@ from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutCons
 
 class DimshuffleOp(TensorOp):
     """
-    Layout transformation op for GPU
+    Layout transformation op for GPU which does a copy
 
     Parameters:
         x (TensorOp): A tensor.
@@ -46,6 +46,9 @@ class DimshuffleOp(TensorOp):
 
 
 class GPUReshapeOp(ReshapeOp):
+    """
+    Layout transformation op for a GPU which does not copy, but changes shape and/or strides
+    """
     def __init__(self, x, view, **kwargs):
         super(GPUReshapeOp, self).__init__(x, axes=x.axes, **kwargs)
         self.layout_view = view
@@ -141,6 +144,23 @@ def get_split_groups(num_axes, num_groups):
 
 
 class GPULayoutAssignment(LayoutAssignment):
+    """
+    GPU implementation of device specific layout descriptor. The layout is implemented
+    by a list of axis groups where each group of axes must be contiguous in memory.
+
+    Attributes:
+        ng_axes: List of Axis objects stored by this layout (unflattened)
+        axes: List of lists where each list is a group of axis indices.
+        shape: Tensor shape calculated from layout axes groups
+        strides: Tensor strides calculated from layout axes groups
+        offset: Tensor offset from buffer base
+
+    Example:
+        ng_axes = [Axis(C), Axis(H), Axis(W), Axis(N)]
+        axes = [[0, 2], [1], [3]]
+        This means C and W are flattened into a single contiguous axis in memory and the
+        other axes are unconstrained, meaning they may be strided in any way.
+    """
     def __init__(self, axes, order=None):
         self.ng_axes = axes
         if order:
@@ -246,6 +266,9 @@ class GPULayoutAssignment(LayoutAssignment):
 
     @staticmethod
     def factory(op):
+        """
+        Generates a list of possible layouts given an op
+        """
         if isinstance(op, AssignOp):
             return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
         elif isinstance(op, UnaryElementWiseOp):
