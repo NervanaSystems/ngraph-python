@@ -328,4 +328,6 @@ class RMSProp(LearningRateOptimizer):
                                                 / (ng.sqrt(state + epsilon) + epsilon)))
             ]))
 
-        return ng.doall(all_updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads] + [updates])

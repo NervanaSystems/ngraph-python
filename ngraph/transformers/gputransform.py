@@ -15,7 +15,6 @@
 from builtins import range
 import atexit
 import sys
-import collections
 
 from ngraph.transformers.base import UnsupportedTransformerException
 
@@ -28,26 +27,24 @@ except ImportError:
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
     DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
-from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
-    DotLowDimension, Max, Min, OneHotOp, \
+from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
+    Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
     AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
-    ReductionOp, DotOp, TensorOp
+    Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
 from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
-from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
+from ngraph.transformers.passes.passes import SimplePrune
 from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
-from ngraph.transformers.passes.nviz import VizPass
+# from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
@@ -377,18 +374,6 @@ class GPUKernelGroup(object):
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
-    #@add_kernel.on_type(Function)
-    #def add_kernel(self, op):
-    #    # Iterate over compounded operations and build kernel for them
-    #    kernel = ElementWiseKernel(self.transformer)
-    #    for sub_op in op.instructions:
-    #        out = sub_op.tensor_description()
-    #        call_info = (_ for _ in sub_op.call_info())
-    #        kernel.add_op(sub_op, out, *call_info)
-
-    #    if kernel.generate_source(self.sourcefile):
-    #        self.kernels.append(kernel)
-
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
         self.kernels.append(ConvFpropKernel(self.transformer, op))
@@ -484,8 +469,6 @@ class GPUKernelGroup(object):
                 k.bind_buffers()
 
             self.setup_kernel_execute(k)
-            #if isinstance(k, ElementWiseKernel) and k.ops_buffer[0][0] == "onehot":
-            #    import pdb; pdb.set_trace()
             k.execute()
             self.after_kernel_execute(k)
 
@@ -605,7 +588,7 @@ class GPURegister():
 
 class GPUDeviceBufferReference(DeviceBufferReference):
     """
-    Analogous to CPUDeviceBufferReference.
+    Analogous to NumPyDeviceBufferReference.
     """
     def __init__(self, transformer, **kwargs):
         super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
@@ -613,7 +596,7 @@ class GPUDeviceBufferReference(DeviceBufferReference):
 
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
-    Used to transform device allocations. Analogous to CPUDeviceBufferStorage.
+    Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
     """
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
@@ -647,7 +630,7 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
 
 class GPUDeviceTensor(DeviceTensor):
     """
-    Used to transform device tensor allocations. Analogous to CPUDeviceTensor.
+    Used to transform device tensor allocations. Analogous to NumPyDeviceTensor.
     """
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
@@ -1025,7 +1008,7 @@ class GPUTransformer(Transformer):
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
-                             layout_convert_pass, VizPass()]
+                             layout_convert_pass]  # , VizPass()]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()

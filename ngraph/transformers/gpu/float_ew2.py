@@ -283,7 +283,8 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False, missing_axis=None):
+    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False,
+                 missing_axis=None):
         self.dtype = tensor_description.dtype
         self.td = tensor_description
 
@@ -304,7 +305,6 @@ class TensorDescriptionWrapper:
 
         if kernel_axes is not None:
             if len(self.shape) != kernel_axes or len(self.strides) != kernel_axes:
-                import pdb; pdb.set_trace()
                 raise ValueError("Invalid tensor view input for kernel generator")
 
         self.strides = tuple(self.strides)

@@ -259,5 +259,4 @@ class GEMMKernel(GPUKernel):
         if self.use_cublas:
             raise NotImplementedError("Not yet supported")
         else:
-            #import pdb; pdb.set_trace()
             self.kernel.prepared_async_call(*self.params)

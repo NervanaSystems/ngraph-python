@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
+from ngraph.op_graph.op_graph import TensorOp
 
 
 def convolution(conv_params, inputs, filters, axes, docstring=None):

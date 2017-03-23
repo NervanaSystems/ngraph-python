@@ -1138,9 +1138,9 @@ class TensorOp(Op):
                                      is_placeholder=self.is_placeholder)
         else:
             return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                 is_persistent=self.is_persistent,
-                                 is_input=self.is_input,
-                                 is_placeholder=self.is_placeholder)
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):

@@ -84,7 +84,8 @@ class VizPass(GraphPass):
             to stdout.
 
     """
-    def __init__(self, subgraph_attr=None, show_axes=False, show_metadata=None, show_all_metadata=False, view=True):
+    def __init__(self, subgraph_attr=None, show_axes=False, show_metadata=None,
+                 show_all_metadata=False, view=True):
         super(VizPass, self).__init__()
         self.show_axes = show_axes
         self.show_all_metadata = show_all_metadata

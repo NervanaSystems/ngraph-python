@@ -298,10 +298,7 @@ class AddLayoutConversions(PeepholeGraphPass):
     @generic_method(dispatch_base_type=Op)
     def op_from_args(self, op, args):
         op_type = type(op)
-        try:
-            new_op = op_type(*args)
-        except:
-            import pdb; pdb.set_trace()
+        new_op = op_type(*args)
         return new_op
 
     @op_from_args.on_type(OneHotOp)
@@ -374,7 +371,7 @@ class AddLayoutConversions(PeepholeGraphPass):
                     new_args.append(arg)
 
             # Replace op if any inputs need to be transformed
-            if any(a is not b for a,b in zip(new_args, list(op.args))):
+            if any(a is not b for a, b in zip(new_args, list(op.args))):
                 new_op = self.op_from_args(op, new_args)
                 self.replace_op(op, new_op)
                 self.visited.append(new_op)

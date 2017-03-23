@@ -15,16 +15,10 @@
 import collections
 import numpy as np
 
-from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
-    DotLowDimension, Max, Min, OneHotOp, \
-    Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
-    ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
-    Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod, UnaryElementWiseOp, BinaryElementWiseOp, \
+from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
+    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
     ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, \
-    RngOp
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
@@ -45,7 +39,7 @@ class DimshuffleOp(TensorOp):
 
     def __init__(self, x, in_view, out_view, axis_order, **kwargs):
         super(DimshuffleOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
-        #TODO: dtype?
+        # TODO: dtype?
         self.in_view = in_view
         self.out_view = out_view
         self.axis_order = tuple(axis_order)
@@ -123,7 +117,7 @@ def enumerate_axis_orders(axes):
 
 
 def split_points_to_groups(split_points, num_axes):
-    result = [list(range(s, split_points[i+1])) for i, s in enumerate(split_points[:-1])]
+    result = [list(range(s, split_points[i + 1])) for i, s in enumerate(split_points[:-1])]
     result = [list(range(split_points[0]))] + result + [list(range(split_points[-1], num_axes))]
     return result
 
@@ -134,7 +128,7 @@ def get_split_groups(num_axes, num_groups):
     split_points = [(i + 1) for i in range(num_splits)]
     results = []
 
-    for split in reversed(range(num_splits)):
+    for split in reversed(tuple(range(num_splits))):
         limit = num_axes if split == (num_splits - 1) else split_points[split + 1]
 
         while split_points[split] < (limit - 1):
@@ -224,10 +218,8 @@ class GPULayoutAssignment(LayoutAssignment):
         if len(axes_list) > max_out_axes:
             split_points = [(i + 1) for i in range(max_out_axes - 1)]
             layout = split_points_to_groups(split_points, len(axes_list))
-            num_groups = max_out_axes
         else:
             layout = [[i] for i in range(len(axes_list))]
-            num_groups = len(axes_list)
 
         return [GPULayoutAssignment(axes_list, layout)]
 
@@ -338,7 +330,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                 bcast_mappings = [a for a in self.mappings if self.mappings[a] in bcast_axes]
                 for bcast in bcast_mappings:
                     self.mappings[bcast] = "bcast"
-                for a, p in self.mappings.iteritems():
+                for a, p in self.mappings.items():
                     if isinstance(p, int):
                         offset = 0
                         for bcast_axis in bcast_axes:
@@ -352,7 +344,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                     if predecessor_op.slices[new_index] != slice(None, None, None):
                         new_index = ("slice", new_index, predecessor_op.slices[new_index])
                     if new_index != index:
-                        for a, p in self.mappings.iteritems():
+                        for a, p in self.mappings.items():
                             if isinstance(p, int) and p == index:
                                 new_indexes.append((a, new_index))
 
@@ -360,12 +352,12 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                     self.mappings[a] = p
 
                 # Find any axes that are sliced out and add these to offset calculations
-                removed_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
-                for rm_axis in removed_axes:
+                rem_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
+                for rm_axis in rem_axes:
                     self.sliced_out.append((rm_axis, predecessor_op.slices[rm_axis]))
             elif isinstance(predecessor_op, ReorderAxes):
                 new_indexes = []
-                for a, p in self.mappings.iteritems():
+                for a, p in self.mappings.items():
                     if isinstance(p, int):
                         new_indexes.append((a, pred_arg_axes.index(pred_axes[p])))
                 for a, p in new_indexes:
@@ -381,7 +373,6 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             elif isinstance(predecessor_op, Unflatten):
                 pass
             else:
-                import pdb; pdb.set_trace()
                 raise RuntimeError("Confused")
             predecessor_op = predecessor_op.args[0]
 
@@ -403,7 +394,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
     def group_axis_contig(self, arg_mem_order, op_group):
         # Convert op group to arg group
         arg_group = [self.map(a) for a in op_group]
-        
+
         # If broadcasts included, not contiguous
         if any(a == "bcast" for a in arg_group) or len(op_group) == 0:
             return False
@@ -415,7 +406,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         compatible = False
         group_len = len(arg_group)
         for i in range(len(arg_mem_order) - group_len + 1):
-            if arg_mem_order[i:i+group_len] == arg_group:
+            if arg_mem_order[i:i + group_len] == arg_group:
                 compatible = True
                 break
         return compatible
@@ -423,7 +414,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
     def group_axis_strided_valid(self, arg_mem_order, op_group):
         # Convert op group to arg group
         arg_group = [self.map(a) for a in op_group]
-        
+
         # If broadcasts included, all axes in group must be broadcast
         if any(a == "bcast" for a in arg_group):
             return all(a == "bcast" for a in arg_group)
@@ -435,7 +426,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         compatible = False
         group_len = len(arg_group)
         for i in range(len(arg_mem_order) - group_len + 1):
-            if arg_mem_order[i:i+group_len] == arg_group:
+            if arg_mem_order[i:i + group_len] == arg_group:
                 compatible = True
                 break
         return compatible
@@ -473,7 +464,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         arg_axis_strides = [1] * len(arg_axes)
         for i in reversed(arg_mem_order[1:]):
             base_strides.insert(0, arg_axes[i].length * base_strides[0])
-        
+
         for index, i in enumerate(arg_mem_order):
             arg_axis_strides[i] = base_strides[index]
 
@@ -500,7 +491,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
                 else:
                     start = group[0][2]
                     slice_stride = 1
-                    
+
                 strides.append(arg_axis_strides[arg_mem_axis] * slice_stride)
                 # Add slice to offset
                 offset += (start * arg_axis_strides[arg_mem_axis])
@@ -760,7 +751,6 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
             self.reduction_axes = flatten(get_axes_list(self.op.reduction_axes))
             self.out_axes = flatten(get_axes_list(self.op.y_out_axes))
         else:
-            import pdb; pdb.set_trace()
             raise ValueError("Invalid argument for constraint")
 
     def needs_transform(self, arg_layout, op_layout):
@@ -791,7 +781,7 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 
                 if self.group_axis_contig(arg_mem_order, required_layout):
                     return False
-        
+
         return True
 
     def get_cost(self, arg_layout, op_layout):
@@ -844,7 +834,8 @@ class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPULutLayoutConstraint, self).__init__(op, arg)
         if len(arg.axes) == 2:
-            self.order = [flatten(get_axes_list(Axes(arg.axes[0]))), flatten(get_axes_list(Axes(arg.axes[1])))]
+            self.order = [flatten(get_axes_list(Axes(arg.axes[0]))),
+                          flatten(get_axes_list(Axes(arg.axes[1])))]
         else:
             self.order = [flatten(get_axes_list(arg.axes))]
 
