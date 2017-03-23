@@ -233,7 +233,7 @@ def test_scatter_gather_graph(transformer_factory):
         ops_to_transform=graph_ops,
         expected_recv_nodes=[x_plus_y])
 
-    
+
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv(transformer_factory):
     # skip if gpu unavailable
