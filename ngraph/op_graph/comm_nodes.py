@@ -225,8 +225,12 @@ class CPUQueueScatterSendOp(ScatterSendOp):
 
     def __init__(self, from_node, to_node):
         super(CPUQueueScatterSendOp, self).__init__(from_node, to_node)
-        self.shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
+        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
         self.comm_type = 'queue'
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class CPUQueueScatterRecvOp(ScatterRecvOp):
@@ -237,19 +241,29 @@ class CPUQueueScatterRecvOp(ScatterRecvOp):
             self.idx = device_idx
         else:
             self.idx = 0
-        self.shared_queues = send_node.shared_queues
+        self._shared_queues = send_node._shared_queues
 
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 class CPUQueueGatherSendOp(GatherSendOp):
 
     def __init__(self, from_node, clone_node=None, device_idx=None):
         super(CPUQueueGatherSendOp, self).__init__(from_node)
         self.idx = 0
-        self.shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
+        self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
 
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 class CPUQueueGatherRecvOp(GatherRecvOp):
 
     def __init__(self, from_node, to_node, send_node):
         super(CPUQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
-        self.shared_queues = send_node.shared_queues
+        self._shared_queues = send_node._shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues

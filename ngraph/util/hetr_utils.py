@@ -125,7 +125,7 @@ def clone_graph(root, device_id, shared_queues_idx, axes):
         op.metadata['transformer'] = op.metadata['device'] + str(device_id)
         op.metadata['device_id'] = str(device_id)
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
-            op.shared_queues = orig_ops[op.uuid].shared_queues
+            op._shared_queues = orig_ops[op.uuid].shared_queues
             op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()

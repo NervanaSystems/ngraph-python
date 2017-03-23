@@ -39,7 +39,6 @@ import pkgutil
 import importlib
 from collections import Iterable
 from builtins import map
-from multiprocessing.queues import Queue
 
 import six
 import numpy as np
@@ -191,12 +190,8 @@ def assign_op_attr(message, value):
             for item in value:
                 if is_scalar_type(item):
                     assign_scalar(message.repeated_scalar.val.add(), item)
-                elif isinstance(item, Queue):
-                    # hetr only, skip shared queues
-                    continue
                 else:
                     raise unhandled_scalar_value(item)
-
         else:
             assign_scalar(message.repeated_scalar.val.add(), '_ngraph_iter_sentinel_')
     elif isinstance(value, Op):
@@ -407,8 +402,8 @@ def protobuf_attr_to_python(val):
     elif val.HasField('axis'):
         return pb_to_axis(val.axis)
     elif str(val) == '':
-        # hetr only, for shared queues
-        # shared queues skipped serialization, so val.__str__ will be '' here
+        # hetr only, for skipped attrs, so val.__str__ will be ''
+        # now only for metadata['hetr_replaced_by', 'replaces_op']
         pass
     else:
         raise ValueError("Cannot convert {} to python attribute value".format(val))
