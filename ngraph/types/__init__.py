@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.op_graph.axes import Axis, AxisRole, Axes
+from ngraph.op_graph.axes import Axis, Axes
 from ngraph.op_graph.op_graph import AssignableTensorOp, Op, TensorOp
 from ngraph.util.names import NameableValue
 from ngraph.transformers.base import Transformer, Computation
@@ -21,7 +21,6 @@ from ngraph.transformers.base import Transformer, Computation
 __all__ = [
     'AssignableTensorOp',
     'Axis',
-    'AxisRole',
     'Axes',
     'Computation',
     'NameableValue',
