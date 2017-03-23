@@ -137,12 +137,13 @@ class ScatterSendOp(SendOp):
         super(ScatterSendOp, self).__init__(from_node)
         self.to_id = to_node.metadata['device_id']
         self._slices = get_slices(self.axes,
-                                 to_node.metadata['parallel'],
-                                 len(self.to_id))
+                                  to_node.metadata['parallel'],
+                                  len(self.to_id))
 
     @property
     def slices(self):
         return self._slices
+
 
 class ScatterRecvOp(RecvOp):
     """
@@ -187,11 +188,13 @@ class GatherRecvOp(RecvOp):
         self.from_id = from_node.metadata['device_id']
         # use _slices to avoid serialization
         self._slices = get_slices(self.axes,
-                                 self.metadata['parallel'],
-                                 len(self.from_id))
+                                  self.metadata['parallel'],
+                                  len(self.from_id))
+
     @property
     def slices(self):
         return self._slices
+
 
 class GpuQueueSendOp(SendOp):
 
@@ -247,6 +250,7 @@ class CPUQueueScatterRecvOp(ScatterRecvOp):
     def shared_queues(self):
         return self._shared_queues
 
+
 class CPUQueueGatherSendOp(GatherSendOp):
 
     def __init__(self, from_node, clone_node=None, device_idx=None):
@@ -257,6 +261,7 @@ class CPUQueueGatherSendOp(GatherSendOp):
     @property
     def shared_queues(self):
         return self._shared_queues
+
 
 class CPUQueueGatherRecvOp(GatherRecvOp):
 
