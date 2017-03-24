@@ -59,9 +59,10 @@ def check_device_assign_pass(default_device, default_device_id,
             assert op.metadata['device'] == graph_op_metadata[op][0]
             assert op.metadata['device_id'] == graph_op_metadata[op][1]
             assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
-                str(graph_op_metadata[op][1])
+                str(graph_op_metadata[op][1][0])
 
-            expected_transformers.add(op.metadata['transformer'])
+            for device_id in graph_op_metadata[op][1]:
+                expected_transformers.add(graph_op_metadata[op][0] + device_id)
         assert hetr.transformers == expected_transformers
 
 
@@ -198,6 +199,37 @@ def test_computation_return_list(transformer_factory):
         computation = ex.executor([x_plus_one, x_plus_two, x_mul_three], x)
         for i in [10, 20, 30]:
             assert computation(i) == (i + 1, i + 2, i * 3)
+
+
+def test_scatter_gather_graph(transformer_factory):
+    # Build the graph
+    W = ng.make_axis(length=6, name='width')
+
+    with ng.metadata(device_id='0'):
+        x = ng.placeholder(())
+        z = ng.placeholder(())
+
+    with ng.metadata(device_id=('1', '2'), parallel=W):
+        y = ng.placeholder(())
+
+    x_plus_z = x + z  # Does not create a recv node
+    x_plus_y = x + y  # creates a gather recv node
+
+    # Build the graph metadata
+    graph_ops = OrderedSet([x, y, z, x_plus_z, x_plus_y])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = ["cpu", '0']
+    graph_op_metadata[z] = ["cpu", '0']
+    graph_op_metadata[y] = ["cpu", ('1', '2')]
+    graph_op_metadata[x_plus_z] = ["cpu", '0']
+    graph_op_metadata[x_plus_y] = ["cpu", '0']
+
+    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
+
+    check_communication_pass(
+        ops_to_transform=graph_ops,
+        expected_recv_nodes=[x_plus_y])
 
 
 @pytest.mark.hetr_gpu_only
