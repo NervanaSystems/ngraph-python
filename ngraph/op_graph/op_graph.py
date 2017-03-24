@@ -2821,9 +2821,17 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes | y.axes
-        x = broadcast(x, axes)
-        y = broadcast(y, axes)
+
+        x_axes_bcast = x.axes + (y.axes - x.axes)
+        y_axes_bcast = y.axes + (x.axes - y.axes)
+
+        if y_axes_bcast == y.axes:
+            axes = y_axes_bcast
+        else:
+            axes = x_axes_bcast
+
+        x = axes_with_order(broadcast(x, x_axes_bcast), axes)
+        y = axes_with_order(broadcast(y, y_axes_bcast), axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
