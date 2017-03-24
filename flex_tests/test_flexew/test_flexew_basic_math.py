@@ -17,7 +17,7 @@ import pytest
 
 import ngraph as ng
 from ngraph.testing.flexutil import template_one_placeholder
-
+import operator as op
 pytestmark = pytest.mark.transformer_dependent("module")
 
 MINIMUM_FLEX_VALUE = -2 ** 15
@@ -40,11 +40,11 @@ test_data_single_operand = (
     # template:(operation, operand, expected_result, description)
 
     # test_assign
-    bug_1103((ng.as_op, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
-    bug_1103((ng.as_op, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
-    (ng.as_op, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
-    (ng.as_op, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value"),
-    (ng.as_op, [0.4], [0.399993896484375], "Assign function of positive values from flex range - check high precision"),
+    bug_1103((ng.value_of, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
+    bug_1103((ng.value_of, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
+    (ng.value_of, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
+    bug_1103((ng.value_of, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value")),
+    (ng.value_of, [0.4], [0.399993896484375], "Assign function of positive values from flex range - check high precision"),
 
     # test_neg
     bug_1103((ng.negative, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Negate function - overflow expected")),
