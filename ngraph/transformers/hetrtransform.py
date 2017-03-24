@@ -21,7 +21,8 @@ from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
 from orderedset import OrderedSet
-from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
+from ngraph.op_graph.op_graph import Op, TensorValueOp
+from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
@@ -185,15 +186,6 @@ class AsyncTransformer(Process):
                 else:
                     # TODO handle and exit gracefully
                     raise
-
-
-class ResultOp(TensorOp):
-
-    def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self, args=args)
-        self.metadata['device_id'] = device_id
-        self.axes = args[0].axes
-        self.dtype = args[0].dtype
 
 
 class HetrComputation(Computation):
