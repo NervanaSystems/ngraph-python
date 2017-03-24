@@ -218,9 +218,9 @@ Elementwise Binary Ops
   Axis order is determined by the following rules:
   1. If the set of axes for both operands match exactly, but the order is
     different, use the order of the left operand.
-  1. If one operand's axes are a superset of the other's, use that operand's axis
+  2. If one operand's axes are a superset of the other's, use that operand's axis
     order
-  2. Otherwise order is determined by concatenating the left operand's axes with
+  3. Otherwise order is determined by concatenating the left operand's axes with
     the axes from the right operand which are not present in the left operand
     (left_axes + (right_axes - left_axes)).
 
