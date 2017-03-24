@@ -397,6 +397,7 @@ class AddLayoutConversions(PeepholeGraphPass):
             # Replace op if any inputs need to be transformed
             if any(a is not b for a, b in zip(new_args, list(op.args))):
                 new_op = self.op_from_args(op, new_args)
+                new_op.metadata["layout"] = op.metadata["layout"]
                 self.replace_op(op, new_op)
                 self.visited.append(new_op)
                 self.binary_constraints[new_op] = self.binary_constraints[op]

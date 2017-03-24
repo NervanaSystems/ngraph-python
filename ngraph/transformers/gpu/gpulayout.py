@@ -428,6 +428,9 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return self.mappings[axis_position]
 
     def group_axis_contig(self, arg_mem_order, op_group):
+        if not op_group:
+            return True
+
         # Convert op group to arg group
         arg_group = [self.map(a) for a in op_group]
 
@@ -742,7 +745,7 @@ class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
         if self.needs_transform(arg_layout, op_layout):
             return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
         else:
-            return arg
+            return self.get_reshape(arg_mem_order, arg_axes, [self.order], arg)
 
 
 class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
@@ -770,7 +773,7 @@ class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
         if self.needs_transform(arg_layout, op_layout):
             return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
         else:
-            return arg
+            return self.get_reshape(arg_mem_order, arg_axes, [self.order], arg)
 
 
 class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
