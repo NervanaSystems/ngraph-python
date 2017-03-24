@@ -328,9 +328,6 @@ class Op(NameableValue, DebugInfo):
         self._is_persistent = persistent
         self._is_trainable = trainable
 
-        # Parent pointer for sequencing ops
-        self.parent = None
-
         # Add this op to the all op accounting lists
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
@@ -846,7 +843,6 @@ class ParallelOp(ControlBlockOp):
     def __init__(self, all, **kwargs):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
-            op.parent = self
             self.add_control_dep(op)
 
 
@@ -1396,7 +1392,6 @@ class SequentialOp(ValueOp):
         # State => op_tops that have read state
         readers = defaultdict(OrderedSet)
         for op_top in self._ops:
-            op_top.parent = self
             ordered_ops = Op.ordered_ops([op_top])
             # Make ops that read/write state execute after the op_tops that last read/wrote
             # the state.
@@ -1906,75 +1901,10 @@ class TensorSliceOp(ReshapeOp):
         Returns:
           TODO
         """
-
-        # import pdb; pdb.set_trace()
-        tensor_op = x.tensor
-        if tensor_op not in adjoints:
-            # For a single (or the first) bprop of a sliced tensor, we allocate a temporary buffer
-            # through _unslice and write into that after filling it with 0's
-            new_delta = _unslice(delta, self.slices, x.axes)
-            new_delta.metadata['unslice_destination'] = True
-            adjoints[tensor_op] = new_delta
-        # elif 'unslice_destination' in adjoints[tensor_op].metadata and \
-        #         not _is_overlapping_slice(adjoints[tensor_op].parent, self.slices):
-        elif 'unslice_destination' in adjoints[tensor_op].metadata:
-            # This is an optimization for when we are slicing multiple non-overlapping regions of
-            # a tensor
-            print("Saving memory")
-            print(adjoints[tensor_op].control_deps)
-            print(adjoints[tensor_op].parent.ops)
-            # This would be the most efficient, but we'd need to figure out the right control deps
-            # to add (this creates a non DAG graph)
-            adjoints[tensor_op]._control_deps.add(SetItemOp(adjoints[tensor_op],
-                                                            self.slices,
-                                                            delta))
-            # seq_op = adjoints[tensor_op].parent
-            # assert(isinstance(seq_op, SequentialOp))
-            # seq_op.ops.insert(-1, SetItemOp(adjoints[tensor_op], self.slices, delta))
-            # # Trigger setter to reconfigure _control_deps
-            # seq_op.ops = seq_op.ops
-            print(adjoints[tensor_op].control_deps)
-            print(adjoints[tensor_op].parent.ops)
-        else:
-            print("typeof adjoints[tensor_op]: {}".format(type(adjoints[tensor_op])))
-            # General case we have to allocate extra memory and add them
-            new_delta = _unslice(delta, self.slices, x.axes)
-            adjoints[tensor_op] = adjoints[tensor_op] + new_delta
-
-
-def _is_overlapping_slice(seq_op, slices):
-    """
-    Check if region described by `slices` overlaps with any SetItem assignment slices in `seq_op`.
-    Arguments:
-      seq_op: <SequentialOp> to check inside
-      slices <list<slice>>: List of slices describing a tensor slice
-    Returns:
-      <boolean> if these slices overlap any in the sequential op
-    """
-    for op in seq_op.ops:
-        if not isinstance(op, SetItemOp):
-            continue
-        assert len(op.item) == len(slices)
-        for s1, s2 in zip(op.item, slices):
-            if isinstance(s1, int) and isinstance(s2, int):
-                if s1 != s2:
-                    break
-            elif isinstance(s1, slice) and isinstance(s2, slice):
-                # TODO(jknight): handle Nones (or check Nones)
-                if s1.stop < s2.start:
-                    break
-                elif s2.stop < s1.start:
-                    break
-            else:
-                if isinstance(s1, slice):
-                    s1, s2 = s2, s1
-                # s1 int, s2 slice
-                # TODO(jknight): handle steps here
-                if s1 < s2.start or s1 > s2.stop:
-                    break
-        else:  # couldn't find any slices which didn't overlap
-            return True
-    return False
+        x.generate_add_delta(
+            adjoints,
+            _unslice(delta, self.slices, x.axes)
+        )
 
 
 def slice_along_axis(x, axis, idx):
@@ -2527,9 +2457,7 @@ def _unslice(x, slices, axes):
         slices: The slices.
         input_axes: The axes of the input x.
     """
-    op_tensor = UnsliceOp(x, slices, axes).value_tensor
-    op_tensor.metadata['unslice_destination'] = True
-    return op_tensor
+    return UnsliceOp(x, slices, axes).value_tensor
 
 
 class RngOp(TensorOp):
