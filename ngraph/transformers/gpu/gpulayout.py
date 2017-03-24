@@ -24,7 +24,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
     UnaryLayoutConstraint
