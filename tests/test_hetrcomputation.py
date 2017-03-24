@@ -94,9 +94,9 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
             for each_arg in op.args:
                 op_list_instance_type.append(type(each_arg))
 
-            if (ng.factory.comm_nodes.CPUQueueRecvOp in op_list_instance_type or
-                ng.factory.comm_nodes.CPUQueueGatherRecvOp in op_list_instance_type or
-                    ng.factory.comm_nodes.CPUQueueScatterRecvOp in
+            if (ng.op_graph.comm_nodes.CPUQueueRecvOp in op_list_instance_type or
+                ng.op_graph.comm_nodes.CPUQueueGatherRecvOp in op_list_instance_type or
+                    ng.op_graph.comm_nodes.CPUQueueScatterRecvOp in
                     op_list_instance_type) is False:
                 assert False
             del op_list_instance_type[:]

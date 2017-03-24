@@ -13,10 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.transformers.passes.passes import GraphBuildingPass
-from ngraph.factory.comm_nodes import calculate_new_axes
+from ngraph.op_graph.comm_nodes import calculate_new_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
-from ngraph.util.hetr_utils import clone
+from ngraph.util.hetr_utils import clone_graph
 from orderedset import OrderedSet
 import socket
 
@@ -32,7 +32,7 @@ class DeviceAssignPass(GraphBuildingPass):
         device = op.metadata.setdefault('device', self.default_device)
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
-        host_transformer = (socket.gethostname(), device_id)
+        host_transformer = socket.gethostname()
         op.metadata['host_transformer'] = host_transformer
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = op.metadata['device'] + op.metadata['device_id'][0]
@@ -89,71 +89,26 @@ class DistributedPass(GraphBuildingPass):
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def clone_nodes(self, nodes, device_id, device_idx, new_axes):
-        # TODO (wenzhe)implement with serde (serialization)
-        subgraph = list()
-        elem = 0
-
-        # First find Add and then clone its args. This is needed to
-        # make sure Add has the correct arguments at init/clone time.
-        visit = nodes
-        add_op_list = list()
-        for v in visit:
-            if v.__class__.__name__ is 'Add':
-                add_op_list.append(visit.index(v))
-
-        while visit:
-            if len(add_op_list):
-                for i in add_op_list:
-                    v = visit[i]
-                    for arg in v.args:
-                        new_node = clone(node=arg, new_axes=new_axes,
-                                         device_id=device_id,
-                                         device_idx=device_idx)
-                        subgraph.append(new_node)
-                        visit.remove(arg)
-                        elem = elem + 1
-                    new_node = clone(node=v, new_axes=new_axes,
-                                     device_id=device_id,
-                                     arg1=subgraph[elem - 1],
-                                     arg2=subgraph[elem - 2])
-                    subgraph.append(new_node)
-                    visit.remove(v)
-                    add_op_list.pop(0)
-            else:
-                node = visit.pop()
-                subgraph.append(
-                    clone(node=node, new_axes=new_axes, device_id=device_id,
-                          device_idx=device_idx, send_nodes=self.send_nodes,
-                          arg1=subgraph[-1]))
-                elem = elem + 1
-
-        return subgraph
-
     def do_pass(self, ops, transformer):
 
         ops = OrderedSet(op.forwarded for op in ops)
 
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
-                # op is GatherSendOp
+                # op is GatherRecvOp
                 self.parallel_axes = op.metadata['parallel']
 
+                gather_send_op = op.send_node()
                 new_axes = calculate_new_axes(
-                    op.send_node().axes, self.parallel_axes,
-                    len(op.from_id), False)
-                Op.visit_input_closure(
-                    [op.send_node()],
-                    lambda x: setattr(x, '_axes', new_axes))
+                    gather_send_op.axes, self.parallel_axes, len(op.from_id))
 
-                nodes_to_clone = Op.ordered_ops([op.send_node()])
-                # clone nodes for other device_id
-                for i, id in enumerate(op.from_id[1:], start=1):
-                    # get axes for last device if it's different
-                    if i == (len(op.from_id) - 1) \
-                            and self.parallel_axes.length % len(op.from_id) > 0:
-                        new_axes = calculate_new_axes(
-                            op.axes, self.parallel_axes, len(op.from_id), True)
+                # clone nodes for each device_id
+                for i, id in enumerate(op.from_id):
+                    new_gather_send_op = clone_graph(root=gather_send_op, device_id=id,
+                                                     shared_queues_idx=i, axes=new_axes)
+                    self.send_nodes.add(new_gather_send_op)
 
-                    self.clone_nodes(nodes=nodes_to_clone, device_id=id,
-                                     device_idx=i, new_axes=new_axes)
+                self.send_nodes.remove(gather_send_op)
+                # how to make sure this part of the graph is not working?
+                for o in Op.ordered_ops([gather_send_op]):
+                    o.metadata['transformer'] = None
