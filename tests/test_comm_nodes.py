@@ -30,7 +30,7 @@ def test_calculate_new_axes_single_device():
 
 @pytest.mark.parametrize("axis, num", [(ax_A, 2), (ax_B, 3), (ax_C, 4), (ax_A, 5), (ax_B, 5),
                                        (ax_C, 5)])
-def test_calculate_new_axes_no_reminder(axis, num):
+def test_calculate_new_axes_no_remainder(axis, num):
     new_axes = calculate_new_axes(axes=axes, parallel_axis=axis, num_devices=num)
     expected_axes = ng.make_axes(
         [a if a != axis else ng.make_axis(length=axis.length / num, name=a.name) for a in axes])
@@ -38,7 +38,7 @@ def test_calculate_new_axes_no_reminder(axis, num):
 
 
 @pytest.mark.parametrize("axis, num", [(ax_B, 2), (ax_A, 3), (ax_B, 4), (ax_B, 6), (ax_C, 7)])
-def tests_calculate_new_axes_has_reminder(axis, num):
+def tests_calculate_new_axes_has_remainder(axis, num):
     with pytest.raises(AssertionError):
         calculate_new_axes(axes=axes, parallel_axis=axis, num_devices=num)
 
