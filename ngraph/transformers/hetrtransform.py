@@ -135,14 +135,17 @@ class AsyncTransformer(Process):
         return c
 
     def close(self):
-        if not self.started:
-            return
         if self.my_pid != os.getpid():
             # Forked into another process
             return
-        self.started = False
-        self.exit.set()
-        self.join()
+
+        # only join child thread if it has been started
+        if self.started:
+            self.started = False
+            self.exit.set()
+            self.join()
+
+        # safe to call manager shutdown more than once
         self.manager.shutdown()
 
     def run(self):
