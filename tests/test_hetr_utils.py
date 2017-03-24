@@ -13,8 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
-from ngraph.factory.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
-from ngraph.factory.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
+from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
+from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
 
 
@@ -110,7 +110,7 @@ def test_update_comm_deps():
     with ng.metadata(transformer='cpu0'):
         z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = create_graph()
     update_comm_deps((z, send_x))
-    assert recv_x_plus_one in z.control_deps
+    assert recv_x_plus_one in z.all_deps
 
 
 def test_update_comm_deps_scatter_gather():
@@ -143,9 +143,9 @@ def test_update_comm_deps_scatter_gather():
     update_comm_deps((scatter_send_x, gather_send_x_plus_one_a, z_a))
     update_comm_deps((gather_send_x_plus_one_b,))
 
-    assert set([scatter_send_x]) == set(scatter_recv_a.control_deps)
+    assert set([scatter_send_x]) == set(scatter_recv_a.all_deps)
     assert set([scatter_send_x, gather_send_x_plus_one_a]) == \
-        set(gather_recv_x_plus_one_a.control_deps)
+        set(gather_recv_x_plus_one_a.all_deps)
 
 
 def test_scatter_gather_node_axes():

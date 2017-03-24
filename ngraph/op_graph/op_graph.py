@@ -30,6 +30,7 @@ from ngraph.op_graph.axes import TensorDescription, \
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
+from cached_property import cached_property
 
 
 def tensor_descriptions(args):
@@ -51,7 +52,6 @@ def tdcache():
 
     Returns:
         Cache decorator set to use a particular cache.
-
     """
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
@@ -279,7 +279,7 @@ class Op(NameableValue, DebugInfo):
             if node in counts:
                 continue
 
-            children = OrderedSet((child.forwarded for child in node.control_deps))
+            children = OrderedSet((child.forwarded for child in node.all_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -469,11 +469,6 @@ class Op(NameableValue, DebugInfo):
         return self
 
     @property
-    def args(self):
-        """All the inputs to this node."""
-        return self._args
-
-    @property
     def forward(self):
         """
         If not None, self has been replaced with forward.
@@ -504,7 +499,7 @@ class Op(NameableValue, DebugInfo):
         Finds the op that handles this op.
 
         Returns:
-             Follows forwarding to the op that shoud handle this op.
+             Follows forwarding to the op that should handle this op.
         """
         result = self
         while True:
@@ -512,14 +507,37 @@ class Op(NameableValue, DebugInfo):
                 return result
             result = result._forward
 
+    @cached_property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies of the op, including args and control_deps.
+            `x.all_deps == OrderedSet(x.args) | x.control_deps`, setter
+            functions are used to maintain this invariant. However, user
+            outside of the Op class should still avoid changing x._all_deps,
+            x._control_deps and x._args directly.
+        """
+        return OrderedSet(self.args) | self.control_deps
+
+    def invalidate_property_cache(self, property_name):
+        """
+        Invalidates self.all_deps cache
+        """
+        if property_name in self.__dict__:
+            del self.__dict__[property_name]
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self._args
+
     @property
     def control_deps(self):
         """
-
         Returns:
-            Ops that must execute before this one can.
+            Control dependency of the op.
         """
-        return self._control_deps | OrderedSet(self.args)
+        return self._control_deps
 
     def add_control_dep(self, dep):
         """
@@ -527,11 +545,13 @@ class Op(NameableValue, DebugInfo):
 
         Args:
             dep: The op.
-
         """
         dep = dep.forwarded
-        if dep is not self and dep not in self.control_deps:
+        if dep is not self and dep not in self.all_deps:
+            # update control_deps
             self._control_deps.add(dep)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def remove_control_dep(self, dep):
         """
@@ -542,28 +562,38 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
-        self._control_deps.remove(dep.forwarded)
+        if dep.forwarded in self.control_deps:
+            # update control_deps
+            self._control_deps.remove(dep.forwarded)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args and control_deps
+        Any subclass that uses ops stored outside of args and all_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
         for forwarding.
 
         """
+        # replace self._args with self._args's forwarded op
+        args_forward = [op.forward for op in self.args]
+        if any(forward is not None for forward in args_forward):
+            new_args = tuple([op.forwarded for op in self.args])
+            if self._args != new_args:
+                self._args = new_args
+                self.invalidate_property_cache('all_deps')
 
-        for op in self.control_deps:
-            if op.forward is not None:
-                self._args = tuple(arg.forwarded for arg in self._args)
-                control_deps = self._control_deps
-                self._control_deps = OrderedSet()
-                for op in control_deps:
-                    self.add_control_dep(op.forwarded)
-                break
+        # replace self._control_deps with self._control_deps's forwarded op
+        control_deps_forward = [op.forward for op in self.control_deps]
+        if any(forward is not None for forward in control_deps_forward):
+            new_control_deps = OrderedSet([op.forwarded for op in self.control_deps])
+            if self._control_deps != new_control_deps:
+                self._control_deps = new_control_deps
+                self.invalidate_property_cache('all_deps')
 
     def replace_self(self, rep):
         self.forward = as_op(rep)
@@ -774,7 +804,6 @@ class SetItemOp(Op):
         tensor (AssignableTensorOp): An assignable tensor.
         item: An index into the tensor.
         val (TensorOp): A value to assign.
-
     """
 
     def __init__(self, tensor, item, val, **kwargs):
@@ -1230,10 +1259,8 @@ class TensorOp(Op):
 class ValueOp(TensorOp, ControlBlockOp):
     """
     Mixin class for ops whose value is another op.
-
     Arguments:
         tensor: The tensor supplying the value for this op.
-
     """
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
@@ -1246,10 +1273,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def tensor(self):
         """
         The op that ultimately supplies the value. See value_tensor.
-
         Returns:
             The op that supplies the value.
-
         """
         return self._tensor.tensor
 
@@ -1257,10 +1282,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def value_tensor(self):
         """
         The op whose value is returned by this op.
-
         Returns:
             The immediate value returned by this op; see tensor for the closure.
-
         """
         return self._tensor
 
@@ -1269,8 +1292,11 @@ class ValueOp(TensorOp, ControlBlockOp):
         self._tensor = tensor
 
     @property
-    def control_deps(self):
-        base_deps = super(ValueOp, self).control_deps
+    def all_deps(self):
+        """
+        TODO: use cached property as other Op
+        """
+        base_deps = super(ValueOp, self).all_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
             return base_deps | OrderedSet([self.value_tensor])
@@ -1400,7 +1426,6 @@ def sequential(ops=None):
 
     Arguments:
         ops: Sequence of ops to compute.
-
     """
     sequential_op = SequentialOp(ops)
     sequential_op.deriv_handler = sequential_op.value_tensor
@@ -1416,7 +1441,6 @@ class TensorValueOp(ValueOp):
 
     This provides a way to maintain different control information on different
     versions of state.
-
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
@@ -1493,7 +1517,6 @@ class AxesCastOp(ReshapeOp):
     Arguments:
         x: A tensor.
         axes: The new axes.
-
     """
 
     def __init__(self, x, axes, **kwargs):
@@ -1749,7 +1772,6 @@ def axes_with_order(x, axes):
 
     Returns:
         TensorOp: The new tensor.
-
     """
     axes = make_axes(axes)
     if x.axes == axes:
@@ -2084,7 +2106,7 @@ class AssignableTensorOp(TensorOp):
 
     def add_control_dep(self, op):
         """
-        Allocations happen before executed ops, so control_deps are ignored.
+        Allocations happen before executed ops, so all_deps are ignored.
 
         Args:
             op:
@@ -2104,7 +2126,6 @@ def value_of(tensor):
 
     Returns:
         A copy of the value.
-
     """
     if tensor.is_constant:
         return tensor
@@ -2161,7 +2182,6 @@ def placeholder(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="placeholder",
                               is_persistent=True,
@@ -2186,7 +2206,6 @@ def temporary(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
@@ -2207,7 +2226,6 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The persistent storage.
-
     """
     return AssignableTensorOp(graph_label_type="Persistent",
                               is_persistent=True,
@@ -2228,7 +2246,6 @@ def variable(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The variable.
-
     """
     return AssignableTensorOp(graph_label_type="Variable",
                               is_input=True,
@@ -2303,7 +2320,6 @@ def stack(x_list, axis, pos=0):
 
     Returns:
         TensorOp: The joined tensors.
-
     """
     return StackOp(x_list, axis, pos)
 
@@ -2481,7 +2497,6 @@ def uniform(x, low=0.0, high=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='uniform', params=dict(low=low, high=high), x=x)
 
@@ -2497,7 +2512,6 @@ def normal(x, loc=0.0, scale=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
 
@@ -2565,7 +2579,6 @@ def negative(x):
 
     Returns:
         (TensorOp): The negative of x.
-
     """
     return NegativeOp(x)
 
@@ -2588,7 +2601,6 @@ def absolute(x):
 
     Returns:
         TensorOp: The absolute value of x.
-
     """
     return AbsoluteOp(x)
 
@@ -2611,7 +2623,6 @@ def sin(x):
 
     Returns:
         TensorOp: sin of x.
-
     """
     return SinOp(x)
 
@@ -2634,7 +2645,6 @@ def cos(x):
 
     Returns:
         TensorOp: The cos of x.
-
     """
     return CosOp(x)
 
@@ -2657,7 +2667,6 @@ def tanh(x):
 
     Returns:
         TensorOp: The tanh of x.
-
     """
     return TanhOp(x)
 
@@ -2680,7 +2689,6 @@ def exp(x):
 
     Returns:
         TensorOp: The exp of x.
-
     """
     return ExpOp(x)
 
@@ -2713,7 +2721,6 @@ def log(x):
 
     Returns:
         TensorOp: The log of x.
-
     """
     return LogOp(x)
 
@@ -2743,7 +2750,6 @@ def reciprocal(x):
 
     Returns:
         TensorOp: The reciprocal of x.
-
     """
     return ReciprocalOp(x)
 
@@ -2762,7 +2768,6 @@ def sign(x):
 
     Returns:
         TensorOp: The sign of x.
-
     """
     return SignOp(x)
 
@@ -2785,7 +2790,6 @@ def square(x):
 
     Returns:
         TensorOp: The square of x.
-
     """
     return SquareOp(x)
 
@@ -2808,7 +2812,6 @@ def sqrt(x):
 
     Returns:
         TensorOp: The square root of x.
-
     """
     return SqrtOp(x)
 
@@ -3003,7 +3006,6 @@ def dot(x, y):
 
     Returns:
         TensorOp: The dot product.
-
     """
     return DotOp(x, y)
 
@@ -3016,7 +3018,6 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
     Returns:
         TensorOp: The result.
-
     """
     if reduction_axes is None:
         if out_axes is None:
@@ -3238,7 +3239,6 @@ def batch_size(x):
 
     Returns:
         The size of the batch axis in x.
-
     """
     return tensor_size(x, reduction_axes=x.axes.batch_axes())
 
@@ -3345,7 +3345,6 @@ def one_hot(x, axis):
 
     Returns:
         OneHotOp: The op.
-
     """
     return OneHotOp(x, axis)
 
@@ -3456,7 +3455,6 @@ def deriv(dependent, independent, error=None):
 
     Returns:
         TensorOp: Derivative applied to error. Has axes of independent.
-
     """
     return DerivOp(dependent, independent, error).value_tensor
 

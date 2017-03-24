@@ -27,7 +27,6 @@ def convolution(conv_params, inputs, filters, axes, docstring=None):
 
     Returns:
         TensorOp: The result of the convolution.
-
     """
     return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 

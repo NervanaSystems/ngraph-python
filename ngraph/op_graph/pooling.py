@@ -27,7 +27,6 @@ def pooling(poolparams, inputs, axes, docstring=None):
 
     Returns:
         TensorOp: The pooling computation.
-
     """
     return PoolingOp(poolparams, inputs, axes=axes, docstring=docstring)
 
