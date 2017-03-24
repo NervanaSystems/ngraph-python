@@ -183,11 +183,12 @@ def test_gemm_multiply_matrix_by_scalar_from_flex_range(transformer_factory):
     # assert np.allclose(res1, res2, EPSILON)
     assert_allclose(res1, res2)
 
-test_data_2 = (
-    (5, 3, 0.1, )
+# test_data_2 = (
+#     (5, 3, 0.1, )
+#
+# )
+# @pytest.mark.parametrize("n, c, const_val, description", test_data_2)
 
-)
-@pytest.mark.parametrize("n, c, const_val, description", test_data_2)
 def test_gemm_multiply_matrix_by_negative_matrix_from_flex_range(transformer_factory):
     """
     Multiplies two matrices with values from the flex range (for 8.8 fixed point),
@@ -274,7 +275,6 @@ def test_gemm_multiply_matrix_by_outside_flex_matrix_from_flex_range(transformer
     """
     n, c = 5, 5
     const_val = 0.1
-
     ng_placeholder, ng_variable = template_create_placeholder_and_variable(n, c, const_val)
     template_one_placeholder(
         np.ones(c) * const_val,
