@@ -27,7 +27,6 @@ class PTB(object):
         shift_target (boolean): Set the target to be the same sequence of shifted
                                 version of the sequence. Default to be True, for
                                 language models.
-
     """
     def __init__(self, path='.', shift_target=True):
         self.path = path

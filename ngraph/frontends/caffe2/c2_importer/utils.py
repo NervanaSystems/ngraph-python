@@ -27,7 +27,6 @@ def args_shape_to_axes(pos):
 
     Arguments:
         pos: Ordinal position of shape in args tuple
-
     """
     def outer(func):
         @wraps(func)
