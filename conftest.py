@@ -20,7 +20,7 @@ import ngraph.op_graph.serde.serde as serde
 def pytest_addoption(parser):
     parser.addoption("--batch_size", type=int, default=8,
                      help="Batch size for tests using input_tensor fixture.")
-    parser.addoption("--transformer", default="numpy", choices=ngt.transformer_choices(),
+    parser.addoption("--transformer", default="cpu", choices=ngt.transformer_choices(),
                      help="Select from available transformers")
     parser.addoption("--serialization_integration_test", action="store_true",
                      help="Force all unit tests to serialize and deserialize the graph before \
@@ -43,7 +43,7 @@ def transformer_factory(request):
     yield set_and_get_factory(name)
 
     # Reset transformer factory to default
-    ngt.set_transformer_factory(ngt.make_transformer_factory("numpy"))
+    ngt.set_transformer_factory(ngt.make_transformer_factory("cpu"))
 
 
 @pytest.fixture(autouse=True)

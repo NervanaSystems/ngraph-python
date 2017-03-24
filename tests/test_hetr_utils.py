@@ -107,16 +107,16 @@ def test_comm_path_exists_scatter_gather():
 
 
 def test_update_comm_deps():
-    with ng.metadata(transformer='numpy0'):
+    with ng.metadata(transformer='cpu0'):
         z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = create_graph()
     update_comm_deps((z, send_x))
-    assert recv_x_plus_one in z.control_deps
+    assert recv_x_plus_one in z.all_deps
 
 
 def test_update_comm_deps_scatter_gather():
     parallel_metadata = dict(parallel=ax_B, device_id=(0, 1),
                              transformer=None, host_transformer=None, device=None)
-    with ng.metadata(transformer='numpy0'):
+    with ng.metadata(transformer='cpu0'):
         with ng.metadata(**parallel_metadata):
             from_node_a = ng.placeholder(axes)
             to_node_a = ng.placeholder(axes)
@@ -126,7 +126,7 @@ def test_update_comm_deps_scatter_gather():
             x_plus_one_a = scatter_recv_a + 1
         gather_send_x_plus_one_a = GatherSendOp(from_node=x_plus_one_a)
 
-    with ng.metadata(transformer='numpy1'):
+    with ng.metadata(transformer='cpu1'):
         with ng.metadata(**parallel_metadata):
             to_node_b = ng.placeholder(axes)
         scatter_recv_b = ScatterRecvOp(to_node=to_node_b, send_node=scatter_send_x)
@@ -134,7 +134,7 @@ def test_update_comm_deps_scatter_gather():
             x_plus_one_b = scatter_recv_b + 1
         gather_send_x_plus_one_b = GatherSendOp(from_node=x_plus_one_b)
 
-    with ng.metadata(transformer='numpy0'):
+    with ng.metadata(transformer='cpu0'):
         with ng.metadata(**parallel_metadata):
             gather_recv_x_plus_one_a = GatherRecvOp(from_node=from_node_a, to_node=to_node_a,
                                                     send_node=gather_send_x_plus_one_a)
@@ -143,9 +143,9 @@ def test_update_comm_deps_scatter_gather():
     update_comm_deps((scatter_send_x, gather_send_x_plus_one_a, z_a))
     update_comm_deps((gather_send_x_plus_one_b,))
 
-    assert set([scatter_send_x]) == set(scatter_recv_a.control_deps)
+    assert set([scatter_send_x]) == set(scatter_recv_a.all_deps)
     assert set([scatter_send_x, gather_send_x_plus_one_a]) == \
-        set(gather_recv_x_plus_one_a.control_deps)
+        set(gather_recv_x_plus_one_a.all_deps)
 
 
 def test_scatter_gather_node_axes():

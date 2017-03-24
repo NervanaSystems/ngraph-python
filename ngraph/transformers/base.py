@@ -308,7 +308,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         initialized (bool): True when variables have been initialized/restored.
         fusion (bool): True when fusion was enabled.
         device_buffers (set): Set of handles for storage allocations.
-
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
@@ -508,7 +507,7 @@ __transformer_factory = None
 def make_transformer():
     """
     Generates a Transformer using the factory in this module which defaults
-    to NumPy
+    to CPU
 
     Returns: Transformer
     """

@@ -106,7 +106,7 @@ ngraph.transformers
 
     :meth:`ngraph.transformers.allocate_transformer` | Allocate a transformer.
     :meth:`ngraph.transformers.make_transformer` | Generates a transformer using the factory.
-    :meth:`ngraph.transformers.make_transformer_factory` | Creates a new factory with numpy default.
+    :meth:`ngraph.transformers.make_transformer_factory` | Creates a new factory with cpu default.
     :meth:`ngraph.transformers.set_transformer_factory` | Sets the Transformer factory used by make_transformer.
     :meth:`ngraph.transformers.transformer_choices` | Return the list of available transformers.
     :meth:`ngraph.transformers.Transformer` | Produce an executable version of op-graphs.
@@ -121,7 +121,6 @@ ngraph.types
 
     :meth:`ngraph.types.AssignableTensorOp` | Assign a tensor. Used by `ng.placeholder`, and more.
     :meth:`ngraph.types.Axis` | An Axis labels a dimension of a tensor.
-    :meth:`ngraph.types.AxisRole` | Labels axis with roles.
     :meth:`ngraph.types.Axes` | Axes represent multiple axis dimensions.
     :meth:`ngraph.types.Computation` | Computations to attach to transformers.
     :meth:`ngraph.types.NameableValue` | Objects that can derive name from the name scope.

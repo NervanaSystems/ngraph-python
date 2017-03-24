@@ -54,7 +54,6 @@ def make_axis(length=None, name=None,
 
     Returns:
         Axis: A new Axis.
-
     """
     return Axis(length=length, name=name, docstring=docstring)
 
@@ -68,7 +67,6 @@ def make_axes(axes=()):
 
     Returns:
         Axes: An Axes.
-
     """
     return Axes(axes=axes)
 
@@ -1013,7 +1011,7 @@ class TensorDescription(NameableValue):
 
     Names the tensor's dimensions with axes and holds pointers to the
     buffer allocated by the analysis and the backend tensor value
-    (e.g. a numpy or gpu tensor).
+    (e.g. a cpu or gpu tensor).
 
     Arguments:
         axes: Axes of the tensor.
@@ -1027,7 +1025,6 @@ class TensorDescription(NameableValue):
             computation.
         is_input: The device tensor can be written from the host.
         **kwargs: Additional args for related classes.
-
     """
 
     def __init__(self, axes,

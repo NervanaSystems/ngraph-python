@@ -39,7 +39,7 @@ TEST_DIRS_INTEGRATION := integration_tests/
 DOC_DIR := doc
 DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
 
-.PHONY: env default install uninstall clean test testflex style lint lint3k check doc viz_install
+.PHONY: env default install uninstall clean test testflex style lint lint3k check doc viz_prepare
 
 default: install
 
@@ -51,11 +51,17 @@ install:
 	@pip install -r requirements.txt
 	@pip install -e .
 
-gpu_install:
+gpu_prepare:
 	@pip install -r gpu_requirements.txt > /dev/null 2>&1
 
-test_install:
+test_prepare:
 	@pip install -r test_requirements.txt > /dev/null 2>&1
+
+examples_prepare:
+	@pip install -r examples_requirements.txt > /dev/null 2>&1
+
+doc_prepare:
+	@pip install -r doc_requirements.txt > /dev/null 2>&1
 
 uninstall:
 	@pip uninstall -y ngraph
@@ -66,44 +72,51 @@ clean:
 	@find . -name "__pycache__" -type d -delete
 	@rm -f .coverage coverage.xml .coverage.*
 	@rm -rf ngraph.egg-info
-	@$(MAKE) -C $(DOC_DIR) clean
 	@echo
 
-test_flex: test_install clean
+test_all_transformers: test_cpu test_hetr test_gpu test_flex
+
+test_flex: test_prepare clean
 	@echo Running flex unit tests...
 	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
-test_mkl: test_install clean
+test_mkl: test_prepare clean
 	@echo Running unit tests...
 	@py.test --transformer mkl -m "transformer_dependent" $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_cpu: test_install clean
-	@echo Running unit tests for core and numpy transformer tests...
+test_cpu: test_prepare clean
+	@echo Running unit tests for core and cpu transformer tests...
 	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_gpu: gpu_install clean
+test_gpu: gpu_prepare test_prepare clean
 	@echo Running unit tests for gpu dependent transformer tests...
 	@py.test --transformer hetr -m "hetr_gpu_only" $(TEST_OPTS) $(TEST_DIRS)
 	@py.test --transformer gpu -m "transformer_dependent" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_hetr: test_install clean
+test_hetr: test_prepare clean
 	@echo Running unit tests for hetr dependent transformer tests...
 	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
 	@coverage xml -i
 
-test_mxnet: test_install clean
+test_mxnet: test_prepare clean
 	@echo Running unit tests for mxnet frontend...
 	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i
 
-test_integration: test_install clean
+test_integration: test_prepare clean
 	@echo Running integration tests...
 	@py.test $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	@coverage xml -i
+
+examples: examples_prepare
+	@for file in `find examples -type f -executable`; do echo Running $$file... ; ./$$file ; done
+
+gpu_examples: examples_prepare gpu_prepare
+	@for file in `find examples -type f -executable | grep -v hetr`; do echo Running $$file... ; ./$$file -b gpu; done
 
 style:
 	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
@@ -134,7 +147,7 @@ autopep8:
 	@autopep8 -a -a --global-config setup.cfg --in-place `find . -name \*.py`
 	@echo run "git diff" to see what may need to be checked in and "make style" to see what work remains
 
-doc:
+doc: doc_prepare
 	$(MAKE) -C $(DOC_DIR) clean
 	$(MAKE) -C $(DOC_DIR) html
 	@echo "Documentation built in $(DOC_DIR)/build/html"
@@ -163,7 +176,7 @@ release: check
 	@echo
 
 UNAME=$(shell uname)
-viz_install:
+viz_prepare:
 ifeq ("$(UNAME)", "Darwin")
 	@brew install graphviz
 else ifeq ("$(UNAME)", "Linux")
