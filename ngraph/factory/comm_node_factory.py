@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from .comm_nodes import GpuQueueSendOp, GpuQueueRecvOp, CPUQueueSendOp, \
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
     CPUQueueScatterSendOp, CPUQueueScatterRecvOp
 from ngraph.op_graph.op_graph import BroadcastOp
@@ -33,15 +33,16 @@ class CommNodePair(object):
 
         def get_node_factory(node):
             if node.metadata['device'] == 'gpu':
-                return GpuCommNodeFactory()
+                return GPUCommNodeFactory()
             elif node.metadata['device'] == 'cpu':
                 return CPUCommNodeFactory()
             else:
-                assert False
+                raise NotImplementedError("device must be either 'gpu' or 'cpu',"
+                                          "currently it's {}".format(node.metadata['device']))
 
         def get_location(from_node, to_node):
-            (send_host, send_idx) = from_node.metadata['host_transformer']
-            (recv_host, recv_idx) = to_node.metadata['host_transformer']
+            send_host = from_node.metadata['host_transformer']
+            recv_host = to_node.metadata['host_transformer']
 
             if send_host == recv_host:
                 return 'local'
@@ -125,7 +126,7 @@ class CommNodeFactory(object):
         pass
 
 
-class GpuCommNodeFactory(CommNodeFactory):
+class GPUCommNodeFactory(CommNodeFactory):
     """
     Represents a GPU communication node factory.
 
@@ -149,11 +150,11 @@ class GpuCommNodeFactory(CommNodeFactory):
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
             if comm_type == 'queue':
-                return GpuQueueSendOp(
+                return GPUQueueSendOp(
                     from_node=from_node)
         elif node_type == 'recv':
             if comm_type == 'queue':
-                return GpuQueueRecvOp(
+                return GPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         else:

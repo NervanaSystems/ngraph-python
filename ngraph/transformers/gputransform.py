@@ -34,7 +34,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
-from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -426,11 +426,11 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(GpuQueueSendOp)
+    @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):
         self.kernels.append(SendKernel(self.transformer, op))
 
-    @add_kernel.on_type(GpuQueueRecvOp)
+    @add_kernel.on_type(GPUQueueRecvOp)
     def add_kernel(self, op):
         self.kernels.append(RecvKernel(self.transformer, op))
 

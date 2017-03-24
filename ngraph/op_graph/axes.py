@@ -54,7 +54,6 @@ def make_axis(length=None, name=None,
 
     Returns:
         Axis: A new Axis.
-
     """
     return Axis(length=length, name=name, docstring=docstring)
 
@@ -68,7 +67,6 @@ def make_axes(axes=()):
 
     Returns:
         Axes: An Axes.
-
     """
     return Axes(axes=axes)
 
@@ -1059,7 +1057,6 @@ class TensorDescription(NameableValue):
             computation.
         is_input: The device tensor can be written from the host.
         **kwargs: Additional args for related classes.
-
     """
 
     def __init__(self, axes, base=None,

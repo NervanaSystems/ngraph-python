@@ -137,7 +137,6 @@ def clip_gradient_value(grad, clip_value=None):
 
     Returns:
         grad (list): List of clipped gradients.
-
     """
     if clip_value is None:
         return grad
