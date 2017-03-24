@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import collections
 import numpy as np
+from cachetools import cached, LRUCache
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
@@ -22,7 +22,7 @@ from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, Assign
     Transpose
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.axes import Axis, Axes, FlattenedAxis
+from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.factory.comm_nodes import GpuQueueSendOp, GpuQueueRecvOp
 
@@ -62,39 +62,11 @@ class GPUReshapeOp(ReshapeOp):
         return td
 
 
-class Memoize:
-    def __init__(self, f):
-        self.f = f
-        self.cache = dict()
-
-    def __call__(self, *args):
-        if not isinstance(args, collections.Hashable):
-            return self.f(*args)
-        if args in self.cache:
-            return self.cache[args]
-        else:
-            value = self.f(*args)
-            self.cache[args] = value
-            return value
-
-
-def get_axes_list(axes):
-    if isinstance(axes, FlattenedAxis):
-        return [get_axes_list(a) for a in axes.axes]
-    elif isinstance(axes, Axes):
-        return [get_axes_list(a) for a in axes]
-    elif isinstance(axes, Axis):
-        return axes
-
-
 def flatten(l):
     out = []
     for item in l:
         if type(item) == list:
             out = out + item
-        elif type(item) == FlattenedAxis:
-            for axis in item.axes:
-                out.append(axis)
         else:
             out.append(item)
     return out
@@ -115,7 +87,7 @@ def enumerate_remaining_axes(remaining_axes):
     return results
 
 
-@Memoize
+@cached(cache=LRUCache(maxsize=100))
 def enumerate_axis_orders(axes):
     return enumerate_remaining_axes(list(axes))
 
@@ -126,7 +98,7 @@ def split_points_to_groups(split_points, num_axes):
     return result
 
 
-@Memoize
+@cached(cache=LRUCache(maxsize=100))
 def get_split_groups(num_axes, num_groups):
     num_splits = num_groups - 1
     split_points = [(i + 1) for i in range(num_splits)]
@@ -206,7 +178,7 @@ class GPULayoutAssignment(LayoutAssignment):
     @staticmethod
     def generate_ew_layouts(axes, max_out_axes):
         # Get list of individual axes
-        axes_list = flatten(get_axes_list(axes))
+        axes_list = Axes.as_flattened_list(axes)
 
         # Need to divide op axes into `max_out_axes` sets
         if len(axes_list) > max_out_axes:
@@ -233,7 +205,7 @@ class GPULayoutAssignment(LayoutAssignment):
 
     @staticmethod
     def generate_default_layout(axes, max_out_axes):
-        axes_list = flatten(get_axes_list(axes))
+        axes_list = Axes.as_flattened_list(axes)
 
         # Need to divide op axes into `max_out_axes` sets
         if len(axes_list) > max_out_axes:
@@ -246,17 +218,17 @@ class GPULayoutAssignment(LayoutAssignment):
 
     @staticmethod
     def generate_default_dot_layout(op):
-        axes_list = flatten(get_axes_list(op.axes))
-        rows_axis = [axes_list.index(a) for a in flatten(get_axes_list(op.x_out_axes))]
-        cols_axis = [axes_list.index(a) for a in flatten(get_axes_list(op.y_out_axes))]
+        axes_list = Axes.as_flattened_list(op.axes)
+        rows_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.x_out_axes)]
+        cols_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.y_out_axes)]
         # By default allow first argument to be transposed, but not second
         # TODO: this could be bad for perf some heuristic?
         return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
 
     @staticmethod
     def generate_default_lut_layout(op):
-        axes_list = flatten(get_axes_list(op.axes))
-        groups = get_axes_list(op.axes)
+        axes_list = Axes.as_flattened_list(op.axes)
+        groups = Axes.as_nested_list(op.axes)
         layout = []
         for group in groups:
             if isinstance(group, list):
@@ -343,15 +315,15 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         while isinstance(predecessor_op, SequentialOp):
             predecessor_op = predecessor_op.value_tensor
 
-        self.arg_axes_list = flatten(get_axes_list(arg.axes))
+        self.arg_axes_list = Axes.as_flattened_list(arg.axes)
         self.mappings = {}
         self.sliced_out = []
         for i in range(len(self.arg_axes_list)):
             self.mappings[i] = i
 
         while not (predecessor_op.is_device_op or isinstance(predecessor_op, TensorValueOp)):
-            pred_axes = flatten(get_axes_list(predecessor_op.axes))
-            pred_arg_axes = flatten(get_axes_list(predecessor_op.args[0].axes))
+            pred_axes = Axes.as_flattened_list(predecessor_op.axes)
+            pred_arg_axes = Axes.as_flattened_list(predecessor_op.args[0].axes)
             if isinstance(predecessor_op, (BroadcastOp, ExpandDims)):
                 bcast_axes = [pred_axes.index(a) for a in pred_axes if a not in pred_arg_axes]
                 bcast_mappings = [a for a in self.mappings if self.mappings[a] in bcast_axes]
@@ -634,7 +606,7 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPUStridedLayoutConstraint, self).__init__(op, arg)
         if isinstance(op, ReductionOp):
-            self.red_axes = flatten(get_axes_list(op.reduction_axes))
+            self.red_axes = Axes.as_flattened_list(op.reduction_axes)
         else:
             self.red_axes = None
 
@@ -723,7 +695,7 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
 class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPUConvLayoutConstraint, self).__init__(op, arg)
-        self.order = flatten(get_axes_list(arg.axes))
+        self.order = Axes.as_flattened_list(arg.axes)
 
     def needs_transform(self, arg_layout, op_layout):
         arg_mem_order = flatten(arg_layout.axes)
@@ -751,7 +723,7 @@ class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
 class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPUPoolLayoutConstraint, self).__init__(op, arg)
-        self.order = flatten(get_axes_list(arg.axes))
+        self.order = Axes.as_flattened_list(arg.axes)
 
     def needs_transform(self, arg_layout, op_layout):
         arg_mem_order = flatten(arg_layout.axes)
@@ -781,15 +753,15 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
         super(GPUDotLayoutConstraint, self).__init__(op, arg)
 
         args = list(self.op.args)
-        self.op_axes = flatten(get_axes_list(self.op.axes))
+        self.op_axes = Axes.as_flattened_list(self.op.axes)
         if self.arg.forwarded is args[0].forwarded:
             self.operand = 'A'
-            self.reduction_axes = flatten(get_axes_list(self.op.reduction_axes))
-            self.out_axes = flatten(get_axes_list(self.op.x_out_axes))
+            self.reduction_axes = Axes.as_flattened_list(self.op.reduction_axes)
+            self.out_axes = Axes.as_flattened_list(self.op.x_out_axes)
         elif self.arg.forwarded is args[1].forwarded:
             self.operand = 'B'
-            self.reduction_axes = flatten(get_axes_list(self.op.reduction_axes))
-            self.out_axes = flatten(get_axes_list(self.op.y_out_axes))
+            self.reduction_axes = Axes.as_flattened_list(self.op.reduction_axes)
+            self.out_axes = Axes.as_flattened_list(self.op.y_out_axes)
         else:
             raise ValueError("Invalid argument for constraint")
 
@@ -857,14 +829,14 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPUSetItemLayoutConstraint, self).__init__(op, arg)
-        self.order = flatten(get_axes_list(arg.axes))
+        self.order = Axes.as_flattened_list(arg.axes)
 
     def get_cost(self, arg_layout, op_layout):
         return 0.0
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         arg_mem_order = flatten(arg_layout.axes)
-        arg_view_axes = flatten(get_axes_list(arg.axes))
+        arg_view_axes = Axes.as_flattened_list(arg.axes)
         arg_axes = arg_layout.ng_axes
         out_groups = [[a] for a in arg_view_axes]
         return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
@@ -874,10 +846,10 @@ class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
     def __init__(self, op, arg):
         super(GPULutLayoutConstraint, self).__init__(op, arg)
         if len(arg.axes) == 2:
-            self.order = [flatten(get_axes_list(Axes(arg.axes[0]))),
-                          flatten(get_axes_list(Axes(arg.axes[1])))]
+            self.order = [Axes.as_flattened_list(Axes(arg.axes[0])),
+                          Axes.as_flattened_list(Axes(arg.axes[1]))]
         else:
-            self.order = [flatten(get_axes_list(arg.axes))]
+            self.order = [Axes.as_flattened_list(arg.axes)]
 
     def needs_transform(self, arg_layout, op_layout):
         arg_mem_order = flatten(arg_layout.axes)

@@ -764,6 +764,38 @@ class Axes(object):
             ', '.join(map(repr, self))
         )
 
+    @staticmethod
+    def as_nested_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expressed as nested lists
+
+        Returns:
+            Nested list of Axis objects
+        """
+        if isinstance(axes, (Axes, list)):
+            return [Axes.as_nested_list(a) for a in axes]
+        elif isinstance(axes, FlattenedAxis):
+            return [Axes.as_nested_list(a) for a in axes.axes]
+        elif isinstance(axes, Axis):
+            return axes
+
+    @staticmethod
+    def as_flattened_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expanded
+
+        Returns:
+            List of Axis objects
+        """
+        l = Axes.as_nested_list(axes)
+        out = []
+        for item in l:
+            if type(item) == list:
+                out = out + item
+            else:
+                out.append(item)
+        return out
+
 
 class DuplicateAxisNames(ValueError):
     def __init__(self, message, duplicate_axis_names):

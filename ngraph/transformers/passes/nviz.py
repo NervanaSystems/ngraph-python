@@ -92,7 +92,6 @@ class VizPass(GraphPass):
         self.subgraph_attr = subgraph_attr
         self.uuid_lookup_table = dict()
         self.view = view
-
         self.show_metadata = show_metadata
 
     def get_subgraphs(self, ops):
@@ -122,8 +121,6 @@ class VizPass(GraphPass):
                 op_label += "\n{}={}".format(k, v)
         if self.show_metadata and self.show_metadata in op.metadata:
             op_label += "\n{}".format(op.metadata[self.show_metadata])
-        if op.tensor_description() and op.tensor_description().layout:
-            op_label += "\n{}".format(op.tensor_description().layout)
         graph.node(op.name, op_label)
 
     def add_edge_to_graph(self, edge, graph):
@@ -186,7 +183,7 @@ class VizPass(GraphPass):
             self.add_edge_to_graph(edge, vg)
 
         tmp_dir = tempfile.mkdtemp()
-        vg.render(filename="nviz", view=False, cleanup=True)
+        vg.render(directory=tmp_dir, view=self.view, cleanup=True)
         if not self.view:
             logging.info("VizPass graph rendered to {}", tmp_dir)
         # Cleanup
