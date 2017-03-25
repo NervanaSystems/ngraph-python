@@ -164,7 +164,7 @@ class GPULayoutAssignment(LayoutAssignment):
                     strides.insert(0, strides[0] * shape[0])
                 if axis:
                     ax_lens = [self.ng_axes[a].length for a in axis]
-                    shape.insert(0, np.prod(ax_lens))
+                    shape.insert(0, int(np.prod(ax_lens)))
                 else:
                     shape.insert(0, 1)
         else:
@@ -278,7 +278,7 @@ class GPULayoutAssignment(LayoutAssignment):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         elif isinstance(op, RngOp):
             return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
-        elif isinstance(op, (GpuQueueSendOp, GpuQueueRecvOp)):
+        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
             return GPULayoutAssignment.generate_default_layout(op.axes, 3)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
@@ -295,9 +295,9 @@ class GPUDotLayoutAssignment(GPULayoutAssignment):
 
 class GPULayoutView(object):
     def __init__(self, shape, strides, offset=0):
-        self.shape = shape
-        self.strides = strides
-        self.offset = offset
+        self.shape = tuple([int(i) for i in shape])
+        self.strides = tuple([int(i) for i in strides])
+        self.offset = int(offset)
 
     def __str__(self):
         return "offset: {}, shape: {}, strides {}".format(self.offset, self.shape, self.strides)
@@ -596,7 +596,7 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
             return GPULutLayoutConstraint(op, arg)
         elif isinstance(op, RngOp):
             return GPUBinaryLayoutConstraint(op, arg)
-        elif isinstance(op, (GpuQueueSendOp, GpuQueueRecvOp)):
+        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
             return GPUBinaryLayoutConstraint(op, arg)
         else:
             raise ValueError("Layouts not implemented for op type {}".format(op))
