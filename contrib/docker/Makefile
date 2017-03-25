@@ -31,9 +31,9 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/ngraph-test/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;py.test --enable_mkl --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
+MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
 
 COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;ls -l .coverage*;coverage combine;coverage xml -i;coverage report"
 
@@ -238,7 +238,7 @@ test_mkldnn_tf: build_mkldnn_test
 	/tmp/chown_files.sh 
 
 test_mkldnn: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} make test_mkl
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} make test_mkldnn
 # update the files to be owned by the calling user instead of root 
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
