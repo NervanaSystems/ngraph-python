@@ -83,13 +83,15 @@ class VizPass(GraphPass):
         view <bool, default True>: Whether to open the rendered PDF, if False, prints PDF location
             to stdout.
     """
-    def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False, view=True):
+    def __init__(self, subgraph_attr=None, show_axes=False, show_metadata=None,
+                 show_all_metadata=False, view=True):
         super(VizPass, self).__init__()
         self.show_axes = show_axes
         self.show_all_metadata = show_all_metadata
         self.subgraph_attr = subgraph_attr
         self.uuid_lookup_table = dict()
         self.view = view
+        self.show_metadata = show_metadata
 
     def get_subgraphs(self, ops):
         clusters = set()
@@ -116,6 +118,8 @@ class VizPass(GraphPass):
         if self.show_all_metadata:
             for k, v in six.iteritems(op.metadata):
                 op_label += "\n{}={}".format(k, v)
+        if self.show_metadata and self.show_metadata in op.metadata:
+            op_label += "\n{}".format(op.metadata[self.show_metadata])
         graph.node(op.name, op_label)
 
     def add_edge_to_graph(self, edge, graph):

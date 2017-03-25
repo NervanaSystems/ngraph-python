@@ -253,7 +253,9 @@ class GradientDescentMomentum(LearningRateOptimizer):
                 delta = velocity
             updates.append(ng.assign(variable, variable + delta))
             all_updates.append(ng.sequential(updates))
-        return ng.doall(all_updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads, updates, 0])
 
 
 class RMSProp(LearningRateOptimizer):
@@ -325,4 +327,6 @@ class RMSProp(LearningRateOptimizer):
                                                 / (ng.sqrt(state + epsilon) + epsilon)))
             ]))
 
-        return ng.doall(all_updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads, updates, 0])

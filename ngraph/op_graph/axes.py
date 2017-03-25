@@ -762,6 +762,38 @@ class Axes(object):
             ', '.join(map(repr, self))
         )
 
+    @staticmethod
+    def as_nested_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expressed as nested lists
+
+        Returns:
+            Nested list of Axis objects
+        """
+        if isinstance(axes, (Axes, list)):
+            return [Axes.as_nested_list(a) for a in axes]
+        elif isinstance(axes, FlattenedAxis):
+            return [Axes.as_nested_list(a) for a in axes.axes]
+        elif isinstance(axes, Axis):
+            return axes
+
+    @staticmethod
+    def as_flattened_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expanded
+
+        Returns:
+            List of Axis objects
+        """
+        l = Axes.as_nested_list(axes)
+        out = []
+        for item in l:
+            if type(item) == list:
+                out = out + item
+            else:
+                out.append(item)
+        return out
+
 
 class DuplicateAxisNames(ValueError):
     def __init__(self, message, duplicate_axis_names):
@@ -1027,8 +1059,8 @@ class TensorDescription(NameableValue):
         **kwargs: Additional args for related classes.
     """
 
-    def __init__(self, axes,
-                 base=None,
+    def __init__(self, axes, base=None,
+                 layout=None,
                  dtype=None,
                  full_strides=None, full_sizes=None, offset=0,
                  next_tensor_description=None,
@@ -1041,6 +1073,7 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
+        self.__layout = layout
         self.__value = None
         self.__buffer = None
         self.__register = None
@@ -1116,7 +1149,7 @@ class TensorDescription(NameableValue):
         """
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
         """
-        return (self.shape, self.dtype, self.offset, self.strides)
+        return (self.shape, self.dtype, self.offset, self.strides, self.layout)
 
     def flatten(self, new_axes):
         """
@@ -1256,6 +1289,23 @@ class TensorDescription(NameableValue):
             dtype=self.dtype,
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
+            offset=self.offset,
+            next_tensor_description=self
+        )
+
+    def clone(self):
+        """
+        Creates a copy of this tensor description
+
+        Retuns:
+            A copy of this tensor description
+        """
+        return TensorDescription(
+            self.axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=self.full_strides,
+            full_sizes=self.full_sizes,
             offset=self.offset,
             next_tensor_description=self
         )
@@ -1505,6 +1555,23 @@ class TensorDescription(NameableValue):
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self
+
+    @property
+    def layout(self):
+        """The layout of the underlying storage."""
+        return self.__layout
+
+    @layout.setter
+    def layout(self, value):
+        """
+        Sets the backend-specific memory layout to be used by the tensor.
+
+        Arguments:
+          value: the layout to use
+
+        Returns:
+        """
+        self.__layout = value
 
     @property
     def buffer(self):

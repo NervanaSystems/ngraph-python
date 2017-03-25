@@ -61,13 +61,19 @@ class DimShuffleKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
-        out = TensorDescriptionWrapper(op.tensor_description(), 2)
+        out = TensorDescriptionWrapper(op.tensor_description())
         (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(arg, 2)
+        in_tensor = TensorDescriptionWrapper(arg, ignore_layout=True)
+
+        # Reshape the tensors in place with dimshuffle views
+        in_tensor.shape = tuple(op.in_view.shape)
+        in_tensor.strides = tuple(op.in_view.strides)
+        out.shape = tuple(op.out_view.shape)
+        out.strides = tuple(op.out_view.strides)
 
         dtype = out.dtype
         shape = in_tensor.shape
-        axes = op.old_axis_positions
+        axes = op.axis_order
 
         self.kernel, self.params = get_dimshuffle(dtype, shape, axes, in_tensor, out)
 
