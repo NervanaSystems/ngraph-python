@@ -1,0 +1,883 @@
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+import numpy as np
+from cachetools import cached, LRUCache
+
+from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
+    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
+    ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
+    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp, \
+    Transpose
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.axes import Axes
+from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
+
+from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
+    UnaryLayoutConstraint
+
+
+class DimshuffleOp(TensorOp):
+    """
+    Layout transformation op for GPU which does a copy
+
+    Parameters:
+        x (TensorOp): A tensor.
+    """
+
+    def __init__(self, x, in_view, out_view, axis_order, **kwargs):
+        super(DimshuffleOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+        # TODO: dtype?
+        self.in_view = in_view
+        self.out_view = out_view
+        self.axis_order = tuple(axis_order)
+
+
+class GPUReshapeOp(ReshapeOp):
+    """
+    Layout transformation op for a GPU which does not copy, but changes shape and/or strides
+    """
+    def __init__(self, x, view, **kwargs):
+        super(GPUReshapeOp, self).__init__(x, axes=x.axes, **kwargs)
+        self.layout_view = view
+
+    @tdcache()
+    def tensor_description(self):
+        td = self.args[0].tensor_description().clone()
+        if "layout" in self.metadata:
+            td.layout = self.metadata["layout"]
+        return td
+
+
+def flatten(l):
+    out = []
+    for item in l:
+        if type(item) == list:
+            out = out + item
+        else:
+            out.append(item)
+    return out
+
+
+def enumerate_remaining_axes(remaining_axes):
+    results = []
+    if len(remaining_axes) == 1:
+        return [[remaining_axes[0]]]
+
+    for axis in remaining_axes:
+        other_axes = [a for a in remaining_axes if a != axis]
+        sub_results = enumerate_remaining_axes(other_axes)
+        for result in sub_results:
+            result.insert(0, axis)
+            results.append(result)
+
+    return results
+
+
+@cached(cache=LRUCache(maxsize=100))
+def enumerate_axis_orders(axes):
+    return enumerate_remaining_axes(list(axes))
+
+
+def split_points_to_groups(split_points, num_axes):
+    result = [list(range(s, split_points[i + 1])) for i, s in enumerate(split_points[:-1])]
+    result = [list(range(split_points[0]))] + result + [list(range(split_points[-1], num_axes))]
+    return result
+
+
+@cached(cache=LRUCache(maxsize=100))
+def get_split_groups(num_axes, num_groups):
+    num_splits = num_groups - 1
+    split_points = [(i + 1) for i in range(num_splits)]
+    results = []
+
+    for split in reversed(tuple(range(num_splits))):
+        limit = num_axes if split == (num_splits - 1) else split_points[split + 1]
+
+        while split_points[split] < (limit - 1):
+            results.append(split_points_to_groups(split_points, num_axes))
+            split_points[split] += 1
+
+    results.append(split_points_to_groups(split_points, num_axes))
+
+    return results
+
+
+class GPULayoutAssignment(LayoutAssignment):
+    """
+    GPU implementation of device specific layout descriptor. The layout is implemented
+    by a list of axis groups where each group of axes must be contiguous in memory.
+
+    Attributes:
+        ng_axes: List of Axis objects stored by this layout (unflattened)
+        axes: List of lists where each list is a group of axis indices.
+        shape: Tensor shape calculated from layout axes groups
+        strides: Tensor strides calculated from layout axes groups
+        offset: Tensor offset from buffer base
+
+    Example:
+        ng_axes = [Axis(C), Axis(H), Axis(W), Axis(N)]
+        axes = [[0, 2], [1], [3]]
+        This means C and W are flattened into a single contiguous axis in memory and the
+        other axes are unconstrained, meaning they may be strided in any way.
+    """
+    def __init__(self, axes, order=None):
+        self.ng_axes = axes
+        if order:
+            self.axes = order
+        else:
+            self.axes = list(range(len(axes)))
+        self.shape = None
+        self.strides = None
+        self.offset = None
+
+    def __str__(self):
+        out = "("
+        for a in self.axes:
+            out = out + "["
+            for idx in a:
+                out = out + str(self.ng_axes[idx].name) + ", "
+            out = out + "] "
+        out = out + ")"
+        out = out + "\nshape: {}, strides {}".format(self.shape, self.strides)
+        return out
+
+    def set_shape_strides(self):
+        if self.axes:
+            shape = []
+            strides = [1]
+            for axis in reversed(self.axes):
+                if len(shape) == len(strides):
+                    strides.insert(0, strides[0] * shape[0])
+                if axis:
+                    ax_lens = [self.ng_axes[a].length for a in axis]
+                    shape.insert(0, int(np.prod(ax_lens)))
+                else:
+                    shape.insert(0, 1)
+        else:
+            shape = []
+            strides = []
+
+        self.offset = 0
+        self.shape = tuple(shape)
+        self.strides = tuple(strides)
+
+    @staticmethod
+    def generate_ew_layouts(axes, max_out_axes):
+        # Get list of individual axes
+        axes_list = Axes.as_flattened_list(axes)
+
+        # Need to divide op axes into `max_out_axes` sets
+        if len(axes_list) > max_out_axes:
+            groups = get_split_groups(len(axes_list), max_out_axes)
+            num_groups = max_out_axes
+        else:
+            groups = [[[i] for i in range(len(axes_list))]]
+            num_groups = len(axes_list)
+
+        # Find all permutations of these axis groups
+        permutations = enumerate_axis_orders(tuple(range(num_groups)))
+
+        if permutations:
+            # Create EW layouts
+            layouts = []
+            for group in groups:
+                for order in permutations:
+                    layout_spec = [group[i] for i in order]
+                    layouts.append(GPULayoutAssignment(axes_list, layout_spec))
+        else:
+            layouts = [GPULayoutAssignment(axes_list, [])]
+
+        return layouts
+
+    @staticmethod
+    def generate_default_layout(axes, max_out_axes):
+        axes_list = Axes.as_flattened_list(axes)
+
+        # Need to divide op axes into `max_out_axes` sets
+        if len(axes_list) > max_out_axes:
+            split_points = [(i + 1) for i in range(max_out_axes - 1)]
+            layout = split_points_to_groups(split_points, len(axes_list))
+        else:
+            layout = [[i] for i in range(len(axes_list))]
+
+        return [GPULayoutAssignment(axes_list, layout)]
+
+    @staticmethod
+    def generate_default_dot_layout(op):
+        axes_list = Axes.as_flattened_list(op.axes)
+        rows_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.x_out_axes)]
+        cols_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.y_out_axes)]
+        # By default allow first argument to be transposed, but not second
+        # TODO: this could be bad for perf some heuristic?
+        return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
+
+    @staticmethod
+    def generate_default_lut_layout(op):
+        axes_list = Axes.as_flattened_list(op.axes)
+        groups = Axes.as_nested_list(op.axes)
+        layout = []
+        for group in groups:
+            if isinstance(group, list):
+                layout.append([axes_list.index(a) for a in group])
+            else:
+                layout.append([axes_list.index(group)])
+        return [GPULayoutAssignment(axes_list, layout)]
+
+    @staticmethod
+    def factory(op):
+        """
+        Generates a list of possible layouts given an op
+        """
+        if isinstance(op, AssignOp):
+            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+        elif isinstance(op, UnaryElementWiseOp):
+            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+        elif isinstance(op, BinaryElementWiseOp):
+            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+        elif isinstance(op, ReductionOp):
+            return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
+        elif isinstance(op, OneHotOp):
+            return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
+        elif isinstance(op, TensorSizeOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, Fill):
+            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
+        elif isinstance(op, SetItemOp):
+            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
+        elif isinstance(op, DotOp):
+            return GPULayoutAssignment.generate_default_dot_layout(op)
+        elif isinstance(op, ConvolutionOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, bprop_conv):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, update_conv):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, PoolingOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, BpropPoolOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, TensorValueOp):
+            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+        elif isinstance(op, LookupTableOp):
+            return GPULayoutAssignment.generate_default_lut_layout(op)
+        elif isinstance(op, (update_lut, bprop_lut)):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        elif isinstance(op, RngOp):
+            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+        else:
+            raise ValueError("Layouts not implemented for op type {}".format(op))
+
+
+class GPUDotLayoutAssignment(GPULayoutAssignment):
+    def __init__(self, A_trans, B_trans, axes, order=None):
+        super(GPUDotLayoutAssignment, self).__init__(axes, order)
+        self.A_trans = A_trans
+        self.B_trans = B_trans
+        if A_trans and B_trans:
+            raise NotImplementedError("Can't support Dot op tt")
+
+
+class GPULayoutView(object):
+    def __init__(self, shape, strides, offset=0):
+        self.shape = tuple([int(i) for i in shape])
+        self.strides = tuple([int(i) for i in strides])
+        self.offset = int(offset)
+
+    def __str__(self):
+        return "offset: {}, shape: {}, strides {}".format(self.offset, self.shape, self.strides)
+
+
+class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        self.op = op
+        self.arg = arg
+
+        # Build mapping of arg axis position to axis position in buffer
+        # Arg axes may be re-ordered, cast, broadcast, sliced between the original
+        # buffer and the op being used for this constraint
+        predecessor_op = arg
+        while isinstance(predecessor_op, SequentialOp):
+            predecessor_op = predecessor_op.value_tensor
+
+        self.arg_axes_list = Axes.as_flattened_list(arg.axes)
+        self.mappings = {}
+        self.sliced_out = []
+        for i in range(len(self.arg_axes_list)):
+            self.mappings[i] = i
+
+        while not (predecessor_op.is_device_op or isinstance(predecessor_op, TensorValueOp)):
+            pred_axes = Axes.as_flattened_list(predecessor_op.axes)
+            pred_arg_axes = Axes.as_flattened_list(predecessor_op.args[0].axes)
+            if isinstance(predecessor_op, (BroadcastOp, ExpandDims)):
+                bcast_axes = [pred_axes.index(a) for a in pred_axes if a not in pred_arg_axes]
+                bcast_mappings = [a for a in self.mappings if self.mappings[a] in bcast_axes]
+                for bcast in bcast_mappings:
+                    self.mappings[bcast] = "bcast"
+                for a, p in self.mappings.items():
+                    if isinstance(p, int):
+                        offset = 0
+                        for bcast_axis in bcast_axes:
+                            if p > bcast_axis:
+                                offset += 1
+                        self.mappings[a] = p - offset
+
+                for i in range(len(self.sliced_out)):
+                    if self.sliced_out[i][0] in bcast_axes:
+                        self.sliced_out[i] = (self.sliced_out[i][0], "bcast")
+                    else:
+                        new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
+                        self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
+            elif isinstance(predecessor_op, TensorSliceOp):
+                new_indexes = []
+                for index, axis in enumerate(pred_axes):
+                    new_index = pred_arg_axes.index(axis)
+                    if predecessor_op.slices[new_index] != slice(None, None, None):
+                        new_index = ("slice", new_index, predecessor_op.slices[new_index])
+                    if new_index != index:
+                        for a, p in self.mappings.items():
+                            if isinstance(p, int) and p == index:
+                                new_indexes.append((a, new_index))
+
+                for a, p in new_indexes:
+                    self.mappings[a] = p
+
+                # Find any axes that are sliced out and add these to offset calculations
+                rem_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
+                for rm_axis in rem_axes:
+                    self.sliced_out.append((rm_axis, predecessor_op.slices[rm_axis]))
+            elif isinstance(predecessor_op, (ReorderAxes, Transpose)):
+                new_indexes = []
+                for a, p in self.mappings.items():
+                    if isinstance(p, int):
+                        new_indexes.append((a, pred_arg_axes.index(pred_axes[p])))
+                for a, p in new_indexes:
+                    self.mappings[a] = p
+
+                for i in range(len(self.sliced_out)):
+                    new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
+                    self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
+            elif isinstance(predecessor_op, AxesCastOp):
+                pass
+            elif isinstance(predecessor_op, Flatten):
+                pass
+            elif isinstance(predecessor_op, Unflatten):
+                pass
+            else:
+                raise RuntimeError("Confused")
+            predecessor_op = predecessor_op.args[0]
+            while isinstance(predecessor_op, SequentialOp):
+                predecessor_op = predecessor_op.value_tensor
+
+        return
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        return arg
+
+    def get_cost(self, arg_layout, op_layout):
+        return 0.0
+
+    def map(self, axis):
+        axis_position = -1
+        for index, arg_axis in enumerate(self.arg_axes_list):
+            if axis == arg_axis:
+                axis_position = index
+        return self.mappings[axis_position]
+
+    def group_axis_contig(self, arg_mem_order, op_group):
+        if not op_group:
+            return True
+
+        # Convert op group to arg group
+        arg_group = [self.map(a) for a in op_group]
+
+        # If broadcasts included, not contiguous
+        if any(a == "bcast" for a in arg_group) or len(op_group) == 0:
+            return False
+
+        # If slices included, not contiguous
+        if any(isinstance(a, tuple) for a in arg_group):
+            return False
+
+        compatible = False
+        group_len = len(arg_group)
+        for i in range(len(arg_mem_order) - group_len + 1):
+            if arg_mem_order[i:i + group_len] == arg_group:
+                compatible = True
+                break
+        return compatible
+
+    def group_axis_strided_valid(self, arg_mem_order, op_group):
+        # Convert op group to arg group
+        arg_group = [self.map(a) for a in op_group]
+
+        # If broadcasts included, all axes in group must be broadcast
+        if any(a == "bcast" for a in arg_group):
+            return all(a == "bcast" for a in arg_group)
+
+        # Slices cannot be grouped with other axes
+        if any(isinstance(a, tuple) for a in arg_group):
+            return len(arg_group) == 1
+
+        compatible = False
+        group_len = len(arg_group)
+        for i in range(len(arg_mem_order) - group_len + 1):
+            if arg_mem_order[i:i + group_len] == arg_group:
+                compatible = True
+                break
+        return compatible
+
+    def contiguous_layout_view(self, out_groups):
+        lengths = []
+        for group in out_groups:
+            if group:
+                lengths.append(np.prod([a.length for a in group]))
+            else:
+                lengths.append(1)
+
+        shape = []
+        strides = [1]
+        for l in reversed(lengths[1:]):
+            shape.insert(0, l)
+            strides.insert(0, shape[0] * strides[0])
+        shape.insert(0, lengths[0])
+        return GPULayoutView(shape, strides)
+
+    def layout_view(self, arg_mem_order, arg_axes, out_groups):
+        # Convert op axis groups to arg axis index groups
+        shape = []
+        axis_groups = []
+        for group in out_groups:
+            if group:
+                shape.append(np.prod([a.length for a in group]))
+                axis_groups.append([self.map(a) for a in group])
+            else:
+                shape.append(1)
+                axis_groups.append(["extra"])
+
+        # Compute axis strides for arg
+        base_strides = [1]
+        arg_axis_strides = [1] * len(arg_axes)
+        for i in reversed(arg_mem_order[1:]):
+            base_strides.insert(0, arg_axes[i].length * base_strides[0])
+
+        for index, i in enumerate(arg_mem_order):
+            arg_axis_strides[i] = base_strides[index]
+
+        # Get strides
+        strides = []
+        offset = 0
+        for axis_index, group in enumerate(axis_groups):
+            if group[-1] == "bcast":
+                strides.append(0)
+            elif group[-1] == "extra":
+                strides.append(1)
+            elif isinstance(group[0], tuple):
+                arg_mem_axis = group[0][1]
+                if isinstance(group[0][2], slice):
+                    slice_stride = group[0][2].step
+                    if slice_stride is None:
+                        slice_stride = 1
+                    start = group[0][2].start
+                    if start is None:
+                        if slice_stride < 0:
+                            start = arg_axes[arg_mem_order[arg_mem_axis]].length - 1
+                        else:
+                            start = 0
+                else:
+                    start = group[0][2]
+                    slice_stride = 1
+
+                strides.append(arg_axis_strides[arg_mem_axis] * slice_stride)
+                # Add slice to offset
+                offset += (start * arg_axis_strides[arg_mem_axis])
+            else:
+                strides.append(arg_axis_strides[group[-1]])
+
+        # Add any offset from axes that are sliced out of the view
+        for axis, s in self.sliced_out:
+            if s != "bcast":
+                stride = arg_axis_strides[axis]
+                if isinstance(s, slice):
+                    offset += (s.start * stride)
+                else:
+                    offset += (s * stride)
+
+        return GPULayoutView(shape, strides, offset=offset)
+
+    def get_dimshuffle(self, arg_mem_order, arg_axes, out_groups, arg):
+        # Get contiguous un-flattened view of input tensor
+        flattened_out_groups = []
+        for group in out_groups:
+            if group:
+                new_groups = [[a] for a in group]
+                flattened_out_groups = flattened_out_groups + new_groups
+            else:
+                flattened_out_groups.append([])
+        dimshuffle_in_view = self.layout_view(arg_mem_order, arg_axes, flattened_out_groups)
+
+        # Determine shuffle order
+        axis_order = tuple(range(len(flattened_out_groups)))
+
+        # Get contiguous un-flattened view of output tensor
+        dimshuffle_out_view = self.contiguous_layout_view(flattened_out_groups)
+
+        # Compute view for the output tensor
+        out_shape = []
+        out_strides = []
+        for group in reversed(out_groups):
+            if group:
+                length = np.prod([a.length for a in group])
+            else:
+                length = 1
+            if len(out_strides) == 0:
+                out_strides.insert(0, 1)
+            else:
+                out_strides.insert(0, out_shape[0] * out_strides[0])
+            out_shape.insert(0, length)
+        op_view = GPULayoutView(out_shape, out_strides)
+
+        out = DimshuffleOp(arg, dimshuffle_in_view, dimshuffle_out_view, axis_order)
+        out.metadata["layout"] = op_view
+        return out
+
+    def get_reshape(self, arg_mem_order, arg_axes, out_groups, arg):
+        out_view = self.layout_view(arg_mem_order, arg_axes, out_groups)
+        out = GPUReshapeOp(arg, out_view)
+        out.metadata["layout"] = out_view
+        return out
+
+    @staticmethod
+    def factory(op, arg):
+        if isinstance(op, AssignOp):
+            return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, SetItemOp):
+            return GPUSetItemLayoutConstraint(op, arg)
+        elif isinstance(op, UnaryElementWiseOp):
+            return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, BinaryElementWiseOp):
+            return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, ReductionOp):
+            return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, OneHotOp):
+            return GPUStridedLayoutConstraint(op, arg)
+        elif isinstance(op, TensorSizeOp):
+            return GPUBinaryLayoutConstraint(op, arg)
+        elif isinstance(op, Fill):
+            return GPUBinaryLayoutConstraint(op, arg)
+        elif isinstance(op, DotOp):
+            return GPUDotLayoutConstraint(op, arg)
+        elif isinstance(op, ConvolutionOp):
+            return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, bprop_conv):
+            return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, update_conv):
+            return GPUConvLayoutConstraint(op, arg)
+        elif isinstance(op, PoolingOp):
+            return GPUPoolLayoutConstraint(op, arg)
+        elif isinstance(op, BpropPoolOp):
+            return GPUPoolLayoutConstraint(op, arg)
+        elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
+            return GPULutLayoutConstraint(op, arg)
+        elif isinstance(op, RngOp):
+            return GPUBinaryLayoutConstraint(op, arg)
+        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+            return GPUBinaryLayoutConstraint(op, arg)
+        else:
+            raise ValueError("Layouts not implemented for op type {}".format(op))
+
+
+class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPUStridedLayoutConstraint, self).__init__(op, arg)
+        if isinstance(op, ReductionOp):
+            self.red_axes = Axes.as_flattened_list(op.reduction_axes)
+        else:
+            self.red_axes = None
+
+    def needs_transform(self, arg_layout, op_layout):
+        # Flattened arg layout axes list used to determine arg contiguity
+        arg_mem_order = flatten(arg_layout.axes)
+
+        # Contiguity requirements come from this op's layout groupings
+        compatible = True
+        for op_axis in op_layout.axes:
+            arg_axis = [op_layout.ng_axes[i] for i in op_axis]
+            if isinstance(self.op, OneHotOp) and arg_axis[0] == self.op.axis:
+                continue
+            if not self.group_axis_strided_valid(arg_mem_order, arg_axis):
+                compatible = False
+                break
+
+        # Check for reduction axes
+        if isinstance(self.op, ReductionOp):
+            red_axis = [a for a in self.red_axes]
+            if not self.group_axis_strided_valid(arg_mem_order, red_axis):
+                compatible = False
+
+        # Compute cost as proportional to tensor size if dimshuffle required
+        return (not compatible)
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        # Flattened arg layout axes list used to determine arg contiguity
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+
+        if self.needs_transform(arg_layout, op_layout):
+            if isinstance(self.op, ReductionOp):
+                # Dimshuffle to 3d with out axis groups plus reduction group
+                out_groups = [[a for a in self.red_axes]] if self.red_axes else []
+                for op_axis in op_layout.axes:
+                    out_groups.append([op_layout.ng_axes[i] for i in op_axis])
+                return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
+            elif isinstance(self.op, OneHotOp):
+                # Dimshuffle to 3d with out axis groups other than onehot axis
+                out_groups = []
+                for op_axis in op_layout.axes:
+                    group = [op_layout.ng_axes[i] for i in op_axis]
+                    if self.op.axis in group:
+                        assert len(group) == 1
+                        continue
+                    out_groups.append(group)
+                return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
+            else:
+                # Dimshuffle to 3d with out axis groups
+                out_groups = []
+                for op_axis in op_layout.axes:
+                    out_groups.append([op_layout.ng_axes[i] for i in op_axis])
+                return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
+        else:
+            # Compute derived layout for arg
+            if isinstance(self.op, ReductionOp):
+                out_groups = [[a for a in self.red_axes]] if self.red_axes else []
+                for op_axis in op_layout.axes:
+                    out_groups.append([op_layout.ng_axes[i] for i in op_axis])
+                return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+            elif isinstance(self.op, OneHotOp):
+                out_groups = []
+                for op_axis in op_layout.axes:
+                    group = [op_layout.ng_axes[i] for i in op_axis]
+                    if self.op.axis in group:
+                        assert len(group) == 1
+                        continue
+                    out_groups.append(group)
+                return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+            else:
+                out_groups = []
+                for op_axis in op_layout.axes:
+                    out_groups.append([op_layout.ng_axes[i] for i in op_axis])
+                return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+
+            return arg
+
+
+class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPUConvLayoutConstraint, self).__init__(op, arg)
+        self.order = Axes.as_flattened_list(arg.axes)
+
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        if not self.group_axis_contig(arg_mem_order, self.order):
+            return True
+
+        return False
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+
+        if self.needs_transform(arg_layout, op_layout):
+            return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
+        else:
+            return self.get_reshape(arg_mem_order, arg_axes, [self.order], arg)
+
+
+class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPUPoolLayoutConstraint, self).__init__(op, arg)
+        self.order = Axes.as_flattened_list(arg.axes)
+
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        if not self.group_axis_contig(arg_mem_order, self.order):
+            return True
+
+        return False
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+
+        if self.needs_transform(arg_layout, op_layout):
+            return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
+        else:
+            return self.get_reshape(arg_mem_order, arg_axes, [self.order], arg)
+
+
+class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPUDotLayoutConstraint, self).__init__(op, arg)
+
+        args = list(self.op.args)
+        self.op_axes = Axes.as_flattened_list(self.op.axes)
+        if self.arg.forwarded is args[0].forwarded:
+            self.operand = 'A'
+            self.reduction_axes = Axes.as_flattened_list(self.op.reduction_axes)
+            self.out_axes = Axes.as_flattened_list(self.op.x_out_axes)
+        elif self.arg.forwarded is args[1].forwarded:
+            self.operand = 'B'
+            self.reduction_axes = Axes.as_flattened_list(self.op.reduction_axes)
+            self.out_axes = Axes.as_flattened_list(self.op.y_out_axes)
+        else:
+            raise ValueError("Invalid argument for constraint")
+
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        out_mem_order = flatten(op_layout.axes)
+
+        reduction_group = [a for a in self.reduction_axes]
+        out_group = [self.op_axes[i] for i in out_mem_order if self.op_axes[i] in self.out_axes]
+
+        # Check if this argument can be transposed
+        if self.operand == 'A':
+            can_trans = op_layout.A_trans
+        elif self.operand == 'B':
+            can_trans = op_layout.B_trans
+
+        # Each arg must have two contiguous axes where one matches
+        # reduction axes and the other matches one of the output axes
+        if len(reduction_group) == 0 or self.group_axis_contig(arg_mem_order, reduction_group):
+            if can_trans:
+                if self.group_axis_contig(arg_mem_order, out_group):
+                    return False
+            else:
+                # Make sure operand is not transposed
+                if self.operand == 'A':
+                    required_layout = out_group + reduction_group
+                elif self.operand == 'B':
+                    required_layout = reduction_group + out_group
+
+                if self.group_axis_contig(arg_mem_order, required_layout):
+                    return False
+
+        return True
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+        args = list(self.op.args)
+
+        reduction_group = [a for a in self.reduction_axes]
+        out_group = [a for a in self.out_axes]
+
+        if self.needs_transform(arg_layout, op_layout):
+            if self.arg.forwarded is args[0].forwarded:
+                out_groups = [out_group, reduction_group]
+                return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
+            else:
+                out_groups = [reduction_group, out_group]
+                return self.get_dimshuffle(arg_mem_order, arg_axes, out_groups, arg)
+        else:
+            if self.arg.forwarded is args[0].forwarded:
+                out_groups = [out_group, reduction_group]
+                return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+            else:
+                out_groups = [reduction_group, out_group]
+                return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+
+
+class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPUSetItemLayoutConstraint, self).__init__(op, arg)
+        self.order = Axes.as_flattened_list(arg.axes)
+
+    def get_cost(self, arg_layout, op_layout):
+        return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_view_axes = Axes.as_flattened_list(arg.axes)
+        arg_axes = arg_layout.ng_axes
+        out_groups = [[a] for a in arg_view_axes]
+        return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
+
+
+class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
+    def __init__(self, op, arg):
+        super(GPULutLayoutConstraint, self).__init__(op, arg)
+        if len(arg.axes) == 2:
+            self.order = [Axes.as_flattened_list(Axes(arg.axes[0])),
+                          Axes.as_flattened_list(Axes(arg.axes[1]))]
+        else:
+            self.order = [Axes.as_flattened_list(arg.axes)]
+
+    def needs_transform(self, arg_layout, op_layout):
+        arg_mem_order = flatten(arg_layout.axes)
+        for group in self.order:
+            if not self.group_axis_contig(arg_mem_order, group):
+                return True
+
+        return False
+
+    def get_cost(self, arg_layout, op_layout):
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
+        else:
+            return 0.0
+
+    def get_layout_transform(self, arg_layout, op_layout, arg):
+        arg_mem_order = flatten(arg_layout.axes)
+        arg_axes = arg_layout.ng_axes
+
+        if self.needs_transform(arg_layout, op_layout):
+            return self.get_dimshuffle(arg_mem_order, arg_axes, self.order, arg)
+        else:
+            return self.get_reshape(arg_mem_order, arg_axes, self.order, arg)
+
+
+class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
+    def __init__(self):
+        pass
+
+    def get_cost(self, op_layout):
+        return 0.0

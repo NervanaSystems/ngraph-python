@@ -426,6 +426,49 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns: A DeviceBufferReference.
         """
 
+    def get_layouts(self, op):
+        """
+        Returns a list of possible axis layouts for the op. The default layout must
+        be the first item in the returned list.
+
+        Arguments:
+            op: graph op to get possible layouts for
+
+        Returns:
+            A list of objects that inherit from LayoutAssignment. The first item in the
+            list must be the default layout for this op.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_cost_function(self, op):
+        """
+        Returns a UnaryLayoutConstraint which computes the cost of an op given an
+        assigned data layout for that op.
+
+        Arguments:
+            op: graph op to get cost function for
+
+        Returns:
+            An object that inherits from UnaryLayoutConstraint and can be used to
+            calculate the layout assignment cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_change_cost_function(self, op, arg):
+        """
+        Returns a BinaryLayoutConstraint which computes the cost of a layout change
+        between the specified op and its specified arg (if any cost).
+
+        Arguments:
+            op: graph op to get cost function for
+            arg: argument to the op to generate cost function for
+
+        Returns:
+            An object that inherits from BinaryLayoutConstraint and can be used to
+            calculate any layout change cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
     # Old interface
     def computation(self, results, *parameters):
         """

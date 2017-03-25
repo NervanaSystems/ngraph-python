@@ -1158,10 +1158,18 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                 is_persistent=self.is_persistent,
-                                 is_input=self.is_input,
-                                 is_placeholder=self.is_placeholder)
+        if "layout" in self.metadata:
+            return TensorDescription(self.axes,
+                                     layout=self.metadata["layout"],
+                                     dtype=self.dtype,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
+        else:
+            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):

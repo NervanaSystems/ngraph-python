@@ -62,9 +62,9 @@ class FlexConvFpropKernel(ConvFpropKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
-        self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
-        self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
+        self.I = TensorDescriptionWrapper(self.I)
+        self.F = TensorDescriptionWrapper(self.F)
+        self.O = TensorDescriptionWrapper(self.O)
 
         self.flex_entry_I = self.I.flex_entry()
         self.flex_entry_F = self.F.flex_entry()
@@ -211,9 +211,9 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
-        self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
-        self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
+        self.E = TensorDescriptionWrapper(self.E)
+        self.F = TensorDescriptionWrapper(self.F)
+        self.O = TensorDescriptionWrapper(self.O)
 
         self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_F = self.F.flex_entry()
@@ -435,9 +435,9 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
-        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
-        self.U = TensorDescriptionWrapper(self.U, len(self.U.shape))
+        self.I = TensorDescriptionWrapper(self.I)
+        self.E = TensorDescriptionWrapper(self.E)
+        self.U = TensorDescriptionWrapper(self.U)
 
         self.flex_entry_I = self.I.flex_entry()
         self.flex_entry_E = self.E.flex_entry()
