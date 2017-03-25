@@ -185,6 +185,49 @@ def test_slice(transformer_factory):
             )
 
 
+def test_multiple_slices(transformer_factory):
+    C = ng.make_axis(length=2)
+    D = ng.make_axis(length=3)
+
+    x = ng.placeholder([C, D])
+
+    x0_slice = x[0, :]
+    x1_slice = x[1, :]
+
+    y1 = x0_slice * 2 + x1_slice * 3
+    # overlapping distinct slices
+    y2 = x0_slice * 2 + x1_slice * 3 + 4 * x[1, :]
+
+    with ExecutorFactory() as ex:
+        # nonoverlapping
+        y1_fun = ex.executor(y1, x)
+        num_deriv_fun1 = ex.numeric_derivative(y1, x, delta)
+        sym_deriv_fun1 = ex.derivative(y1, x)
+
+        # overlapping
+        y2_fun = ex.executor(y2, x)
+        num_deriv_fun2 = ex.numeric_derivative(y2, x, delta)
+        sym_deriv_fun2 = ex.derivative(y2, x)
+
+        x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
+        assert ng.testing.allclose(y1_fun(x_np), np.array([23, 46, 69]))
+        assert ng.testing.allclose(y2_fun(x_np), np.array([27, 54, 81]))
+
+        assert ng.testing.allclose(
+            num_deriv_fun1(x_np),
+            sym_deriv_fun1(x_np),
+            rtol=rtol,
+            atol=atol
+        )
+
+        assert ng.testing.allclose(
+            num_deriv_fun2(x_np),
+            sym_deriv_fun2(x_np),
+            rtol=rtol,
+            atol=atol
+        )
+
+
 def test_padding(transformer_factory):
     """TODO."""
     C = ng.make_axis()

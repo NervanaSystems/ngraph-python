@@ -1899,20 +1899,77 @@ class TensorSliceOp(ReshapeOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         """
-        TODO.
+        Propagate gradients for y = ng.slice(x, slices). That is, set the
+        adjoints w.r.t. x.
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
+        Args:
+            adjoints: the adjoints global dict
+            delta: df/dy
+            x: the input to ng.slice op
+            self: the tensorslice op
 
-        Returns:
-          TODO
+        Example shapes:
+            y = ng.slice(x, slices)
+            x shape: (2, 3)
+            self shape, i.e. y's shape: (3,)
+            delta shape: (3,)
+            _unslice(delta, self.slices, x.axes) shape: (2, 3)
+
+        Goals:
+            adjoints[x] += _unslice(delta, self.slices, x.axes)
+            more exactly, if x is ValueOp, should be handled by x.value_tensor
+
+        Dependencies graph:
+
+                       [0 or other initial gradients]            [first_unslice]
+                          ^                                          ^ ^ ^ ^
+                          |                                          | | | |
+                        (arg)                                        | | | |
+                          |                                          | | | |
+        adjoints[x] => [ng.add]---(arg)------------------------------- | | |
+                         | | |                                         | | |
+                         | | --(ct_dep)-> [setitem_1] -------(ct_dep)--- | |
+                         | |                                             | |
+                         | ----(ct_dep)-> [setitem_2] -------(ct_dep)----- |
+                         |                                                 |
+                         ------(ct_dep)-> [setitem_3] -------(ct_dep)-------
         """
-        x.generate_add_delta(
-            adjoints,
-            _unslice(delta, self.slices, x.axes)
-        )
+
+        # special handling of value op, this is because in generate_add_delta,
+        # ValueOp has special handler
+        if isinstance(x, ValueOp):
+            x = x.value_tensor
+
+        if x not in adjoints:
+            # x not in adjoints dict, so need to allocate a new buffer with
+            # _unslice
+            x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+
+            # critical to add zero
+            # - if we don't add zero, in the "Dependency graph" above,
+            #   the [ng.add] node will collapse with [first_unslice] node,
+            #   creating circular dependency
+            # - after first add zero, later gradient accumulation will be doing
+            #   self add
+            adjoints[x] = x.first_unslice_op + as_op(0.)
+        else:
+            if not hasattr(x, 'first_unslice_op'):
+                # x has received adjoints from other operations, but not
+                # from TensorSliceOp yet
+                x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+                adjoints[x] = x.first_unslice_op + adjoints[x]
+            else:
+                # has the buffer already available, this is the [setitem_1,2,3]
+                # node case in the above docstrings
+                updated_delta = delta + tensor_slice(x.first_unslice_op,
+                                                     self.slices, axes=delta.axes)
+                new_setitem = SetItemOp(x.first_unslice_op,
+                                        self.slices, updated_delta)
+
+                # set appropriate control_deps, this corresponds to (ct_dep)
+                # in the above docstrings
+                new_setitem.add_control_dep(x.first_unslice_op)
+                adjoints[x].add_control_dep(new_setitem)
 
 
 def slice_along_axis(x, axis, idx):
