@@ -25,4 +25,5 @@ ADD . /root/ngraph-test
 RUN pip install -e .
 
 ENV PYTHONPATH=.:/tmp/:$PYTHONPATH
-ENV MKL_TEST_ENABLE=True
+ENV LD_LIBRARY_PATH=$MKLDNN_ROOT/lib:$LD_LIBRARY_PATH
+ENV LD_PRELOAD="./mkldnn_engine.so"

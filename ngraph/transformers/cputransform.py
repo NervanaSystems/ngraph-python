@@ -865,7 +865,7 @@ class CPUTransformer(Transformer):
         return CPUDeviceBufferReference(self)
 
     def start_transform_allocate(self):
-        mkldnn_path = "/tmp/"
+        mkldnn_path = os.getcwd()
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.init_code.append("""def __init__(self):""")
         self.init_code.indent(1)

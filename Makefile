@@ -81,10 +81,8 @@ test_flex: test_prepare clean
 	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 
-test_mkldnn: test_prepare clean
-	@echo Running unit tests...
-	@MKL_TEST_ENABLE=1 py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+test_mkldnn: export MKL_TEST_ENABLE=1
+test_mkldnn: test_prepare clean test_cpu test_hetr
 
 test_cpu: test_prepare clean
 	@echo Running unit tests for core and cpu transformer tests...
