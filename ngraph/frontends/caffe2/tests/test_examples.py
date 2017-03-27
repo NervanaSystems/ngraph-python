@@ -22,7 +22,7 @@ from ngraph.frontends.caffe2.examples.sum import sum_example
 import pytest
 
 
-# Note that these tests are only unit tests. Check if workload is consitent and can be run.
+# Note that these tests are only unit tests. Check if workload is consistent and can be run.
 # These tests don't check results.
 
 
@@ -39,7 +39,9 @@ def test_sum_example():
     sum_example()
 
 
-@pytest.mark.xfail()
+# We don't want to attempt to run any tests that attempt to download data or write temporary
+# files as part of the merge-blocking unit test suites
+@pytest.mark.skip()
 def test_mnist_mlp():
     args = type('', (), {})()
     args.data_dir = '/tmp/data'

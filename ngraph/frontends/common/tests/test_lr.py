@@ -18,106 +18,146 @@ from ngraph.frontends.common.learning_rate_policies import lr_policies
 import ngraph as ng
 import numpy as np
 from ngraph.testing import ExecutorFactory
+import pytest
+
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_disabled("module")]
 
 
-def test_fixed_lr():
+@pytest.fixture
+def iter_buf():
+    return ng.placeholder(axes=(), dtype=np.dtype(np.uint32))
+
+
+@pytest.fixture
+def base_lr():
+    return 0.9
+
+
+@pytest.fixture
+def max_iter():
+    return 20
+
+
+def test_fixed_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'fixed'), ('max_iter', 20), ('base_lr', 0.9)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'fixed'
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr}
 
     # execute
-    naive_lr = np.full(params['max_iter'], params['base_lr'])
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = np.full(max_iter, base_lr)
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
-    # compare
+        # compare
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
-def test_step_lr():
+def test_step_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'step'), ('max_iter', 20), ('base_lr', 0.9), ('gamma', 0.9),
-                   ('step', 5)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'step'
+    gamma = 0.9
+    step = 5
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr,
+              'gamma': gamma,
+              'step': step}
 
     # execute
-    naive_lr = params['base_lr'] * params['gamma'] ** \
-               (np.array(range(0, params['max_iter'])) // params['step'])
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = base_lr * gamma ** (np.arange(max_iter) // step)
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
-    # compare
+        # compare
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
-def test_exp_lr():
+def test_exp_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'exp'), ('max_iter', 20), ('base_lr', 0.9), ('gamma', 0.9)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'exp'
+    gamma = 0.9
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr,
+              'gamma': gamma}
 
     # execute
-    naive_lr = params['base_lr'] * params['gamma'] ** np.array(range(0, params['max_iter']))
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = base_lr * gamma ** np.arange(max_iter)
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
-    # compare
+        # compare
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
-def test_inv_lr():
+def test_inv_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'inv'), ('max_iter', 20), ('base_lr', 0.9), ('gamma', 0.9),
-                  ('power', 0.75)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'inv'
+    gamma = 0.9
+    power = 0.75
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr,
+              'gamma': gamma,
+              'power': power}
 
     # execute
-    naive_lr = params['base_lr'] * (1 + params['gamma'] * np.array(range(0, params['max_iter']))) \
-               ** (-params['power'])
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = base_lr * (1 + gamma * np.arange(max_iter)) ** (-power)
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
-    # compare
+        # compare
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
-def test_poly_lr():
+def test_poly_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'poly'), ('max_iter', 20), ('base_lr', 0.9), ('power', 0.75)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'poly'
+    power = 0.75
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr,
+              'power': power}
 
     # execute
-    naive_lr = params['base_lr'] * \
-               (1 - np.array(range(0, params['max_iter'])) / params['max_iter']) ** params['power']
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = base_lr * (1 - np.arange(max_iter) / max_iter) ** power
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
-    # compare
+        # compare
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
-def test_sigmoid_lr():
+def test_sigmoid_lr(iter_buf, max_iter, base_lr):
     # set up
-    params = dict([('name', 'sigmoid'), ('max_iter', 20), ('base_lr', 0.9), ('gamma', 0.75),
-                   ('step_size', 5)])
-    iter_buf = ng.placeholder(axes=(), dtype=np.dtype(np.uint64))
+    name = 'sigmoid'
+    gamma = 0.75
+    step_size = 5
+    params = {'name': name,
+              'max_iter': max_iter,
+              'base_lr': base_lr,
+              'gamma': gamma,
+              'step_size': step_size}
 
     # execute
-    naive_lr = params['base_lr'] * (1 / (1 + np.exp(-params['gamma'] * (np.array(range(0, params['max_iter'])) - params['step_size']))))
-    lr_op = lr_policies[params['name']]['obj'](params).compute_lr(iter_buf)
+    naive_lr = base_lr * (1 / (1 + np.exp(-gamma * (np.arange(max_iter) - step_size))))
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
     with ExecutorFactory() as ex:
         compute_lr = ex.executor(lr_op, iter_buf)
-        ng_lr = [compute_lr(i).item(0) for i in range(params['max_iter'])]
+        ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
         assert (np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
-

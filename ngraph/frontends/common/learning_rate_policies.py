@@ -34,7 +34,7 @@ class lr_policy:
         self.base_lr = ng.constant(axes=(), const=base_lr)
 
     @abc.abstractmethod
-    def compute_lr(self, iter):
+    def __call__(self, iteration):
         pass
 
 
@@ -44,7 +44,7 @@ class lr_policy_fixed(lr_policy):
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
 
-    def compute_lr(self, iter):
+    def __call__(self, iteration):
         return self.base_lr
 
 
@@ -56,8 +56,8 @@ class lr_policy_step(lr_policy):
         self.gamma = ng.constant(axes=(), const=params['gamma'])
         self.step = ng.constant(axes=(), const=params['step']) # TODO dtype int?
 
-    def compute_lr(self, iter):
-        return self.base_lr * self.gamma ** (iter // self.step)
+    def __call__(self, iteration):
+        return self.base_lr * self.gamma ** (iteration // self.step)
 
 
 class lr_policy_schedule(lr_policy):
@@ -90,7 +90,7 @@ class lr_policy_schedule(lr_policy):
         self.gamma = ng.constant(axes=[sched_axis], const=params['gamma'])
         self.schedule = ng.constant(axes=[sched_axis], const=params['schedule'], dtype=uint_dtype)
 
-    def compute_lr(self, iteration):
+    def __call__(self, iteration):
         masked_gamma = (iteration >= self.schedule) * self.gamma
         masked_holes = (iteration < self.schedule)
         return self.base_lr * ng.prod(masked_gamma + masked_holes, out_axes=())
@@ -103,8 +103,8 @@ class lr_policy_exp(lr_policy):
         lr_policy.__init__(self, params['name'], params['base_lr'])
         self.gamma = params['gamma']
 
-    def compute_lr(self, iter):
-        return self.base_lr * self.gamma ** iter
+    def __call__(self, iteration):
+        return self.base_lr * self.gamma ** iteration
 
 
 class lr_policy_inv(lr_policy):
@@ -115,8 +115,8 @@ class lr_policy_inv(lr_policy):
         self.gamma = params['gamma']
         self.power = params['power']
 
-    def compute_lr(self, iter):
-        return self.base_lr * (1 + self.gamma * iter) ** (-self.power)
+    def __call__(self, iteration):
+        return self.base_lr * (1 + self.gamma * iteration) ** (-self.power)
 
 
 class lr_policy_poly(lr_policy):
@@ -127,8 +127,8 @@ class lr_policy_poly(lr_policy):
         self.max_iter = params['max_iter']
         self.power = params['power']
 
-    def compute_lr(self, iter):
-        return self.base_lr * (1 - iter/self.max_iter) ** self.power
+    def __call__(self, iteration):
+        return self.base_lr * (1 - iteration/self.max_iter) ** self.power
 
 
 class lr_policy_sigmoid(lr_policy):
@@ -139,8 +139,8 @@ class lr_policy_sigmoid(lr_policy):
         self.gamma = params['gamma']
         self.step_size = params['step_size']
 
-    def compute_lr(self, iter):
-        return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iter - self.step_size))))
+    def __call__(self, iteration):
+        return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
 
 
 lr_policies = {
