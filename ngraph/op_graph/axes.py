@@ -680,23 +680,9 @@ class Axes(object):
         order. This check is symmetric.
         """
 
-        def inflate(axes):
-            """
-            Inflate Axes potentially containing FlattendAxis to a list of regular
-            Axis recursively.
-            """
-            axes_list = [list(axis.axes) if axis.is_flattened else [axis]
-                         for axis in axes]
-            axes = list(itertools.chain.from_iterable(axes_list))
-
-            # inflate recursively
-            if any([axis.is_flattened for axis in axes]):
-                return inflate(axes)
-            else:
-                return axes
-
         # inflate
-        src_axes, dst_axes = inflate(src_axes), inflate(dst_axes)
+        src_axes = Axes.as_flattened_list(src_axes)
+        dst_axes = Axes.as_flattened_list(dst_axes)
 
         # check equal number of Axis
         if len(src_axes) != len(dst_axes):
@@ -780,19 +766,20 @@ class Axes(object):
     @staticmethod
     def as_flattened_list(axes):
         """
-        Converts Axes to a list of axes with flattened axes expanded
+        Converts Axes to a list of axes with flattened axes expanded recursively.
 
         Returns:
             List of Axis objects
         """
-        l = Axes.as_nested_list(axes)
-        out = []
-        for item in l:
-            if type(item) == list:
-                out = out + item
-            else:
-                out.append(item)
-        return out
+        axes_list = [list(axis.axes) if axis.is_flattened else [axis]
+                     for axis in axes]
+        axes = list(itertools.chain.from_iterable(axes_list))
+
+        # inflate recursively
+        if any([axis.is_flattened for axis in axes]):
+            return Axes.as_flattened_list(axes)
+        else:
+            return axes
 
 
 class DuplicateAxisNames(ValueError):
