@@ -43,6 +43,7 @@ class OpsUnary(OpsBase):
         # return op
         return result_op
 
+
     def Tanh(self, c2_op, inputs):
         """
         Computes hyperbolic tangent of `x` element-wise.

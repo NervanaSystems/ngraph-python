@@ -69,19 +69,19 @@ def linear_regression(iter_num, lrate, gamma, step_size, noise_scale):
         importer.get_op_handle(['Y_noise', 'X', 'W', 'B', 'Y_pred', 'dist', 'loss'])
 
     # setting learning rate for ngraph, that matches the one that it will be used for caffe2 below
-    alpha = ng.placeholder(axes=(), initial_value=[lrate])
+    lr_params = {'name': 'step', 'base_lr': lrate, 'gamma': gamma, 'step': step_size}
 
-    parallel_update = util.CommonSGDOptimizer(lrate).minimize(loss_ng, [w_ng, b_ng])
+    SGD = util.CommonSGDOptimizer(lr_params)
+    parallel_update = SGD.minimize(loss_ng, [w_ng, b_ng])
     transformer = ngt.make_transformer()
     update_fun = transformer.computation(
-        [loss_ng, w_ng, b_ng, parallel_update], alpha, x_ng, y_gt_ng)
+        [loss_ng, w_ng, b_ng, parallel_update], x_ng, y_gt_ng, SGD.get_iter_buffer())
 
     true_iter = [0]
     # ngraph actual computation
     for i in range(iter_num // batch_len):
         for xs, ys in zip(xs_np, ys_np + noise):
-            loss_val, w_val, b_val, _ = update_fun(
-                lrate * gamma**(true_iter[0] // step_size), xs, ys)
+            loss_val, w_val, b_val, _ = update_fun(xs, ys, i)
             # print("N it: %s W: %s, B: %s loss %s " % (i, w_val, b_val, loss_val))
             true_iter[0] += 1
 
@@ -120,6 +120,9 @@ def linear_regression(iter_num, lrate, gamma, step_size, noise_scale):
     print("Ngraph after training, B is: {}".format(b_val))
     print("Target W was: {}".format(target_w))
     print("Target B was: {}".format(target_b))
+
+    assert(workspace.FetchBlob("loss") < 0.01)
+    assert(loss_val < 0.01)
 
 
 if __name__ == "__main__":

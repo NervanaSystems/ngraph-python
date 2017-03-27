@@ -30,7 +30,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
@@ -146,6 +146,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Divide)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(FloorDivide)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("int_div", x=x, y=y, out=out)
 
     @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
