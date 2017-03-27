@@ -4,7 +4,6 @@ import ngraph.transformers as ngt
 import ngraph.frontends.common.utils as util
 from caffe2.python import core, workspace
 import numpy as np
-import ngraph as ng
 
 
 def linear_regression(iter_num, lrate, gamma, step_size, noise_scale):

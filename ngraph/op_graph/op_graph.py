@@ -1080,9 +1080,6 @@ class TensorOp(Op):
     def __div__(self, val):
         return divide(self, val)
 
-    def __floordiv__(self, val):
-        return floor_divide(self, val)
-
     def __mod__(self, val):
         return mod(self, val)
 

@@ -762,9 +762,6 @@ class GPUDeviceTensor(DeviceTensor):
     def __setitem__(self, key, value):
         sliced = self.__getitem__(key)
 
-        if isinstance(value, np.ndarray) and value.shape == ():
-            value = value.item()
-
         # Use fill for scalar values
         # convert value to numpy
         if type(value) == float:
@@ -778,8 +775,7 @@ class GPUDeviceTensor(DeviceTensor):
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
             sliced.fill(value.astype(sliced.dtype))
-        elif type(value) == np.int32 or type(value) == np.int64 or \
-                type(value) == int:
+        elif type(value) in (np.int32, np.int64, int, np.uint32):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))

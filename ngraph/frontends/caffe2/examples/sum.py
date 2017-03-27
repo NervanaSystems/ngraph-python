@@ -28,7 +28,7 @@ def sum_example():
     A = net.GivenTensorFill([], "A", shape=shape, values=np.random.uniform(-5, 5, shape), name="A")
     B = net.GivenTensorFill([], "B", shape=shape, values=np.random.uniform(-5, 5, shape), name="B")
     C = net.GivenTensorFill([], "C", shape=shape, values=np.random.uniform(-5, 5, shape), name="C")
-    Y = A.Sum([B, C], ["Y"], name="Y")
+    A.Sum([B, C], ["Y"], name="Y")
 
     # Execute via Caffe2
     workspace.ResetWorkspace()

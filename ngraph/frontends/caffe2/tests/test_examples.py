@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 
 
-import argparse
 from ngraph.frontends.caffe2.examples.linear_regression import linear_regression
 from ngraph.frontends.caffe2.examples.fc import fc_example
 from ngraph.frontends.caffe2.examples.mnist_mlp import mnist_mlp

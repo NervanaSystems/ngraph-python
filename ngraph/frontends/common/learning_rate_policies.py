@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
-from math import exp
+from __future__ import division
 import ngraph as ng
 import numpy as np
 import abc
@@ -133,7 +132,7 @@ class lr_policy_poly(lr_policy):
         self.power = ng.constant(axes=(), const=params['power'])
 
     def __call__(self, iteration):
-        return self.base_lr * (1 - iteration/self.max_iter) ** self.power
+        return self.base_lr * (1 - iteration / self.max_iter) ** self.power
 
 
 class lr_policy_sigmoid(lr_policy):

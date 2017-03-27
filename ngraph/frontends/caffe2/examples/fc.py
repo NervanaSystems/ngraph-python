@@ -19,6 +19,7 @@ from caffe2.python import core, workspace
 import ngraph.transformers as ngt
 import numpy as np
 
+
 def fc_example():
     # Caffe2 - network creation
     net = core.Net("net")
@@ -26,7 +27,7 @@ def fc_example():
     X = net.GivenTensorFill([], "X", shape=[2, 2], values=[1.0, 2.0, 3.0, 4.0], name="X")
     W = net.GivenTensorFill([], "W", shape=[1, 2], values=[5.0, 6.0], name="W")
     b = net.ConstantFill([], ["b"], shape=[1, ], value=0.5, run_once=0, name="b")
-    Y = X.FC([W, b], ["Y"], name="Y")
+    X.FC([W, b], ["Y"], name="Y")
 
     # Execute via Caffe2
     workspace.ResetWorkspace()
@@ -46,6 +47,7 @@ def fc_example():
     print("Caffe2 result: {}:\n{}".format("Y", workspace.FetchBlob("Y")))
     print("ngraph result: {}:\n{}".format("Y", f_result))
     assert(np.array_equal(f_result, workspace.FetchBlob("Y")))
+
 
 if __name__ == '__main__':
     fc_example()

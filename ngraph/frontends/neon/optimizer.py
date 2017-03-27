@@ -32,7 +32,7 @@ def get_learning_rate_policy_callback(lr_params):
                                       policies=lrp.lr_policies.keys())
                                   )
     elif all([x in lr_params.keys() for x in lrp.lr_policies[lr_params['name']]['args']]):
-        return lrp.lr_policies[lr_params['name']]['obj'](lr_params).compute_lr
+        return lrp.lr_policies[lr_params['name']]['obj'](lr_params)
     else:
         raise ValueError("Too few arguments provided to create policy {lr_name}."
                          "\nGiven: {lr_params}"

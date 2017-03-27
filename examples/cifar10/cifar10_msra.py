@@ -200,3 +200,5 @@ for step in range(args.num_iterations):
         interval_cost = 0.0
         eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
         tqdm.write("Avg losses: {}".format(eval_losses))
+
+print("Training complete.")
