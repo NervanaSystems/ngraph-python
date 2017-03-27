@@ -1080,6 +1080,9 @@ class TensorOp(Op):
     def __div__(self, val):
         return divide(self, val)
 
+    def __floordiv__(self, val):
+        return floor_divide(self, val)
+
     def __mod__(self, val):
         return mod(self, val)
 
@@ -2970,7 +2973,9 @@ def floordivide_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, -delta * self // y)
 
 
-FloorDivide, floordivide = create_binary_elementwise('FloorDivide', 'floordivide', floordivide_adjoints)
+FloorDivide, floordivide = create_binary_elementwise(
+    'FloorDivide', 'floordivide', floordivide_adjoints)
+
 
 Mod, mod = create_binary_elementwise('Mod', 'mod')
 

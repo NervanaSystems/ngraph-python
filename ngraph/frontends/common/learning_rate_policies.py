@@ -13,18 +13,23 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from math import exp
 import ngraph as ng
+import numpy as np
 import abc
 import collections
+# =======================
 
 # supported lr policies with required parameters
-# fixed   = base_lr
-# step    = base_lr * gamma ^ (floor(iter / step))
-# schedule = base_lr * gamma_1 * gamma_2 * (... up through the number of steps in schedule
-# exp     = base_lr * gamma ^ iter
-# inv     = base_lr * (1 + gamma * iter) ^ (-power)
-# poly    = base_lr * (1 - iter/max_iter) ^ power
-# sigmoid = base_lr * (1 / (1 + exp(-gamma * (iter - step_size))))
+# fixed    = base_lr
+# step     = base_lr * gamma ^ (floor(iter / step))
+# schedule = base_lr * gamma_1 * gamma_2 * (... up through the number of steps in schedule)
+# exp      = base_lr * gamma ^ iter
+# inv      = base_lr * (1 + gamma * iter) ^ (-power)
+# poly     = base_lr * (1 - iter/max_iter) ^ power
+# sigmoid  = base_lr * (1 / (1 + exp(-gamma * (iter - stepsize))))
+
+uint_dtype = np.dtype(np.uint32)
 
 
 class lr_policy:
@@ -54,7 +59,7 @@ class lr_policy_step(lr_policy):
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
         self.gamma = ng.constant(axes=(), const=params['gamma'])
-        self.step = ng.constant(axes=(), const=params['step']) # TODO dtype int?
+        self.step = ng.constant(axes=(), const=params['step'], dtype=uint_dtype)
 
     def __call__(self, iteration):
         return self.base_lr * self.gamma ** (iteration // self.step)
@@ -101,7 +106,7 @@ class lr_policy_exp(lr_policy):
 
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
-        self.gamma = params['gamma']
+        self.gamma = ng.constant(axes=(), const=params['gamma'])
 
     def __call__(self, iteration):
         return self.base_lr * self.gamma ** iteration
@@ -112,8 +117,8 @@ class lr_policy_inv(lr_policy):
 
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
-        self.gamma = params['gamma']
-        self.power = params['power']
+        self.gamma = ng.constant(axes=(), const=params['gamma'])
+        self.power = ng.constant(axes=(), const=params['power'])
 
     def __call__(self, iteration):
         return self.base_lr * (1 + self.gamma * iteration) ** (-self.power)
@@ -124,8 +129,8 @@ class lr_policy_poly(lr_policy):
 
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
-        self.max_iter = params['max_iter']
-        self.power = params['power']
+        self.max_iter = ng.constant(axes=(), const=params['max_iter'], dtype=uint_dtype)
+        self.power = ng.constant(axes=(), const=params['power'])
 
     def __call__(self, iteration):
         return self.base_lr * (1 - iteration/self.max_iter) ** self.power
@@ -136,8 +141,8 @@ class lr_policy_sigmoid(lr_policy):
 
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
-        self.gamma = params['gamma']
-        self.step_size = params['step_size']
+        self.gamma = ng.constant(axes=(), const=params['gamma'])
+        self.step_size = ng.constant(axes=(), const=params['step_size'], dtype=uint_dtype)
 
     def __call__(self, iteration):
         return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
