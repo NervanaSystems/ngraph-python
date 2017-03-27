@@ -31,13 +31,7 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/ngraph-test/
 
-MKLDNN_TEST_CMD_UNIT := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=tests --junit-xml=testout_unit_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${UNIT_TEST_DIRS}||echo keep going in case of test failures; cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_unit_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_NEON := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=ngraph --junit-xml=testout_neon_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${NEON_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_neon_test_${PYTHON_VERSION}"
-MKLDNN_TEST_CMD_TF := sh -c "echo Running unit tests...;MKL_TEST_ENABLE=1 py.test --cov=ngraph --junit-xml=testout_tf_test_${PYTHON_VERSION}.xml ${TEST_OPTS} ${TF_TEST_DIRS}||echo keep going in case of test failures;cp /root/ngraph-test/.coverage /root/ngraph-test/.coverage_tf_test_${PYTHON_VERSION}"
-
-COV_COMBINED_CMD := sh -c "echo Running Coverage Report...;cd /root/ngraph-test;ls -l .coverage*;coverage combine;coverage xml -i;coverage report"
-
-.PHONY: clean doc style test test_gpu test_mkldnn test_mkldnn_gpu build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_mxnet test_mxnet_shell test_all
+.PHONY: clean doc style test test_gpu test_mkldnn build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_mxnet test_mxnet_shell test_all
 
 DOCKER_BUILD=docker build --rm=true
 
@@ -207,38 +201,8 @@ test_parallel: build_test
 	-t ngraph_test \
 	/tmp/chown_files.sh 
 
-test_mkldnn_unit: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_UNIT}
-# update the files to be owned by the calling user instead of root 
-	docker run --rm ${VOLUME} \
-	--env MY_UID=${CALLER_UID} \
-	--env MY_GID=${CALLER_GID} \
-	--env MY_ROOT_DIR=/root/ngraph-test \
-	-t ngraph_mkldnn_test \
-	/tmp/chown_files.sh 
-
-test_mkldnn_neon: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_NEON}
-# update the files to be owned by the calling user instead of root 
-	docker run --rm ${VOLUME} \
-	--env MY_UID=${CALLER_UID} \
-	--env MY_GID=${CALLER_GID} \
-	--env MY_ROOT_DIR=/root/ngraph-test \
-	-t ngraph_mkldnn_test \
-	/tmp/chown_files.sh 
-
-test_mkldnn_tf: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${MKLDNN_TEST_CMD_TF}
-# update the files to be owned by the calling user instead of root 
-	docker run --rm ${VOLUME} \
-	-t ngraph_mkldnn_test \
-	--env MY_UID=${CALLER_UID} \
-	--env MY_GID=${CALLER_GID} \
-	--env MY_ROOT_DIR=/root/ngraph-test \
-	/tmp/chown_files.sh 
-
 test_mkldnn: build_mkldnn_test
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} make test_mkldnn
+	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} sh -c "cp /tmp/mkldnn_engine.so ./mkldnn_engine.so;make test_mkldnn"
 # update the files to be owned by the calling user instead of root 
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
@@ -317,8 +281,5 @@ test_gpu_shell: build_test
 
 shell: build_dev
 	docker run --rm ${VOLUME} -it ngraph_dev:${BUILD_VERSION} /bin/bash
-
-combined_coverage:
-	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} ${COV_COMBINED_CMD}
 
 all: doc style test test_gpu test_mkldnn test_caffe2 test_mxnet
