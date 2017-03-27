@@ -26,7 +26,7 @@ def test_gemm(transformer_factory):
     """
     TODO: make this more interesting
     """
-    n, c = 32, 32
+    n, c = 3, 3
 
     N = ng.make_axis(length=n, name='N')
     C = ng.make_axis(length=c)
@@ -50,4 +50,6 @@ def test_gemm(transformer_factory):
             # assert np.allclose(np.dot(xs, w) - y_hat_val, 0.075*np.ones(n))
 
             # autoflex test
+            print (np.dot(xs, w))
+            print (y_hat_val)
             assert_allclose(np.dot(xs, w), y_hat_val)
