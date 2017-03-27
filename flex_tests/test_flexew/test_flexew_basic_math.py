@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
 import numpy as np
 import pytest
 
 import ngraph as ng
 from ngraph.testing.flexutil import template_one_placeholder
-import operator as op
+from ngraph.testing import executor
+
 pytestmark = pytest.mark.transformer_dependent("module")
 
 MINIMUM_FLEX_VALUE = -2 ** 15
@@ -36,15 +38,20 @@ bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find expla
 EPSILON = 0.2
 x = ng.placeholder(())
 
-test_data_single_operand = (
-    # template:(operation, operand, expected_result, description)
+
+test_assign_data = (
+    # template:(operand_to_assign, expected_result, description)
 
     # test_assign
-    bug_1103((ng.value_of, [MINIMUM_FLEX_VALUE - 2], [MINIMUM_FLEX_VALUE], "Assign function - underflow expected")),
-    bug_1103((ng.value_of, [MAXIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE], "Assign function - overflow expected")),
-    (ng.value_of, [MINIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE], "Assign function of negative boundary value"),
-    bug_1103((ng.value_of, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Assign function of positive boundary value")),
-    (ng.value_of, [0.4], [0.399993896484375], "Assign function of positive values from flex range - check high precision"),
+    bug_1103((MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE, "Assign function - underflow expected")),
+    bug_1103((MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE, "Assign function - overflow expected")),
+    (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE, "Assign function of negative boundary value"),
+    bug_1103((MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, "Assign function of positive boundary value")),
+    (0.4, 0.399993896484375, "Assign function of positive values from flex range - check high precision"),
+)
+
+test_data_single_operand = (
+    # template:(operation, operand, expected_result, description)
 
     # test_neg
     bug_1103((ng.negative, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Negate function - overflow expected")),
@@ -127,3 +134,18 @@ def test_single_operand(transformer_factory, operation, operand, expected_result
 @pytest.mark.parametrize("operation, operand_1, operand_2, expected_result, description", test_data_double_operand)
 def test_double_operand(transformer_factory, operation, operand_1, operand_2, expected_result, description):
     template_one_placeholder(operand_1, operation(x, operand_2), x, expected_result, description)
+
+
+@pytest.mark.parametrize("operand, expected_result, description", test_assign_data)
+def test_assign(transformer_factory, operand, expected_result, description):
+    v = ng.variable(())
+    vset = ng.sequential([
+        ng.assign(v, operand),
+        v
+    ])
+    with executor(vset) as ex:
+        print(description)
+        vset_ex = ex()
+        print("flex: ", vset_ex)
+        print("expected: ", expected_result)
+        assert vset_ex == expected_result
