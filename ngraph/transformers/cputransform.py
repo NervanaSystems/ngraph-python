@@ -45,7 +45,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory
 
-from ngraph.factory.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
+from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
     CPUQueueScatterRecvOp
 

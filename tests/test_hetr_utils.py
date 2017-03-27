@@ -13,8 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
-from ngraph.factory.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
-from ngraph.factory.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
+from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
+from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
 
 
