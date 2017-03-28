@@ -1,7 +1,7 @@
 FROM nvidia/cuda:8.0-devel-ubuntu14.04
 
 RUN apt-get update && \
-    apt-get install -y python-pip python-dev git libssl-dev libffi-dev software-properties-common && \
+    apt-get install -y python-pip python-dev git software-properties-common && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 RUN pip install --upgrade pip
@@ -21,10 +21,5 @@ ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 ADD gpu_requirements.txt /tmp/gpu_requirements.txt
 RUN pip install -r /tmp/gpu_requirements.txt
-
-# add chown_files script
-ADD . /root/ngraph-test
-WORKDIR /root/ngraph-test/contrib/docker
-RUN cp ./chown_files.sh /tmp
 
 WORKDIR /root/ngraph-test
