@@ -1089,6 +1089,9 @@ class TensorOp(Op):
     def __rtruediv__(self, val):
         return divide(val, self)
 
+    def __floordiv__(self, val):
+        return floordivide(self, val)
+
     def __rdiv__(self, val):
         return divide(val, self)
 
@@ -1158,10 +1161,18 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                 is_persistent=self.is_persistent,
-                                 is_input=self.is_input,
-                                 is_placeholder=self.is_placeholder)
+        if "layout" in self.metadata:
+            return TensorDescription(self.axes,
+                                     layout=self.metadata["layout"],
+                                     dtype=self.dtype,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
+        else:
+            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1891,20 +1902,77 @@ class TensorSliceOp(ReshapeOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         """
-        TODO.
+        Propagate gradients for y = ng.slice(x, slices). That is, set the
+        adjoints w.r.t. x.
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
+        Args:
+            adjoints: the adjoints global dict
+            delta: df/dy
+            x: the input to ng.slice op
+            self: the tensorslice op
 
-        Returns:
-          TODO
+        Example shapes:
+            y = ng.slice(x, slices)
+            x shape: (2, 3)
+            self shape, i.e. y's shape: (3,)
+            delta shape: (3,)
+            _unslice(delta, self.slices, x.axes) shape: (2, 3)
+
+        Goals:
+            adjoints[x] += _unslice(delta, self.slices, x.axes)
+            more exactly, if x is ValueOp, should be handled by x.value_tensor
+
+        Dependencies graph:
+
+                       [0 or other initial gradients]            [first_unslice]
+                          ^                                          ^ ^ ^ ^
+                          |                                          | | | |
+                        (arg)                                        | | | |
+                          |                                          | | | |
+        adjoints[x] => [ng.add]---(arg)------------------------------- | | |
+                         | | |                                         | | |
+                         | | --(ct_dep)-> [setitem_1] -------(ct_dep)--- | |
+                         | |                                             | |
+                         | ----(ct_dep)-> [setitem_2] -------(ct_dep)----- |
+                         |                                                 |
+                         ------(ct_dep)-> [setitem_3] -------(ct_dep)-------
         """
-        x.generate_add_delta(
-            adjoints,
-            _unslice(delta, self.slices, x.axes)
-        )
+
+        # special handling of value op, this is because in generate_add_delta,
+        # ValueOp has special handler
+        if isinstance(x, ValueOp):
+            x = x.value_tensor
+
+        if x not in adjoints:
+            # x not in adjoints dict, so need to allocate a new buffer with
+            # _unslice
+            x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+
+            # critical to add zero
+            # - if we don't add zero, in the "Dependency graph" above,
+            #   the [ng.add] node will collapse with [first_unslice] node,
+            #   creating circular dependency
+            # - after first add zero, later gradient accumulation will be doing
+            #   self add
+            adjoints[x] = x.first_unslice_op + as_op(0.)
+        else:
+            if not hasattr(x, 'first_unslice_op'):
+                # x has received adjoints from other operations, but not
+                # from TensorSliceOp yet
+                x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+                adjoints[x] = x.first_unslice_op + adjoints[x]
+            else:
+                # has the buffer already available, this is the [setitem_1,2,3]
+                # node case in the above docstrings
+                updated_delta = delta + tensor_slice(x.first_unslice_op,
+                                                     self.slices, axes=delta.axes)
+                new_setitem = SetItemOp(x.first_unslice_op,
+                                        self.slices, updated_delta)
+
+                # set appropriate control_deps, this corresponds to (ct_dep)
+                # in the above docstrings
+                new_setitem.add_control_dep(x.first_unslice_op)
+                adjoints[x].add_control_dep(new_setitem)
 
 
 def slice_along_axis(x, axis, idx):
@@ -2821,9 +2889,17 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes | y.axes
-        x = broadcast(x, axes)
-        y = broadcast(y, axes)
+
+        x_axes_bcast = x.axes + (y.axes - x.axes)
+        y_axes_bcast = y.axes + (x.axes - y.axes)
+
+        if y_axes_bcast == y.axes:
+            axes = y_axes_bcast
+        else:
+            axes = x_axes_bcast
+
+        x = axes_with_order(broadcast(x, x_axes_bcast), axes)
+        y = axes_with_order(broadcast(y, y_axes_bcast), axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
@@ -2887,6 +2963,16 @@ def divide_adjoints(self, adjoints, delta, x, y):
 
 
 Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
+
+
+def floordivide_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * self // x)
+    y.generate_add_delta(adjoints, -delta * self // y)
+
+
+FloorDivide, floordivide = create_binary_elementwise(
+    'FloorDivide', 'floordivide', floordivide_adjoints)
+
 
 Mod, mod = create_binary_elementwise('Mod', 'mod')
 

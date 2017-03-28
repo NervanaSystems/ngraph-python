@@ -49,6 +49,7 @@ _op_templates = {
     "sub": r"%(out)s = %(x)s - %(y)s;",
     "mul": r"%(out)s = %(x)s * %(y)s;",
     "div": r"%(out)s = %(x)s / %(y)s;",
+    "int_div": r"%(out)s = int(%(x)s) / int(%(y)s);",
     "mod": r"%(out)s = int(%(x)s) %% int(%(y)s);",
     "eq": r"%(out)s = %(x)s == %(y)s;",
     "ne": r"%(out)s = %(x)s != %(y)s;",
@@ -283,58 +284,32 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes, gemm=False, take_axis=False):
+    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False,
+                 missing_axis=None):
         self.dtype = tensor_description.dtype
-        self.strides = tensor_description.strides
-        self.shape = tensor_description.shape
         self.td = tensor_description
 
-        if type(kernel_axes) == int:
-            if len(self.strides) == 0:
-                self.strides = (0, )
-
-            if len(self.shape) == 0:
-                self.shape = (1, )
-
-            if len(self.shape) < kernel_axes:
-                if gemm:
-                    self.shape = tuple(list(self.shape) + [1])
-                    self.strides = tuple(list(self.strides) + [1])
-                else:
-                    self.shape = tuple([1] + list(self.shape))
-                    self.strides = tuple([0] + list(self.strides))
-
-            self.strides = [s // self.dtype.itemsize for s in self.strides]
-            self.strides = tuple(self.strides)
-        elif len(self.strides) != len(kernel_axes):
-            num_kernel_axes = len(kernel_axes)
-            bcast_shape = [1] * num_kernel_axes
-            bcast_strides = [0] * num_kernel_axes
-            converted = []
-
-            for axis in range(num_kernel_axes):
-                if kernel_axes[axis] in self.td.axes:
-                    td_axis_index = self.td.axes.index(kernel_axes[axis])
-                    bcast_shape[axis] = self.shape[td_axis_index]
-                    bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
-                    converted.append(kernel_axes[axis])
-                else:
-                    # Broadcast
-                    bcast_shape[axis] = 1
-                    bcast_strides[axis] = 0
-
-            # Take axis condition where one will not match
-            if take_axis:
-                kernel_index = kernel_axes.index(kernel_axes - converted)
-                td_index = self.td.axes.index(self.td.axes - converted)
-                bcast_shape[kernel_index] = self.shape[td_index]
-                bcast_strides[kernel_index] = self.strides[td_index] // self.dtype.itemsize
-
-            self.shape = tuple(bcast_shape)
-            self.strides = tuple(bcast_strides)
+        if ignore_layout:
+            self.shape = [None]
+            self.strides = [None]
         else:
-            self.strides = [s // self.dtype.itemsize for s in self.strides]
-            self.strides = tuple(self.strides)
+            self.strides = list(tensor_description.layout.strides)
+            self.shape = list(tensor_description.layout.shape)
+
+        if missing_axis is not None:
+            self.shape.insert(missing_axis, 1)
+            self.strides.insert(missing_axis, 0)
+
+        if len(self.strides) == 0 and len(self.shape) == 0:
+            self.strides = [0]
+            self.shape = [1]
+
+        if kernel_axes is not None:
+            if len(self.shape) != kernel_axes or len(self.strides) != kernel_axes:
+                raise ValueError("Invalid tensor view input for kernel generator")
+
+        self.strides = tuple(self.strides)
+        self.shape = tuple(self.shape)
 
     @property
     def is_trans(self):
@@ -692,6 +667,8 @@ def _get_register_type(dtype, memory=False):
             return "float"
     elif dtype == np.int32:
         return "int"
+    elif dtype == np.uint32:
+        return "unsigned int"
     elif dtype == np.int16:
         return "short"
     elif dtype == np.int8:
@@ -701,33 +678,38 @@ def _get_register_type(dtype, memory=False):
 
 
 def _wrap_tensor_descriptions(ops):
-    max_dims = 0
-    kernel_axes = None
+    max_dims = 1
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if op[0] == "take" and (index == 2):
                 continue
             if isinstance(new_op[index], TensorDescription):
-                if len(new_op[index].shape) > max_dims:
-                    max_dims = len(new_op[index].shape)
-                    kernel_axes = new_op[index].axes
-
-    if kernel_axes is None:
-        # Make dummy axis for scalar kernels
-        kernel_axes = (1, )
+                if len(new_op[index].layout.shape) > max_dims:
+                    max_dims = len(new_op[index].layout.shape)
 
     new_ops = []
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                if op[0] == "take" and (index == 2):
+                if op[0] == "take" and (index == 1):
+                    missing_axis = 1 if op[4] == 0 else 0
                     new_op[index] = TensorDescriptionWrapper(new_op[index],
-                                                             kernel_axes,
-                                                             take_axis=True)
+                                                             max_dims,
+                                                             missing_axis=missing_axis)
                 else:
-                    new_op[index] = TensorDescriptionWrapper(new_op[index], kernel_axes)
+                    if op[0] in _redop_templates and index == 3:
+                        missing_axis = op[4]
+                    elif op[0] == "onehot" and index == 1:
+                        missing_axis = op[4]
+                    elif op[0] == "assign" and op[4] is not None:
+                        missing_axis = op[4]
+                    else:
+                        missing_axis = None
+                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                                                             max_dims,
+                                                             missing_axis=missing_axis)
 
         new_ops.append(tuple(new_op))
 

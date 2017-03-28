@@ -213,6 +213,9 @@ def op_to_protobuf(op):
 
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
+        # hetr only
+        if key in ('hetr_replaced_by', 'replaces_op', 'layout'):
+            continue
         assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
 
     if hasattr(op, '_ngraph_ser_handle'):
@@ -228,7 +231,8 @@ def op_to_protobuf(op):
             tensor_to_protobuf(op.valfun(op.tensor_description())))
 
     # These are handled above
-    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata'}
+    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata', 'layout_view', 'in_view', 'out_view',
+                    'all_deps'}
     remaining_keys = set(op.__dict__.keys()).difference(ignored_keys)
 
     for key in remaining_keys:
@@ -272,7 +276,7 @@ def add_edges(pb_edges, pb_ops, op):
 
     # Now iterate through remaining keys of this op's __dict__ and any that reference
     # other Ops we make edges that we can deserialize as Op attributes later
-    remaining_keys = set(op.__dict__.keys())
+    remaining_keys = set(op.__dict__.keys()).difference({'all_deps'})
     for key in remaining_keys:
         if not key.startswith('_is_') and key not in EXCEPTION_ATTRIBUTES and key.startswith('_'):
             continue

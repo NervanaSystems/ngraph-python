@@ -67,7 +67,7 @@ class ArrayIterator(object):
         """
         return -((self.start - self.ndata) // self.batch_size)
 
-    def make_placeholders(self):
+    def make_placeholders(self, include_iteration=False):
         placeholders = {}
         ax.N.length = self.batch_size
         for k, axnm in self.axis_names.items():
@@ -76,6 +76,8 @@ class ArrayIterator(object):
                 name = axnm[i] if axnm else None
                 p_axes += ng.make_axis(length=sz, name=name)
             placeholders[k] = ng.placeholder(p_axes)
+        if include_iteration:
+            placeholders['iteration'] = ng.placeholder(axes=())
         return placeholders
 
     def reset(self):
@@ -107,6 +109,7 @@ class ArrayIterator(object):
             else:
                 batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.items()}
 
+            batch_bufs['iteration'] = self.index
             yield batch_bufs
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
