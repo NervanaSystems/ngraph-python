@@ -120,8 +120,6 @@ def test_gemm(transformer_factory):
             assert_allclose(np.dot(xs, w), y_hat_val)
 
 
-
-#https://ngraph.nervanasys.com/docs/building_graphs.html
 def test_assign(transformer_factory):
     from ngraph.transformers.nptransform import NumPyTransformer
     w = ng.variable((), initial_value=0)
