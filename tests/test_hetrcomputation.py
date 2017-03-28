@@ -313,7 +313,6 @@ def test_recvop_tensorupdate_and_axes(transformer_factory):
                 self.batch_axis
             ])
 
-
     # Layer 1, using convolutation introduces multi/flatten view of tensors
     cf = ConvParams(C=2, N=4, K=1, H=2, W=2, R=2, S=2)
 
@@ -344,7 +343,8 @@ def test_recvop_tensorupdate_and_axes(transformer_factory):
         dot_comp = ex.executor(dot, filters, inputs)
         dot_val = dot_comp(filter_value, input_value)
 
-    np.testing.assert_array_equal(dot_val, [[8.,8.,8.,8.],[8.,8.,8.,8.]])
+    np.testing.assert_array_equal(dot_val, [[8., 8., 8., 8.],
+                                            [8., 8., 8., 8.]])
 
 
 def test_terminate_op(transformer_factory):
