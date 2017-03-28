@@ -138,7 +138,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue, DebugInfo):
+class Op(NameableValue):
     """
     Any operation that can be in an AST.
 

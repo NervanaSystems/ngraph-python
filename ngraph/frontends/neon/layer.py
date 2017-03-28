@@ -41,6 +41,8 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     if pooling and padding >= S:
         raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
 
+    if size < 0:
+        raise ValueError('output_dim {} can not be < 0'.format(size))
     return size
 
 
