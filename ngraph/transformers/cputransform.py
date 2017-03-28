@@ -27,7 +27,7 @@ from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
-    ContiguousOp, CosOp, Op, Divide, DotLowDimension, \
+    ContiguousOp, CosOp, Op, Divide, FloorDivide, DotLowDimension, \
     Mod, Equal, ExpOp, Greater, GreaterEqual, Less, LessEqual, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
@@ -522,6 +522,10 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
         self.append("np.divide({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(FloorDivide)
+    def generate_op(self, op, out, x, y):
+        self.append("np.floor_divide({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Mod)
     def generate_op(self, op, out, x, y):

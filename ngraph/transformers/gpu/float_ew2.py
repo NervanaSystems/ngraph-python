@@ -49,6 +49,7 @@ _op_templates = {
     "sub": r"%(out)s = %(x)s - %(y)s;",
     "mul": r"%(out)s = %(x)s * %(y)s;",
     "div": r"%(out)s = %(x)s / %(y)s;",
+    "int_div": r"%(out)s = int(%(x)s) / int(%(y)s);",
     "mod": r"%(out)s = int(%(x)s) %% int(%(y)s);",
     "eq": r"%(out)s = %(x)s == %(y)s;",
     "ne": r"%(out)s = %(x)s != %(y)s;",
@@ -666,6 +667,8 @@ def _get_register_type(dtype, memory=False):
             return "float"
     elif dtype == np.int32:
         return "int"
+    elif dtype == np.uint32:
+        return "unsigned int"
     elif dtype == np.int16:
         return "short"
     elif dtype == np.int8:
