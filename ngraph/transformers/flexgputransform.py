@@ -85,7 +85,9 @@ class FlexGPUTransformer(GPUTransformer):
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = GPUFlexManager(fixed_point=fixed_point, verbose=flex_verbose)
+        self.flex_manager = GPUFlexManager(save_data_file='flexdata.h5',
+                                           fixed_point=fixed_point,
+                                           verbose=flex_verbose)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -171,7 +173,7 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         super(FlexGPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
 
         # create flex entry
-        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
+        self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
         shape_str = "_".join((str(_) for _ in tensor_description.shape))
@@ -309,4 +311,8 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def __call__(self):
 
         self.transformer.flex_manager.autoflex_count += 1
+
+        # TODO move this once we know where fprop and bprop boundaries are
+        self.transformer.flex_manager.save_diagnostic_data()
+
         super(FlexGPUKernelGroup, self).__call__()
