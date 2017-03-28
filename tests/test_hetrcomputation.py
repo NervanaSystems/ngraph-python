@@ -266,6 +266,87 @@ def test_gpu_send_and_recv(transformer_factory):
             assert computation(i) == i + 2
 
 
+def test_recvop_tensorupdate_and_axes(transformer_factory):
+    class ConvParams(object):
+        def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
+                     pad_d=0, pad_h=0, pad_w=0,
+                     str_d=1, str_h=1, str_w=1):
+
+            from ngraph.frontends.neon.layer import output_dim
+            M = output_dim(D, T, pad_d, str_d)
+            P = output_dim(H, R, pad_h, str_h)
+            Q = output_dim(W, S, pad_w, str_w)
+
+            self.dimO = (K, M, P, Q, N)
+            self.dimI = (C, D, H, W, N)
+            self.dimF = (C, T, R, S, K)
+
+            self.conv_params = dict(
+                pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
+                str_d=str_d, str_h=str_h, str_w=str_w,
+                dil_d=1, dil_h=1, dil_w=1
+            )
+
+            self.batch_axis = ng.make_axis(name='N', length=N)
+
+            self.ax_i = ng.make_axes([
+                ng.make_axis(name='C', length=C),
+                ng.make_axis(name='D', length=D),
+                ng.make_axis(name='H', length=H),
+                ng.make_axis(name='W', length=W),
+                self.batch_axis
+            ])
+
+            self.ax_f = ng.make_axes([
+                ng.make_axis(name='C', length=C),
+                ng.make_axis(name='D', length=T),
+                ng.make_axis(name='H', length=R),
+                ng.make_axis(name='W', length=S),
+                ng.make_axis(name='K', length=K),
+            ])
+
+            self.ax_o = ng.make_axes([
+                ng.make_axis(name='C', length=K),
+                ng.make_axis(name='D', length=M),
+                ng.make_axis(name='H', length=P),
+                ng.make_axis(name='W', length=Q),
+                self.batch_axis
+            ])
+
+
+    # Layer 1, using convolutation introduces multi/flatten view of tensors
+    cf = ConvParams(C=2, N=4, K=1, H=2, W=2, R=2, S=2)
+
+    inputs = ng.placeholder(axes=cf.ax_i)
+    filters = ng.placeholder(axes=cf.ax_f)
+
+    # randomly initialize
+    from ngraph.testing import RandomTensorGenerator
+    rng = RandomTensorGenerator(0, np.float32)
+    # put value 1 into inputs/filters for conv
+    input_value = rng.uniform(1, 1, cf.ax_i)
+    filter_value = rng.uniform(1, 1, cf.ax_f)
+
+    conv = ng.convolution(cf.conv_params, inputs, filters, axes=cf.ax_o)
+
+    # Layer 2, using dot to ensure recv_op.axes == send_op.axes
+    from ngraph.frontends.neon import UniformInit
+    # put value 1 into weights for dot
+    init_uni = UniformInit(1, 1)
+    W_A = ng.make_axis(length=2)
+    w_axes = ng.make_axes(W_A) + conv.axes.feature_axes()
+    w = ng.variable(axes=w_axes, initial_value=init_uni)
+
+    with ng.metadata(device_id='1'):
+        dot = ng.dot(w, conv)
+
+    with ExecutorFactory() as ex:
+        dot_comp = ex.executor(dot, filters, inputs)
+        dot_val = dot_comp(filter_value, input_value)
+
+    np.testing.assert_array_equal(dot_val, [[8.,8.,8.,8.],[8.,8.,8.,8.]])
+
+
 def test_terminate_op(transformer_factory):
 
     class TerminateOp(ng.Op):
