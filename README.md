@@ -21,7 +21,8 @@ Installation documentation can be found
 To install with Intel MKL-DNN support, first download MKL-DNN from [here] 
 (https://github.com/01org/mkl-dnn) and follow the installation instructions
 there to install MKL-DNN. Set environment variable MKLDNN_ROOT to point to 
-the installed location and follow the rest of the steps to install Ngraph
+the installed location and follow the rest of the steps to install Nervana 
+Graph
 ```
 export MKLDNN_ROOT=/path/to/mkldnn/root
 ```
