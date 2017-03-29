@@ -83,12 +83,9 @@ test_flex: test_prepare clean
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 	@coverage xml -i -o coverage_test_flex_$(PY).xml
 
-test_mkl: test_prepare clean
-	@echo Running unit tests...
-	@py.test --transformer mkl -m "transformer_dependent" \
-	 --junit-xml=testout_test_mkldnn_$(PY).xml \
-	 $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i -o coverage_test_mkl_$(PY).xml
+test_mkldnn: export MKL_TEST_ENABLE=1
+test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
+test_mkldnn: test_prepare clean test_cpu test_hetr
 
 test_cpu: test_prepare clean
 	@echo Running unit tests for core and cpu transformer tests...
