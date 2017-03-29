@@ -1527,19 +1527,28 @@ def _ops_to_hash(ops, axes_mapping):
         {op_name}_{arg0}{arg1}{out}{axis}
     """
     axes_key = []
-    for axis in axes_mapping:
+    for idx, axis in enumerate(axes_mapping):
+        if axis[0] == 'x':
+            loop_axis = idx
         axes_key.append("{}{}_{}".format(axis[0], axis[4], axis[3]))
 
     tensors = []
+    tensor_codes = []
     for op in ops:
         for tensor in op[1:4]:
             if tensor not in tensors:
                 tensors.append(tensor)
 
+                # Broadcast tensor along loop axis changes kernel code
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.strides[loop_axis] == 0:
+                    tensor_codes.append(str(len(tensor_codes)) + "b")
+                else:
+                    tensor_codes.append(str(len(tensor_codes)))
+
     ops_key = []
     for op in ops:
         ops_key.append(op[0])
-        op_args = [str(tensors.index(t)) for t in op[1:4] if t]
+        op_args = [tensor_codes[tensors.index(t)] for t in op[1:4] if t]
         if op[4] is not None:
             op_args.append(str(op[4]))
         ops_key.append(".".join(op_args))
