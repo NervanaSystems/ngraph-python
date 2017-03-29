@@ -266,7 +266,27 @@ def test_gpu_send_and_recv(transformer_factory):
             assert computation(i) == i + 2
 
 
-def test_recvop_tensorupdate_and_axes(transformer_factory):
+def test_recvop_axe_using_dot(transformer_factory):
+    x_value = np.array([[1],
+                        [2]])
+    w_value = np.array([[-1, 1]])
+
+    A1 = ng.make_axis(length=1)
+    A2 = ng.make_axis(length=2)
+    A3 = ng.make_axis(length=2)
+
+    x = ng.placeholder([A2, A1])
+    w = ng.variable([A1, A3], initial_value=w_value)
+
+    with ng.metadata(device_id='1'):
+        result = ng.dot(x, w)
+
+    with ExecutorFactory() as ex:
+        computation = ex.executor(result, x, w)
+        assert ng.equal(computation(x_value, w_value), np.dot(x_value, w_value))
+
+
+def test_recvop_tensorupdate(transformer_factory):
     class ConvParams(object):
         def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
                      pad_d=0, pad_h=0, pad_w=0,
