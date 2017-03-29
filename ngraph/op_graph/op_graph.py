@@ -3204,7 +3204,25 @@ def create_reduction_op(name,
     RedClass = type(name, (ReductionOp,), d)
 
     def func(*args, **kwargs):
-        return RedClass(*args, **kwargs)
+        # handle the case where out_axes not in the same order of x's axes
+        if 'out_axes' in kwargs and kwargs['out_axes'] is not None:
+            x = args[0]
+            out_axes = kwargs['out_axes']
+            out_axes_index = [x.axes.index(axis) for axis in out_axes]
+            sorted_out_axes_index = sorted(out_axes_index)
+            if sorted_out_axes_index != out_axes_index:
+                # temp axes for reduction op
+                temp_out_axes = [x.axes[i] for i in sorted_out_axes_index]
+                kwargs['out_axes'] = temp_out_axes
+                reduction_op = RedClass(*args, **kwargs)
+                # reorder axes to requested out_axes
+                reordered_reduction_op = axes_with_order(reduction_op, out_axes)
+                return reordered_reduction_op
+            else:
+                return RedClass(*args, **kwargs)
+        else:
+            return RedClass(*args, **kwargs)
+
     func.__name__ = func_name
     return RedClass, func
 
