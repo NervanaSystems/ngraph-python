@@ -266,7 +266,7 @@ def test_gpu_send_and_recv(transformer_factory):
             assert computation(i) == i + 2
 
 
-def test_recvop_axe_using_dot(transformer_factory):
+def test_recvop_axes_using_dot(transformer_factory):
     x_value = np.array([[1],
                         [2]])
     w_value = np.array([[-1, 1]])
@@ -287,6 +287,16 @@ def test_recvop_axe_using_dot(transformer_factory):
 
 
 def test_recvop_tensorupdate(transformer_factory):
+    """
+    The tensor (RecvOp_#_#) associated with the following conv op has two views:
+    1) Non-flat view (e.g. RecvOp_#_#_1_1_1_1_4.shape=(1,1,1,1,4))
+    2) Flat view (e.g. RecvOp_#_#_1_4.shape = (1,4))
+    This test ensures that inside RecvOp code generation, the generated code
+    should make sure both views get updated (e.g. by using update_RecvOp_#_# API)
+    In this test, ng.dot operation tends to use the flat view (i.e. RecvOp_#_#_1_4)
+    And previously RecvOp with RecvOp_#_#_1_1_1_1_4 = recv_from_send(send_id) failed
+    to update both two views (i.e. flat and non-flat view of the same buffer/tensor)
+    """
     class ConvParams(object):
         def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
                      pad_d=0, pad_h=0, pad_w=0,
