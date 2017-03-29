@@ -791,12 +791,8 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
         self.recv_nodes[recv_id] = op
-        self.append("if {}.shape == ():", out)
-        with indenting(self):
-            self.append("{} = self.recv_from_queue_send({})", out, recv_id)
-        self.append("else:")
-        with indenting(self):
-            self.append("{}[:] = self.recv_from_queue_send({})", out, recv_id)
+        self.append("self.update_a_{}(self.recv_from_queue_send({}))",
+                    out.tensor_description.name, recv_id)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
