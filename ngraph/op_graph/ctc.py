@@ -13,75 +13,61 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp
+from ngraph.op_graph.op_graph import TensorOp, persistent_tensor
 
 
-def ctc(utts, lbls, utt_lens, lbl_lens, grads, out_axes):
+def ctc(activations, labels, activation_lens, label_lens, axes=None):
     """
     Computes the CTC op
     Args:
-        utts (TensorOp): Activations induced by the utterances.
-        lbls (TensorOp): Transcripts corresponding to the utterances.
-        utt_lens (TensorOp): (Strided) utterance lengths.
-        lbl_lens (TensorOp): Transcript lengths.
-        grads (TensorOp): Buffer holding the gradients.
-        out_axes (Axes): The axes for the output.
+        activations (TensorOp): Activations induced by the utterances.
+        labels (TensorOp): Transcripts corresponding to the utterances.
+        activation_lens (TensorOp): (Strided) utterance lengths.
+        label_lens (TensorOp): Transcript lengths.
 
     Returns:
         TensorOp: The result of the CTC op.
 
     """
-    return CTCOp(utts, lbls, utt_lens, lbl_lens, grads, out_axes)
+    return CTCOp(activations, labels, activation_lens, label_lens, axes=axes)
 
 
 class CTCOp(TensorOp):
 
-    def __init__(self, utts, lbls, utt_lens, lbl_lens, grads, out_axes, **kwargs):
+    def __init__(self, activations, labels, activation_lens, label_lens, axes=None, **kwargs):
         """
         Arguments:
-            utts: Activations induced by the utterances.
-            lbls: Transcripts corresponding to the utterances.
-            utt_lens: (Strided) utterance lengths.
-            lbl_lens: Transcript lengths.
-            grads: CTC gradients.
-            out_axes: The axes for the output.
+            activations: Activations induced by the utterances.
+            labels: Transcripts corresponding to the utterances.
+            activation_lens: (Strided) utterance lengths.
+            label_lens: Transcript lengths.
         """
 
         # verify shapes
-        if len(utts.shape) != 3:
-            raise ValueError((
-                'utts shape must have length 3, found {}'
-            ).format(len(utts.shape)))
+        if len(activations.shape) != 3:
+            raise ValueError(('inputs must have 3 dimensions, ',
+                              'found {}').format(len(activations.shape)))
 
-        if len(lbls.shape) != 1:
-            raise ValueError((
-                'lbls shape must have length 1, found {}'
-            ).format(len(lbls.shape)))
+        if len(labels.shape) != 1:
+            raise ValueError(('labels must have 1 dimension, ',
+                              'found {}').format(len(labels.shape)))
 
-        if len(utt_lens.shape) != 1:
-            raise ValueError((
-                'utt_lens shape must have length 1, found {}'
-            ).format(len(utt_lens.shape)))
+        if len(activation_lens.shape) != 1:
+            raise ValueError(('input_lens must have 1 dimension, ',
+                              'found {}').format(len(activation_lens.shape)))
 
-        if len(lbl_lens.shape) != 1:
-            raise ValueError((
-                'lbl_lens shape must have length 1, found {}'
-            ).format(len(lbl_lens.shape)))
+        if len(label_lens.shape) != 1:
+            raise ValueError(('label_lens must have 1 dimension, ',
+                              'found {}').format(len(label_lens.shape)))
 
-        if len(grads.shape) != 3:
-            raise ValueError((
-                'grads shape must have length 3, found {}'
-            ).format(len(grads.shape)))
-
-        self.grads = grads
-
-        super(CTCOp, self).__init__(args=(utts, lbls, utt_lens, lbl_lens, grads), 
-                                    axes=out_axes, 
+        super(CTCOp, self).__init__(args=(activations, labels, activation_lens, label_lens),
+                                    axes=axes if axes is not None else activations.batch_axes(),
                                     **kwargs)
+        self.grads = persistent_tensor(axes=activations.axes).named("ctc_gradients")
 
-    def generate_adjoints(self, adjoints, delta, utts, lbls, utt_lens, lbl_lens, grads):
+    def generate_adjoints(self, adjoints, delta, activations, labels, activation_lens, label_lens):
         """
-        TODO
+        Add gradients computed by warp-ctc do adjoints
         """
-        utts.generate_add_delta(adjoints, self.grads)
+        activations.generate_add_delta(adjoints, self.grads)
 
