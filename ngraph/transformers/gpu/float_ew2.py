@@ -1055,7 +1055,8 @@ def _generate_kernel_args(ops, axes_mapping, dims, ctx):
     processed_tensors = set()
     for op in ops:
         for tensor in op[1:4]:
-            if tensor is None:
+            from ngraph.transformers.gputransform import GPURegister
+            if tensor is None or isinstance(tensor, GPURegister):
                 continue
 
             if isinstance(tensor, TensorDescriptionWrapper) and tensor not in processed_tensors:
