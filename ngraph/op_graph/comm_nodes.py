@@ -17,6 +17,12 @@ from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
 import multiprocessing
 
 
+def calculate_gather_axes(axes, gather_axis, num_devices):
+    new_axes = [make_axis(a.length * num_devices, a.name) if gather_axis == a else a for a in axes ]
+    new_axes = make_axes(new_axes)
+    return new_axes
+
+
 def calculate_new_axes(axes, parallel_axis, num_devices):
     new_axes = list()
     for a in axes:
@@ -116,9 +122,12 @@ class RecvOp(CommunicationOp):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=to_node.axes,
-            dtype=to_node.dtype)
+            axes=self.calculate_recv_axes(send_node.axes),
+            dtype=send_node.dtype)
         self._send_node = send_node
+
+    def calculate_recv_axes(self, send_axes):
+        return send_axes
 
     def send_node(self):
         return self._send_node
@@ -155,7 +164,17 @@ class ScatterRecvOp(RecvOp):
     """
 
     def __init__(self, to_node, send_node):
+        # TODO should these be passed in explicitly?  impacts factory/pass.
+        # TODO having to set these first, then super, then recv_axes seems wrong
+        self.scatter_axis = to_node.metadata['parallel']
+        self.num_recv = len(to_node.metadata['device_id'])
         super(ScatterRecvOp, self).__init__(to_node, send_node)
+
+    def calculate_recv_axes(self, send_axes):
+        #invoke axes math helper to modify scatter axis
+        # TODO if calculate... function is only used here, refactor/rename
+        recv_axes = calculate_new_axes(send_axes, self.scatter_axis, self.num_recv)
+        return recv_axes
 
 
 class GatherSendOp(SendOp):
@@ -182,6 +201,10 @@ class GatherRecvOp(RecvOp):
     """
 
     def __init__(self, from_node, to_node, send_node):
+        # TODO messy, redundant
+        self.num_send = len(from_node.metadata['device_id'])
+        self.gather_axis = from_node.metadata['parallel']
+
         super(GatherRecvOp, self).__init__(to_node, send_node)
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
@@ -190,6 +213,12 @@ class GatherRecvOp(RecvOp):
         self._slices = get_slices(self.axes,
                                   self.metadata['parallel'],
                                   len(self.from_id))
+
+    def calculate_recv_axes(self, send_axes):
+        #invoke axes math helper to modify scatter axis
+        # TODO if calculate... function is only used here, refactor/rename
+        recv_axes = calculate_gather_axes(send_axes, self.gather_axis, self.num_send)
+        return recv_axes
 
     @property
     def slices(self):
