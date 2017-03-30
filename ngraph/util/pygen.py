@@ -15,7 +15,6 @@
 
 from six import exec_
 import tempfile
-import re
 import atexit
 import os
 from contextlib import contextmanager
@@ -31,84 +30,159 @@ def indenting(code_writer):
 
 
 class PyGen(object):
-    def __init__(self, indentation=0, **kwargs):
+    """
+    Helper for generating code to be run locally.
+
+    Arguments:
+        indentation: Initial indentation of code.
+        prefix: Prefix for file.
+
+    Attributes:
+        indentation: Current indentation.
+        prefix: File generation prefix.
+        globals: The current environment.
+        filenames: List of files to be deleted on exit.
+        filename: Name of last generated file.
+
+    """
+    def __init__(self, indentation=0, prefix="", **kwargs):
         super(PyGen, self).__init__(**kwargs)
         self.indentation = indentation
+        self.prefix = prefix
+        self.globals = dict()
+        self.filenames = []
         self.__code = list()
         self.filename = None
+        self.indent_strings = ['', '    ', '        ', '            ']
+        atexit.register(self.__exit_handler)
 
     def indent(self, indentation):
+        """
+        Increase indentation.
+
+        Args:
+            indentation: Amount to increase indentation.
+
+        """
         self.indentation += indentation
 
     def get_arg_name(self, x):
         return x
 
     def name(self, x):
-
         raise NotImplementedError("Must be implemented by a subclass")
 
     def append(self, code, *args, **kwargs):
         """
         Add code formatted with args and kwargs to generated code.
-        :param code: String with {} formatting
-        :param args: Format args for code.
-        :param kwargs: Format kwargs for code.
+
+        Arguments:
+            code: String with {} formatting
+            args: Format args for code.
+            kwargs: Format kwargs for code.
         """
         nameargs = (self.name(arg) for arg in args)
         namekwargs = {k: self.name(v) for k, v in kwargs.items()}
 
-        def indent(code):
-            """
-            Indent first line of code by 4n spaces.
-
-            :param code:
-            :param n:
-            :return: Indented code with trailing space removed.
-            """
-
-            def remove_indentation(code):
-                """
-                Shift first line left to remove whitespace, shift other lines same amount.
-
-                Code string should appear in file as '''
-                some python
-                    some more python
-                    some more python
-                '''
-                Trailing space is also removed.
-
-                :param code:
-                :return:
-                """
-                p = re.search(r"(\n\W*)", code)
-                if p:
-                    code = re.sub(p.group(1), "\n", code)
-                return code.strip()
-
-            return re.sub(r"(^|\n)", r"\1" + " " * (4 * self.indentation),
-                          remove_indentation(code))
-
-        self.append_raw(indent(code.format(*nameargs, **namekwargs)))
-
-    def append_raw(self, code, lines=1):
-        self.endl(lines)
-        self.__code.append(code)
+        fcode = code.format(*nameargs, **namekwargs)
+        indent_string = self.indent_strings[self.indentation]
+        for line in iter(fcode.splitlines()):
+            self.__code.append(indent_string)
+            self.__code.append(line)
+            self.__code.append('\n')
 
     def endl(self, n=1):
+        """
+        Add end of lines.
+
+        Arguments:
+            n: Number of end of lines. Defaults to 1.
+
+        """
         self.__code.extend(["\n"] * n)
+
+    def __exit_handler(self):
+        for filename in self.filenames:
+            os.unlink(filename)
+        self.filenames = []
 
     @property
     def code(self):
+        """
+
+        Returns: The generated code.
+
+        """
         return ''.join(self.__code)
 
-    def compile(self, prefix, globs):
-        file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=prefix, delete=False)
-        self.filename = file.name
-        file.write(self.code)
-        file.close()
-        atexit.register(lambda: os.unlink(self.filename))
+    @property
+    def code_length(self):
+        """
 
-        code = compile(self.code, self.filename, "exec")
-        r = {}
-        exec_(code, globs, r)
-        return r
+        Returns: The number of code segments.
+
+        """
+        return len(self.__code)
+
+    def execute(self, code=None):
+        """
+        Execute code directly into the environment. This is useful for initializing the
+        environment with imports.
+
+        Arguments:
+            code: Something to execute.  Defaults to self.code.
+
+        """
+        if code is None:
+            code = self.code
+            self.__code = []
+        exec_(code, self.globals)
+
+    def evaluate(self, code=None):
+        """
+        Evaluate an expression in the environment.
+
+        Arguments:
+            code: An expression to evaluate. Defaults to self.code.
+
+        Returns:
+            The result of the evaluation.
+
+        """
+        if code is None:
+            code = self.code
+            self.__code = []
+        return eval(code, self.globals)
+
+    def write_to_file(self, file):
+        """
+        Writes self.code to a file.
+
+        Args:
+            file: The code.
+
+        """
+        for s in self.__code:
+            file.write(s)
+        self.__code = []
+
+    def compile(self):
+        """
+        Compiles self.code and loads it into the environment.
+
+        Returns: The updated environment.
+
+        """
+        file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=self.prefix,
+                                           delete=False)
+        self.filename = file.name
+        self.filenames.append(self.filename)
+        self.write_to_file(file)
+        file.close()
+
+        with open(self.filename, 'r') as file:
+            source = file.read()
+            code = compile(source, self.filename, "exec")
+            exec_(code, self.globals, self.globals)
+
+        return self.globals
