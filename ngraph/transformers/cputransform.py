@@ -19,12 +19,8 @@ from __future__ import print_function
 from functools import wraps
 from operator import itemgetter
 # These are indirectly used by the generated code
-import numpy as np  # noqa
-import os  # noqa
-import sys  # noqa
-import ctypes  # noqa
-import itertools as itt  # noqa
-from ngraph.op_graph import axes  # noqa
+import numpy as np
+import os
 
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
@@ -52,189 +48,8 @@ from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
     CPUQueueScatterRecvOp
 
-from ngraph.transformers.cpu.mkldnnengine import MKLDNNEngine
-
 
 class CPUConvEngine(object):
-
-    @staticmethod
-    def all_conv_code():
-        pycode = """# noqa: E501
-        def init_conv_fprop(self, index, I, F, O, pad, stride):
-            if (self.mkldnn_enabled):
-                C, D, H, W, N = I.shape
-                if (self.mkldnn_verbose):
-                    print("C,D,H,W,N", C, D, H, W, N)
-                    print("Input: ", hex(I.ctypes.data), I.shape)
-                    print("Filter: ", hex(F.ctypes.data), F.shape)
-                    print("Output: ", hex(O.ctypes.data), O.shape)
-                    print("Stride: ", stride, len(stride))
-                    print("Pad: ", pad, len(pad))
-                # Only 2D convolution supported in MKLDNN for now
-                if (D != 1):
-                    return
-                # Only single precision float supported for now
-                if ((I.dtype != np.float32) or (O.dtype != np.float32)):
-                    return
-                # Sanity check tensor shapes
-                if ((len(I.shape) != 5) or (len(F.shape) != 5) or
-                    (len(O.shape) != 5) or (len(stride) != 3) or
-                    (len(pad) != 3)):
-                    return
-                # NumPy Tensors need to be contiguous
-                if (not (I.flags['C_CONTIGUOUS'] and
-                         F.flags['C_CONTIGUOUS'] and
-                         O.flags['C_CONTIGUOUS'])):
-                    return
-                input_shape = ((ctypes.c_int)*len(I.shape))(*I.shape)
-                filter_shape = ((ctypes.c_int)*len(F.shape))(*F.shape)
-                output_shape = ((ctypes.c_int)*len(O.shape))(*O.shape)
-                pad_data = ((ctypes.c_int)*len(pad))(*pad)
-                stride_data = ((ctypes.c_int)*len(stride))(*stride)
-                self.mkldnn_conv_fprop_netlist[index] = self.create_mkldnn_conv_fprop_primitives_fn(self.mkldnn_engine,
-                                                                len(I.shape), len(F.shape), 1, len(O.shape), len(stride), len(pad),
-                                                                input_shape, filter_shape, None, output_shape,
-                                                                I.ctypes.data, F.ctypes.data, None, O.ctypes.data,
-                                                                stride_data, pad_data)
-
-        def fprop_conv(self, index, conv_slices, I, F, O):
-            if (self.mkldnn_enabled and index in self.mkldnn_conv_fprop_netlist):
-                self.run_mkldnn_netlist_fn(self.mkldnn_conv_fprop_netlist[index])
-            else:
-                mSlice, pSlice, qSlice, _, _, _ = conv_slices
-                K, M, P, Q, N = O.shape
-
-                for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                             enumerate(pSlice),
-                                                             enumerate(qSlice)):
-                    sliceT, sliceD, _ = mS
-                    sliceR, sliceH, _ = pS
-                    sliceS, sliceW, _ = qS
-                    slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
-                    slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-                    O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
-
-        def init_conv_bprop(self, index, E, F, gI, pad, stride):
-            if (self.mkldnn_enabled):
-                C, D, H, W, N = E.shape
-                if (self.mkldnn_verbose):
-                    print("MKL INIT CONV BPROP index: ", index,
-                            " E.shape: ", E.shape, " F.shape: ", F.shape,
-                            " gI.shape: ", gI.shape, " Stride: ", stride,
-                            " Pad: ", pad)
-                # Only 2D convolution supported in MKLDNN for now
-                if (D != 1):
-                    return
-                # Only single precision float supported for now
-                if ((E.dtype != np.float32) or (F.dtype != np.float32)):
-                    return
-                # Sanity check tensor shapes
-                if ((len(E.shape) != 5) or (len(F.shape) != 5) or
-                    (len(gI.shape) != 5) or (len(stride) != 3) or
-                    (len(pad) != 3)):
-                    return
-                # NumPy Tensors need to be contiguous
-                if (not (E.flags['C_CONTIGUOUS'] and
-                         F.flags['C_CONTIGUOUS'] and
-                         gI.flags['C_CONTIGUOUS'])):
-                    return
-                input_shape = ((ctypes.c_int)*len(E.shape))(*E.shape)
-                filter_shape = ((ctypes.c_int)*len(F.shape))(*F.shape)
-                output_shape = ((ctypes.c_int)*len(gI.shape))(*gI.shape)
-                pad_data = ((ctypes.c_int)*len(pad))(*pad)
-                stride_data = ((ctypes.c_int)*len(stride))(*stride)
-                self.mkldnn_conv_bprop_netlist[index] = self.create_mkldnn_conv_bprop_primitives_fn(self.mkldnn_engine,
-                                                                len(E.shape), len(F.shape), 1, len(gI.shape), len(stride), len(pad),
-                                                                input_shape, filter_shape, None, output_shape,
-                                                                E.ctypes.data, F.ctypes.data, None, gI.ctypes.data,
-                                                                stride_data, pad_data)
-
-        def bprop_conv(self, index, conv_slices, E, F, gI):
-            if (self.mkldnn_enabled and index in self.mkldnn_conv_bprop_netlist):
-                self.run_mkldnn_netlist_fn(self.mkldnn_conv_bprop_netlist[index])
-            else:
-                _, _, _, mSlice, pSlice, qSlice = conv_slices
-                F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
-                K, M, P, Q, N = gI.shape
-
-                for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                         enumerate(pSlice),
-                                                         enumerate(qSlice)):
-                    sliceT, sliceD, _ = mS
-                    sliceR, sliceH, _ = pS
-                    sliceS, sliceW, _ = qS
-                    slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
-                    slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-                    gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
-
-        def update_conv(self, conv_slices, I, E, U):
-            mSlice, pSlice, qSlice, _, _, _ = conv_slices
-            K, M, P, Q, N = E.shape
-            C, _, _, _, K = U.shape
-            U.fill(0.0)
-
-            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                         enumerate(pSlice),
-                                                         enumerate(qSlice)):
-                sliceT, sliceD, tlen = mS
-                sliceR, sliceH, rlen = pS
-                sliceS, sliceW, slen = qS
-                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-                slicedE = E[:, m, p, q, :]
-                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-                U[:, sliceT, sliceR, sliceS, :] += update
-
-        def fprop_pool(self, pool_slices, arrI, arrO):
-            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-            K, M, P, Q, N = arrO.shape
-
-
-            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                                  enumerate(mSlice),
-                                                                  enumerate(pSlice),
-                                                                  enumerate(qSlice)):
-                sliceC, _ = kS
-                sliceD, _ = mS
-                sliceH, _ = pS
-                sliceW, _ = qS
-
-                sliceI = arrI[sliceC, sliceD, sliceH, sliceW, :].reshape(-1, N)
-                if op == "max":
-                    arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
-                    arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
-                elif op == "avg":
-                    arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
-                elif op == "l2":
-                    arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
-
-        def bprop_pool(self, pool_slices, arrE, arrD):
-            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-            arrD[:] = 0
-            K, M, P, Q, N = arrE.shape
-
-            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                                  enumerate(mSlice),
-                                                                  enumerate(pSlice),
-                                                                  enumerate(qSlice)):
-                sliceC, clen = kS
-                sliceD, dlen = mS
-                sliceH, hlen = pS
-                sliceW, wlen = qS
-
-                patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
-                patch_out = (k, m, p, q, slice(None))
-                sliceB = arrD[patch_in].reshape((-1, N))
-                if op == "max":
-                    max_n = arrA[patch_out]
-                    sliceB[max_n, list(range(N))] += arrE[patch_out]
-                elif op == "avg":
-                    sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
-                else:
-                    raise NotImplementedError
-                arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
-
-        """
-        return pycode
 
     @staticmethod
     def get_slices(I, F, O, conv_params):
@@ -325,30 +140,6 @@ class CPUPoolEngine(object):
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
-class CPUCodeEngine(object):
-
-    @staticmethod
-    def lut_code():
-        pycode = """
-        def fprop_lut(self, lut, idx, axis, output):
-            output[:] = lut.take(idx.astype(int), axis)
-
-        def update_lut(self, error, idx, pad_idx, axis, dW):
-            dW[:] = 0
-            idx = idx.astype(int)
-            unqidx, inv = np.unique(idx, return_inverse=True)
-            groups = [np.where(inv == i) for i in range(len(unqidx))]
-            for (wrd_id, group) in zip(unqidx, groups):
-                if wrd_id != pad_idx:
-                    if axis == 0:
-                        dW[wrd_id, :] = np.sum(error.take(group[0], axis=axis), axis=axis)
-                    else:
-                        dW[:, wrd_id] = np.sum(error.take(group[0], axis=axis), axis=axis)
-
-        """
-        return pycode
-
-
 class CPUDeviceBufferStorage(DeviceBufferStorage):
 
     def __init__(self, transformer, bytes, dtype, **kwargs):
@@ -389,9 +180,7 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
             self.transformer.allocate_storage_code.append(
-                """
-                self.{}(np.empty({}, dtype=np.dtype('{}')))
-                """,
+                "self.{}(np.empty({}, dtype=np.dtype('{}')))",
                 self.update_name, elts, self.dtype.name)
             self.transformer.allocate_storage_code.endl()
 
@@ -435,14 +224,12 @@ class CPUDeviceTensor(DeviceTensor):
         tensor_description = self.tensor_description
         self.transformer.init_code.append("{} = None", self.ref_str)
         self.transformer.allocate_storage_code.append(
-            """
-            {ref} = np.ndarray(
-                shape={shape},
-                dtype=np.{dtype},
-                buffer=buffer,
-                offset={offset},
-                strides={strides})
-            """,
+            """{ref} = np.ndarray(
+    shape={shape},
+    dtype=np.{dtype},
+    buffer=buffer,
+    offset={offset},
+    strides={strides})""",
             ref=self.ref_str,
             shape=tensor_description.shape,
             dtype=tensor_description.dtype,
@@ -480,7 +267,7 @@ def get_tensors(f):
 class CPUCodeGenerator(PyGen):
 
     def __init__(self, **kwargs):
-        super(CPUCodeGenerator, self).__init__(**kwargs)
+        super(CPUCodeGenerator, self).__init__(prefix="op", **kwargs)
         self.conv_params = dict()
         self.conv_slices = dict()
         self.pool_params = dict()
@@ -536,7 +323,7 @@ class CPUCodeGenerator(PyGen):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("self.init_conv_fprop(index={}, I={}, F={}, O={}, pad={}, stride={})",
+        self.append("init_conv_fprop(self, index={}, I={}, F={}, O={}, pad={}, stride={})",
                     op.index, inputs, filters, outputs, pad, stride)
 
     @allocate_op.on_type(bprop_conv)
@@ -545,7 +332,7 @@ class CPUCodeGenerator(PyGen):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("self.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
+        self.append("init_conv_bprop(self, index={}, E={}, F={}, gI={}, pad={}, stride={})",
                     op.index, delta, filters, gI, pad, stride)
 
     @generic_method(Op)
@@ -581,40 +368,40 @@ class CPUCodeGenerator(PyGen):
         self.conv_params[op.index] = op.conv_params
         self.conv_slices[op.index] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        self.append("self.fprop_conv({}, self.conv_slices[{}], I={}, F={}, O={})",
+        self.append("fprop_conv(self, {}, self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, op.index, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("self.bprop_conv({}, self.conv_slices[{}], E={}, F={}, gI={})",
+        self.append("bprop_conv(self, {}, self.conv_slices[{}], E={}, F={}, gI={})",
                     op.index, op.index, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("self.update_conv(self.conv_slices[{}], I={}, E={}, U={})",
+        self.append("update_conv(self.conv_slices[{}], I={}, E={}, U={})",
                     op.index, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.pool_params[op.index] = op.pool_params
         self.pool_slices[op.index] = CPUPoolEngine.get_slices(inputs, outputs, op.pool_params)
-        self.append("self.fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
+        self.append("fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
                     op.index, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
-        self.append("self.bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
+        self.append("bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
                     op.index, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
     def generate_op(self, op, outputs, lut, idx):
-        self.append("self.fprop_lut(lut={}, idx={}, axis={}, output={})",
+        self.append("fprop_lut(lut={}, idx={}, axis={}, output={})",
                     lut, idx, op.lut_axis, outputs)
 
     @generate_op.on_type(update_lut)
     def generatea_op(self, op, outputs, delta, idx):
         if op.update:
-            self.append("self.update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
+            self.append("update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
                         delta, idx, op.pad_idx, op.lut_axis, outputs)
 
     @generate_op.on_type(RngOp)
@@ -648,7 +435,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("""np.dot({}, {}, out={})""", x, y, out)
+        self.append("np.dot({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -712,9 +499,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(OneHotOp)
     def generate_op(self, op, out, x):
-        self.append("""
-        {o}[:] = np.eye({o}.shape[0])[:, {x}.astype(np.int32)]
-        """, x=x, o=out)
+        self.append("{o}[:] = np.eye({o}.shape[0])[:, {x}.astype(np.int32)]", x=x, o=out)
 
     @generate_op.on_type(Power)
     def generate_op(self, op, out, x, y):
@@ -723,15 +508,11 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(PrintOp)
     def generate_op(self, op, out, x):
         if op.prefix is not None:
-            self.append("""
-                print({prefix} + ':', {x})
-                {out}[()] = {x}
-            """, out=out, x=x, prefix=repr(op.prefix))
+            self.append("""print({prefix} + ':', {x})
+{out}[()] = {x}""", out=out, x=x, prefix=repr(op.prefix))
         else:
-            self.append("""
-                print({x})
-                {out}[()] = {x}
-            """, out=out, x=x)
+            self.append("""print({x})
+{out}[()] = {x}""", out=out, x=x)
 
     @generate_op.on_type(ReciprocalOp)
     def generate_op(self, op, out, x):
@@ -840,6 +621,20 @@ class CPUTransformer(Transformer):
         self.allocate_code = CPUCodeGenerator()
         self.compute_code = CPUCodeGenerator()
         self.code = CPUCodeGenerator()
+        self.code.execute("""
+import os
+import numpy as np
+import ctypes as ct
+import numpy.ctypeslib as npct
+import itertools as itt
+from ngraph.op_graph import axes
+from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
+from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
+from ngraph.transformers.cpu.cpuengine import mkldnn_init, mkldnn_engine_init
+from ngraph.transformers.cpu.cpuengine import mkldnn_engine_cleanup
+from ngraph.transformers.cpu.cpuengine import init_conv_fprop, fprop_conv
+from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
+""")
         self.model = None
         self.n_computations = 0
         self.use_pinned_mem = False
@@ -874,10 +669,10 @@ class CPUTransformer(Transformer):
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.init_code.append("""def __init__(self):""")
         self.init_code.indent(1)
-        self.init_code.append("""self.mkldnn_init("{}")""", mkldnn_engine_path)
+        self.init_code.append("""mkldnn_init(self, "{}")""", mkldnn_engine_path)
         self.allocate_code.append("""def allocate(self):""")
         self.allocate_code.indent(1)
-        self.allocate_code.append("""self.mkldnn_engine_init()""")
+        self.allocate_code.append("""mkldnn_engine_init(self)""")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -898,7 +693,7 @@ class CPUTransformer(Transformer):
             name = "c_" + str(self.n_computations)
         self.n_computations += 1
         self.compute_code.append("def {}(self):", name)
-        code = self.compute_code.code
+        code_length = self.compute_code.code_length
 
         def tensor_description_value(x):
             if isinstance(x, TensorDescription):
@@ -910,7 +705,7 @@ class CPUTransformer(Transformer):
                 out = tensor_description_value(op.tensor_description())
                 call_info = (tensor_description_value(_) for _ in op.call_info())
                 self.compute_code.generate_op(op, out, *call_info)
-            if code == self.compute_code.code:
+            if code_length == self.compute_code.code_length:
                 self.compute_code.append("pass")
         self.compute_code.endl()
         self.name = name
@@ -920,18 +715,12 @@ class CPUTransformer(Transformer):
         if self.model is not None:
             return
 
-        self.code.append(" class Model(object):")
+        self.code.append("class Model(object):")
         with indenting(self.code):
             if len(self.device_buffers) == 0:
                 self.init_code.append("pass")
             self.code.append(self.init_code.code)
             self.code.endl()
-
-            self.code.append(MKLDNNEngine.mkldnn_init_code())
-            self.code.endl()
-
-            self.code.append(CPUConvEngine.all_conv_code())
-            self.code.append(CPUCodeEngine.lut_code())
             self.code.endl()
 
             self.code.append(self.allocate_storage_code.code)
@@ -941,15 +730,13 @@ class CPUTransformer(Transformer):
             self.code.append(self.allocate_code.code)
             self.code.endl(2)
             self.code.append(self.compute_code.code)
-
-            self.code.append(MKLDNNEngine.mkldnn_cleanup_code())
             self.code.endl()
 
             # with open("code_{}.py".format(self.name), "w") as f:
             #    f.write(self.code.code)
 
-        r = self.code.compile("op", globals())
-        self.model = r['Model']
+        self.globals = self.code.compile()
+        self.model = self.globals['Model']
 
         def queue_send(self, send_id):
             send_op = self.send_nodes[send_id]
@@ -1040,7 +827,7 @@ class CPUTransformer(Transformer):
     def close(self):
         if (self.model):
             try:
-                self.model.mkldnn_engine_cleanup()
+                self.globals['mkldnn_engine_cleanup'](self.model)
             except TypeError:
                 pass
             self.model = None
