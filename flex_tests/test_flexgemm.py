@@ -53,3 +53,4 @@ def test_gemm(transformer_factory):
             print (np.dot(xs, w))
             print (y_hat_val)
             assert_allclose(np.dot(xs, w), y_hat_val)
+            xs *= 10

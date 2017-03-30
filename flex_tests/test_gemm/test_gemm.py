@@ -13,16 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-import numpy as np
+
 import pytest
+import numpy as np
+from ngraph.testing.flexutil import template_dot_two_placeholders, template_dot_one_placeholder,\
+    template_dot_one_placeholder_and_scalar
 
-import ngraph as ng
-from ngraph.testing import executor, assert_allclose
-from ngraph.testing.template import template_create_placeholders_for_multiplication, \
-    template_dot_two_placeholders, template_dot_one_placeholder, \
-    template_create_placeholder, get_executor_result
-
-# matrix multiply
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 EPSILON = 0.2
@@ -31,54 +27,65 @@ pytestmark = pytest.mark.transformer_dependent("module")
 
 
 @pytest.mark.parametrize("n, c, d, description", (
-    # template:  (dimension_1, dimension_2, dimension_3, description)
-
-    (1, 5, 1, "Vertical (m x 1) multiplied by horizontal (1 x m)"),
+    (10, 2, 10, "Vertical (m x 1) multiplied by horizontal (1 x m)"),
     (5, 1, 5, "Horizontal (1 x m) multiplied by vertical(m x 1)"),
     (3, 2, 5, "Horizontal (2 x m) multiplied by vertical (m x 2)"),
     (3, 3, 1, "Horizontal (1 x m) multiplied by square (3 x 3)"),
     (3, 3, 3, "Square (3 x 3) multiplied by square (3 x 3)"),
 ))
 def test_gemm_multiply_matrices(transformer_factory, n, c, d, description):
+    """
+    :param transformer_factory: to use flex calculations
+    :param n: number of columns for second matrix
+    :param c: number of columns for first matrix
+    :param d: number of rows for first matrix
+    :param description: description of a particular test case
+    :return: PASS if dot product of flex calculations passes assert_allclose comparing with dot product of numpy,
+             FAIL if don't
+    """
     print(description)
-    ng_placeholder2, ng_placeholder1 = template_create_placeholders_for_multiplication(n, c, d)
-    template_dot_two_placeholders(
-        np.array([i for i in range(c * d)]).reshape(d, c),
-        np.array([i for i in range(c * n)]).reshape(c, n),
-        ng_placeholder1, ng_placeholder2, ng.dot(ng_placeholder1, ng_placeholder2), lambda a, b: np.dot(a, b))
+    template_dot_two_placeholders(n, c, d)
 
-
-@pytest.mark.parametrize("n, c, const_val, expected_result, description", (
-    # template:  (dimension_1, dimension_2, vector_value, flex_exceptions,  description)
-
+@pytest.mark.parametrize("n, c, const_val, flex_exceptions, description", (
     (3, 3, 1, [[15.99951171875, 15.99951171875, 15.99951171875]],  "Dot product of matrix and positive vector"),
     (9, 9, -0.1, [[-63.19921875, -64, -64, -64, -64, -64, -64, -64, -64]],
      "Dot product of matrix and negative vector"),
     (2, 4, 0, [[0, 0]], "Dot product of matrix and vector of zeros")
 ))
-def test_gemm_multiply_matrix_by_vector(transformer_factory, n, c, const_val, expected_result, description):
+def test_gemm_multiply_matrix_by_vector(transformer_factory, n, c, const_val, flex_exceptions, description):
+    """
+    :param transformer_factory: to use flex calculations
+    :param n: number of columns for first matrix
+    :param c: number of rows for first matrix
+    :param const_val: vector is filed using this value
+    :param flex_exceptions: each element of the list is the another list of expected values which are caused by
+           saturation (expected overflow exists)
+    :param description: description of a particular test case
+    :return: PASS if dot product of flex calculations passes assert_allclose comparing with dot product of numpy
+             or expected overflow occurs and the values are exactly as expected, FAIL if don't
+    """
     print (description)
-    template_dot_one_placeholder(n, c, const_val, expected_result)
+    template_dot_one_placeholder(n, c, const_val, flex_exceptions)
 
 
-@pytest.mark.parametrize("n, c, scalar, description", (
-    # template:  (dimension_1, dimension_2, scalar, description)
-
-    (3, 3, 0.4, "Dot product of matrix and positive scalar"),
-    (2, 4, -0.3, "Dot product of matrix and negative scalar"),
-    (3, 5, 0, "Dot product of matrix and zero")
+@pytest.mark.parametrize("n, c, scalar, flex_exceptions, description", (
+    (3, 3, 0.4, [], "Dot product of matrix and positive scalar"),
+    (2, 4, -0.3, [], "Dot product of matrix and negative scalar"),
+    (3, 5, 0, [], "Dot product of matrix and zero"),
+    (3, 2, 10, [np.array([[0,  63.99804688], [ 63.99804688,  63.99804688], [ 63.99804688,  63.99804688] ])], "Do")
 ))
-def test_gemm_multiply_matrix_by_scalar(transformer_factory, n, c, scalar, description):
+def test_gemm_multiply_matrix_by_scalar(transformer_factory, n, c, scalar, flex_exceptions, description):
+    """
+    :param transformer_factory: to use flex calculations
+    :param n: number of rows for matrix
+    :param c: number of columns for matrix
+    :param scalar: value of scalar which is multiplied
+    :param flex_exceptions: each element of the list is the another list of expected values which are caused by
+           saturation (expected overflow exists)
+    :param description: description of a particular test case
+    :return: PASS if dot product of flex calculations passed assert_allclose comparing with dot product of numpy
+             The calculation equals:
+             ng.dot(scalar, matrix)
+    """
     print (description)
-    ar = np.array([i for i in range(c * n)]).reshape(n, c)
-
-    ng_placeholder = template_create_placeholder(n, c)
-    ng_var = ng.placeholder(())
-
-    res1 = get_executor_result(scalar, ar, ng_var, ng_placeholder, ng.dot(ng_var, ng_placeholder))
-    res2 = np.array([i * scalar for i in ar]).reshape(n, c)
-
-    print("res1\n", res1)
-    print("res2\n", res2)
-
-    assert_allclose(res1, res2)
+    template_dot_one_placeholder_and_scalar(n, c, scalar, flex_exceptions)
