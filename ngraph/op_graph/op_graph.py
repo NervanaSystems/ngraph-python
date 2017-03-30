@@ -138,7 +138,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue, DebugInfo):
+class Op(NameableValue):
     """
     Any operation that can be in an AST.
 
@@ -235,37 +235,19 @@ class Op(NameableValue, DebugInfo):
         return op_set
 
     @staticmethod
-    def ordered_ops(results):
+    def ordered_ops(roots):
         """
-        depth-first, post-order "Bottom Up" traversal of Ops in results.
+        Topological sort of ops reachable from roots. Notes ngraph is using
+        depenency edges rather than dataflow edges, for example,
+        `top_sort(a -> b -> c) => [c, b, a]`.
 
-        Ops will only appear once in result.
-
-        Arguments:
-          results: a list of ops which are the roots of the graph traversal
+        Args:
+            roots: List of ops.
 
         Returns:
-          list of Ops in depth-first, post-order
+            A list of sorted ops.
         """
         ordered_ops = []
-        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
-        return ordered_ops
-
-    @staticmethod
-    def visit_input_closure(roots, fun):
-        """
-        Topological sort order traversal of root and their inputs.
-
-        Nodes will only be visited once, even if there are multiple routes to the
-        same Node.
-
-        Arguments:
-            roots: root set of nodes to visit
-            fun: Function to call on each visited node
-
-        Returns:
-            None
-        """
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
@@ -274,9 +256,8 @@ class Op(NameableValue, DebugInfo):
         available.update(root.forwarded for root in roots)
         while available:
             node = available.pop()
-            node.update_forwards()
 
-            if node in counts:
+            if node in counts or node in ready:
                 continue
 
             children = OrderedSet((child.forwarded for child in node.all_deps))
@@ -290,7 +271,7 @@ class Op(NameableValue, DebugInfo):
 
         while ready:
             node = ready.pop()
-            fun(node)
+            ordered_ops.append(node)
             for p in parents.get(node, []):
                 count = counts[p] - 1
                 if count == 0:
@@ -300,6 +281,22 @@ class Op(NameableValue, DebugInfo):
                     counts[p] = count
         if len(counts) > 0:
             raise ValueError("Graph not a DAG")
+
+        return ordered_ops
+
+    @staticmethod
+    def visit_input_closure(roots, fun):
+        """
+        Apply function `fun` in the topological sorted order of roots.
+
+        Args:
+            roots: List of ops.
+
+        Returns:
+            None
+        """
+        for op in Op.ordered_ops(roots):
+            fun(op)
 
     def __init__(self,
                  args=(),
@@ -3204,7 +3201,25 @@ def create_reduction_op(name,
     RedClass = type(name, (ReductionOp,), d)
 
     def func(*args, **kwargs):
-        return RedClass(*args, **kwargs)
+        # handle the case where out_axes not in the same order of x's axes
+        if 'out_axes' in kwargs and kwargs['out_axes'] is not None:
+            x = args[0]
+            out_axes = kwargs['out_axes']
+            out_axes_index = [x.axes.index(axis) for axis in out_axes]
+            sorted_out_axes_index = sorted(out_axes_index)
+            if sorted_out_axes_index != out_axes_index:
+                # temp axes for reduction op
+                temp_out_axes = [x.axes[i] for i in sorted_out_axes_index]
+                kwargs['out_axes'] = temp_out_axes
+                reduction_op = RedClass(*args, **kwargs)
+                # reorder axes to requested out_axes
+                reordered_reduction_op = axes_with_order(reduction_op, out_axes)
+                return reordered_reduction_op
+            else:
+                return RedClass(*args, **kwargs)
+        else:
+            return RedClass(*args, **kwargs)
+
     func.__name__ = func_name
     return RedClass, func
 

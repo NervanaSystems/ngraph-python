@@ -109,11 +109,11 @@ def get_device_op(op):
     Helper function that traverses through any reshape ops or value ops
     to return the tensor op
     """
-    if op.is_device_op or isinstance(op, TensorValueOp):
-        return op
-
     while isinstance(op, SequentialOp):
         op = op.value_tensor
+
+    if op.is_device_op or isinstance(op, TensorValueOp):
+        return op
 
     for arg in op.args:
         dev_op = get_device_op(arg)
