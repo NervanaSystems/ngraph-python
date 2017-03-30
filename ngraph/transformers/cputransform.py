@@ -627,12 +627,12 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from ngraph.op_graph import axes
-from ngraph.transformers.cpu.nputils import update_conv, fprop_pool, bprop_pool
-from ngraph.transformers.cpu.nputils import fprop_lut, update_lut
-from ngraph.transformers.cpu.mkldnnengine import mkldnn_init, mkldnn_engine_init
-from ngraph.transformers.cpu.mkldnnengine import mkldnn_engine_cleanup
-from ngraph.transformers.cpu.mkldnnengine import init_conv_fprop, fprop_conv
-from ngraph.transformers.cpu.mkldnnengine import init_conv_bprop, bprop_conv
+from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
+from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
+from ngraph.transformers.cpu.cpuengine import mkldnn_init, mkldnn_engine_init
+from ngraph.transformers.cpu.cpuengine import mkldnn_engine_cleanup
+from ngraph.transformers.cpu.cpuengine import init_conv_fprop, fprop_conv
+from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
 """)
         self.model = None
         self.n_computations = 0
