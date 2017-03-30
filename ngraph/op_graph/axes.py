@@ -111,6 +111,9 @@ class Axis(object):
             type(self).__name_counter += 1
 
         self.name = name
+
+        if length is not None and length < 0:
+            raise ValueError("Axis length {} must be >= 0".format(length))
         self.__length = length
 
         self.uuid = uuid.uuid4()
@@ -170,6 +173,8 @@ class Axis(object):
 
     @length.setter
     def length(self, value):
+        if value < 0:
+            raise ValueError("Axis length {} must be >= 0".format(value))
         self.__length = value
 
     @property
