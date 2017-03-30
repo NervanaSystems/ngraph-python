@@ -407,7 +407,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(CTCOp)
     def generate_op(self, op, outputs, activations, lbls, utt_lens, lbl_lens, grads):
-        self.append("self.ctc_cpu(acts={}, lbls={}, utt_lens={}, lbl_lens={}, grads={}, costs={})",
+        self.append("ctc_cpu(acts={}, lbls={}, utt_lens={}, lbl_lens={}, grads={}, costs={})",
                     activations, lbls, utt_lens, lbl_lens, grads, outputs)
 
     @generate_op.on_type(RngOp)
