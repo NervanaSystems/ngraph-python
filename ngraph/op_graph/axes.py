@@ -33,7 +33,10 @@ def default_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.float32)
     elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
-        dtype = np.dtype(dtype)
+        try:
+            dtype = np.dtype(dtype)
+        except TypeError:
+            raise TypeError("Could not cast {} to np.dtype".format(dtype))
     return dtype
 
 
@@ -41,7 +44,10 @@ def default_int_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.int32)
     elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
-        dtype = np.dtype(dtype)
+        try:
+            dtype = np.dtype(dtype)
+        except TypeError:
+            raise TypeError("Could not cast {} to np.dtype".format(dtype))
     return dtype
 
 
