@@ -1329,7 +1329,7 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     @dtype.setter
     def dtype(self, dtype):
-        self.tensor.dtype = dtype
+        self.tensor.dtype = default_dtype(dtype)
 
     @property
     def is_constant(self):
@@ -3025,7 +3025,7 @@ class ContiguousOp(TensorOp):
     """
 
     def __init__(self, x, **kwargs):
-        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, dtype=x.dtype, **kwargs)
 
     @property
     def old_axis_positions(self):

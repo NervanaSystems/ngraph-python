@@ -31,12 +31,16 @@ from ngraph.util.names import NameableValue
 def default_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.float32)
+    elif not isinstance(dtype, np.dtype):
+        dtype = np.dtype(dtype)
     return dtype
 
 
 def default_int_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.int32)
+    elif not isinstance(dtype, np.dtype):
+        dtype = np.dtype(dtype)
     return dtype
 
 
