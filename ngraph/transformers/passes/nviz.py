@@ -111,7 +111,7 @@ class VizPass(GraphPass):
 
     def add_op_to_graph(self, op, graph):
         # Register op in lookup table by uuid for later edge creation
-        self.uuid_lookup_table[op.uuid.get_bytes()] = op
+        self.uuid_lookup_table[op.uuid.bytes] = op
         op_label = op.name
         if hasattr(op, 'axes') and self.show_axes:
             op_label += "\n{}".format(op.axes)
