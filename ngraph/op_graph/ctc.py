@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, persistent_tensor
+from ngraph.op_graph.op_graph import TensorOp, persistent_tensor, sequential
 
 
 def ctc(activations, labels, activation_lens, label_lens, axes=None):
@@ -29,12 +29,14 @@ def ctc(activations, labels, activation_lens, label_lens, axes=None):
         TensorOp: The result of the CTC op.
 
     """
-    return CTCOp(activations, labels, activation_lens, label_lens, axes=axes)
+    grads = persistent_tensor(axes=activations.axes).named("ctc_gradients")
+
+    return CTCOp(activations, labels, activation_lens, label_lens, grads, axes=axes)
 
 
 class CTCOp(TensorOp):
 
-    def __init__(self, activations, labels, activation_lens, label_lens, axes=None, **kwargs):
+    def __init__(self, activations, labels, activation_lens, label_lens, grads, axes=None, **kwargs):
         """
         Arguments:
             activations: Activations induced by the utterances.
@@ -45,29 +47,38 @@ class CTCOp(TensorOp):
 
         # verify shapes
         if len(activations.shape) != 3:
-            raise ValueError(('inputs must have 3 dimensions, ',
+            raise ValueError(('activations must have 3 dimensions, ',
                               'found {}').format(len(activations.shape)))
 
+        if activations.axes.batch_axis() is None:
+            raise ValueError('activations must have a batch axis')
+
+        if activations.axes.recurrent_axis() is None:
+            raise ValueError('activations must have a recurrent axis')
+
         if len(labels.shape) != 1:
-            raise ValueError(('labels must have 1 dimension, ',
+            raise ValueError(('labels 1must have 1 dimension, ',
                               'found {}').format(len(labels.shape)))
 
         if len(activation_lens.shape) != 1:
-            raise ValueError(('input_lens must have 1 dimension, ',
+            raise ValueError(('activation_lens must have 1 dimension, ',
                               'found {}').format(len(activation_lens.shape)))
 
         if len(label_lens.shape) != 1:
             raise ValueError(('label_lens must have 1 dimension, ',
                               'found {}').format(len(label_lens.shape)))
 
-        super(CTCOp, self).__init__(args=(activations, labels, activation_lens, label_lens),
-                                    axes=axes if axes is not None else activations.batch_axes(),
-                                    **kwargs)
-        self.grads = persistent_tensor(axes=activations.axes).named("ctc_gradients")
+        if axes is None:
+            axes = activations.axes.batch_axes()
 
-    def generate_adjoints(self, adjoints, delta, activations, labels, activation_lens, label_lens):
+        super(CTCOp, self).__init__(args=(activations, labels, activation_lens, label_lens, grads),
+                                    axes=axes,
+                                    **kwargs)
+
+    def generate_adjoints(self, adjoints, delta,
+                          activations, labels, activation_lens, label_lens, grads):
         """
         Add gradients computed by warp-ctc do adjoints
         """
-        activations.generate_add_delta(adjoints, self.grads)
+        activations.generate_add_delta(adjoints, sequential([self, grads]))
 
