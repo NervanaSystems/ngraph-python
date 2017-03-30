@@ -26,12 +26,13 @@ import types
 from builtins import object, map, zip
 
 from ngraph.util.names import NameableValue
+from ngraph.flex.base import Flex
 
 
 def default_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.float32)
-    elif not isinstance(dtype, np.dtype):
+    elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
         dtype = np.dtype(dtype)
     return dtype
 
@@ -39,7 +40,7 @@ def default_dtype(dtype=None):
 def default_int_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.int32)
-    elif not isinstance(dtype, np.dtype):
+    elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
         dtype = np.dtype(dtype)
     return dtype
 
