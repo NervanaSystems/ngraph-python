@@ -19,7 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.frontends.neon.axis import ar, shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -41,6 +41,8 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     if pooling and padding >= S:
         raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
 
+    if size < 0:
+        raise ValueError('output_dim {} can not be < 0'.format(size))
     return size
 
 
@@ -199,7 +201,6 @@ class LookupTable(Layer):
         update (bool): if the word vectors get updated through training
         pad_idx (int): by knowing the pad value, the update will make sure always
                        have the vector representing pad value to be 0s.
-
     """
     metadata = {'layer_type': 'lookuptable'}
 
@@ -211,7 +212,6 @@ class LookupTable(Layer):
         self.init = init
         self.update = update
         self.pad_idx = pad_idx
-        self.role_order = (ar.time, ar.batch)
         self.W = None
 
     def lut_init(self, axes, pad_word_axis, pad_idx):
@@ -234,9 +234,9 @@ class LookupTable(Layer):
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
         """
-        in_obj.axes.find_by_name('time')[0].add_role(ar.time)
-        in_obj.axes.find_by_name('time')[0].is_recurrent = True
-        in_obj = ng.axes_with_role_order(in_obj, self.role_order)
+        in_obj = ng.axes_with_order(in_obj,
+                                    ng.make_axes([in_obj.axes.recurrent_axis(),
+                                                  in_obj.axes.batch_axis()]))
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
 
@@ -276,7 +276,6 @@ class ConvBase(Layer):
         strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
         dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
-
     """
     metadata = {'layer_type': 'convolution'}
 
@@ -294,10 +293,6 @@ class ConvBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing conv keys: {}".format(missing_keys))
 
-        self.role_order = (ar.features_input, ar.features_0,
-                           ar.features_1, ar.features_2, ar.batch)
-        self.filter_roles = self.role_order[:-1] + (ar.features_output,)
-
         self.init = init
         self.f_axes = None
         self.o_axes = None
@@ -314,9 +309,7 @@ class ConvBase(Layer):
             self.f_axes = ng.make_axes([in_axes[0]])
             for nm in 'TRSK':
                 self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
-            # mark 'K' as a shadow axis for the initializers.  with #1158
-            # shadows will also be important for axis name matching and roles
-            # can be removed.
+            # mark 'K' as a shadow axis for the initializers.
             self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
             self.f_axes = ng.make_axes([
                 axis if axis.name != 'K' else list(self.axes_map.keys())[0]
@@ -390,7 +383,6 @@ class PoolBase(Layer):
         init (function): function for later initializing filters
         strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
-
     """
     metadata = {'layer_type': 'pooling'}
 
@@ -408,8 +400,6 @@ class PoolBase(Layer):
         if len(missing_keys) > 0:
             raise ValueError("Missing pooling keys: {}".format(missing_keys))
 
-        self.role_order = (ar.features_input, ar.features_0,
-                           ar.features_1, ar.features_2, ar.batch)
         self.o_axes = None
 
     @ng.with_op_metadata
@@ -477,8 +467,8 @@ class Bias(Layer):
     def __call__(self, in_obj):
         if self.init:
             w_axes = in_obj.axes.sample_axes()
-            if self.shared and len(in_obj.axes.role_axes(ar.features_input)) != 0:
-                w_axes = in_obj.axes.role_axes(ar.features_input)
+            if self.shared and in_obj.axes.channel_axis() is not None:
+                w_axes = ng.make_axes(in_obj.axes.channel_axis())
 
             self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init)
             return in_obj + self.W
@@ -558,31 +548,33 @@ class BatchNorm(Layer):
     @cached({}, key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
-        in_axes = in_obj.axes.sample_axes()
-        red_axes = ng.make_axes()
-        if len(in_axes.role_axes(ar.features_input)) != 0:
-            red_axes |= in_axes.sample_axes() - in_axes.role_axes(ar.features_input)
-        if in_axes.recurrent_axis() is not None:
-            red_axes |= in_axes.recurrent_axis()
-        red_axes |= in_obj.axes.batch_axis()
+        in_axes = in_obj.axes
+        if in_axes.channel_axis() is None:
+            red_axes = ng.make_axes(in_axes.recurrent_axis()) + in_axes.batch_axes()
+        else:
+            red_axes = in_axes - in_axes.channel_axis()
+
         out_axes = in_axes - red_axes
 
-        self.gamma = self.gamma or ng.variable(axes=out_axes,
-                                               initial_value=self.init_gamma).named('gamma')
-        self.beta = self.beta or ng.variable(axes=out_axes,
-                                             initial_value=self.init_beta).named('beta')
-        self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-        self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+        in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
+        if self.gamma is None:
+            self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+            self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+            self.gamma = ng.variable(axes=out_axes, initial_value=self.init_gamma).named('gamma')
+            self.beta = ng.variable(axes=out_axes, initial_value=self.init_beta).named('beta')
 
-        xmean = ng.mean(in_obj, reduction_axes=red_axes)
-        xvar = ng.variance(in_obj, reduction_axes=red_axes)
+        xmean = ng.mean(in_obj, out_axes=out_axes)
+        xvar = ng.variance(in_obj, out_axes=out_axes)
+
         if Layer.inference_mode:
-            return self.gamma * (in_obj - self.gmean) / ng.sqrt(self.gvar + self.eps) + self.beta
+            return ng.unflatten(self.gamma * ((in_obj - self.gmean) *
+                                ng.reciprocal(ng.sqrt(self.gvar + self.eps))) + self.beta)
         else:
             return ng.sequential([
                 ng.assign(self.gmean, self.gmean * self.rho + xmean * (1.0 - self.rho)),
                 ng.assign(self.gvar, self.gvar * self.rho + xvar * (1.0 - self.rho)),
-                self.gamma * (in_obj - xmean) / ng.sqrt(xvar + self.eps) + self.beta
+                ng.unflatten(self.gamma * ((in_obj - xmean) *
+                             ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             ])
 
     def set_tuning_iteration(self, batch_index):
@@ -862,7 +854,7 @@ class BiRNN(Layer):
         with ng.metadata(direction="fwd"):
             fwd_out = self.fwd_rnn(fwd_in, fwd_init)
         with ng.metadata(direction="bwd"):
-            bwd_out = self.bwd_rnn(bwd_in, bwd_init)
+            bwd_out = ng.cast_role(self.bwd_rnn(bwd_in, bwd_init), fwd_out.axes)
 
         if self.sum_out:
             return fwd_out + bwd_out
@@ -876,7 +868,7 @@ class BiRNN(Layer):
                     raise ValueError("Multiple hidden axes. Unable to concatenate automatically")
             return ng.ConcatOp([fwd_out, bwd_out], ax_list)
         else:
-            return [fwd_out, bwd_out]
+            return fwd_out, bwd_out
 
 
 class LSTM(Recurrent):
@@ -910,7 +902,6 @@ class LSTM(Recurrent):
         b (Tensor): Biases on output units (output_size, 1)
 
     Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
-
     """
     metadata = {'layer_type': 'LSTM',
                 'gates': ['i', 'f', 'o', 'g']}

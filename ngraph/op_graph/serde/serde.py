@@ -46,7 +46,7 @@ import numpy as np
 import ngraph
 import ngraph.op_graph.op_graph as op_graph
 from ngraph.op_graph.op_graph import Op
-from ngraph.op_graph.axes import Axes, Axis, AxisRole, FlattenedAxis
+from ngraph.op_graph.axes import Axes, Axis, FlattenedAxis
 from ngraph.util.ordered import OrderedSet
 
 import ngraph.op_graph.serde.ops_pb2 as ops_pb
@@ -83,9 +83,6 @@ def axis_to_protobuf(axis):
     pb_axis.recurrent = axis.is_recurrent
     pb_axis.uuid.uuid = axis.uuid.bytes
 
-    for role in axis.roles:
-        tmp = pb_axis.roles.add()
-        tmp.CopyFrom(ops_pb.AxisRole(name=role.name, docstring=role.__doc__))
     return pb_axis
 
 
@@ -216,6 +213,9 @@ def op_to_protobuf(op):
 
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
+        # hetr only
+        if key in ('hetr_replaced_by', 'replaces_op', 'layout'):
+            continue
         assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
 
     if hasattr(op, '_ngraph_ser_handle'):
@@ -231,7 +231,8 @@ def op_to_protobuf(op):
             tensor_to_protobuf(op.valfun(op.tensor_description())))
 
     # These are handled above
-    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata'}
+    ignored_keys = {'valfun', 'uuid', 'dtype', 'metadata', 'layout_view', 'in_view', 'out_view',
+                    'all_deps'}
     remaining_keys = set(op.__dict__.keys()).difference(ignored_keys)
 
     for key in remaining_keys:
@@ -275,7 +276,7 @@ def add_edges(pb_edges, pb_ops, op):
 
     # Now iterate through remaining keys of this op's __dict__ and any that reference
     # other Ops we make edges that we can deserialize as Op attributes later
-    remaining_keys = set(op.__dict__.keys())
+    remaining_keys = set(op.__dict__.keys()).difference({'all_deps'})
     for key in remaining_keys:
         if not key.startswith('_is_') and key not in EXCEPTION_ATTRIBUTES and key.startswith('_'):
             continue
@@ -406,7 +407,6 @@ def protobuf_attr_to_python(val):
 
 
 def pb_to_axis(msg):
-    roles = [AxisRole(name=role.name, docstring=msg.docstring) for role in msg.roles]
 
     if msg.uuid.uuid in GLOBAL_AXIS_REGISTRY:  # Already deserialized
         return GLOBAL_AXIS_REGISTRY[msg.uuid.uuid]
@@ -415,8 +415,7 @@ def pb_to_axis(msg):
         axis = FlattenedAxis(axes)
     else:
         axis = Axis(name=msg.name,
-                    length=msg.length,
-                    roles=roles)
+                    length=msg.length)
 
     axis.uuid = uuid.UUID(bytes=msg.uuid.uuid)
     GLOBAL_AXIS_REGISTRY[axis.uuid.bytes] = axis

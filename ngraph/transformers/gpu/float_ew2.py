@@ -49,6 +49,7 @@ _op_templates = {
     "sub": r"%(out)s = %(x)s - %(y)s;",
     "mul": r"%(out)s = %(x)s * %(y)s;",
     "div": r"%(out)s = %(x)s / %(y)s;",
+    "int_div": r"%(out)s = int(%(x)s) / int(%(y)s);",
     "mod": r"%(out)s = int(%(x)s) %% int(%(y)s);",
     "eq": r"%(out)s = %(x)s == %(y)s;",
     "ne": r"%(out)s = %(x)s != %(y)s;",
@@ -283,58 +284,32 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes, gemm=False, take_axis=False):
+    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False,
+                 missing_axis=None):
         self.dtype = tensor_description.dtype
-        self.strides = tensor_description.strides
-        self.shape = tensor_description.shape
         self.td = tensor_description
 
-        if type(kernel_axes) == int:
-            if len(self.strides) == 0:
-                self.strides = (0, )
-
-            if len(self.shape) == 0:
-                self.shape = (1, )
-
-            if len(self.shape) < kernel_axes:
-                if gemm:
-                    self.shape = tuple(list(self.shape) + [1])
-                    self.strides = tuple(list(self.strides) + [1])
-                else:
-                    self.shape = tuple([1] + list(self.shape))
-                    self.strides = tuple([0] + list(self.strides))
-
-            self.strides = [s // self.dtype.itemsize for s in self.strides]
-            self.strides = tuple(self.strides)
-        elif len(self.strides) != len(kernel_axes):
-            num_kernel_axes = len(kernel_axes)
-            bcast_shape = [1] * num_kernel_axes
-            bcast_strides = [0] * num_kernel_axes
-            converted = []
-
-            for axis in range(num_kernel_axes):
-                if kernel_axes[axis] in self.td.axes:
-                    td_axis_index = self.td.axes.index(kernel_axes[axis])
-                    bcast_shape[axis] = self.shape[td_axis_index]
-                    bcast_strides[axis] = self.strides[td_axis_index] // self.dtype.itemsize
-                    converted.append(kernel_axes[axis])
-                else:
-                    # Broadcast
-                    bcast_shape[axis] = 1
-                    bcast_strides[axis] = 0
-
-            # Take axis condition where one will not match
-            if take_axis:
-                kernel_index = kernel_axes.index(kernel_axes - converted)
-                td_index = self.td.axes.index(self.td.axes - converted)
-                bcast_shape[kernel_index] = self.shape[td_index]
-                bcast_strides[kernel_index] = self.strides[td_index] // self.dtype.itemsize
-
-            self.shape = tuple(bcast_shape)
-            self.strides = tuple(bcast_strides)
+        if ignore_layout:
+            self.shape = [None]
+            self.strides = [None]
         else:
-            self.strides = [s // self.dtype.itemsize for s in self.strides]
-            self.strides = tuple(self.strides)
+            self.strides = list(tensor_description.layout.strides)
+            self.shape = list(tensor_description.layout.shape)
+
+        if missing_axis is not None:
+            self.shape.insert(missing_axis, 1)
+            self.strides.insert(missing_axis, 0)
+
+        if len(self.strides) == 0 and len(self.shape) == 0:
+            self.strides = [0]
+            self.shape = [1]
+
+        if kernel_axes is not None:
+            if len(self.shape) != kernel_axes or len(self.strides) != kernel_axes:
+                raise ValueError("Invalid tensor view input for kernel generator")
+
+        self.strides = tuple(self.strides)
+        self.shape = tuple(self.shape)
 
     @property
     def is_trans(self):
@@ -692,6 +667,8 @@ def _get_register_type(dtype, memory=False):
             return "float"
     elif dtype == np.int32:
         return "int"
+    elif dtype == np.uint32:
+        return "unsigned int"
     elif dtype == np.int16:
         return "short"
     elif dtype == np.int8:
@@ -701,33 +678,38 @@ def _get_register_type(dtype, memory=False):
 
 
 def _wrap_tensor_descriptions(ops):
-    max_dims = 0
-    kernel_axes = None
+    max_dims = 1
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if op[0] == "take" and (index == 2):
                 continue
             if isinstance(new_op[index], TensorDescription):
-                if len(new_op[index].shape) > max_dims:
-                    max_dims = len(new_op[index].shape)
-                    kernel_axes = new_op[index].axes
-
-    if kernel_axes is None:
-        # Make dummy axis for scalar kernels
-        kernel_axes = (1, )
+                if len(new_op[index].layout.shape) > max_dims:
+                    max_dims = len(new_op[index].layout.shape)
 
     new_ops = []
     for op in ops:
         new_op = list(op)
         for index in range(1, 4):
             if isinstance(new_op[index], TensorDescription):
-                if op[0] == "take" and (index == 2):
+                if op[0] == "take" and (index == 1):
+                    missing_axis = 1 if op[4] == 0 else 0
                     new_op[index] = TensorDescriptionWrapper(new_op[index],
-                                                             kernel_axes,
-                                                             take_axis=True)
+                                                             max_dims,
+                                                             missing_axis=missing_axis)
                 else:
-                    new_op[index] = TensorDescriptionWrapper(new_op[index], kernel_axes)
+                    if op[0] in _redop_templates and index == 3:
+                        missing_axis = op[4]
+                    elif op[0] == "onehot" and index == 1:
+                        missing_axis = op[4]
+                    elif op[0] == "assign" and op[4] is not None:
+                        missing_axis = op[4]
+                    else:
+                        missing_axis = None
+                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                                                             max_dims,
+                                                             missing_axis=missing_axis)
 
         new_ops.append(tuple(new_op))
 
@@ -1032,17 +1014,26 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     return code
 
 
-def _generate_kernel_args(ctx, axes_mapping, dims):
+def _generate_kernel_args(ops, axes_mapping, dims, ctx):
     """
     Generates a list of parameters which need to be passed to the CUDA kernel
     at runtime along with strings to represent them in C
 
+    Argument order for kernels is standardized:
+    1. Tensor shape (max shape)
+    2. Tensor inputs/outputs pointers in the order op1_arg1, op1_arg2, op1_out,
+        op2_arg1,...
+    2a. First value for each input/output is a pointer
+    2b. Second value for each input/output is strides
+    2c. (Optional) flex scale for and/or flex stats for flex output
+
     Arguments:
-        ctx (GenerationContext): Context containing kernel specific data
-            structures for register mapping, etc
+        ops (list): List of op descriptions for which to generate kernel
         axes_mapping (list): Mapping between tensor axes and kernel block
             dimensions
         dims (int): Number of dimensions used by the kernel
+        ctx (GenerationContext): Context containing kernel specific data
+            structures for register mapping, etc
 
     Returns: List of parameters and arguments and descriptor string for
         pycuda kernel compiler
@@ -1060,42 +1051,115 @@ def _generate_kernel_args(ctx, axes_mapping, dims):
         arg_desc = arg_desc + "II"
         params.extend([axes_mapping[1][4], axes_mapping[2][4]])
 
-    for constant in ctx.constants.keys():
-        args.append("float " + constant)
-        arg_desc = arg_desc + "f"
-        params.append(ctx.constants[constant])
+    num_constants = 0
+    processed_tensors = set()
+    for op in ops:
+        for tensor in op[1:4]:
+            from ngraph.transformers.gputransform import GPURegister
+            if tensor is None or isinstance(tensor, GPURegister):
+                continue
 
-    for buf in ctx.buffers.keys():
-        args.append(_get_register_type(buf.dtype, True) + "* " + ctx.buffers[buf])
-        args.append("unsigned int stridea_" + ctx.buffers[buf])
-        arg_desc = arg_desc + "PI"
-        params.append(buf.td)
-        params.append(buf.strides[0])
+            if isinstance(tensor, TensorDescriptionWrapper) and tensor not in processed_tensors:
+                # Tensor is buffer in memory
+                regname = ctx.register_mapping[tensor]
+                bufname = ctx.buffers[tensor]
 
-        if dims == 2:
-            args.append("unsigned int strideb_" + ctx.buffers[buf])
-            arg_desc = arg_desc + "I"
-            params.append(buf.strides[1])
-        elif dims == 3:
-            args.append("unsigned int strideb_" + ctx.buffers[buf])
-            args.append("unsigned int stridec_" + ctx.buffers[buf])
-            arg_desc = arg_desc + "II"
-            params.append(buf.strides[1])
-            params.append(buf.strides[2])
+                args.append(_get_register_type(tensor.dtype, True) + "* " + bufname)
+                args.append("unsigned int stridea_" + bufname)
+                arg_desc = arg_desc + "PI"
+                params.append(tensor.td)
+                params.append(tensor.strides[0])
 
-    # flex scale arguments
-    for argname, flex_entry, is_output in ctx.flex_scale.values():
-        args.append("float " + argname)
-        arg_desc = arg_desc + "f"
-        # create description of flex scale parameters that will be bound later
-        params.append(FlexScaleDescription(flex_entry, is_output))
+                if dims == 2:
+                    args.append("unsigned int strideb_" + bufname)
+                    arg_desc = arg_desc + "I"
+                    params.append(tensor.strides[1])
+                elif dims == 3:
+                    args.append("unsigned int strideb_" + bufname)
+                    args.append("unsigned int stridec_" + bufname)
+                    arg_desc = arg_desc + "II"
+                    params.append(tensor.strides[1])
+                    params.append(tensor.strides[2])
 
-    if ctx.flex_stats_ptr is not None:
-        args.append("int * flex_stats")
-        arg_desc = arg_desc + "P"
-        params.append(ctx.flex_stats_ptr)
+                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                    argname, flex_entry, is_output = ctx.flex_scale[regname]
+                    args.append("float " + argname)
+                    arg_desc = arg_desc + "f"
+                    # create description of flex scale parameters that will be bound later
+                    params.append(FlexScaleDescription(flex_entry, is_output))
+
+                    if tensor is op[3]:
+                        # This is an output so we also need flex stats
+                        args.append("int* flex_stats")
+                        arg_desc = arg_desc + "P"
+                        params.append(ctx.flex_stats_ptr)
+            else:
+                # Must be a constant value
+                regname = "constant" + str(num_constants)
+                regtype = ctx.register_types[regname]
+                num_constants += 1
+
+                args.append(regtype + " " + regname)
+                if regtype == "float":
+                    arg_desc = arg_desc + "f"
+                else:
+                    arg_desc = arg_desc + "i"
+                params.append(tensor)
 
     return (args, arg_desc, params)
+
+
+def _generate_new_kernel_args(ops, axes_mapping, dims):
+    """
+    Generates a new list of kernel parameters for an already generated kernel
+
+    Arguments:
+        ops (list): List of op descriptions for which to generate kernel
+        axes_mapping (list): Mapping between tensor axes and kernel block
+            dimensions
+        dims (int): Number of dimensions used by the kernel
+
+    Returns:
+        List of parameters to pass to kernel
+    """
+    # List arguments to kernel
+    params = [axes_mapping[0][4]]
+    if dims == 2:
+        params.append(axes_mapping[1][4])
+    elif dims == 3:
+        params.extend([axes_mapping[1][4], axes_mapping[2][4]])
+
+    processed_tensors = set()
+    for op in ops:
+        for tensor in op[1:4]:
+            if tensor is None:
+                continue
+
+            if isinstance(tensor, TensorDescriptionWrapper) and tensor not in processed_tensors:
+                # Tensor is buffer in memory
+                params.append(tensor.td)
+                params.append(tensor.strides[0])
+
+                if dims == 2:
+                    params.append(tensor.strides[1])
+                elif dims == 3:
+                    params.append(tensor.strides[1])
+                    params.append(tensor.strides[2])
+
+                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                    # create description of flex scale parameters that will be bound later
+                    flex_entry = tensor.flex_entry()
+
+                    if tensor is op[3]:
+                        params.append(FlexScaleDescription(flex_entry, True))
+                        params.append(FlexPtrDescription(flex_entry))
+                    else:
+                        params.append(FlexScaleDescription(flex_entry, False))
+            else:
+                # Must be a constant value
+                params.append(tensor)
+
+    return params
 
 
 def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
@@ -1380,7 +1444,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     kernel_name = kernel_name + '_'.join(op_names)
 
     # Compute arguments, parameters, and descriptor string
-    args, arg_desc, params = _generate_kernel_args(ctx, axes_mapping, dims)
+    args, arg_desc, params = _generate_kernel_args(ops, axes_mapping, dims, ctx)
     argstring = ', '.join(args)
 
     # Construct header and join with code
@@ -1447,12 +1511,59 @@ def _call_compound_kernel(ops):
     kernel.prepared_async_call(*params, shared_size=shared_size)
 
 
+def _ops_to_hash(ops, axes_mapping):
+    """
+    Converts a list of ops into a hashable value that can be used for the kernel
+    cache.
+
+    Creates a string in the following format
+        {axes_mapping(0)}{axes_mapping(1)}{axes_mapping(2)}_{op_desc}*
+
+    Where {axes_mapping(i)} is defined as
+        {axis_dim[i]}{length[i]}_{items_per_thread[i]}
+        axis_dim is one of 'x' | 'y' | 'z'
+
+    Where {op_desc} is defined as
+        {op_name}_{arg0}{arg1}{out}{axis}
+    """
+    axes_key = []
+    for idx, axis in enumerate(axes_mapping):
+        if axis[0] == 'x':
+            loop_axis = idx
+        axes_key.append("{}{}_{}".format(axis[0], axis[4], axis[3]))
+
+    tensors = []
+    tensor_codes = []
+    for op in ops:
+        for tensor in op[1:4]:
+            if tensor not in tensors:
+                tensors.append(tensor)
+
+                # Broadcast tensor along loop axis changes kernel code
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.strides[loop_axis] == 0:
+                    tensor_codes.append(str(len(tensor_codes)) + "b")
+                else:
+                    tensor_codes.append(str(len(tensor_codes)))
+
+    ops_key = []
+    for op in ops:
+        ops_key.append(op[0])
+        op_args = [tensor_codes[tensors.index(t)] for t in op[1:4] if t]
+        if op[4] is not None:
+            op_args.append(str(op[4]))
+        ops_key.append(".".join(op_args))
+
+    kernel_key = ("_".join(axes_key) + "_".join(ops_key))
+    return kernel_key
+
+
 class CudaSourceFile:
     def __init__(self, name, retain_file=False, gen_flex=False):
         self.num_kernels = 0
         self.module = None
         self.functions = dict()
         self.arg_descs = dict()
+        self.cache = dict()
 
         self.compiled = False
         self.retain_file = retain_file
@@ -1473,10 +1584,25 @@ class CudaSourceFile:
         ops = _wrap_tensor_descriptions(ops)
         ops = _compress_axes(ops)
 
-        # Generate kernel source code and block/grid mapping
+        # Generate kernel source code and block/grid mapping or find cached equivalent kernel
         (axes_mapping, dims) = _get_axes_mapping(ops)
-        code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims,
-                                                                   str(self.num_kernels))
+        kernel_key = _ops_to_hash(ops, axes_mapping)
+        if kernel_key in self.cache:
+            kernel_name = self.cache[kernel_key]
+            params = _generate_new_kernel_args(ops, axes_mapping, dims)
+        else:
+            code, kernel_name, arg_desc, params = _get_compound_kernel(ops, axes_mapping, dims,
+                                                                       str(self.num_kernels))
+            self.cache[kernel_key] = kernel_name
+
+            # Add kernel code to source file
+            self.buffer.write(code)
+
+            # Save arg_desc in dict
+            self.arg_descs[kernel_name] = arg_desc
+
+            # Increment number of kernels
+            self.num_kernels = self.num_kernels + 1
 
         # Calculate block and grid dims
         blockdim = [1, 1, 1]
@@ -1493,15 +1619,6 @@ class CudaSourceFile:
                 griddim[2] = axis[2]
 
         params = [tuple(griddim), tuple(blockdim), None] + params
-
-        # Add kernel code to source file
-        self.buffer.write(code)
-
-        # Save arg_desc in dict
-        self.arg_descs[kernel_name] = arg_desc
-
-        # Increment number of kernels
-        self.num_kernels = self.num_kernels + 1
 
         # Return kernel name and params
         return (kernel_name, params)

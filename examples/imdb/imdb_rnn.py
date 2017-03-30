@@ -32,7 +32,7 @@ from imdb import IMDB
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
@@ -72,7 +72,6 @@ seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_id
 
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
-
 
 train_prob = seq1(inputs['review'])
 train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y),

@@ -22,8 +22,8 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     ContiguousOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, constant, \
-    Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
-    ParallelOp
+    Multiply, Add, Divide, Op, Sum, Prod, negative, power
+
 from ngraph.util.generics import generic_method
 
 
@@ -38,7 +38,6 @@ class GraphBuildingPass(GraphPass):
     """
     Base class for passes that build new graph, primarily derivatives
     and other macro-like things.
-
     """
     def do_pass(self, min_ops, transformer):
         """
@@ -67,7 +66,7 @@ class GraphBuildingPass(GraphPass):
             for old, rep in self.replacement_list:
                 old.forwarded.replace_self(rep.forwarded)
             has_work = len(self.replacement_list) > 0
-            min_ops = list(_.forwarded for _ in min_ops)
+            min_ops = list(op.forwarded for op in min_ops)
 
     def replace_op(self, op, replacement):
         """
@@ -84,44 +83,11 @@ class GraphBuildingPass(GraphPass):
 class PeepholeGraphPass(GraphBuildingPass):
     """
     Base class for passes that do not add to the graph.
+
+    TODO: currently it has same exact implementation as GraphBuildingPass,
+    consider removing it in future.
     """
-    def do_pass(self, min_ops, transformer):
-        """
-        Visit the ops until nothing changes.
-
-        Args:
-            min_ops: The set of ops that must be computed.
-            transformer: An InitGraph object.
-
-        """
-        assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
-        has_work = True
-        while True:
-            ops = Op.ordered_ops(min_ops)
-
-            if not has_work:
-                return
-
-            self.replacement_list = []
-
-            # Make control dependency adjustments for any added control blocks.
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
-            for op in ops:
-                for cop in op.control_deps:
-                    if isinstance(cop, ParallelOp):
-                        op.remove_control_dep(cop)
-                        for dep in cop.control_deps:
-                            op.add_control_dep(dep)
-
-            # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
-            for op in ops:
-                op.update_forwards()
-                self.visit(op)
-            for old, rep in self.replacement_list:
-                old.forwarded.replace_self(rep.forwarded)
-            has_work = len(self.replacement_list) > 0
-            min_ops = list(_.forwarded for _ in min_ops)
+    pass
 
 
 class RequiredTensorShaping(PeepholeGraphPass):

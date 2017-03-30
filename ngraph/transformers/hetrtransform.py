@@ -20,8 +20,9 @@ from six import itervalues, iteritems
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
-from ngraph.util.ordered import OrderedSet
-from ngraph.op_graph.op_graph import Op, TensorOp, TensorValueOp
+from orderedset import OrderedSet
+from ngraph.op_graph.op_graph import Op, TensorValueOp
+from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import Transformer
 from ngraph.transformers.base import make_transformer_factory
@@ -38,8 +39,8 @@ def build_transformer(name):
     :param results: the graph nodes that we care about, for the computation
     :return: the dictionary of transformers, with names matching the graph node hints
     """
-    if 'numpy' in name:
-        transformer = make_transformer_factory('numpy')()
+    if 'cpu' in name:
+        transformer = make_transformer_factory('cpu')()
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
@@ -134,14 +135,17 @@ class AsyncTransformer(Process):
         return c
 
     def close(self):
-        if not self.started:
-            return
         if self.my_pid != os.getpid():
             # Forked into another process
             return
-        self.started = False
-        self.exit.set()
-        self.join()
+
+        # only join child thread if it has been started
+        if self.started:
+            self.started = False
+            self.exit.set()
+            self.join()
+
+        # safe to call manager shutdown more than once
         self.manager.shutdown()
 
     def run(self):
@@ -187,15 +191,6 @@ class AsyncTransformer(Process):
                     raise
 
 
-class ResultOp(TensorOp):
-
-    def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self, args=args)
-        self.metadata['device_id'] = device_id
-        self.axes = args[0].axes
-        self.dtype = args[0].dtype
-
-
 class HetrComputation(Computation):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
@@ -229,9 +224,9 @@ class HetrComputation(Computation):
                 new_returns.add(op)
 
         # Do Hetr passes
-        pass_ops = OrderedSet(new_returns + self.computation.parameters)
+        pass_ops = new_returns | OrderedSet(self.computation.parameters)
         for graph_pass in self.transformer.passes:
-            pass_ops = pass_ops + hetr.send_nodes
+            pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
             graph_pass.do_pass(pass_ops, self.transformer)
 
         # hack around new TensorValueOp that wraps AssignableTensorOp
@@ -245,7 +240,7 @@ class HetrComputation(Computation):
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation.parameters)
                          if p.metadata['transformer'] == t_name]
-            my_ops = [op for op in self.send_nodes + new_returns
+            my_ops = [op for op in self.send_nodes | new_returns
                       if op.metadata['transformer'] == t_name]
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
@@ -310,7 +305,7 @@ class HetrTransformer(Transformer):
         self.is_closed = False
         self.child_transformers = dict()
         self.send_nodes = OrderedSet()
-        self.passes = [DeviceAssignPass(hetr=self, default_device='numpy', default_device_id=0),
+        self.passes = [DeviceAssignPass(hetr=self, default_device='cpu', default_device_id=0),
                        CommunicationPass(self.send_nodes),
                        DistributedPass(self.send_nodes)]
 
@@ -368,6 +363,9 @@ class HetrTransformer(Transformer):
         assert False, "Should not be used, TODO cleanup"
 
     def start_transform_allocate(self):
+        assert False, "Should not be used, TODO cleanup"
+
+    def transform_allocate_ops(self, all_ops):
         assert False, "Should not be used, TODO cleanup"
 
     def finish_transform_allocate(self):

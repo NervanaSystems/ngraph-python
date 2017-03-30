@@ -23,7 +23,7 @@ from future.utils import with_metaclass
 
 from ngraph.op_graph.op_graph import Op, computation
 from ngraph.util.names import NameableValue
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 
 
 PYCUDA_LOGIC_ERROR_CODE = 4
@@ -308,7 +308,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         initialized (bool): True when variables have been initialized/restored.
         fusion (bool): True when fusion was enabled.
         device_buffers (set): Set of handles for storage allocations.
-
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
@@ -361,6 +360,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
             device_buffer.transform_allocate()
+        self.transform_allocate_ops(all_ops)
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
@@ -426,6 +426,49 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         Returns: A DeviceBufferReference.
         """
+
+    def get_layouts(self, op):
+        """
+        Returns a list of possible axis layouts for the op. The default layout must
+        be the first item in the returned list.
+
+        Arguments:
+            op: graph op to get possible layouts for
+
+        Returns:
+            A list of objects that inherit from LayoutAssignment. The first item in the
+            list must be the default layout for this op.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_cost_function(self, op):
+        """
+        Returns a UnaryLayoutConstraint which computes the cost of an op given an
+        assigned data layout for that op.
+
+        Arguments:
+            op: graph op to get cost function for
+
+        Returns:
+            An object that inherits from UnaryLayoutConstraint and can be used to
+            calculate the layout assignment cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_change_cost_function(self, op, arg):
+        """
+        Returns a BinaryLayoutConstraint which computes the cost of a layout change
+        between the specified op and its specified arg (if any cost).
+
+        Arguments:
+            op: graph op to get cost function for
+            arg: argument to the op to generate cost function for
+
+        Returns:
+            An object that inherits from BinaryLayoutConstraint and can be used to
+            calculate any layout change cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
 
     # Old interface
     def computation(self, results, *parameters):
@@ -508,7 +551,7 @@ __transformer_factory = None
 def make_transformer():
     """
     Generates a Transformer using the factory in this module which defaults
-    to NumPy
+    to CPU
 
     Returns: Transformer
     """

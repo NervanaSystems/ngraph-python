@@ -17,15 +17,14 @@ from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
 import multiprocessing
 
 
-def calculate_new_axes(axes, parallel_axis, num_devices, is_last):
+def calculate_new_axes(axes, parallel_axis, num_devices):
     new_axes = list()
     for a in axes:
         if parallel_axis == a:
-            remainder = a.length % num_devices
+            assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
+                .format(parallel_axis, num_devices)
+
             new_length = a.length // num_devices
-            if remainder > 0:
-                if is_last:
-                    new_length += remainder
             new_axis = make_axis(new_length, a.name)
             new_axes.append(new_axis)
         else:
@@ -53,6 +52,19 @@ def get_slices(axes, parallel_axis, num_devices):
             slices.append(s)
         new_slices.append(slices)
     return new_slices
+
+
+class ResultOp(TensorOp):
+    """
+    special op for Hetr distributed case, not supported by other transformers
+    note: possible deprecation in future (issue #1115)
+    """
+
+    def __init__(self, device_id, args, **kwargs):
+        super(ResultOp, self).__init__(self, args=args)
+        self.metadata['device_id'] = device_id
+        self.axes = args[0].axes
+        self.dtype = args[0].dtype
 
 
 class CommunicationOp(TensorOp):
@@ -124,9 +136,13 @@ class ScatterSendOp(SendOp):
     def __init__(self, from_node, to_node):
         super(ScatterSendOp, self).__init__(from_node)
         self.to_id = to_node.metadata['device_id']
-        self.slices = get_slices(self.axes,
-                                 to_node.metadata['parallel'],
-                                 len(self.to_id))
+        self._slices = get_slices(self.axes,
+                                  to_node.metadata['parallel'],
+                                  len(self.to_id))
+
+    @property
+    def slices(self):
+        return self._slices
 
 
 class ScatterRecvOp(RecvOp):
@@ -170,76 +186,86 @@ class GatherRecvOp(RecvOp):
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
-        self.slices = get_slices(self.axes,
-                                 self.metadata['parallel'],
-                                 len(self.from_id))
+        # use _slices to avoid serialization
+        self._slices = get_slices(self.axes,
+                                  self.metadata['parallel'],
+                                  len(self.from_id))
+
+    @property
+    def slices(self):
+        return self._slices
 
 
-class GpuQueueSendOp(SendOp):
+class GPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
-        super(GpuQueueSendOp, self).__init__(from_node)
+        super(GPUQueueSendOp, self).__init__(from_node)
         self.queue = multiprocessing.Queue()
 
 
-class GpuQueueRecvOp(RecvOp):
+class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
-        super(GpuQueueRecvOp, self).__init__(to_node, send_node)
+        super(GPUQueueRecvOp, self).__init__(to_node, send_node)
         self.queue = send_node.queue
 
 
-class NumpyQueueSendOp(SendOp):
+class CPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
-        super(NumpyQueueSendOp, self).__init__(from_node)
+        super(CPUQueueSendOp, self).__init__(from_node)
         self.queue = multiprocessing.Queue()
 
 
-class NumpyQueueRecvOp(RecvOp):
+class CPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
-        super(NumpyQueueRecvOp, self).__init__(to_node, send_node)
+        super(CPUQueueRecvOp, self).__init__(to_node, send_node)
         self.queue = send_node.queue
 
 
-class NumpyQueueScatterSendOp(ScatterSendOp):
+class CPUQueueScatterSendOp(ScatterSendOp):
 
     def __init__(self, from_node, to_node):
-        super(NumpyQueueScatterSendOp, self).__init__(from_node, to_node)
-        self.shared_queues = list()
-        for i in range(len(to_node.metadata['device_id'])):
-            self.shared_queues.append(multiprocessing.Queue())
+        super(CPUQueueScatterSendOp, self).__init__(from_node, to_node)
+        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
         self.comm_type = 'queue'
 
-
-class NumpyQueueScatterRecvOp(ScatterRecvOp):
-
-    def __init__(self, to_node, send_node, device_idx=None):
-        super(NumpyQueueScatterRecvOp, self).__init__(to_node, send_node)
-        if device_idx:
-            self.idx = device_idx
-        else:
-            self.idx = 0
-        self.shared_queues = send_node.shared_queues
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
-class NumpyQueueGatherSendOp(GatherSendOp):
+class CPUQueueScatterRecvOp(ScatterRecvOp):
 
-    def __init__(self, from_node, clone_node=None, device_idx=None):
-        super(NumpyQueueGatherSendOp, self).__init__(from_node)
-        self.shared_queues = list()
-        if clone_node:
-            self.idx = device_idx
-            self.shared_queues = clone_node.shared_queues
-        else:
-            self.idx = 0
-            for i in range(len(from_node.metadata['device_id'])):
-                self.shared_queues.append(multiprocessing.Queue())
+    def __init__(self, to_node, send_node):
+        super(CPUQueueScatterRecvOp, self).__init__(to_node, send_node)
+        self.idx = 0
+        self._shared_queues = send_node.shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
-class NumpyQueueGatherRecvOp(GatherRecvOp):
+class CPUQueueGatherSendOp(GatherSendOp):
+
+    def __init__(self, from_node):
+        super(CPUQueueGatherSendOp, self).__init__(from_node)
+        self.idx = 0
+        self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
+
+
+class CPUQueueGatherRecvOp(GatherRecvOp):
 
     def __init__(self, from_node, to_node, send_node):
-        super(NumpyQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
-        self.shared_queues = send_node.shared_queues
+        super(CPUQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
+        self._shared_queues = send_node.shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues

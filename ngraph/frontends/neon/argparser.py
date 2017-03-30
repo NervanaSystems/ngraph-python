@@ -67,7 +67,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.add_argument('-z', '--batch_size', type=int, default=128)
         self.add_argument('-b', '--backend',
                           choices=self.backend_names(),
-                          default='numpy',
+                          default='cpu',
                           help='backend type')
         self.add_argument('-t', '--num_iterations', type=int, default=2000)
         self.add_argument('--iter_interval', type=int, default=200)
@@ -76,7 +76,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           metavar='SEED',
                           help='random number generator seed')
 
-    def parse_args(self, gen_be=True):
+    def parse_args(self):
         args = super(NgraphArgparser, self).parse_args()
         self.make_and_set_transformer_factory(args)
 

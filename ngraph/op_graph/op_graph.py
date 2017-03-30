@@ -29,7 +29,8 @@ from ngraph.op_graph.axes import TensorDescription, \
     default_int_dtype, AxesMap
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
+from cached_property import cached_property
 
 
 def tensor_descriptions(args):
@@ -51,7 +52,6 @@ def tdcache():
 
     Returns:
         Cache decorator set to use a particular cache.
-
     """
     return cachetools.cached(cache=tdcache.tensor_description_cache)
 
@@ -138,7 +138,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue, DebugInfo):
+class Op(NameableValue):
     """
     Any operation that can be in an AST.
 
@@ -217,7 +217,7 @@ class Op(NameableValue, DebugInfo):
         op_set = OrderedSet(ops)
 
         def add_op(op):
-            op_set.insert(0, op)
+            op_set.add(op)
             for key in op.__dict__:
                 val = getattr(op, key)
                 if isinstance(val, Op) and val not in op_set:
@@ -235,37 +235,19 @@ class Op(NameableValue, DebugInfo):
         return op_set
 
     @staticmethod
-    def ordered_ops(results):
+    def ordered_ops(roots):
         """
-        depth-first, post-order "Bottom Up" traversal of Ops in results.
+        Topological sort of ops reachable from roots. Notes ngraph is using
+        depenency edges rather than dataflow edges, for example,
+        `top_sort(a -> b -> c) => [c, b, a]`.
 
-        Ops will only appear once in result.
-
-        Arguments:
-          results: a list of ops which are the roots of the graph traversal
+        Args:
+            roots: List of ops.
 
         Returns:
-          list of Ops in depth-first, post-order
+            A list of sorted ops.
         """
         ordered_ops = []
-        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
-        return ordered_ops
-
-    @staticmethod
-    def visit_input_closure(roots, fun):
-        """
-        Topological sort order traversal of root and their inputs.
-
-        Nodes will only be visited once, even if there are multiple routes to the
-        same Node.
-
-        Arguments:
-            roots: root set of nodes to visit
-            fun: Function to call on each visited node
-
-        Returns:
-            None
-        """
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
@@ -274,12 +256,11 @@ class Op(NameableValue, DebugInfo):
         available.update(root.forwarded for root in roots)
         while available:
             node = available.pop()
-            node.update_forwards()
 
-            if node in counts:
+            if node in counts or node in ready:
                 continue
 
-            children = OrderedSet((child.forwarded for child in node.control_deps))
+            children = OrderedSet((child.forwarded for child in node.all_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -290,7 +271,7 @@ class Op(NameableValue, DebugInfo):
 
         while ready:
             node = ready.pop()
-            fun(node)
+            ordered_ops.append(node)
             for p in parents.get(node, []):
                 count = counts[p] - 1
                 if count == 0:
@@ -300,6 +281,22 @@ class Op(NameableValue, DebugInfo):
                     counts[p] = count
         if len(counts) > 0:
             raise ValueError("Graph not a DAG")
+
+        return ordered_ops
+
+    @staticmethod
+    def visit_input_closure(roots, fun):
+        """
+        Apply function `fun` in the topological sorted order of roots.
+
+        Args:
+            roots: List of ops.
+
+        Returns:
+            None
+        """
+        for op in Op.ordered_ops(roots):
+            fun(op)
 
     def __init__(self,
                  args=(),
@@ -469,11 +466,6 @@ class Op(NameableValue, DebugInfo):
         return self
 
     @property
-    def args(self):
-        """All the inputs to this node."""
-        return self._args
-
-    @property
     def forward(self):
         """
         If not None, self has been replaced with forward.
@@ -504,7 +496,7 @@ class Op(NameableValue, DebugInfo):
         Finds the op that handles this op.
 
         Returns:
-             Follows forwarding to the op that shoud handle this op.
+             Follows forwarding to the op that should handle this op.
         """
         result = self
         while True:
@@ -512,14 +504,37 @@ class Op(NameableValue, DebugInfo):
                 return result
             result = result._forward
 
+    @cached_property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies of the op, including args and control_deps.
+            `x.all_deps == OrderedSet(x.args) | x.control_deps`, setter
+            functions are used to maintain this invariant. However, user
+            outside of the Op class should still avoid changing x._all_deps,
+            x._control_deps and x._args directly.
+        """
+        return OrderedSet(self.args) | self.control_deps
+
+    def invalidate_property_cache(self, property_name):
+        """
+        Invalidates self.all_deps cache
+        """
+        if property_name in self.__dict__:
+            del self.__dict__[property_name]
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self._args
+
     @property
     def control_deps(self):
         """
-
         Returns:
-            Ops that must execute before this one can.
+            Control dependency of the op.
         """
-        return self._control_deps + self.args
+        return self._control_deps
 
     def add_control_dep(self, dep):
         """
@@ -527,11 +542,13 @@ class Op(NameableValue, DebugInfo):
 
         Args:
             dep: The op.
-
         """
         dep = dep.forwarded
-        if dep is not self and dep not in self.control_deps:
+        if dep is not self and dep not in self.all_deps:
+            # update control_deps
             self._control_deps.add(dep)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def remove_control_dep(self, dep):
         """
@@ -542,28 +559,38 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
-        self._control_deps.remove(dep.forwarded)
+        if dep.forwarded in self.control_deps:
+            # update control_deps
+            self._control_deps.remove(dep.forwarded)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args and control_deps
+        Any subclass that uses ops stored outside of args and all_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
         for forwarding.
 
         """
+        # replace self._args with self._args's forwarded op
+        args_forward = [op.forward for op in self.args]
+        if any(forward is not None for forward in args_forward):
+            new_args = tuple([op.forwarded for op in self.args])
+            if self._args != new_args:
+                self._args = new_args
+                self.invalidate_property_cache('all_deps')
 
-        for op in self.control_deps:
-            if op.forward is not None:
-                self._args = tuple(arg.forwarded for arg in self._args)
-                control_deps = self._control_deps
-                self._control_deps = OrderedSet()
-                for op in control_deps:
-                    self.add_control_dep(op.forwarded)
-                break
+        # replace self._control_deps with self._control_deps's forwarded op
+        control_deps_forward = [op.forward for op in self.control_deps]
+        if any(forward is not None for forward in control_deps_forward):
+            new_control_deps = OrderedSet([op.forwarded for op in self.control_deps])
+            if self._control_deps != new_control_deps:
+                self._control_deps = new_control_deps
+                self.invalidate_property_cache('all_deps')
 
     def replace_self(self, rep):
         self.forward = as_op(rep)
@@ -774,7 +801,6 @@ class SetItemOp(Op):
         tensor (AssignableTensorOp): An assignable tensor.
         item: An index into the tensor.
         val (TensorOp): A value to assign.
-
     """
 
     def __init__(self, tensor, item, val, **kwargs):
@@ -856,9 +882,11 @@ class ComputationOp(ParallelOp):
 
         args = tuple(as_op(arg) for arg in args)
         arg_tensors = set(arg.tensor for arg in args)
-        missing_tensors = [t for t in placeholders.difference(arg_tensors)]
+        missing_tensors = [t for t in placeholders - arg_tensors]
         if len(missing_tensors) > 0:
-            raise ValueError("All used placeholders must be supplied to a computation.")
+            raise ValueError(("All used placeholders must be supplied to a "
+                              "computation. Currently missed {}."
+                              ).format(missing_tensors))
 
         for arg in args:
             if not (arg.tensor.is_input):
@@ -1058,6 +1086,9 @@ class TensorOp(Op):
     def __rtruediv__(self, val):
         return divide(val, self)
 
+    def __floordiv__(self, val):
+        return floordivide(self, val)
+
     def __rdiv__(self, val):
         return divide(val, self)
 
@@ -1127,10 +1158,18 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                 is_persistent=self.is_persistent,
-                                 is_input=self.is_input,
-                                 is_placeholder=self.is_placeholder)
+        if "layout" in self.metadata:
+            return TensorDescription(self.axes,
+                                     layout=self.metadata["layout"],
+                                     dtype=self.dtype,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
+        else:
+            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1228,10 +1267,8 @@ class TensorOp(Op):
 class ValueOp(TensorOp, ControlBlockOp):
     """
     Mixin class for ops whose value is another op.
-
     Arguments:
         tensor: The tensor supplying the value for this op.
-
     """
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
@@ -1244,10 +1281,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def tensor(self):
         """
         The op that ultimately supplies the value. See value_tensor.
-
         Returns:
             The op that supplies the value.
-
         """
         return self._tensor.tensor
 
@@ -1255,10 +1290,8 @@ class ValueOp(TensorOp, ControlBlockOp):
     def value_tensor(self):
         """
         The op whose value is returned by this op.
-
         Returns:
             The immediate value returned by this op; see tensor for the closure.
-
         """
         return self._tensor
 
@@ -1267,11 +1300,14 @@ class ValueOp(TensorOp, ControlBlockOp):
         self._tensor = tensor
 
     @property
-    def control_deps(self):
-        base_deps = super(ValueOp, self).control_deps
+    def all_deps(self):
+        """
+        TODO: use cached property as other Op
+        """
+        base_deps = super(ValueOp, self).all_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
-            return base_deps + [self.value_tensor]
+            return base_deps | OrderedSet([self.value_tensor])
         else:
             return base_deps
 
@@ -1398,7 +1434,6 @@ def sequential(ops=None):
 
     Arguments:
         ops: Sequence of ops to compute.
-
     """
     sequential_op = SequentialOp(ops)
     sequential_op.deriv_handler = sequential_op.value_tensor
@@ -1414,7 +1449,6 @@ class TensorValueOp(ValueOp):
 
     This provides a way to maintain different control information on different
     versions of state.
-
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
@@ -1491,7 +1525,6 @@ class AxesCastOp(ReshapeOp):
     Arguments:
         x: A tensor.
         axes: The new axes.
-
     """
 
     def __init__(self, x, axes, **kwargs):
@@ -1737,44 +1770,6 @@ def broadcast(x, axes):
     return BroadcastOp(x, axes)
 
 
-def axes_with_role_order(x, roles):
-    """
-    Return a tensor with a different axes order according to
-    specified roles.  Will expand dims as necessary with inferred
-    axes for missing roles
-
-    Args:
-        x (TensorOp): The tensor.
-        roles (sequence, AxisRoles): A permutation of the roles
-                                     of axes of the tensor.
-
-    Returns:
-        TensorOp: The new tensor.
-
-    """
-    reordered_axes = make_axes()
-    y = x
-    for r in roles:
-        ax_i = y.axes.role_axes(r)
-        if len(ax_i) == 0:
-            ax_i = make_axis(length=1, roles=[r])
-        elif len(ax_i) == 1:
-            ax_i = ax_i[0]
-        else:
-            raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
-        reordered_axes |= ax_i
-        # This will only add the missing axes to the front
-        y = expand_dims(y, ax_i, 0)
-
-    # Ensure that axes of x are a subset of y
-    if not (x.axes & y.axes).is_equal_set(x.axes):
-        raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
-            x.axes - (x.axes & y.axes)
-        ))
-
-    return axes_with_order(y, reordered_axes)
-
-
 def axes_with_order(x, axes):
     """
     Return a tensor with a different axes order.
@@ -1785,7 +1780,6 @@ def axes_with_order(x, axes):
 
     Returns:
         TensorOp: The new tensor.
-
     """
     axes = make_axes(axes)
     if x.axes == axes:
@@ -1905,20 +1899,77 @@ class TensorSliceOp(ReshapeOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         """
-        TODO.
+        Propagate gradients for y = ng.slice(x, slices). That is, set the
+        adjoints w.r.t. x.
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
+        Args:
+            adjoints: the adjoints global dict
+            delta: df/dy
+            x: the input to ng.slice op
+            self: the tensorslice op
 
-        Returns:
-          TODO
+        Example shapes:
+            y = ng.slice(x, slices)
+            x shape: (2, 3)
+            self shape, i.e. y's shape: (3,)
+            delta shape: (3,)
+            _unslice(delta, self.slices, x.axes) shape: (2, 3)
+
+        Goals:
+            adjoints[x] += _unslice(delta, self.slices, x.axes)
+            more exactly, if x is ValueOp, should be handled by x.value_tensor
+
+        Dependencies graph:
+
+                       [0 or other initial gradients]            [first_unslice]
+                          ^                                          ^ ^ ^ ^
+                          |                                          | | | |
+                        (arg)                                        | | | |
+                          |                                          | | | |
+        adjoints[x] => [ng.add]---(arg)------------------------------- | | |
+                         | | |                                         | | |
+                         | | --(ct_dep)-> [setitem_1] -------(ct_dep)--- | |
+                         | |                                             | |
+                         | ----(ct_dep)-> [setitem_2] -------(ct_dep)----- |
+                         |                                                 |
+                         ------(ct_dep)-> [setitem_3] -------(ct_dep)-------
         """
-        x.generate_add_delta(
-            adjoints,
-            _unslice(delta, self.slices, x.axes)
-        )
+
+        # special handling of value op, this is because in generate_add_delta,
+        # ValueOp has special handler
+        if isinstance(x, ValueOp):
+            x = x.value_tensor
+
+        if x not in adjoints:
+            # x not in adjoints dict, so need to allocate a new buffer with
+            # _unslice
+            x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+
+            # critical to add zero
+            # - if we don't add zero, in the "Dependency graph" above,
+            #   the [ng.add] node will collapse with [first_unslice] node,
+            #   creating circular dependency
+            # - after first add zero, later gradient accumulation will be doing
+            #   self add
+            adjoints[x] = x.first_unslice_op + as_op(0.)
+        else:
+            if not hasattr(x, 'first_unslice_op'):
+                # x has received adjoints from other operations, but not
+                # from TensorSliceOp yet
+                x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+                adjoints[x] = x.first_unslice_op + adjoints[x]
+            else:
+                # has the buffer already available, this is the [setitem_1,2,3]
+                # node case in the above docstrings
+                updated_delta = delta + tensor_slice(x.first_unslice_op,
+                                                     self.slices, axes=delta.axes)
+                new_setitem = SetItemOp(x.first_unslice_op,
+                                        self.slices, updated_delta)
+
+                # set appropriate control_deps, this corresponds to (ct_dep)
+                # in the above docstrings
+                new_setitem.add_control_dep(x.first_unslice_op)
+                adjoints[x].add_control_dep(new_setitem)
 
 
 def slice_along_axis(x, axis, idx):
@@ -2120,7 +2171,7 @@ class AssignableTensorOp(TensorOp):
 
     def add_control_dep(self, op):
         """
-        Allocations happen before executed ops, so control_deps are ignored.
+        Allocations happen before executed ops, so all_deps are ignored.
 
         Args:
             op:
@@ -2140,7 +2191,6 @@ def value_of(tensor):
 
     Returns:
         A copy of the value.
-
     """
     if tensor.is_constant:
         return tensor
@@ -2197,7 +2247,6 @@ def placeholder(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="placeholder",
                               is_persistent=True,
@@ -2222,7 +2271,6 @@ def temporary(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
@@ -2243,7 +2291,6 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The persistent storage.
-
     """
     return AssignableTensorOp(graph_label_type="Persistent",
                               is_persistent=True,
@@ -2264,7 +2311,6 @@ def variable(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The variable.
-
     """
     return AssignableTensorOp(graph_label_type="Variable",
                               is_input=True,
@@ -2339,7 +2385,6 @@ def stack(x_list, axis, pos=0):
 
     Returns:
         TensorOp: The joined tensors.
-
     """
     return StackOp(x_list, axis, pos)
 
@@ -2367,8 +2412,7 @@ class ConcatOp(SequentialOp):
         common_axes = arg_axes - ax
 
         # Create long axis for concatenated tens1or
-        concat_axis = make_axis(name=ax.name,
-                                roles=ax.roles)
+        concat_axis = make_axis(name=ax.name)
 
         # Store the axes order equivalent to the first tensor
         ind = arg_axes.index(ax)
@@ -2442,42 +2486,6 @@ def concat_along_axis(x_list, axis):
         return x_list
 
     return ConcatOp(x_list, [axis for _ in range(len(x_list))])
-
-
-def concat_role_axis(x_list, role):
-    """
-    Concatenates a list of tensors along an axis with the specified role. All other axes in each
-    tensor should be identical.
-
-    Args:
-        x_list (list of TensorOps): A list of identically-axed tensors to concatenate
-        role (AxisRole): Axis role common to every tensor in x_list
-
-    Returns:
-        The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
-
-    Examples:
-        role = ng.make_axis_role("Concat")
-        H1 = ng.make_axis(length=5, roles=[role])
-        H2 = ng.make_axis(length=8, roles=[role])
-        W = ng.make_axis(length=4)
-        x = ng.constant(np.ones((H1.length, W.length)), axes=[H1, W])
-        y = ng.constant(np.ones((H2.length, W.length)), axes=[H2, W])
-        c = ng.concat_role_axis([x, y], role)
-    """
-    if len(x_list) < 1:
-        return x_list
-
-    def get_role_axis(axes, role):
-        ax = axes.role_axes(role)
-        if len(ax) > 1:
-            raise RuntimeError("Multiple axes have role {}".format(role.name))
-        elif len(ax) == 0:
-            raise RuntimeError("No axis with role {}".format(role.name))
-        else:
-            return ax[0]
-
-    return ConcatOp(x_list, [get_role_axis(x.axes, role) for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
@@ -2554,7 +2562,6 @@ def uniform(x, low=0.0, high=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='uniform', params=dict(low=low, high=high), x=x)
 
@@ -2570,7 +2577,6 @@ def normal(x, loc=0.0, scale=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
 
@@ -2638,7 +2644,6 @@ def negative(x):
 
     Returns:
         (TensorOp): The negative of x.
-
     """
     return NegativeOp(x)
 
@@ -2661,7 +2666,6 @@ def absolute(x):
 
     Returns:
         TensorOp: The absolute value of x.
-
     """
     return AbsoluteOp(x)
 
@@ -2684,7 +2688,6 @@ def sin(x):
 
     Returns:
         TensorOp: sin of x.
-
     """
     return SinOp(x)
 
@@ -2707,7 +2710,6 @@ def cos(x):
 
     Returns:
         TensorOp: The cos of x.
-
     """
     return CosOp(x)
 
@@ -2730,7 +2732,6 @@ def tanh(x):
 
     Returns:
         TensorOp: The tanh of x.
-
     """
     return TanhOp(x)
 
@@ -2753,7 +2754,6 @@ def exp(x):
 
     Returns:
         TensorOp: The exp of x.
-
     """
     return ExpOp(x)
 
@@ -2786,7 +2786,6 @@ def log(x):
 
     Returns:
         TensorOp: The log of x.
-
     """
     return LogOp(x)
 
@@ -2816,7 +2815,6 @@ def reciprocal(x):
 
     Returns:
         TensorOp: The reciprocal of x.
-
     """
     return ReciprocalOp(x)
 
@@ -2835,7 +2833,6 @@ def sign(x):
 
     Returns:
         TensorOp: The sign of x.
-
     """
     return SignOp(x)
 
@@ -2858,7 +2855,6 @@ def square(x):
 
     Returns:
         TensorOp: The square of x.
-
     """
     return SquareOp(x)
 
@@ -2881,7 +2877,6 @@ def sqrt(x):
 
     Returns:
         TensorOp: The square root of x.
-
     """
     return SqrtOp(x)
 
@@ -2891,9 +2886,17 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes | y.axes
-        x = broadcast(x, axes)
-        y = broadcast(y, axes)
+
+        x_axes_bcast = x.axes + (y.axes - x.axes)
+        y_axes_bcast = y.axes + (x.axes - y.axes)
+
+        if y_axes_bcast == y.axes:
+            axes = y_axes_bcast
+        else:
+            axes = x_axes_bcast
+
+        x = axes_with_order(broadcast(x, x_axes_bcast), axes)
+        y = axes_with_order(broadcast(y, y_axes_bcast), axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
@@ -2957,6 +2960,16 @@ def divide_adjoints(self, adjoints, delta, x, y):
 
 
 Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
+
+
+def floordivide_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * self // x)
+    y.generate_add_delta(adjoints, -delta * self // y)
+
+
+FloorDivide, floordivide = create_binary_elementwise(
+    'FloorDivide', 'floordivide', floordivide_adjoints)
+
 
 Mod, mod = create_binary_elementwise('Mod', 'mod')
 
@@ -3076,7 +3089,6 @@ def dot(x, y):
 
     Returns:
         TensorOp: The dot product.
-
     """
     return DotOp(x, y)
 
@@ -3089,7 +3101,6 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
     Returns:
         TensorOp: The result.
-
     """
     if reduction_axes is None:
         if out_axes is None:
@@ -3190,7 +3201,25 @@ def create_reduction_op(name,
     RedClass = type(name, (ReductionOp,), d)
 
     def func(*args, **kwargs):
-        return RedClass(*args, **kwargs)
+        # handle the case where out_axes not in the same order of x's axes
+        if 'out_axes' in kwargs and kwargs['out_axes'] is not None:
+            x = args[0]
+            out_axes = kwargs['out_axes']
+            out_axes_index = [x.axes.index(axis) for axis in out_axes]
+            sorted_out_axes_index = sorted(out_axes_index)
+            if sorted_out_axes_index != out_axes_index:
+                # temp axes for reduction op
+                temp_out_axes = [x.axes[i] for i in sorted_out_axes_index]
+                kwargs['out_axes'] = temp_out_axes
+                reduction_op = RedClass(*args, **kwargs)
+                # reorder axes to requested out_axes
+                reordered_reduction_op = axes_with_order(reduction_op, out_axes)
+                return reordered_reduction_op
+            else:
+                return RedClass(*args, **kwargs)
+        else:
+            return RedClass(*args, **kwargs)
+
     func.__name__ = func_name
     return RedClass, func
 
@@ -3311,7 +3340,6 @@ def batch_size(x):
 
     Returns:
         The size of the batch axis in x.
-
     """
     return tensor_size(x, reduction_axes=x.axes.batch_axes())
 
@@ -3418,7 +3446,6 @@ def one_hot(x, axis):
 
     Returns:
         OneHotOp: The op.
-
     """
     return OneHotOp(x, axis)
 
@@ -3529,7 +3556,6 @@ def deriv(dependent, independent, error=None):
 
     Returns:
         TensorOp: Derivative applied to error. Has axes of independent.
-
     """
     return DerivOp(dependent, independent, error).value_tensor
 

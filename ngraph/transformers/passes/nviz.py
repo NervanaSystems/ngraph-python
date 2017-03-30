@@ -62,7 +62,7 @@ class JSONPass(GraphPass):
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg)})
-            for arg in op.control_deps:
+            for arg in op.all_deps:
                 if arg not in visited:
                     frontier.add(arg)
                 edges.append({'from': get_id(op), 'to': get_id(arg), 'color': 'blue'})
@@ -82,15 +82,16 @@ class VizPass(GraphPass):
         show_all_metadata <bool, default False>: Whether to render all Op metadata on the nodes.
         view <bool, default True>: Whether to open the rendered PDF, if False, prints PDF location
             to stdout.
-
     """
-    def __init__(self, subgraph_attr=None, show_axes=False, show_all_metadata=False, view=True):
+    def __init__(self, subgraph_attr=None, show_axes=False, show_metadata=None,
+                 show_all_metadata=False, view=True):
         super(VizPass, self).__init__()
         self.show_axes = show_axes
         self.show_all_metadata = show_all_metadata
         self.subgraph_attr = subgraph_attr
         self.uuid_lookup_table = dict()
         self.view = view
+        self.show_metadata = show_metadata
 
     def get_subgraphs(self, ops):
         clusters = set()
@@ -110,13 +111,15 @@ class VizPass(GraphPass):
 
     def add_op_to_graph(self, op, graph):
         # Register op in lookup table by uuid for later edge creation
-        self.uuid_lookup_table[op.uuid.get_bytes()] = op
+        self.uuid_lookup_table[op.uuid.bytes] = op
         op_label = op.name
         if hasattr(op, 'axes') and self.show_axes:
             op_label += "\n{}".format(op.axes)
         if self.show_all_metadata:
             for k, v in six.iteritems(op.metadata):
                 op_label += "\n{}={}".format(k, v)
+        if self.show_metadata and self.show_metadata in op.metadata:
+            op_label += "\n{}".format(op.metadata[self.show_metadata])
         graph.node(op.name, op_label)
 
     def add_edge_to_graph(self, edge, graph):

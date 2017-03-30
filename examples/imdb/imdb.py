@@ -74,7 +74,6 @@ def pad_sentences(sentences, pad_idx, pad_to_len=None, pad_from='left'):
 
 
 class IMDB(object):
-
     """
     IMDB data set from http://www.aclweb.org/anthology/P11-1015..
 
@@ -85,7 +84,6 @@ class IMDB(object):
         sentence_length (int): the max sentence length to pad the data to
         pad_idx (int): the index value used for padding
         shuffle (bool): whether to shuffle the data
-
     """
 
     def __init__(self, path='.', vocab_size=20000, sentence_length=128,
@@ -130,11 +128,11 @@ class IMDB(object):
         self.nclass = 1 + max(np.max(y_train), np.max(y_test))
 
         self.data_dict['train'] = {'review': {'data': X_train,
-                                              'axes': ('batch', 'time')},
+                                              'axes': ('batch', 'REC')},
                                    'label': {'data': y_train,
                                              'axes': ('batch',)}}
         self.data_dict['valid'] = {'review': {'data': X_test,
-                                              'axes': ('batch', 'time')},
+                                              'axes': ('batch', 'REC')},
                                    'label': {'data': y_test,
                                              'axes': ('batch',)}}
         return self.data_dict

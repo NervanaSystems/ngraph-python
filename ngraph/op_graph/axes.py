@@ -40,23 +40,8 @@ def default_int_dtype(dtype=None):
     return dtype
 
 
-def make_axis_role(name=None, docstring=None):
-    """
-    Returns a new AxisRole.
-
-    Args:
-        name (String, optional): The name for the role.
-        docstring (String, optional): A docstring for the role.
-
-    Returns:
-        AxisRole: A new AxisRole with the given name and docstring.
-
-    """
-    return AxisRole(name=name, docstring=docstring)
-
-
 def make_axis(length=None, name=None,
-              roles=None, docstring=None):
+              docstring=None):
     """
     Returns a new Axis.
 
@@ -65,14 +50,12 @@ def make_axis(length=None, name=None,
         name (String, optional): Name of the axis.
         batch (bool, optional): This is a batch axis. Defaults to False.
         recurrent (bool, optional): This is a recurrent axis. Defaults to False.
-        roles (set, optional): A set of axis roles for the axis.
         docstring (String, optional): A docstring for the axis.
 
     Returns:
         Axis: A new Axis.
-
     """
-    return Axis(length=length, name=name, roles=roles, docstring=docstring)
+    return Axis(length=length, name=name, docstring=docstring)
 
 
 def make_axes(axes=()):
@@ -84,40 +67,8 @@ def make_axes(axes=()):
 
     Returns:
         Axes: An Axes.
-
     """
     return Axes(axes=axes)
-
-
-class AxisRole(object):
-    """
-    An AxisRole is like a type for an Axis, such as "Height" or "Channels".
-
-    At different parts of a computation, axes of different length may be used for a role.
-    For example, after a convolution the height axis is usually shortened, and in a
-    convolution filter, the height axis of the filter is related to the height axis of
-    the input and output, but not the height. By matching AxisRoles, operations such as
-    convolution can match the axes in their arguments.
-    """
-
-    def __init__(self, name, docstring=None):
-        self.name = name
-        if docstring is not None:
-            self.__doc__ = docstring
-        super(AxisRole, self).__init__()
-
-    @property
-    def short_name(self):
-        sn = self.name.split('_')[0]
-        if sn.find('.') != -1:
-            sn = sn.split('.')[1]
-        return sn
-
-    def __eq__(self, rhs):
-        return self.name == rhs.name
-
-    def __hash__(self):
-        return hash(self.name)
 
 
 class Axis(object):
@@ -149,7 +100,6 @@ class Axis(object):
 
     def __init__(self,
                  length=None,
-                 roles=None,
                  name=None,
                  **kwargs):
         assert 'batch' not in kwargs
@@ -161,12 +111,12 @@ class Axis(object):
             type(self).__name_counter += 1
 
         self.name = name
+
+        if length is not None and length < 0:
+            raise ValueError("Axis length {} must be >= 0".format(length))
         self.__length = length
 
-        self.__roles = set()
         self.uuid = uuid.uuid4()
-        if roles is not None:
-            self.roles.update(roles)
 
     def named(self, name):
         self.name = name
@@ -200,7 +150,7 @@ class Axis(object):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.name == 'R'
+        return self.name == 'REC'
 
     @property
     def is_channel(self):
@@ -223,44 +173,13 @@ class Axis(object):
 
     @length.setter
     def length(self, value):
+        if value < 0:
+            raise ValueError("Axis length {} must be >= 0".format(value))
         self.__length = value
 
     @property
     def axes(self):
         return Axes([self])
-
-    @property
-    def roles(self):
-        """
-
-        Returns: The AxisRoles of this axis.
-
-        """
-        return self.__roles
-
-    def has_role(self, axis_role):
-        """
-
-        Args:
-            axis_role: A role to test.
-
-        Returns:
-            True if this axis has the role.
-
-        """
-        return axis_role in self.roles
-
-    def add_role(self, axis_role):
-        """
-
-        Args:
-            axis_role:
-
-        Returns:
-
-        """
-        self.roles.add(axis_role)
-        return self
 
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
@@ -317,8 +236,7 @@ def slice_axis(axis, s):
 
     # create sliced axis
     new_axis = make_axis(length=new_length,
-                         name=axis.name,
-                         roles=axis.roles)
+                         name=axis.name)
     return new_axis
 
 
@@ -518,13 +436,6 @@ class Axes(object):
             if axis.is_recurrent:
                 return axis
 
-    def role_axes(self, role):
-        """
-        Returns:
-            The Axes subset that have the specified role
-        """
-        return Axes(axis for axis in self if axis.has_role(role))
-
     def flatten(self, force=False):
         """
         Produces flattened form of axes
@@ -556,11 +467,6 @@ class Axes(object):
 
     def find_by_name(self, name):
         return Axes(axis for axis in self if axis.name == name)
-
-    def add_role(self, role):
-        for axis in self:
-            axis.add_role(role)
-        return self
 
     def __iter__(self):
         return self._axes.__iter__()
@@ -779,23 +685,9 @@ class Axes(object):
         order. This check is symmetric.
         """
 
-        def inflate(axes):
-            """
-            Inflate Axes potentially containing FlattendAxis to a list of regular
-            Axis recursively.
-            """
-            axes_list = [list(axis.axes) if axis.is_flattened else [axis]
-                         for axis in axes]
-            axes = list(itertools.chain.from_iterable(axes_list))
-
-            # inflate recursively
-            if any([axis.is_flattened for axis in axes]):
-                return inflate(axes)
-            else:
-                return axes
-
         # inflate
-        src_axes, dst_axes = inflate(src_axes), inflate(dst_axes)
+        src_axes = Axes.as_flattened_list(src_axes)
+        dst_axes = Axes.as_flattened_list(dst_axes)
 
         # check equal number of Axis
         if len(src_axes) != len(dst_axes):
@@ -860,6 +752,39 @@ class Axes(object):
         return 'Axes({})'.format(
             ', '.join(map(repr, self))
         )
+
+    @staticmethod
+    def as_nested_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expressed as nested lists
+
+        Returns:
+            Nested list of Axis objects
+        """
+        if isinstance(axes, (Axes, list)):
+            return [Axes.as_nested_list(a) for a in axes]
+        elif isinstance(axes, FlattenedAxis):
+            return [Axes.as_nested_list(a) for a in axes.axes]
+        elif isinstance(axes, Axis):
+            return axes
+
+    @staticmethod
+    def as_flattened_list(axes):
+        """
+        Converts Axes to a list of axes with flattened axes expanded recursively.
+
+        Returns:
+            List of Axis objects
+        """
+        axes_list = [list(axis.axes) if axis.is_flattened else [axis]
+                     for axis in axes]
+        axes = list(itertools.chain.from_iterable(axes_list))
+
+        # inflate recursively
+        if any([axis.is_flattened for axis in axes]):
+            return Axes.as_flattened_list(axes)
+        else:
+            return axes
 
 
 class DuplicateAxisNames(ValueError):
@@ -1110,7 +1035,7 @@ class TensorDescription(NameableValue):
 
     Names the tensor's dimensions with axes and holds pointers to the
     buffer allocated by the analysis and the backend tensor value
-    (e.g. a numpy or gpu tensor).
+    (e.g. a cpu or gpu tensor).
 
     Arguments:
         axes: Axes of the tensor.
@@ -1124,11 +1049,10 @@ class TensorDescription(NameableValue):
             computation.
         is_input: The device tensor can be written from the host.
         **kwargs: Additional args for related classes.
-
     """
 
-    def __init__(self, axes,
-                 base=None,
+    def __init__(self, axes, base=None,
+                 layout=None,
                  dtype=None,
                  full_strides=None, full_sizes=None, offset=0,
                  next_tensor_description=None,
@@ -1141,6 +1065,7 @@ class TensorDescription(NameableValue):
         # TODO: support flattening, unflattening, other complex reshapes
         axes = Axes(axes)
         self.axes = axes
+        self.__layout = layout
         self.__value = None
         self.__buffer = None
         self.__register = None
@@ -1216,7 +1141,7 @@ class TensorDescription(NameableValue):
         """
         Returns: A tuple that can be used to tell if two views of a tensor are equivalent.
         """
-        return (self.shape, self.dtype, self.offset, self.strides)
+        return (self.shape, self.dtype, self.offset, self.strides, self.layout)
 
     def flatten(self, new_axes):
         """
@@ -1356,6 +1281,23 @@ class TensorDescription(NameableValue):
             dtype=self.dtype,
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
+            offset=self.offset,
+            next_tensor_description=self
+        )
+
+    def clone(self):
+        """
+        Creates a copy of this tensor description
+
+        Retuns:
+            A copy of this tensor description
+        """
+        return TensorDescription(
+            self.axes,
+            base=self.base,
+            dtype=self.dtype,
+            full_strides=self.full_strides,
+            full_sizes=self.full_sizes,
             offset=self.offset,
             next_tensor_description=self
         )
@@ -1605,6 +1547,23 @@ class TensorDescription(NameableValue):
     def base(self):
         """The viewed tensor description or None if not a view."""
         return self.__base or self
+
+    @property
+    def layout(self):
+        """The layout of the underlying storage."""
+        return self.__layout
+
+    @layout.setter
+    def layout(self, value):
+        """
+        Sets the backend-specific memory layout to be used by the tensor.
+
+        Arguments:
+          value: the layout to use
+
+        Returns:
+        """
+        self.__layout = value
 
     @property
     def buffer(self):

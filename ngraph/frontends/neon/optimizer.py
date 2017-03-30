@@ -15,81 +15,32 @@
 from __future__ import division
 from builtins import object, zip
 import ngraph as ng
-import numpy as np
+import numbers
+import ngraph.frontends.common.learning_rate_policies as lrp
 
 
-class Schedule(object):
-    """
-    Learning rate schedule.
+def get_learning_rate_policy_callback(lr_params):
+    if isinstance(lr_params, numbers.Real):
+                # If argument is real number, set policy to fixed and use given value as base_lr
+        lr_params = {'name': 'fixed', 'base_lr': lr_params}
 
-    By default implements a constant learning rate:
-
-    .. code-block:: python
-
-        # Constant learning rate of 0.01 across training iterations
-        optimizer = GradientDescentMomentum(0.01, 0.9, schedule = Schedule())
-
-    Otherwise, the schedule multiplies the learning rate by change at every element in
-    ``step_config``.
-    For example,
-
-    .. code-block:: python
-
-        schedule = Schedule(step_config=[2, 6], change=0.5)
-        optimizer = GradientDescentMomentum(1.0, 0.9, schedule = Schedule())
-
-    will yield a learning rate schedule of:
-
-    .. csv-table::
-        :header: "iteration", "LR"
-        :widths: 20, 10
-
-        0, 1.0
-        1, 1.0
-        2, 0.5
-        3, 0.5
-        4, 0.5
-        5, 0.5
-        6, 0.25
-        7, 0.25
-        8, 0.25
-        9, 0.25
-    """
-    def __init__(self, step_config=None, change=1.):
-        """
-        Class constructor.
-
-        Arguments:
-            step_config (list, optional): Configure the step times (list of epoch indices).
-                                          Defaults to None (constant).
-            change (int, optional): The learning rate is
-                                    multiplied by ``change ** steps``, where ``steps`` is the
-                                    number of steps in the step schedule that have passed.
-        """
-
-        if isinstance(step_config, list) and isinstance(change, list):
-            assert len(step_config) == len(change), "change and step_config must have the same" \
-                "length after step_config is deduplicated to do epoch-level LR assignment."
-
-        self.step_config = step_config
-        self.change = change
-        self.steps = 0
-
-    def get_learning_rate(self, learning_rate, epoch):
-        """
-        Returns the current learning rate given the epoch and initial learning rate.
-
-        Arguments:
-            learning_rate (float): Initial learning rate
-            epoch (int): Current epoch, used to calculate the adjusted learning rate
-
-        Returns:
-            (float): The adjusted learning rate
-        """
-        if isinstance(self.step_config, list):
-            self.steps = np.sum(epoch >= np.array(self.step_config))
-
-        return learning_rate * self.change ** self.steps
+    # Check if lr_params contains all required parameters for selected policy.
+    if lr_params['name'] not in lrp.lr_policies:
+        raise NotImplementedError("Learning rate policy {lr_name} not supported."
+                                  "\nSupported policies are: {policies}".format(
+                                      lr_name=lr_params['name'],
+                                      policies=lrp.lr_policies.keys())
+                                  )
+    elif all([x in lr_params.keys() for x in lrp.lr_policies[lr_params['name']]['args']]):
+        return lrp.lr_policies[lr_params['name']]['obj'](lr_params)
+    else:
+        raise ValueError("Too few arguments provided to create policy {lr_name}."
+                         "\nGiven: {lr_params}"
+                         "\nExpected: {lr_args}".format(
+                             lr_name=lr_params['name'],
+                             lr_params=lr_params.keys(),
+                             lr_args=lrp.lr_policies[lr_params['name']])
+                         )
 
 
 def clip_gradient_norm(grad_list, bsz, clip_norm=None):
@@ -137,7 +88,6 @@ def clip_gradient_value(grad, clip_value=None):
 
     Returns:
         grad (list): List of clipped gradients.
-
     """
     if clip_value is None:
         return grad
@@ -152,24 +102,16 @@ class Optimizer(object):
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(**kwargs)
         self.name = name
-        self.iteration_index = 0
 
     def update_learning_rate(self):
         pass
 
 
 class LearningRateOptimizer(Optimizer):
-    def __init__(self, learning_rate, **kwargs):
-        super(LearningRateOptimizer, self).__init__(**kwargs)
-        self.learning_rate = learning_rate
-        self.lrate = ng.persistent_tensor(axes=(),
-                                          initial_value=learning_rate).named('lrate')
 
-    def update_learning_rate(self):
-        self.iteration_index += 1
-        self.learning_rate = self.schedule.get_learning_rate(self.learning_rate,
-                                                             self.iteration_index)
-        self.lrate.value[()] = self.learning_rate
+    def __init__(self, learning_rate, iteration=None, **kwargs):
+        super(LearningRateOptimizer, self).__init__(**kwargs)
+        self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -217,12 +159,9 @@ class GradientDescentMomentum(LearningRateOptimizer):
             self,
             learning_rate,
             momentum_coef=0.0,
-            stochastic_round=False,
             wdecay=0.0,
             gradient_clip_norm=None,
             gradient_clip_value=None,
-            name=None,
-            schedule=Schedule(),
             nesterov=False,
             **kwargs):
         super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
@@ -230,9 +169,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
-        self.schedule = schedule
         self.nesterov = nesterov
-        self.stochastic_round = stochastic_round
 
     @ng.with_op_metadata
     def __call__(self, cost_func):
@@ -254,7 +191,9 @@ class GradientDescentMomentum(LearningRateOptimizer):
                 delta = velocity
             updates.append(ng.assign(variable, variable + delta))
             all_updates.append(ng.sequential(updates))
-        return ng.doall(all_updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads, updates, 0])
 
 
 class RMSProp(LearningRateOptimizer):
@@ -280,8 +219,7 @@ class RMSProp(LearningRateOptimizer):
         epsilon=1e-6,
         gradient_clip_norm=None,
         gradient_clip_value=None,
-        name=None,
-        schedule=Schedule()
+        **kwargs
     ):
         """
         Class constructor.
@@ -294,16 +232,14 @@ class RMSProp(LearningRateOptimizer):
             gradient_clip_value (float, optional): Value to element-wise clip
                                                    gradients.
                                                    Defaults to None.
-            schedule (neon.optimizers.optimizer.Schedule, optional): Learning rate schedule.
-                                                                     Defaults to a constant.
+
         Notes:
             Only constant learning rate is supported currently.
         """
-        super(RMSProp, self).__init__(learning_rate=learning_rate, name=name)
+        super(RMSProp, self).__init__(learning_rate=learning_rate, **kwargs)
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
-        self.schedule = schedule
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
 
@@ -326,4 +262,6 @@ class RMSProp(LearningRateOptimizer):
                                                 / (ng.sqrt(state + epsilon) + epsilon)))
             ]))
 
-        return ng.doall(all_updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads, updates, 0])

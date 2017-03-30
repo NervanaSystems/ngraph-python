@@ -31,7 +31,6 @@ def lookuptable(lut, idx, axes, update=True, pad_idx=None, docstring=None):
 
     Returns:
         TensorOp: The result of the lookup.
-
     """
     return LookupTableOp(lut, idx, axes=axes, update=True, pad_idx=pad_idx, docstring=docstring)
 
@@ -48,7 +47,6 @@ def lookuptable_update(delta, lut, idx, fprop_op):
 
     Returns:
         TensorOp: The result of the lookup update.
-
     """
     return update_lut(delta, lut, idx, fprop_op)
 
