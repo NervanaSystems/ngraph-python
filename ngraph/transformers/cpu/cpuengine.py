@@ -21,6 +21,9 @@ import sys
 import itertools as itt
 import numpy as np
 
+import ctypes as ct
+import numpy.ctypeslib as npct
+
 
 def mkldnn_init(self, engine_path):
     self.mkldnn_enabled = False
@@ -292,10 +295,11 @@ def update_lut(error, idx, pad_idx, axis, dW):
 
 
 def ctc_cpu(acts, lbls, utt_lens, lbl_lens, grads, costs, n_threads=8):
-    basepath = os.path.join(os.path.dirname(__file__), "..","..")
+    basepath = os.path.join(os.path.dirname(__file__), "..", "..", "..")
     temp_loc = os.path.join("examples", "deepspeech", "src", "libwarpctc.so")
     libpath = os.path.join(basepath, temp_loc)
-    assert os.path.isfile(libpath), "libwarpctc.so not found.  Run make"
+    assert os.path.isfile(libpath), ("Expected libwarpctc.so at {} but not found. "
+                                     "Try running make").format(libpath)
     ctclib = npct.load_library(libpath, "")
     ctclib.compute_ctc_loss_cpu.restype = int
     ctclib.compute_ctc_loss_cpu.argtypes = [
