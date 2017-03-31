@@ -85,8 +85,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = GPUFlexManager(save_data_file='flexdata.h5',
-                                           fixed_point=fixed_point,
+        self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
 
     def device_buffer_storage(self, bytes, dtype, name):
@@ -310,9 +309,13 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def __call__(self):
 
+        # TODO move this once we know where fprop and bprop boundaries are
+        self.transformer.flex_manager.autoflex_count += 1
         self.transformer.flex_manager.autoflex_count += 1
 
-        # TODO move this once we know where fprop and bprop boundaries are
+        # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
+        # has been called before loop_train in example file
+        # where cbs is CallbackContainer instance returned by make_default_callbacks
         self.transformer.flex_manager.save_diagnostic_data()
 
         super(FlexGPUKernelGroup, self).__call__()
