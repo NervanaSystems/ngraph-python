@@ -35,6 +35,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
@@ -398,6 +399,11 @@ class CPUCodeGenerator(PyGen):
             self.append("update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
                         delta, idx, op.pad_idx, op.lut_axis, outputs)
 
+    @generate_op.on_type(CTCOp)
+    def generate_op(self, op, outputs, activations, lbls, utt_lens, lbl_lens, grads):
+        self.append("ctc_cpu(acts={}, lbls={}, utt_lens={}, lbl_lens={}, grads={}, costs={})",
+                    activations, lbls, utt_lens, lbl_lens, grads, outputs)
+
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):
         if op.distribution == 'uniform':
@@ -655,7 +661,8 @@ from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvComputation
 from ngraph.transformers.cpu.hetr import HetrComputation
-        """)
+from ngraph.transformers.cpu.ctc import ctc_cpu
+""")
 
         mkldnn_path = os.getcwd()
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
