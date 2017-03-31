@@ -118,15 +118,16 @@ class RecvOp(CommunicationOp):
         send_node: The send node associated with this recv node.
     """
 
-    def __init__(self, to_node, send_node):
+    def __init__(self, to_node, send_node, fragment_axis=None, fragments=None):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=self.calculate_recv_axes(send_node.axes),
+            axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
             dtype=send_node.dtype)
         self._send_node = send_node
 
-    def calculate_recv_axes(self, send_axes):
+    @classmethod
+    def calculate_recv_axes(cls, send_axes):
         return send_axes
 
     def send_node(self):
@@ -164,16 +165,15 @@ class ScatterRecvOp(RecvOp):
     """
 
     def __init__(self, to_node, send_node):
-        # TODO should these be passed in explicitly?  impacts factory/pass.
-        # TODO having to set these first, then super, then recv_axes seems wrong
-        self.scatter_axis = to_node.metadata['parallel']
-        self.num_recv = len(to_node.metadata['device_id'])
-        super(ScatterRecvOp, self).__init__(to_node, send_node)
+        super(ScatterRecvOp, self).__init__(to_node, send_node,
+                                            fragment_axis=to_node.metadata['parallel'],
+                                            fragments=len(to_node.metadata['device_id']))
 
-    def calculate_recv_axes(self, send_axes):
+    @classmethod
+    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
         #invoke axes math helper to modify scatter axis
         # TODO if calculate... function is only used here, refactor/rename
-        recv_axes = calculate_new_axes(send_axes, self.scatter_axis, self.num_recv)
+        recv_axes = calculate_new_axes(send_axes, fragment_axis, fragments)
         return recv_axes
 
 
@@ -201,11 +201,9 @@ class GatherRecvOp(RecvOp):
     """
 
     def __init__(self, from_node, to_node, send_node):
-        # TODO messy, redundant
-        self.num_send = len(from_node.metadata['device_id'])
-        self.gather_axis = from_node.metadata['parallel']
-
-        super(GatherRecvOp, self).__init__(to_node, send_node)
+        super(GatherRecvOp, self).__init__(to_node, send_node,
+                                           fragment_axis=from_node.metadata['parallel'],
+                                           fragments=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
@@ -214,10 +212,11 @@ class GatherRecvOp(RecvOp):
                                   self.metadata['parallel'],
                                   len(self.from_id))
 
-    def calculate_recv_axes(self, send_axes):
+    @classmethod
+    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
         #invoke axes math helper to modify scatter axis
         # TODO if calculate... function is only used here, refactor/rename
-        recv_axes = calculate_gather_axes(send_axes, self.gather_axis, self.num_send)
+        recv_axes = calculate_gather_axes(send_axes, fragment_axis, fragments)
         return recv_axes
 
     @property

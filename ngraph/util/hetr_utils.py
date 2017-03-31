@@ -130,6 +130,9 @@ def clone_graph(root, device_id, shared_queues_idx, axes):
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()
 
+        # TODO this looks like it could be incorrect
+        #      some axes in the subgraph may not be changed, right?
+        #      only modify op._axes if it contains parallel axis?
         op._axes = axes
         op.uuid = uuid.uuid4()
 
