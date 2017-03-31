@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -20,15 +20,15 @@ import os
 import numpy.ctypeslib as npct
 import ctypes as ct
 
-basepath = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-temp_loc = os.path.join("examples", "deepspeech", "src", "libwarpctc.so")
-libpath = os.path.join(basepath, temp_loc)
-assert os.path.isfile(libpath), "libwarpctc.so not found.  Run make"
-
 
 class CTCKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(CTCKernel, self).__init__(transformer)
+
+        basepath = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+        temp_loc = os.path.join("examples", "deepspeech", "src", "libwarpctc.so")
+        libpath = os.path.join(basepath, temp_loc)
+        assert os.path.isfile(libpath), "libwarpctc.so not found.  Run make"
 
         self.ctclib = npct.load_library(libpath, "")
         self.at_runtime = self.transformer.runtime
