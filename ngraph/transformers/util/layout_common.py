@@ -12,17 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import numpy as np
 from cachetools import cached, LRUCache
 
 from ngraph.op_graph.op_graph import TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, Unflatten, ExpandDims, SequentialOp, \
-    Transpose
+    AxesCastOp, TensorValueOp, Unflatten, ExpandDims, SequentialOp, Transpose
 from ngraph.op_graph.axes import Axes
 
 from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint
 
+
 def flatten(l):
+    """
+    Flattens a nested list into a single list
+
+    Arguments:
+        l: list to flatten
+
+    Returns:
+        Flattened list
+    """
     out = []
     for item in l:
         if type(item) == list:
@@ -173,6 +181,20 @@ class StridedLayoutAssignment(LayoutAssignment):
 
 
 class StridedBinaryLayoutConstraint(BinaryLayoutConstraint):
+    """
+    Provides functionality for layout constraints based on kernels that use strided array address
+    calculation. One of the primary functions of this class is to map axes of an argument coming
+    into the op back to the buffer underlying that argument. This includes reshape ops between
+    the underlying TensorOp and this op such as reordered axes, broadcast axes, and slices.
+
+    Attributes:
+        op: Op underlying this constraint
+        arg: Argument to the op underlying this constraint
+        arg_axes_list: List of axes present in the arg
+        mappings: Maps from an axis in arg_axes_list back to an axis in the argument's origin op
+        sliced_out: List of axes that are sliced out of the argument between the origin op and
+            this op
+    """
     def __init__(self, op, arg):
         self.op = op
         self.arg = arg
@@ -260,6 +282,23 @@ class StridedBinaryLayoutConstraint(BinaryLayoutConstraint):
         return 0.0
 
     def map(self, axis):
+        """
+        Given an axis from the argument, map it back to an index into the list of axes present
+        int the origin op.
+
+        Arguments:
+            axis: Axis object present in the arg
+
+        Returns:
+            Index into origin op axes
+
+        Example:
+            AddOp(axes=(N, H, W)) -> ReorderAxes(axes=(H, W, N)) -> BroadcastOp(axes=(C, H, W, N))
+            map(C) => "bcast"
+            map(H) => 1
+            map(W) => 2
+            map(N) => 0
+        """
         axis_position = -1
         for index, arg_axis in enumerate(self.arg_axes_list):
             if axis == arg_axis:
@@ -267,6 +306,17 @@ class StridedBinaryLayoutConstraint(BinaryLayoutConstraint):
         return self.mappings[axis_position]
 
     def group_axis_contig(self, arg_mem_order, op_group):
+        """
+        Given a list of axes in the argument, check if they are contiguous in memory.
+
+        Arguments:
+            arg_mem_order: Argument axes order in memory. Integers which index into
+                arg_layout.ng_axes
+            op_group: List of Axis object to check for contiguity in the argument
+
+        Returns:
+            True if axes are in order and contiguous in the argument
+        """
         if not op_group:
             return True
 
@@ -290,6 +340,19 @@ class StridedBinaryLayoutConstraint(BinaryLayoutConstraint):
         return compatible
 
     def group_axis_strided_valid(self, arg_mem_order, op_group):
+        """
+        Given a list of axes in the argument, check if they can be accessed by a single stride.
+        Broadcast axes are allowed only to be grouped with other broadcast axes. Sliced axes
+        must be isolated. Regular axes must be contiguous.
+
+        Arguments:
+            arg_mem_order: Argument axes order in memory. Integers which index into
+                arg_layout.ng_axes
+            op_group: List of Axis object to check for contiguity in the argument
+
+        Returns:
+            True if axes can be accessed by a single stride
+        """
         # Convert op group to arg group
         arg_group = [self.map(a) for a in op_group]
 

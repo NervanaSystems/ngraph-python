@@ -13,21 +13,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-from cachetools import cached, LRUCache
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
-    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
-    ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp, \
-    Transpose
+    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
+    ReshapeOp, TensorValueOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 
-from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
-    UnaryLayoutConstraint
+from ngraph.transformers.passes.layout import UnaryLayoutConstraint
 from ngraph.transformers.util.layout_common import StridedLayoutAssignment, \
     StridedBinaryLayoutConstraint, flatten
 
