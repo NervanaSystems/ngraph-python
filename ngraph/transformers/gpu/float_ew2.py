@@ -375,58 +375,6 @@ def _is_buffer(value):
     return False
 
 
-def _compress_axes(ops):
-    """
-    Called to homogenize the axes of tensors used in a kernel. Also finds the
-    reduction axis.
-    TODO: If this logic is moved up into the graph, this function may not be
-    necessary. Currently with all of the flattening spliced into the graph
-    and limited fusion, this function is not expected to do much.
-
-    Arguments:
-        ops (list): List of tuples describing ops to compile into kernel
-
-    Returns: New list of ops with tensors reshaped as needed.
-    """
-    reduction_axis = None
-    num_axes = 0
-
-    # Find reduction axis if reduction ops are part of this function
-    for op in ops:
-        if op[0] in _redop_templates:
-            assert reduction_axis is None or reduction_axis == op[4]
-            reduction_axis = op[4]
-
-        for t in op[1:4]:
-            if _is_buffer(t):
-                num_axes = max(num_axes, len(t.shape))
-
-    if num_axes <= 3:
-        return ops
-
-    # Combine non-reduction axes
-    if reduction_axis == 0 or reduction_axis is None:
-        new_axes = [[0], range(1, num_axes)]
-    elif reduction_axis == (num_axes - 1):
-        new_axes = [range(num_axes - 1), [num_axes - 1]]
-    else:
-        new_axes = [range(reduction_axis), [reduction_axis], range(reduction_axis + 1, num_axes)]
-
-    # Reshape tensors
-    new_ops = []
-    for op in ops:
-        new_op = list(op)
-
-        for index in range(1, 4):
-            if _is_buffer(op[index]):
-                new_shape = [np.prod([t.shape[d] for d in compress]) for compress in new_axes]
-                new_op[index] = op[index].reshape(tuple(new_shape))
-
-        new_ops.append(tuple(new_op))
-
-    return new_ops
-
-
 def _optimize_loop_axis(dim):
     """
     Chooses kernel parameters including CUDA block size, grid size, and
@@ -1465,7 +1413,6 @@ def _prepare_compound_kernel(ops):
     """
     # Take care tensor dimensionality
     ops = _wrap_tensor_descriptions(ops)
-    ops = _compress_axes(ops)
 
     # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
@@ -1582,7 +1529,6 @@ class CudaSourceFile:
         assert not self.compiled
         # Take care tensor dimensionality
         ops = _wrap_tensor_descriptions(ops)
-        ops = _compress_axes(ops)
 
         # Generate kernel source code and block/grid mapping or find cached equivalent kernel
         (axes_mapping, dims) = _get_axes_mapping(ops)

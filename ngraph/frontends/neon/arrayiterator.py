@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import ngraph as ng
+from future.utils import viewitems
+import six
 from ngraph.frontends.neon import ax
 import collections
 
@@ -127,12 +129,12 @@ class SequentialArrayIterator(object):
         self.index = 0
 
         if isinstance(data_arrays, dict):
-            self.data_arrays = {k: v for k, v in data_arrays.viewitems()}
+            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
 
         # just get an arbitrary element for len
-        self.ndata = len(self.data_arrays[self.data_arrays.keys()[0]])
+        self.ndata = len(six.next(six.itervalues(self.data_arrays)))
         self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
         self.ntokens = self.ndata * self.time_steps
         self.nbatches = self.ndata // self.batch_size
@@ -146,7 +148,7 @@ class SequentialArrayIterator(object):
             self.batch_size,
             self.nbatches,
             self.time_steps
-        ) for k, x in self.data_arrays.viewitems()}
+        ) for k, x in viewitems(self.data_arrays)}
 
         if self.reverse_target:
             self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
@@ -168,4 +170,4 @@ class SequentialArrayIterator(object):
             idx = self.index % self.nbatches
             self.index += 1
 
-            yield {k: np.squeeze(x[:, idx:(idx + 1), :]) for k, x in self.data_arrays.viewitems()}
+            yield {k: np.squeeze(x[:, idx:(idx + 1), :]) for k, x in viewitems(self.data_arrays)}
