@@ -172,26 +172,27 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         """
         :return: name to reference variable.
         """
-        return "self." + self.name
+        return self.name
 
     def transform_allocate(self):
         self.transformer.init_code.append("{} = None", self.ref_str)
-        self.transformer.allocate_storage_code.append("def {}(self):", self.alloc_name)
+        self.transformer.allocate_storage_code.append("def {}():", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
             self.transformer.allocate_storage_code.append(
-                "self.{}(np.empty({}, dtype=np.dtype('{}')))",
+                "{}(np.empty({}, dtype=np.dtype('{}')))",
                 self.update_name, elts, self.dtype.name)
             self.transformer.allocate_storage_code.endl()
 
-        self.transformer.allocate_storage_code.append("def {}(self, buffer):",
+        self.transformer.allocate_storage_code.append("def {}(buffer):",
                                                       self.update_name)
         with indenting(self.transformer.allocate_storage_code):
+            self.transformer.allocate_storage_code.append("global {}", self.ref_str)
             self.transformer.allocate_storage_code.append("{} = buffer", self.ref_str)
             self.transform_allocate_views()
         self.transformer.allocate_storage_code.endl()
 
-        self.transformer.allocate_code.append("self.{}()", self.alloc_name)
+        self.transformer.allocate_code.append("{}()", self.alloc_name)
 
 
 class CPUDeviceBufferReference(DeviceBufferReference):
@@ -210,7 +211,7 @@ class CPUDeviceTensor(DeviceTensor):
     @property
     def tensor(self):
         if self.__tensor is None:
-            self.__tensor = getattr(self.transformer.model, self.name)
+            self.__tensor = self.transformer.globals.get(self.name)
         return self.__tensor
 
     @property
@@ -218,13 +219,14 @@ class CPUDeviceTensor(DeviceTensor):
         """
         :return: name to reference variable.
         """
-        return "self." + self.name
+        return self.name
 
     def transform_allocate(self):
         tensor_description = self.tensor_description
         self.transformer.init_code.append("{} = None", self.ref_str)
         self.transformer.allocate_storage_code.append(
-            """{ref} = np.ndarray(
+            """global {ref}
+{ref} = np.ndarray(
     shape={shape},
     dtype=np.{dtype},
     buffer=buffer,
@@ -268,16 +270,18 @@ class CPUCodeGenerator(PyGen):
 
     def __init__(self, **kwargs):
         super(CPUCodeGenerator, self).__init__(prefix="op", **kwargs)
+
+        # These will get passed over to the computation in the model
         self.conv_params = dict()
         self.conv_slices = dict()
         self.pool_params = dict()
         self.pool_slices = dict()
-        self.send_nodes = dict()
-        self.recv_nodes = dict()
-        self.scatter_send_nodes = dict()
-        self.scatter_recv_nodes = dict()
-        self.gather_send_nodes = dict()
-        self.gather_recv_nodes = dict()
+        self.send_nodes = []
+        self.recv_nodes = []
+        self.scatter_send_nodes = []
+        self.scatter_recv_nodes = []
+        self.gather_send_nodes = []
+        self.gather_recv_nodes = []
 
     def name(self, x):
         if isinstance(x, CPUDeviceBufferStorage):
@@ -305,17 +309,7 @@ class CPUCodeGenerator(PyGen):
 
     @generic_method(Op)
     def allocate_op(self, op, *args):
-        '''
-        if op.is_device_op:
-            raise ValueError((
-                "{class_name} doesn't have a generate_op method for op: {op}. "
-                "In order to fix this, add a method generate_op decorated with "
-                "@generate_op.on_type({op}) to class {class_name}."
-            ).format(
-                class_name=self.__class__.__name__,
-                op=op.__class__.__name__,
-            ))
-        '''
+        pass
 
     @allocate_op.on_type(ConvolutionOp)
     def allocate_op(self, op, outputs, inputs, filters):
@@ -323,7 +317,7 @@ class CPUCodeGenerator(PyGen):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("init_conv_fprop(self, index={}, I={}, F={}, O={}, pad={}, stride={})",
+        self.append("mkldnn.init_conv_fprop(index={}, I={}, F={}, O={}, pad={}, stride={})",
                     op.index, inputs, filters, outputs, pad, stride)
 
     @allocate_op.on_type(bprop_conv)
@@ -332,7 +326,7 @@ class CPUCodeGenerator(PyGen):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("init_conv_bprop(self, index={}, E={}, F={}, gI={}, pad={}, stride={})",
+        self.append("mkldnn.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
                     op.index, delta, filters, gI, pad, stride)
 
     @generic_method(Op)
@@ -368,12 +362,12 @@ class CPUCodeGenerator(PyGen):
         self.conv_params[op.index] = op.conv_params
         self.conv_slices[op.index] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        self.append("fprop_conv(self, {}, self.conv_slices[{}], I={}, F={}, O={})",
+        self.append("mkldnn.fprop_conv({}, self.conv_slices[{}], I={}, F={}, O={})",
                     op.index, op.index, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("bprop_conv(self, {}, self.conv_slices[{}], E={}, F={}, gI={})",
+        self.append("mkldnn.bprop_conv({}, self.conv_slices[{}], E={}, F={}, gI={})",
                     op.index, op.index, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
@@ -565,37 +559,37 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(CPUQueueSendOp)
     def generate_op(self, op, out, *args):
         send_id = len(self.send_nodes)
-        self.send_nodes[send_id] = op
+        self.send_nodes.append(op)
         self.append("self.queue_send({})", send_id)
 
     @generate_op.on_type(CPUQueueRecvOp)
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
-        self.recv_nodes[recv_id] = op
+        self.recv_nodes.append(op)
         self.append("{} = self.recv_from_queue_send({})", out, recv_id)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
         gather_send_id = len(self.gather_send_nodes)
-        self.gather_send_nodes[gather_send_id] = op
+        self.gather_send_nodes.append(op)
         self.append("self.queue_gather_send({})", gather_send_id)
 
     @generate_op.on_type(CPUQueueGatherRecvOp)
     def generate_op(self, op, out, *args):
         gather_recv_id = len(self.gather_recv_nodes)
-        self.gather_recv_nodes[gather_recv_id] = op
+        self.gather_recv_nodes.append(op)
         self.append("{}[:] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
 
     @generate_op.on_type(CPUQueueScatterSendOp)
     def generate_op(self, op, out, *args):
         scatter_send_id = len(self.scatter_send_nodes)
-        self.scatter_send_nodes[scatter_send_id] = op
+        self.scatter_send_nodes.append(op)
         self.append("self.queue_scatter_send({})", scatter_send_id)
 
     @generate_op.on_type(CPUQueueScatterRecvOp)
     def generate_op(self, op, out, *args):
         scatter_recv_id = len(self.scatter_recv_nodes)
-        self.scatter_recv_nodes[scatter_recv_id] = op
+        self.scatter_recv_nodes.append(op)
         self.append("{}[:] = self.scatter_recv_from_queue_scatter_send({})", out, scatter_recv_id)
 
 
@@ -620,21 +614,7 @@ class CPUTransformer(Transformer):
         self.allocate_code = CPUCodeGenerator()
         self.compute_code = CPUCodeGenerator()
         self.code = CPUCodeGenerator()
-        self.code.execute("""
-import os
-import numpy as np
-import ctypes as ct
-import numpy.ctypeslib as npct
-import itertools as itt
-from ngraph.op_graph import axes
-from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
-from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
-from ngraph.transformers.cpu.cpuengine import mkldnn_init, mkldnn_engine_init
-from ngraph.transformers.cpu.cpuengine import mkldnn_engine_cleanup
-from ngraph.transformers.cpu.cpuengine import init_conv_fprop, fprop_conv
-from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
-""")
-        self.model = None
+        self.globals = self.code.globals
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
@@ -664,14 +644,23 @@ from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
         return CPUDeviceBufferReference(self)
 
     def start_transform_allocate(self):
+        self.code.execute("""import os
+import numpy as np
+import ctypes as ct
+import numpy.ctypeslib as npct
+import itertools as itt
+from ngraph.op_graph import axes
+from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
+from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
+from ngraph.transformers.cpu.cpuengine import Mkldnn
+from ngraph.transformers.cpu.cpuengine import ConvComputation
+from ngraph.transformers.cpu.hetr import HetrComputation
+        """)
+
         mkldnn_path = os.getcwd()
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        self.init_code.append("""def __init__(self):""")
-        self.init_code.indent(1)
-        self.init_code.append("""mkldnn_init(self, "{}")""", mkldnn_engine_path)
-        self.allocate_code.append("""def allocate(self):""")
-        self.allocate_code.indent(1)
-        self.allocate_code.append("""mkldnn_engine_init(self)""")
+        self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        self.code.execute("mkldnn.open()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -689,147 +678,76 @@ from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
 
     def transform_ordered_ops(self, ordered_ops, name):
         if name is None:
-            name = "c_" + str(self.n_computations)
+            name = "C_" + str(self.n_computations)
         self.n_computations += 1
-        self.compute_code.append("def {}(self):", name)
-        code_length = self.compute_code.code_length
-
-        def tensor_description_value(x):
-            if isinstance(x, TensorDescription):
-                return x.value
-            return x
-
+        self.compute_code.append("class {}(HetrComputation, ConvComputation):", name)
         with indenting(self.compute_code):
-            for op in ordered_ops:
-                out = tensor_description_value(op.tensor_description())
-                call_info = (tensor_description_value(_) for _ in op.call_info())
-                self.compute_code.generate_op(op, out, *call_info)
-            if code_length == self.compute_code.code_length:
-                self.compute_code.append("pass")
-        self.compute_code.endl()
+            self.compute_code.append("def __call__(self):")
+            code_length = self.compute_code.code_length
+
+            def tensor_description_value(x):
+                if isinstance(x, TensorDescription):
+                    return x.value
+                return x
+
+            with indenting(self.compute_code):
+                for op in ordered_ops:
+                    out = tensor_description_value(op.tensor_description())
+                    call_info = (tensor_description_value(_) for _ in op.call_info())
+                    self.compute_code.generate_op(op, out, *call_info)
+                if code_length == self.compute_code.code_length:
+                    self.compute_code.append("pass")
+            self.compute_code.endl()
         self.name = name
         return name
 
     def finish_transform(self):
-        if self.model is not None:
-            return
+        self.code.append(self.init_code.code)
+        self.code.endl()
+        self.code.endl()
 
-        self.code.append("class Model(object):")
+        self.code.append(self.allocate_storage_code.code)
+        self.code.endl()
+        self.code.append('def allocate():')
         with indenting(self.code):
             if len(self.device_buffers) == 0:
-                self.init_code.append("pass")
-            self.code.append(self.init_code.code)
-            self.code.endl()
-            self.code.endl()
+                self.code.append("pass")
+            else:
+                self.code.append(self.allocate_code.code)
+        self.code.endl(2)
+        self.code.append(self.compute_code.code)
+        self.code.endl()
 
-            self.code.append(self.allocate_storage_code.code)
-            self.code.endl()
-            if len(self.device_buffers) == 0:
-                self.allocate_code.append("pass")
-            self.code.append(self.allocate_code.code)
-            self.code.endl(2)
-            self.code.append(self.compute_code.code)
-            self.code.endl()
-
-            # with open("code_{}.py".format(self.name), "w") as f:
-            #    f.write(self.code.code)
-
+        # with open("code_{}.py".format(self.name), "w") as f:
+        #    f.write(self.code.code)
+        # print(self.code.code)
         self.globals = self.code.compile()
-        self.model = self.globals['Model']
-
-        def queue_send(self, send_id):
-            send_op = self.send_nodes[send_id]
-            q = send_op.queue
-
-            # TODO
-            # below converts DeviceTensor to numpy array
-            # should we instead serialize DeviceTensor?
-            x_devicetensor = send_op.args[0].value
-            x_nparr = x_devicetensor.get(None)
-            q.put(x_nparr)
-
-        def queue_recv(self, recv_id):
-            recv_op = self.recv_nodes[recv_id]
-            q = recv_op.queue
-            x = q.get()
-            return x
-
-        def queue_gather_send(self, gather_send_id):
-            gather_send_op = self.gather_send_nodes[gather_send_id]
-            q = gather_send_op.shared_queues[gather_send_op.idx]
-            # TODO
-            # below converts DeviceTensor to numpy array
-            # should we instead serialize DeviceTensor?
-            x_devicetensor = gather_send_op.args[0].value
-            x_nparr = x_devicetensor.get(None)
-            q.put(x_nparr)
-
-        def queue_gather_recv(self, gather_recv_id):
-            gather_recv_op = self.gather_recv_nodes[gather_recv_id]
-            x_devicetensor = gather_recv_op.value
-            x_nparr = x_devicetensor.get(None)
-            for i in range(len(gather_recv_op.from_id)):
-                q = gather_recv_op.shared_queues[i]
-                x = q.get()
-                x_nparr[gather_recv_op.slices[i]] = x
-            return x_nparr
-
-        def queue_scatter_send(self, scatter_send_id):
-            scatter_send_op = self.scatter_send_nodes[scatter_send_id]
-            # TODO
-            # below converts DeviceTensor to numpy array
-            # should we instead serialize DeviceTensor?
-            x_devicetensor = scatter_send_op.args[0].value
-            x_nparr = x_devicetensor.get(None)
-            for i in range(len(scatter_send_op.to_id)):
-                q = scatter_send_op.shared_queues[i]
-                q.put(x_nparr[scatter_send_op.slices[i]])
-
-        def queue_scatter_recv(self, scatter_recv_id):
-            scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
-            q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
-            x = q.get()
-            return x
-
-        self.model.recv_from_queue_send = queue_recv
-        self.model.queue_send = queue_send
-
-        self.model.gather_recv_from_queue_gather_send = queue_gather_recv
-        self.model.queue_gather_send = queue_gather_send
-
-        self.model.scatter_recv_from_queue_scatter_send = queue_scatter_recv
-        self.model.queue_scatter_send = queue_scatter_send
-
-        self.model = self.model()
-
-        self.model.send_nodes = self.compute_code.send_nodes
-        self.model.recv_nodes = self.compute_code.recv_nodes
-
-        self.model.gather_send_nodes = self.compute_code.gather_send_nodes
-        self.model.gather_recv_nodes = self.compute_code.gather_recv_nodes
-
-        self.model.scatter_send_nodes = self.compute_code.scatter_send_nodes
-        self.model.scatter_recv_nodes = self.compute_code.scatter_recv_nodes
-
-        self.model.conv_params = self.compute_code.conv_params
-        self.model.pool_params = self.compute_code.pool_params
-        self.model.conv_slices = self.compute_code.conv_slices
-        self.model.pool_slices = self.compute_code.pool_slices
 
         for computation in self.computations:
-            executor = getattr(self.model, computation.name)
+            cls = self.globals[computation.name]
+            executor = cls(conv_params=self.compute_code.conv_params,
+                           pool_params=self.compute_code.pool_params,
+                           conv_slices=self.compute_code.conv_slices,
+                           pool_slices=self.compute_code.pool_slices,
+                           send_nodes=self.compute_code.send_nodes,
+                           recv_nodes=self.compute_code.recv_nodes,
+                           scatter_send_nodes=self.compute_code.scatter_send_nodes,
+                           scatter_recv_nodes=self.compute_code.scatter_recv_nodes,
+                           gather_send_nodes=self.compute_code.gather_send_nodes,
+                           gather_recv_nodes=self.compute_code.gather_recv_nodes)
             computation.executor = executor
 
     def allocate_storage(self):
-        self.model.allocate()
+        self.globals.get('allocate')()
 
     def close(self):
-        if (self.model):
+        if self.code is not None:
             try:
-                self.globals['mkldnn_engine_cleanup'](self.model)
+                if self.code.globals.get('mkldnn', None) is not None:
+                    self.code.execute('mkldnn.close()')
             except TypeError:
                 pass
-            self.model = None
+        self.code = None
 
     def consume(self, buf_index, hostlist, devlist):
         '''
