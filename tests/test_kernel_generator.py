@@ -97,3 +97,33 @@ def test_4d_chained(transformer_factory, input_axes):
         graph_val = ex()
     np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
     np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+
+
+def test_kernel_cache(transformer_factory):
+    X = ng.make_axis(32)
+    Y = ng.make_axis(32)
+    C = ng.make_axis(16384)
+    axes = ng.make_axes([
+        X,
+        Y
+    ])
+    bcast_axes = ng.make_axes([
+        X,
+        Y,
+        C
+    ])
+
+    x_val = np.absolute(np.random.randn(*axes.lengths))
+    y_val = np.absolute(np.random.randn(*bcast_axes.lengths))
+    z_val = np.absolute(np.random.randn(*bcast_axes.lengths))
+
+    x = ng.constant(x_val, axes)
+    y = ng.constant(y_val, bcast_axes)
+    z = ng.constant(z_val, bcast_axes)
+
+    out = ng.add(ng.add(x, y), z)
+
+    with executor(out) as ex:
+        graph_val = ex()
+    np_val = np.add(np.add(x_val.reshape(32, 32, 1), y_val), z_val)
+    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)

@@ -21,6 +21,13 @@ To download the source code, first run::
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
 
+To install with Intel MKL-DNN support, download and install MKL-DNN::
+    git clone https://github.com/01org/mkl-dnn.git
+    cd mkl-dnn/scripts && ./prepare_mkl.sh && cd ..
+    mkdir -p build && cd build
+    cmake -DCMAKE_INSTALL_PREFIX=$PWD/../install .. && make install
+    cd ../.. && export MKLDNN_ROOT=$PWD/mkl-dnn/install
+
 We recommend installing inside a virtual environment.
 
 To create and activate a Python 3 virtualenv::
