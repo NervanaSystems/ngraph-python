@@ -639,7 +639,7 @@ from ngraph.transformers.cpu.cpuengine import mkldnn_init, mkldnn_engine_init
 from ngraph.transformers.cpu.cpuengine import mkldnn_engine_cleanup
 from ngraph.transformers.cpu.cpuengine import init_conv_fprop, fprop_conv
 from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
-from ngraph.transformers.cpu.cpuengine import ctc_cpu
+from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
         self.model = None
         self.n_computations = 0

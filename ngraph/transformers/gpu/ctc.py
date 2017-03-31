@@ -14,13 +14,11 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.kernel import GPUKernel
-from ngraph.op_graph.axes import TensorDescription
 
 import numpy as np
 import os
 import numpy.ctypeslib as npct
 import ctypes as ct
-from pycuda.gpuarray import empty
 
 basepath = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 temp_loc = os.path.join("examples", "deepspeech", "src", "libwarpctc.so")
