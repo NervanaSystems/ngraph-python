@@ -131,5 +131,6 @@ def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
     feed_dict = fill_feed_dict(train_set, inputs)
     run_benchmark(batch_cost_computation_op, transformer_type, feed_dict, n_skip, n_iter, label)
 
+
 if __name__ == "__main__":
     run_cifar_benchmark()
