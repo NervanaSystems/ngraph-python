@@ -18,15 +18,20 @@ from ngraph.op_graph.op_graph import TensorOp, persistent_tensor, sequential
 
 def ctc(activations, labels, activation_lens, label_lens, axes=None):
     """
-    Computes the CTC op
+    Computes the CTC cost using warp-ctc
     Args:
-        activations (TensorOp): Activations induced by the utterances.
-        labels (TensorOp): Transcripts corresponding to the utterances.
-        activation_lens (TensorOp): (Strided) utterance lengths.
-        label_lens (TensorOp): Transcript lengths.
+        activations (TensorOp): The network output to compare against the transcripts
+        labels (TensorOp): One-hot encoded transcript labels
+        activation_lens (TensorOp): Length of activations for each example in the batch
+        label_lens (TensorOp): Transcript length for each example in the batch
+        axes (Axes, optional): Output axes for the cost tensor. Defaults to batch axis.
 
     Returns:
         TensorOp: The result of the CTC op.
+
+    References:
+        Graves, A., et al. (2006). https://doi.org/10.1145/1143844.1143891
+        warp-ctc: https://github.com/baidu-research/warp-ctc
 
     """
     grads = persistent_tensor(axes=activations.axes).named("ctc_gradients")
@@ -36,13 +41,16 @@ def ctc(activations, labels, activation_lens, label_lens, axes=None):
 
 class CTCOp(TensorOp):
 
-    def __init__(self, activations, labels, activation_lens, label_lens, grads, axes=None, **kwargs):
+    def __init__(self, activations, labels, activation_lens, label_lens, grads,
+                 axes=None, **kwargs):
         """
-        Arguments:
-            activations: Activations induced by the utterances.
-            labels: Transcripts corresponding to the utterances.
-            activation_lens: (Strided) utterance lengths.
-            label_lens: Transcript lengths.
+        Args:
+            activations (TensorOp): The network output to compare against the transcripts
+            labels (TensorOp): One-hot encoded transcript labels
+            activation_lens (TensorOp): Length of activations for each example in the batch
+            label_lens (TensorOp): Transcript length for each example in the batch
+            grads (TensorOp): A persistent tensor that will be filled with CTC gradients
+            axes (Axes, optional): Output axes for the cost tensor. Defaults to batch axis.
         """
 
         # verify shapes
@@ -71,7 +79,9 @@ class CTCOp(TensorOp):
         if axes is None:
             axes = activations.axes.batch_axes()
 
-        super(CTCOp, self).__init__(args=(activations, labels, activation_lens, label_lens, grads),
+        super(CTCOp, self).__init__(args=(activations, labels,
+                                          activation_lens, label_lens,
+                                          grads),
                                     axes=axes,
                                     **kwargs)
 
@@ -81,4 +91,3 @@ class CTCOp(TensorOp):
         Add gradients computed by warp-ctc do adjoints
         """
         activations.generate_add_delta(adjoints, sequential([self, grads]))
-

@@ -34,10 +34,10 @@ class CTCKernel(GPUKernel):
         self.at_runtime = self.transformer.runtime
         self.stream = self.at_runtime.stream
         self.costs = op.tensor_description()
-        (self.activs, 
-         self.lbls, 
-         self.uttlens_pct, 
-         self.lbl_lens, 
+        (self.activs,
+         self.lbls,
+         self.uttlens_pct,
+         self.lbl_lens,
          self.grads) = (_ for _ in op.call_info())
         self.max_t, self.bsz, self.nout = self.activs.axes.lengths
         self.utt_lens = np.zeros(self.bsz, dtype=np.int32)
@@ -61,18 +61,20 @@ class CTCKernel(GPUKernel):
         self.utt_lens[:] = (self.uttlens_pct.get() * self.max_t / 100.).astype(np.int32)
         self.grads.fill(0.)
         self.costs.fill(0.)
-  
+
         self.ctclib.get_workspace_size_gpu.restype = int
-        self.ctclib.get_workspace_size_gpu.argtypes = [npct.ndpointer(dtype=np.int32, ndim=1),
-                                                       npct.ndpointer(dtype=np.int32, ndim=1),
+        self.ctclib.get_workspace_size_gpu.argtypes = [npct.ndpointer(dtype=np.int32,
+                                                                      ndim=1),
+                                                       npct.ndpointer(dtype=np.int32,
+                                                                      ndim=1),
                                                        ct.c_int,
                                                        ct.c_int,
                                                        ct.c_void_p]
 
-        scratch_size = self.ctclib.get_workspace_size_gpu(np.array(self.lbl_lens.get(), 
+        scratch_size = self.ctclib.get_workspace_size_gpu(np.array(self.lbl_lens.get(),
                                                                    dtype=np.int32),
                                                           self.utt_lens,
-                                                          self.nout, self.bsz, 
+                                                          self.nout, self.bsz,
                                                           stream_buf)
 
         self.at_runtime.set_scratch_size(scratch_size)
@@ -93,22 +95,22 @@ class CTCKernel(GPUKernel):
                                                      ct.POINTER(ct.c_char),
                                                      ct.c_void_p]
 
-
         acts_buf = ct.cast(int(self.activs.gpudata), ct.POINTER(ct.c_float))
         grads_buf = ct.cast(int(self.grads.gpudata), ct.POINTER(ct.c_float))
         costs_buf = ct.cast(int(self.costs.gpudata), ct.POINTER(ct.c_float))
         workspace_buf = ct.cast(workspace, ct.POINTER(ct.c_char))
 
-        status = self.ctclib.compute_ctc_loss_gpu(acts_buf, 
-                                             grads_buf,
-                                             np.array(self.lbls.get(), dtype=np.int32),
-                                             np.array(self.lbl_lens.get(), 
-                                                            dtype=np.int32),
-                                             self.utt_lens,
-                                             self.nout, 
-                                             self.bsz,
-                                             costs_buf,
-                                             workspace_buf,
-                                             stream_buf)
-        
+        status = self.ctclib.compute_ctc_loss_gpu(acts_buf,
+                                                  grads_buf,
+                                                  np.array(self.lbls.get(),
+                                                           dtype=np.int32),
+                                                  np.array(self.lbl_lens.get(),
+                                                           dtype=np.int32),
+                                                  self.utt_lens,
+                                                  self.nout,
+                                                  self.bsz,
+                                                  costs_buf,
+                                                  workspace_buf,
+                                                  stream_buf)
+
         assert status is 0, "Warp-CTC run failed"
