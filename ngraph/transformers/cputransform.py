@@ -714,13 +714,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         self.code.endl()
 
         self.code.append(self.allocate_storage_code.code)
-        self.code.endl()
-        self.code.append('def allocate():')
-        with indenting(self.code):
-            if len(self.device_buffers) == 0:
-                self.code.append("pass")
-            else:
-                self.code.append(self.allocate_code.code)
+        self.code.endl(2)
+        self.code.append(self.allocate_code.code)
         self.code.endl(2)
         self.code.append(self.compute_code.code)
         self.code.endl()
@@ -745,7 +740,7 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
             computation.executor = executor
 
     def allocate_storage(self):
-        self.globals.get('allocate')()
+        pass
 
     def close(self):
         if self.code is not None:
