@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs, \
-    create_send_recv_graph, create_scatter_gather_graph
+from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
+from ngraph.testing.hetr_utils import create_send_recv_graph, create_scatter_gather_graph
 from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
 from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
