@@ -30,7 +30,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
@@ -146,6 +146,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Divide)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(FloorDivide)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("int_div", x=x, y=y, out=out)
 
     @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
@@ -758,9 +762,6 @@ class GPUDeviceTensor(DeviceTensor):
     def __setitem__(self, key, value):
         sliced = self.__getitem__(key)
 
-        if isinstance(value, np.ndarray) and value.shape == ():
-            value = value.item()
-
         # Use fill for scalar values
         # convert value to numpy
         if type(value) == float:
@@ -774,8 +775,7 @@ class GPUDeviceTensor(DeviceTensor):
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
             sliced.fill(value.astype(sliced.dtype))
-        elif type(value) == np.int32 or type(value) == np.int64 or \
-                type(value) == int:
+        elif type(value) in (np.int32, np.int64, int, np.uint32):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))
@@ -1054,6 +1054,9 @@ class GPUTransformer(Transformer):
         self.current_buffer.add_view_allocator(view_alloc)
 
     def start_transform_allocate(self):
+        pass
+
+    def transform_allocate_ops(self, all_ops):
         pass
 
     def finish_transform_allocate(self):

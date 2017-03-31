@@ -61,7 +61,7 @@ class ResultOp(TensorOp):
     """
 
     def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self, args=args)
+        super(ResultOp, self).__init__(args=args)
         self.metadata['device_id'] = device_id
         self.axes = args[0].axes
         self.dtype = args[0].dtype
