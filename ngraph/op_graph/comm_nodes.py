@@ -116,8 +116,8 @@ class RecvOp(CommunicationOp):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=to_node.axes,
-            dtype=to_node.dtype)
+            axes=send_node.axes,
+            dtype=send_node.dtype)
         self._send_node = send_node
 
     def send_node(self):
