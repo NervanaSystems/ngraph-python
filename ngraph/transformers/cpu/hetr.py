@@ -14,12 +14,12 @@
 # ----------------------------------------------------------------------------
 
 
-class HetrComputation(object):
+class HetrLocals(object):
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
                  gather_send_nodes, gather_recv_nodes,
                  **kwargs):
-        super(HetrComputation, self).__init__(**kwargs)
+        super(HetrLocals, self).__init__(**kwargs)
         self.send_nodes = send_nodes
         self.recv_nodes = recv_nodes
         self.scatter_send_nodes = scatter_send_nodes

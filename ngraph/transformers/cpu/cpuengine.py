@@ -286,9 +286,9 @@ def update_lut(error, idx, pad_idx, axis, dW):
                 dW[:, wrd_id] = np.sum(error.take(group[0], axis=axis), axis=axis)
 
 
-class ConvComputation(object):
+class ConvLocals(object):
     def __init__(self, conv_params, conv_slices, pool_params, pool_slices, **kwargs):
-        super(ConvComputation, self).__init__(**kwargs)
+        super(ConvLocals, self).__init__(**kwargs)
         self.conv_params = conv_params
         self.conv_slices = conv_slices
         self.pool_params = pool_params
