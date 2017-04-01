@@ -34,7 +34,7 @@ def flatten(l):
     out = []
     for item in l:
         if type(item) == list:
-            out = out + item
+            out = out + flatten(item)
         else:
             out.append(item)
     return out
