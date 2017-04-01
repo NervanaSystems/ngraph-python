@@ -15,7 +15,7 @@
 from __future__ import division
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 import uuid
 

@@ -39,6 +39,7 @@ import pkgutil
 import importlib
 from collections import Iterable
 from builtins import map
+from orderedset import OrderedSet
 
 import six
 import numpy as np
@@ -47,7 +48,6 @@ import ngraph
 import ngraph.op_graph.op_graph as op_graph
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.axes import Axes, Axis, FlattenedAxis
-from ngraph.util.ordered import OrderedSet
 
 import ngraph.op_graph.serde.ops_pb2 as ops_pb
 
