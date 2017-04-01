@@ -571,8 +571,9 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(CPUQueueRecvOp)
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
-        self.recv_nodes.append(op)
-        self.append("{} = self.recv_from_queue_send({})", out, recv_id)
+        self.recv_nodes[recv_id] = op
+        self.append("update_a_{}(self.recv_from_queue_send({}))",
+                    out.tensor_description.name, recv_id)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
@@ -659,8 +660,8 @@ from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
-from ngraph.transformers.cpu.cpuengine import ConvComputation
-from ngraph.transformers.cpu.hetr import HetrComputation
+from ngraph.transformers.cpu.cpuengine import ConvLocals
+from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
 
@@ -687,7 +688,7 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         if name is None:
             name = "C_" + str(self.n_computations)
         self.n_computations += 1
-        self.compute_code.append("class {}(HetrComputation, ConvComputation):", name)
+        self.compute_code.append("class {}(HetrLocals, ConvLocals):", name)
         with indenting(self.compute_code):
             self.compute_code.append("def __call__(self):")
             code_length = self.compute_code.code_length
