@@ -35,6 +35,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
@@ -404,6 +405,11 @@ class CPUCodeGenerator(PyGen):
             self.append("update_lut(error={}, idx={}, pad_idx={}, axis={}, dW={})",
                         delta, idx, op.pad_idx, op.lut_axis, outputs)
 
+    @generate_op.on_type(CTCOp)
+    def generate_op(self, op, outputs, activations, lbls, utt_lens, lbl_lens, grads):
+        self.append("ctc_cpu(acts={}, lbls={}, utt_lens={}, lbl_lens={}, grads={}, costs={})",
+                    activations, lbls, utt_lens, lbl_lens, grads, outputs)
+
     @generate_op.on_type(RngOp)
     def generate_op(self, op, out, x):
         if op.distribution == 'uniform':
@@ -572,7 +578,8 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
         self.recv_nodes[recv_id] = op
-        self.append("{} = self.recv_from_queue_send({})", out, recv_id)
+        self.append("self.update_a_{}(self.recv_from_queue_send({}))",
+                    out.tensor_description.name, recv_id)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
@@ -633,6 +640,7 @@ from ngraph.transformers.cpu.cpuengine import mkldnn_init, mkldnn_engine_init
 from ngraph.transformers.cpu.cpuengine import mkldnn_engine_cleanup
 from ngraph.transformers.cpu.cpuengine import init_conv_fprop, fprop_conv
 from ngraph.transformers.cpu.cpuengine import init_conv_bprop, bprop_conv
+from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
         self.model = None
         self.n_computations = 0
