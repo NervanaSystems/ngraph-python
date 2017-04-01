@@ -31,7 +31,7 @@ def fill_feed_dict(dataset, feed_inputs):
     return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
 
 
-def run_benchmark(model_out_comp, transformer_type, feed_dict, n_skip, n_iter, label):
+def run_benchmark(model_out_comp, transformer_type, feed_dict, n_skip, n_iter):
     """
     This runs _any_ computation repeatedly with data from feed_dict, and times it
 
@@ -48,25 +48,26 @@ def run_benchmark(model_out_comp, transformer_type, feed_dict, n_skip, n_iter, l
             times[i]['start'] = time.time() * 1000.0
             model_out_computation(feed_dict=feed_dict)
             times[i]['stop'] = time.time() * 1000.0
-    print_benchmark_results(times, label)
+    return times
 
 
-def print_benchmark_results(times, label):
-    k = 0
-    compute_time = np.zeros(len(times.keys()))
-    for v in times.values():
-        compute_time[k] = v.values()[1] - v.values()[0]
-        k += 1
-    header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Units')
-    formatter = '| {:^20} ' * len(header) + '|'
+def print_benchmark_results(benchmarks):
+    for label in benchmarks.keys():
+        k = 0
+        compute_time = np.zeros(len(benchmarks[label]))
+        for v in benchmarks[label].values():
+            compute_time[k] = v.values()[1] - v.values()[0]
+            k += 1
+        header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Units')
+        formatter = '| {:^20} ' * len(header) + '|'
 
-    head_str = formatter.format(*header)
-    sep = '-' * len(head_str)
-    results = (label, compute_time.sum(), compute_time.mean(),
-               compute_time.min(), compute_time.max(), 'msec')
-    results_str = formatter.format(*results)
-    print(sep)
-    print(head_str)
-    print(sep)
-    print(results_str)
-    print(sep)
+        head_str = formatter.format(*header)
+        sep = '-' * len(head_str)
+        results = (label, compute_time.sum(), compute_time.mean(),
+                   compute_time.min(), compute_time.max(), 'msec')
+        results_str = formatter.format(*results)
+        print(sep)
+        print(head_str)
+        print(sep)
+        print(results_str)
+        print(sep)

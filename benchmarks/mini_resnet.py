@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
-from benchmark import fill_feed_dict, run_benchmark
+from benchmark import fill_feed_dict, run_benchmark, print_benchmark_results
 from fake_cifar_generator import FakeCIFAR
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
@@ -117,7 +117,7 @@ def get_fake_cifar(batch_size, n_iter):
 
 
 def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
-                        transformer_type='cpu', label="cifar_msra_fprop"):
+                        transformer_type='cpu'):
     inputs, data, train_set = get_fake_cifar(batch_size, n_iter)
     model = get_mini_resnet(inputs)
     optimizer = GradientDescentMomentum(0.01, 0.9)
@@ -129,7 +129,10 @@ def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
     batch_cost_computation_op = ng.computation(batch_cost, "all")
 
     feed_dict = fill_feed_dict(train_set, inputs)
-    run_benchmark(batch_cost_computation_op, transformer_type, feed_dict, n_skip, n_iter, label)
+    benchmarks = dict()
+    benchmarks['cifar_msra_fprop'] = run_benchmark(batch_cost_computation_op, transformer_type,
+                                                   feed_dict, n_skip, n_iter)
+    print_benchmark_results(benchmarks)
 
 
 if __name__ == "__main__":
