@@ -1,0 +1,61 @@
+name: "Sum"
+
+layer {
+    name: "A"
+    type: "DummyData"
+    top: "A"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 1.0
+        }
+        shape {
+            dim:2
+            dim:3
+        }
+    }
+}
+
+layer {
+    name: "B"
+    type: "DummyData"
+    top: "B"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 3.0
+        }
+        shape {
+            dim:2
+            dim: 3
+        }
+    }
+}
+
+layer {
+    name: "C"
+    type: "DummyData"
+    top: "C"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: -2.0
+        }
+        shape {
+            dim:2
+            dim:3 
+        }
+    }
+}
+
+layer {
+    name: "D"
+    type: "Eltwise"
+    top: "D"
+    bottom: "A"
+    bottom: "B"
+    bottom: "C"
+    eltwise_param {
+        operation: SUM
+    }
+}
