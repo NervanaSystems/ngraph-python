@@ -25,7 +25,7 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples
+STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
 TEST_OPTS := --timeout=300 --cov=ngraph
@@ -33,6 +33,7 @@ TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tes
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
+TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
@@ -78,7 +79,7 @@ test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
 test_flex: test_prepare clean
 	@echo Running flex unit tests...
-	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	@py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	 --junit-xml=testout_test_flex_$(PY).xml \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 	@coverage xml -i -o coverage_test_flex_$(PY).xml
@@ -118,6 +119,11 @@ test_mxnet: test_prepare clean
 	 --junit-xml=testout_test_mxnet_$(PY).xml \
 	 $(TEST_OPTS) $(TEST_DIRS_MXNET)
 	@coverage xml -i coverage_test_mxnet_$(PY).xml
+
+test_cntk: test_prepare clean
+	@echo Running unit tests for cntk frontend...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
+	@coverage xml -i
 
 test_integration: test_prepare clean
 	@echo Running integration tests...

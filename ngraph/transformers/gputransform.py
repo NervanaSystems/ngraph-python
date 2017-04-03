@@ -38,6 +38,7 @@ from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.passes import SimplePrune
@@ -52,6 +53,7 @@ from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
+from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel, SendKernel, RecvKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -429,6 +431,10 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_lut)
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(CTCOp)
+    def add_kernel(self, op):
+        self.kernels.append(CTCKernel(self.transformer, op))
 
     @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):

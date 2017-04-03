@@ -22,6 +22,7 @@ from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
+from ngraph.op_graph.ctc import CTCOp
 
 from ngraph.transformers.passes.layout import UnaryLayoutConstraint
 from ngraph.transformers.util.layout_common import StridedLayoutAssignment, \
@@ -177,7 +178,6 @@ class GPULayoutAssignment(StridedLayoutAssignment):
             else:
                 layout.append([axes_list.index(group)])
         return [GPULayoutAssignment(axes_list, layout)]
-
 
 class GPUDotLayoutAssignment(GPULayoutAssignment):
     """
@@ -817,6 +817,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, CTCOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     else:
         raise ValueError("Layouts not implemented for op type {}".format(op))
 
@@ -866,5 +868,7 @@ def gpu_constraint_factory(op, arg):
         return GPUBinaryLayoutConstraint(op, arg)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, CTCOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     else:
         raise ValueError("Layouts not implemented for op type {}".format(op))
