@@ -147,7 +147,7 @@ def template_dot_one_placeholder_and_scalar(n, c, scalar, flex_exceptions):
                       "Try to check if flex result is inside flex exceptions list")
                 print("Flex dot product result: \n", ng_op_out)
                 print("Current array inside flex exceptions list: \n",
-                       flex_exceptions[flex_exceptions_index])
+                      flex_exceptions[flex_exceptions_index])
                 assert_allclose(ng_op_out, flex_exceptions[flex_exceptions_index])
 
                 # Iterate to the next element of flex exceptions list
