@@ -25,7 +25,7 @@ def get_executor_result(arg_array1, arg_array2, ng_placeholder1, ng_placeholder2
 
 
 def template_create_placeholder_and_variable(n, c, const_val=0.1):
-    N = ng.make_axis(length=n,  name="N")
+    N = ng.make_axis(length=n, name="N")
     C = ng.make_axis(length=c, name="C")
     X = ng.placeholder(axes=(C, N))
     W = ng.variable(axes=[C], initial_value=const_val)
@@ -94,10 +94,11 @@ def template_dot_one_placeholder(n, c, const_val, flex_exceptions):
             try:
                 assert_allclose(ng_op_out, np_op_out)
             except AssertionError:
-                print("Flex dot product result doesn't match to numpy.\nTry to check if flex result is inside "
-                      "flex exceptions list")
+                print("Flex dot product result doesn't match to numpy.\n"
+                      "Try to check if flex result is inside flex exceptions list")
                 print("Flex dot product result: \n", ng_op_out)
-                print("Current array inside flex exceptions list: \n", flex_exceptions[flex_exceptions_index])
+                print("Current array inside flex exceptions list: \n",
+                      flex_exceptions[flex_exceptions_index])
 
                 assert list(ng_op_out) == flex_exceptions[flex_exceptions_index]
 
@@ -142,14 +143,12 @@ def template_dot_one_placeholder_and_scalar(n, c, scalar, flex_exceptions):
             try:
                 assert_allclose(ng_op_out, np_op_out)
             except AssertionError:
-                print("Flex dot product result doesn't match to numpy.\nTry to check if flex result is inside "
-                      "flex exceptions list")
-                print ("Flex dot product result: \n", (ng_op_out))
-                print ("Current array inside flex exceptions list: \n", flex_exceptions[flex_exceptions_index])
+                print("Flex dot product result doesn't match to numpy.\n"
+                      "Try to check if flex result is inside flex exceptions list")
+                print ("Flex dot product result: \n", ng_op_out)
+                print ("Current array inside flex exceptions list: \n",
+                       flex_exceptions[flex_exceptions_index])
                 assert_allclose(ng_op_out, flex_exceptions[flex_exceptions_index])
 
                 # Iterate to the next element of flex exceptions list
                 flex_exceptions_index += 1
-
-
-
