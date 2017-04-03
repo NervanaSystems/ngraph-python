@@ -19,10 +19,6 @@ import numpy as np
 from ngraph.testing.flexutil import template_dot_two_placeholders, template_dot_one_placeholder,\
     template_dot_one_placeholder_and_scalar
 
-MINIMUM_FLEX_VALUE = -2 ** 15
-MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
-EPSILON = 0.2
-
 pytestmark = pytest.mark.transformer_dependent("module")
 
 
@@ -43,7 +39,7 @@ def test_gemm_multiply_matrices(transformer_factory, n, c, d, description):
     :return: PASS if dot product of flex calculations passes assert_allclose comparing with dot product of numpy,
              FAIL if don't
     """
-    print(description)
+    print("Description of test case: ", description)
     template_dot_two_placeholders(n, c, d)
 
 @pytest.mark.parametrize("n, c, const_val, flex_exceptions, description", (
@@ -63,6 +59,8 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, n, c, const_val, fl
     :param description: description of a particular test case
     :return: PASS if dot product of flex calculations passes assert_allclose comparing with dot product of numpy
              or expected overflow occurs and the values are exactly as expected, FAIL if don't
+             The calculation equals:
+             ng.dot(first_matrix, vector)
     """
     print (description)
     template_dot_one_placeholder(n, c, const_val, flex_exceptions)
@@ -72,7 +70,9 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, n, c, const_val, fl
     (3, 3, 0.4, [], "Dot product of matrix and positive scalar"),
     (2, 4, -0.3, [], "Dot product of matrix and negative scalar"),
     (3, 5, 0, [], "Dot product of matrix and zero"),
-    (3, 2, 10, [np.array([[0,  63.99804688], [ 63.99804688,  63.99804688], [ 63.99804688,  63.99804688] ])], "Do")
+    (3, 2, 10, [np.array([[0,  63.99804688], [63.99804688,  63.99804688], [63.99804688,  63.99804688]]),
+                np.array([[0, 255.9921875], [255.9921875, 255.9921875], [255.9921875, 255.9921875]])],
+     "Dot product with two expected overflows")
 ))
 def test_gemm_multiply_matrix_by_scalar(transformer_factory, n, c, scalar, flex_exceptions, description):
     """
