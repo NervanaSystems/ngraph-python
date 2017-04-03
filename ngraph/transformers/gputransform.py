@@ -59,8 +59,8 @@ from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, Set
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
-from ngraph.transformers.gpu.gpulayout import GPULayoutAssignment, GPUUnaryLayoutConstraint, \
-    GPUBinaryLayoutConstraint, DimshuffleOp
+from ngraph.transformers.gpu.gpulayout import gpu_layout_factory, GPUUnaryLayoutConstraint, \
+    gpu_constraint_factory, DimshuffleOp
 
 import cachetools
 import numpy as np
@@ -1113,7 +1113,7 @@ class GPUTransformer(Transformer):
             A list of objects that inherit from LayoutAssignment. The first item in the
             list is the default layout for this op.
         """
-        return GPULayoutAssignment.factory(op)
+        return gpu_layout_factory(op)
 
     def get_layout_cost_function(self, op):
         """
@@ -1140,4 +1140,4 @@ class GPUTransformer(Transformer):
         Returns:
             An object that can be used to calculate any layout change cost.
         """
-        return GPUBinaryLayoutConstraint.factory(op, arg)
+        return gpu_constraint_factory(op, arg)
