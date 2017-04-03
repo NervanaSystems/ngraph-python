@@ -179,6 +179,7 @@ class GPULayoutAssignment(StridedLayoutAssignment):
                 layout.append([axes_list.index(group)])
         return [GPULayoutAssignment(axes_list, layout)]
 
+
 class GPUDotLayoutAssignment(GPULayoutAssignment):
     """
     Dot operation on GPU supports one operand being transposed, but not both. This
