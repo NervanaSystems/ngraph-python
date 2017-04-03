@@ -20,6 +20,7 @@ toy example with 1-D Gaussian data distribution
 """
 
 import numpy as np
+from contextlib import closing
 
 import ngraph as ng
 import ngraph.transformers as ngt
@@ -118,16 +119,16 @@ updates_g = optimizer_g(loss_g, variable_scope=g_scope)
 discriminator_train_outputs = {'batch_cost': mean_cost_d, 'updates': updates_d}
 generator_train_outputs = {'batch_cost': mean_cost_g, 'updates': updates_g}
 
-transformer = ngt.make_transformer()
+with closing(ngt.make_transformer()) as transformer:
 
-train_computation_g = make_bound_computation(transformer,
-                                             generator_train_outputs,
-                                             {'noise_sample': inputs['noise_sample']})
-train_computation_d = make_bound_computation(transformer,
-                                             discriminator_train_outputs,
-                                             inputs)
+    train_computation_g = make_bound_computation(transformer,
+                                                 generator_train_outputs,
+                                                 {'noise_sample': inputs['noise_sample']})
+    train_computation_d = make_bound_computation(transformer,
+                                                 discriminator_train_outputs,
+                                                 inputs)
 
-generator_inference = transformer.computation(G, z)
+    generator_inference = transformer.computation(G, z)
 
 # train loop
 k = 1  # variable rate training of discriminator, if k > 1
