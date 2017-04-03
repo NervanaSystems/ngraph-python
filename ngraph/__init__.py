@@ -22,6 +22,7 @@ from ngraph.transformers.base import UnsupportedTransformerException
 from ngraph.op_graph.convolution import convolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.lookuptable import lookuptable
+from ngraph.op_graph.ctc import ctc
 from ngraph.op_graph.debug import PrintOp
 from ngraph.op_graph.op_graph import *
 from ngraph.op_graph.op_graph import axes_with_order, \
@@ -51,6 +52,7 @@ __all__ = [
     'exp',
     'log',
     'lookuptable',
+    'ctc',
     'make_axes',
     'make_axis',
     'negative',

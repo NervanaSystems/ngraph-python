@@ -124,33 +124,33 @@ def test_sequential_side(M):
         main_effect = ex.executor((y, x1_vo, x2_vo, x1, x2))
         current_values = ex.executor((x1, x2))
 
-    # Run main path #1
-    y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
-    y_np = x_np * 2
+        # Run main path #1
+        y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
+        y_np = x_np * 2
 
-    assert np.allclose(y_val, y_np)
-    assert np.allclose(x1_init_val, x1_np)
-    assert np.allclose(x2_init_val, x2_np)
-    x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
-    x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
-    assert np.allclose(x1_final_val, x1_np)
-    assert np.allclose(x2_final_val, x2_np)
+        assert np.allclose(y_val, y_np)
+        assert np.allclose(x1_init_val, x1_np)
+        assert np.allclose(x2_init_val, x2_np)
+        x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
+        x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
+        assert np.allclose(x1_final_val, x1_np)
+        assert np.allclose(x2_final_val, x2_np)
 
-    x1_val, x2_val = current_values()
-    assert np.allclose(x1_val, x1_np)
-    assert np.allclose(x2_val, x2_np)
+        x1_val, x2_val = current_values()
+        assert np.allclose(x1_val, x1_np)
+        assert np.allclose(x2_val, x2_np)
 
-    # Run main path #2 (Should be the same as before)
-    y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
-    y_np = x_np * 2
+        # Run main path #2 (Should be the same as before)
+        y_val, x1_init_val, x2_init_val, x1_final_val, x2_final_val = main_effect()
+        y_np = x_np * 2
 
-    assert np.allclose(y_val, y_np)
-    assert np.allclose(x1_init_val, x1_np)
-    assert np.allclose(x2_init_val, x2_np)
-    x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
-    x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
-    assert np.allclose(x1_final_val, x1_np)
-    assert np.allclose(x2_final_val, x2_np)
+        assert np.allclose(y_val, y_np)
+        assert np.allclose(x1_init_val, x1_np)
+        assert np.allclose(x2_init_val, x2_np)
+        x1_np = np.sum(x_np) + x1_np * b_np + (1 - b_np)
+        x2_np = np.mean(x_np) + x2_np * b_np + (1 - b_np)
+        assert np.allclose(x1_final_val, x1_np)
+        assert np.allclose(x2_final_val, x2_np)
 
 
 def test_pad_invalid_paddings_length(N):
