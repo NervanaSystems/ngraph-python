@@ -14,6 +14,7 @@ NGRAPH_TEST_CPU_IMG := $(shell docker images ngraph_test_cpu)
 NGRAPH_MKLDNN_IMG := $(shell docker images ngraph_mkldnn_test)
 NGRAPH_CAFFE2_IMG := $(shell docker images ngraph_caffe2)
 NGRAPH_MXNET_IMG := $(shell docker images ngraph_mxnet)
+NGRAPH_CNTK_IMG := $(shell docker images ngraph_cntk)
 
 TEST_OPTS := --timeout=300
 UNIT_TEST_DIRS := tests/
@@ -31,7 +32,7 @@ PYTHON_VERSION = 2
 MKLDNN_ROOT=/usr/local
 MY_PYTHONPATH=./:/root/ngraph-test/
 
-.PHONY: clean doc style test test_gpu test_mkldnn build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_mxnet test_mxnet_shell test_all
+.PHONY: clean doc style test test_gpu test_mkldnn build_base build_dev build_test build_test_cpu build_mkldnn_test build_all shell test_shell test_mkldnn_shell test_caffe2 test_caffe2_shell test_mxnet test_mxnet_shell test_cntk test_cntk_shell test_all
 
 DOCKER_BUILD=docker build --rm=true
 
@@ -56,6 +57,7 @@ expand_dockerfile_templates:
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mkldnn > ${BUILD_DIR}/Dockerfile.mkldnn
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.caffe2 > ${BUILD_DIR}/Dockerfile.caffe2
 	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.mxnet > ${BUILD_DIR}/Dockerfile.mxnet
+	sed -e 's/\(FROM ngraph.*\)/\1:${BUILD_VERSION}/' Dockerfile.cntk > ${BUILD_DIR}/Dockerfile.cntk
 
 fallback_cuda_version: expand_dockerfile_templates
 # if has cuda && v8.0 cuda toolkit -> use nvidia 7.5 base image
@@ -165,10 +167,15 @@ build_mxnet: build_test_base
 	@docker rmi ngraph_mxnet:latest || echo "keep going if docker rmi command fails"
 	@docker tag `docker images -q ngraph_mxnet:${BUILD_VERSION}` ngraph_mxnet:latest
 
-build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2 build_mxnet
+build_cntk: build_test_base
+	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.cntk -t=ngraph_cntk:${BUILD_VERSION} ${DIR}
+	# remove the tag for the previous latest image
+	@docker rmi ngraph_cntk:latest || echo "keep going if docker rmi command fails"
+	@docker tag `docker images -q ngraph_cntk:${BUILD_VERSION}` ngraph_cntk:latest
 
+build_all: build_dev build_doc build_test build_test_cpu build_mkldnn_test build_caffe2 build_mxnet build_cntk
 
-test_all: test test_gpu test_mkldnn test_caffe2 test_mxnet
+test_all: test test_gpu test_mkldnn test_caffe2 test_mxnet test_cntk
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_cpu
@@ -230,6 +237,12 @@ test_mxnet: build_mxnet
 test_mxnet_shell: build_mxnet
 	docker run --privileged=true --rm ${VOLUME} -it ngraph_mxnet:${BUILD_VERSION} /bin/bash
 
+test_cntk: build_cntk
+	docker run --rm ${VOLUME} -it ngraph_cntk:${BUILD_VERSION} make test_cntk
+
+test_cntk_shell: build_cntk
+	docker run --rm ${VOLUME} -it ngraph_cntk:${BUILD_VERSION} /bin/bash
+
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_gpu test_flex
 # update the files to be owned by the calling user instead of root 
@@ -282,4 +295,4 @@ test_gpu_shell: build_test
 shell: build_dev
 	docker run --rm ${VOLUME} -it ngraph_dev:${BUILD_VERSION} /bin/bash
 
-all: doc style test test_gpu test_mkldnn test_caffe2 test_mxnet
+all: doc style test test_gpu test_mkldnn test_caffe2 test_mxnet test_cntk
