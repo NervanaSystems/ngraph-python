@@ -78,10 +78,10 @@ def template_dot_one_placeholder(n, c, const_val, flex_exceptions):
     arg_array2 = np.copy(arg_array)
     flex_exceptions_index = 0
     vector = np.ones(c) * const_val
-    print ("Vector: \n", vector)
+    print("Vector: \n", vector)
     with executor(ng_fun, ng_placeholder) as mm_executor:
         for i in range(n):
-            print ("Iteration " + str(i + 1))
+            print("Iteration " + str(i + 1))
 
             # After each iteration, matrix values are changed
             arg_array = arg_array2 * (i + 1)
@@ -89,8 +89,8 @@ def template_dot_one_placeholder(n, c, const_val, flex_exceptions):
             print("Matrix: \n", arg_array)
             ng_op_out = mm_executor(arg_array)
             np_op_out = np.dot(vector, arg_array)
-            print ("Flex dot product result: \n ", ng_op_out)
-            print ("Numpy dot product result: \n", np_op_out)
+            print("Flex dot product result: \n ", ng_op_out)
+            print("Numpy dot product result: \n", np_op_out)
             try:
                 assert_allclose(ng_op_out, np_op_out)
             except AssertionError:
@@ -111,13 +111,13 @@ def template_dot_two_placeholders(n, c, d):
     ng_fun = ng.dot(ng_placeholder1, ng_placeholder2)
     arg_array1 = np.array([i for i in range(c * d)]).reshape(d, c)
     arg_array2 = np.array([i for i in range(c * n)]).reshape(c, n)
-    print ("Matrix 1:\n", arg_array1)
-    print ("Matrix 2:\n", arg_array2)
+    print("Matrix 1:\n", arg_array1)
+    print("Matrix 2:\n", arg_array2)
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as mm_executor:
         np_op_out = np.dot(arg_array1, arg_array2)
         ng_op_out = mm_executor(arg_array1, arg_array2)
-        print ("Flex dot product result: \n", ng_op_out)
-        print ("Numpy dot product result: \n", np_op_out)
+        print("Flex dot product result: \n", ng_op_out)
+        print("Numpy dot product result: \n", np_op_out)
         assert_allclose(ng_op_out, np_op_out)
 
 
@@ -127,8 +127,8 @@ def template_dot_one_placeholder_and_scalar(n, c, scalar, flex_exceptions):
     ng_var = ng.placeholder(())
     ng_fun = ng.dot(ng_var, ng_placeholder)
     flex_exceptions_index = 0
-    print ("Initial scalar: ", scalar)
-    print ("Matrix:\n", arg_array)
+    print("Initial scalar: ", scalar)
+    print("Matrix:\n", arg_array)
     with executor(ng_fun, ng_var, ng_placeholder) as m_executor:
         for i in range(n):
             print("Iteration " + str(i + 1))
@@ -145,8 +145,8 @@ def template_dot_one_placeholder_and_scalar(n, c, scalar, flex_exceptions):
             except AssertionError:
                 print("Flex dot product result doesn't match to numpy.\n"
                       "Try to check if flex result is inside flex exceptions list")
-                print ("Flex dot product result: \n", ng_op_out)
-                print ("Current array inside flex exceptions list: \n",
+                print("Flex dot product result: \n", ng_op_out)
+                print("Current array inside flex exceptions list: \n",
                        flex_exceptions[flex_exceptions_index])
                 assert_allclose(ng_op_out, flex_exceptions[flex_exceptions_index])
 
