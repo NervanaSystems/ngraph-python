@@ -633,21 +633,8 @@ class Op(NameableValue):
         Returns:
             Set of trainable Ops.
         """
-        params = OrderedSet()
-
-        def visitor(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
-            if node.tensor.is_trainable:
-                params.add(node.tensor)
-
-        Op.visit_input_closure([self], visitor)
-
-        return params
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_trainable])
 
     def placeholders(self):
         """
@@ -656,21 +643,8 @@ class Op(NameableValue):
         Returns:
             Set of placeholder Ops.
         """
-        params = OrderedSet()
-
-        def visitor(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
-            if node.tensor.is_placeholder:
-                params.add(node.tensor)
-
-        Op.visit_input_closure([self], visitor)
-
-        return params
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_placeholder])
 
     def tensor_description(self):
         return None
