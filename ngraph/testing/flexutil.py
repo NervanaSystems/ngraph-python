@@ -107,7 +107,8 @@ def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):
 
 
 def template_dot_two_placeholders(rows_1, col_1, col_2):
-    ng_placeholder2, ng_placeholder1 = template_create_placeholders_for_multiplication(col_2, col_1, rows_1)
+    ng_placeholder2, ng_placeholder1 = \
+        template_create_placeholders_for_multiplication(col_2, col_1, rows_1)
     ng_fun = ng.dot(ng_placeholder1, ng_placeholder2)
     arg_array1 = np.array([i for i in range(col_1 * rows_1)]).reshape(rows_1, col_1)
     arg_array2 = np.array([i for i in range(col_1 * col_2)]).reshape(col_1, col_2)
