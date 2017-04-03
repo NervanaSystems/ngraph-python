@@ -80,18 +80,6 @@ Semantics
 
 In the nervana graph, our axis design is very flexible. Axes can be given arbitrary names and the ordering of the axes does not matter. Sometimes, however, axes need to have additional semantic information provided to operations.
 
-AxisRole
-~~~~~~~~
-
-For example, convolution kernels need to know which axes correspond to the channel, height, width, and/or depth, in order to assemble the feature map. For this reason, we can attach ``AxisRole`` types to any ``axis`` by using ``ng.make_axis_role()``. For example, to create an axis with the ``Channel`` role:
-
-  ::
-
-    role_channel = ng.make_axis_role(name="Channel")
-    axis_channel = ng.make_axis(length=3, roles=[role_channel], name="my_axis")
-
-The neon frontend relies on several axis roles, specified by its name: ``Height``, ``Width``, ``Depth``, ``Channel``, ``Channelout``, and ``Time``. These roles are primarily used for automatic axes inference. For example, a convolution kernel can examine the input feature maps'``AxisRole`` to determine whether a dimshuffle shall be applied prior to convolution.
-
 Properties
 ----------
 
@@ -226,6 +214,21 @@ Elementwise Binary Ops
   (H, W) + (W, N) -> (H, W, N)
   (H, W) + (N, W) -> (H, W, N)
   (C, H) + (W, H, N) -> (C, H, W, N)
+
+  Axis order is determined by the following rules:
+  1. If the set of axes for both operands match exactly, but the order is
+    different, use the order of the left operand.
+  2. If one operand's axes are a superset of the other's, use that operand's axis
+    order
+  3. Otherwise order is determined by concatenating the left operand's axes with
+    the axes from the right operand which are not present in the left operand
+    (left_axes + (right_axes - left_axes)).
+
+  (H, W, N) + (N, H) -> (H, W, N)
+  (H, W) + (N, H, W) -> (N, H, W)
+  (H, W) + (N, W, H) -> (N, W, H)
+  (C, H, W) + (N, W, H) -> (C, H, W, N)
+  (N, C, H, W) + (C, H, W, N) -> (N, C, H, W)
 
 - Commutative property is as usual, though axis order of the equivalent tensors
   can be different. ::

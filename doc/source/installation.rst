@@ -21,19 +21,28 @@ To download the source code, first run::
     git clone git@github.com:NervanaSystems/ngraph.git
     cd ngraph
 
+To install with Intel MKL-DNN support, download and install MKL-DNN::
+    git clone https://github.com/01org/mkl-dnn.git
+    cd mkl-dnn/scripts && ./prepare_mkl.sh && cd ..
+    mkdir -p build && cd build
+    cmake -DCMAKE_INSTALL_PREFIX=$PWD/../install .. && make install
+    cd ../.. && export MKLDNN_ROOT=$PWD/mkl-dnn/install
+
 We recommend installing inside a virtual environment.
 
-To create and activate a Python 2.7 virtualenv::
-    virtualenv -p python2.7 .venv
-    . .venv/bin/activate
-
-To, instead, create and activate a Python 3 virtualenv::
+To create and activate a Python 3 virtualenv::
     python3 -m venv .venv
     . .venv/bin/activate
 
-Finally, to build and install, run:
+To, instead, create and activate a Python 2.7 virtualenv::
+    virtualenv -p python2.7 .venv
+    . .venv/bin/activate
+
+To build and install, run::
     make install
 
+To add GPU support::
+    make gpu_prepare
 
 Getting Started
 ===============
@@ -67,6 +76,7 @@ Before checking in code, run the unit tests and check for style errors::
 
 Documentation can be generated via::
 
+    sudo apt-get install pandoc
     make doc
 
 And viewed at ``doc/build/html/index.html``.

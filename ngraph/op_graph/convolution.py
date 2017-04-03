@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
+from ngraph.op_graph.op_graph import TensorOp
 
 
 def convolution(conv_params, inputs, filters, axes, docstring=None):
@@ -27,7 +27,6 @@ def convolution(conv_params, inputs, filters, axes, docstring=None):
 
     Returns:
         TensorOp: The result of the convolution.
-
     """
     return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 
@@ -128,7 +127,7 @@ class update_conv(ConvDerivOp):
             filters : filter/kernel tensor.
         """
         super(update_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(inputs)),
+            args=(delta, inputs),
             fprop=fprop,
             axes=filters.axes, **kwargs
         )
@@ -142,7 +141,7 @@ class bprop_conv(ConvDerivOp):
             filters : filter/kernel tensor.
         """
         super(bprop_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(filters)),
+            args=(delta, filters),
             fprop=fprop,
             axes=inputs.axes, **kwargs
         )

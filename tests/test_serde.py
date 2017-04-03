@@ -20,6 +20,7 @@ import ngraph as ng
 from ngraph.op_graph.op_graph import Op
 import ngraph.op_graph.serde.serde as ser
 from ngraph.op_graph.serde.serde_pass import SerializationPass
+from ngraph.testing.hetr_utils import create_send_recv_graph
 
 
 def get_simple_graph():
@@ -34,8 +35,8 @@ def strip_dict(d):
     For equality testing we need to remove attributes of dicts that are either unique to each
     instance or need more complex equality handling
     """
-    keys = ('_NameableValue__name', '_axes', '_args', 'valfun', 'dtype', 'scale',
-            '_tensor')
+    keys = ('_NameableValue__name', '_axes', '_args', 'valfun', 'dtype',
+            'scale', '_tensor', '_send_node')
     for key in keys:
         if key in d:
             del d[key]
@@ -172,3 +173,18 @@ def test_ser_pass():
     ser_pass.do_pass([graph], None)
     assert os.path.getsize(fname) > 0
     os.unlink(fname)
+
+
+def test_hetr_send_recv_graph_serialization():
+    """
+    test serializing send/recv ops defined in comm_nodes for hetr communication
+    """
+    z, recv_x, recv_x_plus_one, send_x, x_plus_one, from_node, send_x_plus_one = \
+        create_send_recv_graph()
+    ser_string = ser.serialize_graph([z])
+    py_graph = ser.deserialize_graph(ser_string)
+    orig_graph = Op.all_op_references([z])
+
+    for o1, o2 in zip(sorted(py_graph, key=lambda x: x.uuid),
+                      sorted(orig_graph, key=lambda x: x.uuid)):
+        assert_object_equality(o1, o2)

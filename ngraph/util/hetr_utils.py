@@ -13,86 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import AssignableTensorOp, BroadcastOp, \
-    TensorValueOp
-from ngraph.factory.comm_nodes import GatherSendOp, GatherRecvOp, \
-    RecvOp, ScatterSendOp, ScatterRecvOp
+from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
 from orderedset import OrderedSet
-
-
-def clone(
-        node,
-        new_axes,
-        device_id,
-        device_idx=None,
-        send_nodes=None,
-        arg1=None,
-        arg2=None):
-    if node.__class__.__name__ is 'Add':
-        new_node = node.__class__(arg1, arg2)
-        new_node._axes = new_axes
-        new_node.dtype = node.dtype
-        new_node.metadata['device'] = node.metadata['device']
-        new_node.metadata['device_id'] = device_id
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-        node.metadata['device_id'] = node.metadata['device_id'][0]
-        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
-
-    elif isinstance(node, BroadcastOp):
-        new_arg = clone(node.args[0], new_axes, device_id)
-        new_node = node.__class__(new_arg, new_axes)
-        new_node.dtype = node.dtype
-        new_node.metadata['device'] = node.metadata['device']
-        new_node.metadata['device_id'] = device_id
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-
-        node.metadata['device_id'] = node.metadata['device_id'][0]
-        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
-
-    elif isinstance(node, TensorValueOp):
-        new_node = node.__class__(node.states_read[0])
-        new_node.metadata['device'] = node.metadata['device']
-        new_node.metadata['device_id'] = device_id
-        new_node.metadata['host_transformer'] = node.metadata['host_transformer']
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-
-    elif isinstance(node, ScatterRecvOp):
-        new_node = node.__class__(
-            to_node=node,
-            send_node=node.send_node(),
-            device_idx=device_idx)
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-
-    elif isinstance(node, ScatterSendOp):
-        pass
-
-    elif isinstance(node, GatherSendOp):
-        new_node = node.__class__(
-            from_node=arg1,
-            clone_node=node,
-            device_idx=device_idx)
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-        send_nodes.add(new_node)
-
-    elif isinstance(node, GatherRecvOp):
-        pass
-
-    elif 'marker' in node.metadata and node.metadata['marker'] is 'scatter':
-        pass  # This node is marked to be scattered, so there is no need to clone it.
-
-    elif isinstance(node, AssignableTensorOp) and node.is_constant:
-        new_node = node.__class__()
-        new_node.initial_value = node.initial_value
-        new_node._axes = new_axes
-        new_node.dtype = node.dtype
-        new_node.metadata['device'] = node.metadata['device']
-        new_node.metadata['device_id'] = device_id
-        new_node.metadata['transformer'] = node.metadata['device'] + str(device_id)
-
-    else:
-        raise RuntimeError("Unsupported op type {} for clone.".format(node.__class__.__name__))
-
-    return new_node
+from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+import uuid
 
 
 def comm_path_exists(fro, to):
@@ -177,3 +102,35 @@ def update_comm_deps(ops):
                 if comm_path_exists(fro=r.send_node(), to=op):
                     if r.metadata['transformer'] == op.metadata['transformer']:
                         r.add_control_dep(op)
+
+
+def clone_graph(root, device_id, shared_queues_idx, axes):
+    """
+    clone graph with serde (serialization)
+    input:
+    output: new_root of the cloned graph
+    """
+
+    # clone nodes with GatherSendOp as root using serde
+    ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
+    new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
+
+    orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
+
+    # Prune ops that are not control_deps of new_gather_send_op
+    # deserialize includes extra referenced nodes
+    cloned_graph = Op.ordered_ops([new_root])
+    # update newly cloned op metadata, generate new UUIDs
+    for op in cloned_graph:
+        op.metadata['transformer'] = op.metadata['device'] + str(device_id)
+        op.metadata['device_id'] = str(device_id)
+        if isinstance(op, (ScatterRecvOp, GatherSendOp)):
+            op._shared_queues = orig_ops[op.uuid].shared_queues
+            op.idx = shared_queues_idx
+            if isinstance(op, ScatterRecvOp):
+                op._send_node = orig_ops[op.uuid].send_node()
+
+        op._axes = axes
+        op.uuid = uuid.uuid4()
+
+    return new_root

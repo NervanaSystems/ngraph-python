@@ -27,7 +27,7 @@ import ngraph.transformers as ngt
 from ngraph.frontends.neon import Layer, Affine, Sequential
 from ngraph.frontends.neon import Rectlin, Identity, Tanh, Logistic
 from ngraph.frontends.neon import GaussianInit, ConstantInit
-from ngraph.frontends.neon import GradientDescentMomentum, Schedule
+from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import ArrayIterator
 from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
@@ -45,10 +45,9 @@ def affine_layer(h_dim, activation, name):
 # TODO: LR schedule and other optimizer parameters
 def make_optimizer(name=None):
     learning_rate = 0.005 if minibatch_discrimination else 0.03
-    schedule = Schedule()
-    optimizer = GradientDescentMomentum(learning_rate, momentum_coef=0.0, stochastic_round=False,
+    optimizer = GradientDescentMomentum(learning_rate, momentum_coef=0.0,
                                         wdecay=0.0, gradient_clip_norm=None,
-                                        gradient_clip_value=None, name=name, schedule=schedule)
+                                        gradient_clip_value=None, name=name)
     return optimizer
 
 
@@ -130,20 +129,20 @@ with closing(ngt.make_transformer()) as transformer:
 
     generator_inference = transformer.computation(G, z)
 
-# train loop
-k = 1  # variable rate training of discriminator, if k > 1
-for mb_idx, data in enumerate(train_set):
-    # update discriminator
-    for iter_d in range(k):
-        batch_output_d = train_computation_d(data)
-    # update generator
-    batch_output_g = train_computation_g({'noise_sample': data['noise_sample']})
-    # print losses
-    if mb_idx % 100 == 0:
-        msg = "Iteration {} complete. Discriminator avg loss: {} Generator avg loss: {}"
-        print(msg.format(mb_idx,
-                         float(batch_output_d['batch_cost']),
-                         float(batch_output_g['batch_cost'])))
+    # train loop
+    k = 1  # variable rate training of discriminator, if k > 1
+    for mb_idx, data in enumerate(train_set):
+        # update discriminator
+        for iter_d in range(k):
+            batch_output_d = train_computation_d(data)
+        # update generator
+        batch_output_g = train_computation_g({'noise_sample': data['noise_sample']})
+        # print losses
+        if mb_idx % 100 == 0:
+            msg = "Iteration {} complete. Discriminator avg loss: {} Generator avg loss: {}"
+            print(msg.format(mb_idx,
+                             float(batch_output_d['batch_cost']),
+                             float(batch_output_g['batch_cost'])))
 
 # visualize results
 nrange = toy_gan_data.noise_range

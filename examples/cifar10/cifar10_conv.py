@@ -39,6 +39,8 @@ from cifar10 import CIFAR10
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple CNN on cifar10 dataset')
+parser.add_argument('--use_batch_norm', action='store_true',
+                    help='whether to use batch normalization')
 args = parser.parse_args()
 
 np.random.seed(args.rng_seed)
@@ -57,7 +59,7 @@ ax.Y.length = 10
 
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
-        axes=x.axes.find_by_name('C'),
+        axes=[x.axes.channel_axis()],
         initial_value=np.array([104., 119., 127.]))
 
     return (x - bgr_mean) / 255.
@@ -66,11 +68,14 @@ def cifar_mean_subtract(x):
 init_uni = UniformInit(-0.1, 0.1)
 
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
-                   Convolution((5, 5, 16), filter_init=init_uni, activation=Rectlin()),
+                   Convolution((5, 5, 16), filter_init=init_uni, activation=Rectlin(),
+                               batch_norm=args.use_batch_norm),
                    Pool2D(2, strides=2),
-                   Convolution((5, 5, 32), filter_init=init_uni, activation=Rectlin()),
+                   Convolution((5, 5, 32), filter_init=init_uni, activation=Rectlin(),
+                               batch_norm=args.use_batch_norm),
                    Pool2D(2, strides=2),
-                   Affine(nout=500, weight_init=init_uni, activation=Rectlin()),
+                   Affine(nout=500, weight_init=init_uni, activation=Rectlin(),
+                          batch_norm=args.use_batch_norm),
                    Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
