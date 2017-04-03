@@ -25,7 +25,7 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples
+STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
 TEST_OPTS := --timeout=300 --cov=ngraph
@@ -78,7 +78,7 @@ test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
 test_flex: test_prepare clean
 	@echo Running flex unit tests...
-	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	@py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	 --junit-xml=testout_test_flex_$(PY).xml \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
 	@coverage xml -i -o coverage_test_flex_$(PY).xml
