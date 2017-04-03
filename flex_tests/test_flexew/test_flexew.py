@@ -17,7 +17,6 @@ import pytest
 
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
-from ngraph.testing import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent("module")
 
